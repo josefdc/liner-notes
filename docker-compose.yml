@@ -1,0 +1,96 @@
+# =============================================================================
+# Sonic Agent - Docker Compose Orchestration
+# Production-ready configuration for all three services
+# =============================================================================
+
+services:
+  # ==========================================================================
+  # sonic-web: React/Vite Frontend (Nginx)
+  # ==========================================================================
+  sonic-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sonic-web
+    ports:
+      - "80:80"
+    depends_on:
+      sonic-server:
+        condition: service_healthy
+    networks:
+      - sonic-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================================
+  # sonic-server: Node.js/LangGraph Backend
+  # ==========================================================================
+  sonic-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sonic-server
+    ports:
+      - "3001:3001"
+    depends_on:
+      sonic-analysis:
+        condition: service_healthy
+    env_file:
+      - ./server/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - AUDIO_ANALYSIS_URL=http://sonic-analysis:3002
+      - SQLITE_DB_PATH=/app/data/sonic-agent.db
+    volumes:
+      - sonic-data:/app/data
+    networks:
+      - sonic-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ==========================================================================
+  # sonic-analysis: Python/FastAPI Audio Analysis
+  # ==========================================================================
+  sonic-analysis:
+    build:
+      context: ./server/analysis
+      dockerfile: Dockerfile
+    container_name: sonic-analysis
+    ports:
+      - "3002:3002"
+    networks:
+      - sonic-network
+    restart: unless-stopped
+    # Resource limits for audio processing
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  sonic-data:
+
+networks:
+  sonic-network:
+    driver: bridge

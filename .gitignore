@@ -1,0 +1,83 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.uv/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Essentia TensorFlow models (large binary files, download via download_models.py)
+server/analysis/models/*.pb
+
+# Build outputs
+dist
+dist-ssr
+build
+*.local
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+server/.env
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# TypeScript
+*.tsbuildinfo
+
+# Cache
+.cache
+.parcel-cache
+.turbo
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+
+# Local runtime data (SQLite DB, quarantined files)
+server/data/

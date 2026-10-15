@@ -1,0 +1,42 @@
+{
+  "name": "sonic-agent-server",
+  "version": "0.1.0",
+  "description": "LangGraph backend for The Sonic Agent",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch index.ts",
+    "start": "tsx index.ts",
+    "audio:start": "cd analysis && uvicorn main:app --host 0.0.0.0 --port 3002",
+    "audio:docker": "cd analysis && docker build -t sonic-audio-analysis . && docker run -p 3002:3002 sonic-audio-analysis",
+    "test:spotify": "tsx tools/spotify.test.ts",
+    "test:agent": "tsx agent/graph.test.ts",
+    "test:tools": "tsx tools/genius.test.ts && tsx tools/musicbrainz.test.ts",
+    "test:lastfm": "tsx tools/lastfm.test.ts",
+    "test:listenbrainz": "tsx tools/listenbrainz.test.ts",
+    "test:db": "tsx lib/database.test.ts",
+    "build": "tsup",
+    "start:prod": "node dist/index.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.34.0",
+    "@langchain/community": "^1.1.17",
+    "@langchain/core": "^1.1.27",
+    "@langchain/langgraph": "^1.1.5",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.1",
+    "@langchain/tavily": "^1.2.0",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.16"
+  }
+}

@@ -1,0 +1,79 @@
+import React, { forwardRef } from 'react';
+
+type ButtonVariant = 'cyber' | 'analog' | 'ghost' | 'spotify';
+type ButtonSize = 'sm' | 'md' | 'lg';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  isLoading?: boolean;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+}
+
+const variantStyles: Record<ButtonVariant, string> = {
+  cyber: 'border-cyber/50 text-cyber hover:bg-cyber/10 hover:border-cyber/70 hover:shadow-glow-cyber-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-cyber/30',
+  analog: 'border-analog/50 text-analog hover:bg-analog/10 hover:border-analog/70 hover:shadow-glow-analog-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-analog/30',
+  ghost: 'border-white/10 text-text-tertiary hover:text-white hover:bg-white/5 hover:border-white/20 focus-visible:ring-white/10',
+  spotify: 'border-spotify/50 text-spotify hover:bg-spotify/10 hover:border-spotify/70 hover:shadow-glow-spotify-subtle focus-visible:ring-spotify/30',
+};
+
+const sizeStyles: Record<ButtonSize, string> = {
+  sm: 'px-3 py-1.5 text-xs gap-1.5',
+  md: 'px-6 py-2.5 text-sm gap-2',
+  lg: 'px-8 py-3.5 text-base gap-2.5 min-h-[48px]',
+};
+
+const baseStyles = [
+  'inline-flex items-center justify-center',
+  'bg-transparent border font-mono tracking-widest uppercase rounded-[--radius-sm]',
+  'transition-all duration-[--duration-fast] ease-[--ease-out-expo]',
+  'active:scale-[0.97]',
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-void transition-shadow duration-[--duration-focus]',
+  'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+].join(' ');
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      variant = 'cyber',
+      size = 'md',
+      isLoading = false,
+      leftIcon,
+      rightIcon,
+      children,
+      className = '',
+      disabled,
+      ...props
+    },
+    ref
+  ) => {
+    const isDisabled = disabled || isLoading;
+
+    return (
+      <button
+        ref={ref}
+        className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+        disabled={isDisabled}
+        aria-busy={isLoading}
+        aria-disabled={isDisabled}
+        {...props}
+      >
+        {isLoading ? (
+          <span
+            className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"
+            aria-hidden="true"
+          />
+        ) : (
+          leftIcon
+        )}
+        {children}
+        {!isLoading && rightIcon}
+      </button>
+    );
+  }
+);
+
+Button.displayName = 'Button';
+
+export default Button;

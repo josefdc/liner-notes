@@ -1,0 +1,20 @@
+[project]
+name = "sonic-audio-analysis"
+version = "1.0.0"
+description = "Audio analysis microservice for The Sonic Agent - extracts BPM and key from Spotify previews"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "audioread>=3.1.0",
+    "essentia-tensorflow>=2.1b6.dev1389",
+    "fastapi>=0.125.0",
+    "librosa>=0.11.0",
+    "numpy>=2.3.5",
+    "pydantic>=2.12.5",
+    "requests>=2.32.5",
+    "soundfile>=0.13.1",
+    "uvicorn>=0.38.0",
+]
+
+[tool.uv]
+package = false

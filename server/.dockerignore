@@ -1,0 +1,39 @@
+# =============================================================================
+# Docker Ignore - Server Build
+# =============================================================================
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment files (will be mounted via docker-compose)
+.env
+!.env.example
+
+# Documentation
+*.md
+
+# Analysis service (has its own Dockerfile)
+analysis
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+coverage
+*.test.ts
+*.spec.ts
+__tests__

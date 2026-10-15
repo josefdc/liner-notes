@@ -1,0 +1,55 @@
+# =============================================================================
+# Docker Ignore - Python Audio Analysis Service
+# =============================================================================
+
+# Virtual environment (platform-specific, must be rebuilt in container)
+.venv
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# Test files
+tests/
+*.test.py
+pytest.ini
+
+# Logs
+*.log
+
+# Environment files
+.env
+!.env.example

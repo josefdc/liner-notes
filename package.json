@@ -14,12 +14,17 @@
     "build": "npm run build -w packages/contract -w apps/web -w apps/api",
     "test:db": "npm run test:db -w apps/api",
     "preview": "npm run preview -w apps/web",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "biome check .",
+    "format": "biome format --write ."
   },
   "allowScripts": {
     "better-sqlite3@12.10.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.27.7": true,
     "fsevents@2.3.3": true
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15"
   }
 }

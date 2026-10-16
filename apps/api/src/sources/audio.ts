@@ -1,26 +1,25 @@
 /**
  * Audio Analysis Tool for LangGraph Agent
  *
- * Analyzes audio preview URLs to extract:
- * - Real BPM (tempo)
- * - Musical key (C, D#, etc.)
- * - Mode (Major/Minor)
+ * Measures from a 30-second preview clip:
+ * - BPM (tempo)
+ * - Musical key and mode
  * - Energy level
+ * - Perceptual features (valence, danceability, ...) when the Essentia models are installed
  *
- * Preview source priority: Deezer (primary) → Spotify (fallback) → estimation.
- * Calls a Python FastAPI microservice (librosa) for actual analysis.
- * Falls back to estimation heuristics if service is unavailable.
+ * Preview source priority: Deezer (primary) → Spotify (fallback).
+ * Calls the Python audio analysis service for the measurement. When there is no preview or
+ * the service cannot measure it, the result has source "unavailable", null values and a
+ * reason; nothing is estimated.
  *
  * @requires Audio analysis service running on AUDIO_ANALYSIS_URL
  */
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import dotenv from "dotenv";
 
 import { searchDeezerPreview, type DeezerSearchResult } from "./deezer.js";
-
-dotenv.config();
+import type { AudioUnavailableReason } from "../agent/state.js";
 
 // =============================================================================
 // TypeScript Interfaces
@@ -33,129 +32,116 @@ export interface KeyMoment {
   description: string;
 }
 
+/** Result of analyze_audio_preview. Every value is measured or null. */
 export interface AudioAnalysisResult {
-  bpm: number;
-  key: string;
-  mode: string;
-  energy: number;
-  duration?: number;
-  source: "analyzed" | "estimated";
+  source: "analyzed" | "unavailable";
+  bpm: number | null;
+  key: string | null;
+  mode: string | null;
+  energy: number | null;
+  duration?: number | null;
   keyMoments?: KeyMoment[];
+  // Perceptual features from Essentia (null when the models are unavailable)
+  valence?: number | null;
+  danceability?: number | null;
+  acousticness?: number | null;
+  instrumentalness?: number | null;
+  /** Fields the service returned outside their valid range (reported as null) */
+  outOfRange?: string[];
+  /** Set when source is "unavailable" */
+  reason?: AudioUnavailableReason;
+  /** Error detail for reason */
   error?: string;
-  // Perceptual features from Essentia (present when models are available)
-  valence?: number;
-  danceability?: number;
-  acousticness?: number;
-  instrumentalness?: number;
 }
 
+// What the service may return. It sends null bpm when no tempo is found and null key/mode
+// for unpitched audio; any field may also be missing in older service versions.
 interface AudioServiceResponse {
-  bpm: number;
-  key: string;
-  mode: string;
-  energy: number;
-  duration: number;
-  source: string;
+  bpm?: number | null;
+  key?: string | null;
+  mode?: string | null;
+  energy?: number | null;
+  duration?: number | null;
+  source?: string;
   keyMoments?: KeyMoment[];
   // Perceptual features from Essentia (present when models are available)
-  valence?: number;
-  danceability?: number;
-  acousticness?: number;
-  instrumentalness?: number;
+  valence?: number | null;
+  danceability?: number | null;
+  acousticness?: number | null;
+  instrumentalness?: number | null;
 }
 
 // =============================================================================
 // Configuration
 // =============================================================================
 
-const AUDIO_SERVICE_URL = process.env.AUDIO_ANALYSIS_URL || "http://localhost:3002";
+// Read when called, so the URL set by the environment loader (or a test) is used.
+const audioServiceUrl = () => process.env.AUDIO_ANALYSIS_URL || "http://localhost:3002";
 const SERVICE_TIMEOUT = 30000; // 30 seconds for audio processing
 
-// =============================================================================
-// Estimation Fallbacks (used when service unavailable or no preview)
-// =============================================================================
+// Optional shared secret the service requires on /analyze when it is configured.
+const audioServiceToken = () => process.env.AUDIO_SERVICE_TOKEN || "";
 
-/**
- * Estimate BPM based on title/artist heuristics
- * Used as fallback when audio analysis unavailable
- */
-function estimateBPM(title: string, artist: string): number {
-  const combined = `${title} ${artist}`.toLowerCase();
+// Preview clips are only sent for analysis when they come from the Spotify or Deezer CDNs.
+// Same rules as the audio service (services/audio/preview.py), so a URL the service would
+// refuse is reported here as preview_rejected instead of failing inside the analysis.
+const PREVIEW_HOSTS = new Set(["p.scdn.co"]);
+const PREVIEW_HOST_SUFFIX = ".dzcdn.net";
+const MAX_PREVIEW_URL_LENGTH = 2048;
+const URL_CHARS = /^[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+$/;
+const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const HOSTNAME = new RegExp(`^${DNS_LABEL}(?:\\.${DNS_LABEL})+$`);
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
-  // Genre-based heuristics
-  if (combined.includes("ballad") || combined.includes("slow") || combined.includes("acoustic")) {
-    return 65 + Math.floor(Math.random() * 20); // 65-85
-  }
-  if (combined.includes("dance") || combined.includes("club") || combined.includes("house")) {
-    return 120 + Math.floor(Math.random() * 15); // 120-135
-  }
-  if (
-    combined.includes("drum and bass") ||
-    combined.includes("dnb") ||
-    combined.includes("jungle")
-  ) {
-    return 170 + Math.floor(Math.random() * 10); // 170-180
-  }
-  if (combined.includes("rock") || combined.includes("punk") || combined.includes("metal")) {
-    return 130 + Math.floor(Math.random() * 30); // 130-160
-  }
-  if (combined.includes("hip hop") || combined.includes("rap") || combined.includes("trap")) {
-    return 80 + Math.floor(Math.random() * 20); // 80-100
-  }
-  if (combined.includes("jazz") || combined.includes("blues")) {
-    return 90 + Math.floor(Math.random() * 40); // 90-130
-  }
-  if (combined.includes("techno") || combined.includes("trance")) {
-    return 135 + Math.floor(Math.random() * 15); // 135-150
-  }
+export function isAllowedPreviewUrl(previewUrl: string): boolean {
+  if (!previewUrl || previewUrl.length > MAX_PREVIEW_URL_LENGTH) return false;
+  if (!URL_CHARS.test(previewUrl) || !previewUrl.startsWith("https://")) return false;
 
-  // Default range for pop/rock
-  return 100 + Math.floor(Math.random() * 30); // 100-130
+  // Authority as written (before any normalisation by the URL parser)
+  const authority = previewUrl.slice("https://".length).split(/[/?#]/, 1)[0];
+  if (authority.includes("@")) return false;
+  const [host, port, ...rest] = authority.split(":");
+  if (rest.length > 0 || (port !== undefined && port !== "443")) return false;
+  if (!HOSTNAME.test(host) || IPV4.test(host)) return false;
+  if (host.split(".").some((label) => label.startsWith("xn--"))) return false;
+  return PREVIEW_HOSTS.has(host) || host.endsWith(PREVIEW_HOST_SUFFIX);
 }
 
-/**
- * Estimate key randomly (no reliable heuristic without audio)
- */
-function estimateKey(): { key: string; mode: string } {
-  const keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const modes = ["Major", "Minor"];
+/** A measured tempo: a finite number above zero, else null. */
+function measuredBpm(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** A finite number, else null. */
+function measuredNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** A non-empty string, else null. */
+function measuredText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/** "Major" or "Minor" (any case), else null. */
+function measuredMode(value: unknown): "Major" | "Minor" | null {
+  const text = measuredText(value)?.toLowerCase();
+  return text === "major" ? "Major" : text === "minor" ? "Minor" : null;
+}
+
+function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnalysisResult {
   return {
-    key: keys[Math.floor(Math.random() * keys.length)],
-    mode: modes[Math.floor(Math.random() * modes.length)],
-  };
-}
-
-/**
- * Estimate energy based on genre heuristics
- */
-function estimateEnergy(title: string, artist: string): number {
-  const combined = `${title} ${artist}`.toLowerCase();
-
-  if (
-    combined.includes("ballad") ||
-    combined.includes("acoustic") ||
-    combined.includes("ambient")
-  ) {
-    return 0.2 + Math.random() * 0.2; // 0.2-0.4
-  }
-  if (combined.includes("dance") || combined.includes("rock") || combined.includes("metal")) {
-    return 0.7 + Math.random() * 0.25; // 0.7-0.95
-  }
-
-  return 0.5 + Math.random() * 0.3; // 0.5-0.8 default
-}
-
-/**
- * Generate full estimated audio features
- */
-function generateEstimatedFeatures(title: string, artist: string): AudioAnalysisResult {
-  const { key, mode } = estimateKey();
-  return {
-    bpm: estimateBPM(title, artist),
-    key,
-    mode,
-    energy: Math.round(estimateEnergy(title, artist) * 1000) / 1000,
-    source: "estimated",
+    source: "unavailable",
+    bpm: null,
+    key: null,
+    mode: null,
+    energy: null,
+    keyMoments: [],
+    valence: null,
+    danceability: null,
+    acousticness: null,
+    instrumentalness: null,
+    reason,
+    error,
   };
 }
 
@@ -204,7 +190,7 @@ async function isServiceAvailable(): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(`${AUDIO_SERVICE_URL}/health`, {
+    const response = await fetch(`${audioServiceUrl()}/health`, {
       signal: controller.signal,
     });
 
@@ -223,10 +209,11 @@ async function analyzeWithService(previewUrl: string): Promise<AudioServiceRespo
   const timeout = setTimeout(() => controller.abort(), SERVICE_TIMEOUT);
 
   try {
-    const response = await fetch(`${AUDIO_SERVICE_URL}/analyze`, {
+    const response = await fetch(`${audioServiceUrl()}/analyze`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(audioServiceToken() ? { "X-Audio-Token": audioServiceToken() } : {}),
       },
       body: JSON.stringify({ preview_url: previewUrl }),
       signal: controller.signal,
@@ -268,13 +255,17 @@ export const analyzeAudioPreview = tool(
       effectivePreviewUrl = previewUrl;
       console.log("🎵 [Audio] Deezer unavailable, using Spotify preview (fallback)");
     } else {
-      // No preview from either source
-      console.log("⚠️ [Audio] No preview from Deezer or Spotify, using estimation");
-      const estimated = generateEstimatedFeatures(title || "", artist || "");
-      return JSON.stringify({
-        ...estimated,
-        message: "No preview available (Deezer/Spotify) - using genre-based estimation",
-      });
+      console.log("⚠️ [Audio] No preview from Deezer or Spotify; audio not measured");
+      return JSON.stringify(
+        unavailable("no_preview", "No preview available from Deezer or Spotify"),
+      );
+    }
+
+    if (!isAllowedPreviewUrl(effectivePreviewUrl)) {
+      console.log("⚠️ [Audio] Preview URL host not allowed; audio not measured");
+      return JSON.stringify(
+        unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
+      );
     }
 
     // Try the audio analysis service with the resolved preview URL
@@ -282,12 +273,10 @@ export const analyzeAudioPreview = tool(
       const serviceAvailable = await isServiceAvailable();
 
       if (!serviceAvailable) {
-        console.log("⚠️ [Audio] Analysis service unavailable, using estimation");
-        const estimated = generateEstimatedFeatures(title || "", artist || "");
-        return JSON.stringify({
-          ...estimated,
-          message: "Audio service offline - using genre-based estimation",
-        });
+        console.log("⚠️ [Audio] Analysis service unavailable; audio not measured");
+        return JSON.stringify(
+          unavailable("service_unavailable", "Audio analysis service did not respond"),
+        );
       }
 
       console.log("🎧 [Audio] Calling analysis service...");
@@ -297,39 +286,60 @@ export const analyzeAudioPreview = tool(
         `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
       );
 
-      return JSON.stringify({
-        bpm: result.bpm,
-        key: result.key,
-        mode: result.mode,
-        energy: result.energy,
-        duration: result.duration,
-        source: "analyzed" as const,
-        keyMoments: result.keyMoments || [],
-        // Pass through perceptual features from Essentia (undefined if unavailable)
-        valence: result.valence,
-        danceability: result.danceability,
-        acousticness: result.acousticness,
-        instrumentalness: result.instrumentalness,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Audio] Analysis failed:", message);
+      // Only a reply that says it analysed the clip is a measurement.
+      if (result.source !== "analyzed") {
+        return JSON.stringify(
+          unavailable(
+            "analysis_failed",
+            `Service reply source is ${JSON.stringify(result.source)}`,
+          ),
+        );
+      }
 
-      // Fallback to estimation
-      const estimated = generateEstimatedFeatures(title || "", artist || "");
-      return JSON.stringify({
-        ...estimated,
-        error: message,
-        message: "Analysis failed - using genre-based estimation",
-      });
+      // Missing values stay null, never 0 or a default. A key needs both a pitch class and a
+      // mode: when either is missing (e.g. unpitched audio) both are null. 0..1 scores outside
+      // that range are dropped and listed in outOfRange.
+      const outOfRange: string[] = [];
+      const unit = (name: string, value: unknown): number | null => {
+        const n = measuredNumber(value);
+        if (n === null) return null;
+        if (n < 0 || n > 1) {
+          outOfRange.push(name);
+          return null;
+        }
+        return n;
+      };
+      const keyName = measuredText(result.key);
+      const mode = measuredMode(result.mode);
+      const pitched = keyName !== null && mode !== null;
+      const measured: AudioAnalysisResult = {
+        source: "analyzed",
+        bpm: measuredBpm(result.bpm),
+        key: pitched ? keyName : null,
+        mode: pitched ? mode : null,
+        energy: unit("energy", result.energy),
+        duration: measuredNumber(result.duration),
+        keyMoments: Array.isArray(result.keyMoments) ? result.keyMoments : [],
+        // Scores from the Essentia models (null when the models are unavailable)
+        valence: unit("valence", result.valence),
+        danceability: unit("danceability", result.danceability),
+        acousticness: unit("acousticness", result.acousticness),
+        instrumentalness: unit("instrumentalness", result.instrumentalness),
+      };
+      if (outOfRange.length > 0) measured.outOfRange = outOfRange;
+      return JSON.stringify(measured);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("❌ [Audio] Analysis failed:", message);
+      return JSON.stringify(unavailable("analysis_failed", message));
     }
   },
   {
     name: "analyze_audio_preview",
     description:
-      "Analyze an audio preview URL to extract real BPM and musical key. " +
+      "Analyze an audio preview URL to measure BPM, key and energy. " +
       "Tries Deezer first (more reliable previews), then Spotify as fallback. " +
-      "Falls back to genre-based estimation if all sources fail.",
+      "Returns null values and a reason when no measurement is possible.",
     schema: z.object({
       previewUrl: z
         .string()
@@ -338,14 +348,8 @@ export const analyzeAudioPreview = tool(
         .describe(
           "The Spotify preview URL (30-second MP3). Can be null to trigger Deezer fallback.",
         ),
-      title: z
-        .string()
-        .optional()
-        .describe("Song title (required for Deezer fallback and estimation)"),
-      artist: z
-        .string()
-        .optional()
-        .describe("Artist name (required for Deezer fallback and estimation)"),
+      title: z.string().optional().describe("Song title (used to find a Deezer preview)"),
+      artist: z.string().optional().describe("Artist name (used to find a Deezer preview)"),
     }),
   },
 );
@@ -356,12 +360,12 @@ export const analyzeAudioPreview = tool(
 export const checkAudioServiceHealth = tool(
   async (): Promise<string> => {
     try {
-      const response = await fetch(`${AUDIO_SERVICE_URL}/health`);
+      const response = await fetch(`${audioServiceUrl()}/health`);
 
       if (!response.ok) {
         return JSON.stringify({
           available: false,
-          url: AUDIO_SERVICE_URL,
+          url: audioServiceUrl(),
           error: `HTTP ${response.status}`,
         });
       }
@@ -369,13 +373,13 @@ export const checkAudioServiceHealth = tool(
       const data = (await response.json()) as { version?: string };
       return JSON.stringify({
         available: true,
-        url: AUDIO_SERVICE_URL,
+        url: audioServiceUrl(),
         version: data.version,
       });
     } catch (error) {
       return JSON.stringify({
         available: false,
-        url: AUDIO_SERVICE_URL,
+        url: audioServiceUrl(),
         error: error instanceof Error ? error.message : "Connection failed",
       });
     }
@@ -392,4 +396,3 @@ export const checkAudioServiceHealth = tool(
 // =============================================================================
 
 export const audioTools = [analyzeAudioPreview, checkAudioServiceHealth];
-export { generateEstimatedFeatures, estimateBPM, estimateKey };

@@ -1,13 +1,91 @@
 /**
  * Engineer Node — Audio Analysis
  * Runs in parallel with Historian
+ *
+ * Every value it returns is measured by the audio analysis service or null. When no
+ * measurement is possible the features carry `unavailableReason`, and nothing is cached.
+ * Cached rows are only reused when they carry the `measured` marker; rows written before
+ * estimates were removed have none and are measured again.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { analyzeAudioPreview, type AudioAnalysisResult } from "../../sources/audio.js";
-import { withRetry } from "../errors.js";
 import { getCache } from "../../store/cache.js";
-import type { SonicAgentStateType, AudioFeatures } from "../state.js";
+import type { SonicAgentStateType, AudioFeatures, AudioUnavailableReason } from "../state.js";
+
+function unavailableFeatures(reason: AudioUnavailableReason, detail?: string): AudioFeatures {
+  return {
+    bpm: null,
+    key: null,
+    energy: null,
+    valence: null,
+    danceability: null,
+    acousticness: null,
+    instrumentalness: null,
+    confidence: "low",
+    keyMoments: [],
+    unavailableReason: reason,
+    unavailableDetail: detail,
+  };
+}
+
+/** Builds AudioFeatures from an analysis result, keeping only measured values. */
+export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
+  if (analysis.source !== "analyzed") {
+    return unavailableFeatures(analysis.reason ?? "analysis_failed", analysis.error);
+  }
+
+  // A key is a pitch class plus a mode; with either missing there is no key.
+  const key = analysis.key && analysis.mode ? `${analysis.key} ${analysis.mode}` : null;
+  const features: AudioFeatures = {
+    bpm: analysis.bpm ?? null,
+    key,
+    energy: analysis.energy ?? null,
+    valence: analysis.valence ?? null,
+    danceability: analysis.danceability ?? null,
+    acousticness: analysis.acousticness ?? null,
+    instrumentalness: analysis.instrumentalness ?? null,
+    confidence: "low",
+    keyMoments: analysis.keyMoments || [],
+    ...(analysis.outOfRange?.length ? { outOfRange: analysis.outOfRange } : {}),
+  };
+
+  if (features.bpm == null || features.key == null) {
+    const missing = [features.bpm == null && "tempo", features.key == null && "key"]
+      .filter(Boolean)
+      .join(" and ");
+    return {
+      ...features,
+      unavailableReason: "not_detected",
+      unavailableDetail: `The analysis found no ${missing}`,
+    };
+  }
+
+  const complete =
+    features.energy != null &&
+    features.valence != null &&
+    features.danceability != null &&
+    features.acousticness != null &&
+    features.instrumentalness != null;
+  return {
+    ...features,
+    confidence: complete ? "high" : "low",
+    measured: true,
+    analyzer: "audio-service",
+  };
+}
+
+/** True for a cached row this code wrote from a measurement. */
+function isTrustedCacheRow(row: AudioFeatures | null | undefined): row is AudioFeatures {
+  return (
+    row?.measured === true &&
+    row.analyzer === "audio-service" &&
+    typeof row.bpm === "number" &&
+    row.bpm > 0 &&
+    typeof row.key === "string" &&
+    row.key !== ""
+  );
+}
 
 export async function engineerNode(
   state: SonicAgentStateType,
@@ -19,11 +97,14 @@ export async function engineerNode(
 
   const writer = config.writer;
 
-  // Check persistent audio cache first
+  // Check persistent audio cache first. Rows without the measured marker are ignored.
   try {
     const cache = getCache();
     const cachedAudio = cache.getAudio(state.spotifyData.id);
-    if (cachedAudio) {
+    if (cachedAudio && !isTrustedCacheRow(cachedAudio)) {
+      console.log("🎧 [Engineer] Ignoring unmarked cached audio for:", state.spotifyData.title);
+    }
+    if (isTrustedCacheRow(cachedAudio)) {
       console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
       writer?.({
         type: "status",
@@ -51,92 +132,64 @@ export async function engineerNode(
 
   console.log("🎧 [Engineer] Analyzing:", state.spotifyData.title);
 
+  let audioFeatures: AudioFeatures;
   try {
-    // Use real audio analysis via Python microservice (librosa), with retry on transient failures
-    const analysisResult = await withRetry(() =>
-      analyzeAudioPreview.invoke({
-        previewUrl: state.spotifyData!.previewUrl,
-        title: state.spotifyData!.title,
-        artist: state.spotifyData!.artist,
-      }),
-    );
+    // analyzeAudioPreview reports failures in its result (source "unavailable") instead of throwing.
+    const analysisResult = await analyzeAudioPreview.invoke({
+      previewUrl: state.spotifyData.previewUrl,
+      title: state.spotifyData.title,
+      artist: state.spotifyData.artist,
+    });
+    audioFeatures = toAudioFeatures(JSON.parse(analysisResult) as AudioAnalysisResult);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("❌ [Engineer] Error:", message);
+    audioFeatures = unavailableFeatures("analysis_failed", message);
+  }
 
-    const analysis = JSON.parse(analysisResult) as AudioAnalysisResult;
-
-    // Construct full key string (e.g., "C Major")
-    const fullKey = analysis.mode ? `${analysis.key} ${analysis.mode}` : analysis.key;
-
-    // Real perceptual features from Essentia (null/undefined when models unavailable)
-    const hasEssentiaFeatures =
-      analysis.valence != null &&
-      analysis.danceability != null &&
-      analysis.acousticness != null &&
-      analysis.instrumentalness != null;
-
-    // Confidence is "high" only when both librosa and Essentia provide real data
-    const confidence = analysis.source === "analyzed" && hasEssentiaFeatures ? "high" : "low";
-
-    const audioFeatures: AudioFeatures = {
-      bpm: analysis.bpm,
-      key: fullKey,
-      energy: analysis.energy,
-      // Use real Essentia values when available; fall back to energy-based estimation
-      valence: analysis.valence ?? 0.5 + Math.random() * 0.3,
-      danceability:
-        analysis.danceability ??
-        (analysis.energy > 0.6 ? 0.6 + Math.random() * 0.3 : 0.4 + Math.random() * 0.2),
-      acousticness:
-        analysis.acousticness ??
-        (analysis.energy < 0.4 ? 0.5 + Math.random() * 0.3 : Math.random() * 0.3),
-      instrumentalness: analysis.instrumentalness ?? Math.random() * 0.2,
-      confidence,
-      keyMoments: analysis.keyMoments || [],
-    };
-
-    // Persist to cache
-    try {
-      getCache().putAudio(state.spotifyData!.id, audioFeatures);
-    } catch {
-      // Non-critical — log and continue
-    }
-
-    const sourceLabel = analysis.source === "analyzed" ? "verified" : "estimated";
+  if (audioFeatures.unavailableReason) {
+    const reason = audioFeatures.unavailableReason;
+    // Say what is missing: "not_detected" can leave a measured tempo without a key, or the
+    // reverse; the other reasons mean nothing was measured.
+    const summary =
+      reason === "not_detected"
+        ? `${audioFeatures.unavailableDetail ?? "The analysis found no tempo or key"} (${reason})`
+        : `Audio not measured (${reason}): BPM and key unavailable`;
     writer?.({
       type: "status",
-      code: "AUDIO-COMPLETE",
-      message: `Frequency analysis (${sourceLabel}): ${audioFeatures.bpm} BPM // ${audioFeatures.key}`,
+      code: "AUDIO-ERROR",
+      message: summary,
       node: "engineer",
       timestamp: new Date().toISOString(),
     });
-    console.log(
-      `✅ [Engineer] Analysis complete (${analysis.source}):`,
-      audioFeatures.bpm,
-      "BPM,",
-      audioFeatures.key,
-    );
-
+    console.log(`⚠️ [Engineer] ${summary}`);
     return {
       audioFeatures,
-      statusMessages: [
-        `🎵 Audio (${analysis.source}): ${audioFeatures.bpm} BPM, ${audioFeatures.key}`,
-      ],
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("❌ [Engineer] Error:", message);
-    return {
-      audioFeatures: {
-        bpm: 120,
-        key: "C Major",
-        energy: 0.7,
-        valence: 0.6,
-        danceability: 0.7,
-        acousticness: 0.2,
-        instrumentalness: 0.1,
-        confidence: "low" as const, // Fallback = low confidence
-        keyMoments: [], // No key moments for fallback
-      },
-      statusMessages: ["⚠️ Using fallback audio features"],
+      statusMessages: [`⚠️ ${summary}`],
     };
   }
+
+  // Only measurements are cached. A failed write (e.g. a column that does not accept null
+  // energy yet) is logged and the run continues; nothing reports the result as cached.
+  try {
+    getCache().putAudio(state.spotifyData.id, audioFeatures);
+  } catch (error) {
+    console.warn("⚠️ [Engineer] Could not cache audio:", error);
+  }
+
+  const partial =
+    audioFeatures.confidence === "high" ? "" : " (some perceptual features not measured)";
+  writer?.({
+    type: "status",
+    code: "AUDIO-COMPLETE",
+    message: `Frequency analysis: ${audioFeatures.bpm} BPM // ${audioFeatures.key}${partial}`,
+    node: "engineer",
+    timestamp: new Date().toISOString(),
+  });
+  console.log("✅ [Engineer] Analysis complete:", audioFeatures.bpm, "BPM,", audioFeatures.key);
+
+  return {
+    audioFeatures,
+    statusMessages: [`🎵 Audio (measured): ${audioFeatures.bpm} BPM, ${audioFeatures.key}`],
+  };
 }

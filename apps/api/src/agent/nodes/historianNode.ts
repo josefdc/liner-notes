@@ -5,8 +5,7 @@
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { searchSamples, searchProductionHistory, searchSongMeaning } from "../../sources/search.js";
-import { fetchLyrics } from "../../sources/genius.js";
+import { searchSamples, searchProductionHistory } from "../../sources/search.js";
 import { getMusicBrainzRelations } from "../../sources/musicbrainz.js";
 import {
   getLastfmTrackTags,
@@ -17,6 +16,15 @@ import { getCachedResearcherSubgraph } from "../researcherSubgraph.js";
 import { withRetry } from "../errors.js";
 import { getCache } from "../../store/cache.js";
 import type { SonicAgentStateType, ResearchData } from "../state.js";
+
+/**
+ * Research cached before song-meaning research was removed may hold page text from that
+ * search (which can quote the song) or from an earlier song-text source; it is dropped.
+ */
+export function withoutSongMeaning(research: ResearchData): ResearchData {
+  const { songMeaning: _dropped, ...rest } = research;
+  return rest;
+}
 
 export async function historianNode(
   state: SonicAgentStateType,
@@ -31,8 +39,9 @@ export async function historianNode(
   // Check persistent research cache first
   try {
     const cache = getCache();
-    const cachedResearch = cache.getResearch(state.spotifyData.id);
-    if (cachedResearch) {
+    const cached = cache.getResearch(state.spotifyData.id);
+    if (cached) {
+      const cachedResearch = withoutSongMeaning(cached);
       console.log("📚 [Historian] Cache hit for:", state.spotifyData.title);
       writer?.({
         type: "status",
@@ -202,7 +211,6 @@ export async function historianNode(
     const researchData: ResearchData = {
       samples: [],
       productionTrivia: [],
-      songMeaning: [],
       relatedArtists: [],
       collaborators: [],
       artistTopTracks: [],
@@ -214,15 +222,12 @@ export async function historianNode(
     };
 
     try {
-      // Enhanced research: Use MusicBrainz for structured data, Genius for lyrics, plus web search
-      const [samplesResult, triviaResult, meaningResult, musicBrainzResult, lyricsResult] =
-        await Promise.allSettled([
-          withRetry(() => searchSamples.invoke({ songTitle: title, artistName: artist })),
-          withRetry(() => searchProductionHistory.invoke({ songTitle: title, artistName: artist })),
-          withRetry(() => searchSongMeaning.invoke({ songTitle: title, artistName: artist })),
-          withRetry(() => getMusicBrainzRelations.invoke({ title, artist })),
-          withRetry(() => fetchLyrics.invoke({ title, artist })),
-        ]);
+      // Enhanced research: MusicBrainz for structured data, plus web search
+      const [samplesResult, triviaResult, musicBrainzResult] = await Promise.allSettled([
+        withRetry(() => searchSamples.invoke({ songTitle: title, artistName: artist })),
+        withRetry(() => searchProductionHistory.invoke({ songTitle: title, artistName: artist })),
+        withRetry(() => getMusicBrainzRelations.invoke({ title, artist })),
+      ]);
 
       // Process web search results
       if (samplesResult.status === "fulfilled" && !samplesResult.value.startsWith("Error")) {
@@ -230,9 +235,6 @@ export async function historianNode(
       }
       if (triviaResult.status === "fulfilled" && !triviaResult.value.startsWith("Error")) {
         researchData.productionTrivia.push(triviaResult.value);
-      }
-      if (meaningResult.status === "fulfilled" && !meaningResult.value.startsWith("Error")) {
-        researchData.songMeaning.push(meaningResult.value);
       }
 
       // Process MusicBrainz structured data
@@ -257,23 +259,9 @@ export async function historianNode(
         }
       }
 
-      // Process Genius lyrics
-      if (lyricsResult.status === "fulfilled") {
-        try {
-          const lyricsData = JSON.parse(lyricsResult.value);
-          if (lyricsData.lyrics) {
-            researchData.songMeaning.push(
-              `[Genius Lyrics] Raw lyrics for analysis:\n${lyricsData.lyrics}`,
-            );
-          }
-        } catch (e) {
-          console.warn("[Historian] Genius lyrics parse error:", e);
-        }
-      }
-
       return {
         researchData,
-        statusMessages: ["📚 Enhanced research complete (with Genius & MusicBrainz)"],
+        statusMessages: ["📚 Enhanced research complete (with MusicBrainz)"],
       };
     } catch {
       return {

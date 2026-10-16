@@ -1,29 +1,27 @@
 name: docker
 
-# Builds every image when anything that goes into an image changes.
+# Builds every image when files that can go into an image change.
 on:
   pull_request:
     paths:
-      - "apps/*/Dockerfile*"
-      - "apps/web/nginx.conf"
-      - "apps/*/package.json"
+      - "apps/**"
+      - "packages/**"
       - "services/audio/**"
-      - "packages/*/package.json"
       - "package.json"
       - "package-lock.json"
+      - ".npmrc"
       - ".dockerignore"
       - "docker-compose.yml"
       - ".github/workflows/docker.yml"
   push:
     branches: [main]
     paths:
-      - "apps/*/Dockerfile*"
-      - "apps/web/nginx.conf"
-      - "apps/*/package.json"
+      - "apps/**"
+      - "packages/**"
       - "services/audio/**"
-      - "packages/*/package.json"
       - "package.json"
       - "package-lock.json"
+      - ".npmrc"
       - ".dockerignore"
       - "docker-compose.yml"
       - ".github/workflows/docker.yml"
@@ -42,6 +40,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # docker-compose.yml points the API at apps/api/.env; images never contain it.
       - name: Create an empty API env file
         run: touch apps/api/.env

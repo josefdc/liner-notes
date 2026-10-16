@@ -1,6 +1,6 @@
 /**
  * Tests for database.ts, store.ts, and cache.ts
- * Run: cd server && npm run test:db
+ * Run: npm run test:db -w apps/api
  */
 
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync } from "node:fs";

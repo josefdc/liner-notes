@@ -23,4 +23,5 @@
 **/*.spec.ts
 **/*.spec.tsx
 **/__tests__
+**/coverage
 **/*.log

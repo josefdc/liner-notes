@@ -1,7 +1,7 @@
 /**
  * Test for Audio Analysis Tool
  *
- * Run with: tsx tools/audio.test.ts
+ * Run with: tsx src/sources/audio.test.ts
  *
  * Note: Requires the Python audio analysis service to be running:
  *   cd services/audio && uvicorn main:app --port 3002

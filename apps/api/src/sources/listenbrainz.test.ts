@@ -4,7 +4,7 @@
  * Tests the ListenBrainz similar artists tool with both MBID and name resolution.
  * No API key required (public API).
  *
- * Run: cd server && npx tsx tools/listenbrainz.test.ts
+ * Run: cd apps/api && npx tsx src/sources/listenbrainz.test.ts
  */
 
 import dotenv from "dotenv";

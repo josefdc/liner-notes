@@ -5,11 +5,13 @@
 //   WEB_PORT=3110 API_PORT=3111 AUDIO_PORT=3112 npm run dev
 //   DEV_SERVICES=web,api npm run dev     a subset
 //
-// Output lines are prefixed with the service name. If one service exits, the others are stopped.
+// Output lines are prefixed with the service name. If one service exits, the others are
+// stopped and this script exits with the first failing service's exit code.
 
 import { spawn } from "node:child_process";
 
 const { WEB_PORT, API_PORT, AUDIO_PORT } = process.env;
+const STOP_TIMEOUT_MS = 5000;
 
 const services = {
   web: {
@@ -44,8 +46,13 @@ for (const name of selected) {
   }
 }
 
+if (API_PORT && API_PORT !== "3001" && selected.includes("web")) {
+  console.warn("[dev] note: the web app still calls the API on port 3001; API_PORT moves only the API");
+}
+
 const children = new Map();
 let shuttingDown = false;
+let exitCode = 0;
 
 function prefix(name, stream, target) {
   let buffer = "";
@@ -60,18 +67,30 @@ function prefix(name, stream, target) {
   });
 }
 
-function shutdown(code) {
-  if (shuttingDown) return;
-  shuttingDown = true;
+// Each child leads its own process group, so watchers and servers it spawned are signalled too.
+function signalAll(signal) {
   for (const child of children.values()) {
-    // Each child leads its own process group so watchers and servers it spawned stop too.
     try {
-      process.kill(-child.pid, "SIGTERM");
+      process.kill(-child.pid, signal);
     } catch {
       // already gone
     }
   }
-  setTimeout(() => process.exit(code), 500).unref();
+}
+
+function shutdown(code) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  exitCode = code;
+  if (children.size === 0) process.exit(exitCode);
+  signalAll("SIGTERM");
+  setTimeout(() => {
+    if (children.size > 0) {
+      console.error(`[dev] ${[...children.keys()].join(", ")} did not stop in time; killing`);
+      signalAll("SIGKILL");
+    }
+    process.exit(exitCode);
+  }, STOP_TIMEOUT_MS).unref();
 }
 
 for (const name of selected) {
@@ -89,11 +108,11 @@ for (const name of selected) {
     if (!shuttingDown) {
       console.error(`[dev] ${name} exited (${signal ?? code}); stopping the other services`);
       shutdown(code || 1);
-    } else if (children.size === 0) {
-      process.exit(code ?? 0);
     }
+    if (children.size === 0) process.exit(exitCode);
   });
 }
 
-process.on("SIGINT", () => shutdown(0));
-process.on("SIGTERM", () => shutdown(0));
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => shutdown(0));
+}

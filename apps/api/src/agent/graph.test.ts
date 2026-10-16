@@ -1,7 +1,7 @@
 /**
  * Sonic Agent Graph Test
  *
- * Run with: npm run test:agent (from server directory)
+ * Run with: npm run test:agent -w apps/api
  *
  * Tests the complete LangGraph workflow:
  * scout → [clarification] → engineer/historian → composer

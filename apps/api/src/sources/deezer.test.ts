@@ -1,7 +1,7 @@
 /**
  * Test for Deezer Preview Tool
  *
- * Run with: cd server && npx tsx tools/deezer.test.ts
+ * Run with: cd apps/api && npx tsx src/sources/deezer.test.ts
  */
 
 import { searchDeezerPreview } from "./deezer.js";

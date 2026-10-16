@@ -1,7 +1,7 @@
 /**
  * Spotify Tools Test
  *
- * Run with: npm run test:spotify (from server directory)
+ * Run with: npm run test:spotify -w apps/api
  *
  * Make sure you have a .env file with:
  * - SPOTIFY_CLIENT_ID

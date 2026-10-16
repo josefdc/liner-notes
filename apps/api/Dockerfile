@@ -17,7 +17,8 @@ COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY services/audio/package.json services/audio/
 COPY packages/contract/package.json packages/contract/
-RUN npm ci -w apps/api
+# Full install: build tools resolve exactly as in a local checkout
+RUN npm ci
 
 # Copy source files
 COPY apps/api apps/api

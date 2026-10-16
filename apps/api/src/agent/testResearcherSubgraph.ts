@@ -1,6 +1,6 @@
 /**
  * Quick test for the Deep Dive Researcher Subgraph
- * Run with: npx tsx agent/testResearcherSubgraph.ts
+ * Run with: cd apps/api && npx tsx src/agent/testResearcherSubgraph.ts
  */
 
 import dotenv from "dotenv";

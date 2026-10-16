@@ -4,7 +4,7 @@
  * Tests all 5 Last.fm tools against the live API.
  * Requires LASTFM_API_KEY to be set in apps/api/.env
  *
- * Run: cd server && npx tsx tools/lastfm.test.ts
+ * Run: cd apps/api && npx tsx src/sources/lastfm.test.ts
  */
 
 import dotenv from "dotenv";

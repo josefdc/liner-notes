@@ -1,18 +1,27 @@
 # =============================================================================
 # Docker Ignore - repository root context (fallback)
 # The web and API images use apps/web/Dockerfile.dockerignore and
-# apps/api/Dockerfile.dockerignore; this file covers builders that ignore those.
+# apps/api/Dockerfile.dockerignore; this allowlist covers builders that ignore
+# those files and sends only what either image needs.
 # =============================================================================
 
-.git
+**
+
+!package.json
+!package-lock.json
+!.npmrc
+!apps/web
+!apps/api
+!services/audio/package.json
+!packages/contract/package.json
+
 **/node_modules
 **/dist
-**/.env
-**/.env.local
+**/.env*
 **/data
 **/*.db
 **/*.db-*
-**/.venv
-**/__pycache__
-services/audio/models
+**/*.sqlite*
+**/coverage
+**/*.md
 **/*.log

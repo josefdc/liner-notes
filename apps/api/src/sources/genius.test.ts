@@ -1,7 +1,7 @@
 /**
  * Test for Genius Lyrics Tool
  *
- * Run with: npm run test:tools (or tsx tools/genius.test.ts)
+ * Run with: npm run test:tools (or tsx src/sources/genius.test.ts)
  */
 
 import { fetchLyrics, getGeniusAnnotations } from "./genius.js";

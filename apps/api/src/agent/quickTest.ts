@@ -1,6 +1,6 @@
 /**
  * Quick Test Script for Sonic Agent v2
- * Run with: npx tsx agent/quickTest.ts
+ * Run with: cd apps/api && npx tsx src/agent/quickTest.ts
  */
 
 import dotenv from "dotenv";

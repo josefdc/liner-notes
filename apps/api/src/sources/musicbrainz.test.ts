@@ -1,7 +1,7 @@
 /**
  * Test for MusicBrainz Tool
  *
- * Run with: tsx tools/musicbrainz.test.ts
+ * Run with: tsx src/sources/musicbrainz.test.ts
  */
 
 import { getMusicBrainzRelations, getMusicBrainzArtist } from "./musicbrainz.js";

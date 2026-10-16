@@ -20,6 +20,34 @@ export async function useMockApi(page: Page, fixture: unknown) {
   await page.addInitScript({ path: join(mockDir, "mock-api.js") });
 }
 
+type MockWindow = {
+  __mockApi: { log: string[]; streamLog: string[]; release: (name: string) => void };
+};
+
+/** API requests the app has made so far ("fetch <path>" or "stream <path>?<query>"). */
+export function apiRequests(page: Page) {
+  return page.evaluate(() => (window as unknown as MockWindow).__mockApi.log);
+}
+
+/** What the mocked streams have done so far ("<path> open|<event>|closed|ended"). */
+export function streamLog(page: Page) {
+  return page.evaluate(() => (window as unknown as MockWindow).__mockApi.streamLog);
+}
+
+/** Lets streams paused at `{ "$wait": name }` continue. */
+export function releaseStream(page: Page, name: string) {
+  return page.evaluate((wait) => (window as unknown as MockWindow).__mockApi.release(wait), name);
+}
+
+/** The result event of the full-result fixture, for tests that build their own streams. */
+export function fullResultData() {
+  const events = loadFixture("full-result").streams["/api/analyze/stream"] as Array<{
+    type: string;
+    data?: unknown;
+  }>;
+  return events.find((event) => event.type === "complete")?.data;
+}
+
 /**
  * Collects console errors and warnings, and uncaught page errors. Failed resource loads are
  * left out: the font requests are aborted on purpose (see useMockApi).
@@ -37,8 +65,12 @@ export function collectProblems(page: Page) {
 }
 
 /** Runs a search against the mocked stream and continues to the Dashboard. */
-export async function analyzeAndOpenDashboard(page: Page, query: string) {
-  await page.goto("/");
+export async function analyzeAndOpenDashboard(
+  page: Page,
+  query: string,
+  { reload = true }: { reload?: boolean } = {},
+) {
+  if (reload) await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
   await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
   await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();

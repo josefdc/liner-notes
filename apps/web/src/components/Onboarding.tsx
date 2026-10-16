@@ -125,6 +125,8 @@ interface OnboardingProps {
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
+  /** Runs the failed analysis again. */
+  retry: () => void;
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
   onComplete: (trackData: TrackData) => void;
   // UX: Focus management
@@ -142,6 +144,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   candidates,
   analyze,
   selectCandidate,
+  retry,
   searchSuggest,
   onComplete,
   searchInputRef,
@@ -176,7 +179,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   // ─── P1:14 HITL disambiguation state ─────────────────────────────────────
   const [hitlSelectedIndex, setHitlSelectedIndex] = useState(0);
   const [hitlCountdown, setHitlCountdown] = useState<number | null>(null);
-  const hitlTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hitlRowRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // UX: HITL pause-on-hover (Item 6)
   const [hitlPaused, setHitlPaused] = useState(false);
   // UX: Auto-scroll to disambiguation when it appears
@@ -321,65 +324,34 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
   // ─── P1:14 HITL disambiguation logic ──────────────────────────────────────
-  // Show disambiguation when ≥3 candidates; auto-select otherwise
+  // Any candidate list is shown to the user; nothing is chosen without them seeing it.
+  const showPicker = status === 'disambiguation' && !!candidates && candidates.length > 0;
+
   useEffect(() => {
     if (status === 'disambiguation' && candidates && candidates.length > 0) {
-      if (candidates.length < 3) {
-        // Low ambiguity — auto-select
-        selectCandidate(candidates[0].id);
-      } else {
-        // Show disambiguation UI with 5s countdown
-        setHitlSelectedIndex(0);
-        setHitlCountdown(5);
-      }
+      // Show disambiguation UI with 5s countdown
+      setHitlSelectedIndex(0);
+      setHitlCountdown(5);
     } else {
       // Clear HITL state when not in disambiguation
       setHitlCountdown(null);
-      if (hitlTimerRef.current) {
-        clearInterval(hitlTimerRef.current);
-        hitlTimerRef.current = null;
-      }
-    }
-  }, [status, candidates, selectCandidate]);
-
-  // Auto-scroll to disambiguation panel when it appears
-  useEffect(() => {
-    if (status === 'disambiguation' && candidates && candidates.length >= 3 && hitlRef.current) {
-      hitlRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [status, candidates]);
 
-  // HITL countdown timer (respects pause state)
+  // Bring the picker into view and give it the keyboard when it appears
   useEffect(() => {
-    if (hitlCountdown === null || hitlCountdown <= 0 || hitlPaused) return;
-
-    hitlTimerRef.current = setInterval(() => {
-      setHitlCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          // Time's up — auto-select
-          if (candidates?.[hitlSelectedIndex]) {
-            selectCandidate(candidates[hitlSelectedIndex].id);
-          }
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (hitlTimerRef.current) {
-        clearInterval(hitlTimerRef.current);
-        hitlTimerRef.current = null;
-      }
-    };
-  }, [hitlCountdown, hitlPaused, candidates, hitlSelectedIndex, selectCandidate]);
+    if (status === 'disambiguation' && candidates && candidates.length > 0 && hitlRef.current) {
+      hitlRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      hitlRef.current.focus({ preventScroll: true });
+    }
+  }, [status, candidates]);
 
   // HITL candidate selection handler
   const handleHitlSelect = useCallback(
     (index: number) => {
-      if (!candidates) return;
+      const candidate = candidates?.[index];
+      if (!candidate) return;
       // Update preview (P1:10)
-      const candidate = candidates[index];
       setPreviewTrack({
         title: candidate.title,
         artist: candidate.artist,
@@ -387,42 +359,47 @@ const Onboarding: React.FC<OnboardingProps> = ({
       });
       setHitlSelectedIndex(index);
       setHitlCountdown(null);
-      if (hitlTimerRef.current) {
-        clearInterval(hitlTimerRef.current);
-        hitlTimerRef.current = null;
-      }
       selectCandidate(candidate.id);
     },
     [candidates, selectCandidate],
   );
 
-  // Handle Enter during HITL to confirm current selection
+  // HITL countdown timer (respects pause state). The selection at zero happens here, in
+  // the effect, never inside a state updater.
+  useEffect(() => {
+    if (hitlCountdown === null || hitlPaused) return;
+    if (hitlCountdown <= 0) {
+      handleHitlSelect(hitlSelectedIndex);
+      return;
+    }
+    const timer = setTimeout(
+      () => setHitlCountdown((prev) => (prev === null ? null : prev - 1)),
+      1000,
+    );
+    return () => clearTimeout(timer);
+  }, [hitlCountdown, hitlPaused, hitlSelectedIndex, handleHitlSelect]);
+
+  // Arrow keys move the highlight (and focus) and stop the countdown; Enter selects the
+  // highlighted row, wherever focus is inside the picker.
   const handleHitlKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (!candidates || hitlCountdown === null) return;
+      if (!candidates || candidates.length === 0) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         handleHitlSelect(hitlSelectedIndex);
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        setHitlSelectedIndex((prev) => (prev < candidates.length - 1 ? prev + 1 : 0));
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        const next = (hitlSelectedIndex + step + candidates.length) % candidates.length;
+        setHitlSelectedIndex(next);
         setHitlCountdown(null); // Pause countdown on interaction
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setHitlSelectedIndex((prev) => (prev > 0 ? prev - 1 : candidates.length - 1));
-        setHitlCountdown(null);
+        hitlRowRefs.current[next]?.focus();
       }
     },
-    [candidates, hitlCountdown, hitlSelectedIndex, handleHitlSelect],
+    [candidates, hitlSelectedIndex, handleHitlSelect],
   );
 
   // ─── P0:2 Error retry handlers ────────────────────────────────────────────
-  const handleRetry = useCallback(() => {
-    if (searchQuery.trim()) {
-      analyze(searchQuery.trim());
-    }
-  }, [analyze, searchQuery]);
-
   const handleReset = useCallback(() => {
     setSearchQuery('');
     setPreviewTrack(null);
@@ -600,7 +577,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   variant="cyber"
                   size="md"
                   leftIcon={<RotateCcw size={14} />}
-                  onClick={handleRetry}
+                  onClick={retry}
                 >
                   RETRY ANALYSIS
                 </Button>
@@ -690,7 +667,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           )}
 
           {/* P1:14 HITL Disambiguation UI (Item 6 — pause-on-hover, keyboard hint, timer bar) */}
-          {status === 'disambiguation' && candidates && candidates.length >= 3 && (
+          {showPicker && candidates && (
             <div
               ref={hitlRef}
               className="mb-6 animate-fade-in-up"
@@ -711,7 +688,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   <button
                     type="button"
                     key={candidate.id}
+                    ref={(el) => {
+                      hitlRowRefs.current[index] = el;
+                    }}
                     onClick={() => handleHitlSelect(index)}
+                    onFocus={() => setHitlSelectedIndex(index)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-[--radius-sm] text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
                       index === hitlSelectedIndex
                         ? 'bg-cyber/15 border border-cyber/30'

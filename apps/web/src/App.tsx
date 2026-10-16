@@ -82,6 +82,7 @@ interface PhaseViewProps {
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
+  retry: () => void;
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
   // Player props
   decryptMoreFactoidsStream: (
@@ -120,6 +121,7 @@ const PhaseView = React.memo<PhaseViewProps>(
     candidates,
     analyze,
     selectCandidate,
+    retry,
     searchSuggest,
     decryptMoreFactoidsStream,
     onAnalysisComplete,
@@ -146,6 +148,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
+            retry={retry}
             searchSuggest={searchSuggest}
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
@@ -188,6 +191,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
+            retry={retry}
             searchSuggest={searchSuggest}
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
@@ -210,6 +214,7 @@ const App: React.FC = () => {
     isComplete,
     analyze,
     selectCandidate,
+    retry,
     decryptMoreFactoidsStream,
     searchSuggest,
     reset,
@@ -364,50 +369,51 @@ const App: React.FC = () => {
   }, [reset, effectiveTrackData]);
 
   // ─── P1:15 Browser history support ────────────────────────────────────────
-  // Records the initial phase once on mount; later phases are pushed by navigation.
+  // One history entry per phase the user navigates to; the steps of an analysis add none.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs only on mount
   useEffect(() => {
     window.history.replaceState({ phase }, '');
   }, []);
 
   useEffect(() => {
-    // Don't push during analysis (would create noise)
-    if (
-      status !== 'idle' &&
-      status !== 'complete' &&
-      status !== 'error' &&
-      phase === AppPhase.ONBOARDING
-    ) {
-      return;
-    }
+    // Already recorded: the initial entry, or the entry the browser just moved to.
+    if (window.history.state?.phase === phase) return;
     window.history.pushState({ phase }, '');
-  }, [phase, status]);
+  }, [phase]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (event.state?.phase) {
-        const targetPhase = event.state.phase as AppPhase;
-        // Guard: don't interrupt a running analysis
-        if (phase === AppPhase.ONBOARDING && isLoading) {
-          // Re-push current state to prevent navigation
-          window.history.pushState({ phase }, '');
-          return;
-        }
-        // Guard: don't navigate to dashboard/player without track data
-        if (
-          (targetPhase === AppPhase.DASHBOARD || targetPhase === AppPhase.PLAYER) &&
-          !effectiveTrackData
-        ) {
-          setPhase(AppPhase.ONBOARDING);
-          return;
-        }
-        setPhase(targetPhase);
+      const targetPhase = event.state?.phase as AppPhase | undefined;
+      if (!targetPhase) return;
+      // Guard: don't interrupt a running analysis or an open track picker
+      if (phase === AppPhase.ONBOARDING && (isLoading || status === 'disambiguation')) {
+        // Re-push current state to prevent navigation
+        window.history.pushState({ phase }, '');
+        return;
       }
+      if (targetPhase === AppPhase.ONBOARDING) {
+        // Back from a result starts a new search; the result stays available to restore.
+        if (phase !== AppPhase.ONBOARDING) handleNewSearch();
+        return;
+      }
+      if (!effectiveTrackData) {
+        // Forward to a result left with Back: show it again, without a new analysis.
+        if (previousTrackDataRef.current) {
+          setOverrideTrackData(previousTrackDataRef.current);
+          setIsRestoredSession(true);
+          setPhase(targetPhase);
+        } else {
+          // Guard: don't navigate to dashboard/player without track data
+          setPhase(AppPhase.ONBOARDING);
+        }
+        return;
+      }
+      setPhase(targetPhase);
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [phase, isLoading, effectiveTrackData]);
+  }, [phase, isLoading, status, effectiveTrackData, handleNewSearch]);
 
   return (
     <Layout>
@@ -424,6 +430,7 @@ const App: React.FC = () => {
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
+            retry={retry}
             searchSuggest={searchSuggest}
             decryptMoreFactoidsStream={decryptMoreFactoidsStream}
             onAnalysisComplete={handleAnalysisComplete}

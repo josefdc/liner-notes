@@ -4,48 +4,111 @@
  * Features:
  * - SSE streaming for real-time status updates
  * - Human-in-the-loop disambiguation handling
- * - Automatic fallback to non-streaming API
+ * - An inactivity watchdog fed by the server's heartbeat events
  * - TypeScript types aligned with backend schemas
+ *
+ * Every analysis is a "run": its first stream, the track picker and the resume stream all
+ * belong to it. Events are handled only while their stream is the run's current stream and
+ * the run is the latest one, so a stale stream can never close or overwrite a newer one.
+ * A broken stream ends the run with an error the user can retry; it never starts the
+ * analysis again by itself.
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { TrackData, LogCode, Factoid } from '../types';
+import type { LogCode, Factoid } from '../types';
 import type { AgentLog } from '../types';
-import type { AgentState, UseAgentReturn, SearchCandidate } from './agent/types';
+import type { AgentState, AgentStreamEvent, UseAgentReturn, SearchCandidate } from './agent/types';
 import { API_BASE_URL } from './agent/types';
-import { analyzeSync, resumeSync, fetchSuggestions } from './agent/apiClient';
+import { fetchSuggestions } from './agent/apiClient';
 
 // Re-export types for consumers that import from this file
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
+
+/**
+ * How long a stream may stay silent once its server has sent a heartbeat (a named
+ * `heartbeat` event, every 15 s). The watchdog arms only on the first heartbeat: a server
+ * that sends none is never timed out, so a slow step is not cut off.
+ */
+export const STREAM_INACTIVITY_TIMEOUT_MS = 45_000;
+
+const INITIAL_STATE: AgentState = {
+  status: 'idle',
+  logs: [],
+  trackData: null,
+  candidates: null,
+  threadId: null,
+  error: null,
+  isLoading: false,
+  isComplete: false,
+};
+
+interface Run {
+  query: string;
+  threadId: string | null;
+  candidates: SearchCandidate[] | null;
+  /** How far the run got; a result or an error is final and later events are ignored. */
+  phase: 'running' | 'awaiting-selection' | 'complete' | 'failed';
+  /** Aborted when the run is replaced, on reset and on unmount; closes its streams. */
+  controller: AbortController;
+}
+
+function newRun(query: string): Run {
+  return {
+    query,
+    threadId: null,
+    candidates: null,
+    phase: 'running',
+    controller: new AbortController(),
+  };
+}
+
+function sameCandidates(a: SearchCandidate[] | null, b: SearchCandidate[]): boolean {
+  return !!a && a.length === b.length && a.every((candidate, i) => candidate.id === b[i].id);
+}
+
+/** Calls `onTimeout` after a silence, but only once a heartbeat has armed it. */
+function inactivityWatchdog(onTimeout: () => void) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let armed = false;
+  const restart = () => {
+    clearTimeout(timer);
+    timer = setTimeout(onTimeout, STREAM_INACTIVITY_TIMEOUT_MS);
+  };
+  return {
+    heartbeat() {
+      armed = true;
+      restart();
+    },
+    activity() {
+      if (armed) restart();
+    },
+    stop() {
+      armed = false;
+      clearTimeout(timer);
+    },
+  };
+}
+
+function abortError(): Error {
+  return new DOMException('The stream was aborted', 'AbortError');
+}
 
 // =============================================================================
 // Hook Implementation
 // =============================================================================
 
 export function useAgent(): UseAgentReturn {
-  const [state, setState] = useState<AgentState>({
-    status: 'idle',
-    logs: [],
-    trackData: null,
-    candidates: null,
-    threadId: null,
-    error: null,
-    isLoading: false,
-    isComplete: false,
-  });
+  const [state, setState] = useState<AgentState>(INITIAL_STATE);
 
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Ref for reading current state in callbacks without adding state to deps
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const runRef = useRef<Run>(newRun(''));
+  // The run's open stream and the function that closes it (and stops its watchdog).
+  const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      eventSourceRef.current?.close();
-      abortControllerRef.current?.abort();
+      runRef.current.controller.abort();
+      runRef.current = newRun('');
     };
   }, []);
 
@@ -66,43 +129,50 @@ export function useAgent(): UseAgentReturn {
     }));
   }, []);
 
+  /** Ends the run with an error the user can retry. */
+  const fail = useCallback(
+    (run: Run, message: string) => {
+      if (runRef.current !== run || run.phase === 'failed') return;
+      run.phase = 'failed';
+      setState((prev) => ({
+        ...prev,
+        status: 'error',
+        error: message,
+        candidates: null,
+        isLoading: false,
+      }));
+      addLog(`Error: ${message}`, 'SYS-ERROR');
+    },
+    [addLog],
+  );
+
   /**
    * Reset state
    */
   const reset = useCallback(() => {
-    eventSourceRef.current?.close();
-    abortControllerRef.current?.abort();
-    setState({
-      status: 'idle',
-      logs: [],
-      trackData: null,
-      candidates: null,
-      threadId: null,
-      error: null,
-      isLoading: false,
-      isComplete: false,
-    });
+    runRef.current.controller.abort();
+    runRef.current = newRun('');
+    setState(INITIAL_STATE);
   }, []);
 
   /**
-   * Handle streaming events
+   * Handle one event of the run's current stream. `close` closes that stream.
    */
   const handleStreamEvent = useCallback(
-    (data: {
-      type: string;
-      message?: string;
-      code?: LogCode;
-      node?: string;
-      threadId?: string;
-      candidates?: SearchCandidate[];
-      data?: TrackData;
-      error?: string;
-    }) => {
+    (run: Run, data: AgentStreamEvent, close: () => void) => {
+      // A result or an error is final. Later events (the server repeats `complete` for
+      // the thread) change nothing; the stream is closed when it ends.
+      if (run.phase === 'complete' || run.phase === 'failed') {
+        if (data.type === 'done' || data.type === 'error') close();
+        return;
+      }
+
       switch (data.type) {
         case 'connected':
+          run.threadId = data.threadId || null;
           setState((prev) => ({
             ...prev,
-            threadId: data.threadId || null,
+            threadId: run.threadId,
           }));
           addLog('Connected to agent', 'SYS-INIT');
           break;
@@ -122,33 +192,48 @@ export function useAgent(): UseAgentReturn {
           }
           break;
 
+        // The server announces the picker twice (`candidates`, then `interrupt` once the
+        // run is paused); both describe the same choice.
         case 'candidates':
+        case 'interrupt': {
+          const candidates = data.candidates ?? run.candidates ?? [];
+          if (candidates.length === 0) {
+            close();
+            fail(run, 'No matching songs were found.');
+            break;
+          }
+          if (data.threadId) run.threadId = data.threadId;
+          // Keep the same list object when nothing changed, so the picker is not reset.
+          if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
+          run.phase = 'awaiting-selection';
           setState((prev) => ({
             ...prev,
             status: 'disambiguation',
-            candidates: data.candidates || null,
+            threadId: run.threadId,
+            candidates: run.candidates,
             isLoading: false,
           }));
-          addLog(`Found ${data.candidates?.length || 0} matching songs`, 'SYS-WARN');
+          addLog(
+            data.type === 'candidates'
+              ? `Found ${candidates.length} matching songs`
+              : 'Awaiting user selection...',
+            'SYS-WARN',
+          );
           break;
-
-        case 'interrupt':
-          setState((prev) => ({
-            ...prev,
-            status: 'disambiguation',
-            threadId: data.threadId || prev.threadId,
-            candidates: data.candidates || null,
-            isLoading: false,
-          }));
-          addLog('Awaiting user selection...', 'SYS-WARN');
-          break;
+        }
 
         case 'complete':
-          eventSourceRef.current?.close();
+          if (!data.data) {
+            close();
+            fail(run, 'The analysis finished without a result.');
+            break;
+          }
+          run.phase = 'complete';
           setState((prev) => ({
             ...prev,
             status: 'complete',
-            trackData: data.data || null,
+            trackData: data.data ?? null,
+            candidates: null,
             isLoading: false,
             isComplete: true,
           }));
@@ -156,74 +241,76 @@ export function useAgent(): UseAgentReturn {
           break;
 
         case 'error':
-          eventSourceRef.current?.close();
-          setState((prev) => ({
-            ...prev,
-            status: 'error',
-            error: data.error || 'Unknown error',
-            isLoading: false,
-          }));
-          addLog(`Error: ${data.error}`, 'SYS-ERROR');
+          close();
+          fail(run, data.error || 'The analysis failed.');
           break;
 
         case 'done':
-          eventSourceRef.current?.close();
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-          }));
+          close();
+          // A stream that ends without a result, an error or a picker has nothing to show.
+          if (run.phase === 'running') fail(run, 'The analysis ended without a result.');
           break;
       }
     },
-    [addLog],
+    [addLog, fail],
   );
 
   /**
-   * Fallback to synchronous API if SSE fails
+   * Open a stream for the run and make it the run's current stream.
    */
-  const fallbackToSync = useCallback(
-    async (query: string) => {
-      addLog('⚡ Switching to standard API...');
+  const openRunStream = useCallback(
+    (url: string, run: Run, onOpen?: () => void) => {
+      const source = new EventSource(url);
+      const isCurrent = () => runRef.current === run && streamRef.current?.source === source;
 
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+      const close = () => {
+        watchdog.stop();
+        source.close();
+        run.controller.signal.removeEventListener('abort', close);
+        if (streamRef.current?.source === source) streamRef.current = null;
+      };
+      // The connection is gone: an error unless the run already has what it needs.
+      const lose = (message: string) => {
+        const current = isCurrent();
+        close();
+        if (current && run.phase === 'running') fail(run, message);
+      };
+      const watchdog = inactivityWatchdog(() => lose('The analysis stopped responding.'));
 
-      try {
-        const result = await analyzeSync(query, controller.signal);
+      run.controller.signal.addEventListener('abort', close, { once: true });
+      streamRef.current = { source, close };
 
-        if (result.success && result.data) {
-          setState((prev) => ({
-            ...prev,
-            status: 'complete',
-            trackData: result.data as TrackData,
-            isLoading: false,
-            isComplete: true,
-          }));
-          addLog('✅ Analysis complete!');
-        } else {
-          setState((prev) => ({
-            ...prev,
-            status: 'error',
-            error: result.error || 'Analysis failed',
-            isLoading: false,
-          }));
-          addLog(`❌ ${result.error || 'Analysis failed'}`);
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
+      source.onopen = () => {
+        if (isCurrent()) onOpen?.();
+      };
+      source.addEventListener('heartbeat', () => {
+        if (isCurrent()) watchdog.heartbeat();
+        else close();
+      });
+      source.onmessage = (event) => {
+        if (!isCurrent()) {
+          close();
           return;
         }
-        const message = error instanceof Error ? error.message : 'Request failed';
-        setState((prev) => ({
-          ...prev,
-          status: 'error',
-          error: message,
-          isLoading: false,
-        }));
-        addLog(`❌ Error: ${message}`);
-      }
+        watchdog.activity();
+        let data: AgentStreamEvent;
+        try {
+          data = JSON.parse(event.data);
+        } catch (e) {
+          console.error('[useAgent] Failed to parse SSE event:', e);
+          return;
+        }
+        if (data.type === 'heartbeat') {
+          watchdog.heartbeat();
+          return;
+        }
+        handleStreamEvent(run, data, close);
+      };
+      // EventSource reconnects by itself, which would start the analysis again on the
+      // server: close instead and let the user retry.
+      source.onerror = () => lose('Lost the connection to the analysis.');
     },
-    [addLog],
+    [fail, handleStreamEvent],
   );
 
   /**
@@ -231,85 +318,44 @@ export function useAgent(): UseAgentReturn {
    */
   const analyze = useCallback(
     async (query: string) => {
-      // Reset previous state
-      eventSourceRef.current?.close();
-      abortControllerRef.current?.abort();
+      runRef.current.controller.abort();
+      const run = newRun(query);
+      runRef.current = run;
 
-      setState({
-        status: 'connecting',
-        logs: [],
-        trackData: null,
-        candidates: null,
-        threadId: null,
-        error: null,
-        isLoading: true,
-        isComplete: false,
-      });
-
+      setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
       addLog(`🔍 Searching for "${query}"...`);
 
       try {
-        // Try SSE streaming first
         const url = `${API_BASE_URL}/api/analyze/stream?query=${encodeURIComponent(query)}`;
-        const eventSource = new EventSource(url);
-        eventSourceRef.current = eventSource;
-
-        eventSource.onopen = () => {
-          setState((prev) => ({ ...prev, status: 'searching' }));
-        };
-
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            handleStreamEvent(data);
-          } catch (e) {
-            console.error('[useAgent] Failed to parse SSE event:', e);
-          }
-        };
-
-        eventSource.onerror = (error) => {
-          console.error('[useAgent] SSE error:', error);
-          eventSource.close();
-
-          // Fall back to non-streaming API
-          fallbackToSync(query);
-        };
+        openRunStream(url, run, () =>
+          setState((prev) =>
+            prev.status === 'connecting' ? { ...prev, status: 'searching' } : prev,
+          ),
+        );
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Connection failed';
-        setState((prev) => ({
-          ...prev,
-          status: 'error',
-          error: message,
-          isLoading: false,
-        }));
-        addLog(`❌ Error: ${message}`);
+        fail(run, error instanceof Error ? error.message : 'Connection failed');
       }
     },
-    [addLog, handleStreamEvent, fallbackToSync],
+    [addLog, fail, openRunStream],
   );
 
   /**
-   * Select a candidate after disambiguation
+   * Select a candidate after disambiguation. Only the first selection for a picker counts.
    */
   const selectCandidate = useCallback(
     async (candidateId: string) => {
-      const { threadId, candidates } = stateRef.current;
+      const run = runRef.current;
+      if (run.phase !== 'awaiting-selection') return;
+      const candidate = run.candidates?.find((c) => c.id === candidateId);
+      if (!candidate) return;
 
-      if (!threadId) {
-        // No thread ID means we need to start fresh with the selected track
-        addLog(`🎵 Selected track: ${candidateId}`);
-        setState((prev) => ({
-          ...prev,
-          status: 'analyzing',
-          isLoading: true,
-          candidates: null,
-        }));
+      run.phase = 'running';
+      // The analysis stream has done its part; nothing it sends later may touch this run.
+      streamRef.current?.close();
 
-        // Use the track ID directly to search
-        const selectedCandidate = candidates?.find((c) => c.id === candidateId);
-        if (selectedCandidate) {
-          await analyze(`${selectedCandidate.title} ${selectedCandidate.artist}`);
-        }
+      if (!run.threadId) {
+        // Without a thread there is nothing to resume: search for the chosen track instead.
+        await analyze(`${candidate.title} ${candidate.artist}`);
         return;
       }
 
@@ -322,63 +368,22 @@ export function useAgent(): UseAgentReturn {
       }));
 
       try {
-        // Try streaming resume first
-        const url = `${API_BASE_URL}/api/analyze/stream/resume?threadId=${encodeURIComponent(threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}`;
-        const eventSource = new EventSource(url);
-        eventSourceRef.current = eventSource;
-
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            handleStreamEvent(data);
-          } catch (e) {
-            console.error('[useAgent] Failed to parse resume event:', e);
-          }
-        };
-
-        eventSource.onerror = async () => {
-          eventSource.close();
-
-          // Fallback to POST resume
-          try {
-            const result = await resumeSync(threadId, candidateId);
-
-            if (result.success && result.data) {
-              setState((prev) => ({
-                ...prev,
-                status: 'complete',
-                trackData: result.data as TrackData,
-                isLoading: false,
-                isComplete: true,
-              }));
-              addLog('✅ Analysis complete!');
-            } else {
-              throw new Error(result.error || 'Resume failed');
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Resume failed';
-            setState((prev) => ({
-              ...prev,
-              status: 'error',
-              error: message,
-              isLoading: false,
-            }));
-            addLog(`❌ ${message}`);
-          }
-        };
+        const url = `${API_BASE_URL}/api/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}`;
+        openRunStream(url, run);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Selection failed';
-        setState((prev) => ({
-          ...prev,
-          status: 'error',
-          error: message,
-          isLoading: false,
-        }));
-        addLog(`❌ ${message}`);
+        fail(run, error instanceof Error ? error.message : 'Selection failed');
       }
     },
-    [addLog, handleStreamEvent, analyze],
+    [addLog, analyze, fail, openRunStream],
   );
+
+  /**
+   * Run the last analysis again (the error screen's retry).
+   */
+  const retry = useCallback(() => {
+    const { query } = runRef.current;
+    if (query) analyze(query);
+  }, [analyze]);
 
   /**
    * Stream factoids one-by-one via SSE for faster perceived speed
@@ -390,8 +395,16 @@ export function useAgent(): UseAgentReturn {
       trackArtist: string,
       existingIds: string[],
       onFactoid: (factoid: Factoid) => void,
+      signal?: AbortSignal,
     ): Promise<void> => {
       return new Promise((resolve, reject) => {
+        // A new analysis or a reset ends the stream, as does the caller's signal.
+        const runSignal = runRef.current.controller.signal;
+        if (runSignal.aborted || signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+
         const params = new URLSearchParams({
           trackTitle,
           trackArtist: trackArtist || '',
@@ -400,8 +413,31 @@ export function useAgent(): UseAgentReturn {
 
         const url = `${API_BASE_URL}/api/factoids/decrypt/stream?${params}`;
         const eventSource = new EventSource(url);
+        let active = true;
 
+        const stop = () => {
+          active = false;
+          watchdog.stop();
+          eventSource.close();
+          runSignal.removeEventListener('abort', onAbort);
+          signal?.removeEventListener('abort', onAbort);
+        };
+        const onAbort = () => {
+          stop();
+          reject(abortError());
+        };
+        const watchdog = inactivityWatchdog(() => {
+          stop();
+          reject(new Error('Factoid stream stopped responding'));
+        });
+        runSignal.addEventListener('abort', onAbort, { once: true });
+        signal?.addEventListener('abort', onAbort, { once: true });
+
+        eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
         eventSource.onmessage = (event) => {
+          // Nothing reaches the caller once the stream is closed or aborted.
+          if (!active) return;
+          watchdog.activity();
           try {
             const data = JSON.parse(event.data);
 
@@ -411,8 +447,12 @@ export function useAgent(): UseAgentReturn {
                 onFactoid(data.data as Factoid);
                 break;
 
+              case 'heartbeat':
+                watchdog.heartbeat();
+                break;
+
               case 'done':
-                eventSource.close();
+                stop();
                 resolve();
                 break;
 
@@ -427,7 +467,7 @@ export function useAgent(): UseAgentReturn {
         };
 
         eventSource.onerror = () => {
-          eventSource.close();
+          stop();
           reject(new Error('Factoid stream connection failed'));
         };
       });
@@ -460,10 +500,11 @@ export function useAgent(): UseAgentReturn {
       ...state,
       analyze,
       selectCandidate,
+      retry,
       decryptMoreFactoidsStream,
       searchSuggest,
       reset,
     }),
-    [state, analyze, selectCandidate, decryptMoreFactoidsStream, searchSuggest, reset],
+    [state, analyze, selectCandidate, retry, decryptMoreFactoidsStream, searchSuggest, reset],
   );
 }

@@ -1,22 +1,29 @@
 # Evals: golden track set
 
-`golden.jsonl` is the reference set the app is measured against: 45 real
+`golden.jsonl` is the reference set the app is measured against: real
 recordings, each with labels that say where they came from. It is small on
 purpose. Every value in it can be traced to a lookup or a page, and a label
 that could not be sourced is left `null`.
 
 ```
 evals/
-  golden.jsonl            one JSON object per line (the set)
-  scripts/coverage.mjs    Deezer preview coverage check (Node >= 20, no dependencies)
-  reports/                dated coverage reports produced by the script
+  golden.jsonl                  one JSON object per line (the set)
+  scripts/summary.mjs           prints the counts that describe the set
+  scripts/coverage.mjs          Deezer preview coverage check (Node >= 20, no dependencies)
+  scripts/coverage.test.mjs     tests for the coverage matcher and input checks
+  reports/                      dated coverage reports produced by the script
 ```
+
+Counts (rows, strata sizes, live subset, edges, held-out domains) change as
+the set changes, so they are not repeated here: run
+`node evals/scripts/summary.mjs`.
 
 ## Row schema
 
 ```jsonc
 {
   "isrc": "GBDUW0000053",          // required, unique, ^[A-Z]{2}[A-Z0-9]{3}\d{7}$
+  "mbid": "60fa767a-…",            // MusicBrainz recording the row means
   "spotifyId": null,               // Spotify track id, or null (see below)
   "deezerId": 3135553,             // Deezer track the audio eval uses (carries this ISRC)
   "title": "One More Time",
@@ -39,6 +46,8 @@ evals/
         "retrieved": "2026-10-16"  // UTC date the source was read
       }
     ],
+    "edgesExhaustive": true,       // gold lists every forward relation the cited sources state
+    "otherDocumentedTargets": [],  // relations the sources state that gold does not score
     "noSample": false,             // true only for checked no-sample controls
     "noSampleSources": []          // controls: [{ sourceUrl, kind, retrieved, revisionUrl? }]
   },
@@ -48,20 +57,28 @@ evals/
 
 Field rules:
 
+- **mbid** is the MusicBrainz recording the row means. **Identity is scored at
+  recording level**: the row's ISRC is one of several codes for that
+  recording (album, single, compilation and reissue registrations), and an
+  answer that resolves to the same MusicBrainz recording through another of
+  its codes is correct. MusicBrainz sometimes attaches one ISRC to several
+  recordings (a radio edit, a live take, a duplicate); `notes` names those
+  and `mbid` says which one is meant.
 - **isrc** comes from a lookup that was actually run, never from memory. For
   each row, every ISRC on the row's MusicBrainz recording(s) was resolved on
   Deezer, and the code with the **earliest year** that resolves to the same
-  studio recording (not live, instrumental, remix or edit) was chosen. Ties
-  within a year go to the entry on the original album, then to a playable
-  entry. A code is kept even if its Deezer entry is not playable; the
-  coverage report shows that. When no MusicBrainz recording carries any
-  usable code, the ISRC from the Deezer search is kept. `notes` says which
-  case applies and why.
+  studio recording (not live, instrumental, remix, edit, or an edited "clean"
+  version) was chosen. Ties within a year go to the entry on the original
+  album, then to a playable entry. A code is kept even if its Deezer entry is
+  not playable; the coverage report shows that. When no MusicBrainz recording
+  carries a usable code, the ISRC from the Deezer search is kept. `notes`
+  says which case applies and why.
 - **deezerId** is a playable Deezer entry that carries the row's ISRC when one
   was found (Deezer search followed by `GET /track/<id>`), otherwise the entry
   `GET /track/isrc:<ISRC>` returns. Deezer often has several entries for one
   ISRC (album, single, compilations) and the ISRC endpoint returns only one of
-  them, sometimes an unplayable one. **The audio eval uses the row's
+  them, sometimes an unplayable one or a different take (for "Stronger" it
+  returns an unreadable instrumental). **The audio eval uses the row's
   `deezerId` entry.** The gap between the two is a known Deezer issue that the
   app's resolver must handle (fall back from the ISRC endpoint to search or a
   known id); the coverage report measures both.
@@ -76,24 +93,58 @@ Field rules:
   should accept any of them. `target` is as precise as the source allows: an
   `isrc` (looked up the same way as row ISRCs) and/or an `mbid` (the
   MusicBrainz recording the source names), and always `title` + `artist`.
+- **Borrowings described without a named type.** Some sources describe a
+  borrowing without calling it a sample, interpolation or cover ("took
+  elements from", "incorporates elements of"). When the description clearly
+  fits one type, the edge uses it and `notes` quotes the source; "Creep" is
+  recorded as an interpolation of "The Air That I Breathe" because the source
+  describes shared chord progression and melody, with co-writing credit, and
+  no reused recording. When no type fits, the borrowing goes into
+  `otherDocumentedTargets` with `relation: null`.
 - **Several edges with the same target** are one gold relation backed by
   several sources (for example Wikipedia, a newspaper and MusicBrainz). Score
   per distinct target, not per edge; the extra edges exist so that held-out
   credit survives when one source domain is excluded (see below).
+- **edgesExhaustive / otherDocumentedTargets.** Gold edges are not always
+  every relation the sources mention. `otherDocumentedTargets` lists
+  relations the cited sources state that gold deliberately does not score
+  (secondary samples, indirect samples, contested findings, borrowings with
+  no type or no identifiable recording), each as `{ target, relation,
+  sourceUrl, revisionUrl?, retrieved }`, with the reason in `notes`.
+  `edgesExhaustive` is `true` only where the cited sources were checked and
+  gold lists every forward relation they state; it is always `true` for
+  no-sample controls and `false` for rows whose sources were not checked for
+  this purpose.
 - **key** is written as tonic plus mode, with `#` and `b` as accidentals.
 - **noSample** is `true` only in the no-sample-controls stratum, after the
   check listed in `noSampleSources`. `false` means "no claim either way", not
   "known to contain samples".
 
+## Scoring edges
+
+- Recall: a gold target counts as found when a proposed edge points to the
+  same recording (by ISRC or MusicBrainz id) or to the same title and artist,
+  with the gold relation or one of its `relationAlternatives`.
+- Precision: a proposed edge that matches gold is a true positive. A proposed
+  edge that matches an `otherDocumentedTargets` entry is **neither a true nor
+  a false positive**; it is left out of precision. On rows with
+  `edgesExhaustive: true`, every other proposed edge is a false positive. On
+  rows with `edgesExhaustive: false`, the sources may know relations gold does
+  not list, so only proposals that match gold or are clearly unsupported
+  (nothing in the run's evidence or the cited sources backs them) count;
+  anything else is left out.
+- On no-sample controls any proposed sample, interpolation or cover is a
+  hallucinated relation.
+
 ## Strata
 
-| stratum | rows | what it is for |
-|---|---:|---|
-| `documented-samples` | 13 | tracks whose samples or interpolations are well documented; the main test of edge recall and precision |
-| `no-sample-controls` | 8 | original compositions with no known samples or interpolations; any edge the app reports here is a false positive |
-| `ambiguous-titles` | 8 | titles shared by several well-known songs ("Hurt", "Creep", "Crazy", "Angel"…); tests that the app resolves the right recording |
-| `non-english` | 8 | titles that are not in English (Japanese, Korean, Spanish, French, German); tests search and metadata outside English |
-| `obscure` | 8 | small-audience but real and documented releases, several of them sample sources for the first stratum |
+| stratum | what it is for |
+|---|---|
+| `documented-samples` | tracks whose samples or interpolations are well documented; the main test of edge recall and precision |
+| `no-sample-controls` | original compositions with no known samples or interpolations; any edge the app reports here is a hallucination |
+| `ambiguous-titles` | titles shared by several well-known songs ("Hurt", "Creep", "Crazy", "Angel"…); tests that the app resolves the right recording |
+| `non-english` | titles that are not in English (Japanese, Korean, Spanish, French, German); tests search and metadata outside English |
+| `obscure` | small-audience but real and documented releases, several of them sample sources for the first stratum |
 
 A no-sample control is checked against two sources, both listed in
 `noSampleSources`: its MusicBrainz recording has no forward "samples material"
@@ -103,10 +154,27 @@ consulted for this version of the set because it refuses automated requests.
 
 ## Live subset
 
-Rows with `"liveSubset": true` (24 of 45) are the ones the live end-to-end
-eval runs through the real pipeline with real network calls; the rest are
-scored offline. The subset contains every row with a held-out edge plus at
-least two rows from each stratum, so every stratum is represented in live runs.
+Rows with `"liveSubset": true` are the ones the live end-to-end eval runs
+through the real pipeline with real network calls. The subset contains every
+documented-samples row, at least five no-sample controls, and rows from the
+ambiguous-title, non-English and obscure strata; every row with a held-out
+edge is in it. Rows outside the subset are not run by the live eval: they are
+covered by the preview coverage check below and by the schema checks run on
+this file, and can be run live on demand. Ambiguous-title rows outside the
+subset keep only MusicBrainz edges as gold; their Wikipedia or press
+statements are listed in `otherDocumentedTargets`.
+
+Live rows per metric in this version (`node evals/scripts/summary.mjs`
+prints the current values):
+
+| metric | live rows it uses | n |
+|---|---|---:|
+| edge recall | live rows with at least one gold edge | 15 |
+| edge precision | all live rows (controls included) | 24 |
+| held-out recall | live rows with at least one held-out edge | 15 |
+| hallucinated-sample rate | live no-sample controls | 5 |
+| identity accuracy | all live rows | 24 |
+
 Changing the subset needs a recorded reason, like any other change to the set.
 
 ## What counts as a source
@@ -125,12 +193,15 @@ Every non-null label carries a source:
 - `bpmLabelSource` / `keyLabelSource` say honestly what kind of source it is,
   in `kind`, and when it was read, in `retrieved`. Kinds used so far:
   - *published sheet music (Musicnotes listing)*: the "original published
-    key" and the metronome marking on the publisher's product page. A
-    metronome marking is a nominal tempo written on the score, not a
-    measurement of the recording, so compare it with a tolerance and expect
-    half/double-time readings.
+    key" and the metronome marking on the publisher's product page.
   - *Wikipedia article citing published sheet music*: used where the sheet
     music itself could not be fetched; the kind names what the article cites.
+- **Sheet-music tempos are nominal.** A metronome marking is written on the
+  score, not measured from the recording; it can differ from the recording by
+  a few BPM, be written at half or double time, and a song can change tempo
+  ("bad guy" moves from about 135 to about 120). Use these labels with a
+  tolerance and octave-equivalence; they are not suitable for strict
+  Acc1-style scoring (within 4% of the exact tempo).
 - Algorithmic estimates (Deezer's `bpm` field, key-finder sites, Spotify audio
   features) are not used as labels. If one ever is, its `kind` must say
   "algorithmic estimate (site)".
@@ -149,12 +220,13 @@ score well on them by echoing a database it already queries.
 planned to query":
 
 - queried today: MusicBrainz, ListenBrainz, Last.fm, the Genius API, Spotify,
-  Deezer, and pages returned by Tavily web search;
+  Deezer, pages returned by Tavily web search, and WhoSampled (the
+  pipeline's sample search asks the web search for WhoSampled pages);
 - planned (they arrive with a later issue): Discogs and SecondHandSongs.
 
 Edges from those sources are `true`. Everything else is `false`, i.e.
 held-out: Wikipedia articles, newspapers and magazines, broadcasters,
-interviews, label press releases, liner notes, WhoSampled.
+interviews, label press releases, liner notes.
 
 Held-out status is decided **per run**, not once. Web search can surface any
 domain, so an edge stops counting as held-out for a given run if that run's
@@ -163,9 +235,8 @@ includes an `en.wikipedia.org` page loses held-out credit for every
 Wikipedia-sourced edge it finds). The flag in the file is the default; the
 scorer applies the per-run rule. To keep one cited domain from wiping out all
 held-out credit, every documented-samples row has held-out edges from at least
-two different domains: Wikipedia and one of ten other publications
-(latimes.com, theguardian.com, loudwire.com, rollingstone.com, billboard.com,
-ig.ft.com, news.bbc.co.uk, archive.seattletimes.com, npr.org, kexp.org).
+two different domains (Wikipedia and a newspaper, magazine or broadcaster);
+`summary.mjs` lists the domains.
 
 ## Changing the set
 
@@ -189,21 +260,25 @@ sequentially and at least 300 ms apart (10 s timeout, one retry):
 Title and artist must be equal after normalisation (NFKC, case, Latin
 accents, punctuation, whitespace, featured-artist credits); a Deezer title
 with instrumental/live/remix/karaoke/acoustic/demo/edit/version that the row
-lacks counts as different, and a bracketed non-Latin title matches either
-part (e.g. "Gangnam Style (강남스타일)" and "강남스타일"). Preview URLs are
-signed and expire, so they are never stored or printed.
+lacks counts as different, remaster notes are ignored however they are
+worded, and a bracketed non-Latin title matches either part (e.g. "Gangnam
+Style (강남스타일)" and "강남스타일"). Preview URLs are signed and expire, so
+they are never stored or printed.
 
 ```sh
 node evals/scripts/coverage.mjs --dry-run                       # lookups + table, writes nothing
 node evals/scripts/coverage.mjs --report evals/reports/coverage-$(date -u +%F).md
+node --test 'evals/scripts/*.test.mjs'                          # matcher and input tests, no network
 ```
 
-The output ends with `deezerId preview: N/M (P%)` followed by
-`coverage: N/M (P%)`, where the last line counts previews via the ISRC
-endpoint. Failed lookups (network, timeout, non-JSON, quota) are listed and
-never counted as "no preview". The script exits 0 when every lookup got an
-answer, whatever the coverage, and 1 on an invalid golden file (bad JSON,
-missing or duplicate ISRC, unknown stratum), bad arguments, any failed
-lookup, or repeated quota errors (it stops after three in a row). The report
-records the golden file's path and sha256, the git commit, and that preview
-availability depends on the country of the requesting IP address.
+When every lookup got an answer, the output ends with
+`deezerId preview: N/M (P%)` followed by `coverage: N/M (P%)`; the last line
+counts previews via the ISRC endpoint. A failed lookup (network, timeout,
+non-JSON body, quota) is never counted as "no preview": the failures are
+listed, both lines read `… unavailable (K lookups failed)`, no report is
+written and the script exits 1. It also exits 1 on an invalid golden file
+(bad JSON, missing or duplicate ISRC, unknown stratum), bad arguments, or
+repeated quota errors (it stops after three in a row); otherwise it exits 0
+whatever the coverage. The report records the generation date, the golden
+file's path and sha256, and that preview availability depends on the country
+of the requesting IP address.

@@ -18,20 +18,21 @@
 //   --dry-run        do the lookups and print the table, write nothing
 //   --report <path>  also write a markdown report to <path>
 //
-// After a completed run the output ends with two lines:
+// When every lookup got an answer, stdout ends with two lines:
 //   deezerId preview: N/M (P%)   rows whose deezerId entry has a preview
 //   coverage: N/M (P%)           rows whose ISRC-endpoint entry has a preview
-// A run that cannot start or is aborted ends with an `error:` line on stderr.
-//
-// Exit code: 0 when every lookup got an answer, whatever the coverage.
-// 1 when the golden file is unreadable or invalid (bad JSON, missing or
-// duplicate ISRC, unknown stratum), on bad arguments, or when any lookup
-// failed (network error, timeout, non-JSON response, quota) after its retry.
-// Failed lookups are listed and never counted as "no preview".
+// When K lookups failed (network error, timeout, non-JSON body, quota) after
+// their retry, the failures are listed, both lines read
+//   deezerId preview: unavailable (K lookups failed)
+//   coverage: unavailable (K lookups failed)
+// no report is written and the exit code is 1: a failed lookup is never
+// counted as "no preview". A run that cannot start (bad arguments, unreadable
+// or invalid golden file: bad JSON, missing or duplicate ISRC, unknown
+// stratum) or is aborted after repeated quota errors prints an `error:` line
+// on stderr and exits 1. Otherwise the exit code is 0, whatever the coverage.
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -104,6 +105,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class QuotaAbort extends Error {}
 
+// Reads and parses a response body. A timeout or connection error while the
+// body is still arriving is a failed lookup, not a malformed response.
+export async function readJsonBody(res) {
+  let text;
+  try {
+    text = await res.text();
+  } catch (err) {
+    const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+    return {
+      kind: "fail",
+      error: timedOut
+        ? "timeout while reading the body"
+        : `network while reading the body: ${err?.message ?? err}`,
+    };
+  }
+  try {
+    return { kind: "ok", body: JSON.parse(text) };
+  } catch {
+    return { kind: "fail", error: "response is not JSON" };
+  }
+}
+
 function makeClient() {
   let last = 0;
   let consecutiveQuota = 0;
@@ -124,12 +147,9 @@ function makeClient() {
       };
     }
     if (!res.ok) return { kind: "fail", error: `HTTP ${res.status}` };
-    let body;
-    try {
-      body = JSON.parse(await res.text());
-    } catch {
-      return { kind: "fail", error: "response is not JSON" };
-    }
+    const read = await readJsonBody(res);
+    if (read.kind === "fail") return read;
+    const body = read.body;
     if (body && typeof body === "object" && body.error) {
       // Deezer reports errors as HTTP 200 with an error object.
       if (body.error.code === 800) return { kind: "not-found" }; // "no data": an answer, not a failure
@@ -176,7 +196,7 @@ function norm(s) {
     .normalize("NFKC")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "") // Latin diacritics only; kana and hangul are left intact
+    .replace(/[\u0300-\u036f]/g, "") // Latin diacritics only; kana and hangul are left intact
     .normalize("NFC")
     .replace(/&/g, " and ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
@@ -194,7 +214,7 @@ function stripNeutral(s) {
   return String(s ?? "")
     .replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, "")
     .replace(/\s*[([][^)\]]*\bremaster(?:ed)?\b[^)\]]*[)\]]/gi, "")
-    .replace(/\s+-\s+(?:\d{4}\s+)?remaster(?:ed)?(?:\s+\d{4})?\s*$/i, "");
+    .replace(/\s+-\s+[^-]*\bremaster(?:ed)?\b[^-]*$/i, "");
 }
 
 // The forms a title may legitimately be written in: the whole title, and when
@@ -213,8 +233,11 @@ function titleForms(s) {
 }
 
 export function titleMatches(golden, deezer) {
-  const g = qualifiers(golden);
-  if ([...qualifiers(deezer)].some((q) => !g.has(q))) return false;
+  // Remaster and featured-artist notes are removed before looking for
+  // qualifiers, so "(2014 Remastered Version)" and "(Remastered 2023)" are
+  // treated the same way.
+  const g = qualifiers(stripNeutral(golden));
+  if ([...qualifiers(stripNeutral(deezer))].some((q) => !g.has(q))) return false;
   const forms = titleForms(golden);
   for (const f of titleForms(deezer)) if (forms.has(f)) return true;
   return false;
@@ -299,47 +322,19 @@ function byStratum(results) {
   return m;
 }
 
-function gitCommit() {
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: HERE,
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-  } catch {
-    return null;
-  }
-}
-
 function markdown(ctx) {
-  const {
-    results,
-    strata,
-    date,
-    goldenPath,
-    sha256,
-    commit,
-    total,
-    previews,
-    idPreviews,
-    failures,
-  } = ctx;
+  const { results, strata, date, goldenPath, sha256, total, previews, idPreviews } = ctx;
   const esc = (v) => String(v).replace(/\|/g, "\\|");
   const { head, rows } = table(results);
   const o = [];
   o.push(`# Deezer preview coverage, ${date}`);
   o.push("");
-  o.push(`- Date (UTC): ${date}`);
+  o.push(`- Generated (UTC date): ${date}`);
   o.push(`- Golden file: \`${goldenPath}\`, ${total} rows, sha256 \`${sha256}\``);
-  o.push(
-    `- Commit: ${commit ? `\`${commit}\` (the golden file may carry uncommitted changes; the sha256 identifies it)` : "unavailable (not run inside a git checkout)"}`,
-  );
   o.push(`- Preview via the ISRC endpoint: **${previews}/${total} (${pct(previews, total)}%)**`);
   o.push(
     `- Preview via the row's \`deezerId\`: **${idPreviews}/${total} (${pct(idPreviews, total)}%)**`,
   );
-  o.push(`- Failed lookups: ${failures.length}`);
   o.push(
     "- How measured: `node evals/scripts/coverage.mjs --report <path>` made two keyless requests per row, " +
       "`https://api.deezer.com/track/isrc:<ISRC>` and `https://api.deezer.com/track/<deezerId>`, sequentially and at least " +
@@ -368,12 +363,6 @@ function markdown(ctx) {
     );
   }
   o.push("");
-  if (failures.length) {
-    o.push("## Failed lookups");
-    o.push("");
-    for (const f of failures) o.push(`- ${f}`);
-    o.push("");
-  }
   o.push("## Per track");
   o.push("");
   o.push(`| ${head.join(" | ")} |`);
@@ -498,10 +487,18 @@ async function main() {
   for (const [s, v] of strata) {
     console.log(`${s}: ${v.preview}/${v.n} via ISRC endpoint, ${v.idPreview}/${v.n} via deezerId`);
   }
+
+  // A failed lookup is not an answer: no percentage is computed and no report
+  // is written, so a network problem can never be read as low coverage.
   if (failures.length) {
     console.log("");
-    console.log(`${failures.length} lookup(s) failed (not counted as "no preview"):`);
+    console.log(`${failures.length} lookup(s) failed:`);
     for (const f of failures) console.log(`  ${f}`);
+    if (opts.report && !opts.dryRun)
+      console.error("error: report not written because lookups failed");
+    console.log(`deezerId preview: unavailable (${failures.length} lookups failed)`);
+    console.log(`coverage: unavailable (${failures.length} lookups failed)`);
+    return 1;
   }
 
   if (opts.report && !opts.dryRun) {
@@ -517,11 +514,9 @@ async function main() {
           date,
           goldenPath,
           sha256: golden.sha256,
-          commit: gitCommit(),
           total,
           previews,
           idPreviews,
-          failures,
         }),
       );
       console.log(`report written to ${opts.report}`);
@@ -533,7 +528,7 @@ async function main() {
 
   console.log(`deezerId preview: ${idPreviews}/${total} (${pct(idPreviews, total)}%)`);
   console.log(`coverage: ${previews}/${total} (${pct(previews, total)}%)`);
-  return failures.length ? 1 : 0;
+  return 0;
 }
 
 // Run only when executed directly, so the matchers can be imported for tests.

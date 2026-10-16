@@ -5,6 +5,7 @@
  * Maps to the frontend TrackData interface.
  */
 
+import { randomUUID } from "node:crypto";
 import { Annotation } from "@langchain/langgraph";
 import type { SearchCandidate, TrackData } from "./schema.js";
 
@@ -30,7 +31,7 @@ export interface Factoid {
   id: string;
   title: string;
   content: string;
-  type: "production" | "trivia" | "lyrics" | "credits" | "sample" | "curiosity" | "connection";
+  type: "production" | "trivia" | "credits" | "sample" | "curiosity" | "connection";
   /** Clickable entities mentioned in the factoid (artists, songs, albums) */
   entities?: FactoidEntity[];
 }
@@ -96,24 +97,68 @@ export interface KeyMoment {
   description: string;
 }
 
+/**
+ * Why measured audio values are missing:
+ * - no_preview: neither Deezer nor Spotify returned a preview clip
+ * - preview_rejected: the preview URL is not on an allowed audio CDN host
+ * - service_unavailable: the audio analysis service did not answer its health check
+ * - analysis_failed: the service was reached but the analysis failed
+ * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio)
+ * - not_run: audio analysis did not run for this track
+ */
+export type AudioUnavailableReason =
+  | "no_preview"
+  | "preview_rejected"
+  | "service_unavailable"
+  | "analysis_failed"
+  | "not_detected"
+  | "not_run";
+
+/**
+ * Audio features from the analysis service, computed on the preview clip, or null.
+ * - bpm, key and energy are measured from the signal (tempo tracking, key profiles, RMS).
+ * - valence, danceability, acousticness and instrumentalness are scores from audio models
+ *   (Essentia) run over the clip: model estimates, not signal measurements.
+ * No value is filled in by this code or by a language model; missing values stay null.
+ */
 export interface AudioFeatures {
-  bpm: number;
-  key: string;
-  energy: number;
-  valence: number;
-  danceability: number;
-  acousticness: number;
-  instrumentalness: number;
-  /** Reliability of the analysis: 'high' for real librosa analysis, 'low' for estimation */
+  bpm: number | null;
+  key: string | null;
+  energy: number | null;
+  valence: number | null;
+  danceability: number | null;
+  acousticness: number | null;
+  instrumentalness: number | null;
+  /**
+   * 'high' when tempo, key and all perceptual features were measured;
+   * 'low' when some of them are missing (missing values are null, never filled in).
+   */
   confidence: "low" | "high";
   /** Key moments detected in the audio (drops, peaks, transitions) */
   keyMoments?: KeyMoment[];
+  /** Set when the analysis did not produce a measurement */
+  unavailableReason?: AudioUnavailableReason;
+  /** Human-readable detail for unavailableReason (e.g. the service error message) */
+  unavailableDetail?: string;
+  /** Fields the service returned outside their valid range; they are null here */
+  outOfRange?: string[];
+  /**
+   * Set to true only on features built from an audio service measurement. Cached rows without
+   * it were written before estimates were removed and are not trusted.
+   */
+  measured?: true;
+  /** What produced the measurement (the audio analysis service) */
+  analyzer?: "audio-service";
 }
 
 export interface ResearchData {
   samples: string[];
   productionTrivia: string[];
-  songMeaning: string[];
+  /**
+   * No longer collected: song-meaning web pages can quote the song. Optional only so research
+   * cached before its removal still type-checks; it is dropped when that research is read.
+   */
+  songMeaning?: string[];
   relatedArtists: string[];
   /** Artist collaborators from MusicBrainz */
   collaborators?: string[];
@@ -168,10 +213,7 @@ export interface ResearchPlan {
   nextAction:
     | "search_samples"
     | "search_production"
-    | "search_meaning"
     | "search_general"
-    | "search_lyrics"
-    | "search_annotations"
     | "search_musicbrainz"
     | "search_artist_collaborators"
     | "search_artist_top_tracks"
@@ -252,7 +294,6 @@ export const SonicAgentState = Annotation.Root({
     reducer: (prev, next) => ({
       samples: [...prev.samples, ...next.samples],
       productionTrivia: [...prev.productionTrivia, ...next.productionTrivia],
-      songMeaning: [...prev.songMeaning, ...next.songMeaning],
       relatedArtists: [...prev.relatedArtists, ...next.relatedArtists],
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
       artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
@@ -274,7 +315,6 @@ export const SonicAgentState = Annotation.Root({
     default: () => ({
       samples: [],
       productionTrivia: [],
-      songMeaning: [],
       relatedArtists: [],
       collaborators: [],
       artistTopTracks: [],
@@ -335,14 +375,14 @@ export const SEGMENT_COLORS = {
  * Generate a unique ID
  */
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11); // guard-allow: random-values-api — identifier, not data
+  return randomUUID();
 }
 
 /**
- * Create default segments based on duration
+ * A generic song structure used when nothing better is known. It is a template, not an
+ * analysis of the track: TrackData built with it sets `segmentsSource: "template"`.
  */
 export function createDefaultSegments(_durationMs: number): SongSegment[] {
-  // Simple default structure for songs without detailed analysis
   return [
     { label: "Intro", start: 0, end: 8, color: SEGMENT_COLORS.intro },
     { label: "Verse 1", start: 8, end: 25, color: SEGMENT_COLORS.verse },

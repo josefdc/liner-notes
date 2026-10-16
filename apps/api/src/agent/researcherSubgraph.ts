@@ -19,13 +19,7 @@ import dotenv from "dotenv";
 import { generateStructuredOutput, GEMINI_MODEL_PRO } from "./geminiClient.js";
 import { ResearchPlanSchema } from "./schema.js";
 import { formatResearchManagerPrompt } from "./prompts.js";
-import {
-  searchSamples,
-  searchProductionHistory,
-  searchSongMeaning,
-  searchMusicInfo,
-} from "../sources/search.js";
-import { fetchLyrics, getGeniusAnnotations } from "../sources/genius.js";
+import { searchSamples, searchProductionHistory, searchMusicInfo } from "../sources/search.js";
 import { getMusicBrainzRelations, getMusicBrainzArtist } from "../sources/musicbrainz.js";
 import { getArtistTopTracks } from "../sources/spotify.js";
 import {
@@ -60,7 +54,6 @@ export const ResearcherState = Annotation.Root({
     reducer: (prev, next) => ({
       samples: [...prev.samples, ...(next.samples || [])],
       productionTrivia: [...prev.productionTrivia, ...(next.productionTrivia || [])],
-      songMeaning: [...prev.songMeaning, ...(next.songMeaning || [])],
       relatedArtists: [...prev.relatedArtists, ...(next.relatedArtists || [])],
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
       artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
@@ -82,7 +75,6 @@ export const ResearcherState = Annotation.Root({
     default: () => ({
       samples: [],
       productionTrivia: [],
-      songMeaning: [],
       relatedArtists: [],
       collaborators: [],
       artistTopTracks: [],
@@ -279,7 +271,6 @@ async function researchToolNode(
   const newData: ResearchData = {
     samples: [],
     productionTrivia: [],
-    songMeaning: [],
     relatedArtists: [],
     collaborators: [],
     artistTopTracks: [],
@@ -314,16 +305,6 @@ async function researchToolNode(
         }
         break;
 
-      case "search_meaning":
-        result = await searchSongMeaning.invoke({
-          songTitle: title,
-          artistName: artist,
-        });
-        if (!result.startsWith("Error") && !result.startsWith("No song meaning")) {
-          newData.songMeaning.push(result);
-        }
-        break;
-
       case "search_general": {
         // Use the custom query from the plan (for following leads)
         const query = plan.query || `${title} ${artist} music history`;
@@ -334,39 +315,6 @@ async function researchToolNode(
         }
         break;
       }
-
-      case "search_lyrics":
-        // Use Genius to fetch raw lyrics
-        result = await fetchLyrics.invoke({ title, artist });
-        try {
-          const lyricsData = JSON.parse(result);
-          if (lyricsData.lyrics) {
-            newData.songMeaning.push(`[Genius Lyrics]\n${lyricsData.lyrics}`);
-          }
-        } catch {
-          // If parse fails, add raw result
-          if (!result.includes("error")) {
-            newData.songMeaning.push(result);
-          }
-        }
-        break;
-
-      case "search_annotations":
-        // Use Genius annotations for deeper meaning
-        result = await getGeniusAnnotations.invoke({ title, artist });
-        try {
-          const annotData = JSON.parse(result);
-          if (annotData.topAnnotations?.length > 0) {
-            newData.songMeaning.push(
-              `[Genius Annotations] ${JSON.stringify(annotData.topAnnotations)}`,
-            );
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.songMeaning.push(result);
-          }
-        }
-        break;
 
       case "search_musicbrainz":
         // Use MusicBrainz for structured genealogy data

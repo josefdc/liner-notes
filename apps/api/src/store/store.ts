@@ -4,6 +4,10 @@
  * Drop-in replacement for InMemoryStore. Implements only the abstract
  * `batch()` method; all convenience methods (get, put, search, delete,
  * listNamespaces) are inherited from BaseStore and delegate to batch().
+ *
+ * Search is an exact prefix match on namespaces (no wildcards, case-sensitive) and supports
+ * value filters; semantic `query` search is not supported. Items older than the store
+ * retention period are deleted by the retention job (retention.ts).
  */
 
 import type Database from "better-sqlite3";
@@ -44,24 +48,93 @@ function isListNamespacesOp(op: Operation): op is ListNamespacesOperation {
 // SqliteStore
 // =============================================================================
 
+interface StoreRow {
+  namespace: string;
+  key: string;
+  value: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const DEFAULT_SEARCH_LIMIT = 10;
+
+function prepareStatements(db: Database.Database) {
+  const columns = "namespace, key, value, created_at, updated_at";
+  return {
+    get: db.prepare<[string, string], StoreRow>(
+      `SELECT ${columns} FROM store_items WHERE namespace = ? AND key = ?`,
+    ),
+    put: db.prepare(
+      `INSERT INTO store_items (namespace, key, value, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(namespace, key) DO UPDATE SET
+         value = excluded.value,
+         updated_at = excluded.updated_at`,
+    ),
+    delete: db.prepare("DELETE FROM store_items WHERE namespace = ? AND key = ?"),
+    searchAll: db.prepare<[], StoreRow>(
+      `SELECT ${columns} FROM store_items ORDER BY namespace, key`,
+    ),
+    searchAllPage: db.prepare<[number, number], StoreRow>(
+      `SELECT ${columns} FROM store_items ORDER BY namespace, key LIMIT ? OFFSET ?`,
+    ),
+    // Exact, case-sensitive prefix match on the JSON-encoded namespace: the namespace itself, or
+    // one that starts with the prefix followed by another segment. substr() compares text
+    // exactly, so `_`, `%` and letter case in namespaces carry no special meaning.
+    searchPrefix: db.prepare<{ ns: string; child: string }, StoreRow>(
+      `SELECT ${columns} FROM store_items
+       WHERE namespace = :ns OR substr(namespace, 1, length(:child)) = :child
+       ORDER BY namespace, key`,
+    ),
+    searchPrefixPage: db.prepare<
+      { ns: string; child: string; limit: number; offset: number },
+      StoreRow
+    >(
+      `SELECT ${columns} FROM store_items
+       WHERE namespace = :ns OR substr(namespace, 1, length(:child)) = :child
+       ORDER BY namespace, key
+       LIMIT :limit OFFSET :offset`,
+    ),
+    namespaces: db.prepare<[], { namespace: string }>(
+      "SELECT DISTINCT namespace FROM store_items ORDER BY namespace",
+    ),
+  };
+}
+
+function toItem(row: StoreRow): Item {
+  return {
+    value: JSON.parse(row.value),
+    key: row.key,
+    namespace: JSON.parse(row.namespace),
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
 export class SqliteStore extends BaseStore {
-  private db: Database.Database;
+  private readonly stmt: ReturnType<typeof prepareStatements>;
 
   constructor(db: Database.Database) {
     super();
-    this.db = db;
+    this.stmt = prepareStatements(db);
   }
 
+  /**
+   * Runs each operation in order. A failed write (put or delete) rejects the batch so the caller
+   * sees it; a failed read is logged and returns null (get) or an empty list (search, list).
+   */
   async batch<Op extends readonly Operation[]>(operations: Op): Promise<OperationResults<Op>> {
     const results: unknown[] = [];
 
     for (const op of operations) {
+      if (isPutOp(op)) {
+        this.handlePut(op);
+        results.push(undefined);
+        continue;
+      }
       try {
         if (isGetOp(op)) {
           results.push(this.handleGet(op));
-        } else if (isPutOp(op)) {
-          this.handlePut(op);
-          results.push(undefined);
         } else if (isSearchOp(op)) {
           results.push(this.handleSearch(op));
         } else if (isListNamespacesOp(op)) {
@@ -70,15 +143,8 @@ export class SqliteStore extends BaseStore {
           results.push(null);
         }
       } catch (err) {
-        console.error("[SqliteStore] Operation error:", err);
-        // Graceful fallback: return null/empty for reads, undefined for writes
-        if (isPutOp(op)) {
-          results.push(undefined);
-        } else if (isSearchOp(op) || isListNamespacesOp(op)) {
-          results.push([]);
-        } else {
-          results.push(null);
-        }
+        console.error("[SqliteStore] Read error:", err);
+        results.push(isSearchOp(op) || isListNamespacesOp(op) ? [] : null);
       }
     }
 
@@ -90,104 +156,49 @@ export class SqliteStore extends BaseStore {
   // ---------------------------------------------------------------------------
 
   private handleGet(op: GetOperation): Item | null {
-    const nsKey = JSON.stringify(op.namespace);
-    const row = this.db
-      .prepare(
-        "SELECT value, created_at, updated_at FROM store_items WHERE namespace = ? AND key = ?",
-      )
-      .get(nsKey, op.key) as { value: string; created_at: string; updated_at: string } | undefined;
-
-    if (!row) return null;
-
-    return {
-      value: JSON.parse(row.value),
-      key: op.key,
-      namespace: op.namespace,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
-    };
+    const row = this.stmt.get.get(JSON.stringify(op.namespace), op.key);
+    return row ? toItem(row) : null;
   }
 
   private handlePut(op: PutOperation): void {
+    const nsKey = JSON.stringify(op.namespace);
     if (op.value === null) {
-      // Delete
-      const nsKey = JSON.stringify(op.namespace);
-      this.db.prepare("DELETE FROM store_items WHERE namespace = ? AND key = ?").run(nsKey, op.key);
-    } else {
-      // Upsert
-      const nsKey = JSON.stringify(op.namespace);
-      const now = new Date().toISOString();
-      this.db
-        .prepare(
-          `INSERT INTO store_items (namespace, key, value, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(namespace, key) DO UPDATE SET
-             value = excluded.value,
-             updated_at = excluded.updated_at`,
-        )
-        .run(nsKey, op.key, JSON.stringify(op.value), now, now);
+      this.stmt.delete.run(nsKey, op.key);
+      return;
     }
+    const now = new Date().toISOString();
+    this.stmt.put.run(nsKey, op.key, JSON.stringify(op.value), now, now);
   }
 
+  /** Prefix search. A filter is applied before offset and limit, so it sees every match. */
   private handleSearch(op: SearchOperation): SearchItem[] {
-    const nsPrefix = JSON.stringify(op.namespacePrefix);
-    // Match rows whose namespace starts with the prefix array
-    // We use a LIKE pattern on the JSON-encoded namespace
-    // e.g., '["tracks"]' matches '["tracks"]' and '["tracks","sub"]'
-    const likePattern = `${nsPrefix.slice(0, -1)}%`;
+    const limit = op.limit ?? DEFAULT_SEARCH_LIMIT;
+    const offset = op.offset ?? 0;
+    const filter = op.filter;
 
-    let rows: Array<{
-      namespace: string;
-      key: string;
-      value: string;
-      created_at: string;
-      updated_at: string;
-    }>;
+    const ns = JSON.stringify(op.namespacePrefix);
+    // '["a","b"]' -> '["a","b",' : the start of every namespace below ["a","b"].
+    const child = `${ns.slice(0, -1)},`;
+    const all = op.namespacePrefix.length === 0;
 
-    if (op.namespacePrefix.length === 0) {
-      // Empty prefix matches everything
-      rows = this.db
-        .prepare(
-          "SELECT namespace, key, value, created_at, updated_at FROM store_items LIMIT ? OFFSET ?",
-        )
-        .all(op.limit ?? 10, op.offset ?? 0) as typeof rows;
-    } else {
-      rows = this.db
-        .prepare(
-          `SELECT namespace, key, value, created_at, updated_at FROM store_items
-           WHERE namespace = ? OR namespace LIKE ?
-           LIMIT ? OFFSET ?`,
-        )
-        .all(
-          nsPrefix,
-          likePattern.replace("]", ",%"),
-          op.limit ?? 10,
-          op.offset ?? 0,
-        ) as typeof rows;
+    if (!filter || Object.keys(filter).length === 0) {
+      const rows = all
+        ? this.stmt.searchAllPage.all(limit, offset)
+        : this.stmt.searchPrefixPage.all({ ns, child, limit, offset });
+      return rows.map(toItem);
     }
 
-    // Apply in-memory filter if specified
-    let items: SearchItem[] = rows.map((row) => ({
-      value: JSON.parse(row.value),
-      key: row.key,
-      namespace: JSON.parse(row.namespace),
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
-    }));
-
-    if (op.filter) {
-      items = items.filter((item) => matchesFilter(item.value, op.filter!));
-    }
-
-    return items;
+    const rows = all ? this.stmt.searchAll.all() : this.stmt.searchPrefix.all({ ns, child });
+    return rows
+      .map(toItem)
+      .filter((item) => matchesFilter(item.value, filter))
+      .slice(offset, offset + limit);
   }
 
   private handleListNamespaces(op: ListNamespacesOperation): string[][] {
-    const rows = this.db.prepare("SELECT DISTINCT namespace FROM store_items").all() as Array<{
-      namespace: string;
-    }>;
-
-    let namespaces: string[][] = rows.map((r) => JSON.parse(r.namespace));
+    let namespaces: string[][] = this.stmt.namespaces
+      .all()
+      .map((r) => JSON.parse(r.namespace) as string[]);
 
     // Apply match conditions
     if (op.matchConditions && op.matchConditions.length > 0) {
@@ -198,8 +209,9 @@ export class SqliteStore extends BaseStore {
 
     // Apply maxDepth
     if (op.maxDepth != null) {
+      const depth = op.maxDepth;
       namespaces = namespaces
-        .map((ns) => ns.slice(0, op.maxDepth!))
+        .map((ns) => ns.slice(0, depth))
         .filter(
           (ns, i, arr) =>
             arr.findIndex((other) => JSON.stringify(other) === JSON.stringify(ns)) === i,

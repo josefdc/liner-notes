@@ -10,16 +10,23 @@ interface SmartTimelineProps {
   segmentsSource?: TrackData['segmentsSource'];
   /** Song duration in seconds; undefined when it is not known. */
   durationSeconds?: number;
-  /** Length of the audio preview the key moments were measured in (30 s when not sent). */
-  previewDurationSeconds?: number;
   samples?: { time: number; description: string }[];
   keyMoments?: KeyMoment[];
-  /** False when the audio was not analysed (which is why there are no key moments). */
+  /**
+   * True when the audio was analysed (so no key moments means none were detected), false when
+   * it was not analysed, undefined when the result does not say.
+   */
   audioAnalyzed?: boolean;
 }
 
-// Spotify and Deezer previews are 30 seconds long.
-const DEFAULT_PREVIEW_SECONDS = 30;
+// The preview lane. Spotify and Deezer previews are about 30 seconds long, and the audio
+// service decodes at most the first 35 seconds of a clip, so key moments can fall anywhere in
+// 0-35 s. The API does not send the clip length, so the lane spans 30 s, stretched to the
+// latest key moment when one falls between 30 and 35 s; moments past 35 s cannot come from
+// the decoded clip and are not drawn. The label says "about" because the length is not known.
+const PREVIEW_SECONDS = 30;
+const DECODED_SECONDS = 35;
+const PREVIEW_LABEL = 'Audio preview (about 30 s)';
 
 /**
  * Format seconds to MM:SS
@@ -106,13 +113,11 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   segments = EMPTY_SEGMENTS,
   segmentsSource,
   durationSeconds,
-  previewDurationSeconds,
   samples = EMPTY_SAMPLES,
   keyMoments = EMPTY_KEY_MOMENTS,
   audioAnalyzed,
 }) => {
   const duration = positiveSeconds(durationSeconds);
-  const previewLength = positiveSeconds(previewDurationSeconds) ?? DEFAULT_PREVIEW_SECONDS;
 
   // Sample times are written by the model: drawn on the song timeline, labelled as inferred,
   // and only when they fall inside the song.
@@ -132,21 +137,20 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
 
   // Key moments are measured inside the audio preview, so they get their own lane scaled to
   // the preview: their times say nothing about where they fall in the full song.
-  const momentMarkers = useMemo(
-    () =>
-      placeable(
-        (keyMoments ?? []).map((k) => ({
-          time: k.time,
-          description: `${k.description} (measured at ${formatTime(k.time)} in the preview)`,
-          color: getMarkerColor(k.type),
-          intensity: k.intensity,
-        })),
-        previewLength,
-      ),
-    [keyMoments, previewLength],
-  );
-
-  const previewLabel = `Audio preview (${Math.round(previewLength)} s)`;
+  const { momentMarkers, previewLength } = useMemo(() => {
+    const markers = placeable(
+      (keyMoments ?? []).map((k) => ({
+        time: k.time,
+        description: `${k.description} (measured at ${formatTime(k.time)} in the preview)`,
+        color: getMarkerColor(k.type),
+        intensity: k.intensity,
+      })),
+      DECODED_SECONDS,
+    );
+    const latest = markers.inside.reduce((max, m) => Math.max(max, m.time), 0);
+    return { momentMarkers: markers, previewLength: Math.max(PREVIEW_SECONDS, latest) };
+  }, [keyMoments]);
+  const previewLabel = PREVIEW_LABEL;
 
   return (
     <div className="w-full mt-8" role="group" aria-label="Song structure">
@@ -225,7 +229,9 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         <Note>
           {audioAnalyzed === false
             ? 'No key moments — the audio was not analysed'
-            : 'No key moments detected'}
+            : audioAnalyzed
+              ? 'No key moments detected'
+              : 'No key moments'}
         </Note>
       )}
       {momentMarkers.outside > 0 && (

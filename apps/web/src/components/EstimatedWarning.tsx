@@ -4,13 +4,14 @@ import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
   AUDIO_FIELD_COUNT,
-  LEGACY_ESTIMATE_TEXT,
+  ESTIMATED_AUDIO_TEXT,
   audioUnavailableText,
   audioValues,
   formatScore,
   hasEstimatedAudio,
   missingAudioValues,
   missingModelOutput,
+  modelUnavailableText,
   moodLabel,
 } from '../constants';
 
@@ -61,7 +62,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   rowClassName = 'justify-center',
   className = '',
 }) => {
-  // Values from an earlier version's estimates come back null here: shown as not measured.
+  // Estimated (not measured) values come back null here: shown as not measured.
   const { bpm, key, energy, valence, danceability, acousticness } = audioValues(track);
   const hasModelScores = valence !== null || danceability !== null || acousticness !== null;
   const measuredTitle = 'Measured from the audio preview';
@@ -106,56 +107,58 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
       </ul>
 
       {hasModelScores && (
-        <ul
-          aria-label="Audio-model estimates"
-          className={`flex flex-wrap items-center gap-2 ${rowClassName}`}
-        >
-          <li className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+        <div className={`flex flex-wrap items-center gap-2 ${rowClassName}`}>
+          <p className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
             Audio-model estimates (scores 0–1, not probabilities)
-          </li>
-          {valence !== null && (
-            <li>
-              <Badge
-                variant="gray"
-                size={size}
-                icon={
-                  <Heart
-                    size={iconSize}
-                    className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
-                  />
-                }
-                title="Mood score from an audio model: 0 = melancholic, 1 = euphoric"
-              >
-                <span className="text-text-tertiary">MOOD</span>{' '}
-                <span className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}>
-                  {moodLabel(valence)}
-                </span>{' '}
-                <span className="text-text-tertiary">{formatScore(valence)}</span>
-              </Badge>
-            </li>
-          )}
-          {danceability !== null && (
-            <li>
-              <Badge
-                variant="gray"
-                size={size}
-                icon={<Disc size={iconSize} className="text-analog" />}
-                title="Danceability score from an audio model"
-              >
-                <span className="text-text-tertiary">DANCE</span>{' '}
-                <span className="text-analog">{formatScore(danceability)}</span>
-              </Badge>
-            </li>
-          )}
-          {acousticness !== null && (
-            <li>
-              <Badge variant="gray" size={size} title="Acousticness score from an audio model">
-                <span className="text-text-tertiary">ACOUSTIC</span>{' '}
-                <span className="text-analog">{formatScore(acousticness)}</span>
-              </Badge>
-            </li>
-          )}
-        </ul>
+          </p>
+          <ul
+            aria-label="Audio-model estimates"
+            className={`flex flex-wrap items-center gap-2 ${rowClassName}`}
+          >
+            {valence !== null && (
+              <li>
+                <Badge
+                  variant="gray"
+                  size={size}
+                  icon={
+                    <Heart
+                      size={iconSize}
+                      className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
+                    />
+                  }
+                  title="Mood score from an audio model: 0 = melancholic, 1 = euphoric"
+                >
+                  <span className="text-text-tertiary">MOOD</span>{' '}
+                  <span className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}>
+                    {moodLabel(valence)}
+                  </span>{' '}
+                  <span className="text-text-tertiary">{formatScore(valence)}</span>
+                </Badge>
+              </li>
+            )}
+            {danceability !== null && (
+              <li>
+                <Badge
+                  variant="gray"
+                  size={size}
+                  icon={<Disc size={iconSize} className="text-analog" />}
+                  title="Danceability score from an audio model"
+                >
+                  <span className="text-text-tertiary">DANCE</span>{' '}
+                  <span className="text-analog">{formatScore(danceability)}</span>
+                </Badge>
+              </li>
+            )}
+            {acousticness !== null && (
+              <li>
+                <Badge variant="gray" size={size} title="Acousticness score from an audio model">
+                  <span className="text-text-tertiary">ACOUSTIC</span>{' '}
+                  <span className="text-analog">{formatScore(acousticness)}</span>
+                </Badge>
+              </li>
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -165,7 +168,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
 function audioNotice(track: TrackData) {
   const missing = missingAudioValues(track);
   if (hasEstimatedAudio(track)) {
-    return { title: 'Audio values not measured', reason: LEGACY_ESTIMATE_TEXT, missing };
+    return { title: 'Audio values not measured', reason: ESTIMATED_AUDIO_TEXT, missing };
   }
   if (track.audioSource === 'analyzed' && missing.length === 0) return null;
   return {
@@ -203,7 +206,7 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
         <Notice title="Model unavailable">
           <p>
             This result was built from source data only
-            {track.modelUnavailableReason ? ` (${track.modelUnavailableReason})` : ''}.
+            {` (${modelUnavailableText(track.modelUnavailableReason)})`}.
           </p>
           {modelMissing.length > 0 && <p>Missing: {modelMissing.join(', ')}.</p>}
         </Notice>
@@ -211,9 +214,6 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
       {audio && (
         <Notice title={audio.title}>
           <p>{audio.reason}</p>
-          {track.audioUnavailableDetail && (
-            <p className="text-text-tertiary">{track.audioUnavailableDetail}</p>
-          )}
           {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
         </Notice>
       )}

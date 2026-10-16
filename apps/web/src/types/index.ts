@@ -108,6 +108,9 @@ export type AudioUnavailableReason =
   | 'not_detected'
   | 'not_run';
 
+/** Why the model was unavailable (a category: the API never sends the provider's text). */
+export type ModelUnavailableReason = 'no_output' | 'rate_limited' | 'timeout' | 'auth' | 'error';
+
 export interface TrackData {
   id: string;
   title: string;
@@ -122,17 +125,13 @@ export interface TrackData {
   // Measured from the audio preview; null when not measured (never filled in).
   bpm: number | null;
   key?: string | null;
-  mode?: string | null;
   energy?: number | null;
   // Scores (0-1) from audio models run over the preview: estimates, not probabilities.
   // null when not measured.
   valence?: number | null;
   danceability?: number | null;
   acousticness?: number | null;
-  instrumentalness?: number | null;
   durationSeconds?: number; // Duration in seconds for timeline display
-  /** Length of the audio preview the key moments were measured in, when the API sends it. */
-  previewDurationSeconds?: number;
   segments: SongSegment[];
   /** 'template': a generic default structure; 'inferred': written by the model. Never measured. */
   segmentsSource?: 'template' | 'inferred';
@@ -149,15 +148,14 @@ export interface TrackData {
   // Genre profile for the Sonic Fingerprint radar chart (written by the model)
   genreProfile?: GenreProfileItem[];
   // Audio provenance: 'analyzed' when tempo and key were measured, 'unavailable' otherwise.
-  // 'estimated' is sent by earlier versions of the API (and by results cached by them): its
-  // values were estimated from the genre or at random and are never shown as measurements.
+  // 'estimated' is sent by the API before audio values were measured only, and by results it
+  // cached: those values were estimated from the genre or at random and are never shown.
   audioSource?: 'analyzed' | 'unavailable' | 'estimated';
   audioConfidence?: 'high' | 'low';
   audioUnavailableReason?: AudioUnavailableReason;
-  audioUnavailableDetail?: string;
   // Model provenance: true when the result was built from source data without the model
   modelUnavailable?: boolean;
-  modelUnavailableReason?: string;
+  modelUnavailableReason?: ModelUnavailableReason;
 }
 
 export interface AgentLog {

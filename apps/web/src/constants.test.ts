@@ -3,7 +3,7 @@ import { displayableFactoids, normalizeTrack } from './constants';
 import type { TrackData } from './types';
 
 describe('displayableFactoids', () => {
-  it('drops lyric factoids from earlier versions and entries that are not factoids', () => {
+  it('drops lyric factoids and entries that are not factoids', () => {
     const factoids = [
       { id: 'f1', title: 'Studio', content: 'Text', type: 'production' },
       { id: 'f2', title: 'Lyrical Analysis', content: 'Text', type: 'lyrics' },
@@ -36,5 +36,57 @@ describe('normalizeTrack', () => {
     expect(track.key).toBeNull();
     expect(track.releaseYear).toBeUndefined();
     expect(track.bpm).toBeNull();
+  });
+});
+
+describe('factoids that repeat estimated audio values', () => {
+  const track = (audioSource: string | undefined) =>
+    ({
+      id: 't1',
+      title: 'Song',
+      artist: 'Artist',
+      album: 'Album',
+      coverUrl: '',
+      bpm: 117,
+      key: 'A Minor',
+      energy: 0.63,
+      danceability: 0.54,
+      audioSource,
+      factoids: [
+        {
+          id: 'g1',
+          title: 'Sonic Profile',
+          content: '117 BPM in A Minor. Danceability: 54%.',
+          type: 'production',
+        },
+        {
+          id: 'g2',
+          title: 'Track Signature',
+          content: 'A positive track at 117 BPM in A Minor.',
+          type: 'production',
+        },
+        { id: 'g3', title: 'Groove', content: 'Sits at 117 bpm.', type: 'trivia' },
+        { id: 'g4', title: 'Mix', content: 'Energy around 63% of full scale.', type: 'trivia' },
+        {
+          id: 'g5',
+          title: 'Release Info',
+          content: 'Released in 1999. Popularity score: 55/100.',
+          type: 'trivia',
+        },
+      ],
+    }) as unknown as TrackData;
+
+  it.each(['estimated', undefined])('are dropped when the audio source is %s', (source) => {
+    expect(normalizeTrack(track(source)).factoids.map((f) => f.id)).toEqual(['g5']);
+  });
+
+  it('are kept when the values were measured', () => {
+    expect(normalizeTrack(track('analyzed')).factoids.map((f) => f.id)).toEqual([
+      'g1',
+      'g2',
+      'g3',
+      'g4',
+      'g5',
+    ]);
   });
 });

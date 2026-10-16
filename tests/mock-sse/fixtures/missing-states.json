@@ -72,7 +72,7 @@
           "audioConfidence": "low",
           "audioUnavailableReason": "no_preview",
           "modelUnavailable": true,
-          "modelUnavailableReason": "quota exceeded"
+          "modelUnavailableReason": "rate_limited"
         }
       },
       {

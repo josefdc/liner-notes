@@ -40,6 +40,17 @@ interface PlayerProps {
 // ─── P2:24 Default visible factoids count ───────────────────────────────────
 const INITIAL_VISIBLE_FACTOIDS = 3;
 
+/**
+ * Whether the audio was analysed: true when it was (including "not_detected", where the
+ * analysis ran but found no tempo or key), false when it was not, undefined when unknown.
+ */
+function audioAnalyzed(track: TrackData): boolean | undefined {
+  if (track.audioSource === 'analyzed' || track.audioUnavailableReason === 'not_detected') {
+    return true;
+  }
+  return track.audioSource === 'unavailable' ? false : undefined;
+}
+
 /** Shown when there is no analysis to display: never a demo track in its place. */
 const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'headingRef'>> = ({
   onBack,
@@ -92,15 +103,18 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const { bpm, key } = audioValues(track);
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
+  // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
   const allFactoids = useMemo(
-    () => displayableFactoids([...track.factoids, ...additionalFactoids]),
+    () => [...track.factoids, ...additionalFactoids],
     [track.factoids, additionalFactoids],
   );
 
-  // P2:24 — Visible factoids
+  // P2:24 — Visible factoids, split by where they come from so each part carries its label
   const visibleFactoids = showAllFactoids
     ? allFactoids
     : allFactoids.slice(0, INITIAL_VISIBLE_FACTOIDS);
+  const visibleResultFactoids = visibleFactoids.slice(0, track.factoids.length);
+  const visibleDecryptedFactoids = visibleFactoids.slice(track.factoids.length);
   const hiddenCount = allFactoids.length - INITIAL_VISIBLE_FACTOIDS;
 
   // Refs for transient values in handleDecryptMore
@@ -176,7 +190,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
       // Stream factoids - each one is added immediately when received
       await onDecryptMoreStream(track.title, track.artist, existingIds, (newFactoid) => {
-        setAdditionalFactoids((prev) => [...prev, newFactoid]);
+        // Only factoids that are shown count (lyric factoids are dropped).
+        const shown = displayableFactoids([newFactoid]);
+        if (shown.length === 0) return;
+        setAdditionalFactoids((prev) => [...prev, ...shown]);
         newCount++;
       });
 
@@ -261,7 +278,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Agent Analysis
             </h3>
-            {allFactoids.length > 0 && <InferenceLabel>{provenance}</InferenceLabel>}
+            {track.factoids.length > 0 && <InferenceLabel>{provenance}</InferenceLabel>}
           </div>
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">
@@ -276,11 +293,30 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             </div>
           ) : (
             <div className="space-y-6">
-              {visibleFactoids.map((fact, idx) => (
+              {visibleResultFactoids.map((fact, idx) => (
                 <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
                   <InteractiveFactoid factoid={fact} onEntityClick={handleEntityClick} />
                 </div>
               ))}
+
+              {/* Factoids added by DECRYPT MORE are written by the model, whatever the result */}
+              {visibleDecryptedFactoids.length > 0 && (
+                <section aria-label="Decrypted insights" className="space-y-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+                      Decrypted insights
+                    </h4>
+                    <InferenceLabel />
+                  </div>
+                  {visibleDecryptedFactoids.map((fact) => (
+                    <InteractiveFactoid
+                      key={fact.id}
+                      factoid={fact}
+                      onEntityClick={handleEntityClick}
+                    />
+                  ))}
+                </section>
+              )}
 
               {/* Standalone Decrypt More card */}
               {onDecryptMoreStream && (
@@ -440,12 +476,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               segments={track.segments}
               segmentsSource={track.segmentsSource}
               durationSeconds={track.durationSeconds}
-              previewDurationSeconds={track.previewDurationSeconds}
               samples={track.samples}
               keyMoments={track.keyMoments}
-              audioAnalyzed={
-                track.audioSource === undefined ? undefined : track.audioSource === 'analyzed'
-              }
+              audioAnalyzed={audioAnalyzed(track)}
             />
           </div>
         </div>

@@ -7,10 +7,11 @@ import {
   useMockApi,
 } from "./mock";
 
-// Results the web app must render honestly whatever the API version: the earlier payload with
-// estimated audio values (also served from its result cache), and a result with lists missing.
+// Results the web app must render honestly whatever the API version: a payload with estimated
+// audio values (audioSource "estimated", also served from the result cache) and the fallback
+// factoids that repeat them, and a result with lists missing.
 
-test("audio values estimated by an earlier version are not shown as measured", async ({ page }) => {
+test("estimated audio values are not shown as measured, not even in factoids", async ({ page }) => {
   await useMockApi(page, loadFixture("legacy-estimated"));
   await analyzeAndOpenDashboard(page, "Old Estimate");
 
@@ -20,18 +21,21 @@ test("audio values estimated by an earlier version are not shown as measured", a
   await expect(stats).toContainText("Energy not measured");
   const notices = page.getByRole("region", { name: "Missing data" });
   await expect(notices).toContainText("Audio values not measured");
-  await expect(notices).toContainText(
-    "Estimated by an earlier version of the analysis — not a measurement.",
-  );
+  await expect(notices).toContainText("Estimated, not measured — not shown.");
   await expect(page.locator("#root")).not.toContainText("117");
   await expect(page.locator("#root")).not.toContainText("A Minor");
 
   await openPlayer(page);
   await expect(page.getByRole("list", { name: "Audio values" })).toContainText("BPM not measured");
   await expect(page.locator("#root")).not.toContainText("117");
-  // The lyric factoid of the earlier version is dropped, not shown as trivia.
-  await expect(page.locator("#root")).toContainText("Studio Intel");
-  await expect(page.locator("#root")).not.toContainText("Lyrical Analysis");
+  // Factoids that repeat the estimates, and the lyric factoid, are dropped.
+  const insights = page.locator("#panel-context");
+  await expect(insights).toContainText("Studio Intel");
+  await expect(insights).not.toContainText("Sonic Profile");
+  await expect(insights).not.toContainText("Track Signature");
+  await expect(insights).not.toContainText("Lyrical Analysis");
+  await expect(page.locator("#root")).not.toContainText("A Minor");
+  await expect(page.locator("#root")).not.toContainText("54%");
 });
 
 test("a result with missing lists renders, graph included", async ({ page }) => {

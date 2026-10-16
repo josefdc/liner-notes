@@ -27,7 +27,7 @@ const missingTrack = {
   audioConfidence: 'low',
   audioUnavailableReason: 'service_unavailable',
   modelUnavailable: true,
-  modelUnavailableReason: 'quota exceeded',
+  modelUnavailableReason: 'rate_limited',
 } as unknown as TrackData;
 
 const renderDashboard = (trackData: TrackData) =>
@@ -49,7 +49,8 @@ describe('Dashboard', () => {
     renderDashboard(missingTrack);
     const notices = screen.getByRole('region', { name: 'Missing data' });
     expect(notices.textContent).toContain('Model unavailable');
-    expect(notices.textContent).toContain('quota exceeded');
+    expect(notices.textContent).toContain('(quota or rate limit reached)');
+    expect(notices.textContent).not.toContain('rate_limited');
     expect(notices.textContent).toContain('genre profile');
     expect(notices.textContent).toContain('The audio analysis service did not respond.');
     expect(notices.textContent).toContain('Not measured: BPM, key, energy');
@@ -82,7 +83,11 @@ describe('Dashboard', () => {
     expect(stats.textContent).toContain('105');
     expect(stats.textContent).toContain('A Minor');
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
-    expect(scores.textContent).toContain('not probabilities');
+    expect(
+      screen.getByText(/Audio-model estimates \(scores 0–1, not probabilities\)/),
+    ).toBeTruthy();
+    // The caption labels the list; it is not one of its items.
+    expect(scores.textContent).not.toContain('not probabilities');
     expect(scores.textContent).toContain('0.62');
     expect(scores.textContent).toContain('Mellow');
     expect(scores.textContent).not.toContain('62%');

@@ -50,11 +50,13 @@ test("the Player labels model-written segments and keeps every marker", async ({
   await expect(timeline).toContainText("4:00");
   // The sample on the song timeline; the two key moments (same time) on the preview lane.
   await expect(timeline.getByRole("img")).toHaveCount(3);
-  const preview = timeline.getByRole("group", { name: "Audio preview (30 s)" });
+  const preview = timeline.getByRole("group", { name: "Audio preview (about 30 s)" });
   await expect(preview.getByRole("img")).toHaveCount(2);
   await expect(timeline).toContainText("Sample times: model inference");
   // The insights and the genealogy are labelled as model output.
   await expect(page.locator("#panel-context")).toContainText("Model inference");
+  // A factoid stating measured values is kept.
+  await expect(page.locator("#panel-context")).toContainText("Sonic Profile");
   await expect(page.locator("#panel-genealogy")).toContainText("Model inference");
   expect(problems.filter((p) => /same key|width\(-?\d+\)/.test(p))).toEqual([]);
 });

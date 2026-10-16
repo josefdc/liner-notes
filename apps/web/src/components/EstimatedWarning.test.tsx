@@ -55,7 +55,7 @@ describe('ResultNotices', () => {
     );
     const text = screen.getByRole('region', { name: 'Missing data' }).textContent;
     expect(text).toContain('Model unavailable');
-    expect(text).toContain('(timeout)');
+    expect(text).toContain('(the model timed out)');
     expect(text).toContain(
       'Missing: genre profile, song structure (a generic template is shown), insights.',
     );
@@ -94,13 +94,12 @@ describe('ResultNotices', () => {
           bpm: null,
           audioSource: 'unavailable',
           audioUnavailableReason: 'not_detected',
-          audioUnavailableDetail: 'no stable tempo',
         }}
       />,
     );
     const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
     expect(notice).toContain('Audio partly measured');
-    expect(notice).toContain('no stable tempo');
+    expect(notice).toContain('The analysis ran but could not detect the tempo or key.');
     expect(notice).toContain('Not measured: BPM.');
   });
 });
@@ -136,7 +135,7 @@ describe('AudioStats', () => {
   });
 });
 
-describe('values estimated by earlier versions of the analysis', () => {
+describe('estimated audio values', () => {
   // The shape the API sent before audio values were measured only: genre-based or random
   // estimates under audioSource "estimated" (also served from its result cache).
   const legacy = {
@@ -170,9 +169,7 @@ describe('values estimated by earlier versions of the analysis', () => {
     expect(container.textContent).not.toMatch(/117|A Minor|0\.72|63%/);
     const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
     expect(notice).toContain('Audio values not measured');
-    expect(notice).toContain(
-      'Estimated by an earlier version of the analysis — not a measurement.',
-    );
+    expect(notice).toContain('Estimated, not measured — not shown.');
   });
 
   it('still shows values measured when tempo or key was not detected', () => {
@@ -212,5 +209,37 @@ describe('partly measured results', () => {
       'Key not measured',
     );
     expect(container.textContent).not.toMatch(/KEY\s*(null|undefined)/i);
+  });
+});
+
+describe('model unavailable reason', () => {
+  const unavailable = (reason: string | undefined) =>
+    ({ ...base, modelUnavailable: true, modelUnavailableReason: reason }) as unknown as TrackData;
+
+  it.each([
+    ['no_output', 'the model returned no output'],
+    ['rate_limited', 'quota or rate limit reached'],
+    ['timeout', 'the model timed out'],
+    ['auth', 'authentication or configuration problem'],
+    ['error', 'the model returned an error'],
+    // Older results carried the provider's text: shown only as the generic description.
+    [
+      'Resource has been exhausted (e.g. check quota). (RESOURCE_EXHAUSTED)',
+      'the model did not respond',
+    ],
+    ['constructor', 'the model did not respond'],
+    [undefined, 'the model did not respond'],
+  ])('shows %j as %j', (reason, category) => {
+    render(<ResultNotices track={unavailable(reason)} />);
+    const text = screen.getByRole('region', { name: 'Missing data' }).textContent;
+    expect(text).toContain(`This result was built from source data only (${category}).`);
+  });
+
+  it('never shows the provider error text', () => {
+    const providerText =
+      `${'Upstream provider said: request failed with details '.repeat(5)}x`.slice(0, 300);
+    const { container } = render(<ResultNotices track={unavailable(providerText)} />);
+    expect(container.textContent).not.toContain('Upstream provider said');
+    expect(container.textContent).toContain('(the model did not respond)');
   });
 });

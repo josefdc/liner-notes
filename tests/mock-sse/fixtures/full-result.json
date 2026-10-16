@@ -116,6 +116,12 @@
               "title": "Studio Intel",
               "content": "Recorded in two days.",
               "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Sonic Profile",
+              "content": "105 BPM in A Minor. High measured energy.",
+              "type": "production"
             }
           ],
           "genealogy": {

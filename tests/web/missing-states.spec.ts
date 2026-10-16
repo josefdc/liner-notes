@@ -34,7 +34,7 @@ test("the Dashboard names what is missing and shows no placeholder content", asy
 
   const notices = page.getByRole("region", { name: "Missing data" });
   await expect(notices).toContainText("Model unavailable");
-  await expect(notices).toContainText("quota exceeded");
+  await expect(notices).toContainText("(quota or rate limit reached)");
   await expect(notices).toContainText("genre profile");
   await expect(notices).toContainText("song structure");
   await expect(notices).toContainText("Audio not analysed");

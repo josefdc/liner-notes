@@ -1,6 +1,6 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TrackData } from '../types';
+import type { Factoid, TrackData } from '../types';
 import Player from './Player';
 
 afterEach(cleanup);
@@ -77,5 +77,48 @@ describe('Player', () => {
     render(<Player trackData={track} onBack={() => {}} />);
     expect(screen.getByText('From source data')).toBeTruthy();
     expect(screen.queryByText('Model inference')).toBeNull();
+  });
+
+  it('says no key moments were detected when the tempo or key was not detected', () => {
+    const { container } = render(<Player trackData={missingTrack} onBack={() => {}} />);
+    expect(container.textContent).toContain('No key moments detected');
+    expect(container.textContent).not.toContain('the audio was not analysed');
+  });
+
+  it('labels decrypted factoids as model inference and counts only the ones shown', async () => {
+    const track = {
+      ...missingTrack,
+      modelUnavailable: true,
+      factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
+    } as unknown as TrackData;
+    const decrypt = async (
+      _title: string,
+      _artist: string,
+      _ids: string[],
+      onFactoid: (f: Factoid) => void,
+    ) => {
+      onFactoid({
+        id: 'm1',
+        title: 'Hidden Sample',
+        content: 'Interpolates a 1972 record.',
+        type: 'sample',
+      });
+      onFactoid({
+        id: 'm2',
+        title: 'Lyric Meaning',
+        content: 'About the words.',
+        type: 'lyrics',
+      } as unknown as Factoid);
+    };
+    render(<Player trackData={track} onBack={() => {}} onDecryptMoreStream={decrypt} />);
+    fireEvent.click(screen.getByRole('button', { name: /DECRYPT MORE/ }));
+
+    const decrypted = await screen.findByRole('region', { name: 'Decrypted insights' });
+    expect(decrypted.textContent).toContain('Hidden Sample');
+    expect(decrypted.textContent).toContain('Model inference');
+    expect(decrypted.textContent).not.toContain('From source data');
+    expect(screen.getAllByText('From source data')).toHaveLength(1);
+    expect(screen.queryByText('Lyric Meaning')).toBeNull();
+    expect(await screen.findByText('1 NEW INTEL DECODED')).toBeTruthy();
   });
 });

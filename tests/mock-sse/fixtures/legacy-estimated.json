@@ -25,7 +25,7 @@
           "key": "A Minor",
           "energy": 0.63,
           "valence": 0.41,
-          "danceability": 0.72,
+          "danceability": 0.54,
           "acousticness": 0.2,
           "durationSeconds": 230,
           "genreProfile": [
@@ -62,6 +62,18 @@
               "id": "f1",
               "title": "Studio Intel",
               "content": "Recorded live.",
+              "type": "production"
+            },
+            {
+              "id": "g1",
+              "title": "Sonic Profile",
+              "content": "117 BPM in A Minor. Moderate energy with a positive mood. Danceability: 54%.",
+              "type": "production"
+            },
+            {
+              "id": "g2",
+              "title": "Track Signature",
+              "content": "A positive track at 117 BPM in A Minor. Driven by electronic production.",
               "type": "production"
             },
             {

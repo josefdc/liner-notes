@@ -63,7 +63,7 @@ describe('SmartTimeline', () => {
         ]}
       />,
     );
-    const preview = screen.getByRole('group', { name: 'Audio preview (30 s)' });
+    const preview = screen.getByRole('group', { name: 'Audio preview (about 30 s)' });
     const markers = within(preview).getAllByRole('img');
     expect(markers).toHaveLength(1);
     // 12 s of a 30 s preview, not 12 s of a 240 s song.
@@ -75,16 +75,35 @@ describe('SmartTimeline', () => {
     expect(timeline.textContent).toContain('1 key moment outside the preview, not drawn');
   });
 
-  it('scales the preview lane to the preview length when it is sent', () => {
+  it('keeps key moments from the decoded 30-35 s window inside the preview lane', () => {
     render(
       <SmartTimeline
         segments={template}
-        previewDurationSeconds={60}
-        keyMoments={[{ time: 45, type: 'onset', intensity: 0.5, description: 'Onset' }]}
+        keyMoments={[
+          { time: 33, type: 'onset', intensity: 0.5, description: 'Late onset' },
+          { time: 36, type: 'onset', intensity: 0.5, description: 'Past the decoded clip' },
+        ]}
       />,
     );
-    const preview = screen.getByRole('group', { name: 'Audio preview (60 s)' });
-    expect(within(preview).getAllByRole('img')).toHaveLength(1);
+    const preview = screen.getByRole('group', { name: 'Audio preview (about 30 s)' });
+    const markers = within(preview).getAllByRole('img');
+    expect(markers).toHaveLength(1);
+    expect(markers[0].getAttribute('aria-label')).toContain('Late onset');
+    // The lane stretches to the latest moment instead of pinning it past the end.
+    expect(preview.textContent).toContain('0:33');
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain('1 key moment outside the preview, not drawn');
+  });
+
+  it.each([
+    [true, 'No key moments detected'],
+    [false, 'No key moments — the audio was not analysed'],
+    [undefined, 'No key moments'],
+  ])('says why there are no key moments when audioAnalyzed is %s', (analysed, text) => {
+    render(<SmartTimeline segments={template} audioAnalyzed={analysed} />);
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain(text);
+    if (analysed !== false) expect(timeline.textContent).not.toContain('not analysed');
   });
 
   it('labels sample times as inferred and leaves out samples past the end of the song', () => {

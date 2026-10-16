@@ -1,0 +1,52 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "threadId": "thread-sparse"
+      },
+      {
+        "type": "status",
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "complete",
+        "data": {
+          "id": "t-sparse",
+          "title": "Sparse Result",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "bpm": 100,
+          "key": "C Major",
+          "energy": 0.4,
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Sparse Result - Test Artist",
+                "size": 40
+              },
+              {
+                "id": "o1",
+                "group": 2,
+                "label": "Older Song - Someone",
+                "size": 30
+              }
+            ]
+          },
+          "audioSource": "analyzed",
+          "audioConfidence": "low"
+        }
+      },
+      {
+        "type": "done",
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

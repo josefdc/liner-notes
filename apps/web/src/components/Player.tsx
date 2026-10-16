@@ -6,20 +6,17 @@ import {
   Pause,
   Music,
   ExternalLink,
-  Heart,
-  Disc,
   Search,
   ChevronDown,
   Lock,
   Unlock,
 } from 'lucide-react';
-import { CURRENT_TRACK } from '../constants';
+import { audioValues, displayableFactoids, normalizeTrack } from '../constants';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
-import EstimatedWarning from './EstimatedWarning';
+import { AudioStats, InferenceLabel, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
-import { Badge } from './ui/Badge';
 import type { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types';
 
 interface PlayerProps {
@@ -43,8 +40,47 @@ interface PlayerProps {
 // ─── P2:24 Default visible factoids count ───────────────────────────────────
 const INITIAL_VISIBLE_FACTOIDS = 3;
 
-const Player: React.FC<PlayerProps> = ({
-  trackData,
+/**
+ * Whether the audio was analysed: true when it was (including "not_detected", where the
+ * analysis ran but found no tempo or key), false when it was not, undefined when unknown.
+ */
+function audioAnalyzed(track: TrackData): boolean | undefined {
+  if (track.audioSource === 'analyzed' || track.audioUnavailableReason === 'not_detected') {
+    return true;
+  }
+  return track.audioSource === 'unavailable' ? false : undefined;
+}
+
+/** Shown when there is no analysis to display: never a demo track in its place. */
+const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'headingRef'>> = ({
+  onBack,
+  onNewSearch,
+  headingRef,
+}) => (
+  <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-void p-6 text-center">
+    <h1
+      ref={headingRef}
+      tabIndex={-1}
+      className="text-xl font-light text-white tracking-tight outline-none"
+    >
+      No analysis loaded
+    </h1>
+    <p className="text-xs font-mono text-text-tertiary">Search for a song to see its analysis.</p>
+    <div className="flex items-center gap-3">
+      <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
+        BACK TO BASE
+      </Button>
+      {onNewSearch && (
+        <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
+          NEW SEARCH
+        </Button>
+      )}
+    </div>
+  </div>
+);
+
+const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }> = ({
+  track,
   onBack,
   onDecryptMoreStream,
   onAnalyzeTrack,
@@ -64,17 +100,21 @@ const Player: React.FC<PlayerProps> = ({
   // P0:7 — Audio preview ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Use provided trackData or fallback to mock data
-  const track = trackData || CURRENT_TRACK;
+  const { bpm, key } = audioValues(track);
+  // Written by the model, or taken from source data when the model was unavailable.
+  const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
+  // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
   const allFactoids = useMemo(
     () => [...track.factoids, ...additionalFactoids],
     [track.factoids, additionalFactoids],
   );
 
-  // P2:24 — Visible factoids
+  // P2:24 — Visible factoids, split by where they come from so each part carries its label
   const visibleFactoids = showAllFactoids
     ? allFactoids
     : allFactoids.slice(0, INITIAL_VISIBLE_FACTOIDS);
+  const visibleResultFactoids = visibleFactoids.slice(0, track.factoids.length);
+  const visibleDecryptedFactoids = visibleFactoids.slice(track.factoids.length);
   const hiddenCount = allFactoids.length - INITIAL_VISIBLE_FACTOIDS;
 
   // Refs for transient values in handleDecryptMore
@@ -150,7 +190,10 @@ const Player: React.FC<PlayerProps> = ({
 
       // Stream factoids - each one is added immediately when received
       await onDecryptMoreStream(track.title, track.artist, existingIds, (newFactoid) => {
-        setAdditionalFactoids((prev) => [...prev, newFactoid]);
+        // Only factoids that are shown count (lyric factoids are dropped).
+        const shown = displayableFactoids([newFactoid]);
+        if (shown.length === 0) return;
+        setAdditionalFactoids((prev) => [...prev, ...shown]);
         newCount++;
       });
 
@@ -213,11 +256,9 @@ const Player: React.FC<PlayerProps> = ({
         </div>
         <div className="hidden md:flex items-center gap-3 text-xs font-mono text-cyber">
           <span>
-            DEEP_DIVE_MODE {'//'} {track.bpm} BPM {track.key && `// ${track.key}`}
+            DEEP_DIVE_MODE {'//'} {bpm !== null ? `${bpm} BPM` : 'BPM not measured'}
+            {key !== null && ` // ${key}`}
           </span>
-          <EstimatedWarning
-            show={track.audioConfidence === 'low' || track.audioSource === 'estimated'}
-          />
         </div>
       </div>
 
@@ -233,9 +274,12 @@ const Player: React.FC<PlayerProps> = ({
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
-          <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest mb-1">
-            Agent Analysis
-          </h3>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+              Agent Analysis
+            </h3>
+            {track.factoids.length > 0 && <InferenceLabel>{provenance}</InferenceLabel>}
+          </div>
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">
               {allFactoids.length} insights decoded
@@ -249,11 +293,30 @@ const Player: React.FC<PlayerProps> = ({
             </div>
           ) : (
             <div className="space-y-6">
-              {visibleFactoids.map((fact, idx) => (
+              {visibleResultFactoids.map((fact, idx) => (
                 <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
                   <InteractiveFactoid factoid={fact} onEntityClick={handleEntityClick} />
                 </div>
               ))}
+
+              {/* Factoids added by DECRYPT MORE are written by the model, whatever the result */}
+              {visibleDecryptedFactoids.length > 0 && (
+                <section aria-label="Decrypted insights" className="space-y-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+                      Decrypted insights
+                    </h4>
+                    <InferenceLabel />
+                  </div>
+                  {visibleDecryptedFactoids.map((fact) => (
+                    <InteractiveFactoid
+                      key={fact.id}
+                      factoid={fact}
+                      onEntityClick={handleEntityClick}
+                    />
+                  ))}
+                </section>
+              )}
 
               {/* Standalone Decrypt More card */}
               {onDecryptMoreStream && (
@@ -328,6 +391,8 @@ const Player: React.FC<PlayerProps> = ({
             ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
         `}
         >
+          <ResultNotices track={track} className="w-full max-w-lg mb-4" />
+
           {/* Album Art Container */}
           <div className="relative w-56 h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 mb-8 mt-4 group flex-shrink-0">
             <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-[--duration-dramatic]"></div>
@@ -367,45 +432,8 @@ const Player: React.FC<PlayerProps> = ({
                 )}
               </div>
             )}
-            {/* Audio Stats */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
-              {track.bpm != null && <Badge variant="cyber">{track.bpm} BPM</Badge>}
-              {track.key && <Badge variant="cyber">{track.key}</Badge>}
-              {track.valence !== undefined && (
-                <Badge
-                  variant="gray"
-                  icon={
-                    <Heart
-                      size={10}
-                      className={track.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
-                    />
-                  }
-                  title="Mood"
-                >
-                  <span className={track.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}>
-                    {track.valence > 0.7
-                      ? 'Euphoric'
-                      : track.valence > 0.5
-                        ? 'Upbeat'
-                        : track.valence > 0.3
-                          ? 'Mellow'
-                          : 'Melancholic'}
-                  </span>
-                </Badge>
-              )}
-              {track.danceability !== undefined && (
-                <Badge
-                  variant="gray"
-                  icon={<Disc size={10} className="text-analog" />}
-                  title="Danceability"
-                >
-                  <span className="text-analog">{Math.round(track.danceability * 100)}%</span>
-                </Badge>
-              )}
-              <EstimatedWarning
-                show={track.audioConfidence === 'low' || track.audioSource === 'estimated'}
-              />
-            </div>
+            {/* Audio Stats: measured values, or "not measured" */}
+            <AudioStats track={track} className="mt-3" />
             {/* Spotify Link */}
             {track.spotifyUrl && (
               <a
@@ -446,9 +474,11 @@ const Player: React.FC<PlayerProps> = ({
           <div className="w-full max-w-lg">
             <SmartTimeline
               segments={track.segments}
-              duration={track.durationSeconds || 100}
+              segmentsSource={track.segmentsSource}
+              durationSeconds={track.durationSeconds}
               samples={track.samples}
               keyMoments={track.keyMoments}
+              audioAnalyzed={audioAnalyzed(track)}
             />
           </div>
         </div>
@@ -463,12 +493,13 @@ const Player: React.FC<PlayerProps> = ({
             ${activeTab === 'genealogy' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
-          <div className="absolute top-4 left-4 z-10 pointer-events-none hidden md:block">
-            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+          <div className="absolute top-4 left-4 z-10 pointer-events-none flex items-center gap-2">
+            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
               Genealogy Network
             </h3>
+            {track.genealogy.nodes.length > 1 && <InferenceLabel>{provenance}</InferenceLabel>}
           </div>
-          {track.genealogy?.nodes && track.genealogy.nodes.length > 1 ? (
+          {track.genealogy.nodes.length > 1 ? (
             <GenealogyGraph data={track.genealogy} onNodeClick={handleNodeClick} />
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
@@ -526,6 +557,13 @@ const Player: React.FC<PlayerProps> = ({
       </div>
     </div>
   );
+};
+
+const Player: React.FC<PlayerProps> = ({ trackData, ...props }) => {
+  // Missing lists default to empty so a partial result renders; memoised so the graph and
+  // the factoid list keep their identity between renders.
+  const track = useMemo(() => (trackData ? normalizeTrack(trackData) : null), [trackData]);
+  return track ? <PlayerView track={track} {...props} /> : <NoAnalysis {...props} />;
 };
 
 export default Player;

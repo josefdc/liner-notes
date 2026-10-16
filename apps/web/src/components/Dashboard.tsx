@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef, Suspense } from 'react';
 const SonicFingerprint = React.lazy(() => import('./SonicFingerprint'));
 import ActivityLog from './ActivityLog';
-import { RECOMMENDATIONS } from '../constants';
-import { Music, ArrowRight, ExternalLink, Disc, Heart, Zap, Search } from 'lucide-react';
+import { Music, ArrowRight, ExternalLink, Search } from 'lucide-react';
 import { AppPhase, type TrackData, type AgentLog } from '../types';
 import TargetScanOverlay from './TargetScanOverlay';
-import EstimatedWarning from './EstimatedWarning';
+import { AudioStats, InferenceLabel, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
+import { normalizeTrack } from '../constants';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -59,7 +59,7 @@ function generateGradientColors(label: string, group: number): { from: string; t
   };
 }
 
-// Convert genealogy nodes to recommendation-like cards
+// Tracks connected to this one in its genealogy (empty when there are none: no stand-ins)
 function getRelatedTracks(trackData: TrackData | null): Array<{
   id: string;
   title: string;
@@ -68,16 +68,10 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   img: string | null;
   group: number;
 }> {
-  if (!trackData?.genealogy?.nodes) {
-    return RECOMMENDATIONS.map((r) => ({ ...r, group: 4, img: r.img }));
-  }
-
   // Filter out the current song (group 1) and get related nodes
-  const relatedNodes = trackData.genealogy.nodes.filter((node) => node.group !== 1).slice(0, 4);
-
-  if (relatedNodes.length === 0) {
-    return RECOMMENDATIONS.map((r) => ({ ...r, group: 4, img: r.img }));
-  }
+  const relatedNodes = (trackData?.genealogy?.nodes ?? [])
+    .filter((node) => node.group !== 1)
+    .slice(0, 4);
 
   const groupLabels: Record<number, string> = {
     2: 'Sampled in this track',
@@ -90,7 +84,7 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
     title: node.label,
     artist: '', // Genealogy nodes don't have separate artist field
     reason: groupLabels[node.group] || 'Related',
-    img: isValidImageUrl(node.img) ? node.img! : null,
+    img: isValidImageUrl(node.img) ? node.img : null,
     group: node.group,
   }));
 }
@@ -114,7 +108,7 @@ const PlaceholderCover: React.FC<{ title: string; group: number }> = ({ title, g
 };
 
 const Dashboard: React.FC<DashboardProps> = ({
-  trackData,
+  trackData: rawTrackData,
   onNavigate,
   onAnalyzeTrack,
   logs = EMPTY_LOGS,
@@ -124,10 +118,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   onUndoAnalysis,
   isRestoredSession = false,
 }) => {
+  // Missing lists default to empty so a partial result renders instead of throwing.
+  const trackData = useMemo(
+    () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
+    [rawTrackData],
+  );
   const relatedTracks = useMemo(() => getRelatedTracks(trackData), [trackData]);
-  const isFallbackRecommendations =
-    !trackData?.genealogy?.nodes ||
-    trackData.genealogy.nodes.filter((n) => n.group !== 1).length === 0;
+  const hasGenreProfile = (trackData?.genreProfile?.length ?? 0) > 0;
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
   // UX: Undo toast state (replaces confirm dialog)
@@ -226,6 +223,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </header>
 
+      {/* What this result is missing, named (model unavailable, audio not measured) */}
+      {trackData && <ResultNotices track={trackData} />}
+
       {/* Now Playing Hero Section (P2:17 — stagger animation) */}
       {trackData && (
         <section className="bg-surface border border-border rounded-[--radius-lg] p-[--space-xl] md:p-[--space-2xl] relative overflow-hidden group transition-all duration-[--duration-slow] animate-stagger-in stagger-2">
@@ -281,68 +281,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               )}
 
-              {/* Audio Stats Row — P2:20 descriptive labels */}
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-6">
-                {trackData.bpm != null && (
-                  <Badge variant="cyber" size="md">
-                    <span className="opacity-60">BPM</span> {trackData.bpm}
-                  </Badge>
-                )}
-                {trackData.key && (
-                  <Badge variant="cyber" size="md">
-                    <span className="opacity-60">KEY</span> {trackData.key}
-                  </Badge>
-                )}
-                {trackData.energy !== undefined && (
-                  <Badge variant="gray" size="md" icon={<Zap size={12} className="text-cyber" />}>
-                    <span className="text-text-tertiary">ENERGY</span>{' '}
-                    <span className="text-cyber">{Math.round(trackData.energy * 100)}%</span>
-                  </Badge>
-                )}
-                {trackData.valence !== undefined && (
-                  <Badge
-                    variant="gray"
-                    size="md"
-                    icon={
-                      <Heart
-                        size={12}
-                        className={
-                          trackData.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'
-                        }
-                      />
-                    }
-                    title="Mood: 0=melancholic, 100=euphoric"
-                  >
-                    <span
-                      className={trackData.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
-                    >
-                      {trackData.valence > 0.7
-                        ? 'Euphoric'
-                        : trackData.valence > 0.5
-                          ? 'Upbeat'
-                          : trackData.valence > 0.3
-                            ? 'Mellow'
-                            : 'Melancholic'}
-                    </span>
-                  </Badge>
-                )}
-                {trackData.danceability !== undefined && (
-                  <Badge
-                    variant="gray"
-                    size="md"
-                    icon={<Disc size={12} className="text-analog" />}
-                    title="Danceability"
-                  >
-                    <span className="text-text-tertiary">DANCE</span>{' '}
-                    <span className="text-analog">{Math.round(trackData.danceability * 100)}%</span>
-                  </Badge>
-                )}
-                <EstimatedWarning
-                  show={
-                    trackData.audioConfidence === 'low' || trackData.audioSource === 'estimated'
-                  }
-                />
-              </div>
+              {/* Audio values: measured, model scores, or "not measured" */}
+              <AudioStats
+                track={trackData}
+                size="md"
+                rowClassName="justify-center md:justify-start"
+                className="mb-6"
+              />
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
@@ -374,10 +319,19 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Main Grid (P2:17 — stagger animations) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         {/* Hero: Sonic Fingerprint */}
-        <div className="lg:col-span-1 bg-surface border border-border rounded-[--radius-md] p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3">
-          <SectionLabel subtitle="Genre DNA distribution" indicator="cyber" className="mb-4 z-10">
-            Sonic Fingerprint
-          </SectionLabel>
+        <section
+          aria-label="Sonic Fingerprint"
+          className="lg:col-span-1 bg-surface border border-border rounded-[--radius-md] p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+        >
+          <div className="flex items-start justify-between gap-2 mb-4 z-10">
+            <SectionLabel
+              subtitle={hasGenreProfile ? 'Genre affinity written by the model' : 'Genre affinity'}
+              className="flex-1"
+            >
+              Sonic Fingerprint
+            </SectionLabel>
+            {hasGenreProfile && <InferenceLabel />}
+          </div>
           <div className="flex-1 min-h-[250px] md:min-h-[300px] z-10">
             <Suspense
               fallback={
@@ -386,28 +340,39 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               }
             >
-              <SonicFingerprint genreProfile={trackData?.genreProfile} />
+              <SonicFingerprint
+                genreProfile={trackData?.genreProfile}
+                modelUnavailable={trackData?.modelUnavailable}
+              />
             </Suspense>
           </div>
           {/* Decorative BG */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyber/5 blur-[100px] pointer-events-none"></div>
-        </div>
+        </section>
 
-        {/* Recommendations / Gems (P2:17 — stagger) */}
+        {/* Connected tracks from the genealogy (P2:17 — stagger) */}
         <div className="lg:col-span-2 flex flex-col gap-6 animate-stagger-in stagger-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium tracking-tight text-white">Discovered Gems</h3>
-              {isFallbackRecommendations && (
-                <p className="text-[10px] font-mono text-text-muted mt-0.5">
-                  SUGGESTED TRACKS (no direct connections found)
-                </p>
-              )}
+              <h3 className="text-lg font-medium tracking-tight text-white">Connected Tracks</h3>
+              <p className="text-[10px] font-mono text-text-muted mt-0.5">
+                {trackData?.modelUnavailable
+                  ? 'From source data'
+                  : 'From the genealogy graph — model inference from research'}
+              </p>
             </div>
-            <span className="text-xs font-mono text-analog">
-              {relatedTracks.length} RELATED ARTIFACTS
-            </span>
+            {relatedTracks.length > 0 && (
+              <span className="text-xs font-mono text-analog">
+                {relatedTracks.length} RELATED ARTIFACTS
+              </span>
+            )}
           </div>
+
+          {relatedTracks.length === 0 && (
+            <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
+              No connected tracks found for this song.
+            </p>
+          )}
 
           <div className="flex gap-[--space-lg] overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
             {relatedTracks.map((rec) => (

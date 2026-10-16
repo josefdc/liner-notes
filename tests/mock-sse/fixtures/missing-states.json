@@ -1,0 +1,84 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "threadId": "thread-missing"
+      },
+      {
+        "type": "status",
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "data": {
+          "id": "t-missing",
+          "title": "Quiet Signal",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-missing",
+          "releaseYear": "2001",
+          "bpm": null,
+          "key": null,
+          "energy": null,
+          "valence": null,
+          "danceability": null,
+          "acousticness": null,
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Main",
+              "start": 10,
+              "end": 90,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Outro",
+              "start": 90,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "template",
+          "samples": [],
+          "factoids": [],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Quiet Signal",
+                "size": 40
+              }
+            ],
+            "links": []
+          },
+          "audioSource": "unavailable",
+          "audioConfidence": "low",
+          "audioUnavailableReason": "no_preview",
+          "modelUnavailable": true,
+          "modelUnavailableReason": "rate_limited"
+        }
+      },
+      {
+        "type": "done",
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

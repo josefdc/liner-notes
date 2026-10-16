@@ -1,0 +1,161 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "threadId": "thread-full"
+      },
+      {
+        "type": "status",
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "data": {
+          "id": "t-full",
+          "title": "Bright Lines",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-full",
+          "releaseYear": "2011",
+          "bpm": 105,
+          "key": "A Minor",
+          "energy": 0.71,
+          "valence": 0.34,
+          "danceability": 0.62,
+          "acousticness": 0.12,
+          "durationSeconds": 240,
+          "genreProfile": [
+            {
+              "genre": "Synthpop",
+              "value": 80
+            },
+            {
+              "genre": "Electronic",
+              "value": 70
+            },
+            {
+              "genre": "Rock",
+              "value": 20
+            },
+            {
+              "genre": "Pop",
+              "value": 55
+            },
+            {
+              "genre": "Ambient",
+              "value": 30
+            }
+          ],
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record"
+            }
+          ],
+          "keyMoments": [
+            {
+              "time": 12,
+              "type": "energy_peak",
+              "intensity": 0.9,
+              "description": "Energy peak"
+            },
+            {
+              "time": 12,
+              "type": "energy_peak",
+              "intensity": 0.8,
+              "description": "Second energy peak"
+            }
+          ],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Sonic Profile",
+              "content": "105 BPM in A Minor. High measured energy.",
+              "type": "production"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Bright Lines - Test Artist (2011)",
+                "size": 40
+              },
+              {
+                "id": "origin1",
+                "group": 2,
+                "label": "Older Record - Someone (1984)",
+                "size": 30
+              }
+            ],
+            "links": [
+              {
+                "source": "origin1",
+                "target": "current",
+                "value": 3,
+                "type": "sample"
+              }
+            ]
+          },
+          "audioSource": "analyzed",
+          "audioConfidence": "high"
+        }
+      },
+      {
+        "type": "done",
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

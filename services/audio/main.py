@@ -16,26 +16,29 @@ Settings (environment variables, all optional):
     AUDIO_SERVICE_TOKEN    shared secret; when set, /analyze requires X-Audio-Token
     MODELS_DIR             directory with the Essentia models (default: ./models)
     ANALYSIS_TIMEOUT_S     seconds allowed for decoding and analysis (default: 60)
-    MAX_CONCURRENT_ANALYSES  analyses at once before answering 503 (default: 4)
+    MAX_CONCURRENT_ANALYSES  analyses that run at once (default: 4)
+    MAX_QUEUED_ANALYSES    requests that may wait for a free slot (default: 16)
+    QUEUE_WAIT_S           seconds a request waits for a slot before a 503 (default: 10)
     AUDIO_ENABLE_DOCS      set to 1 to serve /docs and /openapi.json
 """
 
 import asyncio
-import hmac
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
 # Keep TensorFlow's C++ logging to warnings and errors.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import librosa  # noqa: E402
 import numpy as np  # noqa: E402
-from fastapi import Depends, FastAPI, Header, HTTPException  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from download_models import MODELS, is_verified, models_dir  # noqa: E402
+from guards import AnalysisSlots, RequestGuardMiddleware, ServiceBusyError  # noqa: E402
 from preview import PreviewDownloadError, PreviewURLError, download_preview  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -66,9 +69,13 @@ VERSION = "1.0.0"
 TOKEN_HEADER = "X-Audio-Token"
 ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
 MAX_DECODE_SECONDS = 35.0
-# Analyses run in worker threads; beyond this many at once the service answers 503.
+# Analyses run in worker threads, at most this many at once. Further requests wait up to
+# QUEUE_WAIT_S for a slot (at most MAX_QUEUED_ANALYSES of them) before a 503. The wait stays
+# well below the API's 30 s client timeout and does not count against ANALYSIS_TIMEOUT_S.
 MAX_CONCURRENT_ANALYSES = int(os.environ.get("MAX_CONCURRENT_ANALYSES") or 4)
-_analysis_slots = asyncio.Semaphore(MAX_CONCURRENT_ANALYSES)
+MAX_QUEUED_ANALYSES = int(os.environ.get("MAX_QUEUED_ANALYSES") or 16)
+QUEUE_WAIT_S = float(os.environ.get("QUEUE_WAIT_S") or 10)
+RETRY_AFTER_S = 5
 
 
 def _cors_origins() -> list[str]:
@@ -79,31 +86,12 @@ def _cors_origins() -> list[str]:
     return origins
 
 
-_docs_enabled = os.environ.get("AUDIO_ENABLE_DOCS") == "1"
-app = FastAPI(
-    # The interactive docs and schema are off unless explicitly enabled.
-    docs_url="/docs" if _docs_enabled else None,
-    redoc_url=None,
-    openapi_url="/openapi.json" if _docs_enabled else None,
-    title="Liner Notes audio analysis",
-    description="Measures tempo, key and audio features from 30-second previews",
-    version=VERSION,
-)
+def _service_token() -> str:
+    return os.environ.get("AUDIO_SERVICE_TOKEN", "")
 
-# The API calls this service server to server; browsers only need CORS when an origin is
-# configured explicitly. Credentials are never allowed.
-CORS_ORIGINS = _cors_origins()
-if CORS_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=CORS_ORIGINS,
-        allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", TOKEN_HEADER],
-    )
 
-# Thread pool for CPU-bound audio processing
-executor = ThreadPoolExecutor(max_workers=4)
+# Thread pool for CPU-bound audio processing, one thread per analysis slot
+executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ANALYSES)
 
 # =============================================================================
 # Essentia Model Loading
@@ -251,8 +239,9 @@ def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str | None, str | None]:
         chroma: Chromagram (12 x time frames)
 
     Returns:
-        Tuple of (key, mode) e.g., ("C", "Major"), or (None, None) when the audio has no
-        pitched content to correlate (e.g. silence) — never a default key.
+        Tuple of (key, mode) e.g., ("C", "Major"), or (None, None) when the chroma profile is
+        flat or undefined (e.g. digital silence) — never a default key. Noise or unpitched
+        audio still yields the best-correlating key.
     """
     # Sum chroma over time to get overall pitch class distribution
     chroma_sum = np.sum(chroma, axis=1)
@@ -475,6 +464,8 @@ def analyze_perceptual_features(file_path: str) -> dict:
     try:
         # Load audio at 16kHz mono (required by the embedding models)
         audio = MonoLoader(filename=file_path, sampleRate=16000, resampleQuality=4)()
+        # MonoLoader always decodes the whole file; keep the same span librosa analyses.
+        audio = audio[: int(16000 * MAX_DECODE_SECONDS)]
 
         # MusiCNN embeddings (200-dim per frame, reused for 3 classification heads)
         musicnn_embeddings = _musicnn_extractor(audio)
@@ -600,21 +591,10 @@ async def analyze_preview_url(url: str) -> dict:
 # =============================================================================
 
 
-def require_token(x_audio_token: str | None = Header(default=None)) -> None:
-    """Reject the request when AUDIO_SERVICE_TOKEN is set and the header does not match."""
-    expected = os.environ.get("AUDIO_SERVICE_TOKEN", "")
-    if not expected:
-        return
-    supplied = x_audio_token or ""
-    if not hmac.compare_digest(supplied.encode(), expected.encode()):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-@app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
-    Liveness and model status. Always 200 while the service can analyse tempo and key;
-    status is "degraded" when the perceptual models are not loaded.
+    Liveness and model status (GET and HEAD). Always 200 while the service can analyse tempo
+    and key; status is "degraded" when the perceptual models are not loaded.
     """
     return {
         "status": "ok" if MODELS_LOADED else "degraded",
@@ -623,8 +603,7 @@ async def health_check():
     }
 
 
-@app.post("/analyze", response_model=AudioAnalysisResult, dependencies=[Depends(require_token)])
-async def analyze_preview(request: AnalyzeRequest):
+async def analyze_preview(request: AnalyzeRequest, http_request: Request):
     """
     Analyze a Deezer or Spotify preview URL.
 
@@ -632,11 +611,17 @@ async def analyze_preview(request: AnalyzeRequest):
     are loaded, also estimates valence, danceability, acousticness and instrumentalness.
     Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
     """
-    if _analysis_slots.locked():
-        raise HTTPException(status_code=503, detail="The analysis service is busy; try again")
+    slots: AnalysisSlots = http_request.app.state.analysis_slots
     try:
-        async with _analysis_slots:
+        async with slots.slot():
             result = await analyze_preview_url(request.preview_url)
+    except ServiceBusyError as e:
+        logger.warning("Analysis refused, service busy: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="The analysis service is busy; try again",
+            headers={"Retry-After": str(RETRY_AFTER_S)},
+        ) from None
     except PreviewURLError as e:
         logger.info("Rejected preview URL: %s", e)
         raise HTTPException(
@@ -668,7 +653,6 @@ async def analyze_preview(request: AnalyzeRequest):
     )
 
 
-@app.get("/")
 async def root():
     """Root endpoint with API info."""
     return {
@@ -680,6 +664,61 @@ async def root():
             "/analyze": "POST - Analyze a preview URL",
         },
     }
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Created here so the semaphore belongs to the loop that serves the requests.
+    application.state.analysis_slots = AnalysisSlots(
+        MAX_CONCURRENT_ANALYSES, MAX_QUEUED_ANALYSES, QUEUE_WAIT_S
+    )
+    yield
+
+
+def create_app() -> FastAPI:
+    """Build the application from the current environment."""
+    docs_enabled = os.environ.get("AUDIO_ENABLE_DOCS") == "1"
+    application = FastAPI(
+        # The interactive docs and schema are off unless explicitly enabled.
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+        title="Liner Notes audio analysis",
+        description="Measures tempo, key and audio features from 30-second previews",
+        version=VERSION,
+        lifespan=lifespan,
+    )
+    application.add_api_route(
+        "/health", health_check, methods=["GET", "HEAD"], response_model=HealthResponse
+    )
+    application.add_api_route(
+        "/analyze", analyze_preview, methods=["POST"], response_model=AudioAnalysisResult
+    )
+    application.add_api_route("/", root, methods=["GET"])
+
+    # The API calls this service server to server; browsers only need CORS when an origin is
+    # configured explicitly. Credentials are never allowed.
+    origins = _cors_origins()
+    if origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type", TOKEN_HEADER],
+        )
+    # Added last so it runs first: the token and the body size are checked before the
+    # application reads anything.
+    application.add_middleware(
+        RequestGuardMiddleware,
+        token=_service_token,
+        token_header=TOKEN_HEADER,
+        protected_paths=frozenset({"/analyze"}),
+    )
+    return application
+
+
+app = create_app()
 
 
 # =============================================================================

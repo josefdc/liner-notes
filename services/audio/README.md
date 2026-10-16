@@ -43,10 +43,12 @@ All settings are optional environment variables.
 | Variable | Default | Purpose |
 |---|---|---|
 | `CORS_ORIGINS` | empty (no CORS headers) | Comma-separated browser origins allowed to call the service. `*` is ignored and credentials are never allowed. |
-| `AUDIO_SERVICE_TOKEN` | empty (no check) | Shared secret. When set, `POST /analyze` requires the same value in the `X-Audio-Token` header and answers `401` otherwise. |
+| `AUDIO_SERVICE_TOKEN` | empty (no check) | Shared secret. When set, `POST /analyze` requires the same value in the `X-Audio-Token` header and answers `401` otherwise, before reading the body. The API does not send this header yet (#26): setting it today makes every analysis fail. |
 | `MODELS_DIR` | `./models` (`/app/models` in the image) | Where the Essentia models are read from and downloaded to. |
 | `ANALYSIS_TIMEOUT_S` | `60` | Seconds allowed for decoding and analysing one preview (`504` after that). |
-| `MAX_CONCURRENT_ANALYSES` | `4` | Analyses allowed at once; further requests get `503` until one finishes. |
+| `MAX_CONCURRENT_ANALYSES` | `4` | Analyses that run at once (also the size of the worker thread pool). |
+| `MAX_QUEUED_ANALYSES` | `16` | Requests that may wait for a free slot; any beyond that get `503` at once. |
+| `QUEUE_WAIT_S` | `10` | Seconds a request waits for a free slot before `503`. Keep it below the API's 30 s client timeout; the wait does not count against `ANALYSIS_TIMEOUT_S`. |
 | `AUDIO_ENABLE_DOCS` | unset | Set to `1` to serve `/docs` and `/openapi.json` (off by default). |
 | `AUDIO_FETCH_MODELS` | `1` | Image only: set to `0` to skip the model download on start. |
 | `MODEL_FETCH_TIMEOUT_S` | `90` | Image only: time limit for the model download on start. |
@@ -54,7 +56,7 @@ All settings are optional environment variables.
 
 ## API
 
-### `GET /health`
+### `GET /health` (and `HEAD /health`)
 
 Always `200` while the service can measure tempo and key. `status` is `ok` when the perceptual
 models are loaded and `degraded` when they are not.
@@ -71,6 +73,8 @@ curl -X POST http://localhost:3002/analyze \
   -H "Content-Type: application/json" \
   -d '{"preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/..."}'
 ```
+
+The request body is limited to 16 KB (`413` beyond that).
 
 Response (perceptual fields are `null` without the models):
 
@@ -90,15 +94,22 @@ Response (perceptual fields are `null` without the models):
 }
 ```
 
+`bpm`, `key` and `mode` are measurements and are never filled with a default: `bpm` is `null`
+when beat tracking finds no tempo (for example silence or audio without onsets), and `key` and
+`mode` are both `null` when the chroma profile is flat or undefined (for example digital
+silence). Noise or unpitched audio still gets the best-matching key, so treat a key on such
+material with care.
+
 Errors carry a generic `detail`; the cause is only written to the service log.
 
 | Status | Meaning |
 |---|---|
 | `400` | `preview_url` is not an allowed preview URL (see below) |
-| `503` | `MAX_CONCURRENT_ANALYSES` analyses are already running |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
+| `413` | Request body larger than 16 KB |
 | `422` | Request body is not `{"preview_url": "<string>"}` |
 | `502` | The preview could not be downloaded within the limits |
+| `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
 | `500` | Decoding or analysis failed |
 

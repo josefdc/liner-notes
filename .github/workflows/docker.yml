@@ -92,7 +92,7 @@ jobs:
 
           docker run --rm --network none liner-notes-audio:ci sh -c '
             ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=5" /tmp/tone.mp3 &&
-            python -c "import main; print(main.analyze_audio_file(\"/tmp/tone.mp3\"))"'
+            python -c "import main; assert main.ESSENTIA_AVAILABLE, \"essentia-tensorflow does not import\"; print(main.analyze_audio_file(\"/tmp/tone.mp3\"))"'
 
           docker run -d --name audio-smoke -e AUDIO_FETCH_MODELS=0 -p 127.0.0.1:3102:3002 \
             liner-notes-audio:ci

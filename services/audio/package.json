@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "FastAPI audio analysis service (Python, managed with uv); this manifest only exposes npm scripts",
   "scripts": {
-    "dev": "uv run uvicorn main:app --reload --host 0.0.0.0 --port ${AUDIO_PORT:-3002}",
-    "docker": "docker build -t liner-notes-audio . && docker run -p 3002:3002 liner-notes-audio"
+    "dev": "uv run uvicorn main:app --reload --host 127.0.0.1 --port ${AUDIO_PORT:-3002}",
+    "docker": "docker build -t liner-notes-audio . && docker run --rm -p 127.0.0.1:3002:3002 -v liner-notes-models:/app/models liner-notes-audio"
   }
 }

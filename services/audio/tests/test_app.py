@@ -140,7 +140,33 @@ def test_cors_origins_come_from_the_environment(monkeypatch, value, expected):
     assert main._cors_origins() == expected
 
 
-def test_cors_never_allows_credentials():
-    for middleware in main.app.user_middleware:
-        if middleware.cls.__name__ == "CORSMiddleware":
-            assert middleware.kwargs["allow_credentials"] is False
+def test_cors_is_off_without_configured_origins(monkeypatch):
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    with TestClient(main.create_app()) as c:
+        response = c.get("/health", headers={"Origin": "https://liner.example"})
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_allows_configured_origins_without_credentials(monkeypatch):
+    monkeypatch.setenv("CORS_ORIGINS", "https://liner.example")
+    with TestClient(main.create_app()) as c:
+        preflight = c.options(
+            "/analyze",
+            headers={
+                "Origin": "https://liner.example",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        simple = c.get("/health", headers={"Origin": "https://liner.example"})
+        refused = c.options(
+            "/analyze",
+            headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"},
+        )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "https://liner.example"
+    assert "access-control-allow-credentials" not in preflight.headers
+    assert simple.headers["access-control-allow-origin"] == "https://liner.example"
+    assert "access-control-allow-credentials" not in simple.headers
+    assert refused.status_code == 400
+    assert "access-control-allow-origin" not in refused.headers

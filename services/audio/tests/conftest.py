@@ -44,6 +44,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(302, {"Location": "/internal-admin", "Content-Length": "0"})
         elif path == "/internal-admin":
             self._send(200, {"Content-Type": "audio/mpeg", "Content-Length": "4"}, b"data")
+        elif path == "/gzip.mp3":
+            self._send(
+                200,
+                {"Content-Type": "audio/mpeg", "Content-Encoding": "gzip", "Content-Length": "4"},
+                b"data",
+            )
         elif path == "/page.html":
             self._send(200, {"Content-Type": "text/html", "Content-Length": "6"}, b"<html>")
         elif path == "/declared-huge.mp3":

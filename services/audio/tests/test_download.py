@@ -105,3 +105,44 @@ def test_downloaded_mp3_can_be_decoded(cdn, temp_dir):
         assert 2.5 < len(y) / sr < 3.5
     finally:
         os.remove(path)
+
+
+def test_refuses_compressed_bodies(cdn, temp_dir):
+    base, _ = cdn
+    with pytest.raises(PreviewDownloadError, match="content encoding"):
+        fetch(f"{base}/gzip.mp3")
+    assert list(temp_dir.iterdir()) == []
+
+
+def test_ignores_proxy_settings_from_the_environment(cdn, temp_dir, monkeypatch):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    proxy_hits = []
+
+    class Proxy(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            proxy_hits.append(self.path)
+            self.send_response(502)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    proxy = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+    Thread(target=proxy.serve_forever, daemon=True).start()
+    try:
+        proxy_url = f"http://127.0.0.1:{proxy.server_address[1]}"
+        for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY"):
+            monkeypatch.setenv(name, proxy_url)
+        for name in ("NO_PROXY", "no_proxy"):
+            monkeypatch.delenv(name, raising=False)
+        base, server = cdn
+        path = fetch(f"{base}/audio.mp3")
+        os.remove(path)
+    finally:
+        proxy.shutdown()
+        proxy.server_close()
+    assert proxy_hits == []
+    assert server.hits == ["/audio.mp3"]

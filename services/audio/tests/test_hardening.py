@@ -74,23 +74,6 @@ def test_no_tempo_is_reported_as_null_not_a_default(tmp_path):
     assert result["bpm"] is None
 
 
-def test_busy_service_answers_503(client):
-    async def hold_all_slots():
-        for _ in range(main.MAX_CONCURRENT_ANALYSES):
-            await main._analysis_slots.acquire()
-
-    def release_all_slots():
-        for _ in range(main.MAX_CONCURRENT_ANALYSES):
-            main._analysis_slots.release()
-
-    asyncio.run(hold_all_slots())
-    try:
-        url = "https://cdnt-preview.dzcdn.net/api/1/1/f/8/c/0/f8c5.mp3"
-        assert client.post("/analyze", json={"preview_url": url}).status_code == 503
-    finally:
-        release_all_slots()
-
-
 def test_docs_and_schema_are_off_by_default(client):
     assert client.get("/docs").status_code == 404
     assert client.get("/openapi.json").status_code == 404

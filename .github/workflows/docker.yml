@@ -71,3 +71,40 @@ jobs:
             sonic-server.cache-to=type=gha,scope=sonic-server,mode=max
             sonic-analysis.cache-from=type=gha,scope=sonic-analysis
             sonic-analysis.cache-to=type=gha,scope=sonic-analysis,mode=max
+      # Loads the audio image (its layers come from the build above) to check how it runs:
+      # as a non-root user, decoding and analysing a generated clip offline, and serving
+      # /health as "degraded" when the models are not downloaded.
+      - name: Load the audio image
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-compose.yml
+          targets: sonic-analysis
+          load: true
+          set: |
+            sonic-analysis.tags=liner-notes-audio:ci
+            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
+      - name: Check the audio image
+        run: |
+          uid=$(docker run --rm liner-notes-audio:ci id -u)
+          echo "audio image runs as uid $uid"
+          test "$uid" -ne 0
+
+          docker run --rm --network none liner-notes-audio:ci sh -c '
+            ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=5" /tmp/tone.mp3 &&
+            python -c "import main; print(main.analyze_audio_file(\"/tmp/tone.mp3\"))"'
+
+          docker run -d --name audio-smoke -e AUDIO_FETCH_MODELS=0 -p 127.0.0.1:3102:3002 \
+            liner-notes-audio:ci
+          trap 'docker logs audio-smoke; docker rm -f audio-smoke' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3102/health && break
+            sleep 2
+          done
+          echo
+          curl -fsS http://127.0.0.1:3102/health | grep -q '"status":"degraded","version":"[^"]*","models":false'
+          test "$(docker exec audio-smoke id -u)" -ne 0
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3102/analyze-test)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3102/analyze \
+            -H 'content-type: application/json' \
+            -d '{"preview_url":"http://169.254.169.254/#dzcdn.net"}')" = 400

@@ -1,36 +1,51 @@
 """
-Audio Analysis Microservice for The Sonic Agent
+Audio analysis service for Liner Notes.
 
-FastAPI service that analyzes Spotify preview URLs to extract:
-- BPM (tempo) via librosa.beat.beat_track
-- Key detection via chroma analysis
-- Additional audio features
-- Perceptual metrics (valence, danceability, acousticness, instrumentalness)
-  via Essentia TensorFlow pre-trained models when available
+Downloads a 30-second Deezer or Spotify preview and measures:
+- tempo (librosa.beat.beat_track)
+- key and mode (Krumhansl-Kessler profiles on a constant-Q chromagram)
+- energy and notable moments
+- valence, danceability, acousticness and instrumentalness, when the Essentia TensorFlow
+  models are present and verified (see download_models.py)
 
-Runs on port 3002 as a sidecar to the main Node.js server.
+Run locally:
+    uv run uvicorn main:app --host 127.0.0.1 --port 3002
 
-Usage:
-    uvicorn main:app --host 0.0.0.0 --port 3002
-
-Dependencies:
-    pip install fastapi uvicorn librosa numpy requests pydantic essentia-tensorflow
+Settings (environment variables, all optional):
+    CORS_ORIGINS           comma-separated browser origins allowed to call the service
+    AUDIO_SERVICE_TOKEN    shared secret; when set, /analyze requires X-Audio-Token
+    MODELS_DIR             directory with the Essentia models (default: ./models)
+    ANALYSIS_TIMEOUT_S     seconds allowed for decoding and analysis (default: 60)
+    MAX_CONCURRENT_ANALYSES  analyses that run at once (default: 4)
+    MAX_QUEUED_ANALYSES    requests that may wait for a free slot (default: 16)
+    QUEUE_WAIT_S           seconds a request waits for a slot before a 503 (default: 10)
+    AUDIO_ENABLE_DOCS      set to 1 to serve /docs and /openapi.json
 """
 
 import asyncio
+import logging
 import os
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
-import librosa
-import numpy as np
-import requests
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl
+# Keep TensorFlow's C++ logging to warnings and errors.
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
+import librosa  # noqa: E402
+import numpy as np  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
+
+from download_models import MODELS, is_verified, models_dir  # noqa: E402
+from guards import AnalysisSlots, RequestGuardMiddleware, ServiceBusyError  # noqa: E402
+from preview import PreviewDownloadError, PreviewURLError, download_preview  # noqa: E402
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("audio")
 
 # =============================================================================
-# Essentia TensorFlow (optional — graceful fallback if unavailable)
+# Essentia TensorFlow (optional; the service runs without it)
 # =============================================================================
 
 ESSENTIA_AVAILABLE = False
@@ -50,42 +65,37 @@ except ImportError:
 # Configuration
 # =============================================================================
 
-# Allowed preview URL domains for audio analysis
-ALLOWED_PREVIEW_DOMAINS = [
-    "scdn.co",  # Spotify CDN
-    "spotify.com",  # Spotify direct
-    "dzcdn.net",  # Deezer CDN
-    "deezer.com",  # Deezer direct
-    "cdns-preview",  # Deezer preview CDN pattern
-]
+VERSION = "1.0.0"
+TOKEN_HEADER = "X-Audio-Token"
+ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
+MAX_DECODE_SECONDS = 35.0
+# Analyses run in worker threads, at most this many at once. Further requests wait up to
+# QUEUE_WAIT_S for a slot (at most MAX_QUEUED_ANALYSES of them) before a 503. The wait stays
+# well below the API's 30 s client timeout and does not count against ANALYSIS_TIMEOUT_S.
+MAX_CONCURRENT_ANALYSES = int(os.environ.get("MAX_CONCURRENT_ANALYSES") or 4)
+MAX_QUEUED_ANALYSES = int(os.environ.get("MAX_QUEUED_ANALYSES") or 16)
+QUEUE_WAIT_S = float(os.environ.get("QUEUE_WAIT_S") or 10)
+RETRY_AFTER_S = 5
 
-app = FastAPI(
-    title="Sonic Agent Audio Analysis",
-    description="Extracts BPM and Key from Spotify preview URLs",
-    version="1.0.0",
-)
 
-# CORS -- configurable via CORS_ORIGINS env var (comma-separated)
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(
-    ","
-)
+def _cors_origins() -> list[str]:
+    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+    if "*" in origins:
+        logger.warning("Ignoring '*' in CORS_ORIGINS; list explicit origins instead")
+        origins = [o for o in origins if o != "*"]
+    return origins
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# Thread pool for CPU-bound audio processing
-executor = ThreadPoolExecutor(max_workers=4)
+def _service_token() -> str:
+    return os.environ.get("AUDIO_SERVICE_TOKEN", "")
+
+
+# Thread pool for CPU-bound audio processing, one thread per analysis slot
+executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ANALYSES)
 
 # =============================================================================
 # Essentia Model Loading
 # =============================================================================
-
-MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 
 _musicnn_extractor = None
 _effnet_extractor = None
@@ -93,33 +103,28 @@ _valence_model = None
 _danceability_model = None
 _acousticness_model = None
 _instrumentalness_model = None
-ESSENTIA_MODELS_LOADED = False
 
 
 def _init_essentia_models() -> bool:
-    """Load Essentia TensorFlow models at startup. Returns True if successful."""
+    """Load the Essentia models once their checksums are verified. Returns True on success."""
     global _musicnn_extractor, _effnet_extractor
     global _valence_model, _danceability_model, _acousticness_model, _instrumentalness_model
 
     if not ESSENTIA_AVAILABLE:
-        print("INFO: essentia-tensorflow not installed, perceptual features disabled")
+        logger.info("essentia-tensorflow is not installed; perceptual features disabled")
         return False
 
-    model_files = {
-        "musicnn": os.path.join(MODELS_DIR, "msd-musicnn-1.pb"),
-        "effnet": os.path.join(MODELS_DIR, "discogs-effnet-bs64-1.pb"),
-        "valence": os.path.join(MODELS_DIR, "deam-msd-musicnn-2.pb"),
-        "danceability": os.path.join(MODELS_DIR, "danceability-msd-musicnn-1.pb"),
-        "acousticness": os.path.join(MODELS_DIR, "mood_acoustic-discogs-effnet-1.pb"),
-        "instrumentalness": os.path.join(MODELS_DIR, "voice_instrumental-msd-musicnn-1.pb"),
-    }
+    directory = models_dir()
+    unverified = [m.filename for m in MODELS if not is_verified(m, directory)]
+    if unverified:
+        logger.warning(
+            "Perceptual features disabled; missing or invalid models: %s "
+            "(run 'uv run python download_models.py')",
+            ", ".join(unverified),
+        )
+        return False
 
-    for name, path in model_files.items():
-        if not os.path.exists(path):
-            print(f"WARNING: Missing essentia model: {name} ({path})")
-            print("  Run 'python download_models.py' to download models")
-            return False
-
+    model_files = {m.name: os.path.join(directory, m.filename) for m in MODELS}
     try:
         # MusiCNN: raw audio → 200-dim embeddings
         _musicnn_extractor = TensorflowPredictMusiCNN(
@@ -157,17 +162,16 @@ def _init_essentia_models() -> bool:
             graphFilename=model_files["instrumentalness"],
             output="model/Softmax",
         )
-
-        print("Essentia TensorFlow models loaded successfully")
-        return True
-
-    except Exception as e:
-        print(f"ERROR: Failed to load essentia models: {e}")
+    except Exception:
+        logger.exception("Failed to load the Essentia models")
         return False
+
+    logger.info("Essentia models loaded")
+    return True
 
 
 # Load models at module level (once per worker)
-ESSENTIA_MODELS_LOADED = _init_essentia_models()
+MODELS_LOADED = _init_essentia_models()
 
 # =============================================================================
 # Data Models
@@ -177,7 +181,7 @@ ESSENTIA_MODELS_LOADED = _init_essentia_models()
 class AnalyzeRequest(BaseModel):
     """Request body for audio analysis"""
 
-    preview_url: HttpUrl
+    preview_url: str = Field(min_length=1, max_length=2048)
 
 
 class KeyMoment(BaseModel):
@@ -192,9 +196,9 @@ class KeyMoment(BaseModel):
 class AudioAnalysisResult(BaseModel):
     """Analysis result with extracted features"""
 
-    bpm: int
-    key: str
-    mode: str  # "Major" or "Minor"
+    bpm: int | None  # null when no tempo was found
+    key: str | None  # null when no key could be measured
+    mode: str | None  # "Major" or "Minor"; null with key
     energy: float  # 0-1 scale
     duration: float  # seconds
     source: str = "analyzed"  # "analyzed" or "estimated"
@@ -209,9 +213,9 @@ class AudioAnalysisResult(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response"""
 
-    status: str
+    status: str  # "ok", or "degraded" when the perceptual models are not loaded
     version: str
-    essentia: bool  # Whether essentia models are loaded
+    models: bool  # Whether the Essentia models are verified and loaded
 
 
 # =============================================================================
@@ -227,23 +231,7 @@ MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 
 MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 
 
-def download_preview(url: str) -> str:
-    """Download preview MP3 to a temporary file."""
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
-
-    fd, path = tempfile.mkstemp(suffix=".mp3")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(response.content)
-    except:
-        os.close(fd)
-        raise
-
-    return path
-
-
-def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str, str]:
+def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str | None, str | None]:
     """
     Detect key using Krumhansl-Kessler algorithm.
 
@@ -251,11 +239,16 @@ def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str, str]:
         chroma: Chromagram (12 x time frames)
 
     Returns:
-        Tuple of (key, mode) e.g., ("C", "Major")
+        Tuple of (key, mode) e.g., ("C", "Major"), or (None, None) when the chroma profile is
+        flat or undefined (e.g. digital silence) — never a default key. Noise or unpitched
+        audio still yields the best-correlating key.
     """
     # Sum chroma over time to get overall pitch class distribution
     chroma_sum = np.sum(chroma, axis=1)
     chroma_sum = chroma_sum / (np.sum(chroma_sum) + 1e-10)  # Normalize
+
+    if not np.all(np.isfinite(chroma_sum)) or np.ptp(chroma_sum) < 1e-6:
+        return None, None
 
     best_corr = -2
     best_key = 0
@@ -280,6 +273,8 @@ def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str, str]:
             best_key = shift
             best_mode = "Minor"
 
+    if best_corr == -2:  # every correlation was undefined
+        return None, None
     return PITCH_CLASSES[best_key], best_mode
 
 
@@ -463,12 +458,14 @@ def analyze_perceptual_features(file_path: str) -> dict:
         dict with valence, danceability, acousticness, instrumentalness (all 0-1),
         or empty dict if models are unavailable.
     """
-    if not ESSENTIA_MODELS_LOADED:
+    if not MODELS_LOADED:
         return {}
 
     try:
         # Load audio at 16kHz mono (required by the embedding models)
         audio = MonoLoader(filename=file_path, sampleRate=16000, resampleQuality=4)()
+        # MonoLoader always decodes the whole file; keep the same span librosa analyses.
+        audio = audio[: int(16000 * MAX_DECODE_SECONDS)]
 
         # MusiCNN embeddings (200-dim per frame, reused for 3 classification heads)
         musicnn_embeddings = _musicnn_extractor(audio)
@@ -512,7 +509,7 @@ def analyze_perceptual_features(file_path: str) -> dict:
         }
 
     except Exception as e:
-        print(f"WARNING: Essentia perceptual analysis failed: {e}")
+        logger.warning("Essentia perceptual analysis failed: %s", e)
         return {}
 
 
@@ -524,7 +521,8 @@ def analyze_audio_file(file_path: str) -> dict:
     and optionally valence, danceability, acousticness, instrumentalness.
     """
     # Load audio (librosa handles MP3 via audioread/ffmpeg)
-    y, sr = librosa.load(file_path, sr=22050, mono=True)
+    # Previews are 30 s; never decode more than that, whatever the file claims.
+    y, sr = librosa.load(file_path, sr=22050, mono=True, duration=MAX_DECODE_SECONDS)
 
     # Get duration
     duration = librosa.get_duration(y=y, sr=sr)
@@ -533,10 +531,13 @@ def analyze_audio_file(file_path: str) -> dict:
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
 
     # Handle tempo being an array in newer librosa versions
+    # No tempo found is reported as null, never as a default.
     if isinstance(tempo, np.ndarray):
-        bpm = float(tempo[0]) if len(tempo) > 0 else 120.0
+        bpm = float(tempo[0]) if len(tempo) > 0 else None
     else:
         bpm = float(tempo)
+    if bpm is not None and not (bpm > 0 and np.isfinite(bpm)):
+        bpm = None
 
     # Chromagram for key detection
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
@@ -549,7 +550,7 @@ def analyze_audio_file(file_path: str) -> dict:
     key_moments = detect_key_moments(y, sr)
 
     result = {
-        "bpm": round(bpm),
+        "bpm": round(bpm) if bpm is not None else None,
         "key": key,
         "mode": mode,
         "energy": round(energy, 3),
@@ -564,22 +565,21 @@ def analyze_audio_file(file_path: str) -> dict:
     return result
 
 
-async def analyze_preview_async(url: str) -> dict:
-    """
-    Async wrapper for audio analysis.
-    Downloads and analyzes in a thread pool to avoid blocking.
-    """
-    loop = asyncio.get_event_loop()
+class AnalysisTimeoutError(Exception):
+    """Decoding and analysis did not finish within ANALYSIS_TIMEOUT_S."""
 
-    # Download in thread pool
-    file_path = await loop.run_in_executor(executor, download_preview, url)
 
+async def analyze_preview_url(url: str) -> dict:
+    """Download a validated preview, analyse it in the thread pool and remove the file."""
+    file_path = await download_preview(url)
     try:
-        # Analyze in thread pool
-        result = await loop.run_in_executor(executor, analyze_audio_file, file_path)
-        return result
+        loop = asyncio.get_running_loop()
+        work = loop.run_in_executor(executor, analyze_audio_file, file_path)
+        try:
+            return await asyncio.wait_for(work, timeout=ANALYSIS_TIMEOUT_S)
+        except TimeoutError as e:
+            raise AnalysisTimeoutError from e
     finally:
-        # Cleanup temp file
         try:
             os.remove(file_path)
         except OSError:
@@ -591,103 +591,134 @@ async def analyze_preview_async(url: str) -> dict:
 # =============================================================================
 
 
-@app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint for container orchestration."""
-    return {"status": "healthy", "version": "1.0.0", "essentia": ESSENTIA_MODELS_LOADED}
-
-
-@app.post("/analyze", response_model=AudioAnalysisResult)
-async def analyze_preview(request: AnalyzeRequest):
     """
-    Analyze a Spotify or Deezer preview URL.
-
-    Extracts BPM, key, mode, and energy from the 30-second preview.
-    When Essentia models are available, also extracts valence, danceability,
-    acousticness, and instrumentalness.
-    Supports both Spotify (scdn.co, spotify.com) and Deezer (dzcdn.net) URLs.
+    Liveness and model status (GET and HEAD). Always 200 while the service can analyse tempo
+    and key; status is "degraded" when the perceptual models are not loaded.
     """
-    preview_url = str(request.preview_url)
+    return {
+        "status": "ok" if MODELS_LOADED else "degraded",
+        "version": VERSION,
+        "models": MODELS_LOADED,
+    }
 
-    if not preview_url:
-        raise HTTPException(status_code=400, detail="preview_url is required")
 
-    # Validate it's a supported preview URL (Spotify or Deezer)
-    if not any(domain in preview_url for domain in ALLOWED_PREVIEW_DOMAINS):
+async def analyze_preview(request: AnalyzeRequest, http_request: Request):
+    """
+    Analyze a Deezer or Spotify preview URL.
+
+    Measures BPM, key, mode and energy from the 30-second preview. When the Essentia models
+    are loaded, also estimates valence, danceability, acousticness and instrumentalness.
+    Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
+    """
+    slots: AnalysisSlots = http_request.app.state.analysis_slots
+    try:
+        async with slots.slot():
+            result = await analyze_preview_url(request.preview_url)
+    except ServiceBusyError as e:
+        logger.warning("Analysis refused, service busy: %s", e)
         raise HTTPException(
-            status_code=400, detail="Invalid preview URL. Must be a Spotify or Deezer preview URL."
-        )
+            status_code=503,
+            detail="The analysis service is busy; try again",
+            headers={"Retry-After": str(RETRY_AFTER_S)},
+        ) from None
+    except PreviewURLError as e:
+        logger.info("Rejected preview URL: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail="preview_url must be an https URL on a supported preview CDN",
+        ) from None
+    except PreviewDownloadError as e:
+        logger.warning("Preview download failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not download the preview") from None
+    except AnalysisTimeoutError:
+        logger.warning("Analysis exceeded %s s", ANALYSIS_TIMEOUT_S)
+        raise HTTPException(status_code=504, detail="Audio analysis timed out") from None
+    except Exception:
+        logger.exception("Audio analysis failed")
+        raise HTTPException(status_code=500, detail="Audio analysis failed") from None
 
-    try:
-        result = await analyze_preview_async(preview_url)
-
-        return AudioAnalysisResult(
-            bpm=result["bpm"],
-            key=result["key"],
-            mode=result["mode"],
-            energy=result["energy"],
-            duration=result["duration"],
-            source="analyzed",
-            keyMoments=[KeyMoment(**m) for m in result.get("keyMoments", [])],
-            valence=result.get("valence"),
-            danceability=result.get("danceability"),
-            acousticness=result.get("acousticness"),
-            instrumentalness=result.get("instrumentalness"),
-        )
-
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Failed to download preview: {str(e)}") from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Audio analysis failed: {str(e)}") from e
-
-
-@app.post("/analyze-test", response_model=AudioAnalysisResult)
-async def analyze_test(request: AnalyzeRequest):
-    """
-    Test endpoint - analyze any audio URL (for development only).
-
-    Unlike /analyze, this accepts any audio URL, not just Spotify previews.
-    """
-    preview_url = str(request.preview_url)
-
-    if not preview_url:
-        raise HTTPException(status_code=400, detail="preview_url is required")
-
-    try:
-        result = await analyze_preview_async(preview_url)
-
-        return AudioAnalysisResult(
-            bpm=result["bpm"],
-            key=result["key"],
-            mode=result["mode"],
-            energy=result["energy"],
-            duration=result["duration"],
-            source="analyzed",
-            keyMoments=[KeyMoment(**m) for m in result.get("keyMoments", [])],
-            valence=result.get("valence"),
-            danceability=result.get("danceability"),
-            acousticness=result.get("acousticness"),
-            instrumentalness=result.get("instrumentalness"),
-        )
-
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Failed to download audio: {str(e)}") from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Audio analysis failed: {str(e)}") from e
+    return AudioAnalysisResult(
+        bpm=result["bpm"],
+        key=result["key"],
+        mode=result["mode"],
+        energy=result["energy"],
+        duration=result["duration"],
+        source="analyzed",
+        keyMoments=[KeyMoment(**m) for m in result.get("keyMoments", [])],
+        valence=result.get("valence"),
+        danceability=result.get("danceability"),
+        acousticness=result.get("acousticness"),
+        instrumentalness=result.get("instrumentalness"),
+    )
 
 
-@app.get("/")
 async def root():
     """Root endpoint with API info."""
     return {
-        "service": "Sonic Agent Audio Analysis",
-        "version": "1.0.0",
-        "essentia": ESSENTIA_MODELS_LOADED,
+        "service": "Liner Notes audio analysis",
+        "version": VERSION,
+        "models": MODELS_LOADED,
         "endpoints": {
-            "/health": "Health check",
-            "/analyze": "POST - Analyze preview URL",
+            "/health": "Health and model status",
+            "/analyze": "POST - Analyze a preview URL",
         },
     }
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Created here so the semaphore belongs to the loop that serves the requests.
+    application.state.analysis_slots = AnalysisSlots(
+        MAX_CONCURRENT_ANALYSES, MAX_QUEUED_ANALYSES, QUEUE_WAIT_S
+    )
+    yield
+
+
+def create_app() -> FastAPI:
+    """Build the application from the current environment."""
+    docs_enabled = os.environ.get("AUDIO_ENABLE_DOCS") == "1"
+    application = FastAPI(
+        # The interactive docs and schema are off unless explicitly enabled.
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+        title="Liner Notes audio analysis",
+        description="Measures tempo, key and audio features from 30-second previews",
+        version=VERSION,
+        lifespan=lifespan,
+    )
+    application.add_api_route(
+        "/health", health_check, methods=["GET", "HEAD"], response_model=HealthResponse
+    )
+    application.add_api_route(
+        "/analyze", analyze_preview, methods=["POST"], response_model=AudioAnalysisResult
+    )
+    application.add_api_route("/", root, methods=["GET"])
+
+    # The API calls this service server to server; browsers only need CORS when an origin is
+    # configured explicitly. Credentials are never allowed.
+    origins = _cors_origins()
+    if origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type", TOKEN_HEADER],
+        )
+    # Added last so it runs first: the token and the body size are checked before the
+    # application reads anything.
+    application.add_middleware(
+        RequestGuardMiddleware,
+        token=_service_token,
+        token_header=TOKEN_HEADER,
+        protected_paths=frozenset({"/analyze"}),
+    )
+    return application
+
+
+app = create_app()
 
 
 # =============================================================================
@@ -697,4 +728,4 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=3002)
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT") or 3002))

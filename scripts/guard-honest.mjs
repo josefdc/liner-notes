@@ -234,4 +234,5 @@ function main() {
   }
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();
+// Runs only when executed directly (import.meta.main also holds through symlinked paths).
+if (import.meta.main) main();

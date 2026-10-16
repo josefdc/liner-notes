@@ -4,18 +4,19 @@
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
 //                stream ends like a server response does (onerror unless the app closed it)
-// Every request is recorded in `window.__mockApi.log`. Requests to the API that the
-// configuration does not cover fail, so a test never depends on a real backend.
+// Every API request (any URL whose path starts with /api/) is recorded in
+// `window.__mockApi.log`. API requests the configuration does not cover fail, so a test
+// never depends on a real backend.
 
 (() => {
   const config = window.__mockApi ?? { suggestions: [], streams: {} };
   config.log = [];
-  const isApi = (url) => new URL(url, location.href).port === "3001";
+  const isApi = (url) => new URL(url, location.href).pathname.startsWith("/api/");
   const pathOf = (url) => new URL(url, location.href).pathname;
 
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
-    const url = typeof input === "string" ? input : input.url;
+    const url = input instanceof Request ? input.url : String(input);
     if (!isApi(url)) return realFetch(input, init);
     config.log.push(`fetch ${pathOf(url)}`);
     if (pathOf(url) === "/api/search/suggest") {

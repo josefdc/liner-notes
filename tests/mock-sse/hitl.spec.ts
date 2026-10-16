@@ -14,13 +14,15 @@ const requests = (page: import("@playwright/test").Page) =>
   page.evaluate(() => (window as unknown as MockWindow).__mockApi.log);
 
 test.beforeEach(async ({ page }) => {
+  // Keep the tests off the network: web fonts are not needed to check behaviour.
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await page.addInitScript((config) => {
     (window as unknown as { __mockApi: unknown }).__mockApi = config;
   }, fixture);
   await page.addInitScript({ path: join(here, "mock-api.js") });
 });
 
-test("an ambiguous search shows the track picker and keeps it until a choice is made", async ({
+test("an ambiguous search shows the track picker and keeps it after the stream ends", async ({
   page,
 }) => {
   await page.goto("/");
@@ -61,4 +63,10 @@ test("choosing a candidate resumes the analysis with that track", async ({ page 
     .toContain(
       `stream /api/analyze/stream/resume?threadId=thread-hitl&selectedTrackId=${second.id}`,
     );
+  // The resume stream ends with "done": no fallback request and no error screen.
+  await page.waitForTimeout(500);
+  expect((await requests(page)).filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual(
+    [],
+  );
+  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
 });

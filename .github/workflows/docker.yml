@@ -39,11 +39,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # docker-compose.yml points the API at apps/api/.env; images never contain it.
       - name: Create an empty API env file
         run: touch apps/api/.env
+      - uses: docker/setup-buildx-action@v4
+      # Builds the services defined in docker-compose.yml, reusing layers from earlier runs.
       - name: Build all images
-        run: docker compose build
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-compose.yml
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max

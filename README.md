@@ -137,6 +137,19 @@ not needed. The audio service needs [uv](https://docs.astral.sh/uv/); without it
 
 Then open http://localhost:3000
 
+### 4. Checks
+
+```bash
+npm run lint           # Biome (lint + formatting); `npm run format` rewrites files
+npm run typecheck      # TypeScript in every workspace
+npm run guard:honest   # counts of placeholder-data patterns; may only go down
+npm run test:db -w apps/api && npm run test:lastfm -w apps/api
+cd services/audio && uv run ruff check . && uv run pytest
+```
+
+CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
+
+
 ---
 
 ## 🐳 Docker Deployment

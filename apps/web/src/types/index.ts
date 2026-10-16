@@ -51,7 +51,7 @@ export interface Factoid {
   id: string;
   title: string;
   content: string;
-  type: 'production' | 'trivia' | 'lyrics' | 'credits' | 'sample' | 'curiosity' | 'connection';
+  type: 'production' | 'trivia' | 'credits' | 'sample' | 'curiosity' | 'connection';
   entities?: FactoidEntity[];
 }
 
@@ -99,6 +99,18 @@ export interface GenreProfileItem {
   value: number; // 0-100
 }
 
+/** Why measured audio values are missing (sent with audioSource "unavailable"). */
+export type AudioUnavailableReason =
+  | 'service_unavailable'
+  | 'no_preview'
+  | 'preview_rejected'
+  | 'analysis_failed'
+  | 'not_detected'
+  | 'not_run';
+
+/** Why the model was unavailable (a category: the API never sends the provider's text). */
+export type ModelUnavailableReason = 'no_output' | 'rate_limited' | 'timeout' | 'auth' | 'error';
+
 export interface TrackData {
   id: string;
   title: string;
@@ -110,17 +122,22 @@ export interface TrackData {
   previewUrl?: string;
   releaseYear?: string;
   explicit?: boolean;
-  // Audio features
-  bpm: number;
-  key?: string;
-  energy?: number;
-  valence?: number;
-  danceability?: number;
-  acousticness?: number;
+  // Measured from the audio preview; null when not measured (never filled in).
+  bpm: number | null;
+  key?: string | null;
+  energy?: number | null;
+  // Scores (0-1) from audio models run over the preview: estimates, not probabilities.
+  // null when not measured.
+  valence?: number | null;
+  danceability?: number | null;
+  acousticness?: number | null;
   durationSeconds?: number; // Duration in seconds for timeline display
   segments: SongSegment[];
+  /** 'template': a generic default structure; 'inferred': written by the model. Never measured. */
+  segmentsSource?: 'template' | 'inferred';
   samples: { time: number; description: string }[];
-  keyMoments?: KeyMoment[]; // Key moments from audio analysis
+  keyMoments?: KeyMoment[]; // Detected in the audio preview
+  // May be fewer than three, or empty, when there was nothing to say
   factoids: Factoid[];
   // Production credits
   credits?: ProductionCredits;
@@ -128,11 +145,17 @@ export interface TrackData {
     nodes: GenealogyNode[];
     links: GenealogyLink[];
   };
-  // Genre profile for Sonic Fingerprint radar chart
+  // Genre profile for the Sonic Fingerprint radar chart (written by the model)
   genreProfile?: GenreProfileItem[];
-  // Audio metadata for graceful degradation
-  audioSource?: 'analyzed' | 'estimated';
+  // Audio provenance: 'analyzed' when tempo and key were measured, 'unavailable' otherwise.
+  // 'estimated' is sent by the API before audio values were measured only, and by results it
+  // cached: those values were estimated from the genre or at random and are never shown.
+  audioSource?: 'analyzed' | 'unavailable' | 'estimated';
   audioConfidence?: 'high' | 'low';
+  audioUnavailableReason?: AudioUnavailableReason;
+  // Model provenance: true when the result was built from source data without the model
+  modelUnavailable?: boolean;
+  modelUnavailableReason?: ModelUnavailableReason;
 }
 
 export interface AgentLog {

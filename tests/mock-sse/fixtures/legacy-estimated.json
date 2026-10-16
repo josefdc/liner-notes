@@ -1,0 +1,107 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "threadId": "thread-legacy"
+      },
+      {
+        "type": "status",
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "complete",
+        "data": {
+          "id": "t-legacy",
+          "title": "Old Estimate",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "releaseYear": "1999",
+          "bpm": 117,
+          "key": "A Minor",
+          "energy": 0.63,
+          "valence": 0.41,
+          "danceability": 0.54,
+          "acousticness": 0.2,
+          "durationSeconds": 230,
+          "genreProfile": [
+            {
+              "genre": "Rock",
+              "value": 70
+            },
+            {
+              "genre": "Pop",
+              "value": 50
+            },
+            {
+              "genre": "Electronic",
+              "value": 30
+            }
+          ],
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 20,
+              "color": "#374151"
+            },
+            {
+              "label": "Verse",
+              "start": 20,
+              "end": 100,
+              "color": "#1F2937"
+            }
+          ],
+          "samples": [],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded live.",
+              "type": "production"
+            },
+            {
+              "id": "g1",
+              "title": "Sonic Profile",
+              "content": "117 BPM in A Minor. Moderate energy with a positive mood. Danceability: 54%.",
+              "type": "production"
+            },
+            {
+              "id": "g2",
+              "title": "Track Signature",
+              "content": "A positive track at 117 BPM in A Minor. Driven by electronic production.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Lyrical Analysis",
+              "content": "About the words.",
+              "type": "lyrics"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Old Estimate",
+                "size": 40
+              }
+            ],
+            "links": []
+          },
+          "audioSource": "estimated",
+          "audioConfidence": "low"
+        }
+      },
+      {
+        "type": "done",
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

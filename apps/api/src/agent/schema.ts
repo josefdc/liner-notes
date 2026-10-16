@@ -388,9 +388,11 @@ export const TrackDataSchema = z.object({
     .optional()
     .describe("True when the language model call failed and the result was built from source data"),
   modelUnavailableReason: z
-    .string()
+    .enum(["no_output", "rate_limited", "timeout", "auth", "error"])
     .optional()
-    .describe("The model error when modelUnavailable is true"),
+    .describe(
+      "Why the model call failed, as a category; the provider's text stays in the server log",
+    ),
 });
 
 export type TrackData = z.infer<typeof TrackDataSchema>;

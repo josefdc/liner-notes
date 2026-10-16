@@ -36,7 +36,10 @@ router.post("/api/factoids/decrypt", async (req, res) => {
     title: z.string().describe("Catchy title summarizing the factoid, max 50 chars"),
     content: z.string().describe("Detailed explanation 1-3 sentences with specific facts"),
     type: z.enum(["production", "trivia", "lyrics"]).describe("Category of the factoid"),
-    entityNames: z.array(z.string()).optional().describe("Names of entities mentioned (synths, producers, etc)"),
+    entityNames: z
+      .array(z.string())
+      .optional()
+      .describe("Names of entities mentioned (synths, producers, etc)"),
   });
 
   const DecryptResponseSchema = z.object({
@@ -142,7 +145,8 @@ router.get("/api/factoids/decrypt/stream", async (req, res) => {
   if (!trackTitle) {
     res.status(400).json({
       error: "Missing required parameter: trackTitle",
-      example: "/api/factoids/decrypt/stream?trackTitle=Midnight+City&trackArtist=M83&existingIds=f1,f2",
+      example:
+        "/api/factoids/decrypt/stream?trackTitle=Midnight+City&trackArtist=M83&existingIds=f1,f2",
     });
     return;
   }
@@ -156,15 +160,28 @@ router.get("/api/factoids/decrypt/stream", async (req, res) => {
   res.setHeader("X-Accel-Buffering", "no");
 
   // Send connected event
-  res.write(`data: ${JSON.stringify({ type: "connected", timestamp: new Date().toISOString() })}\n\n`);
+  res.write(
+    `data: ${JSON.stringify({ type: "connected", timestamp: new Date().toISOString() })}\n\n`,
+  );
 
   // Schema for a single factoid
   const SingleFactoidSchema = z.object({
     id: z.string().describe("Unique identifier"),
     title: z.string().describe("Catchy title, max 50 chars"),
     content: z.string().describe("Detailed explanation 1-3 sentences"),
-    type: z.enum(["production", "trivia", "lyrics", "credits", "sample", "curiosity", "connection"]),
-    entityNames: z.array(z.string()).optional().describe("Names of entities (synths, producers, etc)"),
+    type: z.enum([
+      "production",
+      "trivia",
+      "lyrics",
+      "credits",
+      "sample",
+      "curiosity",
+      "connection",
+    ]),
+    entityNames: z
+      .array(z.string())
+      .optional()
+      .describe("Names of entities (synths, producers, etc)"),
   });
 
   const categories = [
@@ -219,7 +236,9 @@ Entity examples: "Roland Juno-106", "Nigel Godrich", "sidechain compression", "A
         res.write(`data: ${JSON.stringify({ type: "factoid", data: fullFactoid })}\n\n`);
       } else {
         console.warn(`⚠️ [SSE] Failed to generate factoid ${i + 1}:`, result.error);
-        res.write(`data: ${JSON.stringify({ type: "error", error: result.error || "Generation failed", index: i })}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({ type: "error", error: result.error || "Generation failed", index: i })}\n\n`,
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

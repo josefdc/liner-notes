@@ -7,21 +7,21 @@
   --color-void-light: #0a0a0a;
   --color-void-lighter: #121212;
 
-  --color-cyber: #00F0FF;
+  --color-cyber: #00f0ff;
   --color-cyber-dim: rgba(0, 240, 255, 0.1);
   --color-cyber-muted: rgba(0, 240, 255, 0.5);
 
-  --color-analog: #FFB000;
+  --color-analog: #ffb000;
   --color-analog-dim: rgba(255, 176, 0, 0.1);
   --color-analog-muted: rgba(255, 176, 0, 0.5);
 
   /* Accent Colors */
-  --color-accent-purple: #A855F7;
-  --color-accent-pink: #EC4899;
-  --color-accent-green: #22C55E;
-  --color-accent-indigo: #6366F1;
-  --color-accent-amber: #F59E0B;
-  --color-accent-blue: #3B82F6;
+  --color-accent-purple: #a855f7;
+  --color-accent-pink: #ec4899;
+  --color-accent-green: #22c55e;
+  --color-accent-indigo: #6366f1;
+  --color-accent-amber: #f59e0b;
+  --color-accent-blue: #3b82f6;
 
   /* Surface colors */
   --color-surface: rgba(255, 255, 255, 0.05);
@@ -33,17 +33,17 @@
   --color-border-hover: rgba(255, 255, 255, 0.2);
 
   /* Status colors */
-  --color-status-success: #22C55E;
-  --color-status-warning: #F59E0B;
-  --color-status-error: #EF4444;
-  --color-status-info: #3B82F6;
+  --color-status-success: #22c55e;
+  --color-status-warning: #f59e0b;
+  --color-status-error: #ef4444;
+  --color-status-info: #3b82f6;
 
   /* Spotify brand */
-  --color-spotify: #1DB954;
+  --color-spotify: #1db954;
 
   /* Fonts */
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 
   /* Shadows */
   --shadow-glow-cyber: 0 0 20px rgba(0, 240, 255, 0.25);
@@ -68,8 +68,8 @@
 
   /* Border radius scale */
   --radius-xs: 2px;
-  --radius-sm: 4px;   /* inputs, badges, buttons, chips */
-  --radius-md: 8px;   /* cards, factoids, dropdowns */
+  --radius-sm: 4px; /* inputs, badges, buttons, chips */
+  --radius-md: 8px; /* cards, factoids, dropdowns */
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
@@ -87,12 +87,12 @@
 
   /* Opaque gray scale (for backgrounds, borders, non-text elements) */
   /* Matches src/styles/theme.ts palette.gray */
-  --color-gray-300: #D1D5DB;
-  --color-gray-400: #9CA3AF;
-  --color-gray-500: #6B7280;
-  --color-gray-600: #4B5563;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
   --color-gray-700: #374151;
-  --color-gray-800: #1F2937;
+  --color-gray-800: #1f2937;
   --color-gray-900: #111827;
 
   /* Text hierarchy */
@@ -130,7 +130,7 @@
   --shadow-glow-white-hover: 0 0 30px rgba(255, 255, 255, 0.3);
 
   /* Surface overlay */
-  --color-surface-overlay: rgba(0, 0, 0, 0.95);  /* dropdowns, modals */
+  --color-surface-overlay: rgba(0, 0, 0, 0.95); /* dropdowns, modals */
   --color-surface-subtle: rgba(255, 255, 255, 0.03);
 
   /* Animations */
@@ -155,105 +155,211 @@
 
   /* Keyframes */
   @keyframes scan-vertical {
-    0% { top: 0; }
-    100% { top: 100%; }
+    0% {
+      top: 0;
+    }
+    100% {
+      top: 100%;
+    }
   }
 
   @keyframes scan-horizontal {
-    0% { left: 0; }
-    100% { left: 100%; }
+    0% {
+      left: 0;
+    }
+    100% {
+      left: 100%;
+    }
   }
 
   @keyframes scanline {
-    0% { transform: translateY(-100%); }
-    100% { transform: translateY(100vh); }
+    0% {
+      transform: translateY(-100%);
+    }
+    100% {
+      transform: translateY(100vh);
+    }
   }
 
   @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
   }
 
   @keyframes spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @keyframes fade-in-right {
-    from { opacity: 0; transform: translateX(-8px); }
-    to { opacity: 1; transform: translateX(0); }
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 
   @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 5px #00F0FF, 0 0 10px #00F0FF; }
-    50% { box-shadow: 0 0 15px #00F0FF, 0 0 25px #00F0FF; }
+    0%,
+    100% {
+      box-shadow:
+        0 0 5px #00f0ff,
+        0 0 10px #00f0ff;
+    }
+    50% {
+      box-shadow:
+        0 0 15px #00f0ff,
+        0 0 25px #00f0ff;
+    }
   }
 
   @keyframes stagger-in {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   @keyframes spin-reverse {
-    from { transform: rotate(360deg); }
-    to { transform: rotate(0deg); }
+    from {
+      transform: rotate(360deg);
+    }
+    to {
+      transform: rotate(0deg);
+    }
   }
 
   @keyframes completion-reveal {
-    0% { transform: scale(1); box-shadow: 0 0 0 rgba(0, 240, 255, 0); }
-    50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(0, 240, 255, 0.4); }
-    100% { transform: scale(1.02); box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); }
+    0% {
+      transform: scale(1);
+      box-shadow: 0 0 0 rgba(0, 240, 255, 0);
+    }
+    50% {
+      transform: scale(1.05);
+      box-shadow: 0 0 40px rgba(0, 240, 255, 0.4);
+    }
+    100% {
+      transform: scale(1.02);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+    }
   }
 
   @keyframes progress-shimmer {
-    0% { background-position: -200px 0; }
-    100% { background-position: 200px 0; }
+    0% {
+      background-position: -200px 0;
+    }
+    100% {
+      background-position: 200px 0;
+    }
   }
 
   @keyframes glow-breathe {
-    0%, 100% { box-shadow: 0 0 8px rgba(0, 240, 255, 0.15); }
-    50% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.3); }
+    0%,
+    100% {
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    }
   }
 
   @keyframes scale-in {
-    from { opacity: 0; transform: scale(0.96); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   @keyframes slide-up-fade {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   @keyframes fade-out {
-    from { opacity: 1; }
-    to { opacity: 0; }
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
   }
 
   @keyframes glow-breathe-white {
-    0%, 100% { box-shadow: 0 0 15px rgba(255, 255, 255, 0.15); }
-    50% { box-shadow: 0 0 30px rgba(255, 255, 255, 0.35); }
+    0%,
+    100% {
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.15);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
+    }
   }
 
   @keyframes lock-wiggle {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-5deg); }
-    75% { transform: rotate(5deg); }
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-5deg);
+    }
+    75% {
+      transform: rotate(5deg);
+    }
   }
 
   @keyframes typing-reveal {
-    from { max-width: 0; }
-    to { max-width: 40ch; }
+    from {
+      max-width: 0;
+    }
+    to {
+      max-width: 40ch;
+    }
   }
 }
 
@@ -301,7 +407,9 @@
 
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -317,7 +425,9 @@
     background:
       linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%),
       linear-gradient(90deg, rgba(255, 0, 0, 0.08), rgba(0, 255, 0, 0.04), rgba(0, 0, 255, 0.08));
-    background-size: 100% 2px, 3px 100%;
+    background-size:
+      100% 2px,
+      3px 100%;
   }
 
   /* Hide scrollbar but keep functionality */
@@ -334,26 +444,48 @@
 @layer utilities {
   /* Text Shadow for readability on busy backgrounds */
   .text-shadow-dark {
-    text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8);
+    text-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.9),
+      0 0 8px rgba(0, 0, 0, 0.8);
   }
 
   .text-shadow-glow-cyber {
-    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
+    text-shadow:
+      0 0 10px rgba(0, 240, 255, 0.5),
+      0 0 20px rgba(0, 240, 255, 0.3);
   }
 
   .text-shadow-glow-analog {
-    text-shadow: 0 0 10px rgba(255, 176, 0, 0.5), 0 0 20px rgba(255, 176, 0, 0.3);
+    text-shadow:
+      0 0 10px rgba(255, 176, 0, 0.5),
+      0 0 20px rgba(255, 176, 0, 0.3);
   }
 
   /* Animate with stagger delay */
-  .stagger-1 { animation-delay: 50ms; }
-  .stagger-2 { animation-delay: 100ms; }
-  .stagger-3 { animation-delay: 150ms; }
-  .stagger-4 { animation-delay: 200ms; }
-  .stagger-5 { animation-delay: 250ms; }
-  .stagger-6 { animation-delay: 300ms; }
-  .stagger-7 { animation-delay: 350ms; }
-  .stagger-8 { animation-delay: 400ms; }
+  .stagger-1 {
+    animation-delay: 50ms;
+  }
+  .stagger-2 {
+    animation-delay: 100ms;
+  }
+  .stagger-3 {
+    animation-delay: 150ms;
+  }
+  .stagger-4 {
+    animation-delay: 200ms;
+  }
+  .stagger-5 {
+    animation-delay: 250ms;
+  }
+  .stagger-6 {
+    animation-delay: 300ms;
+  }
+  .stagger-7 {
+    animation-delay: 350ms;
+  }
+  .stagger-8 {
+    animation-delay: 400ms;
+  }
 
   /* Timeline marker glow on hover */
   .marker-glow:hover {

@@ -8,7 +8,11 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { searchSamples, searchProductionHistory, searchSongMeaning } from "../../sources/search.js";
 import { fetchLyrics } from "../../sources/genius.js";
 import { getMusicBrainzRelations } from "../../sources/musicbrainz.js";
-import { getLastfmTrackTags, getLastfmArtistTags, getLastfmSimilarTracks } from "../../sources/lastfm.js";
+import {
+  getLastfmTrackTags,
+  getLastfmArtistTags,
+  getLastfmSimilarTracks,
+} from "../../sources/lastfm.js";
 import { getCachedResearcherSubgraph } from "../researcherSubgraph.js";
 import { withRetry } from "../errors.js";
 import { getCache } from "../../store/cache.js";
@@ -16,7 +20,7 @@ import type { SonicAgentStateType, ResearchData } from "../state.js";
 
 export async function historianNode(
   state: SonicAgentStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
     return { statusMessages: ["⚠️ Skipping research - no track data"] };
@@ -73,11 +77,13 @@ export async function historianNode(
       try {
         const data = JSON.parse(trackTagsResult.value);
         if (data.found && data.tags?.length > 0) {
-          prefetchData.lastfmTags = data.tags.map((t: { name: string; count: number }) =>
-            `${t.name} (${t.count})`
+          prefetchData.lastfmTags = data.tags.map(
+            (t: { name: string; count: number }) => `${t.name} (${t.count})`,
           );
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     }
 
     // Process artist tags (merge with track tags, deduplicate)
@@ -86,14 +92,18 @@ export async function historianNode(
         const data = JSON.parse(artistTagsResult.value);
         if (data.found && data.tags?.length > 0) {
           const existingNames = new Set(
-            (prefetchData.lastfmTags || []).map((t: string) => t.replace(/\s*\(\d+\)$/, "").toLowerCase())
+            (prefetchData.lastfmTags || []).map((t: string) =>
+              t.replace(/\s*\(\d+\)$/, "").toLowerCase(),
+            ),
           );
           const newTags = data.tags
             .filter((t: { name: string }) => !existingNames.has(t.name.toLowerCase()))
             .map((t: { name: string; count: number }) => `${t.name} (${t.count})`);
           prefetchData.lastfmTags = [...(prefetchData.lastfmTags || []), ...newTags];
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     }
 
     // Process similar tracks
@@ -103,15 +113,19 @@ export async function historianNode(
         if (data.found && data.tracks?.length > 0) {
           prefetchData.lastfmSimilarTracks = data.tracks.map(
             (t: { name: string; artist: string; match: number }) =>
-              `${t.name} by ${t.artist} (match: ${(t.match * 100).toFixed(0)}%)`
+              `${t.name} by ${t.artist} (match: ${(t.match * 100).toFixed(0)}%)`,
           );
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     }
 
     const tagCount = prefetchData.lastfmTags?.length || 0;
     const trackCount = prefetchData.lastfmSimilarTracks?.length || 0;
-    console.log(`✅ [Historian] Pre-fetched ${tagCount} tags, ${trackCount} similar tracks from Last.fm`);
+    console.log(
+      `✅ [Historian] Pre-fetched ${tagCount} tags, ${trackCount} similar tracks from Last.fm`,
+    );
   } catch (error) {
     console.warn("⚠️ [Historian] Last.fm pre-fetch failed (non-critical):", error);
   }
@@ -127,7 +141,7 @@ export async function historianNode(
       },
       {
         streamMode: ["values", "custom"],
-      }
+      },
     );
 
     let finalState: any = {};
@@ -143,7 +157,7 @@ export async function historianNode(
     }
 
     console.log(
-      `✅ [Historian] Deep dive complete - ${finalState.researchIteration || 0} iterations`
+      `✅ [Historian] Deep dive complete - ${finalState.researchIteration || 0} iterations`,
     );
 
     writer?.({
@@ -201,19 +215,14 @@ export async function historianNode(
 
     try {
       // Enhanced research: Use MusicBrainz for structured data, Genius for lyrics, plus web search
-      const [
-        samplesResult,
-        triviaResult,
-        meaningResult,
-        musicBrainzResult,
-        lyricsResult,
-      ] = await Promise.allSettled([
-        withRetry(() => searchSamples.invoke({ songTitle: title, artistName: artist })),
-        withRetry(() => searchProductionHistory.invoke({ songTitle: title, artistName: artist })),
-        withRetry(() => searchSongMeaning.invoke({ songTitle: title, artistName: artist })),
-        withRetry(() => getMusicBrainzRelations.invoke({ title, artist })),
-        withRetry(() => fetchLyrics.invoke({ title, artist })),
-      ]);
+      const [samplesResult, triviaResult, meaningResult, musicBrainzResult, lyricsResult] =
+        await Promise.allSettled([
+          withRetry(() => searchSamples.invoke({ songTitle: title, artistName: artist })),
+          withRetry(() => searchProductionHistory.invoke({ songTitle: title, artistName: artist })),
+          withRetry(() => searchSongMeaning.invoke({ songTitle: title, artistName: artist })),
+          withRetry(() => getMusicBrainzRelations.invoke({ title, artist })),
+          withRetry(() => fetchLyrics.invoke({ title, artist })),
+        ]);
 
       // Process web search results
       if (samplesResult.status === "fulfilled" && !samplesResult.value.startsWith("Error")) {
@@ -234,12 +243,12 @@ export async function historianNode(
             const { samples, covers, remixes } = mbData.genealogy;
             if (samples?.length > 0) {
               researchData.samples.push(
-                `[MusicBrainz] Structured sample data: ${JSON.stringify(samples)}`
+                `[MusicBrainz] Structured sample data: ${JSON.stringify(samples)}`,
               );
             }
             if (covers?.length > 0 || remixes?.length > 0) {
               researchData.productionTrivia.push(
-                `[MusicBrainz] Covers: ${JSON.stringify(covers)}, Remixes: ${JSON.stringify(remixes)}`
+                `[MusicBrainz] Covers: ${JSON.stringify(covers)}, Remixes: ${JSON.stringify(remixes)}`,
               );
             }
           }
@@ -254,7 +263,7 @@ export async function historianNode(
           const lyricsData = JSON.parse(lyricsResult.value);
           if (lyricsData.lyrics) {
             researchData.songMeaning.push(
-              `[Genius Lyrics] Raw lyrics for analysis:\n${lyricsData.lyrics}`
+              `[Genius Lyrics] Raw lyrics for analysis:\n${lyricsData.lyrics}`,
             );
           }
         } catch (e) {

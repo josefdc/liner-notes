@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 
 interface SectionLabelProps {
   children: React.ReactNode;
@@ -7,7 +7,10 @@ interface SectionLabelProps {
   className?: string;
 }
 
-const indicatorStyles: Record<Exclude<SectionLabelProps['indicator'], undefined | 'none'>, string> = {
+const indicatorStyles: Record<
+  Exclude<SectionLabelProps['indicator'], undefined | 'none'>,
+  string
+> = {
   cyber: 'bg-cyber',
   analog: 'bg-analog',
   success: 'bg-status-success',
@@ -24,9 +27,7 @@ export const SectionLabel: React.FC<SectionLabelProps> = ({
       <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-[--tracking-widest]">
         {children}
       </h3>
-      {subtitle && (
-        <p className="text-[10px] text-text-tertiary font-mono mt-0.5">{subtitle}</p>
-      )}
+      {subtitle && <p className="text-[10px] text-text-tertiary font-mono mt-0.5">{subtitle}</p>}
     </div>
     {indicator !== 'none' && (
       <span

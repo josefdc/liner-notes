@@ -13,7 +13,7 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function scoutNode(
   state: SonicAgentStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<SonicAgentStateType>> {
   const writer = config.writer;
   const store = getStore();
@@ -26,9 +26,11 @@ export async function scoutNode(
       if (cached?.value?.trackData && Date.now() - cached.value.timestamp < CACHE_TTL_MS) {
         console.log("📦 [Scout] Cache hit for:", normalizedQuery);
         writer?.({
-          type: "status", code: "NET-200",
+          type: "status",
+          code: "NET-200",
           message: "Cache hit — returning stored analysis",
-          node: "scout", timestamp: new Date().toISOString(),
+          node: "scout",
+          timestamp: new Date().toISOString(),
         });
         writer?.({ type: "complete", data: cached.value.trackData });
         return { trackData: cached.value.trackData };
@@ -38,7 +40,13 @@ export async function scoutNode(
     }
   }
 
-  writer?.({ type: "status", code: "NET-100", message: "Establishing connection to Spotify API...", node: "scout", timestamp: new Date().toISOString() });
+  writer?.({
+    type: "status",
+    code: "NET-100",
+    message: "Establishing connection to Spotify API...",
+    node: "scout",
+    timestamp: new Date().toISOString(),
+  });
 
   console.log("🔍 [Scout] Searching for:", state.songQuery);
 
@@ -80,7 +88,8 @@ export async function scoutNode(
     const { disambiguationThreshold, popularityGap, maxCandidates } = state.hitlConfig;
 
     const isTopTrackDominant = topTrack.popularity >= disambiguationThreshold;
-    const hasSignificantGap = !secondTrack || secondTrack.popularity < topTrack.popularity * popularityGap;
+    const hasSignificantGap =
+      !secondTrack || secondTrack.popularity < topTrack.popularity * popularityGap;
     const isAmbiguous = tracks.length > 1 && !isTopTrackDominant && !hasSignificantGap;
 
     if (isAmbiguous) {
@@ -89,13 +98,26 @@ export async function scoutNode(
         try {
           const pref = await store.get(["disambiguation"], normalizedQuery);
           if (pref?.value?.selectedTrackId) {
-            const currentIds = tracks.slice(0, maxCandidates).map(t => t.id).sort().join(",");
+            const currentIds = tracks
+              .slice(0, maxCandidates)
+              .map((t) => t.id)
+              .sort()
+              .join(",");
             if (pref.value.candidateIds === currentIds) {
               // Same candidate set — auto-select the remembered preference
-              const remembered = tracks.find(t => t.id === pref.value.selectedTrackId);
+              const remembered = tracks.find((t) => t.id === pref.value.selectedTrackId);
               if (remembered) {
-                console.log("📦 [Scout] Auto-selecting from disambiguation memory:", remembered.title);
-                writer?.({ type: "status", code: "SPOTIFY-FOUND", message: `Remembered preference: "${remembered.title}" // ${remembered.artist}`, node: "scout", timestamp: new Date().toISOString() });
+                console.log(
+                  "📦 [Scout] Auto-selecting from disambiguation memory:",
+                  remembered.title,
+                );
+                writer?.({
+                  type: "status",
+                  code: "SPOTIFY-FOUND",
+                  message: `Remembered preference: "${remembered.title}" // ${remembered.artist}`,
+                  node: "scout",
+                  timestamp: new Date().toISOString(),
+                });
                 return {
                   spotifyData: remembered,
                   selectedTrackId: remembered.id,
@@ -121,7 +143,7 @@ export async function scoutNode(
       });
 
       // Convert to candidates for human selection (limited by maxCandidates config)
-      const candidates: SearchCandidate[] = tracks.slice(0, maxCandidates).map(t => ({
+      const candidates: SearchCandidate[] = tracks.slice(0, maxCandidates).map((t) => ({
         id: t.id,
         title: t.title,
         artist: t.artist,
@@ -146,7 +168,13 @@ export async function scoutNode(
     }
 
     // Unambiguous: auto-select top result
-    writer?.({ type: "status", code: "SPOTIFY-FOUND", message: `Target acquired: "${topTrack.title}" // ${topTrack.artist}`, node: "scout", timestamp: new Date().toISOString() });
+    writer?.({
+      type: "status",
+      code: "SPOTIFY-FOUND",
+      message: `Target acquired: "${topTrack.title}" // ${topTrack.artist}`,
+      node: "scout",
+      timestamp: new Date().toISOString(),
+    });
     console.log("✅ [Scout] Auto-selected:", topTrack.title, "by", topTrack.artist);
 
     return {

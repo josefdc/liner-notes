@@ -93,10 +93,12 @@ router.get("/api/analyze/stream", async (req, res) => {
   res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
   // Generate thread ID for potential resume
-  const threadId = `stream-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const threadId = `stream-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`; // guard-allow: random-values-api — identifier, not data
 
   // Send initial connection event
-  res.write(`data: ${JSON.stringify({ type: "connected", threadId, timestamp: new Date().toISOString() })}\n\n`);
+  res.write(
+    `data: ${JSON.stringify({ type: "connected", threadId, timestamp: new Date().toISOString() })}\n\n`,
+  );
 
   try {
     const graph = createSonicAgentGraph();
@@ -107,7 +109,7 @@ router.get("/api/analyze/stream", async (req, res) => {
       {
         configurable: { thread_id: threadId },
         streamMode: ["updates", "custom"],
-      }
+      },
     );
 
     let interruptData: { candidates: SearchCandidate[] } | null = null;
@@ -128,12 +130,14 @@ router.get("/api/analyze/stream", async (req, res) => {
         // Node state updates
         const updates = data as Record<string, unknown>;
 
-        for (const [nodeName, nodeData] of Object.entries(updates)) {
+        for (const nodeData of Object.values(updates)) {
           const stateData = nodeData as { trackData?: TrackData; error?: string };
 
           // Send completion when we have final data
           if (stateData.trackData) {
-            res.write(`data: ${JSON.stringify({ type: "complete", data: stateData.trackData })}\n\n`);
+            res.write(
+              `data: ${JSON.stringify({ type: "complete", data: stateData.trackData })}\n\n`,
+            );
           }
 
           // Send error if present
@@ -146,19 +150,20 @@ router.get("/api/analyze/stream", async (req, res) => {
 
     // If we have interrupt data, send it and keep connection for resume
     if (interruptData) {
-      res.write(`data: ${JSON.stringify({
-        type: "interrupt",
-        reason: "disambiguation",
-        threadId,
-        candidates: interruptData.candidates,
-        message: "Please select the correct song",
-      })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          type: "interrupt",
+          reason: "disambiguation",
+          threadId,
+          candidates: interruptData.candidates,
+          message: "Please select the correct song",
+        })}\n\n`,
+      );
     }
 
     // Send done event
     res.write(`data: ${JSON.stringify({ type: "done", timestamp: new Date().toISOString() })}\n\n`);
     res.end();
-
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`❌ [SSE] Error:`, message);
@@ -230,19 +235,24 @@ router.get("/api/analyze/stream/resume", async (req, res) => {
   if (!threadId || !selectedTrackId) {
     res.status(400).json({
       error: "Missing required parameters",
-      example: "/api/analyze/stream/resume?threadId=stream-123&selectedTrackId=6GyFP1nfCDB8lbD2bG0Hq9",
+      example:
+        "/api/analyze/stream/resume?threadId=stream-123&selectedTrackId=6GyFP1nfCDB8lbD2bG0Hq9",
     });
     return;
   }
 
-  console.log(`\n📡 [SSE] Resuming stream: threadId=${threadId}, selectedTrackId=${selectedTrackId}`);
+  console.log(
+    `\n📡 [SSE] Resuming stream: threadId=${threadId}, selectedTrackId=${selectedTrackId}`,
+  );
 
   // Set up SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  res.write(`data: ${JSON.stringify({ type: "resuming", threadId, timestamp: new Date().toISOString() })}\n\n`);
+  res.write(
+    `data: ${JSON.stringify({ type: "resuming", threadId, timestamp: new Date().toISOString() })}\n\n`,
+  );
 
   try {
     const graph = createSonicAgentGraph();
@@ -250,20 +260,20 @@ router.get("/api/analyze/stream/resume", async (req, res) => {
     console.log(`🔄 [Resume] Invoking graph.stream with Command({ resume: "${selectedTrackId}" })`);
 
     // Use Command({ resume: ... }) to continue from interrupt with the selected value
-    const stream = await graph.stream(
-      new Command({ resume: selectedTrackId }),
-      {
-        configurable: { thread_id: threadId },
-        streamMode: ["updates", "custom"],
-      }
-    );
+    const stream = await graph.stream(new Command({ resume: selectedTrackId }), {
+      configurable: { thread_id: threadId },
+      streamMode: ["updates", "custom"],
+    });
 
     console.log(`🔄 [Resume] Stream created, iterating...`);
 
     for await (const chunk of stream) {
       const [mode, data] = chunk as unknown as [string, unknown];
 
-      console.log(`📦 [Resume] Received chunk: mode=${mode}`, JSON.stringify(data).substring(0, 200));
+      console.log(
+        `📦 [Resume] Received chunk: mode=${mode}`,
+        JSON.stringify(data).substring(0, 200),
+      );
 
       if (mode === "custom") {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -275,7 +285,9 @@ router.get("/api/analyze/stream/resume", async (req, res) => {
           const stateData = nodeData as { trackData?: TrackData; error?: string };
 
           if (stateData.trackData) {
-            res.write(`data: ${JSON.stringify({ type: "complete", data: stateData.trackData })}\n\n`);
+            res.write(
+              `data: ${JSON.stringify({ type: "complete", data: stateData.trackData })}\n\n`,
+            );
           }
 
           if (stateData.error) {
@@ -288,7 +300,6 @@ router.get("/api/analyze/stream/resume", async (req, res) => {
     console.log(`✅ [Resume] Stream completed`);
     res.write(`data: ${JSON.stringify({ type: "done", timestamp: new Date().toISOString() })}\n\n`);
     res.end();
-
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`❌ [Resume] Error:`, error);

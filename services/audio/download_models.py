@@ -13,7 +13,7 @@ Usage:
 
 import os
 import sys
-import hashlib
+
 import requests
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
@@ -80,7 +80,11 @@ def download_file(url: str, dest: str, description: str) -> bool:
                 downloaded += len(chunk)
                 if total > 0:
                     pct = downloaded / total * 100
-                    print(f"\r    {downloaded / 1024 / 1024:.1f} / {total / 1024 / 1024:.1f} MB ({pct:.0f}%)", end="", flush=True)
+                    print(
+                        f"\r    {downloaded / 1024 / 1024:.1f} / {total / 1024 / 1024:.1f} MB ({pct:.0f}%)",
+                        end="",
+                        flush=True,
+                    )
 
         print()  # newline after progress
         size_mb = os.path.getsize(dest) / (1024 * 1024)

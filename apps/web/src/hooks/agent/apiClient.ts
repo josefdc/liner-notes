@@ -12,7 +12,7 @@ import type { SearchCandidate } from './types';
  */
 export async function analyzeSync(
   query: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   const response = await fetch(`${API_BASE_URL}/api/analyze`, {
     method: 'POST',
@@ -28,7 +28,7 @@ export async function analyzeSync(
  */
 export async function resumeSync(
   threadId: string,
-  selectedTrackId: string
+  selectedTrackId: string,
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   const response = await fetch(`${API_BASE_URL}/api/analyze/resume`, {
     method: 'POST',
@@ -45,7 +45,7 @@ export async function fetchFactoids(
   trackId: string,
   trackTitle: string,
   trackArtist: string,
-  existingIds: string[]
+  existingIds: string[],
 ): Promise<Factoid[]> {
   const response = await fetch(`${API_BASE_URL}/api/factoids/decrypt`, {
     method: 'POST',
@@ -72,10 +72,10 @@ export async function fetchFactoids(
  */
 export async function fetchSuggestions(
   query: string,
-  limit: number = 5
+  limit: number = 5,
 ): Promise<SearchCandidate[]> {
   const response = await fetch(
-    `${API_BASE_URL}/api/search/suggest?query=${encodeURIComponent(query)}&limit=${limit}`
+    `${API_BASE_URL}/api/search/suggest?query=${encodeURIComponent(query)}&limit=${limit}`,
   );
 
   const result = await response.json();

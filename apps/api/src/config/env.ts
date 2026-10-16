@@ -32,7 +32,7 @@ const missing = REQUIRED_KEYS.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(
     `[config] Missing required environment variables: ${missing.join(", ")}.\n` +
-      `[config] Set them in ${ENV_PATH} (see .env.example) or in the process environment.`
+      `[config] Set them in ${ENV_PATH} (see .env.example) or in the process environment.`,
   );
   process.exit(1);
 }

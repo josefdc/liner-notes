@@ -62,7 +62,7 @@ const MAX_LYRICS_LENGTH = 3000; // Truncate to save tokens
 async function searchGeniusSong(
   title: string,
   artist: string,
-  accessToken: string
+  accessToken: string,
 ): Promise<GeniusSearchResult | null> {
   const query = `${title} ${artist}`;
   const url = new URL(`${GENIUS_API_BASE}/search`);
@@ -87,14 +87,15 @@ async function searchGeniusSong(
   const normalizedTitle = title.toLowerCase().trim();
   const normalizedArtist = artist.toLowerCase().trim();
 
-  const bestMatch = hits.find((hit) => {
-    const resultTitle = hit.result.title.toLowerCase();
-    const resultArtist = hit.result.primary_artist.name.toLowerCase();
-    return (
-      resultTitle.includes(normalizedTitle) ||
-      normalizedTitle.includes(resultTitle)
-    ) && resultArtist.includes(normalizedArtist.split(",")[0]);
-  }) || hits[0];
+  const bestMatch =
+    hits.find((hit) => {
+      const resultTitle = hit.result.title.toLowerCase();
+      const resultArtist = hit.result.primary_artist.name.toLowerCase();
+      return (
+        (resultTitle.includes(normalizedTitle) || normalizedTitle.includes(resultTitle)) &&
+        resultArtist.includes(normalizedArtist.split(",")[0])
+      );
+    }) || hits[0];
 
   return {
     id: bestMatch.result.id,
@@ -114,7 +115,7 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
     const response = await fetch(geniusUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; SonicAgent/1.0)",
-        "Accept": "text/html",
+        Accept: "text/html",
       },
     });
 
@@ -130,7 +131,7 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
     let lyrics = "";
     for (const match of matches) {
       // Clean HTML tags while preserving line breaks
-      let chunk = match[1]
+      const chunk = match[1]
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<[^>]+>/g, "")
         .replace(/&#x27;/g, "'")
@@ -142,7 +143,7 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
         .trim();
 
       if (chunk) {
-        lyrics += chunk + "\n\n";
+        lyrics += `${chunk}\n\n`;
       }
     }
 
@@ -151,11 +152,11 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
       const altRegex = /class="Lyrics__Container[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
       const altMatches = html.matchAll(altRegex);
       for (const match of altMatches) {
-        let chunk = match[1]
+        const chunk = match[1]
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<[^>]+>/g, "")
           .trim();
-        if (chunk) lyrics += chunk + "\n\n";
+        if (chunk) lyrics += `${chunk}\n\n`;
       }
     }
 
@@ -215,11 +216,11 @@ export const fetchLyrics = tool(
       // Truncate if too long
       const truncated = lyrics.length > MAX_LYRICS_LENGTH;
       const finalLyrics = truncated
-        ? lyrics.substring(0, MAX_LYRICS_LENGTH) + "\n\n[... lyrics truncated ...]"
+        ? `${lyrics.substring(0, MAX_LYRICS_LENGTH)}\n\n[... lyrics truncated ...]`
         : lyrics;
 
       console.log(
-        `✅ [Genius] Retrieved ${finalLyrics.length} chars of lyrics${truncated ? " (truncated)" : ""}`
+        `✅ [Genius] Retrieved ${finalLyrics.length} chars of lyrics${truncated ? " (truncated)" : ""}`,
       );
 
       return JSON.stringify({
@@ -247,7 +248,7 @@ export const fetchLyrics = tool(
       title: z.string().describe("The exact song title"),
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 /**
@@ -289,16 +290,20 @@ export const getGeniusAnnotations = tool(
         throw new Error(`Genius API error: ${response.status}`);
       }
 
-      const data = await response.json() as {
-        response?: { referents?: Array<{ fragment: string; annotations?: Array<{ body?: { plain?: string } }> }> }
+      const data = (await response.json()) as {
+        response?: {
+          referents?: Array<{
+            fragment: string;
+            annotations?: Array<{ body?: { plain?: string } }>;
+          }>;
+        };
       };
       const referents = data.response?.referents || [];
 
       // Extract annotation summaries
       const annotations = referents.slice(0, 5).map((ref: any) => ({
         fragment: ref.fragment,
-        annotation:
-          ref.annotations?.[0]?.body?.plain?.substring(0, 500) || "No annotation text",
+        annotation: ref.annotations?.[0]?.body?.plain?.substring(0, 500) || "No annotation text",
       }));
 
       console.log(`✅ [Genius] Found ${annotations.length} annotations`);
@@ -325,7 +330,7 @@ export const getGeniusAnnotations = tool(
       title: z.string().describe("The exact song title"),
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 // =============================================================================

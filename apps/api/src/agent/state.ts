@@ -15,7 +15,7 @@ import type { SearchCandidate, TrackData } from "./schema.js";
 export interface SongSegment {
   label: string;
   start: number; // percentage 0-100
-  end: number;   // percentage 0-100
+  end: number; // percentage 0-100
   color: string;
 }
 
@@ -90,7 +90,7 @@ export interface SpotifyData {
 }
 
 export interface KeyMoment {
-  time: number;      // Time in seconds
+  time: number; // Time in seconds
   type: "energy_peak" | "energy_drop" | "onset" | "harmonic_change" | "silence";
   intensity: number; // 0-1 scale
   description: string;
@@ -257,10 +257,19 @@ export const SonicAgentState = Annotation.Root({
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
       artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
       lastfmTags: [...(prev.lastfmTags || []), ...(next.lastfmTags || [])],
-      lastfmSimilarTracks: [...(prev.lastfmSimilarTracks || []), ...(next.lastfmSimilarTracks || [])],
-      lastfmSimilarArtists: [...(prev.lastfmSimilarArtists || []), ...(next.lastfmSimilarArtists || [])],
+      lastfmSimilarTracks: [
+        ...(prev.lastfmSimilarTracks || []),
+        ...(next.lastfmSimilarTracks || []),
+      ],
+      lastfmSimilarArtists: [
+        ...(prev.lastfmSimilarArtists || []),
+        ...(next.lastfmSimilarArtists || []),
+      ],
       lastfmArtistBio: next.lastfmArtistBio || prev.lastfmArtistBio,
-      listenbrainzSimilarArtists: [...(prev.listenbrainzSimilarArtists || []), ...(next.listenbrainzSimilarArtists || [])],
+      listenbrainzSimilarArtists: [
+        ...(prev.listenbrainzSimilarArtists || []),
+        ...(next.listenbrainzSimilarArtists || []),
+      ],
     }),
     default: () => ({
       samples: [],
@@ -309,13 +318,13 @@ export type SonicAgentStateType = typeof SonicAgentState.State;
 // =============================================================================
 
 export const SEGMENT_COLORS = {
-  intro: "#374151",    // gray-700
-  verse: "#1F2937",    // gray-800
-  chorus: "#00F0FF",   // cyber
-  bridge: "#FFB000",   // analog
-  outro: "#374151",    // gray-700
+  intro: "#374151", // gray-700
+  verse: "#1F2937", // gray-800
+  chorus: "#00F0FF", // cyber
+  bridge: "#FFB000", // analog
+  outro: "#374151", // gray-700
   instrumental: "#6366F1", // indigo
-  breakdown: "#EC4899",    // pink
+  breakdown: "#EC4899", // pink
 };
 
 // =============================================================================
@@ -326,13 +335,13 @@ export const SEGMENT_COLORS = {
  * Generate a unique ID
  */
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
+  return Math.random().toString(36).substring(2, 11); // guard-allow: random-values-api — identifier, not data
 }
 
 /**
  * Create default segments based on duration
  */
-export function createDefaultSegments(durationMs: number): SongSegment[] {
+export function createDefaultSegments(_durationMs: number): SongSegment[] {
   // Simple default structure for songs without detailed analysis
   return [
     { label: "Intro", start: 0, end: 8, color: SEGMENT_COLORS.intro },

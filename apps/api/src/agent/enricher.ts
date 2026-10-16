@@ -1,14 +1,14 @@
 /**
  * Genealogy Enricher for The Sonic Agent
- * 
+ *
  * This module enriches genealogy data with real album artwork from Spotify.
- * 
+ *
  * Problem: The LLM generates genealogy nodes with song names but can't provide
  *          real album artwork URLs because it doesn't have access to Spotify.
- * 
+ *
  * Solution: After the Composer generates the genealogy, we search Spotify
  *           for each referenced song and fetch the actual album artwork.
- * 
+ *
  * Features:
  * - Parallel batch search for performance
  * - Caching to avoid repeated API calls
@@ -85,7 +85,7 @@ async function getSpotifyToken(): Promise<string> {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
     },
     body: params,
   });
@@ -103,7 +103,7 @@ async function getSpotifyToken(): Promise<string> {
  */
 async function searchSpotifyForArtwork(
   query: string,
-  token: string
+  token: string,
 ): Promise<SpotifySearchResultWithArtist> {
   // Check cache first
   const cached = getCachedArtwork(query);
@@ -124,25 +124,43 @@ async function searchSpotifyForArtwork(
     if (!response.ok) {
       if (response.status === 429) {
         console.warn("⚠️ [Enricher] Spotify rate limit hit");
-        return { coverUrl: null, spotifyUrl: null, artist: null, previewUrl: null, spotifyId: null, trackTitle: null, trackArtist: null };
+        return {
+          coverUrl: null,
+          spotifyUrl: null,
+          artist: null,
+          previewUrl: null,
+          spotifyId: null,
+          trackTitle: null,
+          trackArtist: null,
+        };
       }
       throw new Error(`Spotify search failed: ${response.status}`);
     }
 
-    const data = (await response.json()) as { 
-      tracks?: { items?: Array<{
-        id?: string;
-        name?: string;
-        preview_url?: string | null;
-        album?: { images?: Array<{ url: string }> };
-        external_urls?: { spotify: string };
-        artists?: Array<{ name: string }>;
-      }> } 
+    const data = (await response.json()) as {
+      tracks?: {
+        items?: Array<{
+          id?: string;
+          name?: string;
+          preview_url?: string | null;
+          album?: { images?: Array<{ url: string }> };
+          external_urls?: { spotify: string };
+          artists?: Array<{ name: string }>;
+        }>;
+      };
     };
     const track = data.tracks?.items?.[0];
 
     if (!track) {
-      const result: SpotifySearchResultWithArtist = { coverUrl: null, spotifyUrl: null, artist: null, previewUrl: null, spotifyId: null, trackTitle: null, trackArtist: null };
+      const result: SpotifySearchResultWithArtist = {
+        coverUrl: null,
+        spotifyUrl: null,
+        artist: null,
+        previewUrl: null,
+        spotifyId: null,
+        trackTitle: null,
+        trackArtist: null,
+      };
       setCachedArtwork(query, result);
       return result;
     }
@@ -161,7 +179,15 @@ async function searchSpotifyForArtwork(
     return result;
   } catch (error) {
     console.error(`❌ [Enricher] Error searching for "${query}":`, error);
-    return { coverUrl: null, spotifyUrl: null, artist: null, previewUrl: null, spotifyId: null, trackTitle: null, trackArtist: null };
+    return {
+      coverUrl: null,
+      spotifyUrl: null,
+      artist: null,
+      previewUrl: null,
+      spotifyId: null,
+      trackTitle: null,
+      trackArtist: null,
+    };
   }
 }
 
@@ -171,25 +197,27 @@ async function searchSpotifyForArtwork(
 
 /**
  * Enrich genealogy nodes with real Spotify album artwork.
- * 
+ *
  * @param genealogy - The genealogy object from the Composer (may have optional fields)
  * @param currentTrackCoverUrl - The cover URL of the main track (already known)
  * @returns Enriched genealogy with real artwork URLs
  */
 export async function enrichGenealogyWithArtwork(
   genealogy: Partial<Genealogy> | undefined,
-  currentTrackCoverUrl: string
+  currentTrackCoverUrl: string,
 ): Promise<Genealogy> {
   // Handle undefined or malformed genealogy
   if (!genealogy?.nodes || !Array.isArray(genealogy.nodes) || genealogy.nodes.length === 0) {
     return {
-      nodes: [{
-        id: "current",
-        group: 1,
-        label: "Current Track",
-        img: currentTrackCoverUrl,
-        size: 40,
-      }],
+      nodes: [
+        {
+          id: "current",
+          group: 1,
+          label: "Current Track",
+          img: currentTrackCoverUrl,
+          size: 40,
+        },
+      ],
       links: [],
     };
   }
@@ -198,14 +226,14 @@ export async function enrichGenealogyWithArtwork(
 
   try {
     const token = await getSpotifyToken();
-    
+
     // Process nodes in parallel (with concurrency limit to avoid rate limits)
     const BATCH_SIZE = 5;
     const enrichedNodes: GenealogyNode[] = [];
 
     for (let i = 0; i < genealogy.nodes.length; i += BATCH_SIZE) {
       const batch = genealogy.nodes.slice(i, i + BATCH_SIZE);
-      
+
       const batchResults = await Promise.all(
         batch.map(async (node) => {
           // Ensure node has required fields
@@ -232,7 +260,7 @@ export async function enrichGenealogyWithArtwork(
 
           // Search Spotify for this song
           const result = await searchSpotifyForArtwork(safeNode.label, token);
-          
+
           return {
             ...safeNode,
             img: result.coverUrl || undefined,
@@ -242,26 +270,28 @@ export async function enrichGenealogyWithArtwork(
             trackTitle: result.trackTitle || undefined,
             trackArtist: result.trackArtist || undefined,
           };
-        })
+        }),
       );
 
       enrichedNodes.push(...batchResults);
-      
+
       // Small delay between batches to be nice to Spotify API
       if (i + BATCH_SIZE < genealogy.nodes.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
-    const nodesWithImages = enrichedNodes.filter(n => n.img).length;
+    const nodesWithImages = enrichedNodes.filter((n) => n.img).length;
     console.log(`✅ [Enricher] Found artwork for ${nodesWithImages}/${enrichedNodes.length} nodes`);
 
     // Ensure links have required fields
-    const safeLinks = (genealogy.links || []).map(link => ({
-      source: link.source || "",
-      target: link.target || "",
-      value: link.value || 1,
-    })).filter(link => link.source && link.target);
+    const safeLinks = (genealogy.links || [])
+      .map((link) => ({
+        source: link.source || "",
+        target: link.target || "",
+        value: link.value || 1,
+      }))
+      .filter((link) => link.source && link.target);
 
     return {
       nodes: enrichedNodes,
@@ -271,13 +301,15 @@ export async function enrichGenealogyWithArtwork(
     console.error("❌ [Enricher] Error enriching genealogy:", error);
     // Return safe fallback if enrichment fails
     return {
-      nodes: [{
-        id: "current",
-        group: 1,
-        label: "Current Track",
-        img: currentTrackCoverUrl,
-        size: 40,
-      }],
+      nodes: [
+        {
+          id: "current",
+          group: 1,
+          label: "Current Track",
+          img: currentTrackCoverUrl,
+          size: 40,
+        },
+      ],
       links: [],
     };
   }
@@ -288,18 +320,18 @@ export async function enrichGenealogyWithArtwork(
  */
 function isValidImageUrl(url: string): boolean {
   if (!url || typeof url !== "string") return false;
-  
+
   try {
     const parsed = new URL(url);
     // Accept common image hosting domains
     const validDomains = [
-      "i.scdn.co",           // Spotify
-      "mosaic.scdn.co",      // Spotify mosaic
-      "picsum.photos",       // Placeholder service
-      "placehold.co",        // Placeholder
+      "i.scdn.co", // Spotify
+      "mosaic.scdn.co", // Spotify mosaic
+      "picsum.photos", // Placeholder service
+      "placehold.co", // Placeholder
       "images.unsplash.com", // Unsplash
     ];
-    return validDomains.some(domain => parsed.hostname.includes(domain));
+    return validDomains.some((domain) => parsed.hostname.includes(domain));
   } catch {
     return false;
   }
@@ -314,23 +346,23 @@ export function generatePlaceholderGradient(label: string, group: number): strin
   let hash = 0;
   for (let i = 0; i < label.length; i++) {
     const char = label.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
-  
+
   // Generate HSL colors based on hash and group
   const hue = Math.abs(hash) % 360;
-  
+
   // Different saturation/lightness based on group for visual hierarchy
   const groupStyles: Record<number, { s: number; l: number }> = {
-    1: { s: 80, l: 50 },  // Current: vibrant
-    2: { s: 70, l: 45 },  // Sampled: warm
-    3: { s: 60, l: 40 },  // Sampler: cooler
-    4: { s: 50, l: 35 },  // Influence: subtle
+    1: { s: 80, l: 50 }, // Current: vibrant
+    2: { s: 70, l: 45 }, // Sampled: warm
+    3: { s: 60, l: 40 }, // Sampler: cooler
+    4: { s: 50, l: 35 }, // Influence: subtle
   };
-  
+
   const style = groupStyles[group] || { s: 60, l: 40 };
-  
+
   return `hsl(${hue}, ${style.s}%, ${style.l}%)`;
 }
 

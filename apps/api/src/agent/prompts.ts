@@ -637,28 +637,30 @@ export function formatResearchManagerPrompt(
     lastfmSimilarArtists?: string[];
     listenbrainzSimilarArtists?: string[];
   },
-  iteration: number
+  iteration: number,
 ): string {
   // Format research data with clear category labels
   const researchSummary = [
-    ...researchData.samples.map(s => `[SAMPLES] ${s.substring(0, 600)}`),
-    ...researchData.productionTrivia.map(s => `[PRODUCTION] ${s.substring(0, 600)}`),
-    ...researchData.songMeaning.map(s => `[MEANING] ${s.substring(0, 600)}`),
-    ...(researchData.lastfmTags || []).map(s => `[LASTFM TAGS] ${s}`),
-    ...(researchData.lastfmSimilarTracks || []).map(s => `[LASTFM SIMILAR TRACKS] ${s}`),
-    ...(researchData.lastfmSimilarArtists || []).map(s => `[LASTFM SIMILAR ARTISTS] ${s}`),
-    ...(researchData.listenbrainzSimilarArtists || []).map(s => `[LISTENBRAINZ SIMILAR] ${s}`),
+    ...researchData.samples.map((s) => `[SAMPLES] ${s.substring(0, 600)}`),
+    ...researchData.productionTrivia.map((s) => `[PRODUCTION] ${s.substring(0, 600)}`),
+    ...researchData.songMeaning.map((s) => `[MEANING] ${s.substring(0, 600)}`),
+    ...(researchData.lastfmTags || []).map((s) => `[LASTFM TAGS] ${s}`),
+    ...(researchData.lastfmSimilarTracks || []).map((s) => `[LASTFM SIMILAR TRACKS] ${s}`),
+    ...(researchData.lastfmSimilarArtists || []).map((s) => `[LASTFM SIMILAR ARTISTS] ${s}`),
+    ...(researchData.listenbrainzSimilarArtists || []).map((s) => `[LISTENBRAINZ SIMILAR] ${s}`),
   ].join("\n\n---\n\n");
 
-  return RESEARCH_MANAGER_PROMPT
-    .replace(/{songTitle}/g, songTitle)
+  return RESEARCH_MANAGER_PROMPT.replace(/{songTitle}/g, songTitle)
     .replace(/{artistName}/g, artistName)
     .replace(/{samplesCount}/g, String(researchData.samples.length))
     .replace(/{triviaCount}/g, String(researchData.productionTrivia.length))
     .replace(/{meaningCount}/g, String(researchData.songMeaning.length))
     .replace(/{lastfmTagsCount}/g, String((researchData.lastfmTags || []).length))
     .replace(/{lastfmSimilarTracksCount}/g, String((researchData.lastfmSimilarTracks || []).length))
-    .replace(/{lastfmSimilarArtistsCount}/g, String((researchData.lastfmSimilarArtists || []).length))
+    .replace(
+      /{lastfmSimilarArtistsCount}/g,
+      String((researchData.lastfmSimilarArtists || []).length),
+    )
     .replace(/{listenbrainzCount}/g, String((researchData.listenbrainzSimilarArtists || []).length))
     .replace(/{researchData}/g, researchSummary || "No research collected yet.")
     .replace(/{iteration}/g, String(iteration));
@@ -671,26 +673,31 @@ export function formatResearchManagerPrompt(
 export function formatComposerPrompt(
   spotifyData: unknown,
   audioFeatures: unknown,
-  researchData: unknown
+  researchData: unknown,
 ): string {
   // Extract Last.fm-specific fields for dedicated prompt sections
   const rd = researchData as Record<string, unknown> | null;
   const lastfmTags = (rd?.lastfmTags as string[] | undefined) || [];
   const lastfmSimilarTracks = (rd?.lastfmSimilarTracks as string[] | undefined) || [];
 
-  return COMPOSER_USER_PROMPT
-    .replace("{spotifyData}", JSON.stringify(spotifyData, null, 2))
+  return COMPOSER_USER_PROMPT.replace("{spotifyData}", JSON.stringify(spotifyData, null, 2))
     .replace("{audioFeatures}", JSON.stringify(audioFeatures, null, 2))
     .replace("{researchData}", JSON.stringify(researchData, null, 2))
-    .replace("{lastfmTags}", lastfmTags.length > 0 ? lastfmTags.join(", ") : "No Last.fm tags available.")
-    .replace("{lastfmSimilarTracks}", lastfmSimilarTracks.length > 0 ? lastfmSimilarTracks.join("\n") : "No similar tracks available.");
+    .replace(
+      "{lastfmTags}",
+      lastfmTags.length > 0 ? lastfmTags.join(", ") : "No Last.fm tags available.",
+    )
+    .replace(
+      "{lastfmSimilarTracks}",
+      lastfmSimilarTracks.length > 0
+        ? lastfmSimilarTracks.join("\n")
+        : "No similar tracks available.",
+    );
 }
 
 /**
  * Format the researcher prompt (legacy)
  */
 export function formatResearcherPrompt(songTitle: string, artistName: string): string {
-  return RESEARCHER_PROMPT
-    .replace("{songTitle}", songTitle)
-    .replace("{artistName}", artistName);
+  return RESEARCHER_PROMPT.replace("{songTitle}", songTitle).replace("{artistName}", artistName);
 }

@@ -6,7 +6,7 @@ const router = Router();
 /**
  * Health check endpoint
  */
-router.get("/api/health", (req, res) => {
+router.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "sonic-agent",

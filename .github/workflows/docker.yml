@@ -31,19 +31,43 @@ permissions:
   contents: read
 
 concurrency:
-  group: docker-${{ github.ref }}
-  cancel-in-progress: true
+  group: docker-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   compose-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # docker-compose.yml points the API at apps/api/.env; images never contain it.
       - name: Create an empty API env file
         run: touch apps/api/.env
-      - name: Build all images
-        run: docker compose build
+      - uses: docker/setup-buildx-action@v4
+      # Builds the services defined in docker-compose.yml, reusing layers from earlier runs.
+      # Pull requests read the layer cache; only main writes it, which keeps the cache small.
+      - name: Build all images (read cache)
+        if: github.event_name != 'push'
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-compose.yml
+          set: |
+            sonic-web.cache-from=type=gha,scope=sonic-web
+            sonic-server.cache-from=type=gha,scope=sonic-server
+            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
+      - name: Build all images (read and write cache)
+        if: github.event_name == 'push'
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-compose.yml
+          set: |
+            sonic-web.cache-from=type=gha,scope=sonic-web
+            sonic-web.cache-to=type=gha,scope=sonic-web,mode=max
+            sonic-server.cache-from=type=gha,scope=sonic-server
+            sonic-server.cache-to=type=gha,scope=sonic-server,mode=max
+            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
+            sonic-analysis.cache-to=type=gha,scope=sonic-analysis,mode=max

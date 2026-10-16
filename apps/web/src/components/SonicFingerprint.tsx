@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import type React from 'react';
+import { useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import { RADAR_DATA } from '../constants';
 import type { GenreProfileItem } from '../types';
@@ -12,7 +13,7 @@ function transformToRadarData(profile: GenreProfileItem[] | undefined) {
   if (!profile || profile.length === 0) {
     return RADAR_DATA;
   }
-  return profile.map(item => ({
+  return profile.map((item) => ({
     subject: item.genre,
     A: item.value,
     fullMark: 100,

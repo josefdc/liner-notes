@@ -43,13 +43,17 @@ const selected = (process.env.DEV_SERVICES ?? "web,api,audio")
 
 for (const name of selected) {
   if (!services[name]) {
-    console.error(`[dev] unknown service "${name}" (expected: ${Object.keys(services).join(", ")})`);
+    console.error(
+      `[dev] unknown service "${name}" (expected: ${Object.keys(services).join(", ")})`,
+    );
     process.exit(1);
   }
 }
 
 if (API_PORT && API_PORT !== "3001" && selected.includes("web")) {
-  console.warn("[dev] note: the web app still calls the API on port 3001; API_PORT moves only the API");
+  console.warn(
+    "[dev] note: the web app still calls the API on port 3001; API_PORT moves only the API",
+  );
 }
 
 const children = new Map();

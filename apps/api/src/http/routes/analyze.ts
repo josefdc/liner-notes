@@ -93,7 +93,7 @@ router.get("/api/analyze/stream", async (req, res) => {
   res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
   // Generate thread ID for potential resume
-  const threadId = `stream-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const threadId = `stream-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`; // guard-allow: random-values-api — identifier, not data
 
   // Send initial connection event
   res.write(

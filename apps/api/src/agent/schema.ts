@@ -512,7 +512,7 @@ export type FlatTrackData = z.infer<typeof FlatTrackDataSchema>;
  * Generate a unique ID for entities
  */
 function generateEntityId(): string {
-  return `e${Date.now().toString(36)}${Math.random().toString(36).substr(2, 4)}`;
+  return `e${Date.now().toString(36)}${Math.random().toString(36).substr(2, 4)}`; // guard-allow: random-values-api — identifier, not data
 }
 
 /**

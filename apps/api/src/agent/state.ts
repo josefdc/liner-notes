@@ -335,7 +335,7 @@ export const SEGMENT_COLORS = {
  * Generate a unique ID
  */
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
+  return Math.random().toString(36).substring(2, 11); // guard-allow: random-values-api — identifier, not data
 }
 
 /**

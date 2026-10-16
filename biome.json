@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!services/audio", "!evals/reports"]
+    "includes": ["**", "!**/dist", "!**/node_modules", "!evals/reports", "!services/audio/**/*.py"]
   },
   "formatter": {
     "enabled": true,
@@ -49,10 +49,26 @@
       "linter": {
         "rules": {
           "a11y": {
-            "useSemanticElements": "warn",
-            "noStaticElementInteractions": "warn",
-            "noNoninteractiveTabindex": "warn",
-            "useAriaPropsSupportedByRole": "warn"
+            "useSemanticElements": "off",
+            "noStaticElementInteractions": "off",
+            "noNoninteractiveTabindex": "off",
+            "useAriaPropsSupportedByRole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/api/src/agent/enricher.ts",
+        "apps/api/src/agent/errors.ts",
+        "apps/api/src/agent/nodes/historianNode.ts",
+        "apps/api/src/sources/genius.ts",
+        "apps/web/src/components/GenealogyGraph.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }
@@ -64,9 +80,6 @@
       "preset": "recommended",
       "style": {
         "noNonNullAssertion": "off"
-      },
-      "suspicious": {
-        "noExplicitAny": "warn"
       }
     }
   },

@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   node:
@@ -33,7 +33,7 @@ jobs:
       # .npmrc's strict-allow-scripts is enforced from npm 11.18 on; older npm would ignore it.
       - name: Use npm 11.18 or later
         run: |
-          if ! npx -y semver -r '>=11.18.0' "$(npm --version)" >/dev/null; then
+          if ! npx -y semver@7.7.3 -r '>=11.18.0' "$(npm --version)" >/dev/null; then
             npm install -g npm@11.19.1
           fi
           npm --version
@@ -73,6 +73,7 @@ jobs:
           uv run --frozen --only-group dev ruff check .
           uv run --frozen --only-group dev ruff format --check .
       - run: uv sync --frozen
-      # Exit code 5 means "no tests collected"; the service has no tests yet.
+      # Exit code 5 means "no tests collected": the service has no tests yet.
+      # Remove the allowance once the audio test suite exists (#14).
       - name: Pytest
         run: uv run --frozen pytest || [ $? -eq 5 ]

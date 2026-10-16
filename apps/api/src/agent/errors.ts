@@ -47,7 +47,7 @@ export async function withRetry<T>(
       lastError = e instanceof Error ? e : new Error(String(e));
       if (!isTransient(e) || attempt === maxAttempts - 1) throw lastError;
       const delay = initialInterval * backoffFactor ** attempt;
-      await sleep(delay + Math.random() * delay * 0.1); // slight jitter
+      await sleep(delay + Math.random() * delay * 0.1); // guard-allow: random-values-api — retry backoff jitter
     }
   }
   throw lastError!; // unreachable

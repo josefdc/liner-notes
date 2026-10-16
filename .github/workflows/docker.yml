@@ -32,7 +32,7 @@ permissions:
 
 concurrency:
   group: docker-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   compose-build:
@@ -52,6 +52,11 @@ jobs:
         with:
           source: .
           files: docker-compose.yml
+          # One cache scope per image, so the three builds do not overwrite each other's cache.
           set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
+            sonic-web.cache-from=type=gha,scope=sonic-web
+            sonic-web.cache-to=type=gha,scope=sonic-web,mode=max
+            sonic-server.cache-from=type=gha,scope=sonic-server
+            sonic-server.cache-to=type=gha,scope=sonic-server,mode=max
+            sonic-analysis.cache-from=type=gha,scope=sonic-analysis
+            sonic-analysis.cache-to=type=gha,scope=sonic-analysis,mode=max

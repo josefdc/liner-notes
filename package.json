@@ -15,7 +15,7 @@
     "test:db": "npm run test:db -w apps/api",
     "preview": "npm run preview -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "biome check .",
+    "lint": "biome check --error-on-warnings .",
     "format": "biome format --write .",
     "guard:honest": "node scripts/guard-honest.mjs"
   },

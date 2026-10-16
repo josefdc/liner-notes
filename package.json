@@ -16,7 +16,8 @@
     "preview": "npm run preview -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "guard:honest": "node scripts/guard-honest.mjs"
   },
   "allowScripts": {
     "better-sqlite3@12.10.0": true,

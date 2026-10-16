@@ -181,10 +181,7 @@ async function mbFetch<T>(url: string): Promise<T> {
 /**
  * Search for a recording by title and artist
  */
-async function searchRecording(
-  title: string,
-  artist: string
-): Promise<MBRecording | null> {
+async function searchRecording(title: string, artist: string): Promise<MBRecording | null> {
   const query = encodeURIComponent(`recording:"${title}" AND artist:"${artist}"`);
   const url = `${MB_API_BASE}/recording?query=${query}&limit=5&fmt=json`;
 
@@ -198,14 +195,15 @@ async function searchRecording(
   const normalizedTitle = title.toLowerCase().trim();
   const normalizedArtist = artist.toLowerCase().split(",")[0].trim();
 
-  const match = data.recordings.find((r) => {
-    const rTitle = r.title.toLowerCase();
-    const rArtist = r["artist-credit"]?.[0]?.name?.toLowerCase() || "";
-    return (
-      (rTitle === normalizedTitle || rTitle.includes(normalizedTitle)) &&
-      (rArtist === normalizedArtist || rArtist.includes(normalizedArtist))
-    );
-  }) || data.recordings[0];
+  const match =
+    data.recordings.find((r) => {
+      const rTitle = r.title.toLowerCase();
+      const rArtist = r["artist-credit"]?.[0]?.name?.toLowerCase() || "";
+      return (
+        (rTitle === normalizedTitle || rTitle.includes(normalizedTitle)) &&
+        (rArtist === normalizedArtist || rArtist.includes(normalizedArtist))
+      );
+    }) || data.recordings[0];
 
   return match;
 }
@@ -213,9 +211,7 @@ async function searchRecording(
 /**
  * Get full recording details with relationships
  */
-async function getRecordingWithRelations(
-  mbid: string
-): Promise<MBRecording | null> {
+async function getRecordingWithRelations(mbid: string): Promise<MBRecording | null> {
   const url = `${MB_API_BASE}/recording/${mbid}?inc=recording-rels+work-rels+artist-rels&fmt=json`;
   return mbFetch<MBRecording>(url);
 }
@@ -238,8 +234,7 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
     else if (relType.includes("cover")) type = "cover";
     else if (relType.includes("remix") || relType.includes("dj-mix")) type = "remix";
 
-    const direction: "source" | "derived" =
-      rel.direction === "backward" ? "source" : "derived";
+    const direction: "source" | "derived" = rel.direction === "backward" ? "source" : "derived";
 
     const target = rel.recording || rel.work;
     if (target) {
@@ -307,7 +302,7 @@ export const getMusicBrainzRelations = tool(
 
       console.log(
         `✅ [MusicBrainz] Found ${genealogy.length} genealogy relations: ` +
-          `${samples.length} samples, ${covers.length} covers, ${remixes.length} remixes`
+          `${samples.length} samples, ${covers.length} covers, ${remixes.length} remixes`,
       );
 
       return JSON.stringify({
@@ -344,7 +339,7 @@ export const getMusicBrainzRelations = tool(
       title: z.string().describe("The exact song title"),
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 /**
@@ -359,9 +354,15 @@ export const getMusicBrainzArtist = tool(
       const query = encodeURIComponent(`artist:"${artistName}"`);
       const searchUrl = `${MB_API_BASE}/artist?query=${query}&limit=1&fmt=json`;
 
-      const searchData = await mbFetch<{ artists: Array<{ id: string; name: string; type?: string; country?: string; "life-span"?: { begin?: string } }> }>(
-        searchUrl
-      );
+      const searchData = await mbFetch<{
+        artists: Array<{
+          id: string;
+          name: string;
+          type?: string;
+          country?: string;
+          "life-span"?: { begin?: string };
+        }>;
+      }>(searchUrl);
 
       if (!searchData.artists || searchData.artists.length === 0) {
         return JSON.stringify({
@@ -415,7 +416,7 @@ export const getMusicBrainzArtist = tool(
     schema: z.object({
       artistName: z.string().describe("The artist or band name"),
     }),
-  }
+  },
 );
 
 // =============================================================================

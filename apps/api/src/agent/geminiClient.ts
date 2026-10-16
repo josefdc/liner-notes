@@ -47,7 +47,9 @@ export function getGeminiClient(): GoogleGenAI | null {
   }
 
   clientInstance = new GoogleGenAI({ apiKey });
-  console.log(`✅ [GeminiClient] Initialized (pro: ${GEMINI_MODEL_PRO}, fast: ${GEMINI_MODEL_FAST})`);
+  console.log(
+    `✅ [GeminiClient] Initialized (pro: ${GEMINI_MODEL_PRO}, fast: ${GEMINI_MODEL_FAST})`,
+  );
   return clientInstance;
 }
 
@@ -84,9 +86,10 @@ export interface GenerateResult<T> {
 // =============================================================================
 
 function buildModelChain(tier: ModelTier, useFallback: boolean): string[] {
-  const full = tier === "pro"
-    ? [GEMINI_MODEL_PRO, GEMINI_MODEL_FAST, GEMINI_FALLBACK_MODEL]
-    : [GEMINI_MODEL_FAST, GEMINI_FALLBACK_MODEL];
+  const full =
+    tier === "pro"
+      ? [GEMINI_MODEL_PRO, GEMINI_MODEL_FAST, GEMINI_FALLBACK_MODEL]
+      : [GEMINI_MODEL_FAST, GEMINI_FALLBACK_MODEL];
   return useFallback ? full : [full[0]];
 }
 
@@ -112,7 +115,7 @@ function isQuotaError(error: unknown): boolean {
  * });
  */
 export async function generateStructuredOutput<T extends z.ZodTypeAny>(
-  options: GenerateStructuredOptions<T>
+  options: GenerateStructuredOptions<T>,
 ): Promise<GenerateResult<z.infer<T>>> {
   const ai = getGeminiClient();
   if (!ai) {
@@ -135,7 +138,9 @@ export async function generateStructuredOutput<T extends z.ZodTypeAny>(
 
   for (const currentModel of models) {
     try {
-      console.log(`🚀 [GeminiClient] Generating with ${currentModel} (${tier})${useGoogleSearch ? " + Google Search" : ""}`);
+      console.log(
+        `🚀 [GeminiClient] Generating with ${currentModel} (${tier})${useGoogleSearch ? " + Google Search" : ""}`,
+      );
 
       const response = await ai.models.generateContent({
         model: currentModel,
@@ -151,7 +156,12 @@ export async function generateStructuredOutput<T extends z.ZodTypeAny>(
       const text = response.text;
       if (!text) {
         console.warn("⚠️ [GeminiClient] Empty response from model");
-        return { data: null, model: currentModel, groundingUsed: useGoogleSearch, error: "Empty response" };
+        return {
+          data: null,
+          model: currentModel,
+          groundingUsed: useGoogleSearch,
+          error: "Empty response",
+        };
       }
 
       // Parse and validate against Zod schema
@@ -167,7 +177,9 @@ export async function generateStructuredOutput<T extends z.ZodTypeAny>(
         };
       } else {
         // Schema validation failures do NOT fall back — a weaker model won't fix schema issues
-        const issues = validated.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ");
+        const issues = validated.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join(", ");
         console.warn("⚠️ [GeminiClient] Schema validation failed:", issues);
         return {
           data: null,
@@ -189,7 +201,12 @@ export async function generateStructuredOutput<T extends z.ZodTypeAny>(
   }
 
   const lastModel = models[models.length - 1];
-  return { data: null, model: lastModel, groundingUsed: useGoogleSearch, error: "All models exhausted (quota)" };
+  return {
+    data: null,
+    model: lastModel,
+    groundingUsed: useGoogleSearch,
+    error: "All models exhausted (quota)",
+  };
 }
 
 // =============================================================================

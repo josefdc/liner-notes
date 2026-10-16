@@ -6,11 +6,7 @@
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { generateStructuredOutput, GEMINI_MODEL_PRO } from "../geminiClient.js";
-import {
-  FlatTrackDataSchema,
-  transformFlatToTrackData,
-  type TrackData,
-} from "../schema.js";
+import { FlatTrackDataSchema, transformFlatToTrackData, type TrackData } from "../schema.js";
 import { COMPOSER_SYSTEM_PROMPT, formatComposerPrompt } from "../prompts.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { createFallbackTrackData } from "../fallback.js";
@@ -19,7 +15,7 @@ import type { SonicAgentStateType } from "../state.js";
 
 export async function composerNode(
   state: SonicAgentStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
     return {
@@ -40,28 +36,27 @@ export async function composerNode(
 
   console.log("🎼 [Composer] Synthesizing data for:", state.spotifyData.title);
 
-  const prompt = formatComposerPrompt(
-    state.spotifyData,
-    state.audioFeatures,
-    state.researchData
-  );
+  const prompt = formatComposerPrompt(state.spotifyData, state.audioFeatures, state.researchData);
 
   // Use FLATTENED schema to avoid Gemini nesting depth limits
   // Then transform back to full TrackData structure (with retry on transient failures)
-  const result = await withRetry(async () => {
-    const r = await generateStructuredOutput({
-      prompt,
-      schema: FlatTrackDataSchema,
-      systemPrompt: COMPOSER_SYSTEM_PROMPT,
-      useGoogleSearch: true, // Enable grounding for real-time data
-      useFallbackOnQuota: true, // Auto-fallback through model chain on quota errors
-      tier: "pro",
-    });
-    if (!r.data && r.error && isTransient(r.error)) {
-      throw new TransientError(`Gemini: ${r.error}`);
-    }
-    return r;
-  }, { maxAttempts: 2, initialInterval: 2000 });
+  const result = await withRetry(
+    async () => {
+      const r = await generateStructuredOutput({
+        prompt,
+        schema: FlatTrackDataSchema,
+        systemPrompt: COMPOSER_SYSTEM_PROMPT,
+        useGoogleSearch: true, // Enable grounding for real-time data
+        useFallbackOnQuota: true, // Auto-fallback through model chain on quota errors
+        tier: "pro",
+      });
+      if (!r.data && r.error && isTransient(r.error)) {
+        throw new TransientError(`Gemini: ${r.error}`);
+      }
+      return r;
+    },
+    { maxAttempts: 2, initialInterval: 2000 },
+  );
 
   if (result.data) {
     // Transform flat LLM output to full nested TrackData
@@ -77,7 +72,9 @@ export async function composerNode(
       trackData = { ...trackData, previewUrl: state.spotifyData.previewUrl };
     }
 
-    console.log(`✅ [Composer] Generated via ${result.model}${result.groundingUsed ? " + Google Search" : ""}`);
+    console.log(
+      `✅ [Composer] Generated via ${result.model}${result.groundingUsed ? " + Google Search" : ""}`,
+    );
 
     // Enrich genealogy with real Spotify album artwork
     writer?.({
@@ -91,7 +88,7 @@ export async function composerNode(
     try {
       const enrichedGenealogy = await enrichGenealogyWithArtwork(
         trackData.genealogy,
-        state.spotifyData?.coverUrl || trackData.coverUrl
+        state.spotifyData?.coverUrl || trackData.coverUrl,
       );
       trackData = { ...trackData, genealogy: enrichedGenealogy };
       console.log("✅ [Composer] Enriched genealogy with Spotify artwork");
@@ -123,15 +120,22 @@ export async function composerNode(
 
   // Fallback: Build from state data if LLM fails
   console.log("⚠️ [Composer] LLM failed, using fallback data:", result.error);
-  console.log("📊 [Composer] Error details:", JSON.stringify({
-    error: result.error,
-    model: result.model,
-    hasResearchData: {
-      samples: state.researchData?.samples?.length || 0,
-      productionTrivia: state.researchData?.productionTrivia?.length || 0,
-      songMeaning: state.researchData?.songMeaning?.length || 0,
-    }
-  }, null, 2));
+  console.log(
+    "📊 [Composer] Error details:",
+    JSON.stringify(
+      {
+        error: result.error,
+        model: result.model,
+        hasResearchData: {
+          samples: state.researchData?.samples?.length || 0,
+          productionTrivia: state.researchData?.productionTrivia?.length || 0,
+          songMeaning: state.researchData?.songMeaning?.length || 0,
+        },
+      },
+      null,
+      2,
+    ),
+  );
 
   // Try to generate rich factoids even in fallback mode
   writer?.({
@@ -148,7 +152,7 @@ export async function composerNode(
   try {
     const enrichedGenealogy = await enrichGenealogyWithArtwork(
       fallbackData.genealogy,
-      state.spotifyData?.coverUrl || fallbackData.coverUrl
+      state.spotifyData?.coverUrl || fallbackData.coverUrl,
     );
     fallbackData = { ...fallbackData, genealogy: enrichedGenealogy };
   } catch {

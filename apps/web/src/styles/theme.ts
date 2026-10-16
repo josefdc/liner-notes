@@ -93,10 +93,10 @@ export const colors = {
  * Genealogy Graph - Node group colors
  */
 export const genealogyColors = {
-  current: colors.cyber,      // Group 1 - Currently playing track
-  origin: colors.analog,      // Group 2 - Sampled/source track
-  sampler: colors.purple,     // Group 3 - Track that samples this
-  influence: colors.green,    // Group 4 - Influenced by
+  current: colors.cyber, // Group 1 - Currently playing track
+  origin: colors.analog, // Group 2 - Sampled/source track
+  sampler: colors.purple, // Group 3 - Track that samples this
+  influence: colors.green, // Group 4 - Influenced by
   default: colors.gray[500],
 } as const;
 
@@ -121,4 +121,3 @@ export const keyMomentColors = {
   harmonic_change: colors.analog,
   silence: colors.gray[500],
 } as const;
-

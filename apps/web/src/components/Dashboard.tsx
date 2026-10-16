@@ -12,19 +12,19 @@ import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
 
 interface DashboardProps {
-    trackData: TrackData | null;
-    onNavigate: (phase: AppPhase) => void;
-    onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
-    logs?: AgentLog[];
-    isComplete?: boolean;
-    // P0:3 — New search callback
-    onNewSearch?: () => void;
-    // UX: Focus management on phase transition
-    headingRef?: React.Ref<HTMLHeadingElement>;
-    // UX: Undo analysis callback
-    onUndoAnalysis?: () => void;
-    // UX: Hide activity log when restoring a previous session (logs are cleared)
-    isRestoredSession?: boolean;
+  trackData: TrackData | null;
+  onNavigate: (phase: AppPhase) => void;
+  onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
+  logs?: AgentLog[];
+  isComplete?: boolean;
+  // P0:3 — New search callback
+  onNewSearch?: () => void;
+  // UX: Focus management on phase transition
+  headingRef?: React.Ref<HTMLHeadingElement>;
+  // UX: Undo analysis callback
+  onUndoAnalysis?: () => void;
+  // UX: Hide activity log when restoring a previous session (logs are cleared)
+  isRestoredSession?: boolean;
 }
 
 /**
@@ -36,7 +36,7 @@ function generateGradientColors(label: string, group: number): { from: string; t
   let hash = 0;
   for (let i = 0; i < label.length; i++) {
     const char = label.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
 
@@ -44,10 +44,10 @@ function generateGradientColors(label: string, group: number): { from: string; t
 
   // Different color schemes based on group
   const groupHueOffset: Record<number, number> = {
-    1: 180,  // Current: cyan family
-    2: 30,   // Sampled: amber family
-    3: 270,  // Sampler: purple family
-    4: 120,  // Influence: green family
+    1: 180, // Current: cyan family
+    2: 30, // Sampled: amber family
+    3: 270, // Sampler: purple family
+    4: 120, // Influence: green family
   };
 
   const offset = groupHueOffset[group] || 0;
@@ -69,16 +69,14 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   group: number;
 }> {
   if (!trackData?.genealogy?.nodes) {
-    return RECOMMENDATIONS.map(r => ({ ...r, group: 4, img: r.img }));
+    return RECOMMENDATIONS.map((r) => ({ ...r, group: 4, img: r.img }));
   }
 
   // Filter out the current song (group 1) and get related nodes
-  const relatedNodes = trackData.genealogy.nodes
-    .filter(node => node.group !== 1)
-    .slice(0, 4);
+  const relatedNodes = trackData.genealogy.nodes.filter((node) => node.group !== 1).slice(0, 4);
 
   if (relatedNodes.length === 0) {
-    return RECOMMENDATIONS.map(r => ({ ...r, group: 4, img: r.img }));
+    return RECOMMENDATIONS.map((r) => ({ ...r, group: 4, img: r.img }));
   }
 
   const groupLabels: Record<number, string> = {
@@ -87,7 +85,7 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
     4: 'Related influence',
   };
 
-  return relatedNodes.map(node => ({
+  return relatedNodes.map((node) => ({
     id: node.id,
     title: node.label,
     artist: '', // Genealogy nodes don't have separate artist field
@@ -115,18 +113,33 @@ const PlaceholderCover: React.FC<{ title: string; group: number }> = ({ title, g
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeTrack, logs = EMPTY_LOGS, isComplete = true, onNewSearch, headingRef, onUndoAnalysis, isRestoredSession = false }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  trackData,
+  onNavigate,
+  onAnalyzeTrack,
+  logs = EMPTY_LOGS,
+  isComplete = true,
+  onNewSearch,
+  headingRef,
+  onUndoAnalysis,
+  isRestoredSession = false,
+}) => {
   const relatedTracks = useMemo(() => getRelatedTracks(trackData), [trackData]);
-  const isFallbackRecommendations = !trackData?.genealogy?.nodes || trackData.genealogy.nodes.filter(n => n.group !== 1).length === 0;
+  const isFallbackRecommendations =
+    !trackData?.genealogy?.nodes ||
+    trackData.genealogy.nodes.filter((n) => n.group !== 1).length === 0;
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
   // UX: Undo toast state (replaces confirm dialog)
-  const [undoToast, setUndoToast] = useState<{ trackTitle: string; timeout: ReturnType<typeof setTimeout> } | null>(null);
+  const [undoToast, setUndoToast] = useState<{
+    trackTitle: string;
+    timeout: ReturnType<typeof setTimeout>;
+  } | null>(null);
   const undoToastRef = useRef(undoToast);
   undoToastRef.current = undoToast;
 
   const clearUndoToast = useCallback(() => {
-    setUndoToast(prev => {
+    setUndoToast((prev) => {
       if (prev) clearTimeout(prev.timeout);
       return null;
     });
@@ -146,7 +159,7 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
 
   // Pause-on-hover for undo toast
   const handleToastMouseEnter = useCallback(() => {
-    setUndoToast(prev => {
+    setUndoToast((prev) => {
       if (prev) {
         clearTimeout(prev.timeout);
         return { ...prev, timeout: setTimeout(() => {}, 999999) }; // paused
@@ -156,7 +169,7 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
   }, []);
 
   const handleToastMouseLeave = useCallback(() => {
-    setUndoToast(prev => {
+    setUndoToast((prev) => {
       if (prev) {
         clearTimeout(prev.timeout);
         const timeout = setTimeout(() => setUndoToast(null), 5000);
@@ -178,22 +191,33 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo]);
 
-  const handleCardClick = useCallback((rec: { id: string; title: string; artist: string }) => {
-    if (onAnalyzeTrack) {
-      onAnalyzeTrack(rec.id, rec.title, rec.artist);
-      startUndoTimeout(rec.title);
-    } else {
-      onNavigate(AppPhase.PLAYER);
-    }
-  }, [onAnalyzeTrack, onNavigate, startUndoTimeout]);
+  const handleCardClick = useCallback(
+    (rec: { id: string; title: string; artist: string }) => {
+      if (onAnalyzeTrack) {
+        onAnalyzeTrack(rec.id, rec.title, rec.artist);
+        startUndoTimeout(rec.title);
+      } else {
+        onNavigate(AppPhase.PLAYER);
+      }
+    },
+    [onAnalyzeTrack, onNavigate, startUndoTimeout],
+  );
 
   return (
     <div className="h-full w-full p-[--space-md] md:p-[--space-2xl] flex flex-col gap-[--space-xl] md:gap-[--space-2xl] overflow-y-auto overflow-x-hidden pb-20 md:pb-10">
       {/* Top Bar (P0:3 — New Search button, P0:5 — removed date slider) */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-stagger-in stagger-1">
         <div>
-            <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-medium tracking-tight text-white outline-none">Command Center</h2>
-            <p className="text-xs font-mono text-text-tertiary mt-1">AGENT_ID: X9-ALPHA // STATUS: ONLINE</p>
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-2xl font-medium tracking-tight text-white outline-none"
+          >
+            Command Center
+          </h2>
+          <p className="text-xs font-mono text-text-tertiary mt-1">
+            AGENT_ID: X9-ALPHA // STATUS: ONLINE
+          </p>
         </div>
         {onNewSearch && (
           <Button variant="ghost" size="sm" leftIcon={<Search size={14} />} onClick={onNewSearch}>
@@ -234,11 +258,15 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
             {/* Track Info */}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="text-[10px] font-mono text-cyber/60 uppercase tracking-widest">NOW PLAYING</span>
+                <span className="text-[10px] font-mono text-cyber/60 uppercase tracking-widest">
+                  NOW PLAYING
+                </span>
                 <div className="w-1.5 h-1.5 rounded-full bg-cyber/60"></div>
               </div>
 
-              <h2 className="text-2xl md:text-4xl font-bold text-white tracking-tight mb-1">{trackData.title}</h2>
+              <h2 className="text-2xl md:text-4xl font-bold text-white tracking-tight mb-1">
+                {trackData.title}
+              </h2>
               <p className="text-lg text-text-tertiary font-mono mb-1">{trackData.artist}</p>
               {trackData.album && (
                 <div className="flex items-center gap-2 mb-4 text-sm text-text-tertiary">
@@ -249,9 +277,7 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
                       <span>{trackData.releaseYear}</span>
                     </>
                   )}
-                  {trackData.explicit && (
-                    <Badge variant="gray">EXPLICIT</Badge>
-                  )}
+                  {trackData.explicit && <Badge variant="gray">EXPLICIT</Badge>}
                 </div>
               )}
 
@@ -274,24 +300,58 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
                   </Badge>
                 )}
                 {trackData.valence !== undefined && (
-                  <Badge variant="gray" size="md" icon={<Heart size={12} className={trackData.valence > 0.5 ? "text-accent-pink" : "text-accent-blue"} />} title="Mood: 0=melancholic, 100=euphoric">
-                    <span className={trackData.valence > 0.5 ? "text-accent-pink" : "text-accent-blue"}>
-                      {trackData.valence > 0.7 ? "Euphoric" : trackData.valence > 0.5 ? "Upbeat" : trackData.valence > 0.3 ? "Mellow" : "Melancholic"}
+                  <Badge
+                    variant="gray"
+                    size="md"
+                    icon={
+                      <Heart
+                        size={12}
+                        className={
+                          trackData.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'
+                        }
+                      />
+                    }
+                    title="Mood: 0=melancholic, 100=euphoric"
+                  >
+                    <span
+                      className={trackData.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
+                    >
+                      {trackData.valence > 0.7
+                        ? 'Euphoric'
+                        : trackData.valence > 0.5
+                          ? 'Upbeat'
+                          : trackData.valence > 0.3
+                            ? 'Mellow'
+                            : 'Melancholic'}
                     </span>
                   </Badge>
                 )}
                 {trackData.danceability !== undefined && (
-                  <Badge variant="gray" size="md" icon={<Disc size={12} className="text-analog" />} title="Danceability">
+                  <Badge
+                    variant="gray"
+                    size="md"
+                    icon={<Disc size={12} className="text-analog" />}
+                    title="Danceability"
+                  >
                     <span className="text-text-tertiary">DANCE</span>{' '}
                     <span className="text-analog">{Math.round(trackData.danceability * 100)}%</span>
                   </Badge>
                 )}
-                <EstimatedWarning show={trackData.audioConfidence === 'low' || trackData.audioSource === 'estimated'} />
+                <EstimatedWarning
+                  show={
+                    trackData.audioConfidence === 'low' || trackData.audioSource === 'estimated'
+                  }
+                />
               </div>
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-                <Button variant="cyber" size="md" rightIcon={<ArrowRight size={16} />} onClick={() => onNavigate(AppPhase.PLAYER)}>
+                <Button
+                  variant="cyber"
+                  size="md"
+                  rightIcon={<ArrowRight size={16} />}
+                  onClick={() => onNavigate(AppPhase.PLAYER)}
+                >
                   VIEW FULL ANALYSIS
                 </Button>
                 {trackData.spotifyUrl && (
@@ -313,85 +373,102 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
 
       {/* Main Grid (P2:17 — stagger animations) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-
         {/* Hero: Sonic Fingerprint */}
         <div className="lg:col-span-1 bg-surface border border-border rounded-[--radius-md] p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3">
-            <SectionLabel subtitle="Genre DNA distribution" indicator="cyber" className="mb-4 z-10">
-              Sonic Fingerprint
-            </SectionLabel>
-            <div className="flex-1 min-h-[250px] md:min-h-[300px] z-10">
-                <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-xs font-mono text-text-tertiary">Loading...</div>}>
-                  <SonicFingerprint genreProfile={trackData?.genreProfile} />
-                </Suspense>
-            </div>
-             {/* Decorative BG */}
-             <div className="absolute top-0 right-0 w-64 h-64 bg-cyber/5 blur-[100px] pointer-events-none"></div>
+          <SectionLabel subtitle="Genre DNA distribution" indicator="cyber" className="mb-4 z-10">
+            Sonic Fingerprint
+          </SectionLabel>
+          <div className="flex-1 min-h-[250px] md:min-h-[300px] z-10">
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-xs font-mono text-text-tertiary">
+                  Loading...
+                </div>
+              }
+            >
+              <SonicFingerprint genreProfile={trackData?.genreProfile} />
+            </Suspense>
+          </div>
+          {/* Decorative BG */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-cyber/5 blur-[100px] pointer-events-none"></div>
         </div>
 
         {/* Recommendations / Gems (P2:17 — stagger) */}
         <div className="lg:col-span-2 flex flex-col gap-6 animate-stagger-in stagger-4">
-            <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium tracking-tight text-white">Discovered Gems</h3>
-                  {isFallbackRecommendations && (
-                    <p className="text-[10px] font-mono text-text-muted mt-0.5">SUGGESTED TRACKS (no direct connections found)</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium tracking-tight text-white">Discovered Gems</h3>
+              {isFallbackRecommendations && (
+                <p className="text-[10px] font-mono text-text-muted mt-0.5">
+                  SUGGESTED TRACKS (no direct connections found)
+                </p>
+              )}
+            </div>
+            <span className="text-xs font-mono text-analog">
+              {relatedTracks.length} RELATED ARTIFACTS
+            </span>
+          </div>
+
+          <div className="flex gap-[--space-lg] overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
+            {relatedTracks.map((rec) => (
+              <div
+                key={rec.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleCardClick(rec)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleCardClick(rec);
+                  }
+                }}
+                onMouseEnter={() => setHoveredCardId(rec.id)}
+                onMouseLeave={() => setHoveredCardId(null)}
+                className="relative min-w-[280px] bg-void border border-border p-4 rounded-[--radius-md] cursor-pointer group hover:border-cyber/30 hover:bg-surface-hover hover:-translate-y-1 hover:shadow-glow-cyber-subtle focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none transition-[transform,box-shadow,border-color,background-color] duration-[--duration-normal] ease-[--ease-out-expo] animate-fade-in-up opacity-0"
+                style={{
+                  animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`,
+                  animationFillMode: 'forwards',
+                }}
+              >
+                <div className="relative aspect-square rounded-[--radius-md] overflow-hidden mb-4 bg-gray-900">
+                  {rec.img ? (
+                    <img
+                      src={rec.img}
+                      alt={rec.title}
+                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-[--duration-slow]"
+                    />
+                  ) : (
+                    <PlaceholderCover title={rec.title} group={rec.group} />
+                  )}
+                  {/* Target Scan Overlay on hover */}
+                  <TargetScanOverlay
+                    isHovered={hoveredCardId === rec.id}
+                    index={relatedTracks.indexOf(rec)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="font-semibold text-white truncate">{rec.title}</h4>
+                  {rec.artist && (
+                    <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
                   )}
                 </div>
-                <span className="text-xs font-mono text-analog">{relatedTracks.length} RELATED ARTIFACTS</span>
-            </div>
 
-            <div className="flex gap-[--space-lg] overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
-                {relatedTracks.map((rec) => (
-                    <div
-                        key={rec.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleCardClick(rec)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleCardClick(rec);
-                          }
-                        }}
-                        onMouseEnter={() => setHoveredCardId(rec.id)}
-                        onMouseLeave={() => setHoveredCardId(null)}
-                        className="relative min-w-[280px] bg-void border border-border p-4 rounded-[--radius-md] cursor-pointer group hover:border-cyber/30 hover:bg-surface-hover hover:-translate-y-1 hover:shadow-glow-cyber-subtle focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none transition-[transform,box-shadow,border-color,background-color] duration-[--duration-normal] ease-[--ease-out-expo] animate-fade-in-up opacity-0"
-                        style={{ animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`, animationFillMode: 'forwards' }}
-                    >
-                        <div className="relative aspect-square rounded-[--radius-md] overflow-hidden mb-4 bg-gray-900">
-                             {rec.img ? (
-                               <img
-                                 src={rec.img}
-                                 alt={rec.title}
-                                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-[--duration-slow]"
-                               />
-                             ) : (
-                               <PlaceholderCover title={rec.title} group={rec.group} />
-                             )}
-                             {/* Target Scan Overlay on hover */}
-                             <TargetScanOverlay isHovered={hoveredCardId === rec.id} index={relatedTracks.indexOf(rec)} />
-                        </div>
-
-                        <div className="space-y-1">
-                            <h4 className="font-semibold text-white truncate">{rec.title}</h4>
-                            {rec.artist && <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>}
-                        </div>
-
-                        <div className="mt-4 pt-3 border-t border-white/5">
-                            <Badge variant="analog" glow>
-                                <span className="font-bold">LOGIC:</span> {rec.reason}
-                            </Badge>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Agent Activity Log - Collapsible (P2:17 — stagger) */}
-            {!isRestoredSession && (
-              <div className="animate-stagger-in stagger-5">
-                <ActivityLog logs={logs} isComplete={isComplete} />
+                <div className="mt-4 pt-3 border-t border-white/5">
+                  <Badge variant="analog" glow>
+                    <span className="font-bold">LOGIC:</span> {rec.reason}
+                  </Badge>
+                </div>
               </div>
-            )}
+            ))}
+          </div>
+
+          {/* Agent Activity Log - Collapsible (P2:17 — stagger) */}
+          {!isRestoredSession && (
+            <div className="animate-stagger-in stagger-5">
+              <ActivityLog logs={logs} isComplete={isComplete} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -416,7 +493,9 @@ const Dashboard: React.FC<DashboardProps> = ({ trackData, onNavigate, onAnalyzeT
 
       {/* UX: ARIA live region for undo toast announcements */}
       <div aria-live="assertive" className="sr-only">
-        {undoToast ? `Analyzing ${undoToast.trackTitle}. Press Ctrl+Z or activate the undo button to cancel.` : ''}
+        {undoToast
+          ? `Analyzing ${undoToast.trackTitle}. Press Ctrl+Z or activate the undo button to cancel.`
+          : ''}
       </div>
     </div>
   );

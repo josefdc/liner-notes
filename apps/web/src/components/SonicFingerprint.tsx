@@ -12,7 +12,7 @@ function transformToRadarData(profile: GenreProfileItem[] | undefined) {
   if (!profile || profile.length === 0) {
     return RADAR_DATA;
   }
-  return profile.map(item => ({
+  return profile.map((item) => ({
     subject: item.genre,
     A: item.value,
     fullMark: 100,

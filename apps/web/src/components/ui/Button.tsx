@@ -12,10 +12,14 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
-  cyber: 'border-cyber/50 text-cyber hover:bg-cyber/10 hover:border-cyber/70 hover:shadow-glow-cyber-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-cyber/30',
-  analog: 'border-analog/50 text-analog hover:bg-analog/10 hover:border-analog/70 hover:shadow-glow-analog-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-analog/30',
-  ghost: 'border-white/10 text-text-tertiary hover:text-white hover:bg-white/5 hover:border-white/20 focus-visible:ring-white/10',
-  spotify: 'border-spotify/50 text-spotify hover:bg-spotify/10 hover:border-spotify/70 hover:shadow-glow-spotify-subtle focus-visible:ring-spotify/30',
+  cyber:
+    'border-cyber/50 text-cyber hover:bg-cyber/10 hover:border-cyber/70 hover:shadow-glow-cyber-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-cyber/30',
+  analog:
+    'border-analog/50 text-analog hover:bg-analog/10 hover:border-analog/70 hover:shadow-glow-analog-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-analog/30',
+  ghost:
+    'border-white/10 text-text-tertiary hover:text-white hover:bg-white/5 hover:border-white/20 focus-visible:ring-white/10',
+  spotify:
+    'border-spotify/50 text-spotify hover:bg-spotify/10 hover:border-spotify/70 hover:shadow-glow-spotify-subtle focus-visible:ring-spotify/30',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -46,7 +50,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled,
       ...props
     },
-    ref
+    ref,
   ) => {
     const isDisabled = disabled || isLoading;
 
@@ -71,7 +75,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {!isLoading && rightIcon}
       </button>
     );
-  }
+  },
 );
 
 Button.displayName = 'Button';

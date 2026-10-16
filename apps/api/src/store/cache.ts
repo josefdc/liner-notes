@@ -26,9 +26,9 @@ export interface SpotifySearchResult {
 // TTL Defaults (ms)
 // =============================================================================
 
-const TTL_AUDIO = 30 * 24 * 60 * 60 * 1000;     // 30 days
-const TTL_RESEARCH = 48 * 60 * 60 * 1000;         // 48 hours
-const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000;      // 7 days
+const TTL_AUDIO = 30 * 24 * 60 * 60 * 1000; // 30 days
+const TTL_RESEARCH = 48 * 60 * 60 * 1000; // 48 hours
+const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // =============================================================================
 // SonicCache
@@ -49,7 +49,9 @@ export class SonicCache {
     try {
       const row = this.db
         .prepare("SELECT full_data, confidence, expires_at FROM audio_cache WHERE spotify_id = ?")
-        .get(spotifyId) as { full_data: string; confidence: string; expires_at: number } | undefined;
+        .get(spotifyId) as
+        | { full_data: string; confidence: string; expires_at: number }
+        | undefined;
 
       if (!row) return null;
 
@@ -88,7 +90,7 @@ export class SonicCache {
              energy = excluded.energy,
              confidence = excluded.confidence,
              full_data = excluded.full_data,
-             expires_at = excluded.expires_at`
+             expires_at = excluded.expires_at`,
         )
         .run(
           spotifyId,
@@ -97,7 +99,7 @@ export class SonicCache {
           features.energy,
           features.confidence,
           JSON.stringify(features),
-          expiresAt
+          expiresAt,
         );
     } catch (err) {
       console.error("[SonicCache] putAudio error:", err);
@@ -139,14 +141,14 @@ export class SonicCache {
              samples_count = excluded.samples_count,
              trivia_count = excluded.trivia_count,
              full_data = excluded.full_data,
-             expires_at = excluded.expires_at`
+             expires_at = excluded.expires_at`,
         )
         .run(
           spotifyId,
           data.samples?.length ?? 0,
           data.productionTrivia?.length ?? 0,
           JSON.stringify(data),
-          expiresAt
+          expiresAt,
         );
     } catch (err) {
       console.error("[SonicCache] putResearch error:", err);
@@ -161,17 +163,19 @@ export class SonicCache {
     try {
       const row = this.db
         .prepare(
-          "SELECT cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?"
+          "SELECT cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
         )
-        .get(searchKey) as {
-        cover_url: string | null;
-        spotify_url: string | null;
-        preview_url: string | null;
-        spotify_id: string | null;
-        track_title: string | null;
-        track_artist: string | null;
-        expires_at: number;
-      } | undefined;
+        .get(searchKey) as
+        | {
+            cover_url: string | null;
+            spotify_url: string | null;
+            preview_url: string | null;
+            spotify_id: string | null;
+            track_title: string | null;
+            track_artist: string | null;
+            expires_at: number;
+          }
+        | undefined;
 
       if (!row) return null;
 
@@ -208,7 +212,7 @@ export class SonicCache {
              spotify_id = excluded.spotify_id,
              track_title = excluded.track_title,
              track_artist = excluded.track_artist,
-             expires_at = excluded.expires_at`
+             expires_at = excluded.expires_at`,
         )
         .run(
           searchKey,
@@ -218,7 +222,7 @@ export class SonicCache {
           result.spotifyId,
           result.trackTitle,
           result.trackArtist,
-          expiresAt
+          expiresAt,
         );
     } catch (err) {
       console.error("[SonicCache] putArtwork error:", err);
@@ -245,7 +249,7 @@ export class SonicCache {
 
       if (audio + research + artwork > 0) {
         console.log(
-          `[SonicCache] Purged expired: ${audio} audio, ${research} research, ${artwork} artwork`
+          `[SonicCache] Purged expired: ${audio} audio, ${research} research, ${artwork} artwork`,
         );
       }
 

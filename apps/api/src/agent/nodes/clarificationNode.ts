@@ -17,7 +17,7 @@ interface DisambiguationInterrupt {
 
 export async function clarificationNode(
   state: SonicAgentStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<SonicAgentStateType>> {
   console.log("⏸️ [Clarification] Waiting for user to select track...");
   const store = getStore();
@@ -39,7 +39,7 @@ export async function clarificationNode(
   }
 
   // Find the selected candidate and convert to SpotifyData
-  const selected = state.candidates?.find(c => c.id === selectedId);
+  const selected = state.candidates?.find((c) => c.id === selectedId);
 
   if (!selected) {
     return {
@@ -49,12 +49,21 @@ export async function clarificationNode(
   }
 
   const writer = config.writer;
-  writer?.({ type: "status", code: "SPOTIFY-FOUND", message: `User confirmed: "${selected.title}" // ${selected.artist}`, node: "clarification", timestamp: new Date().toISOString() });
+  writer?.({
+    type: "status",
+    code: "SPOTIFY-FOUND",
+    message: `User confirmed: "${selected.title}" // ${selected.artist}`,
+    node: "clarification",
+    timestamp: new Date().toISOString(),
+  });
 
   // Save disambiguation preference in long-term memory
   if (store && state.candidates) {
     const normalizedQuery = state.songQuery.toLowerCase().trim();
-    const candidateIds = state.candidates.map(c => c.id).sort().join(",");
+    const candidateIds = state.candidates
+      .map((c) => c.id)
+      .sort()
+      .join(",");
     try {
       await store.put(["disambiguation"], normalizedQuery, {
         selectedTrackId: selectedId,

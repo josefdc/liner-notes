@@ -39,13 +39,11 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ lo
   const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
 
   return (
-    <div className={`flex items-start font-mono text-xs leading-relaxed py-0.5 content-auto ${isLatest ? 'animate-fade-in-right' : ''}`}>
-      <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums opacity-60">
-        {time}
-      </span>
-      <span className={`${colorClass} mr-2 shrink-0 font-bold tracking-wider`}>
-        {codePrefix}
-      </span>
+    <div
+      className={`flex items-start font-mono text-xs leading-relaxed py-0.5 content-auto ${isLatest ? 'animate-fade-in-right' : ''}`}
+    >
+      <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums opacity-60">{time}</span>
+      <span className={`${colorClass} mr-2 shrink-0 font-bold tracking-wider`}>{codePrefix}</span>
       <span className="text-text-secondary tracking-tight">
         {log.message}
         {isLatest && cyberCursor}
@@ -88,9 +86,8 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
     <div className="relative w-full max-w-3xl mx-auto group" aria-label="Analysis system console">
       {/* Glow Effect Background */}
       <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/15 to-accent-purple/10 rounded-[--radius-md] blur opacity-20 group-hover:opacity-40 transition duration-[--duration-dramatic] ease-[--ease-out-expo]"></div>
-      
+
       <div className="relative rounded-[--radius-md] overflow-hidden border border-border bg-black/90 shadow-2xl backdrop-blur-xl">
-        
         {/* Terminal Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -104,15 +101,21 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
               {isComplete ? '[ COMPLETE ]' : '[ ACTIVE ]'}
             </span>
             <div className="flex gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-status-error/50" title="Close (just kidding)" />
+              <div
+                className="w-2 h-2 rounded-full bg-status-error/50"
+                title="Close (just kidding)"
+              />
               <div className="w-2 h-2 rounded-full bg-accent-amber/50" title="Minimize (nope)" />
-              <div className="w-2 h-2 rounded-full bg-status-success/50" title="Maximize (dreaming)" />
+              <div
+                className="w-2 h-2 rounded-full bg-status-success/50"
+                title="Maximize (dreaming)"
+              />
             </div>
           </div>
         </div>
 
         {/* Terminal Body */}
-        <div 
+        <div
           ref={consoleRef}
           role="log"
           aria-live="polite"
@@ -123,7 +126,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
           <div className="absolute inset-0 pointer-events-none z-10 crt-scanlines opacity-30"></div>
 
           {/* Grid background pattern */}
-          <div 
+          <div
             className="absolute inset-0 pointer-events-none opacity-[0.03]"
             style={{
               backgroundImage: 'linear-gradient(rgba(0,240,255,0.1) 1px, transparent 1px)',
@@ -142,13 +145,9 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
           {/* Log Entries */}
           <div className="space-y-0.5 relative z-0">
             {logs.map((log, idx) => (
-              <LogLine 
-                key={log.id} 
-                log={log} 
-                isLatest={idx === logs.length - 1 && !isComplete}
-              />
+              <LogLine key={log.id} log={log} isLatest={idx === logs.length - 1 && !isComplete} />
             ))}
-            
+
             {/* Processing Indicator "Mira" Animada */}
             {!isComplete && logs.length > 0 && (
               <div className="pt-3 flex items-center text-cyber text-xs border-t border-white/5 mt-3">
@@ -157,9 +156,15 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
                 </span>
                 <span className="tracking-widest font-mono">PROCESSING_DATA_STREAM</span>
                 <span className="inline-flex ml-2">
-                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>
+                    .
+                  </span>
+                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>
+                    .
+                  </span>
+                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>
+                    .
+                  </span>
                 </span>
               </div>
             )}
@@ -173,18 +178,18 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
                 </div>
               </div>
             )}
-            
+
             {/* Elemento invisible para forzar scroll al fondo */}
             <div ref={bottomRef} className="h-1" />
           </div>
         </div>
-        
+
         {/* Footer Status Bar — P3:26 real derived values */}
         <div className="bg-white/5 border-t border-white/5 px-4 py-1.5 flex justify-between items-center text-[9px] font-mono text-text-tertiary uppercase">
           <span>EVENTS: {logs.length}</span>
           <span>UPLINK: {elapsedSeconds}s</span>
-          <span className={isComplete ? "text-status-success" : "text-cyber animate-pulse"}>
-            {isComplete ? "● ONLINE" : "◉ BUSY"}
+          <span className={isComplete ? 'text-status-success' : 'text-cyber animate-pulse'}>
+            {isComplete ? '● ONLINE' : '◉ BUSY'}
           </span>
         </div>
       </div>

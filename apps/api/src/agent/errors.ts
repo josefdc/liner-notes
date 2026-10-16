@@ -1,5 +1,8 @@
 export class TransientError extends Error {
-  constructor(message: string, public readonly statusCode?: number) {
+  constructor(
+    message: string,
+    public readonly statusCode?: number,
+  ) {
     super(message);
     this.name = "TransientError";
   }
@@ -10,9 +13,14 @@ export function isTransient(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
   const code = (error as any)?.status ?? (error as any)?.statusCode;
   return (
-    code === 429 || code === 502 || code === 503 || code === 504 ||
-    msg.includes("quota") || msg.includes("Rate limit") ||
-    msg.includes("ECONNREFUSED") || msg.includes("ETIMEDOUT") ||
+    code === 429 ||
+    code === 502 ||
+    code === 503 ||
+    code === 504 ||
+    msg.includes("quota") ||
+    msg.includes("Rate limit") ||
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ETIMEDOUT") ||
     msg.includes("fetch failed")
   );
 }
@@ -28,7 +36,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  opts: { maxAttempts?: number; initialInterval?: number; backoffFactor?: number } = {}
+  opts: { maxAttempts?: number; initialInterval?: number; backoffFactor?: number } = {},
 ): Promise<T> {
   const { maxAttempts = 3, initialInterval = 1000, backoffFactor = 2 } = opts;
   let lastError: Error | undefined;

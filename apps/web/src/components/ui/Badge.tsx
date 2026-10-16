@@ -37,21 +37,29 @@ const sizeStyles: Record<BadgeSize, string> = {
   md: 'px-3 py-1.5 text-xs gap-1.5',
 };
 
-const baseStyles = 'inline-flex items-center rounded-[--radius-sm] border font-mono uppercase tracking-[--tracking-widest] transition-all duration-[--duration-fast]';
+const baseStyles =
+  'inline-flex items-center rounded-[--radius-sm] border font-mono uppercase tracking-[--tracking-widest] transition-all duration-[--duration-fast]';
 
 export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
-  ({ children, variant = 'cyber', size = 'sm', glow = false, icon, className = '', ...props }, ref) => {
+  (
+    { children, variant = 'cyber', size = 'sm', glow = false, icon, className = '', ...props },
+    ref,
+  ) => {
     return (
       <span
         ref={ref}
         className={`${baseStyles} ${sizeStyles[size]} ${variantStyles[variant]} ${glow ? glowStyles[variant] : ''} ${className}`}
         {...props}
       >
-        {icon && <span className="flex-shrink-0" aria-hidden="true">{icon}</span>}
+        {icon && (
+          <span className="flex-shrink-0" aria-hidden="true">
+            {icon}
+          </span>
+        )}
         {children}
       </span>
     );
-  }
+  },
 );
 
 Badge.displayName = 'Badge';

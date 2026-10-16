@@ -12,7 +12,7 @@ export const CURRENT_TRACK: TrackData = {
   id: 't1',
   title: 'Midnight City',
   artist: 'M83',
-  album: 'Hurry Up, We\'re Dreaming',
+  album: "Hurry Up, We're Dreaming",
   coverUrl: IMAGES.ALBUM_1,
   bpm: 105,
   segments: [
@@ -23,28 +23,29 @@ export const CURRENT_TRACK: TrackData = {
     { label: 'Bridge', start: 70, end: 85, color: '#FFB000' },
     { label: 'Outro', start: 85, end: 100, color: '#374151' },
   ],
-  samples: [
-    { time: 75, description: 'Vocal chop from "Downtown" (1984)' }
-  ],
+  samples: [{ time: 75, description: 'Vocal chop from "Downtown" (1984)' }],
   factoids: [
     {
       id: 'f1',
       title: 'Production Insight',
-      content: 'The famous saxophone solo at the end was almost cut from the final mix. The producer felt it was "too 80s" until the very last listening session.',
-      type: 'production'
+      content:
+        'The famous saxophone solo at the end was almost cut from the final mix. The producer felt it was "too 80s" until the very last listening session.',
+      type: 'production',
     },
     {
       id: 'f2',
       title: 'Lyrical Analysis',
-      content: 'The phrase "waiting in the car" is a metaphor for liminal spaces—the state of being between two destinations, much like the band\'s transition between genres.',
-      type: 'lyrics'
+      content:
+        'The phrase "waiting in the car" is a metaphor for liminal spaces—the state of being between two destinations, much like the band\'s transition between genres.',
+      type: 'lyrics',
     },
     {
       id: 'f3',
       title: 'Sample Trivia',
-      content: 'The iconic vocal riff isn\'t a synth; it is a human voice heavily processed through a bitcrusher and reverb.',
-      type: 'trivia'
-    }
+      content:
+        "The iconic vocal riff isn't a synth; it is a human voice heavily processed through a bitcrusher and reverb.",
+      type: 'trivia',
+    },
   ],
   genealogy: {
     nodes: [
@@ -59,8 +60,8 @@ export const CURRENT_TRACK: TrackData = {
       { source: 'origin', target: 'sib1', value: 3 },
       { source: 'origin', target: 'sib2', value: 3 },
       { source: 'current', target: 'child1', value: 2 },
-    ]
-  }
+    ],
+  },
 };
 
 // Fallback radar data when no genre profile is available
@@ -74,8 +75,32 @@ export const RADAR_DATA = [
 ];
 
 export const RECOMMENDATIONS = [
-  { id: 'r1', title: 'Plastic Love', artist: 'Mariya Takeuchi', reason: 'City Pop aesthetic match', img: 'https://picsum.photos/seed/rec1/300/300' },
-  { id: 'r2', title: 'Nightcall', artist: 'Kavinsky', reason: 'High BPM + Synth texture', img: 'https://picsum.photos/seed/rec2/300/300' },
-  { id: 'r3', title: 'Space Song', artist: 'Beach House', reason: 'Melancholic progression', img: 'https://picsum.photos/seed/rec3/300/300' },
-  { id: 'r4', title: 'After Dark', artist: 'Mr. Kitty', reason: 'Lo-fi atmosphere affinity', img: 'https://picsum.photos/seed/rec4/300/300' },
+  {
+    id: 'r1',
+    title: 'Plastic Love',
+    artist: 'Mariya Takeuchi',
+    reason: 'City Pop aesthetic match',
+    img: 'https://picsum.photos/seed/rec1/300/300',
+  },
+  {
+    id: 'r2',
+    title: 'Nightcall',
+    artist: 'Kavinsky',
+    reason: 'High BPM + Synth texture',
+    img: 'https://picsum.photos/seed/rec2/300/300',
+  },
+  {
+    id: 'r3',
+    title: 'Space Song',
+    artist: 'Beach House',
+    reason: 'Melancholic progression',
+    img: 'https://picsum.photos/seed/rec3/300/300',
+  },
+  {
+    id: 'r4',
+    title: 'After Dark',
+    artist: 'Mr. Kitty',
+    reason: 'Lo-fi atmosphere affinity',
+    img: 'https://picsum.photos/seed/rec4/300/300',
+  },
 ];

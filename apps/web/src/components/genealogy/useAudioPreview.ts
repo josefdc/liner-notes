@@ -56,8 +56,8 @@ export function useAudioPreview() {
 
     const playPromise = audioRef.current.play();
     if (playPromise !== undefined) {
-      playPromise.catch(error => {
-        console.log("Audio preview blocked:", error);
+      playPromise.catch((error) => {
+        console.log('Audio preview blocked:', error);
         setHasPreviewSupport(false);
       });
     }

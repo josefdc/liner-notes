@@ -25,7 +25,9 @@ globalThis.fetch = (async () => {
   throw new Error("network access is not expected without an API key");
 }) as typeof fetch;
 
-const cases: Array<[string, { invoke: (input: never) => Promise<unknown> }, Record<string, string>]> = [
+const cases: Array<
+  [string, { invoke: (input: never) => Promise<unknown> }, Record<string, string>]
+> = [
   ["track tags", getLastfmTrackTags, { title: "Bohemian Rhapsody", artist: "Queen" }],
   ["artist tags", getLastfmArtistTags, { artist: "Queen" }],
   ["similar tracks", getLastfmSimilarTracks, { title: "Bohemian Rhapsody", artist: "Queen" }],
@@ -48,7 +50,9 @@ for (const [name, lastfmTool, input] of cases) {
     ) {
       console.log(`ok   ${name}: reports "not configured"`);
     } else {
-      console.log(`FAIL ${name}: expected only a "not configured" error, got ${JSON.stringify(data)}`);
+      console.log(
+        `FAIL ${name}: expected only a "not configured" error, got ${JSON.stringify(data)}`,
+      );
       failed++;
     }
   } catch (error) {

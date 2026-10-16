@@ -22,10 +22,7 @@ import { SqliteStore } from "../store/store.js";
 import dotenv from "dotenv";
 
 import type { TrackData, SearchCandidate } from "./schema.js";
-import {
-  SonicAgentState,
-  type SonicAgentStateType,
-} from "./state.js";
+import { SonicAgentState, type SonicAgentStateType } from "./state.js";
 import {
   scoutNode,
   clarificationNode,
@@ -153,7 +150,7 @@ export async function analyzeSong(songQuery: string): Promise<TrackData | null> 
 
   const result = await graph.invoke(
     { songQuery },
-    { configurable: { thread_id: `analysis-${Date.now()}` } }
+    { configurable: { thread_id: `analysis-${Date.now()}` } },
   );
 
   if (result.error) {
@@ -173,7 +170,7 @@ export async function analyzeSong(songQuery: string): Promise<TrackData | null> 
 
 export async function* streamAnalysis(
   songQuery: string,
-  threadId?: string
+  threadId?: string,
 ): AsyncGenerator<{ type: string; data: unknown }> {
   console.log("\n🚀 [Sonic Agent v2] Starting streaming analysis for:", songQuery);
 
@@ -185,7 +182,7 @@ export async function* streamAnalysis(
     {
       configurable: { thread_id: configThreadId },
       streamMode: ["updates", "custom"],
-    }
+    },
   );
 
   for await (const event of stream) {
@@ -207,17 +204,16 @@ export async function* streamAnalysis(
 
 export async function resumeWithSelection(
   threadId: string,
-  selectedTrackId: string
+  selectedTrackId: string,
 ): Promise<TrackData | null> {
   console.log("\n🔄 [Sonic Agent v2] Resuming with selection:", selectedTrackId);
 
   const graph = createSonicAgentGraph();
 
   // Use Command({ resume: ... }) to continue from interrupt with the selected value
-  const result = await graph.invoke(
-    new Command({ resume: selectedTrackId }),
-    { configurable: { thread_id: threadId } }
-  );
+  const result = await graph.invoke(new Command({ resume: selectedTrackId }), {
+    configurable: { thread_id: threadId },
+  });
 
   if (result.error) {
     console.error("❌ [Sonic Agent] Error:", result.error);

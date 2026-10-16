@@ -1,6 +1,16 @@
 import React, { useEffect, useState, useReducer, useRef, useCallback } from 'react';
 import { TrackData, AgentLog } from '../types';
-import { Network, Cpu, Search, Music, Check, AlertCircle, RotateCcw, ArrowRight, ArrowLeft } from 'lucide-react';
+import {
+  Network,
+  Cpu,
+  Search,
+  Music,
+  Check,
+  AlertCircle,
+  RotateCcw,
+  ArrowRight,
+  ArrowLeft,
+} from 'lucide-react';
 import type { SearchCandidate, AgentStatus } from '../hooks/agent/types';
 import SystemConsole from './SystemConsole';
 import { Button } from './ui/Button';
@@ -81,13 +91,24 @@ function suggestionReducer(state: SuggestionState, action: SuggestionAction): Su
 }
 
 // Hoisted constant — Set for O(1) status lookups
-const ANALYZING_STATUSES = new Set<AgentStatus>(['searching', 'analyzing', 'researching', 'composing', 'disambiguation']);
+const ANALYZING_STATUSES = new Set<AgentStatus>([
+  'searching',
+  'analyzing',
+  'researching',
+  'composing',
+  'disambiguation',
+]);
 
 // UX: Error hint helper (Item 10 - in-character error copy)
 function getErrorHint(error: string | null): string {
   if (!error) return 'Unexpected interference. The system is ready to retry.';
   const lower = error.toLowerCase();
-  if (lower.includes('timeout') || lower.includes('connection') || lower.includes('network') || lower.includes('fetch'))
+  if (
+    lower.includes('timeout') ||
+    lower.includes('connection') ||
+    lower.includes('network') ||
+    lower.includes('fetch')
+  )
     return 'Uplink unstable. Check your connection and retry.';
   if (lower.includes('not found') || lower.includes('no results') || lower.includes('404'))
     return 'No signal detected. Verify track name and artist.';
@@ -134,7 +155,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const debouncedQuery = useDebounce(searchQuery, 300);
 
   // ─── P1:10 Track preview state ────────────────────────────────────────────
-  const [previewTrack, setPreviewTrack] = useState<{ title: string; artist: string; coverUrl: string } | null>(null);
+  const [previewTrack, setPreviewTrack] = useState<{
+    title: string;
+    artist: string;
+    coverUrl: string;
+  } | null>(null);
 
   // ─── P1:9 Debounced ARIA live region ──────────────────────────────────────
   const [announcedStatus, setAnnouncedStatus] = useState('');
@@ -205,51 +230,63 @@ const Onboarding: React.FC<OnboardingProps> = ({
   }, []);
 
   // Handle double-click or Enter - fill and analyze (P1:10 — set preview)
-  const handleSelectAndAnalyze = useCallback((candidate: SearchCandidate) => {
-    const query = `${candidate.title} ${candidate.artist}`;
-    setSearchQuery(query);
-    sugDispatch({ type: 'CLEAR' });
-    setPreviewTrack({
-      title: candidate.title,
-      artist: candidate.artist,
-      coverUrl: candidate.coverUrl,
-    });
-    analyze(query);
-  }, [analyze]);
+  const handleSelectAndAnalyze = useCallback(
+    (candidate: SearchCandidate) => {
+      const query = `${candidate.title} ${candidate.artist}`;
+      setSearchQuery(query);
+      sugDispatch({ type: 'CLEAR' });
+      setPreviewTrack({
+        title: candidate.title,
+        artist: candidate.artist,
+        coverUrl: candidate.coverUrl,
+      });
+      analyze(query);
+    },
+    [analyze],
+  );
 
   // Keyboard navigation
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!showSuggestions || suggestions.length === 0) {
-      return;
-    }
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!showSuggestions || suggestions.length === 0) {
+        return;
+      }
 
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        sugDispatch({ type: 'SET_SELECTED', index: selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : 0 });
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        sugDispatch({ type: 'SET_SELECTED', index: selectedIndex > 0 ? selectedIndex - 1 : suggestions.length - 1 });
-        break;
-      case 'Enter':
-        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+      switch (e.key) {
+        case 'ArrowDown':
           e.preventDefault();
-          handleSelectAndAnalyze(suggestions[selectedIndex]);
-        }
-        break;
-      case 'Escape':
-        sugDispatch({ type: 'SET_SHOW', show: false });
-        sugDispatch({ type: 'SET_SELECTED', index: -1 });
-        break;
-      case 'Tab':
-        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+          sugDispatch({
+            type: 'SET_SELECTED',
+            index: selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : 0,
+          });
+          break;
+        case 'ArrowUp':
           e.preventDefault();
-          handleSelectSuggestion(suggestions[selectedIndex]);
-        }
-        break;
-    }
-  }, [showSuggestions, suggestions, selectedIndex, handleSelectAndAnalyze, handleSelectSuggestion]);
+          sugDispatch({
+            type: 'SET_SELECTED',
+            index: selectedIndex > 0 ? selectedIndex - 1 : suggestions.length - 1,
+          });
+          break;
+        case 'Enter':
+          if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+            e.preventDefault();
+            handleSelectAndAnalyze(suggestions[selectedIndex]);
+          }
+          break;
+        case 'Escape':
+          sugDispatch({ type: 'SET_SHOW', show: false });
+          sugDispatch({ type: 'SET_SELECTED', index: -1 });
+          break;
+        case 'Tab':
+          if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+            e.preventDefault();
+            handleSelectSuggestion(suggestions[selectedIndex]);
+          }
+          break;
+      }
+    },
+    [showSuggestions, suggestions, selectedIndex, handleSelectAndAnalyze, handleSelectSuggestion],
+  );
 
   // Handle completion (Item 9 — skip button + silent auto-proceed)
   useEffect(() => {
@@ -316,7 +353,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
     if (hitlCountdown === null || hitlCountdown <= 0 || hitlPaused) return;
 
     hitlTimerRef.current = setInterval(() => {
-      setHitlCountdown(prev => {
+      setHitlCountdown((prev) => {
         if (prev === null || prev <= 1) {
           // Time's up — auto-select
           if (candidates && candidates[hitlSelectedIndex]) {
@@ -337,40 +374,46 @@ const Onboarding: React.FC<OnboardingProps> = ({
   }, [hitlCountdown, hitlPaused, candidates, hitlSelectedIndex, selectCandidate]);
 
   // HITL candidate selection handler
-  const handleHitlSelect = useCallback((index: number) => {
-    if (!candidates) return;
-    // Update preview (P1:10)
-    const candidate = candidates[index];
-    setPreviewTrack({
-      title: candidate.title,
-      artist: candidate.artist,
-      coverUrl: candidate.coverUrl,
-    });
-    setHitlSelectedIndex(index);
-    setHitlCountdown(null);
-    if (hitlTimerRef.current) {
-      clearInterval(hitlTimerRef.current);
-      hitlTimerRef.current = null;
-    }
-    selectCandidate(candidate.id);
-  }, [candidates, selectCandidate]);
+  const handleHitlSelect = useCallback(
+    (index: number) => {
+      if (!candidates) return;
+      // Update preview (P1:10)
+      const candidate = candidates[index];
+      setPreviewTrack({
+        title: candidate.title,
+        artist: candidate.artist,
+        coverUrl: candidate.coverUrl,
+      });
+      setHitlSelectedIndex(index);
+      setHitlCountdown(null);
+      if (hitlTimerRef.current) {
+        clearInterval(hitlTimerRef.current);
+        hitlTimerRef.current = null;
+      }
+      selectCandidate(candidate.id);
+    },
+    [candidates, selectCandidate],
+  );
 
   // Handle Enter during HITL to confirm current selection
-  const handleHitlKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!candidates || hitlCountdown === null) return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleHitlSelect(hitlSelectedIndex);
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHitlSelectedIndex(prev => (prev < candidates.length - 1 ? prev + 1 : 0));
-      setHitlCountdown(null); // Pause countdown on interaction
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHitlSelectedIndex(prev => (prev > 0 ? prev - 1 : candidates.length - 1));
-      setHitlCountdown(null);
-    }
-  }, [candidates, hitlCountdown, hitlSelectedIndex, handleHitlSelect]);
+  const handleHitlKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!candidates || hitlCountdown === null) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleHitlSelect(hitlSelectedIndex);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHitlSelectedIndex((prev) => (prev < candidates.length - 1 ? prev + 1 : 0));
+        setHitlCountdown(null); // Pause countdown on interaction
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHitlSelectedIndex((prev) => (prev > 0 ? prev - 1 : candidates.length - 1));
+        setHitlCountdown(null);
+      }
+    },
+    [candidates, hitlCountdown, hitlSelectedIndex, handleHitlSelect],
+  );
 
   // ─── P0:2 Error retry handlers ────────────────────────────────────────────
   const handleRetry = useCallback(() => {
@@ -388,23 +431,38 @@ const Onboarding: React.FC<OnboardingProps> = ({
   // Calculate progress based on status
   const getProgress = () => {
     switch (status) {
-      case 'idle': return 0;
-      case 'connecting': return 10;
-      case 'searching': return 25;
-      case 'disambiguation': return 25; // P1:14 — hold at searching position
-      case 'analyzing': return 50;
-      case 'researching': return 70;
-      case 'composing': return 90;
-      case 'complete': return 100;
-      default: return 0;
+      case 'idle':
+        return 0;
+      case 'connecting':
+        return 10;
+      case 'searching':
+        return 25;
+      case 'disambiguation':
+        return 25; // P1:14 — hold at searching position
+      case 'analyzing':
+        return 50;
+      case 'researching':
+        return 70;
+      case 'composing':
+        return 90;
+      case 'complete':
+        return 100;
+      default:
+        return 0;
     }
   };
 
   // Display track for analysis view (P1:10 — previewTrack || trackData)
-  const displayTrack = previewTrack || (trackData ? { title: trackData.title, artist: trackData.artist, coverUrl: trackData.coverUrl } : null);
+  const displayTrack =
+    previewTrack ||
+    (trackData
+      ? { title: trackData.title, artist: trackData.artist, coverUrl: trackData.coverUrl }
+      : null);
 
   return (
-    <div className={`h-[100dvh] w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? 'justify-center' : 'justify-start pt-[min(8vh,4rem)]'}`}>
+    <div
+      className={`h-[100dvh] w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? 'justify-center' : 'justify-start pt-[min(8vh,4rem)]'}`}
+    >
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-gray-900 via-void to-void opacity-40"></div>
 
@@ -426,7 +484,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="relative">
               <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-cyber transition-colors z-10" size={20} />
+                <Search
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-cyber transition-colors z-10"
+                  size={20}
+                />
                 {isLoadingSuggestions && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10">
                     <div className="w-4 h-4 border-2 border-cyber/30 border-t-cyber rounded-full animate-spin" />
@@ -437,13 +498,17 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     // Merge internal ref and external searchInputRef
                     (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
                     if (typeof searchInputRef === 'function') searchInputRef(el);
-                    else if (searchInputRef) (searchInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+                    else if (searchInputRef)
+                      (searchInputRef as React.MutableRefObject<HTMLInputElement | null>).current =
+                        el;
                   }}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  onFocus={() => suggestions.length > 0 && sugDispatch({ type: 'SET_SHOW', show: true })}
+                  onFocus={() =>
+                    suggestions.length > 0 && sugDispatch({ type: 'SET_SHOW', show: true })
+                  }
                   placeholder="Song title + artist (e.g., Midnight City M83)"
                   className={`${inputVisualStyles} pl-12 pr-10`}
                   autoComplete="off"
@@ -504,7 +569,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
               )}
             </div>
 
-            <Button type="submit" variant="cyber" size="lg" disabled={!searchQuery.trim()} isLoading={isAnalyzing} className="w-full">
+            <Button
+              type="submit"
+              variant="cyber"
+              size="lg"
+              disabled={!searchQuery.trim()}
+              isLoading={isAnalyzing}
+              className="w-full"
+            >
               ANALYZE_SONG
             </Button>
           </form>
@@ -519,9 +591,16 @@ const Onboarding: React.FC<OnboardingProps> = ({
               {error && (
                 <p className="text-text-secondary text-xs font-mono text-center">{error}</p>
               )}
-              <p className="text-text-tertiary text-xs font-mono text-center">{getErrorHint(error)}</p>
+              <p className="text-text-tertiary text-xs font-mono text-center">
+                {getErrorHint(error)}
+              </p>
               <div className="flex flex-col items-center gap-3">
-                <Button variant="cyber" size="md" leftIcon={<RotateCcw size={14} />} onClick={handleRetry}>
+                <Button
+                  variant="cyber"
+                  size="md"
+                  leftIcon={<RotateCcw size={14} />}
+                  onClick={handleRetry}
+                >
                   RETRY ANALYSIS
                 </Button>
                 <button
@@ -548,10 +627,18 @@ const Onboarding: React.FC<OnboardingProps> = ({
       ) : (
         <div className="z-10 w-full max-w-2xl p-6">
           {/* Central Node Graphic (P1:11 — completion reveal animation) */}
-          <div className={`flex justify-center ${status === 'disambiguation' ? 'mb-4' : 'mb-8'} transition-all duration-300`}>
-            <div className={`relative ${status === 'complete' ? 'animate-completion-reveal' : ''} ${status === 'disambiguation' ? 'scale-75' : ''} transition-transform duration-300`}>
-              <div className={`w-28 h-28 rounded-full border ${status === 'complete' ? 'border-status-success/50' : 'border-cyber/20'} flex items-center justify-center animate-spin-slow`}>
-                <div className={`w-16 h-16 rounded-full border ${status === 'complete' ? 'border-status-success/30' : 'border-analog/40'} flex items-center justify-center animate-spin-reverse`}>
+          <div
+            className={`flex justify-center ${status === 'disambiguation' ? 'mb-4' : 'mb-8'} transition-all duration-300`}
+          >
+            <div
+              className={`relative ${status === 'complete' ? 'animate-completion-reveal' : ''} ${status === 'disambiguation' ? 'scale-75' : ''} transition-transform duration-300`}
+            >
+              <div
+                className={`w-28 h-28 rounded-full border ${status === 'complete' ? 'border-status-success/50' : 'border-cyber/20'} flex items-center justify-center animate-spin-slow`}
+              >
+                <div
+                  className={`w-16 h-16 rounded-full border ${status === 'complete' ? 'border-status-success/30' : 'border-analog/40'} flex items-center justify-center animate-spin-reverse`}
+                >
                   {status === 'complete' ? (
                     <Check size={24} className="text-status-success" />
                   ) : (
@@ -560,13 +647,25 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 </div>
               </div>
               {/* Data Lines */}
-              <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[1px] bg-gradient-to-r from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-cyber/50'} to-transparent animate-pulse`}></div>
-              <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[200%] bg-gradient-to-b from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-cyber/50'} to-transparent animate-pulse`}></div>
+              <div
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[1px] bg-gradient-to-r from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-cyber/50'} to-transparent animate-pulse`}
+              ></div>
+              <div
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[200%] bg-gradient-to-b from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-cyber/50'} to-transparent animate-pulse`}
+              ></div>
               {/* Corner brackets */}
-              <div className={`absolute -top-2 -left-2 w-4 h-4 border-l border-t ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`} />
-              <div className={`absolute -top-2 -right-2 w-4 h-4 border-r border-t ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`} />
-              <div className={`absolute -bottom-2 -left-2 w-4 h-4 border-l border-b ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`} />
-              <div className={`absolute -bottom-2 -right-2 w-4 h-4 border-r border-b ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`} />
+              <div
+                className={`absolute -top-2 -left-2 w-4 h-4 border-l border-t ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+              />
+              <div
+                className={`absolute -top-2 -right-2 w-4 h-4 border-r border-t ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+              />
+              <div
+                className={`absolute -bottom-2 -left-2 w-4 h-4 border-l border-b ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+              />
+              <div
+                className={`absolute -bottom-2 -right-2 w-4 h-4 border-r border-b ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+              />
             </div>
           </div>
 
@@ -600,7 +699,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <div className="text-center mb-3">
                 <p className="text-sm font-mono text-text-secondary">Is this the right track?</p>
                 {/* Keyboard hint above candidates */}
-                <p className="text-[10px] font-mono text-text-muted mt-1">↑↓ navigate &nbsp; Enter select &nbsp; hover pauses timer</p>
+                <p className="text-[10px] font-mono text-text-muted mt-1">
+                  ↑↓ navigate &nbsp; Enter select &nbsp; hover pauses timer
+                </p>
               </div>
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {candidates.map((candidate, index) => (
@@ -614,15 +715,23 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     }`}
                   >
                     {candidate.coverUrl ? (
-                      <img src={candidate.coverUrl} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                      <img
+                        src={candidate.coverUrl}
+                        alt=""
+                        className="w-8 h-8 rounded object-cover flex-shrink-0"
+                      />
                     ) : (
                       <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
                         <Music size={12} className="text-text-muted" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <span className="text-white text-sm font-mono truncate block">{candidate.title}</span>
-                      <span className="text-text-tertiary text-xs truncate block">{candidate.artist} • {candidate.releaseYear || candidate.album}</span>
+                      <span className="text-white text-sm font-mono truncate block">
+                        {candidate.title}
+                      </span>
+                      <span className="text-text-tertiary text-xs truncate block">
+                        {candidate.artist} • {candidate.releaseYear || candidate.album}
+                      </span>
                     </div>
                     {index === hitlSelectedIndex && (
                       <span className="text-cyber text-xs font-mono flex-shrink-0">▶</span>
@@ -640,9 +749,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     />
                   </div>
                   <p className="text-xs font-mono text-text-tertiary mt-1 text-center">
-                    {hitlPaused
-                      ? <span className="text-text-muted">(paused)</span>
-                      : `Take your time. We'll pick the top match if you don't.`}
+                    {hitlPaused ? (
+                      <span className="text-text-muted">(paused)</span>
+                    ) : (
+                      `Take your time. We'll pick the top match if you don't.`
+                    )}
                   </p>
                 </div>
               )}
@@ -670,7 +781,8 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <div
                   className="absolute inset-0 animate-progress-shimmer"
                   style={{
-                    backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                    backgroundImage:
+                      'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
                     backgroundSize: '200px 100%',
                     backgroundRepeat: 'no-repeat',
                   }}
@@ -680,10 +792,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
           </div>
 
           {/* P1:9 ARIA live region (debounced) */}
-          <div aria-live="polite" className="sr-only">{announcedStatus}</div>
+          <div aria-live="polite" className="sr-only">
+            {announcedStatus}
+          </div>
 
           {/* Status Text (P0:1 — human-readable messages) */}
-          <div className={`text-center mt-4 text-sm font-mono ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}>
+          <div
+            className={`text-center mt-4 text-sm font-mono ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}
+          >
             {status === 'complete' ? (
               <span className="inline-block overflow-hidden whitespace-nowrap border-r-2 border-status-success animate-[typing-reveal_1s_steps(40)_forwards] max-w-0">
                 {STATUS_MESSAGES[status]}

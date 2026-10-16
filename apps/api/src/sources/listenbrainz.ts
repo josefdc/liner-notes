@@ -79,7 +79,7 @@ export const getListenBrainzSimilarArtists = tool(
       let mbid = artistMbid;
       if (!mbid && artistName) {
         console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName}"...`);
-        mbid = await resolveArtistMbid(artistName) ?? undefined;
+        mbid = (await resolveArtistMbid(artistName)) ?? undefined;
         if (!mbid) {
           return JSON.stringify({
             found: false,
@@ -203,7 +203,7 @@ export const getListenBrainzSimilarArtists = tool(
         .optional()
         .describe("Artist name (will be resolved to MBID via MusicBrainz search)"),
     }),
-  }
+  },
 );
 
 // =============================================================================

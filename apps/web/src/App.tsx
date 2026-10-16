@@ -1,4 +1,13 @@
-import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, Suspense, lazy, startTransition } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  Suspense,
+  lazy,
+  startTransition,
+} from 'react';
 import Layout from './components/Layout';
 import Onboarding from './components/Onboarding';
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -9,7 +18,8 @@ import type { AgentStatus, SearchCandidate } from './hooks/agent/types';
 import type { Factoid } from './types';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
-const shimmerClass = 'bg-gradient-to-r from-white/[0.03] via-white/[0.07] to-white/[0.03] bg-[length:200%_100%] animate-progress-shimmer';
+const shimmerClass =
+  'bg-gradient-to-r from-white/[0.03] via-white/[0.07] to-white/[0.03] bg-[length:200%_100%] animate-progress-shimmer';
 
 const DashboardSkeleton = (
   <div className="h-full w-full p-4 md:p-10 flex flex-col gap-6 md:gap-8 overflow-hidden bg-void animate-fade-in">
@@ -24,12 +34,17 @@ const DashboardSkeleton = (
     <div className={`h-48 ${shimmerClass} border border-white/10 rounded-[--radius-lg]`} />
     {/* Grid skeleton */}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-      <div className={`lg:col-span-1 ${shimmerClass} border border-white/10 rounded-[--radius-lg] min-h-[300px]`} />
+      <div
+        className={`lg:col-span-1 ${shimmerClass} border border-white/10 rounded-[--radius-lg] min-h-[300px]`}
+      />
       <div className="lg:col-span-2 flex flex-col gap-6">
         <div className={`h-5 w-40 ${shimmerClass} rounded-[--radius-sm]`} />
         <div className="flex gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className={`min-w-[280px] h-80 ${shimmerClass} border border-white/10 rounded-[--radius-lg]`} />
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className={`min-w-[280px] h-80 ${shimmerClass} border border-white/10 rounded-[--radius-lg]`}
+            />
           ))}
         </div>
       </div>
@@ -73,7 +88,7 @@ interface PhaseViewProps {
     trackTitle: string,
     trackArtist: string,
     existingIds: string[],
-    onFactoid: (factoid: Factoid) => void
+    onFactoid: (factoid: Factoid) => void,
   ) => Promise<void>;
   // Navigation
   onAnalysisComplete: (trackData: TrackData) => void;
@@ -93,99 +108,111 @@ interface PhaseViewProps {
   isRestoredSession: boolean;
 }
 
-const PhaseView = React.memo<PhaseViewProps>(({
-  phase,
-  status,
-  logs,
-  trackData,
-  error,
-  isLoading,
-  isComplete,
-  candidates,
-  analyze,
-  selectCandidate,
-  searchSuggest,
-  decryptMoreFactoidsStream,
-  onAnalysisComplete,
-  onNavigate,
-  onAnalyzeTrack,
-  onBackToBoard,
-  onNewSearch,
-  dashboardHeadingRef,
-  playerHeadingRef,
-  searchInputRef,
-  onUndoAnalysis,
-  onRestorePrevious,
-  isRestoredSession,
-}) => {
-  switch (phase) {
-    case AppPhase.ONBOARDING:
-      return (
-        <Onboarding
-          status={status}
-          logs={logs}
-          trackData={trackData}
-          error={error}
-          isLoading={isLoading}
-          candidates={candidates}
-          analyze={analyze}
-          selectCandidate={selectCandidate}
-          searchSuggest={searchSuggest}
-          onComplete={onAnalysisComplete}
-          searchInputRef={searchInputRef}
-          onRestorePrevious={onRestorePrevious ?? undefined}
-        />
-      );
-    case AppPhase.DASHBOARD:
-      return (
-        <Dashboard
-          trackData={trackData}
-          onNavigate={onNavigate}
-          onAnalyzeTrack={onAnalyzeTrack}
-          logs={logs}
-          isComplete={isComplete}
-          onNewSearch={onNewSearch}
-          headingRef={dashboardHeadingRef}
-          onUndoAnalysis={onUndoAnalysis}
-          isRestoredSession={isRestoredSession}
-        />
-      );
-    case AppPhase.PLAYER:
-      return (
-        <Player
-          trackData={trackData}
-          onBack={onBackToBoard}
-          onDecryptMoreStream={decryptMoreFactoidsStream}
-          onAnalyzeTrack={onAnalyzeTrack}
-          onNewSearch={onNewSearch}
-          headingRef={playerHeadingRef}
-        />
-      );
-    default:
-      return (
-        <Onboarding
-          status={status}
-          logs={logs}
-          trackData={trackData}
-          error={error}
-          isLoading={isLoading}
-          candidates={candidates}
-          analyze={analyze}
-          selectCandidate={selectCandidate}
-          searchSuggest={searchSuggest}
-          onComplete={onAnalysisComplete}
-          searchInputRef={searchInputRef}
-          onRestorePrevious={onRestorePrevious ?? undefined}
-        />
-      );
-  }
-});
+const PhaseView = React.memo<PhaseViewProps>(
+  ({
+    phase,
+    status,
+    logs,
+    trackData,
+    error,
+    isLoading,
+    isComplete,
+    candidates,
+    analyze,
+    selectCandidate,
+    searchSuggest,
+    decryptMoreFactoidsStream,
+    onAnalysisComplete,
+    onNavigate,
+    onAnalyzeTrack,
+    onBackToBoard,
+    onNewSearch,
+    dashboardHeadingRef,
+    playerHeadingRef,
+    searchInputRef,
+    onUndoAnalysis,
+    onRestorePrevious,
+    isRestoredSession,
+  }) => {
+    switch (phase) {
+      case AppPhase.ONBOARDING:
+        return (
+          <Onboarding
+            status={status}
+            logs={logs}
+            trackData={trackData}
+            error={error}
+            isLoading={isLoading}
+            candidates={candidates}
+            analyze={analyze}
+            selectCandidate={selectCandidate}
+            searchSuggest={searchSuggest}
+            onComplete={onAnalysisComplete}
+            searchInputRef={searchInputRef}
+            onRestorePrevious={onRestorePrevious ?? undefined}
+          />
+        );
+      case AppPhase.DASHBOARD:
+        return (
+          <Dashboard
+            trackData={trackData}
+            onNavigate={onNavigate}
+            onAnalyzeTrack={onAnalyzeTrack}
+            logs={logs}
+            isComplete={isComplete}
+            onNewSearch={onNewSearch}
+            headingRef={dashboardHeadingRef}
+            onUndoAnalysis={onUndoAnalysis}
+            isRestoredSession={isRestoredSession}
+          />
+        );
+      case AppPhase.PLAYER:
+        return (
+          <Player
+            trackData={trackData}
+            onBack={onBackToBoard}
+            onDecryptMoreStream={decryptMoreFactoidsStream}
+            onAnalyzeTrack={onAnalyzeTrack}
+            onNewSearch={onNewSearch}
+            headingRef={playerHeadingRef}
+          />
+        );
+      default:
+        return (
+          <Onboarding
+            status={status}
+            logs={logs}
+            trackData={trackData}
+            error={error}
+            isLoading={isLoading}
+            candidates={candidates}
+            analyze={analyze}
+            selectCandidate={selectCandidate}
+            searchSuggest={searchSuggest}
+            onComplete={onAnalysisComplete}
+            searchInputRef={searchInputRef}
+            onRestorePrevious={onRestorePrevious ?? undefined}
+          />
+        );
+    }
+  },
+);
 
 const App: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>(AppPhase.ONBOARDING);
   const {
-    status, logs, trackData, candidates, error, isLoading, isComplete,
-    analyze, selectCandidate, decryptMoreFactoidsStream, searchSuggest, reset,
+    status,
+    logs,
+    trackData,
+    candidates,
+    error,
+    isLoading,
+    isComplete,
+    analyze,
+    selectCandidate,
+    decryptMoreFactoidsStream,
+    searchSuggest,
+    reset,
   } = useAgent();
 
   // ─── UX: Focus management refs (Item 1) ─────────────────────────────────
@@ -263,7 +290,7 @@ const App: React.FC = () => {
         img.src = td.coverUrl;
       }
       // Preload genealogy node images
-      td.genealogy?.nodes?.forEach(node => {
+      td.genealogy?.nodes?.forEach((node) => {
         if (node.img) {
           const img = new Image();
           img.src = node.img;
@@ -285,15 +312,18 @@ const App: React.FC = () => {
   }, []);
 
   // Handle analyzing a track from Dashboard (Discovered Gems) — P1:13 fix
-  const handleAnalyzeTrack = useCallback((trackId: string, title: string, artist: string) => {
-    // Save current trackData for undo (Item 2)
-    previousTrackDataRef.current = effectiveTrackData;
-    setOverrideTrackData(null);
-    setIsRestoredSession(false);
-    reset();
-    setPendingQuery(`${title} ${artist}`.trim());
-    startTransition(() => setPhase(AppPhase.ONBOARDING));
-  }, [reset, effectiveTrackData]);
+  const handleAnalyzeTrack = useCallback(
+    (trackId: string, title: string, artist: string) => {
+      // Save current trackData for undo (Item 2)
+      previousTrackDataRef.current = effectiveTrackData;
+      setOverrideTrackData(null);
+      setIsRestoredSession(false);
+      reset();
+      setPendingQuery(`${title} ${artist}`.trim());
+      startTransition(() => setPhase(AppPhase.ONBOARDING));
+    },
+    [reset, effectiveTrackData],
+  );
 
   const handleBackToDashboard = useCallback(() => {
     setPhase(AppPhase.DASHBOARD);
@@ -340,7 +370,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Don't push during analysis (would create noise)
-    if (status !== 'idle' && status !== 'complete' && status !== 'error' && phase === AppPhase.ONBOARDING) {
+    if (
+      status !== 'idle' &&
+      status !== 'complete' &&
+      status !== 'error' &&
+      phase === AppPhase.ONBOARDING
+    ) {
       return;
     }
     window.history.pushState({ phase }, '');
@@ -357,7 +392,10 @@ const App: React.FC = () => {
           return;
         }
         // Guard: don't navigate to dashboard/player without track data
-        if ((targetPhase === AppPhase.DASHBOARD || targetPhase === AppPhase.PLAYER) && !effectiveTrackData) {
+        if (
+          (targetPhase === AppPhase.DASHBOARD || targetPhase === AppPhase.PLAYER) &&
+          !effectiveTrackData
+        ) {
           setPhase(AppPhase.ONBOARDING);
           return;
         }

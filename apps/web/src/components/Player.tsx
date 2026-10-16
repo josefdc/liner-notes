@@ -11,11 +11,11 @@ import {
   Lock,
   Unlock,
 } from 'lucide-react';
-import { measuredNumber, measuredText } from '../constants';
+import { audioValues, displayableFactoids, normalizeTrack } from '../constants';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
-import { AudioStats, ResultNotices } from './EstimatedWarning';
+import { AudioStats, InferenceLabel, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import type { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types';
 
@@ -89,10 +89,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // P0:7 — Audio preview ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const bpm = measuredNumber(track.bpm);
-  const key = measuredText(track.key);
+  const { bpm, key } = audioValues(track);
+  // Written by the model, or taken from source data when the model was unavailable.
+  const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
   const allFactoids = useMemo(
-    () => [...track.factoids, ...additionalFactoids],
+    () => displayableFactoids([...track.factoids, ...additionalFactoids]),
     [track.factoids, additionalFactoids],
   );
 
@@ -256,9 +257,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
-          <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest mb-1">
-            Agent Analysis
-          </h3>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+              Agent Analysis
+            </h3>
+            {allFactoids.length > 0 && <InferenceLabel>{provenance}</InferenceLabel>}
+          </div>
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">
               {allFactoids.length} insights decoded
@@ -436,6 +440,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               segments={track.segments}
               segmentsSource={track.segmentsSource}
               durationSeconds={track.durationSeconds}
+              previewDurationSeconds={track.previewDurationSeconds}
               samples={track.samples}
               keyMoments={track.keyMoments}
               audioAnalyzed={
@@ -455,12 +460,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'genealogy' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
-          <div className="absolute top-4 left-4 z-10 pointer-events-none hidden md:block">
-            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
+          <div className="absolute top-4 left-4 z-10 pointer-events-none flex items-center gap-2">
+            <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
               Genealogy Network
             </h3>
+            {track.genealogy.nodes.length > 1 && <InferenceLabel>{provenance}</InferenceLabel>}
           </div>
-          {track.genealogy?.nodes && track.genealogy.nodes.length > 1 ? (
+          {track.genealogy.nodes.length > 1 ? (
             <GenealogyGraph data={track.genealogy} onNodeClick={handleNodeClick} />
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
@@ -520,7 +526,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   );
 };
 
-const Player: React.FC<PlayerProps> = ({ trackData, ...props }) =>
-  trackData ? <PlayerView track={trackData} {...props} /> : <NoAnalysis {...props} />;
+const Player: React.FC<PlayerProps> = ({ trackData, ...props }) => {
+  // Missing lists default to empty so a partial result renders; memoised so the graph and
+  // the factoid list keep their identity between renders.
+  const track = useMemo(() => (trackData ? normalizeTrack(trackData) : null), [trackData]);
+  return track ? <PlayerView track={track} {...props} /> : <NoAnalysis {...props} />;
+};
 
 export default Player;

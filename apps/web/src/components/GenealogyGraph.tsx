@@ -17,9 +17,19 @@ import type { TrackData } from '../types';
  * node list. d3-force throws on a link to an unknown node id, which would take the whole page
  * down, so such links are left out.
  */
-export function drawableLinks(data: TrackData['genealogy']): TrackData['genealogy']['links'] {
-  const ids = new Set(data.nodes.map((node) => node.id));
-  return data.links.filter((link) => ids.has(link.source) && ids.has(link.target));
+export function drawableLinks(
+  data: Partial<TrackData['genealogy']> | null | undefined,
+): TrackData['genealogy']['links'] {
+  const ids = new Set(graphNodes(data).map((node) => node.id));
+  const links = Array.isArray(data?.links) ? data.links : [];
+  return links.filter((link) => ids.has(link.source) && ids.has(link.target));
+}
+
+/** The genealogy's nodes, or none when the list is missing. */
+function graphNodes(
+  data: Partial<TrackData['genealogy']> | null | undefined,
+): TrackData['genealogy']['nodes'] {
+  return Array.isArray(data?.nodes) ? data.nodes : [];
 }
 
 /**
@@ -145,10 +155,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
     // 4. Force Simulation Setup
     // Use a deep copy to prevent D3 from mutating the original props reference directly if strict
-    const nodes: CustomNode[] = JSON.parse(JSON.stringify(data.nodes)).map((n: CustomNode) => ({
-      ...n,
-      size: n.size * nodeScale, // Scale node sizes for mobile
-    }));
+    const nodes: CustomNode[] = JSON.parse(JSON.stringify(graphNodes(data))).map(
+      (n: CustomNode) => ({
+        ...n,
+        size: n.size * nodeScale, // Scale node sizes for mobile
+      }),
+    );
     const links: CustomLink[] = JSON.parse(JSON.stringify(drawableLinks(data)));
 
     // Create simulation centered at viewport center
@@ -474,8 +486,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
       {/* P2:22 — Accessible summary for screen readers */}
       <div className="sr-only">
-        Genealogy network{data.nodes.length > 0 ? ` with ${data.nodes.length} related tracks` : ''}.
-        {data.nodes
+        Genealogy network
+        {graphNodes(data).length > 0 ? ` with ${graphNodes(data).length} related tracks` : ''}.
+        {graphNodes(data)
           .map((node) => {
             const relationship =
               node.group === 1

@@ -13,7 +13,7 @@ interface SonicFingerprintProps {
 // The genre profile is written by the model. Without one there is nothing to draw: no
 // placeholder shape is shown in its place.
 function toRadarData(profile: GenreProfileItem[] | undefined) {
-  return (profile ?? [])
+  return (Array.isArray(profile) ? profile : [])
     .filter((item) => item.genre && Number.isFinite(item.value))
     .map((item) => ({ subject: item.genre, A: item.value, fullMark: 100 }));
 }

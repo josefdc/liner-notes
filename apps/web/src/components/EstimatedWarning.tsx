@@ -3,12 +3,12 @@ import { AlertTriangle, Disc, Heart, Sparkles, Zap } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
-  AUDIO_MODEL_FIELDS,
-  MEASURED_AUDIO_FIELDS,
+  AUDIO_FIELD_COUNT,
+  LEGACY_ESTIMATE_TEXT,
   audioUnavailableText,
+  audioValues,
   formatScore,
-  measuredNumber,
-  measuredText,
+  hasEstimatedAudio,
   missingAudioValues,
   missingModelOutput,
   moodLabel,
@@ -61,12 +61,8 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   rowClassName = 'justify-center',
   className = '',
 }) => {
-  const bpm = measuredNumber(track.bpm);
-  const key = measuredText(track.key);
-  const energy = measuredNumber(track.energy);
-  const valence = measuredNumber(track.valence);
-  const danceability = measuredNumber(track.danceability);
-  const acousticness = measuredNumber(track.acousticness);
+  // Values from an earlier version's estimates come back null here: shown as not measured.
+  const { bpm, key, energy, valence, danceability, acousticness } = audioValues(track);
   const hasModelScores = valence !== null || danceability !== null || acousticness !== null;
   const measuredTitle = 'Measured from the audio preview';
   const iconSize = size === 'md' ? 12 : 10;
@@ -168,14 +164,13 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
 /** The audio notice for a track, or null when every audio value was measured. */
 function audioNotice(track: TrackData) {
   const missing = missingAudioValues(track);
-  if (track.audioSource !== 'unavailable' && missing.length === 0) return null;
-  const allFields = MEASURED_AUDIO_FIELDS.length + AUDIO_MODEL_FIELDS.length;
+  if (hasEstimatedAudio(track)) {
+    return { title: 'Audio values not measured', reason: LEGACY_ESTIMATE_TEXT, missing };
+  }
+  if (track.audioSource === 'analyzed' && missing.length === 0) return null;
   return {
-    title: missing.length === allFields ? 'Audio not analysed' : 'Audio partly measured',
-    reason:
-      track.audioSource === 'unavailable' || track.audioUnavailableReason
-        ? audioUnavailableText(track.audioUnavailableReason)
-        : null,
+    title: missing.length === AUDIO_FIELD_COUNT ? 'Audio not analysed' : 'Audio partly measured',
+    reason: audioUnavailableText(track.audioUnavailableReason),
     missing,
   };
 }
@@ -215,7 +210,7 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
       )}
       {audio && (
         <Notice title={audio.title}>
-          {audio.reason && <p>{audio.reason}</p>}
+          <p>{audio.reason}</p>
           {track.audioUnavailableDetail && (
             <p className="text-text-tertiary">{track.audioUnavailableDetail}</p>
           )}

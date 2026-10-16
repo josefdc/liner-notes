@@ -5,16 +5,21 @@ import { keyMomentColors, colors } from '../styles/theme';
 import { InferenceLabel } from './EstimatedWarning';
 
 interface SmartTimelineProps {
-  segments: SongSegment[];
+  segments?: SongSegment[];
   /** Where the segments come from; neither source is a measurement of the audio. */
   segmentsSource?: TrackData['segmentsSource'];
   /** Song duration in seconds; undefined when it is not known. */
   durationSeconds?: number;
+  /** Length of the audio preview the key moments were measured in (30 s when not sent). */
+  previewDurationSeconds?: number;
   samples?: { time: number; description: string }[];
   keyMoments?: KeyMoment[];
   /** False when the audio was not analysed (which is why there are no key moments). */
   audioAnalyzed?: boolean;
 }
+
+// Spotify and Deezer previews are 30 seconds long.
+const DEFAULT_PREVIEW_SECONDS = 30;
 
 /**
  * Format seconds to MM:SS
@@ -38,52 +43,110 @@ const SEGMENT_SOURCE_LABEL: Record<NonNullable<TrackData['segmentsSource']>, str
   inferred: 'Model inference',
 };
 
+const EMPTY_SEGMENTS: SongSegment[] = [];
 const EMPTY_SAMPLES: { time: number; description: string }[] = [];
 const EMPTY_KEY_MOMENTS: KeyMoment[] = [];
 
+const positiveSeconds = (value: number | undefined): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+
+interface Marker {
+  time: number;
+  description: string;
+  color: string;
+  intensity: number;
+}
+
+/** Markers whose time falls inside [0, length]; the rest cannot be placed on this lane. */
+function placeable(markers: Marker[], length: number | null) {
+  const valid = markers.filter((m) => Number.isFinite(m.time) && m.time >= 0);
+  const inside = length === null ? [] : valid.filter((m) => m.time <= length);
+  return { inside: inside.sort((a, b) => a.time - b.time), outside: valid.length - inside.length };
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** A lane of markers positioned by time over a known length. */
+const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, length }) => (
+  <div className="relative h-6 w-full mt-1">
+    {markers.map((marker, index) => (
+      <div
+        // biome-ignore lint/suspicious/noArrayIndexKey: markers can share a time and type
+        key={index}
+        className="absolute top-0 -translate-x-1/2 cursor-pointer group"
+        style={{ left: `${Math.min(Math.max((marker.time / length) * 100, 2), 98)}%` }}
+        tabIndex={0}
+        role="img"
+        aria-label={marker.description}
+      >
+        {/* Marker diamond with dynamic color */}
+        <div
+          className="w-2 h-2 rotate-45 border border-black group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
+          style={{ backgroundColor: marker.color, opacity: marker.intensity ?? 1 }}
+        />
+        {/* Tooltip */}
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-[10px] font-mono transition-opacity z-20 pointer-events-none"
+          style={{ color: marker.color }}
+        >
+          {marker.description}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const Note: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="mt-2 text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+    {children}
+  </p>
+);
+
 const SmartTimeline: React.FC<SmartTimelineProps> = ({
-  segments,
+  segments = EMPTY_SEGMENTS,
   segmentsSource,
   durationSeconds,
+  previewDurationSeconds,
   samples = EMPTY_SAMPLES,
   keyMoments = EMPTY_KEY_MOMENTS,
   audioAnalyzed,
 }) => {
-  const duration =
-    typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
-      ? durationSeconds
-      : null;
+  const duration = positiveSeconds(durationSeconds);
+  const previewLength = positiveSeconds(previewDurationSeconds) ?? DEFAULT_PREVIEW_SECONDS;
 
-  const markers = useMemo(
+  // Sample times are written by the model: drawn on the song timeline, labelled as inferred,
+  // and only when they fall inside the song.
+  const sampleMarkers = useMemo(
     () =>
-      [
-        ...samples.map((s) => ({
+      placeable(
+        (samples ?? []).map((s) => ({
           time: s.time,
-          description: `Sample: ${s.description} (position from the model)`,
+          description: `Sample: ${s.description} (time inferred by the model)`,
           color: colors.analog,
           intensity: 1,
         })),
-        ...keyMoments.map((k) => ({
+        duration,
+      ),
+    [samples, duration],
+  );
+
+  // Key moments are measured inside the audio preview, so they get their own lane scaled to
+  // the preview: their times say nothing about where they fall in the full song.
+  const momentMarkers = useMemo(
+    () =>
+      placeable(
+        (keyMoments ?? []).map((k) => ({
           time: k.time,
-          description: `${k.description} (detected in the audio preview at ${formatTime(k.time)})`,
+          description: `${k.description} (measured at ${formatTime(k.time)} in the preview)`,
           color: getMarkerColor(k.type),
           intensity: k.intensity,
         })),
-      ]
-        .filter((m) => Number.isFinite(m.time) && m.time >= 0)
-        .sort((a, b) => a.time - b.time),
-    [samples, keyMoments],
+        previewLength,
+      ),
+    [keyMoments, previewLength],
   );
 
-  let markerNote: string | null = null;
-  if (markers.length === 0) {
-    markerNote =
-      audioAnalyzed === false
-        ? 'No key moments — the audio was not analysed'
-        : 'No key moments detected';
-  } else if (duration === null) {
-    markerNote = `Duration unknown: ${markers.length} marker${markers.length === 1 ? '' : 's'} cannot be placed`;
-  }
+  const previewLabel = `Audio preview (${Math.round(previewLength)} s)`;
 
   return (
     <div className="w-full mt-8" role="group" aria-label="Song structure">
@@ -135,44 +198,38 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       )}
 
-      {/* Sample and key-moment markers, placed only when the duration is known */}
-      {duration !== null && markers.length > 0 && (
-        <div className="relative h-6 w-full mt-1">
-          {markers.map((marker, index) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: markers can share a time and type
-              key={index}
-              className="absolute top-0 -translate-x-1/2 cursor-pointer group"
-              style={{
-                left: `${Math.min(Math.max((marker.time / duration) * 100, 2), 98)}%`,
-              }}
-              tabIndex={0}
-              role="img"
-              aria-label={marker.description}
-            >
-              {/* Marker diamond with dynamic color */}
-              <div
-                className="w-2 h-2 rotate-45 border border-black group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
-                style={{
-                  backgroundColor: marker.color,
-                  opacity: marker.intensity || 1,
-                }}
-              />
-              {/* Tooltip */}
-              <div
-                className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-[10px] font-mono transition-opacity z-20 pointer-events-none"
-                style={{ color: marker.color }}
-              >
-                {marker.description}
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Samples on the song timeline (times inferred by the model) */}
+      {duration !== null && sampleMarkers.inside.length > 0 && (
+        <MarkerLane markers={sampleMarkers.inside} length={duration} />
       )}
-      {markerNote && (
-        <p className="mt-2 text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
-          {markerNote}
-        </p>
+      {sampleMarkers.inside.length > 0 && <Note>Sample times: model inference</Note>}
+      {sampleMarkers.outside > 0 && (
+        <Note>
+          {duration === null
+            ? `Duration unknown: ${plural(sampleMarkers.outside, 'sample')} not placed`
+            : `${plural(sampleMarkers.outside, 'sample time')} outside the song, not drawn`}
+        </Note>
+      )}
+
+      {/* Key moments on their own lane, scaled to the preview they were measured in */}
+      {momentMarkers.inside.length > 0 ? (
+        <div className="mt-6" role="group" aria-label={previewLabel}>
+          <div className="flex justify-between text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+            <span>{previewLabel} — key moments measured</span>
+            <span>{formatTime(previewLength)}</span>
+          </div>
+          <div className="h-1 w-full mt-2 rounded-full bg-white/10" />
+          <MarkerLane markers={momentMarkers.inside} length={previewLength} />
+        </div>
+      ) : (
+        <Note>
+          {audioAnalyzed === false
+            ? 'No key moments — the audio was not analysed'
+            : 'No key moments detected'}
+        </Note>
+      )}
+      {momentMarkers.outside > 0 && (
+        <Note>{`${plural(momentMarkers.outside, 'key moment')} outside the preview, not drawn`}</Note>
       )}
     </div>
   );

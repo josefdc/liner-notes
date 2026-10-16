@@ -1,4 +1,4 @@
-import type { AudioUnavailableReason, TrackData } from './types';
+import type { AudioUnavailableReason, Factoid, TrackData } from './types';
 
 // How the result screens describe values that are missing. Nothing here stands in for a
 // value: when a value is not known, the screens say so with this text.
@@ -17,17 +17,76 @@ export function audioUnavailableText(reason: string | undefined): string {
   if (reason && Object.hasOwn(AUDIO_UNAVAILABLE_TEXT, reason)) {
     return AUDIO_UNAVAILABLE_TEXT[reason as AudioUnavailableReason];
   }
-  return reason ? `The audio was not analysed (${reason}).` : 'No reason was given.';
+  return reason ? `The audio was not analysed (${reason}).` : 'The analysis did not report why.';
 }
+
+/** Shown instead of values from an earlier version of the analysis, which estimated them. */
+export const LEGACY_ESTIMATE_TEXT =
+  'Estimated by an earlier version of the analysis — not a measurement.';
 
 /** The value when it was measured (a finite number), otherwise null. */
 export function measuredNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-/** The value when it is a non-empty string, otherwise null. */
+// Strings some serialisers write for a missing value; they are not values.
+const MISSING_TEXT = new Set(['', 'null', 'undefined', 'nan']);
+
+/** The value when it is a real string ("null", "undefined" and blanks are missing), else null. */
 export function measuredText(value: string | null | undefined): string | null {
-  return typeof value === 'string' && value.trim() !== '' ? value : null;
+  return typeof value === 'string' && !MISSING_TEXT.has(value.trim().toLowerCase()) ? value : null;
+}
+
+/**
+ * True when the audio values of this result can be shown as measurements. Only the current
+ * API's sources qualify: "analyzed", and "unavailable" (where any value that is present was
+ * still measured). "estimated", a missing source or any other value comes from earlier
+ * versions, whose values were estimated, so they are treated as not measured.
+ */
+export function hasMeasuredAudioSource(track: TrackData): boolean {
+  return track.audioSource === 'analyzed' || track.audioSource === 'unavailable';
+}
+
+export interface AudioValues {
+  bpm: number | null;
+  key: string | null;
+  energy: number | null;
+  valence: number | null;
+  danceability: number | null;
+  acousticness: number | null;
+}
+
+function rawAudioValues(track: TrackData): AudioValues {
+  return {
+    bpm: measuredNumber(track.bpm),
+    key: measuredText(track.key),
+    energy: measuredNumber(track.energy),
+    valence: measuredNumber(track.valence),
+    danceability: measuredNumber(track.danceability),
+    acousticness: measuredNumber(track.acousticness),
+  };
+}
+
+const NO_AUDIO_VALUES: AudioValues = {
+  bpm: null,
+  key: null,
+  energy: null,
+  valence: null,
+  danceability: null,
+  acousticness: null,
+};
+
+/** The audio values that may be shown as measured; everything else is null. */
+export function audioValues(track: TrackData): AudioValues {
+  return hasMeasuredAudioSource(track) ? rawAudioValues(track) : NO_AUDIO_VALUES;
+}
+
+/** True when the result carries audio values that an earlier version estimated. */
+export function hasEstimatedAudio(track: TrackData): boolean {
+  return (
+    !hasMeasuredAudioSource(track) &&
+    Object.values(rawAudioValues(track)).some((value) => value !== null)
+  );
 }
 
 /** A 0-1 audio-model score as shown to users: two decimals, never a percentage. */
@@ -43,30 +102,22 @@ export function moodLabel(valence: number): string {
   return 'Melancholic';
 }
 
-interface AudioField {
-  label: string;
-  value: (track: TrackData) => number | string | null;
-}
-
-/** Values measured from the audio signal. */
-export const MEASURED_AUDIO_FIELDS: AudioField[] = [
-  { label: 'BPM', value: (t) => measuredNumber(t.bpm) },
-  { label: 'key', value: (t) => measuredText(t.key) },
-  { label: 'energy', value: (t) => measuredNumber(t.energy) },
+// Signal measurements first, then the scores from audio models run over the preview.
+const AUDIO_FIELD_LABELS: [keyof AudioValues, string][] = [
+  ['bpm', 'BPM'],
+  ['key', 'key'],
+  ['energy', 'energy'],
+  ['valence', 'mood'],
+  ['danceability', 'danceability'],
+  ['acousticness', 'acousticness'],
 ];
 
-/** Scores from audio models run over the preview (estimates, not probabilities). */
-export const AUDIO_MODEL_FIELDS: AudioField[] = [
-  { label: 'mood', value: (t) => measuredNumber(t.valence) },
-  { label: 'danceability', value: (t) => measuredNumber(t.danceability) },
-  { label: 'acousticness', value: (t) => measuredNumber(t.acousticness) },
-];
+export const AUDIO_FIELD_COUNT = AUDIO_FIELD_LABELS.length;
 
 /** Names of the audio values that were not measured, signal measurements first. */
 export function missingAudioValues(track: TrackData): string[] {
-  return [...MEASURED_AUDIO_FIELDS, ...AUDIO_MODEL_FIELDS]
-    .filter((field) => field.value(track) === null)
-    .map((field) => field.label);
+  const values = audioValues(track);
+  return AUDIO_FIELD_LABELS.filter(([field]) => values[field] === null).map(([, label]) => label);
 }
 
 /** Parts of a result the model writes that this result does not have. */
@@ -79,4 +130,44 @@ export function missingModelOutput(track: TrackData): string[] {
   if (!track.factoids?.length) missing.push('insights');
   if (!track.genealogy?.nodes?.some((node) => node.group !== 1)) missing.push('connected tracks');
   return missing;
+}
+
+function list<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** Factoids that can be shown: lyric factoids from earlier versions are dropped. */
+export function displayableFactoids(factoids: unknown): Factoid[] {
+  if (!Array.isArray(factoids)) return [];
+  return factoids.filter(
+    (f): f is Factoid =>
+      isObject(f) && typeof f.id === 'string' && typeof f.title === 'string' && f.type !== 'lyrics',
+  );
+}
+
+/**
+ * A result with every list and object the views read present, so a payload with missing
+ * fields renders (showing them as missing) instead of throwing. Values are not filled in:
+ * lists default to empty and text that is not a real value becomes missing.
+ */
+export function normalizeTrack(track: TrackData): TrackData {
+  const genealogy: Partial<TrackData['genealogy']> = isObject(track.genealogy)
+    ? track.genealogy
+    : {};
+  return {
+    ...track,
+    album: measuredText(track.album) ?? '',
+    releaseYear: measuredText(track.releaseYear) ?? undefined,
+    key: measuredText(track.key),
+    segments: list(track.segments),
+    samples: list(track.samples),
+    keyMoments: list(track.keyMoments),
+    factoids: displayableFactoids(track.factoids),
+    genealogy: { nodes: list(genealogy.nodes), links: list(genealogy.links) },
+    genreProfile: Array.isArray(track.genreProfile) ? track.genreProfile : undefined,
+    credits: isObject(track.credits) ? track.credits : undefined,
+  };
 }

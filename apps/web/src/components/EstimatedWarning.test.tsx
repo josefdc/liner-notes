@@ -135,3 +135,82 @@ describe('AudioStats', () => {
     expect(screen.queryByRole('list', { name: 'Audio-model estimates' })).toBeNull();
   });
 });
+
+describe('values estimated by earlier versions of the analysis', () => {
+  // The shape the API sent before audio values were measured only: genre-based or random
+  // estimates under audioSource "estimated" (also served from its result cache).
+  const legacy = {
+    ...base,
+    bpm: 117,
+    key: 'A Minor',
+    energy: 0.63,
+    valence: 0.41,
+    danceability: 0.72,
+    acousticness: 0.2,
+    audioSource: 'estimated',
+    audioConfidence: 'low',
+  } as TrackData;
+
+  it.each([
+    ['audioSource "estimated"', legacy],
+    ['no audioSource', { ...legacy, audioSource: undefined }],
+    ['an unknown audioSource', { ...legacy, audioSource: 'guessed' } as unknown as TrackData],
+  ])('shows nothing as measured for %s', (_case, track) => {
+    const { container } = render(
+      <>
+        <ResultNotices track={track} />
+        <AudioStats track={track} />
+      </>,
+    );
+    const stats = screen.getByRole('list', { name: 'Audio values' }).textContent;
+    expect(stats).toContain('BPM not measured');
+    expect(stats).toContain('Key not measured');
+    expect(stats).toContain('Energy not measured');
+    expect(screen.queryByRole('list', { name: 'Audio-model estimates' })).toBeNull();
+    expect(container.textContent).not.toMatch(/117|A Minor|0\.72|63%/);
+    const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
+    expect(notice).toContain('Audio values not measured');
+    expect(notice).toContain(
+      'Estimated by an earlier version of the analysis — not a measurement.',
+    );
+  });
+
+  it('still shows values measured when tempo or key was not detected', () => {
+    render(
+      <AudioStats
+        track={{
+          ...base,
+          bpm: null,
+          audioSource: 'unavailable',
+          audioUnavailableReason: 'not_detected',
+        }}
+      />,
+    );
+    const stats = screen.getByRole('list', { name: 'Audio values' }).textContent;
+    expect(stats).toContain('BPM not measured');
+    expect(stats).toContain('C Major');
+    expect(stats).toContain('50%');
+  });
+});
+
+describe('partly measured results', () => {
+  it('says the analysis did not report why when no reason is given', () => {
+    render(
+      <ResultNotices
+        track={{ ...base, energy: null, valence: null, danceability: null, acousticness: null }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
+    expect(notice).toContain('Audio partly measured');
+    expect(notice).toContain('The analysis did not report why.');
+    expect(notice).toContain('Not measured: energy, mood, danceability, acousticness.');
+  });
+
+  it.each(['null', 'undefined', ' NULL '])('treats the key text %j as missing', (key) => {
+    const { container } = render(<AudioStats track={{ ...base, key }} />);
+    expect(screen.getByRole('list', { name: 'Audio values' }).textContent).toContain(
+      'Key not measured',
+    );
+    expect(container.textContent).not.toMatch(/KEY\s*(null|undefined)/i);
+  });
+});

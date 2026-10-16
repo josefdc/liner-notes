@@ -131,6 +131,8 @@ export interface TrackData {
   acousticness?: number | null;
   instrumentalness?: number | null;
   durationSeconds?: number; // Duration in seconds for timeline display
+  /** Length of the audio preview the key moments were measured in, when the API sends it. */
+  previewDurationSeconds?: number;
   segments: SongSegment[];
   /** 'template': a generic default structure; 'inferred': written by the model. Never measured. */
   segmentsSource?: 'template' | 'inferred';
@@ -146,8 +148,10 @@ export interface TrackData {
   };
   // Genre profile for the Sonic Fingerprint radar chart (written by the model)
   genreProfile?: GenreProfileItem[];
-  // Audio provenance: 'analyzed' when tempo and key were measured, 'unavailable' otherwise
-  audioSource?: 'analyzed' | 'unavailable';
+  // Audio provenance: 'analyzed' when tempo and key were measured, 'unavailable' otherwise.
+  // 'estimated' is sent by earlier versions of the API (and by results cached by them): its
+  // values were estimated from the genre or at random and are never shown as measurements.
+  audioSource?: 'analyzed' | 'unavailable' | 'estimated';
   audioConfidence?: 'high' | 'low';
   audioUnavailableReason?: AudioUnavailableReason;
   audioUnavailableDetail?: string;

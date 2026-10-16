@@ -9,6 +9,7 @@ import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
+import { normalizeTrack } from '../constants';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -107,7 +108,7 @@ const PlaceholderCover: React.FC<{ title: string; group: number }> = ({ title, g
 };
 
 const Dashboard: React.FC<DashboardProps> = ({
-  trackData,
+  trackData: rawTrackData,
   onNavigate,
   onAnalyzeTrack,
   logs = EMPTY_LOGS,
@@ -117,6 +118,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   onUndoAnalysis,
   isRestoredSession = false,
 }) => {
+  // Missing lists default to empty so a partial result renders instead of throwing.
+  const trackData = useMemo(
+    () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
+    [rawTrackData],
+  );
   const relatedTracks = useMemo(() => getRelatedTracks(trackData), [trackData]);
   const hasGenreProfile = (trackData?.genreProfile?.length ?? 0) > 0;
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);

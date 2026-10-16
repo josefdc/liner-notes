@@ -3,6 +3,7 @@
  * Run: npm run test:db -w apps/api
  */
 
+import { expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,9 +16,6 @@ import { SonicCache } from "./cache.js";
 // =============================================================================
 
 let tmpDir: string;
-let testCount = 0;
-let passCount = 0;
-let failCount = 0;
 
 function setup(): string {
   tmpDir = mkdtempSync(join(tmpdir(), "sonic-db-test-"));
@@ -36,27 +34,11 @@ function cleanup(): void {
 }
 
 function assert(condition: boolean, message: string): void {
-  testCount++;
-  if (condition) {
-    passCount++;
-    console.log(`  ✅ ${message}`);
-  } else {
-    failCount++;
-    console.error(`  ❌ ${message}`);
-  }
+  expect(condition, message).toBe(true);
 }
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {
-  testCount++;
-  if (actual === expected) {
-    passCount++;
-    console.log(`  ✅ ${message}`);
-  } else {
-    failCount++;
-    console.error(
-      `  ❌ ${message} (expected: ${JSON.stringify(expected)}, got: ${JSON.stringify(actual)})`,
-    );
-  }
+  expect(actual, message).toBe(expected);
 }
 
 // =============================================================================
@@ -64,7 +46,6 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
 // =============================================================================
 
 async function testDbInitialization(): Promise<void> {
-  console.log("\n📦 Test 1: Database Initialization & Health");
   const dbPath = setup();
 
   try {
@@ -89,7 +70,6 @@ async function testDbInitialization(): Promise<void> {
 // =============================================================================
 
 async function testSchemaVersioning(): Promise<void> {
-  console.log("\n📦 Test 2: Schema Versioning");
   const dbPath = setup();
 
   try {
@@ -123,7 +103,6 @@ async function testSchemaVersioning(): Promise<void> {
 // =============================================================================
 
 async function testSqliteStore(): Promise<void> {
-  console.log("\n📦 Test 3: SqliteStore");
   const dbPath = setup();
 
   try {
@@ -181,7 +160,6 @@ async function testSqliteStore(): Promise<void> {
 // =============================================================================
 
 async function testSqliteStoreFilters(): Promise<void> {
-  console.log("\n📦 Test 4: SqliteStore — Filters");
   const dbPath = setup();
 
   try {
@@ -209,7 +187,6 @@ async function testSqliteStoreFilters(): Promise<void> {
 // =============================================================================
 
 async function testSonicCacheAudio(): Promise<void> {
-  console.log("\n📦 Test 5: SonicCache — Audio");
   const dbPath = setup();
 
   try {
@@ -259,7 +236,6 @@ async function testSonicCacheAudio(): Promise<void> {
 // =============================================================================
 
 async function testSonicCacheResearchArtwork(): Promise<void> {
-  console.log("\n📦 Test 6: SonicCache — Research & Artwork");
   const dbPath = setup();
 
   try {
@@ -301,7 +277,6 @@ async function testSonicCacheResearchArtwork(): Promise<void> {
 // =============================================================================
 
 async function testSonicCacheTTL(): Promise<void> {
-  console.log("\n📦 Test 7: SonicCache — TTL Expiration");
   const dbPath = setup();
 
   try {
@@ -353,7 +328,6 @@ async function testSonicCacheTTL(): Promise<void> {
 // =============================================================================
 
 async function testCorruptionRecovery(): Promise<void> {
-  console.log("\n📦 Test 8: Corruption Recovery");
   const dbPath = setup();
 
   try {
@@ -379,7 +353,6 @@ async function testCorruptionRecovery(): Promise<void> {
 // =============================================================================
 
 async function testGracefulDegradation(): Promise<void> {
-  console.log("\n📦 Test 9: Graceful Degradation after close");
   const dbPath = setup();
 
   try {
@@ -398,7 +371,6 @@ async function testGracefulDegradation(): Promise<void> {
 // =============================================================================
 
 async function testConcurrentWrites(): Promise<void> {
-  console.log("\n📦 Test 10: Concurrent Writes");
   const dbPath = setup();
 
   try {
@@ -455,29 +427,13 @@ async function testConcurrentWrites(): Promise<void> {
 // Runner
 // =============================================================================
 
-async function runAllTests(): Promise<void> {
-  console.log(`🧪 Running Sonic Agent Database Tests\n${"=".repeat(50)}`);
-
-  await testDbInitialization();
-  await testSchemaVersioning();
-  await testSqliteStore();
-  await testSqliteStoreFilters();
-  await testSonicCacheAudio();
-  await testSonicCacheResearchArtwork();
-  await testSonicCacheTTL();
-  await testCorruptionRecovery();
-  await testGracefulDegradation();
-  await testConcurrentWrites();
-
-  console.log(`\n${"=".repeat(50)}`);
-  console.log(`Results: ${passCount}/${testCount} passed, ${failCount} failed`);
-
-  if (failCount > 0) {
-    process.exit(1);
-  }
-}
-
-runAllTests().catch((err) => {
-  console.error("Test runner error:", err);
-  process.exit(1);
-});
+it("initializes the database and reports health", testDbInitialization);
+it("keeps the schema version across re-opens", testSchemaVersioning);
+it("stores and reads items with SqliteStore", testSqliteStore);
+it("filters SqliteStore searches", testSqliteStoreFilters);
+it("caches audio analysis", testSonicCacheAudio);
+it("caches research and artwork", testSonicCacheResearchArtwork);
+it("expires cache entries after their TTL", testSonicCacheTTL);
+it("recovers from a corrupt database file", testCorruptionRecovery);
+it("degrades gracefully after close", testGracefulDegradation);
+it("handles concurrent writes", testConcurrentWrites);

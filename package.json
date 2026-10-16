@@ -12,12 +12,14 @@
   "scripts": {
     "dev": "exec node scripts/dev.mjs",
     "build": "npm run build -w packages/contract -w apps/web -w apps/api",
-    "test:db": "npm run test:db -w apps/api",
+    "test:db": "vitest run --project api src/store/database.test.ts",
     "preview": "npm run preview -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
     "lint": "biome check --error-on-warnings .",
     "format": "biome format --write .",
-    "guard:honest": "node scripts/guard-honest.mjs"
+    "guard:honest": "node scripts/guard-honest.mjs",
+    "test:e2e": "playwright test"
   },
   "allowScripts": {
     "better-sqlite3@12.10.0": true,
@@ -26,6 +28,11 @@
     "fsevents@2.3.3": true
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15"
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.64.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "happy-dom": "21.0.3",
+    "vitest": "5.0.5"
   }
 }

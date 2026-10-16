@@ -12,6 +12,9 @@
     },
     {
       "path": "./packages/contract"
+    },
+    {
+      "path": "./tsconfig.tools.json"
     }
   ]
 }

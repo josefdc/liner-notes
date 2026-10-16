@@ -81,3 +81,7 @@ temp
 
 # Local runtime data (SQLite DB, quarantined files)
 apps/api/data/
+
+# Playwright output
+playwright-report/
+test-results/

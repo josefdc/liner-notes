@@ -143,7 +143,8 @@ Then open http://localhost:3000
 npm run lint           # Biome (lint + formatting); `npm run format` rewrites files
 npm run typecheck      # TypeScript in every workspace
 npm run guard:honest   # counts of placeholder-data patterns; lower the baseline with -- --update
-npm run test:db -w apps/api && npm run test:lastfm -w apps/api
+npm test               # Vitest: API, web and script tests
+npm run test:e2e       # Playwright against the web app with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
 cd services/audio && uv run ruff check . && uv run ruff format --check .
 cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
 ```

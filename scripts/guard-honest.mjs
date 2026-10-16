@@ -35,7 +35,7 @@ const withoutComments = (line) => {
   return code.replace(/\s\/\/.*$/, "");
 };
 
-const rules = [
+export const rules = [
   {
     id: "random-values-api",
     owner: "#9",
@@ -100,6 +100,22 @@ function sourceFiles() {
   return [...new Set([...list([]), ...list(["--others", "--exclude-standard"])])];
 }
 
+// Counts the matches of one rule in a file's text; returns the total and the matching lines.
+export function countInText(rule, text) {
+  let total = 0;
+  const lines = [];
+  text.split("\n").forEach((line, index) => {
+    const scanned = rule.stripComments ? withoutComments(line) : line;
+    const matches = scanned.match(rule.pattern)?.length ?? 0;
+    const allowed = matches > 0 && allowMarker(line, rule.id) ? 1 : 0;
+    if (matches - allowed > 0) {
+      total += matches - allowed;
+      lines.push(index + 1);
+    }
+  });
+  return { total, lines };
+}
+
 function count(rule, files) {
   let total = 0;
   const locations = [];
@@ -110,114 +126,113 @@ function count(rule, files) {
     } catch {
       continue; // deleted in the working tree
     }
-    text.split("\n").forEach((line, index) => {
-      const scanned = rule.stripComments ? withoutComments(line) : line;
-      const matches = scanned.match(rule.pattern)?.length ?? 0;
-      const allowed = matches > 0 && allowMarker(line, rule.id) ? 1 : 0;
-      if (matches - allowed > 0) {
-        total += matches - allowed;
-        locations.push(`${path}:${index + 1}`);
-      }
-    });
+    const result = countInText(rule, text);
+    total += result.total;
+    for (const line of result.lines) locations.push(`${path}:${line}`);
   }
   return { total, locations };
 }
 
-const args = process.argv.slice(2);
-const update = args.includes("--update");
-const baseRef = args.includes("--base") ? args[args.indexOf("--base") + 1] : null;
-const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+function main() {
+  const args = process.argv.slice(2);
+  const update = args.includes("--update");
+  const baseRef = args.includes("--base") ? args[args.indexOf("--base") + 1] : null;
+  const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
 
-// A change may lower baselines but never raise them, including in its own diff.
-if (baseRef) {
-  let previous = null;
-  try {
-    previous = JSON.parse(
-      execFileSync("git", ["show", `${baseRef}:scripts/guard-baseline.json`], {
-        cwd: root,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }),
+  // A change may lower baselines but never raise them, including in its own diff.
+  if (baseRef) {
+    let previous = null;
+    try {
+      previous = JSON.parse(
+        execFileSync("git", ["show", `${baseRef}:scripts/guard-baseline.json`], {
+          cwd: root,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      );
+    } catch {
+      console.log(`[guard] no baseline at ${baseRef}; skipping the comparison`);
+    }
+    const raised = Object.entries(baseline).filter(
+      ([id, value]) => previous && id in previous && value > previous[id],
     );
-  } catch {
-    console.log(`[guard] no baseline at ${baseRef}; skipping the comparison`);
+    for (const [id, value] of raised) {
+      console.error(`[guard] baseline for "${id}" was raised from ${previous[id]} to ${value}`);
+    }
+    if (raised.length > 0) process.exit(1);
   }
-  const raised = Object.entries(baseline).filter(
-    ([id, value]) => previous && id in previous && value > previous[id],
-  );
-  for (const [id, value] of raised) {
-    console.error(`[guard] baseline for "${id}" was raised from ${previous[id]} to ${value}`);
-  }
-  if (raised.length > 0) process.exit(1);
-}
-const files = sourceFiles();
+  const files = sourceFiles();
 
-let failed = false;
-const next = { ...baseline };
-const rows = [];
+  let failed = false;
+  const next = { ...baseline };
+  const rows = [];
 
-for (const rule of rules) {
-  if (!(rule.id in baseline)) {
-    console.error(`[guard] rule "${rule.id}" has no baseline in scripts/guard-baseline.json`);
-    process.exit(1);
-  }
-  const limit = baseline[rule.id];
-  if (!Number.isInteger(limit) || limit < 0) {
-    console.error(
-      `[guard] baseline for "${rule.id}" must be a non-negative integer, got ${JSON.stringify(limit)}`,
-    );
-    process.exit(1);
-  }
-  const { total, locations } = count(rule, files);
-  let status = "ok";
-  if (total > limit) {
-    status = "ABOVE BASELINE";
-    failed = true;
-  } else if (total < limit) {
-    if (update) {
-      status = "lowered";
-      next[rule.id] = total;
-    } else {
-      status = "BELOW BASELINE";
+  for (const rule of rules) {
+    if (!(rule.id in baseline)) {
+      console.error(`[guard] rule "${rule.id}" has no baseline in scripts/guard-baseline.json`);
+      process.exit(1);
+    }
+    const limit = baseline[rule.id];
+    if (!Number.isInteger(limit) || limit < 0) {
+      console.error(
+        `[guard] baseline for "${rule.id}" must be a non-negative integer, got ${JSON.stringify(limit)}`,
+      );
+      process.exit(1);
+    }
+    const { total, locations } = count(rule, files);
+    let status = "ok";
+    if (total > limit) {
+      status = "ABOVE BASELINE";
       failed = true;
+    } else if (total < limit) {
+      if (update) {
+        status = "lowered";
+        next[rule.id] = total;
+      } else {
+        status = "BELOW BASELINE";
+        failed = true;
+      }
+    }
+    rows.push({ rule, total, limit, status, locations });
+  }
+
+  for (const id of Object.keys(baseline)) {
+    if (!rules.some((rule) => rule.id === id)) {
+      console.error(`[guard] baseline entry "${id}" has no rule`);
+      process.exit(1);
     }
   }
-  rows.push({ rule, total, limit, status, locations });
-}
 
-for (const id of Object.keys(baseline)) {
-  if (!rules.some((rule) => rule.id === id)) {
-    console.error(`[guard] baseline entry "${id}" has no rule`);
+  const width = Math.max(...rules.map((rule) => rule.id.length));
+  for (const { rule, total, limit, status, locations } of rows) {
+    console.log(
+      `${rule.id.padEnd(width)}  ${String(total).padStart(3)} / ${String(limit).padEnd(3)}  ${status}  (${rule.owner})`,
+    );
+    if (status === "ABOVE BASELINE") {
+      console.log(`  ${rule.description}`);
+      for (const location of locations) console.log(`    ${location}`);
+    }
+  }
+
+  if (update && !rows.some((row) => row.status === "ABOVE BASELINE")) {
+    writeFileSync(baselinePath, `${JSON.stringify(next, null, 2)}\n`);
+    console.log("[guard] baseline updated");
+  }
+
+  if (failed) {
+    if (rows.some((row) => row.status === "ABOVE BASELINE")) {
+      console.error(
+        "[guard] a count rose above its baseline; remove the new occurrences instead of raising the baseline",
+      );
+    }
+    if (rows.some((row) => row.status === "BELOW BASELINE")) {
+      console.error(
+        "[guard] a count fell below its baseline; lower it in this change: npm run guard:honest -- --update",
+      );
+    }
     process.exit(1);
   }
 }
 
-const width = Math.max(...rules.map((rule) => rule.id.length));
-for (const { rule, total, limit, status, locations } of rows) {
-  console.log(
-    `${rule.id.padEnd(width)}  ${String(total).padStart(3)} / ${String(limit).padEnd(3)}  ${status}  (${rule.owner})`,
-  );
-  if (status === "ABOVE BASELINE") {
-    console.log(`  ${rule.description}`);
-    for (const location of locations) console.log(`    ${location}`);
-  }
-}
-
-if (update && !rows.some((row) => row.status === "ABOVE BASELINE")) {
-  writeFileSync(baselinePath, `${JSON.stringify(next, null, 2)}\n`);
-  console.log("[guard] baseline updated");
-}
-
-if (failed) {
-  if (rows.some((row) => row.status === "ABOVE BASELINE")) {
-    console.error(
-      "[guard] a count rose above its baseline; remove the new occurrences instead of raising the baseline",
-    );
-  }
-  if (rows.some((row) => row.status === "BELOW BASELINE")) {
-    console.error(
-      "[guard] a count fell below its baseline; lower it in this change: npm run guard:honest -- --update",
-    );
-  }
-  process.exit(1);
-}
+// Runs only when executed directly (import.meta.main also holds through symlinked paths).
+if (import.meta.main) main();

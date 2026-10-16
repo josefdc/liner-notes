@@ -1,14 +1,11 @@
 /**
- * Last.fm Tools Test
+ * Last.fm tools without an API key
  *
- * Tests all 5 Last.fm tools against the live API.
- * Requires LASTFM_API_KEY to be set in apps/api/.env
+ * Every Last.fm tool must report that the source is not configured instead of
+ * throwing or returning made-up data, and must not touch the network.
  *
- * Run: cd apps/api && npx tsx src/sources/lastfm.test.ts
+ * Run: npm run test:lastfm -w apps/api
  */
-
-import dotenv from "dotenv";
-dotenv.config();
 
 import {
   getLastfmTrackTags,
@@ -18,179 +15,50 @@ import {
   getLastfmArtistInfo,
 } from "./lastfm.js";
 
-const TEST_TRACK = "Bohemian Rhapsody";
-const TEST_ARTIST = "Queen";
+// Importing the tools loads apps/api/.env; remove the key afterwards so the
+// no-key path is exercised regardless of local configuration.
+delete process.env.LASTFM_API_KEY;
 
-async function runTests() {
-  console.log("=".repeat(60));
-  console.log("Last.fm Tools Test Suite");
-  console.log("=".repeat(60));
+let networkCalls = 0;
+globalThis.fetch = (async () => {
+  networkCalls++;
+  throw new Error("network access is not expected without an API key");
+}) as typeof fetch;
 
-  if (!process.env.LASTFM_API_KEY) {
-    console.log("\n⚠️  LASTFM_API_KEY not set — testing graceful degradation\n");
-  }
+const cases: Array<[string, { invoke: (input: never) => Promise<unknown> }, Record<string, string>]> = [
+  ["track tags", getLastfmTrackTags, { title: "Bohemian Rhapsody", artist: "Queen" }],
+  ["artist tags", getLastfmArtistTags, { artist: "Queen" }],
+  ["similar tracks", getLastfmSimilarTracks, { title: "Bohemian Rhapsody", artist: "Queen" }],
+  ["similar artists", getLastfmSimilarArtists, { artist: "Queen" }],
+  ["artist info", getLastfmArtistInfo, { artist: "Queen" }],
+];
 
-  let passed = 0;
-  let failed = 0;
+let failed = 0;
 
-  // Test 1: Track Tags
-  console.log("\n--- Test 1: Track Tags ---");
+for (const [name, lastfmTool, input] of cases) {
   try {
-    const result = await getLastfmTrackTags.invoke({
-      title: TEST_TRACK,
-      artist: TEST_ARTIST,
-    });
-    const data = JSON.parse(result);
-    console.log("Result:", JSON.stringify(data, null, 2));
-
-    if (!process.env.LASTFM_API_KEY) {
-      if (data.error?.includes("not configured")) {
-        console.log("✅ Graceful degradation works");
-        passed++;
-      } else {
-        console.log("❌ Expected graceful degradation error");
-        failed++;
-      }
-    } else if (data.found && data.tags.length > 0) {
-      console.log("✅ PASSED — found", data.tags.length, "tags");
-      passed++;
+    const result = await lastfmTool.invoke(input as never);
+    const data = JSON.parse(String(result));
+    const dataKeys = ["tags", "tracks", "artists", "name"].filter((key) => key in data);
+    if (
+      typeof data.error === "string" &&
+      data.error.includes("not configured") &&
+      data.found !== true &&
+      dataKeys.length === 0
+    ) {
+      console.log(`ok   ${name}: reports "not configured"`);
     } else {
-      console.log("❌ FAILED — no tags found");
+      console.log(`FAIL ${name}: expected only a "not configured" error, got ${JSON.stringify(data)}`);
       failed++;
     }
   } catch (error) {
-    console.log("❌ FAILED —", error);
+    console.log(`FAIL ${name}: threw ${error}`);
     failed++;
-  }
-
-  // Test 2: Artist Tags
-  console.log("\n--- Test 2: Artist Tags ---");
-  try {
-    const result = await getLastfmArtistTags.invoke({
-      artist: TEST_ARTIST,
-    });
-    const data = JSON.parse(result);
-    console.log("Result:", JSON.stringify(data, null, 2));
-
-    if (!process.env.LASTFM_API_KEY) {
-      if (data.error?.includes("not configured")) {
-        console.log("✅ Graceful degradation works");
-        passed++;
-      } else {
-        console.log("❌ Expected graceful degradation error");
-        failed++;
-      }
-    } else if (data.found && data.tags.length > 0) {
-      console.log("✅ PASSED — found", data.tags.length, "tags");
-      passed++;
-    } else {
-      console.log("❌ FAILED — no tags found");
-      failed++;
-    }
-  } catch (error) {
-    console.log("❌ FAILED —", error);
-    failed++;
-  }
-
-  // Test 3: Similar Tracks
-  console.log("\n--- Test 3: Similar Tracks ---");
-  try {
-    const result = await getLastfmSimilarTracks.invoke({
-      title: TEST_TRACK,
-      artist: TEST_ARTIST,
-    });
-    const data = JSON.parse(result);
-    console.log("Result:", JSON.stringify(data, null, 2));
-
-    if (!process.env.LASTFM_API_KEY) {
-      if (data.error?.includes("not configured")) {
-        console.log("✅ Graceful degradation works");
-        passed++;
-      } else {
-        console.log("❌ Expected graceful degradation error");
-        failed++;
-      }
-    } else if (data.found && data.tracks.length > 0) {
-      console.log("✅ PASSED — found", data.tracks.length, "similar tracks");
-      passed++;
-    } else {
-      console.log("❌ FAILED — no similar tracks found");
-      failed++;
-    }
-  } catch (error) {
-    console.log("❌ FAILED —", error);
-    failed++;
-  }
-
-  // Test 4: Similar Artists
-  console.log("\n--- Test 4: Similar Artists ---");
-  try {
-    const result = await getLastfmSimilarArtists.invoke({
-      artist: TEST_ARTIST,
-    });
-    const data = JSON.parse(result);
-    console.log("Result:", JSON.stringify(data, null, 2));
-
-    if (!process.env.LASTFM_API_KEY) {
-      if (data.error?.includes("not configured")) {
-        console.log("✅ Graceful degradation works");
-        passed++;
-      } else {
-        console.log("❌ Expected graceful degradation error");
-        failed++;
-      }
-    } else if (data.found && data.artists.length > 0) {
-      console.log("✅ PASSED — found", data.artists.length, "similar artists");
-      passed++;
-    } else {
-      console.log("❌ FAILED — no similar artists found");
-      failed++;
-    }
-  } catch (error) {
-    console.log("❌ FAILED —", error);
-    failed++;
-  }
-
-  // Test 5: Artist Info
-  console.log("\n--- Test 5: Artist Info ---");
-  try {
-    const result = await getLastfmArtistInfo.invoke({
-      artist: TEST_ARTIST,
-    });
-    const data = JSON.parse(result);
-    console.log("Result:", JSON.stringify(data, null, 2));
-
-    if (!process.env.LASTFM_API_KEY) {
-      if (data.error?.includes("not configured")) {
-        console.log("✅ Graceful degradation works");
-        passed++;
-      } else {
-        console.log("❌ Expected graceful degradation error");
-        failed++;
-      }
-    } else if (data.found && data.name) {
-      console.log("✅ PASSED — got info for", data.name);
-      passed++;
-    } else {
-      console.log("❌ FAILED — no artist info found");
-      failed++;
-    }
-  } catch (error) {
-    console.log("❌ FAILED —", error);
-    failed++;
-  }
-
-  // Summary
-  console.log("\n" + "=".repeat(60));
-  console.log(`Results: ${passed} passed, ${failed} failed out of 5 tests`);
-  console.log("=".repeat(60));
-
-  if (failed > 0) {
-    process.exit(1);
   }
 }
 
-runTests().catch((error) => {
-  console.error("Test runner error:", error);
-  process.exit(1);
-});
+console.log(`\n${cases.length - failed}/${cases.length} Last.fm tools degrade without a key`);
+if (networkCalls > 0) {
+  console.log(`FAIL ${networkCalls} network call(s) attempted without an API key`);
+}
+process.exit(failed > 0 || networkCalls > 0 ? 1 : 0);

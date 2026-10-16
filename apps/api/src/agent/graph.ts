@@ -194,7 +194,7 @@ export async function* streamAnalysis(
       yield { type: "event", data: chunk };
     } else if (mode === "updates") {
       // Emit node updates
-      for (const [nodeName, nodeData] of Object.entries(chunk)) {
+      for (const [nodeName, nodeData] of Object.entries(chunk as Record<string, unknown>)) {
         yield { type: "update", data: { node: nodeName, state: nodeData } };
       }
     }

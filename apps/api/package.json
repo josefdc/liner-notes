@@ -7,18 +7,14 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "test:spotify": "tsx src/sources/spotify.test.ts",
-    "test:agent": "tsx src/agent/graph.test.ts",
-    "test:tools": "tsx src/sources/genius.test.ts && tsx src/sources/musicbrainz.test.ts",
-    "test:lastfm": "tsx src/sources/lastfm.test.ts",
-    "test:listenbrainz": "tsx src/sources/listenbrainz.test.ts",
     "test:db": "tsx src/store/database.test.ts",
+    "test:lastfm": "tsx src/sources/lastfm.test.ts",
     "build": "tsup",
-    "start:prod": "node dist/index.js"
+    "start:prod": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@google/genai": "1.34.0",
-    "@langchain/community": "1.1.17",
     "@langchain/core": "1.1.27",
     "@langchain/langgraph": "1.1.5",
     "@langchain/langgraph-checkpoint": "1.0.0",
@@ -36,7 +32,6 @@
     "@types/node": "22.19.3",
     "tsup": "8.5.1",
     "tsx": "4.21.0",
-    "typescript": "5.9.3",
-    "vitest": "4.0.16"
+    "typescript": "~6.0.3"
   }
 }

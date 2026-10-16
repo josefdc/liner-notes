@@ -21,7 +21,7 @@ vi.mock("@langchain/langgraph", async (importOriginal) => ({
   getStore: () => store,
 }));
 
-import { composerNode } from "./composerNode.js";
+import { composerNode, modelErrorCategory } from "./composerNode.js";
 import type { AudioFeatures, SonicAgentStateType } from "../state.js";
 
 // What a model might return, including measured fields it must not be able to set.
@@ -240,13 +240,31 @@ describe("composerNode", () => {
 
     expect(out.trackData).toMatchObject({
       modelUnavailable: true,
-      modelUnavailableReason: "API key not valid. (INVALID_ARGUMENT)",
+      modelUnavailableReason: "auth",
       bpm: null,
       key: null,
       segmentsSource: "template",
     });
     const status = out.statusMessages?.join(" ") ?? "";
-    expect(status).toContain("API key not valid.");
+    expect(status).toContain("Model unavailable (not authorised)");
+    expect(status).not.toContain("API key not valid");
+    expect(JSON.stringify(out.trackData)).not.toContain("API key not valid");
     expect(status).not.toMatch(/complete/i);
+  });
+
+  it.each([
+    [undefined, "no_output"],
+    [
+      '{"error":{"code":429,"message":"Quota exceeded for project 123","status":"RESOURCE_EXHAUSTED"}}',
+      "rate_limited",
+    ],
+    ["Request timed out after 60000ms", "timeout"],
+    [
+      '{"error":{"code":403,"message":"Permission denied on resource project p-42","status":"PERMISSION_DENIED"}}',
+      "auth",
+    ],
+    ["socket hang up", "error"],
+  ])("sends only a category for the model error %s", (error, category) => {
+    expect(modelErrorCategory(error)).toBe(category);
   });
 });

@@ -28,6 +28,28 @@ export function modelErrorReason(error: string | undefined): string {
   return error.slice(0, 300);
 }
 
+export type ModelUnavailableReason = "no_output" | "rate_limited" | "timeout" | "auth" | "error";
+
+/**
+ * The category sent to clients when the model call fails. Provider error text stays in the
+ * server log: it can name keys, projects or quotas and is not meant for users.
+ */
+export function modelErrorCategory(error: string | undefined): ModelUnavailableReason {
+  if (!error) return "no_output";
+  if (/\b429\b|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(error)) return "rate_limited";
+  if (/timed? ?out|DEADLINE_EXCEEDED|ETIMEDOUT|\babort/i.test(error)) return "timeout";
+  if (/\b40[13]\b|API key|UNAUTHENTICATED|PERMISSION_DENIED|credential/i.test(error)) return "auth";
+  return "error";
+}
+
+const MODEL_REASON_TEXT: Record<ModelUnavailableReason, string> = {
+  no_output: "no output",
+  rate_limited: "rate limited",
+  timeout: "timed out",
+  auth: "not authorised",
+  error: "request failed",
+};
+
 // Audio problems that may clear up on the next run. A result missing audio for one of these
 // reasons is not stored, so it is not served after the analysis service recovers.
 const TRANSIENT_AUDIO_REASONS = new Set(["service_unavailable", "analysis_failed", "not_run"]);
@@ -152,8 +174,9 @@ export async function composerNode(
   }
 
   // Fallback: Build from state data if LLM fails
-  const modelError = modelErrorReason(result.error);
-  console.log("⚠️ [Composer] LLM failed, using fallback data:", modelError);
+  const modelError = modelErrorCategory(result.error);
+  const modelErrorText = MODEL_REASON_TEXT[modelError];
+  console.log("⚠️ [Composer] LLM failed, using fallback data:", modelErrorReason(result.error));
   console.log(
     "📊 [Composer] Error details:",
     JSON.stringify(
@@ -173,7 +196,7 @@ export async function composerNode(
   writer?.({
     type: "status",
     code: "GEMINI-ERROR",
-    message: `Model unavailable (${modelError}); building the result from source data only`,
+    message: `Model unavailable (${modelErrorText}); building the result from source data only`,
     node: "composer",
     timestamp: new Date().toISOString(),
   });
@@ -200,6 +223,6 @@ export async function composerNode(
 
   return {
     trackData: fallbackData,
-    statusMessages: [`⚠️ Model unavailable (${modelError}); showing source data only`],
+    statusMessages: [`⚠️ Model unavailable (${modelErrorText}); showing source data only`],
   };
 }

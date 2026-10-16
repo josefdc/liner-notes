@@ -86,7 +86,6 @@ function getFactoidStyle(type: Factoid['type']): {
       return { icon: <Sparkles size={14} />, color: 'text-accent-amber', label: 'CURIOSITY' };
     case 'connection':
       return { icon: <Link2 size={14} />, color: 'text-accent-green', label: 'CONNECTION' };
-    case 'trivia':
     default:
       return { icon: <Info size={14} />, color: 'text-analog', label: 'TRIVIA' };
   }
@@ -124,6 +123,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
       // Add clickable entity
       elements.push(
         <button
+          type="button"
           key={entity.id}
           onClick={() => onEntityClick?.(entity)}
           className={`

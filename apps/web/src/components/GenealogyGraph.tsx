@@ -5,7 +5,6 @@ import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } 
 import type { Simulation } from 'd3-force';
 import { drag } from 'd3-drag';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
-import { GenealogyNode } from '../types';
 import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
 import { colors, genealogyColors, linkColors } from '../styles/theme';
 import type { GenealogyGraphProps, CustomNode, CustomLink } from './genealogy/types';
@@ -278,7 +277,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .text((d) => {
         // More aggressive truncation on mobile
         const maxLen = isMobile ? 12 : 30;
-        return d.label.length > maxLen ? d.label.slice(0, maxLen) + '…' : d.label;
+        return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
       })
       .attr('text-anchor', 'middle')
       .attr('fill', '#fff')
@@ -322,7 +321,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     }
 
     node
-      .on('mouseenter', function (event, d) {
+      .on('mouseenter', function (_event, d) {
         // Dim everything
         node.style('opacity', 0.1);
         link.style('stroke-opacity', 0.05);
@@ -374,7 +373,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
             .style('opacity', 1);
         }
       })
-      .on('mouseleave', function () {
+      .on('mouseleave', () => {
         node.style('opacity', 1);
         link
           .style('stroke', (d: any) => {
@@ -387,7 +386,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         stopPreview();
       })
       // Click to navigate (infinite exploration)
-      .on('click', function (event, d) {
+      .on('click', (event, d) => {
         event.stopPropagation();
 
         // Don't re-analyze the current song (group 1)

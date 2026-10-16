@@ -46,7 +46,7 @@ export async function withRetry<T>(
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
       if (!isTransient(e) || attempt === maxAttempts - 1) throw lastError;
-      const delay = initialInterval * Math.pow(backoffFactor, attempt);
+      const delay = initialInterval * backoffFactor ** attempt;
       await sleep(delay + Math.random() * delay * 0.1); // slight jitter
     }
   }

@@ -1,4 +1,4 @@
-import type { TrackData, AgentLog, LogCode, Factoid } from '../../types';
+import type { TrackData, AgentLog, Factoid } from '../../types';
 
 export interface SearchCandidate {
   id: string;

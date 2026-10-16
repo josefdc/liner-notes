@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import type React from 'react';
+import { useState, useMemo } from 'react';
 import {
   Database,
   Search,
@@ -99,13 +100,14 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
 
       {/* Collapsible Header - Always visible */}
       <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         aria-expanded={isExpanded}
         aria-controls="activity-log-content"
         aria-label={
           isExpanded
             ? 'Collapse activity log'
-            : `Expand activity log${lastLog ? ', last event: ' + lastLog.message : ''}`
+            : `Expand activity log${lastLog ? `, last event: ${lastLog.message}` : ''}`
         }
         className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-[--duration-fast] cursor-pointer focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none"
       >

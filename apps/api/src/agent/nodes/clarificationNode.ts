@@ -88,7 +88,7 @@ export async function clarificationNode(
       candidates: null, // Clear candidates
       statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
     };
-  } catch (error) {
+  } catch {
     // Fallback: create minimal SpotifyData from candidate
     return {
       spotifyData: {

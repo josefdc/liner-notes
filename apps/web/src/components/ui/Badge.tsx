@@ -1,4 +1,5 @@
-import React, { forwardRef } from 'react';
+import type React from 'react';
+import { forwardRef } from 'react';
 
 type BadgeVariant = 'cyber' | 'analog' | 'purple' | 'green' | 'pink' | 'gray' | 'indigo' | 'amber';
 type BadgeSize = 'sm' | 'md';

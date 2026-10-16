@@ -130,7 +130,7 @@ router.get("/api/analyze/stream", async (req, res) => {
         // Node state updates
         const updates = data as Record<string, unknown>;
 
-        for (const [nodeName, nodeData] of Object.entries(updates)) {
+        for (const nodeData of Object.values(updates)) {
           const stateData = nodeData as { trackData?: TrackData; error?: string };
 
           // Send completion when we have final data

@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import type React from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
   Play,
@@ -19,7 +20,7 @@ import InteractiveFactoid from './InteractiveFactoid';
 import EstimatedWarning from './EstimatedWarning';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
-import { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types';
+import type { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types';
 
 interface PlayerProps {
   trackData: TrackData | null;
@@ -212,7 +213,7 @@ const Player: React.FC<PlayerProps> = ({
         </div>
         <div className="hidden md:flex items-center gap-3 text-xs font-mono text-cyber">
           <span>
-            DEEP_DIVE_MODE // {track.bpm} BPM {track.key && `// ${track.key}`}
+            DEEP_DIVE_MODE {'//'} {track.bpm} BPM {track.key && `// ${track.key}`}
           </span>
           <EstimatedWarning
             show={track.audioConfidence === 'low' || track.audioSource === 'estimated'}
@@ -257,6 +258,7 @@ const Player: React.FC<PlayerProps> = ({
               {/* Standalone Decrypt More card */}
               {onDecryptMoreStream && (
                 <button
+                  type="button"
                   onClick={handleDecryptMore}
                   disabled={isDecrypting}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4
@@ -286,6 +288,7 @@ const Player: React.FC<PlayerProps> = ({
                   {/* Gradient fade on boundary */}
                   <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-black/20 pointer-events-none" />
                   <button
+                    type="button"
                     onClick={() => setShowAllFactoids(true)}
                     className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none transition-colors"
                   >
@@ -296,6 +299,7 @@ const Player: React.FC<PlayerProps> = ({
               )}
               {showAllFactoids && allFactoids.length > INITIAL_VISIBLE_FACTOIDS && (
                 <button
+                  type="button"
                   onClick={() => setShowAllFactoids(false)}
                   className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none"
                 >
@@ -420,6 +424,7 @@ const Player: React.FC<PlayerProps> = ({
           <div className="flex items-center justify-center gap-8 mb-6">
             {track.previewUrl ? (
               <button
+                type="button"
                 onClick={handlePlayPause}
                 className={`w-16 h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 hover:shadow-[var(--shadow-glow-white-hover)] hover:ring-2 hover:ring-white/20 active:scale-95 transition-all duration-[--duration-fast] ease-[--ease-spring] shadow-[var(--shadow-glow-white)] ${isPlaying ? 'animate-[glow-breathe-white_3s_ease-in-out_infinite]' : ''}`}
                 aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
@@ -486,6 +491,7 @@ const Player: React.FC<PlayerProps> = ({
         className="md:hidden border-t border-white/5 bg-void/90 backdrop-blur-lg flex text-xs font-mono uppercase tracking-widest pb-[env(safe-area-inset-bottom)]"
       >
         <button
+          type="button"
           role="tab"
           id="tab-context"
           aria-selected={activeTab === 'context'}
@@ -496,6 +502,7 @@ const Player: React.FC<PlayerProps> = ({
           Analysis
         </button>
         <button
+          type="button"
           role="tab"
           id="tab-player"
           aria-selected={activeTab === 'player'}
@@ -506,6 +513,7 @@ const Player: React.FC<PlayerProps> = ({
           Player
         </button>
         <button
+          type="button"
           role="tab"
           id="tab-genealogy"
           aria-selected={activeTab === 'genealogy'}

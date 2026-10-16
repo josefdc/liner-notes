@@ -3,10 +3,9 @@
  * Run: npm run test:db -w apps/api
  */
 
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
 import { initializeDatabase, closeDatabase, isDatabaseHealthy, getDb } from "./database.js";
 import { SqliteStore } from "./store.js";
 import { SonicCache } from "./cache.js";
@@ -457,7 +456,7 @@ async function testConcurrentWrites(): Promise<void> {
 // =============================================================================
 
 async function runAllTests(): Promise<void> {
-  console.log("🧪 Running Sonic Agent Database Tests\n" + "=".repeat(50));
+  console.log(`🧪 Running Sonic Agent Database Tests\n${"=".repeat(50)}`);
 
   await testDbInitialization();
   await testSchemaVersioning();
@@ -470,7 +469,7 @@ async function runAllTests(): Promise<void> {
   await testGracefulDegradation();
   await testConcurrentWrites();
 
-  console.log("\n" + "=".repeat(50));
+  console.log(`\n${"=".repeat(50)}`);
   console.log(`Results: ${passCount}/${testCount} passed, ${failCount} failed`);
 
   if (failCount > 0) {

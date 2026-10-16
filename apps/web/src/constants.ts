@@ -1,4 +1,4 @@
-import { TrackData } from './types';
+import type { TrackData } from './types';
 
 // Placeholder images (internal only)
 const IMAGES = {

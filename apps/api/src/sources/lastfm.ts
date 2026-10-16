@@ -163,7 +163,7 @@ function cleanBio(bio: string, maxLength = 300): string {
     .replace(/\s+/g, " ")
     .trim();
   if (cleaned.length <= maxLength) return cleaned;
-  return cleaned.substring(0, maxLength).replace(/\s+\S*$/, "") + "...";
+  return `${cleaned.substring(0, maxLength).replace(/\s+\S*$/, "")}...`;
 }
 
 // =============================================================================

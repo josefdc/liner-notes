@@ -6,7 +6,7 @@
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { generateStructuredOutput, GEMINI_MODEL_PRO } from "../geminiClient.js";
-import { FlatTrackDataSchema, transformFlatToTrackData, type TrackData } from "../schema.js";
+import { FlatTrackDataSchema, transformFlatToTrackData } from "../schema.js";
 import { COMPOSER_SYSTEM_PROMPT, formatComposerPrompt } from "../prompts.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { createFallbackTrackData } from "../fallback.js";

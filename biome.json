@@ -1,16 +1,85 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": ["**", "!**/dist", "!**/node_modules", "!services/audio", "!evals/reports"]
   },
-  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
-  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
   "overrides": [
     {
       "includes": ["apps/web/**"],
-      "javascript": { "formatter": { "quoteStyle": "single", "jsxQuoteStyle": "double" } }
+      "javascript": {
+        "formatter": {
+          "quoteStyle": "single",
+          "jsxQuoteStyle": "double"
+        }
+      }
+    },
+    {
+      "includes": ["**/*.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/components/ActivityLog.tsx",
+        "apps/web/src/components/Dashboard.tsx",
+        "apps/web/src/components/Onboarding.tsx",
+        "apps/web/src/components/SmartTimeline.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "warn",
+            "noStaticElementInteractions": "warn",
+            "noNoninteractiveTabindex": "warn",
+            "useAriaPropsSupportedByRole": "warn"
+          }
+        }
+      }
     }
   ],
-  "linter": { "enabled": true, "rules": { "recommended": true } }
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
 }

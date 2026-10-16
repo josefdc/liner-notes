@@ -341,7 +341,7 @@ export function generateId(): string {
 /**
  * Create default segments based on duration
  */
-export function createDefaultSegments(durationMs: number): SongSegment[] {
+export function createDefaultSegments(_durationMs: number): SongSegment[] {
   // Simple default structure for songs without detailed analysis
   return [
     { label: "Intro", start: 0, end: 8, color: SEGMENT_COLORS.intro },

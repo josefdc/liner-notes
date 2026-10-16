@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { SongSegment, KeyMoment } from '../types';
+import type React from 'react';
+import { useMemo } from 'react';
+import type { SongSegment, KeyMoment } from '../types';
 import { keyMomentColors, colors } from '../styles/theme';
 
 interface SmartTimelineProps {
@@ -35,7 +36,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   samples = EMPTY_SAMPLES,
   keyMoments = EMPTY_KEY_MOMENTS,
 }) => {
-  const { allMarkers, isPercentageMode, actualDuration } = useMemo(() => {
+  const { allMarkers, actualDuration } = useMemo(() => {
     const isPct = duration === 100;
     const actDur = isPct ? 225 : duration;
     const timeToPercent = (t: number) => (isPct ? t : (t / actDur) * 100);

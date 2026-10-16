@@ -75,7 +75,8 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
     return () => clearInterval(interval);
   }, [logs.length, isComplete]);
 
-  // Auto-scroll forzado siempre al fondo usando anchor invisible
+  // Keep the newest log line in view
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
   useEffect(() => {
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -83,7 +84,10 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
   }, [logs]);
 
   return (
-    <div className="relative w-full max-w-3xl mx-auto group" aria-label="Analysis system console">
+    <section
+      className="relative w-full max-w-3xl mx-auto group"
+      aria-label="Analysis system console"
+    >
       {/* Glow Effect Background */}
       <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/15 to-accent-purple/10 rounded-[--radius-md] blur opacity-20 group-hover:opacity-40 transition duration-[--duration-dramatic] ease-[--ease-out-expo]"></div>
 
@@ -193,7 +197,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
           </span>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 

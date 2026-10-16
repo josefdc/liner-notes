@@ -80,7 +80,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
           factoids.push({
             id: generateId(),
             title: idx === 0 ? "Studio Intel" : "Behind the Boards",
-            content: cleanTrivia.length > 300 ? cleanTrivia.substring(0, 297) + "..." : cleanTrivia,
+            content: cleanTrivia.length > 300 ? `${cleanTrivia.substring(0, 297)}...` : cleanTrivia,
             type: "production",
           });
         }
@@ -90,7 +90,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   // 2. Samples discovered - parse from research data strings
   if (research.samples && research.samples.length > 0) {
     // Try to extract structured samples from MusicBrainz data
-    let parsedSamples: Array<{ title: string; artist: string }> = [];
+    const parsedSamples: Array<{ title: string; artist: string }> = [];
 
     for (const sampleStr of research.samples) {
       if (sampleStr.includes("[MusicBrainz]")) {
@@ -110,7 +110,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
           factoids.push({
             id: generateId(),
             title: "Sample Detective",
-            content: cleanText.length > 300 ? cleanText.substring(0, 297) + "..." : cleanText,
+            content: cleanText.length > 300 ? `${cleanText.substring(0, 297)}...` : cleanText,
             type: "sample",
           });
         }
@@ -150,7 +150,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
       factoids.push({
         id: generateId(),
         title: "Lyrical Decode",
-        content: meaningText.length > 300 ? meaningText.substring(0, 297) + "..." : meaningText,
+        content: meaningText.length > 300 ? `${meaningText.substring(0, 297)}...` : meaningText,
         type: "trivia",
       });
     }

@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useReducer, useRef, useCallback } from 'react';
-import { TrackData, AgentLog } from '../types';
+import type React from 'react';
+import { useEffect, useState, useReducer, useRef, useCallback } from 'react';
+import type { TrackData, AgentLog } from '../types';
 import {
   Network,
   Cpu,
@@ -356,7 +357,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       setHitlCountdown((prev) => {
         if (prev === null || prev <= 1) {
           // Time's up — auto-select
-          if (candidates && candidates[hitlSelectedIndex]) {
+          if (candidates?.[hitlSelectedIndex]) {
             selectCandidate(candidates[hitlSelectedIndex].id);
           }
           return null;
@@ -604,6 +605,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   RETRY ANALYSIS
                 </Button>
                 <button
+                  type="button"
                   onClick={handleReset}
                   className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors focus-visible:underline focus-visible:outline-none"
                 >
@@ -616,6 +618,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {/* UX: Session restore link (Item 8) */}
           {status === 'idle' && onRestorePrevious && (
             <button
+              type="button"
               onClick={onRestorePrevious}
               className="text-text-tertiary hover:text-cyber text-xs font-mono animate-fade-in transition-colors focus-visible:outline-none focus-visible:underline flex items-center gap-1.5"
             >
@@ -706,6 +709,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {candidates.map((candidate, index) => (
                   <button
+                    type="button"
                     key={candidate.id}
                     onClick={() => handleHitlSelect(index)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-[--radius-sm] text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${

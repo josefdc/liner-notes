@@ -134,7 +134,7 @@ export class SqliteStore extends BaseStore {
     // Match rows whose namespace starts with the prefix array
     // We use a LIKE pattern on the JSON-encoded namespace
     // e.g., '["tracks"]' matches '["tracks"]' and '["tracks","sub"]'
-    const likePattern = nsPrefix.slice(0, -1) + "%";
+    const likePattern = `${nsPrefix.slice(0, -1)}%`;
 
     let rows: Array<{
       namespace: string;

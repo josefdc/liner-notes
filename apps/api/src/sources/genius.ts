@@ -131,7 +131,7 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
     let lyrics = "";
     for (const match of matches) {
       // Clean HTML tags while preserving line breaks
-      let chunk = match[1]
+      const chunk = match[1]
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<[^>]+>/g, "")
         .replace(/&#x27;/g, "'")
@@ -143,7 +143,7 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
         .trim();
 
       if (chunk) {
-        lyrics += chunk + "\n\n";
+        lyrics += `${chunk}\n\n`;
       }
     }
 
@@ -152,11 +152,11 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
       const altRegex = /class="Lyrics__Container[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
       const altMatches = html.matchAll(altRegex);
       for (const match of altMatches) {
-        let chunk = match[1]
+        const chunk = match[1]
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<[^>]+>/g, "")
           .trim();
-        if (chunk) lyrics += chunk + "\n\n";
+        if (chunk) lyrics += `${chunk}\n\n`;
       }
     }
 
@@ -216,7 +216,7 @@ export const fetchLyrics = tool(
       // Truncate if too long
       const truncated = lyrics.length > MAX_LYRICS_LENGTH;
       const finalLyrics = truncated
-        ? lyrics.substring(0, MAX_LYRICS_LENGTH) + "\n\n[... lyrics truncated ...]"
+        ? `${lyrics.substring(0, MAX_LYRICS_LENGTH)}\n\n[... lyrics truncated ...]`
         : lyrics;
 
       console.log(

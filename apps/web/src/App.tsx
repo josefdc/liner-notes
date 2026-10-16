@@ -12,7 +12,7 @@ import Layout from './components/Layout';
 import Onboarding from './components/Onboarding';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Player = lazy(() => import('./components/Player'));
-import { AppPhase, TrackData, AgentLog } from './types';
+import { AppPhase, type TrackData, type AgentLog } from './types';
 import { useAgent } from './hooks/useAgent';
 import type { AgentStatus, SearchCandidate } from './hooks/agent/types';
 import type { Factoid } from './types';
@@ -300,7 +300,7 @@ const App: React.FC = () => {
   }, [effectiveTrackData]);
 
   // Handle song analysis completion
-  const handleAnalysisComplete = useCallback((completedData: TrackData) => {
+  const handleAnalysisComplete = useCallback((_completedData: TrackData) => {
     setOverrideTrackData(null); // New analysis data comes from hook
     setIsRestoredSession(false);
     setPhase(AppPhase.DASHBOARD);
@@ -313,7 +313,7 @@ const App: React.FC = () => {
 
   // Handle analyzing a track from Dashboard (Discovered Gems) — P1:13 fix
   const handleAnalyzeTrack = useCallback(
-    (trackId: string, title: string, artist: string) => {
+    (_trackId: string, title: string, artist: string) => {
       // Save current trackData for undo (Item 2)
       previousTrackDataRef.current = effectiveTrackData;
       setOverrideTrackData(null);
@@ -364,9 +364,11 @@ const App: React.FC = () => {
   }, [reset, effectiveTrackData]);
 
   // ─── P1:15 Browser history support ────────────────────────────────────────
+  // Records the initial phase once on mount; later phases are pushed by navigation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs only on mount
   useEffect(() => {
     window.history.replaceState({ phase }, '');
-  }, []); // Set initial state
+  }, []);
 
   useEffect(() => {
     // Don't push during analysis (would create noise)

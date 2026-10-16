@@ -138,7 +138,7 @@ class SpotifyAuthManager {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       },
       body: params,
     });
@@ -296,7 +296,7 @@ export const getTrackDetails = tool(
 
       const track = (await response.json()) as SpotifyTrack & { preview_url?: string };
 
-      if (!track || !track.id) {
+      if (!track?.id) {
         return `No track data available for ID "${trackId}".`;
       }
 

@@ -324,7 +324,7 @@ async function researchToolNode(
         }
         break;
 
-      case "search_general":
+      case "search_general": {
         // Use the custom query from the plan (for following leads)
         const query = plan.query || `${title} ${artist} music history`;
         result = await searchMusicInfo.invoke({ query });
@@ -333,6 +333,7 @@ async function researchToolNode(
           newData.productionTrivia.push(result);
         }
         break;
+      }
 
       case "search_lyrics":
         // Use Genius to fetch raw lyrics
@@ -411,7 +412,7 @@ async function researchToolNode(
         }
         break;
 
-      case "search_artist_top_tracks":
+      case "search_artist_top_tracks": {
         // Use Spotify to get artist's top tracks for "More from this artist"
         const artistId = state.spotifyData.artistIds?.[0];
         if (artistId) {
@@ -433,6 +434,7 @@ async function researchToolNode(
           console.log("⚠️ [Research Tool] No artist ID available for top tracks");
         }
         break;
+      }
 
       case "search_lastfm_tags":
         // Fetch both track and artist tags in parallel

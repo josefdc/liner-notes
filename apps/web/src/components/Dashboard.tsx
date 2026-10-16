@@ -3,7 +3,7 @@ const SonicFingerprint = React.lazy(() => import('./SonicFingerprint'));
 import ActivityLog from './ActivityLog';
 import { RECOMMENDATIONS } from '../constants';
 import { Music, ArrowRight, ExternalLink, Disc, Heart, Zap, Search } from 'lucide-react';
-import { AppPhase, TrackData, AgentLog } from '../types';
+import { AppPhase, type TrackData, type AgentLog } from '../types';
 import TargetScanOverlay from './TargetScanOverlay';
 import EstimatedWarning from './EstimatedWarning';
 import { Button } from './ui/Button';
@@ -216,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             Command Center
           </h2>
           <p className="text-xs font-mono text-text-tertiary mt-1">
-            AGENT_ID: X9-ALPHA // STATUS: ONLINE
+            AGENT_ID: X9-ALPHA {'//'} STATUS: ONLINE
           </p>
         </div>
         {onNewSearch && (
@@ -483,6 +483,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             Analyzing <span className="text-white font-bold">{undoToast.trackTitle}</span>
           </span>
           <button
+            type="button"
             onClick={handleUndo}
             className="text-xs font-mono font-bold text-cyber uppercase tracking-widest hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none px-2 py-1"
           >

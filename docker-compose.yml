@@ -10,7 +10,7 @@ services:
   sonic-web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: apps/web/Dockerfile
     container_name: sonic-web
     ports:
       - "80:80"
@@ -32,8 +32,8 @@ services:
   # ==========================================================================
   sonic-server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: sonic-server
     ports:
       - "3001:3001"
@@ -41,7 +41,7 @@ services:
       sonic-analysis:
         condition: service_healthy
     env_file:
-      - ./server/.env
+      - ./apps/api/.env
     environment:
       - NODE_ENV=production
       - PORT=3001
@@ -64,7 +64,7 @@ services:
   # ==========================================================================
   sonic-analysis:
     build:
-      context: ./server/analysis
+      context: ./services/audio
       dockerfile: Dockerfile
     container_name: sonic-analysis
     ports:

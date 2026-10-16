@@ -5,6 +5,10 @@
 # Virtual environment (platform-specific, must be rebuilt in container)
 .venv
 
+# Local models and data (models are downloaded during the image build)
+models/
+data/
+
 # Python cache
 __pycache__
 *.py[cod]

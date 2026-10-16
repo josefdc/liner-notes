@@ -6,7 +6,8 @@
 //   DEV_SERVICES=web,api npm run dev     a subset
 //
 // Output lines are prefixed with the service name. If one service exits, the others are
-// stopped and this script exits with the first failing service's exit code.
+// stopped and this script exits with the first failing service's exit code. The API runs
+// under `tsx watch`, which stays up after a crash and restarts on the next file change.
 
 import { spawn } from "node:child_process";
 
@@ -16,7 +17,8 @@ const STOP_TIMEOUT_MS = 5000;
 const services = {
   web: {
     workspace: "apps/web",
-    args: WEB_PORT ? ["--", "--port", WEB_PORT] : [],
+    // strictPort: never drift onto the next port (the API's) when the web port is taken
+    args: ["--", "--port", WEB_PORT ?? "3000", "--strictPort"],
     env: {},
   },
   api: {
@@ -56,6 +58,7 @@ let exitCode = 0;
 
 function prefix(name, stream, target) {
   let buffer = "";
+  stream.setEncoding("utf8");
   stream.on("data", (chunk) => {
     buffer += chunk;
     const lines = buffer.split("\n");

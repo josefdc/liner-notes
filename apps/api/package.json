@@ -1,5 +1,6 @@
 {
   "name": "@liner-notes/api",
+  "private": true,
   "version": "0.1.0",
   "description": "LangGraph backend for The Sonic Agent",
   "type": "module",

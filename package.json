@@ -10,7 +10,7 @@
     "packages/contract"
   ],
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "exec node scripts/dev.mjs",
     "build": "npm run build -w packages/contract -w apps/web -w apps/api",
     "test:db": "npm run test:db -w apps/api",
     "preview": "npm run preview -w apps/web"

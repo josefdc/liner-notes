@@ -3,55 +3,105 @@
  *
  * Single responsibility: graceful degradation when the LLM composer fails.
  * Builds TrackData from raw state (Spotify metadata + research data + audio features)
- * without requiring a successful LLM call.
+ * without requiring a successful LLM call. Values that are not known are left out or null;
+ * nothing is filled in with defaults.
  */
 
 import { z } from "zod";
 import { generateStructuredOutput } from "./geminiClient.js";
-import type { TrackData } from "./schema.js";
+import { measuredAudioFields, type TrackData } from "./schema.js";
 import {
   createDefaultSegments,
   generateId,
+  type AudioFeatures,
   type SonicAgentStateType,
   type Factoid,
   type FactoidEntity,
   type ResearchData,
+  type SpotifyData,
 } from "./state.js";
+
+/** Splits a research entry such as `[MusicBrainz Samples] [...]` into its tag and body. */
+function splitTag(entry: string): { tag: string | null; body: string } {
+  const match = entry.match(/^\[([^\]]+)\]\s*(.*)$/s);
+  return match ? { tag: match[1], body: match[2] } : { tag: null, body: entry };
+}
+
+/** True for entries that hold structured data (JSON) rather than prose. */
+function isStructured(entry: string): boolean {
+  const { tag, body } = splitTag(entry);
+  return (tag?.startsWith("MusicBrainz") ?? false) || /^[[{]/.test(body.trim());
+}
+
+/** Parses the sample list from a MusicBrainz samples entry; [] if it is not one. */
+function parseMusicBrainzSamples(entry: string): Array<{ title: string; artist: string }> {
+  const { tag, body } = splitTag(entry);
+  if (!tag?.startsWith("MusicBrainz")) return [];
+  const json = body.slice(body.indexOf("["));
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (s): s is { title: string; artist: string } =>
+        typeof s?.title === "string" && s.title !== "" && typeof s?.artist === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function truncate(text: string, max = 300): string {
+  return text.length > max ? `${text.substring(0, max - 3)}...` : text;
+}
+
+/** A sentence describing the measured audio values, or null when nothing was measured. */
+function describeMeasuredAudio(audio: AudioFeatures | null): string | null {
+  if (!audio || audio.bpm == null || audio.key == null) return null;
+  const parts = [`${Math.round(audio.bpm)} BPM in ${audio.key}.`];
+  if (audio.energy != null) {
+    parts.push(`${audio.energy > 0.7 ? "High" : audio.energy > 0.4 ? "Moderate" : "Low"} energy.`);
+  }
+  if (audio.valence != null) {
+    const mood =
+      audio.valence > 0.7
+        ? "euphoric"
+        : audio.valence > 0.5
+          ? "positive"
+          : audio.valence > 0.3
+            ? "melancholic"
+            : "dark";
+    parts.push(`Measured mood: ${mood}.`);
+  }
+  if (audio.danceability != null) {
+    parts.push(`Danceability: ${Math.round(audio.danceability * 100)}%.`);
+  }
+  return parts.join(" ");
+}
+
+/** A release sentence built only from the Spotify fields that are present. */
+function describeRelease(spotify: SpotifyData): string | null {
+  const year = spotify.releaseDate?.split("-")[0];
+  const parts: string[] = [];
+  if (year && spotify.album) parts.push(`Released in ${year} on "${spotify.album}".`);
+  else if (year) parts.push(`Released in ${year}.`);
+  else if (spotify.album) parts.push(`Released on "${spotify.album}".`);
+  if (typeof spotify.popularity === "number") {
+    parts.push(`Spotify popularity score: ${spotify.popularity}/100.`);
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
+}
 
 /**
  * Build TrackData from state when the main composer LLM call fails.
- * Extracts factoids from research data and falls back to template factoids.
+ * Extracts factoids from research data; adds metadata factoids only for known values.
  */
 export async function createFallbackTrackData(state: SonicAgentStateType): Promise<TrackData> {
   const spotify = state.spotifyData!;
-  const audio = state.audioFeatures || {
-    bpm: 120,
-    key: "C Major",
-    energy: 0.7,
-    valence: 0.6,
-    danceability: 0.7,
-    acousticness: 0.2,
-    instrumentalness: 0.1,
-    confidence: "low" as const,
-    keyMoments: [],
-  };
+  const audio = state.audioFeatures ?? null;
 
   // Extract release year from releaseDate
-  const releaseYear = spotify.releaseDate?.split("-")[0];
+  const releaseYear = spotify.releaseDate?.split("-")[0] || undefined;
 
-  // Generate valence description
-  const valenceLabel =
-    audio.valence > 0.7
-      ? "euphoric"
-      : audio.valence > 0.5
-        ? "positive"
-        : audio.valence > 0.3
-          ? "melancholic"
-          : "dark";
-
-  // ==========================================================================
-  // Generate RICH factoids from research data instead of boring templates
-  // ==========================================================================
   const factoids: Factoid[] = [];
   const research: ResearchData = state.researchData || {
     samples: [],
@@ -68,92 +118,74 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     collaborators: research.collaborators?.length || 0,
   });
 
-  // 1. Production trivia from research (filter out MusicBrainz raw data)
-  if (research.productionTrivia && research.productionTrivia.length > 0) {
-    research.productionTrivia
-      .filter((t) => !t.startsWith("[MusicBrainz]") && t.length > 20)
-      .slice(0, 2)
-      .forEach((trivia, idx) => {
-        // Clean up trivia text - extract the most interesting sentence
-        const cleanTrivia = trivia.replace(/\[.*?\]/g, "").trim();
-        if (cleanTrivia.length > 20) {
-          factoids.push({
-            id: generateId(),
-            title: idx === 0 ? "Studio Intel" : "Behind the Boards",
-            content: cleanTrivia.length > 300 ? `${cleanTrivia.substring(0, 297)}...` : cleanTrivia,
-            type: "production",
-          });
-        }
+  // 1. Production trivia from research (prose only; structured MusicBrainz data is skipped)
+  (research.productionTrivia || [])
+    .filter((t) => !isStructured(t))
+    .map((t) => splitTag(t).body.trim())
+    .filter((t) => t.length > 20)
+    .slice(0, 2)
+    .forEach((trivia, idx) => {
+      factoids.push({
+        id: generateId(),
+        title: idx === 0 ? "Studio Intel" : "Behind the Boards",
+        content: truncate(trivia),
+        type: "production",
       });
-  }
+    });
 
-  // 2. Samples discovered - parse from research data strings
+  // 2. Samples: structured MusicBrainz relations first, else a prose description
   if (research.samples && research.samples.length > 0) {
-    // Try to extract structured samples from MusicBrainz data
-    const parsedSamples: Array<{ title: string; artist: string }> = [];
+    const parsedSamples = research.samples.flatMap(parseMusicBrainzSamples);
 
-    for (const sampleStr of research.samples) {
-      if (sampleStr.includes("[MusicBrainz]")) {
-        try {
-          const jsonMatch = sampleStr.match(/\[.*?\].*?(\[.*\])/s);
-          if (jsonMatch) {
-            const samples = JSON.parse(jsonMatch[1]);
-            parsedSamples.push(...samples.slice(0, 3));
-          }
-        } catch {
-          /* ignore parse errors */
-        }
-      } else {
-        // Text description of samples - create a factoid from it
-        const cleanText = sampleStr.replace(/\[.*?\]/g, "").trim();
-        if (cleanText.length > 20 && parsedSamples.length === 0) {
-          factoids.push({
-            id: generateId(),
-            title: "Sample Detective",
-            content: cleanText.length > 300 ? `${cleanText.substring(0, 297)}...` : cleanText,
-            type: "sample",
-          });
-        }
-      }
-    }
-
-    // If we found structured samples, create a rich factoid
     if (parsedSamples.length > 0) {
-      const samplesList = parsedSamples
-        .slice(0, 3)
-        .map((s) => `"${s.title}" by ${s.artist}`)
+      const shown = parsedSamples.slice(0, 3);
+      const samplesList = shown
+        .map((s) => (s.artist ? `"${s.title}" by ${s.artist}` : `"${s.title}"`))
         .join(", ");
+      const more =
+        parsedSamples.length > 3 ? ` Plus ${parsedSamples.length - 3} more in MusicBrainz.` : "";
       factoids.push({
         id: generateId(),
         title: "Sample DNA",
-        content: `This track samples: ${samplesList}. ${parsedSamples.length > 3 ? `Plus ${parsedSamples.length - 3} more hidden gems.` : ""}`,
+        content: `This track samples: ${samplesList}.${more}`,
         type: "sample",
-        entities: parsedSamples.slice(0, 3).map((s) => ({
+        entities: shown.map((s) => ({
           id: generateId(),
-          text: `${s.title} - ${s.artist}`,
+          text: s.artist ? `${s.title} - ${s.artist}` : s.title,
           type: "sample" as const,
-          searchQuery: `${s.title} ${s.artist}`,
+          searchQuery: `${s.title} ${s.artist}`.trim(),
         })),
       });
+    } else {
+      const prose = research.samples
+        .filter((s) => !isStructured(s))
+        .map((s) => splitTag(s).body.trim())
+        .find((s) => s.length > 20);
+      if (prose) {
+        factoids.push({
+          id: generateId(),
+          title: "Sample Detective",
+          content: truncate(prose),
+          type: "sample",
+        });
+      }
     }
   }
 
-  // 3. Song meaning / lyrics analysis (clean up raw lyrics data)
-  if (research.songMeaning && research.songMeaning.length > 0) {
-    const meaningText = research.songMeaning
-      .filter((s) => !s.includes("[Genius Lyrics] Raw lyrics"))
-      .join(" ")
-      .replace(/\[.*?\]/g, "")
-      .trim();
-
-    if (meaningText.length > 30) {
-      factoids.push({
-        id: generateId(),
-        title: "Lyrical Decode",
-        content: meaningText.length > 300 ? `${meaningText.substring(0, 297)}...` : meaningText,
-        type: "trivia",
-      });
-    }
+  // 3. Song meaning from interpretation articles (prose only). Entries from the removed Genius
+  //    source can still arrive from research cached before its removal; they are skipped.
+  const meaningText = (research.songMeaning || [])
+    .filter((s) => !isStructured(s) && !splitTag(s).tag?.startsWith("Genius"))
+    .map((s) => splitTag(s).body.trim())
+    .join(" ")
+    .trim();
+  if (meaningText.length > 30) {
+    factoids.push({
+      id: generateId(),
+      title: "Song Meaning",
+      content: truncate(meaningText),
+      type: "trivia",
+    });
   }
 
   // 4. Artist collaborators network
@@ -162,7 +194,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     factoids.push({
       id: generateId(),
       title: "Collaboration Network",
-      content: `${spotify.artist} has worked with: ${collabNames}. These connections shaped their sonic DNA.`,
+      content: `${spotify.artist} has worked with: ${collabNames}.`,
       type: "connection",
       entities: research.collaborators.slice(0, 4).map((name) => ({
         id: generateId(),
@@ -183,7 +215,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
       factoids.push({
         id: generateId(),
         title: "Discography Context",
-        content: `From the same artist: ${hitsList}. See how their sound evolved across releases.`,
+        content: `From the same artist: ${hitsList}.`,
         type: "connection",
         entities: otherHits.map((t) => ({
           id: generateId(),
@@ -211,32 +243,25 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     }
   }
 
-  // 7. Always add basic audio profile if we still need more
-  if (factoids.length < 4) {
+  // 7. Metadata factoids, only from values that are known (measured audio, Spotify metadata).
+  //    Fewer than three factoids is better than padding with invented ones.
+  const sonicProfile = describeMeasuredAudio(audio);
+  if (factoids.length < 4 && sonicProfile) {
     factoids.push({
       id: generateId(),
       title: "Sonic Profile",
-      content: `${audio.bpm} BPM in ${audio.key}. ${audio.energy > 0.7 ? "High energy" : "Moderate energy"} with a ${valenceLabel} mood. Danceability: ${Math.round(audio.danceability * 100)}%.`,
+      content: sonicProfile,
       type: "production",
     });
   }
-
-  // Ensure we have at least 3 factoids with fallback templates
-  while (factoids.length < 3) {
-    const templates = [
-      {
-        title: "Release Info",
-        content: `Released in ${releaseYear || "Unknown"} on "${spotify.album}". Popularity score: ${spotify.popularity}/100 on Spotify.`,
-        type: "trivia" as const,
-      },
-      {
-        title: "Track Signature",
-        content: `A ${valenceLabel} track at ${audio.bpm} BPM in ${audio.key}. ${audio.acousticness > 0.5 ? "Features organic, acoustic elements." : "Driven by electronic production."}`,
-        type: "production" as const,
-      },
-    ];
-    const template = templates[factoids.length % templates.length];
-    factoids.push({ id: generateId(), ...template });
+  const releaseInfo = describeRelease(spotify);
+  if (factoids.length < 3 && releaseInfo) {
+    factoids.push({
+      id: generateId(),
+      title: "Release Info",
+      content: releaseInfo,
+      type: "trivia",
+    });
   }
 
   console.log(
@@ -249,21 +274,16 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     artist: spotify.artist,
     album: spotify.album,
     coverUrl: spotify.coverUrl,
-    // New enhanced metadata
     spotifyUrl: spotify.spotifyUrl,
-    releaseYear: releaseYear,
+    releaseYear,
     explicit: spotify.explicit,
-    // Audio features
-    bpm: audio.bpm,
-    key: audio.key,
-    energy: audio.energy,
-    valence: audio.valence,
-    danceability: audio.danceability,
-    acousticness: audio.acousticness,
-    durationSeconds: Math.round(spotify.durationMs / 1000),
+    // Measured audio values or null, with the reason when missing
+    ...measuredAudioFields(audio),
+    durationSeconds: spotify.durationMs ? Math.round(spotify.durationMs / 1000) : undefined,
+    // A generic structure, not an analysis of this track
     segments: createDefaultSegments(spotify.durationMs),
+    segmentsSource: "template",
     samples: [], // Samples are integrated into factoids, not raw array here
-    keyMoments: audio.keyMoments || [],
     factoids,
     genealogy: {
       nodes: [
@@ -277,8 +297,6 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
       ],
       links: [],
     },
-    audioSource: audio.confidence === "high" ? "analyzed" : "estimated",
-    audioConfidence: audio.confidence,
   };
 }
 

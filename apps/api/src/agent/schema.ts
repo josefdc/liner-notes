@@ -11,7 +11,9 @@
  * - Frontend type alignment
  */
 
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import type { AudioFeatures } from "./state.js";
 
 // =============================================================================
 // Segment Schema
@@ -137,13 +139,11 @@ export const FactoidSchema = z.object({
   title: z.string().describe("Catchy title summarizing the factoid, max 50 chars, no colon at end"),
   content: z
     .string()
-    .describe(
-      "Detailed explanation 1-3 sentences. MUST cite research data when available. Quote actual lyrics.",
-    ),
+    .describe("Detailed explanation 1-3 sentences. MUST cite research data when available."),
   type: z
-    .enum(["production", "trivia", "lyrics", "credits", "sample", "curiosity", "connection"])
+    .enum(["production", "trivia", "credits", "sample", "curiosity", "connection"])
     .describe(
-      "Category: production=studio/recording, trivia=history/culture, lyrics=meaning, credits=producer/writer info, sample=sampling history, curiosity=surprising facts, connection=artist relationships",
+      "Category: production=studio/recording, trivia=history/culture/meaning, credits=producer/writer info, sample=sampling history, curiosity=surprising facts, connection=artist relationships",
     ),
   entities: z
     .array(FactoidEntitySchema)
@@ -164,7 +164,7 @@ export const FlatFactoidSchema = z.object({
     .string()
     .describe("Detailed explanation 1-3 sentences. MUST cite research data when available."),
   type: z
-    .enum(["production", "trivia", "lyrics", "credits", "sample", "curiosity", "connection"])
+    .enum(["production", "trivia", "credits", "sample", "curiosity", "connection"])
     .describe("Category"),
   entityNames: z
     .string()
@@ -256,43 +256,16 @@ export type GenealogyLink = z.infer<typeof GenealogyLinkSchema>;
 export type Genealogy = z.infer<typeof GenealogySchema>;
 
 // =============================================================================
-// Audio Features Schema (Sonic Fingerprint)
+// Measured audio fields (Sonic Fingerprint)
 // =============================================================================
 
-export const AudioFeaturesSchema = z.object({
-  bpm: z.number().min(40).max(240).describe("Tempo in beats per minute"),
-  key: z.string().describe("Musical key and mode, e.g. 'C Major', 'F# Minor'"),
-  energy: z
-    .number()
-    .min(0)
-    .max(1)
-    .describe("Energy level 0-1: how intense/aggressive the track feels"),
-  valence: z
-    .number()
-    .min(0)
-    .max(1)
-    .describe("Musical positiveness 0-1: happy/euphoric (high) vs sad/angry (low)"),
-  danceability: z.number().min(0).max(1).describe("Danceability 0-1: how suitable for dancing"),
-  acousticness: z
-    .number()
-    .min(0)
-    .max(1)
-    .optional()
-    .describe("Acousticness 0-1: confidence that track is acoustic"),
-  instrumentalness: z
-    .number()
-    .min(0)
-    .max(1)
-    .optional()
-    .describe("Instrumentalness 0-1: predicts if track has no vocals"),
-  confidence: z
-    .enum(["low", "high"])
-    .describe(
-      "Reliability of the analysis. 'high' for real audio analysis (librosa), 'low' for genre-based estimation.",
-    ),
-});
-
-export type AudioFeatures = z.infer<typeof AudioFeaturesSchema>;
+export const AudioUnavailableReasonSchema = z.enum([
+  "no_preview",
+  "preview_rejected",
+  "service_unavailable",
+  "analysis_failed",
+  "not_run",
+]);
 
 // =============================================================================
 // Main TrackData Schema (Final Output)
@@ -322,21 +295,13 @@ export const TrackDataSchema = z.object({
     .describe("Year of release (e.g. '2022') — extracted from releaseDate"),
   explicit: z.boolean().optional().describe("Whether track has explicit content"),
 
-  // Audio analysis
-  bpm: z
-    .number()
-    .describe("Tempo BPM — use audio features if confidence='high', else estimate by genre"),
-  key: z
-    .string()
-    .optional()
-    .describe("Musical key e.g. 'C Major' — from audio features or genre estimation"),
-  energy: z.number().optional().describe("Energy 0-1 — from audio features"),
-  valence: z
-    .number()
-    .optional()
-    .describe("Positiveness 0-1 — from audio features (0=sad, 1=happy)"),
-  danceability: z.number().optional().describe("Danceability 0-1 — from audio features"),
-  acousticness: z.number().optional().describe("Acousticness 0-1 — confidence track is acoustic"),
+  // Measured audio analysis: copied from the audio measurement, null when not measured
+  bpm: z.number().nullable().describe("Measured tempo BPM, or null when not measured"),
+  key: z.string().nullable().optional().describe("Measured key e.g. 'C Major', or null"),
+  energy: z.number().nullable().optional().describe("Measured energy 0-1, or null"),
+  valence: z.number().nullable().optional().describe("Measured positiveness 0-1, or null"),
+  danceability: z.number().nullable().optional().describe("Measured danceability 0-1, or null"),
+  acousticness: z.number().nullable().optional().describe("Measured acousticness 0-1, or null"),
   durationSeconds: z
     .number()
     .optional()
@@ -360,6 +325,12 @@ export const TrackDataSchema = z.object({
     .describe(
       "Song structure segments. MUST cover 0-100% contiguously with NO GAPS. Adjacent segments must connect.",
     ),
+  segmentsSource: z
+    .enum(["template", "inferred"])
+    .optional()
+    .describe(
+      "Where the segments come from: 'template' = a generic default structure, 'inferred' = generated from genre conventions. Neither is measured from the audio.",
+    ),
 
   // Sample history
   samples: z
@@ -376,7 +347,7 @@ export const TrackDataSchema = z.object({
 
   // Production credits (NEW)
   credits: ProductionCreditsSchema.optional().describe(
-    "Production credits: producers, writers, engineers. Extract from MusicBrainz or Genius data.",
+    "Production credits: producers, writers, engineers. Extract from MusicBrainz data.",
   ),
 
   // Context & trivia (ENHANCED: more factoids allowed)
@@ -385,7 +356,7 @@ export const TrackDataSchema = z.object({
     .min(3)
     .max(8)
     .describe(
-      "Interesting facts. PRIORITY: research data > Genius > knowledge. Include at least one of each type when data available: production, sample, credits, curiosity.",
+      "Interesting facts. PRIORITY: research data > knowledge. Include at least one of each type when data available: production, sample, credits, curiosity.",
     ),
 
   // Genealogy graph
@@ -393,17 +364,32 @@ export const TrackDataSchema = z.object({
     "Musical DNA graph. Current song = group 1. ALL referenced songs MUST be REAL and exist on Spotify.",
   ),
 
-  // Audio metadata for graceful degradation
+  // Audio provenance
   audioSource: z
-    .enum(["analyzed", "estimated"])
+    .enum(["analyzed", "unavailable"])
     .optional()
     .describe(
-      "Source of audio data: 'analyzed' for real librosa analysis, 'estimated' for genre-based fallback",
+      "'analyzed' when tempo and key were measured from the preview; 'unavailable' when they were not",
     ),
   audioConfidence: z
     .enum(["high", "low"])
     .optional()
-    .describe("Confidence level: 'high' for verified analysis, 'low' for estimation"),
+    .describe(
+      "'high' when tempo, key and all perceptual features were measured; 'low' when some are missing (null)",
+    ),
+  audioUnavailableReason: AudioUnavailableReasonSchema.optional().describe(
+    "Why measured audio values are missing; absent when the analysis succeeded",
+  ),
+
+  // Model provenance
+  modelUnavailable: z
+    .boolean()
+    .optional()
+    .describe("True when the language model call failed and the result was built from source data"),
+  modelUnavailableReason: z
+    .string()
+    .optional()
+    .describe("The model error when modelUnavailable is true"),
 });
 
 export type TrackData = z.infer<typeof TrackDataSchema>;
@@ -433,13 +419,8 @@ export const FlatTrackDataSchema = z.object({
   releaseYear: z.string().optional().describe("Year of release (e.g. '2022')"),
   explicit: z.boolean().optional().describe("Whether track has explicit content"),
 
-  // Audio analysis
-  bpm: z.number().describe("Tempo BPM"),
-  key: z.string().optional().describe("Musical key e.g. 'C Major'"),
-  energy: z.number().optional().describe("Energy 0-1"),
-  valence: z.number().optional().describe("Positiveness 0-1"),
-  danceability: z.number().optional().describe("Danceability 0-1"),
-  acousticness: z.number().optional().describe("Acousticness 0-1"),
+  // Measured audio values (bpm, key, energy, valence, danceability, acousticness) are not part
+  // of this schema: they are copied from the audio measurement by transformFlatToTrackData.
   durationSeconds: z.number().optional().describe("Song duration in seconds"),
 
   // Genre Profile for Sonic Fingerprint Radar Chart
@@ -496,10 +477,6 @@ export const FlatTrackDataSchema = z.object({
       }),
     )
     .describe("Genealogy connections. source→target direction."),
-
-  // Audio metadata
-  audioSource: z.enum(["analyzed", "estimated"]).optional(),
-  audioConfidence: z.enum(["high", "low"]).optional(),
 });
 
 export type FlatTrackData = z.infer<typeof FlatTrackDataSchema>;
@@ -512,13 +489,65 @@ export type FlatTrackData = z.infer<typeof FlatTrackDataSchema>;
  * Generate a unique ID for entities
  */
 function generateEntityId(): string {
-  return `e${Date.now().toString(36)}${Math.random().toString(36).substr(2, 4)}`; // guard-allow: random-values-api — identifier, not data
+  return `e${randomUUID()}`;
+}
+
+type MeasuredAudioFields = Pick<
+  TrackData,
+  | "bpm"
+  | "key"
+  | "energy"
+  | "valence"
+  | "danceability"
+  | "acousticness"
+  | "keyMoments"
+  | "audioSource"
+  | "audioConfidence"
+  | "audioUnavailableReason"
+>;
+
+/**
+ * The TrackData audio fields, taken only from the audio measurement. Values that were not
+ * measured are null, and the reason is carried in audioUnavailableReason.
+ */
+export function measuredAudioFields(audio: AudioFeatures | null | undefined): MeasuredAudioFields {
+  if (!audio) {
+    return {
+      bpm: null,
+      key: null,
+      energy: null,
+      valence: null,
+      danceability: null,
+      acousticness: null,
+      keyMoments: [],
+      audioSource: "unavailable",
+      audioConfidence: "low",
+      audioUnavailableReason: "not_run",
+    };
+  }
+  const measured = audio.bpm != null && audio.key != null;
+  return {
+    bpm: audio.bpm ?? null,
+    key: audio.key ?? null,
+    energy: audio.energy ?? null,
+    valence: audio.valence ?? null,
+    danceability: audio.danceability ?? null,
+    acousticness: audio.acousticness ?? null,
+    keyMoments: audio.keyMoments ?? [],
+    audioSource: measured ? "analyzed" : "unavailable",
+    audioConfidence: measured ? audio.confidence : "low",
+    audioUnavailableReason: measured ? undefined : (audio.unavailableReason ?? "not_run"),
+  };
 }
 
 /**
- * Transform flat LLM output to full TrackData structure
+ * Transform flat LLM output to full TrackData structure. Measured audio fields come from
+ * `audio` only; the model output cannot set them.
  */
-export function transformFlatToTrackData(flat: FlatTrackData): TrackData {
+export function transformFlatToTrackData(
+  flat: FlatTrackData,
+  audio: AudioFeatures | null | undefined,
+): TrackData {
   // Reconstruct factoids with nested entities
   const factoids: Factoid[] = flat.factoids.map((f) => {
     let entities: FactoidEntity[] | undefined;
@@ -594,22 +623,15 @@ export function transformFlatToTrackData(flat: FlatTrackData): TrackData {
     spotifyUrl: flat.spotifyUrl,
     releaseYear: flat.releaseYear,
     explicit: flat.explicit,
-    bpm: flat.bpm,
-    key: flat.key,
-    energy: flat.energy,
-    valence: flat.valence,
-    danceability: flat.danceability,
-    acousticness: flat.acousticness,
     durationSeconds: flat.durationSeconds,
     genreProfile: flat.genreProfile,
     segments: flat.segments,
+    segmentsSource: "inferred",
     samples: flat.samples,
-    keyMoments: undefined, // Comes from audio analysis, not LLM
     credits,
     factoids,
     genealogy,
-    audioSource: flat.audioSource,
-    audioConfidence: flat.audioConfidence,
+    ...measuredAudioFields(audio),
   };
 }
 
@@ -640,8 +662,6 @@ export const ResearchPlanSchema = z.object({
       "search_production",
       "search_meaning",
       "search_general",
-      "search_lyrics",
-      "search_annotations",
       "search_musicbrainz",
       "search_artist_collaborators",
       "search_artist_top_tracks",
@@ -659,7 +679,7 @@ export const ResearchPlanSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Search query — REQUIRED for all actions except 'done', 'search_musicbrainz', 'search_lyrics', 'search_artist_collaborators', 'search_artist_top_tracks', 'search_lastfm_tags', 'search_lastfm_similar_tracks', 'search_lastfm_similar_artists', 'search_lastfm_artist_info', 'search_listenbrainz_similar'. Be specific.",
+      "Search query — REQUIRED for all actions except 'done', 'search_musicbrainz', 'search_artist_collaborators', 'search_artist_top_tracks', 'search_lastfm_tags', 'search_lastfm_similar_tracks', 'search_lastfm_similar_artists', 'search_lastfm_artist_info', 'search_listenbrainz_similar'. Be specific.",
     ),
   reasoning: z
     .string()
@@ -747,22 +767,18 @@ export function createEmptyTrackData(id: string, title: string, artist: string):
     id,
     title,
     artist,
-    album: "Unknown Album",
+    album: "",
     coverUrl: "",
     spotifyUrl: `https://open.spotify.com/track/${id}`,
     releaseYear: undefined,
-    explicit: false,
-    bpm: 120,
-    key: "C Major",
-    energy: 0.5,
-    valence: 0.5,
-    danceability: 0.5,
-    acousticness: 0.3,
+    explicit: undefined,
+    ...measuredAudioFields(null),
     segments: [
       { label: "Intro", start: 0, end: 10, color: "#374151" },
       { label: "Main", start: 10, end: 90, color: "#1F2937" },
       { label: "Outro", start: 90, end: 100, color: "#374151" },
     ],
+    segmentsSource: "template",
     samples: [],
     factoids: [],
     credits: undefined,

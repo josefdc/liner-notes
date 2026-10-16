@@ -1,8 +1,8 @@
 {
-  "random-values-api": 19,
+  "random-values-api": 0,
   "stock-images-web": 10,
   "tailwind-v3-variable-classes": 92,
   "hex-colours-outside-tokens": 11,
-  "dotenv-outside-config": 11,
+  "dotenv-outside-config": 9,
   "string-sentinel-tool-results": 15
 }

@@ -25,7 +25,6 @@ import {
   searchSongMeaning,
   searchMusicInfo,
 } from "../sources/search.js";
-import { fetchLyrics, getGeniusAnnotations } from "../sources/genius.js";
 import { getMusicBrainzRelations, getMusicBrainzArtist } from "../sources/musicbrainz.js";
 import { getArtistTopTracks } from "../sources/spotify.js";
 import {
@@ -334,39 +333,6 @@ async function researchToolNode(
         }
         break;
       }
-
-      case "search_lyrics":
-        // Use Genius to fetch raw lyrics
-        result = await fetchLyrics.invoke({ title, artist });
-        try {
-          const lyricsData = JSON.parse(result);
-          if (lyricsData.lyrics) {
-            newData.songMeaning.push(`[Genius Lyrics]\n${lyricsData.lyrics}`);
-          }
-        } catch {
-          // If parse fails, add raw result
-          if (!result.includes("error")) {
-            newData.songMeaning.push(result);
-          }
-        }
-        break;
-
-      case "search_annotations":
-        // Use Genius annotations for deeper meaning
-        result = await getGeniusAnnotations.invoke({ title, artist });
-        try {
-          const annotData = JSON.parse(result);
-          if (annotData.topAnnotations?.length > 0) {
-            newData.songMeaning.push(
-              `[Genius Annotations] ${JSON.stringify(annotData.topAnnotations)}`,
-            );
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.songMeaning.push(result);
-          }
-        }
-        break;
 
       case "search_musicbrainz":
         // Use MusicBrainz for structured genealogy data

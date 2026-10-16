@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "test:db": "tsx src/store/database.test.ts",
+    "test:lastfm": "tsx src/sources/lastfm.test.ts",
     "build": "tsup",
     "start:prod": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"

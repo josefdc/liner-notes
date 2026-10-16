@@ -236,6 +236,7 @@ export function useAgent(): UseAgentReturn {
       threadId: null,
       error: null,
       isLoading: true,
+      isComplete: false,
     });
 
     addLog(`🔍 Searching for "${query}"...`);

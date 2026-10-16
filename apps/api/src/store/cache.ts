@@ -1,13 +1,20 @@
 /**
- * SonicCache — Typed cache tables for expensive API responses
+ * SonicCache — typed cache tables for expensive lookups
  *
- * Separate tables for each data type (audio, research, artwork) with TTL.
- * Called directly from nodes; no stringly-typed keys.
+ * Separate tables for each data type (audio, research, artwork), each with a TTL. Stored JSON
+ * is validated when read; a row that does not match is treated as a miss.
+ *
+ * The audio cache holds measurements only. A row is served only when its stored data carries
+ * the `measured` marker the engineer sets on audio service measurements; a measured row with
+ * low confidence is served too, with its confidence. Writes of unmarked features are refused.
+ *
+ * Reads return null on a database error (the caller then does the work again). Writes throw,
+ * after logging, so the caller decides whether a failed write matters.
  */
 
 import type Database from "better-sqlite3";
-import type { AudioFeatures } from "../agent/state.js";
-import type { ResearchData } from "../agent/state.js";
+import { z } from "zod";
+import type { AudioFeatures, ResearchData } from "../agent/state.js";
 
 // =============================================================================
 // Types
@@ -26,83 +33,213 @@ export interface SpotifySearchResult {
 // TTL Defaults (ms)
 // =============================================================================
 
-const TTL_AUDIO = 30 * 24 * 60 * 60 * 1000; // 30 days
+/** A complete measurement (tempo, key and every perceptual feature) is kept for 30 days. */
+const TTL_AUDIO_HIGH = 30 * 24 * 60 * 60 * 1000;
+/**
+ * A partial measurement (low confidence, e.g. the perceptual models were unavailable) is kept
+ * for a day, so a complete measurement replaces it soon after the models are back.
+ */
+const TTL_AUDIO_LOW = 24 * 60 * 60 * 1000;
 const TTL_RESEARCH = 48 * 60 * 60 * 1000; // 48 hours
 const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// =============================================================================
+// Stored data schemas
+// =============================================================================
+
+const unitScore = z.number().min(0).max(1).nullable();
+
+/** Audio features as the engineer caches them: measured, from the audio service. */
+const MeasuredAudioSchema = z
+  .object({
+    bpm: z.number().positive(),
+    key: z.string().min(1),
+    energy: unitScore,
+    valence: unitScore,
+    danceability: unitScore,
+    acousticness: unitScore,
+    instrumentalness: unitScore,
+    confidence: z.enum(["low", "high"]),
+    keyMoments: z.array(z.unknown()).optional(),
+    unavailableReason: z.undefined(),
+    measured: z.literal(true),
+    analyzer: z.literal("audio-service"),
+  })
+  .passthrough();
+
+const stringList = z.array(z.string());
+
+const ResearchSchema = z
+  .object({
+    samples: stringList,
+    productionTrivia: stringList,
+    relatedArtists: stringList,
+    collaborators: stringList.optional(),
+    artistTopTracks: z
+      .array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          album: z.string(),
+          popularity: z.number(),
+        }),
+      )
+      .optional(),
+    lastfmTags: stringList.optional(),
+    lastfmSimilarTracks: stringList.optional(),
+    lastfmSimilarArtists: stringList.optional(),
+    lastfmArtistBio: z.string().optional(),
+    listenbrainzSimilarArtists: stringList.optional(),
+  })
+  .passthrough();
+
+/** True when `features` is a measurement the audio cache may store and serve. */
+export function isMeasuredAudio(features: unknown): features is AudioFeatures {
+  return MeasuredAudioSchema.safeParse(features).success;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+const nowSec = () => Math.floor(Date.now() / 1000);
 
 // =============================================================================
 // SonicCache
 // =============================================================================
 
+function prepareStatements(db: Database.Database) {
+  return {
+    getAudio: db.prepare<[string], { full_data: string; expires_at: number }>(
+      "SELECT full_data, expires_at FROM audio_cache WHERE spotify_id = ?",
+    ),
+    getAudioForWrite: db.prepare<[string], { confidence: string; expires_at: number }>(
+      "SELECT confidence, expires_at FROM audio_cache WHERE spotify_id = ?",
+    ),
+    putAudio: db.prepare(
+      `INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(spotify_id) DO UPDATE SET
+         bpm = excluded.bpm,
+         key_signature = excluded.key_signature,
+         energy = excluded.energy,
+         confidence = excluded.confidence,
+         full_data = excluded.full_data,
+         created_at = unixepoch(),
+         expires_at = excluded.expires_at`,
+    ),
+    getResearch: db.prepare<[string], { full_data: string; expires_at: number }>(
+      "SELECT full_data, expires_at FROM research_cache WHERE spotify_id = ?",
+    ),
+    putResearch: db.prepare(
+      `INSERT INTO research_cache (spotify_id, samples_count, trivia_count, full_data, expires_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(spotify_id) DO UPDATE SET
+         samples_count = excluded.samples_count,
+         trivia_count = excluded.trivia_count,
+         full_data = excluded.full_data,
+         expires_at = excluded.expires_at`,
+    ),
+    getArtwork: db.prepare<
+      [string],
+      {
+        cover_url: string | null;
+        spotify_url: string | null;
+        preview_url: string | null;
+        spotify_id: string | null;
+        track_title: string | null;
+        track_artist: string | null;
+        expires_at: number;
+      }
+    >(
+      "SELECT cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
+    ),
+    putArtwork: db.prepare(
+      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(search_key) DO UPDATE SET
+         cover_url = excluded.cover_url,
+         spotify_url = excluded.spotify_url,
+         preview_url = excluded.preview_url,
+         spotify_id = excluded.spotify_id,
+         track_title = excluded.track_title,
+         track_artist = excluded.track_artist,
+         expires_at = excluded.expires_at`,
+    ),
+    purgeAudio: db.prepare("DELETE FROM audio_cache WHERE expires_at <= ?"),
+    purgeResearch: db.prepare("DELETE FROM research_cache WHERE expires_at <= ?"),
+    purgeArtwork: db.prepare("DELETE FROM artwork_cache WHERE expires_at <= ?"),
+  };
+}
+
 export class SonicCache {
-  private db: Database.Database;
+  private readonly stmt: ReturnType<typeof prepareStatements>;
 
   constructor(db: Database.Database) {
-    this.db = db;
+    this.stmt = prepareStatements(db);
   }
 
   // ---------------------------------------------------------------------------
   // Audio Cache
   // ---------------------------------------------------------------------------
 
+  /** A cached measurement, or null (missing, expired, unmarked or not a valid measurement). */
   getAudio(spotifyId: string): AudioFeatures | null {
     try {
-      const row = this.db
-        .prepare("SELECT full_data, confidence, expires_at FROM audio_cache WHERE spotify_id = ?")
-        .get(spotifyId) as
-        | { full_data: string; confidence: string; expires_at: number }
-        | undefined;
+      const row = this.stmt.getAudio.get(spotifyId);
+      if (!row || nowSec() >= row.expires_at) return null;
 
-      if (!row) return null;
-
-      // Check TTL
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (nowSec >= row.expires_at) return null;
-
-      return JSON.parse(row.full_data) as AudioFeatures;
+      const parsed = MeasuredAudioSchema.safeParse(parseJson(row.full_data));
+      if (!parsed.success) {
+        console.warn(`[SonicCache] Ignoring audio row for ${spotifyId}: not a marked measurement`);
+        return null;
+      }
+      return parsed.data as AudioFeatures;
     } catch (err) {
       console.error("[SonicCache] getAudio error:", err);
       return null;
     }
   }
 
-  putAudio(spotifyId: string, features: AudioFeatures, ttlMs: number = TTL_AUDIO): void {
+  /**
+   * Caches a measurement. Throws on unmarked features and on database errors. A complete
+   * (high-confidence) row that has not expired is not replaced by a partial one.
+   */
+  putAudio(spotifyId: string, features: AudioFeatures, ttlMs?: number): void {
+    if (!isMeasuredAudio(features)) {
+      throw new TypeError(
+        "Only measured audio features (measured: true, from the audio service) can be cached",
+      );
+    }
     try {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const expiresAt = nowSec + Math.floor(ttlMs / 1000);
-
-      // Overwrite protection: don't replace "high" confidence with "low"
-      const existing = this.db
-        .prepare("SELECT confidence FROM audio_cache WHERE spotify_id = ?")
-        .get(spotifyId) as { confidence: string } | undefined;
-
-      if (existing && existing.confidence === "high" && features.confidence === "low") {
-        return; // Don't downgrade
+      const now = nowSec();
+      const existing = this.stmt.getAudioForWrite.get(spotifyId);
+      if (
+        existing &&
+        now < existing.expires_at &&
+        existing.confidence === "high" &&
+        features.confidence === "low"
+      ) {
+        return;
       }
 
-      this.db
-        .prepare(
-          `INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(spotify_id) DO UPDATE SET
-             bpm = excluded.bpm,
-             key_signature = excluded.key_signature,
-             energy = excluded.energy,
-             confidence = excluded.confidence,
-             full_data = excluded.full_data,
-             expires_at = excluded.expires_at`,
-        )
-        .run(
-          spotifyId,
-          features.bpm,
-          features.key,
-          features.energy,
-          features.confidence,
-          JSON.stringify(features),
-          expiresAt,
-        );
+      const ttl = ttlMs ?? (features.confidence === "high" ? TTL_AUDIO_HIGH : TTL_AUDIO_LOW);
+      this.stmt.putAudio.run(
+        spotifyId,
+        features.bpm,
+        features.key,
+        features.energy,
+        features.confidence,
+        JSON.stringify(features),
+        now + Math.floor(ttl / 1000),
+      );
     } catch (err) {
       console.error("[SonicCache] putAudio error:", err);
+      throw err;
     }
   }
 
@@ -112,16 +249,15 @@ export class SonicCache {
 
   getResearch(spotifyId: string): ResearchData | null {
     try {
-      const row = this.db
-        .prepare("SELECT full_data, expires_at FROM research_cache WHERE spotify_id = ?")
-        .get(spotifyId) as { full_data: string; expires_at: number } | undefined;
+      const row = this.stmt.getResearch.get(spotifyId);
+      if (!row || nowSec() >= row.expires_at) return null;
 
-      if (!row) return null;
-
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (nowSec >= row.expires_at) return null;
-
-      return JSON.parse(row.full_data) as ResearchData;
+      const parsed = ResearchSchema.safeParse(parseJson(row.full_data));
+      if (!parsed.success) {
+        console.warn(`[SonicCache] Ignoring research row for ${spotifyId}: unexpected shape`);
+        return null;
+      }
+      return parsed.data as ResearchData;
     } catch (err) {
       console.error("[SonicCache] getResearch error:", err);
       return null;
@@ -130,28 +266,16 @@ export class SonicCache {
 
   putResearch(spotifyId: string, data: ResearchData, ttlMs: number = TTL_RESEARCH): void {
     try {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const expiresAt = nowSec + Math.floor(ttlMs / 1000);
-
-      this.db
-        .prepare(
-          `INSERT INTO research_cache (spotify_id, samples_count, trivia_count, full_data, expires_at)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(spotify_id) DO UPDATE SET
-             samples_count = excluded.samples_count,
-             trivia_count = excluded.trivia_count,
-             full_data = excluded.full_data,
-             expires_at = excluded.expires_at`,
-        )
-        .run(
-          spotifyId,
-          data.samples?.length ?? 0,
-          data.productionTrivia?.length ?? 0,
-          JSON.stringify(data),
-          expiresAt,
-        );
+      this.stmt.putResearch.run(
+        spotifyId,
+        data.samples?.length ?? 0,
+        data.productionTrivia?.length ?? 0,
+        JSON.stringify(data),
+        nowSec() + Math.floor(ttlMs / 1000),
+      );
     } catch (err) {
       console.error("[SonicCache] putResearch error:", err);
+      throw err;
     }
   }
 
@@ -161,26 +285,8 @@ export class SonicCache {
 
   getArtwork(searchKey: string): SpotifySearchResult | null {
     try {
-      const row = this.db
-        .prepare(
-          "SELECT cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
-        )
-        .get(searchKey) as
-        | {
-            cover_url: string | null;
-            spotify_url: string | null;
-            preview_url: string | null;
-            spotify_id: string | null;
-            track_title: string | null;
-            track_artist: string | null;
-            expires_at: number;
-          }
-        | undefined;
-
-      if (!row) return null;
-
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (nowSec >= row.expires_at) return null;
+      const row = this.stmt.getArtwork.get(searchKey);
+      if (!row || nowSec() >= row.expires_at) return null;
 
       return {
         coverUrl: row.cover_url,
@@ -198,34 +304,19 @@ export class SonicCache {
 
   putArtwork(searchKey: string, result: SpotifySearchResult, ttlMs: number = TTL_ARTWORK): void {
     try {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const expiresAt = nowSec + Math.floor(ttlMs / 1000);
-
-      this.db
-        .prepare(
-          `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(search_key) DO UPDATE SET
-             cover_url = excluded.cover_url,
-             spotify_url = excluded.spotify_url,
-             preview_url = excluded.preview_url,
-             spotify_id = excluded.spotify_id,
-             track_title = excluded.track_title,
-             track_artist = excluded.track_artist,
-             expires_at = excluded.expires_at`,
-        )
-        .run(
-          searchKey,
-          result.coverUrl,
-          result.spotifyUrl,
-          result.previewUrl,
-          result.spotifyId,
-          result.trackTitle,
-          result.trackArtist,
-          expiresAt,
-        );
+      this.stmt.putArtwork.run(
+        searchKey,
+        result.coverUrl,
+        result.spotifyUrl,
+        result.previewUrl,
+        result.spotifyId,
+        result.trackTitle,
+        result.trackArtist,
+        nowSec() + Math.floor(ttlMs / 1000),
+      );
     } catch (err) {
       console.error("[SonicCache] putArtwork error:", err);
+      throw err;
     }
   }
 
@@ -234,18 +325,12 @@ export class SonicCache {
   // ---------------------------------------------------------------------------
 
   purgeExpired(): { audio: number; research: number; artwork: number } {
-    const nowSec = Math.floor(Date.now() / 1000);
+    const now = nowSec();
 
     try {
-      const audio = this.db
-        .prepare("DELETE FROM audio_cache WHERE expires_at <= ?")
-        .run(nowSec).changes;
-      const research = this.db
-        .prepare("DELETE FROM research_cache WHERE expires_at <= ?")
-        .run(nowSec).changes;
-      const artwork = this.db
-        .prepare("DELETE FROM artwork_cache WHERE expires_at <= ?")
-        .run(nowSec).changes;
+      const audio = this.stmt.purgeAudio.run(now).changes;
+      const research = this.stmt.purgeResearch.run(now).changes;
+      const artwork = this.stmt.purgeArtwork.run(now).changes;
 
       if (audio + research + artwork > 0) {
         console.log(

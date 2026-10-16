@@ -1,0 +1,133 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
+import { runMigrations } from "./migrations.js";
+import { SonicCache, isMeasuredAudio } from "./cache.js";
+import type { AudioFeatures } from "../agent/state.js";
+
+const DAY_SEC = 24 * 60 * 60;
+
+/** A measurement as the engineer caches it. */
+function measured(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
+  return {
+    bpm: 104,
+    key: "A Minor",
+    energy: 0.7,
+    valence: 0.4,
+    danceability: 0.6,
+    acousticness: 0.2,
+    instrumentalness: 0.1,
+    confidence: "high",
+    keyMoments: [],
+    measured: true,
+    analyzer: "audio-service",
+    ...overrides,
+  };
+}
+
+describe("SonicCache audio", () => {
+  let db: Database.Database;
+  let cache: SonicCache;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    runMigrations(db);
+    cache = new SonicCache(db);
+  });
+  afterEach(() => db.close());
+
+  const insertRaw = (id: string, fullData: string, confidence = "high") =>
+    db
+      .prepare(
+        "INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at) VALUES (?, 120, 'C Major', 0.5, ?, ?, unixepoch() + 86400)",
+      )
+      .run(id, confidence, fullData);
+
+  const expiresIn = (id: string) =>
+    db
+      .prepare("SELECT expires_at - unixepoch() FROM audio_cache WHERE spotify_id = ?")
+      .pluck()
+      .get(id) as number;
+
+  it("does not serve a row without the measured marker", () => {
+    const { measured: _m, analyzer: _a, ...unmarked } = measured();
+    insertRaw("old", JSON.stringify(unmarked));
+    expect(cache.getAudio("old")).toBeNull();
+  });
+
+  it("does not serve a marked row that is not a valid measurement", () => {
+    insertRaw("zero-bpm", JSON.stringify(measured({ bpm: 0 })));
+    insertRaw("out-of-range", JSON.stringify(measured({ energy: 3 })));
+    insertRaw("broken-json", "{not json");
+    insertRaw("other-analyzer", JSON.stringify({ ...measured(), analyzer: "estimator" }));
+    for (const id of ["zero-bpm", "out-of-range", "broken-json", "other-analyzer"]) {
+      expect(cache.getAudio(id), id).toBeNull();
+    }
+  });
+
+  it("serves a measured low-confidence row with its confidence", () => {
+    cache.putAudio("partial", measured({ confidence: "low", valence: null, danceability: null }));
+    const hit = cache.getAudio("partial");
+    expect(hit).toMatchObject({ bpm: 104, key: "A Minor", confidence: "low", valence: null });
+  });
+
+  it("caches a measurement without energy", () => {
+    cache.putAudio("no-energy", measured({ energy: null, confidence: "low" }));
+    expect(cache.getAudio("no-energy")).toMatchObject({ bpm: 104, energy: null });
+    const row = db.prepare("SELECT energy FROM audio_cache WHERE spotify_id = 'no-energy'").get();
+    expect(row).toEqual({ energy: null });
+  });
+
+  it("refuses to cache features that are not marked as measured", () => {
+    const { measured: _m, ...unmarked } = measured();
+    expect(() => cache.putAudio("x", unmarked as AudioFeatures)).toThrow(/Only measured/);
+    expect(() =>
+      cache.putAudio("y", {
+        ...measured(),
+        bpm: null,
+        key: null,
+        unavailableReason: "service_unavailable",
+      }),
+    ).toThrow(/Only measured/);
+    expect(db.prepare("SELECT COUNT(*) FROM audio_cache").pluck().get()).toBe(0);
+    expect(isMeasuredAudio(measured())).toBe(true);
+  });
+
+  it("keeps a partial measurement for a day and a complete one for 30 days", () => {
+    cache.putAudio("low", measured({ confidence: "low", valence: null }));
+    cache.putAudio("high", measured());
+    expect(Math.abs(expiresIn("low") - DAY_SEC)).toBeLessThanOrEqual(2);
+    expect(Math.abs(expiresIn("high") - 30 * DAY_SEC)).toBeLessThanOrEqual(2);
+  });
+
+  it("lets a partial measurement replace an expired complete one, but not a live one", () => {
+    cache.putAudio("live", measured({ bpm: 100 }));
+    cache.putAudio("live", measured({ bpm: 90, confidence: "low" }));
+    expect(cache.getAudio("live")?.bpm).toBe(100);
+
+    cache.putAudio("expired", measured({ bpm: 100 }), 0);
+    cache.putAudio("expired", measured({ bpm: 90, confidence: "low" }));
+    expect(cache.getAudio("expired")).toMatchObject({ bpm: 90, confidence: "low" });
+  });
+
+  it("surfaces write errors", () => {
+    db.exec("DROP TABLE research_cache");
+    expect(() =>
+      cache.putResearch("r", { samples: [], productionTrivia: [], relatedArtists: [] }),
+    ).toThrow();
+  });
+});
+
+describe("SonicCache research", () => {
+  it("treats a row with an unexpected shape as a miss", () => {
+    const db = new Database(":memory:");
+    runMigrations(db);
+    const cache = new SonicCache(db);
+    db.prepare(
+      "INSERT INTO research_cache (spotify_id, samples_count, trivia_count, full_data, expires_at) VALUES ('bad', 0, 0, ?, unixepoch() + 60)",
+    ).run(JSON.stringify({ samples: "not a list", productionTrivia: [], relatedArtists: [] }));
+    expect(cache.getResearch("bad")).toBeNull();
+    cache.putResearch("good", { samples: ["a"], productionTrivia: [], relatedArtists: [] });
+    expect(cache.getResearch("good")?.samples).toEqual(["a"]);
+    db.close();
+  });
+});

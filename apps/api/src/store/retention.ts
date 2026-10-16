@@ -141,3 +141,32 @@ export function pruneDatabase(
   }
   return result;
 }
+
+export const RETENTION_INTERVAL_MS = HOUR_MS;
+
+/**
+ * Purges expired cache rows and prunes old data now, then every `intervalMs` (an hour by
+ * default). A failure is logged and retried at the next tick. Returns a function that stops it.
+ */
+export function startRetention(
+  db: Database.Database,
+  cache: { purgeExpired(): unknown },
+  intervalMs: number = RETENTION_INTERVAL_MS,
+): () => void {
+  const run = () => {
+    try {
+      cache.purgeExpired();
+    } catch (err) {
+      console.error("[Retention] Cache purge failed:", err);
+    }
+    try {
+      pruneDatabase(db);
+    } catch (err) {
+      console.error("[Retention] Pruning failed:", err);
+    }
+  };
+  run();
+  const timer = setInterval(run, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}

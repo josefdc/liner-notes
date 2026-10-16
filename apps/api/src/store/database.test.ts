@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chmodSync,
   closeSync,
+  copyFileSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readdirSync,
@@ -237,13 +239,21 @@ async function testSonicCacheAudio(): Promise<void> {
     assertEqual(retrieved?.key, "D Minor", "Key matches");
 
     // Overwrite protection: don't downgrade high → low
-    const lowConfidence = { ...audioFeatures, confidence: "low" as const, bpm: 100 };
+    // A partial measurement, as the engineer builds it: perceptual scores not measured are null.
+    const partial = {
+      valence: null,
+      danceability: null,
+      acousticness: null,
+      instrumentalness: null,
+      confidence: "low" as const,
+    };
+    const lowConfidence = { ...audioFeatures, ...partial, bpm: 100 };
     cache.putAudio("spotify-123", lowConfidence);
     const afterDowngrade = cache.getAudio("spotify-123");
     assertEqual(afterDowngrade?.bpm, 105, "High confidence not overwritten by low");
 
     // Allow upgrade: low → high
-    cache.putAudio("spotify-456", { ...audioFeatures, confidence: "low" as const, bpm: 90 });
+    cache.putAudio("spotify-456", { ...audioFeatures, ...partial, bpm: 90 });
     cache.putAudio("spotify-456", { ...audioFeatures, confidence: "high" as const, bpm: 95 });
     const upgraded = cache.getAudio("spotify-456");
     assertEqual(upgraded?.bpm, 95, "Low confidence overwritten by high");
@@ -633,6 +643,54 @@ describe("opening a database that cannot be used", () => {
     );
   });
 
+  it("moves a database judged corrupt aside with its stale WAL and SHM exactly as found", () => {
+    // A healthy backup restored over the database while the -wal and -shm of a writer that was
+    // killed before checkpointing are still there. The WAL replays onto the wrong pages, so the
+    // integrity check fails; the quarantined set must be the original bytes so the backup can
+    // still be recovered (by removing the stale WAL).
+    const dbPath = setup();
+    const other = join(tmpDir, "other");
+    mkdirSync(other);
+    const backup = new Database(dbPath);
+    backup.pragma("journal_mode = WAL");
+    backup.exec("CREATE TABLE marker (x INTEGER); INSERT INTO marker VALUES (42);");
+    backup.pragma("wal_checkpoint(TRUNCATE)");
+    backup.close();
+
+    const crashed = new Database(join(other, "y.db"));
+    crashed.pragma("journal_mode = WAL");
+    crashed.exec("CREATE TABLE big (x BLOB)");
+    const fill = (n: number) =>
+      crashed.transaction(() => {
+        const insert = crashed.prepare("INSERT INTO big VALUES (randomblob(3000))");
+        for (let i = 0; i < n; i++) insert.run();
+      })();
+    fill(10);
+    crashed.pragma("wal_checkpoint(TRUNCATE)");
+    crashed.pragma("wal_autocheckpoint = 0");
+    fill(300);
+    // Copied while the writer still holds them: the state a crash leaves behind.
+    copyFileSync(join(other, "y.db-wal"), `${dbPath}-wal`);
+    copyFileSync(join(other, "y.db-shm"), `${dbPath}-shm`);
+    crashed.close();
+
+    const original = {
+      db: readFileSync(dbPath),
+      wal: readFileSync(`${dbPath}-wal`),
+      shm: readFileSync(`${dbPath}-shm`),
+    };
+
+    initializeDatabase(dbPath);
+    expect(isDatabaseHealthy()).toBe(true);
+
+    const moved = readdirSync(tmpDir).find((f) => /^test\.db\.corrupt\.\d+$/.test(f));
+    expect(moved).toBeDefined();
+    const movedPath = join(tmpDir, moved as string);
+    expect(readFileSync(movedPath).equals(original.db)).toBe(true);
+    expect(readFileSync(`${movedPath}-wal`).equals(original.wal)).toBe(true);
+    expect(readFileSync(`${movedPath}-shm`).equals(original.shm)).toBe(true);
+  });
+
   it("refuses a database migrated by a newer release and leaves it untouched", () => {
     const dbPath = setup();
     initializeDatabase(dbPath);
@@ -755,6 +813,87 @@ describe("migrations", () => {
       energy: null,
     } as Parameters<SonicCache["putAudio"]>[1]);
     expect(cache.getAudio("no-energy")).toMatchObject({ bpm: 120, energy: null });
+  });
+
+  it("keeps only audio rows the cache would serve and caps low-confidence expiry at a day", () => {
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    raw.exec(PRE_MIGRATIONS_SCHEMA);
+    const put = raw.prepare(
+      "INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at) VALUES (?, 120, 'C Major', 0.5, ?, ?, unixepoch() + 30 * 86400)",
+    );
+    const marked = { measured: true, analyzer: "audio-service" };
+    put.run("high", "high", JSON.stringify(audioRow(marked)));
+    put.run(
+      "low",
+      "low",
+      JSON.stringify(
+        audioRow({
+          ...marked,
+          confidence: "low",
+          valence: null,
+          danceability: null,
+          acousticness: null,
+          instrumentalness: null,
+        }),
+      ),
+    );
+    put.run("zero-bpm", "high", JSON.stringify(audioRow({ ...marked, bpm: 0 })));
+    put.run("no-key", "high", JSON.stringify(audioRow({ ...marked, key: "" })));
+    put.run("energy-out-of-range", "high", JSON.stringify(audioRow({ ...marked, energy: 3 })));
+    put.run(
+      "other-analyzer",
+      "high",
+      JSON.stringify(audioRow({ measured: true, analyzer: "estimator" })),
+    );
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    const rows = db
+      .prepare(
+        "SELECT spotify_id, expires_at - unixepoch() AS ttl FROM audio_cache ORDER BY spotify_id",
+      )
+      .all() as Array<{ spotify_id: string; ttl: number }>;
+    expect(rows.map((r) => r.spotify_id)).toEqual(["high", "low"]);
+    const ttl = Object.fromEntries(rows.map((r) => [r.spotify_id, r.ttl]));
+    expect(ttl.high).toBeGreaterThan(29 * 86400);
+    expect(ttl.low).toBeLessThanOrEqual(86400);
+    expect(ttl.low).toBeGreaterThan(86400 - 60);
+  });
+
+  it("refuses to start when a recorded migration has another name than this code's", () => {
+    const dbPath = setup();
+    initializeDatabase(dbPath);
+    closeDatabase();
+    const raw = new Database(dbPath);
+    raw.prepare("UPDATE schema_migrations SET name = 'something_else' WHERE version = 2").run();
+    raw.close();
+    const before = readFileSync(dbPath);
+
+    const err = thrown(() => initializeDatabase(dbPath));
+    expect(err.kind).toBe("schema_mismatch");
+    expect(err.message).toContain('recorded as "something_else"');
+    expect(err.message).toContain('"runs"');
+    expect(readFileSync(dbPath).equals(before)).toBe(true);
+  });
+
+  it("says which migrations were applied when a later one fails", () => {
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    raw.exec(PRE_MIGRATIONS_SCHEMA);
+    // Makes migration 3 fail: the table it creates already exists.
+    raw.exec("CREATE TABLE audio_cache_new (x)");
+    raw.close();
+
+    const err = thrown(() => initializeDatabase(dbPath));
+    expect(err.name).toBe("DatabaseOpenError");
+    expect(err.message).toContain("migration 3 (measured_audio_cache) failed");
+    expect(err.message).toContain("Migration 3 was rolled back");
+    expect(err.message).toContain("Migrations 1, 2 were applied");
+    expect(err.message).not.toContain("left untouched");
+    const check = new Database(dbPath, { readonly: true });
+    expect(check.prepare("SELECT version FROM schema_migrations").pluck().all()).toEqual([1, 2]);
+    check.close();
   });
 
   it("runs each migration once", () => {

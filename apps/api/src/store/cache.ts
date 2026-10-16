@@ -15,6 +15,13 @@
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
+import {
+  isMeasuredAudio,
+  LOW_CONFIDENCE_AUDIO_TTL_MS,
+  parseMeasuredAudio,
+} from "./measuredAudio.js";
+
+export { isMeasuredAudio } from "./measuredAudio.js";
 
 // =============================================================================
 // Types
@@ -35,37 +42,14 @@ export interface SpotifySearchResult {
 
 /** A complete measurement (tempo, key and every perceptual feature) is kept for 30 days. */
 const TTL_AUDIO_HIGH = 30 * 24 * 60 * 60 * 1000;
-/**
- * A partial measurement (low confidence, e.g. the perceptual models were unavailable) is kept
- * for a day, so a complete measurement replaces it soon after the models are back.
- */
-const TTL_AUDIO_LOW = 24 * 60 * 60 * 1000;
+/** A partial (low-confidence) measurement is kept for a day; see measuredAudio.ts. */
+const TTL_AUDIO_LOW = LOW_CONFIDENCE_AUDIO_TTL_MS;
 const TTL_RESEARCH = 48 * 60 * 60 * 1000; // 48 hours
 const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // =============================================================================
 // Stored data schemas
 // =============================================================================
-
-const unitScore = z.number().min(0).max(1).nullable();
-
-/** Audio features as the engineer caches them: measured, from the audio service. */
-const MeasuredAudioSchema = z
-  .object({
-    bpm: z.number().positive(),
-    key: z.string().min(1),
-    energy: unitScore,
-    valence: unitScore,
-    danceability: unitScore,
-    acousticness: unitScore,
-    instrumentalness: unitScore,
-    confidence: z.enum(["low", "high"]),
-    keyMoments: z.array(z.unknown()).optional(),
-    unavailableReason: z.undefined(),
-    measured: z.literal(true),
-    analyzer: z.literal("audio-service"),
-  })
-  .passthrough();
 
 const stringList = z.array(z.string());
 
@@ -93,11 +77,6 @@ const ResearchSchema = z
   })
   .passthrough();
 
-/** True when `features` is a measurement the audio cache may store and serve. */
-export function isMeasuredAudio(features: unknown): features is AudioFeatures {
-  return MeasuredAudioSchema.safeParse(features).success;
-}
-
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -116,9 +95,6 @@ function prepareStatements(db: Database.Database) {
   return {
     getAudio: db.prepare<[string], { full_data: string; expires_at: number }>(
       "SELECT full_data, expires_at FROM audio_cache WHERE spotify_id = ?",
-    ),
-    getAudioForWrite: db.prepare<[string], { confidence: string; expires_at: number }>(
-      "SELECT confidence, expires_at FROM audio_cache WHERE spotify_id = ?",
     ),
     putAudio: db.prepare(
       `INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at)
@@ -193,12 +169,11 @@ export class SonicCache {
       const row = this.stmt.getAudio.get(spotifyId);
       if (!row || nowSec() >= row.expires_at) return null;
 
-      const parsed = MeasuredAudioSchema.safeParse(parseJson(row.full_data));
-      if (!parsed.success) {
+      const features = parseMeasuredAudio(row.full_data);
+      if (!features) {
         console.warn(`[SonicCache] Ignoring audio row for ${spotifyId}: not a marked measurement`);
-        return null;
       }
-      return parsed.data as AudioFeatures;
+      return features;
     } catch (err) {
       console.error("[SonicCache] getAudio error:", err);
       return null;
@@ -207,7 +182,8 @@ export class SonicCache {
 
   /**
    * Caches a measurement. Throws on unmarked features and on database errors. A complete
-   * (high-confidence) row that has not expired is not replaced by a partial one.
+   * (high-confidence) measurement that has not expired is not replaced by a partial one; a
+   * stored row that is not a valid measurement counts as absent and is overwritten.
    */
   putAudio(spotifyId: string, features: AudioFeatures, ttlMs?: number): void {
     if (!isMeasuredAudio(features)) {
@@ -217,13 +193,9 @@ export class SonicCache {
     }
     try {
       const now = nowSec();
-      const existing = this.stmt.getAudioForWrite.get(spotifyId);
-      if (
-        existing &&
-        now < existing.expires_at &&
-        existing.confidence === "high" &&
-        features.confidence === "low"
-      ) {
+      const row = this.stmt.getAudio.get(spotifyId);
+      const existing = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
+      if (existing?.confidence === "high" && features.confidence === "low") {
         return;
       }
 

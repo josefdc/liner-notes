@@ -9,7 +9,7 @@ import express from "express";
 import { healthRouter, searchRouter, analyzeRouter, factoidsRouter } from "./http/routes/index.js";
 import { initializeDatabase, closeDatabase } from "./store/database.js";
 import { initCache, getCache } from "./store/cache.js";
-import { pruneDatabase } from "./store/retention.js";
+import { startRetention } from "./store/retention.js";
 
 // =============================================================================
 // Database Initialization (must happen before routes that use the graph)
@@ -71,16 +71,7 @@ app.use(factoidsRouter);
 // Cache purge and retention (at startup, then every hour)
 // =============================================================================
 
-function runRetention() {
-  try {
-    getCache().purgeExpired();
-    pruneDatabase(db);
-  } catch (err) {
-    console.error("[Retention] Pruning failed:", err);
-  }
-}
-runRetention();
-const purgeInterval = setInterval(runRetention, 60 * 60 * 1000);
+const stopRetention = startRetention(db, getCache());
 
 // =============================================================================
 // Graceful Shutdown
@@ -88,7 +79,7 @@ const purgeInterval = setInterval(runRetention, 60 * 60 * 1000);
 
 function shutdown() {
   console.log("\n[Server] Shutting down gracefully...");
-  clearInterval(purgeInterval);
+  stopRetention();
   closeDatabase();
   process.exit(0);
 }

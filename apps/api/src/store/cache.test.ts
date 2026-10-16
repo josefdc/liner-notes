@@ -6,6 +6,15 @@ import type { AudioFeatures } from "../agent/state.js";
 
 const DAY_SEC = 24 * 60 * 60;
 
+/** Perceptual scores of a partial measurement: not measured, so null (as toAudioFeatures does). */
+const PARTIAL = {
+  valence: null,
+  danceability: null,
+  acousticness: null,
+  instrumentalness: null,
+  confidence: "low",
+} as const;
+
 /** A measurement as the engineer caches it. */
 function measured(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
   return {
@@ -101,19 +110,63 @@ describe("SonicCache audio", () => {
 
   it("lets a partial measurement replace an expired complete one, but not a live one", () => {
     cache.putAudio("live", measured({ bpm: 100 }));
-    cache.putAudio("live", measured({ bpm: 90, confidence: "low" }));
+    cache.putAudio("live", measured({ bpm: 90, ...PARTIAL }));
     expect(cache.getAudio("live")?.bpm).toBe(100);
 
     cache.putAudio("expired", measured({ bpm: 100 }), 0);
-    cache.putAudio("expired", measured({ bpm: 90, confidence: "low" }));
+    cache.putAudio("expired", measured({ bpm: 90, ...PARTIAL }));
     expect(cache.getAudio("expired")).toMatchObject({ bpm: 90, confidence: "low" });
   });
 
-  it("surfaces write errors", () => {
-    db.exec("DROP TABLE research_cache");
+  it("lets a real measurement replace a stored row that is not a valid measurement", () => {
+    // Marked as measured and high confidence, but bpm 0 is not a measurement.
+    insertRaw("broken", JSON.stringify(measured({ bpm: 0 })), "high");
+    cache.putAudio("broken", measured({ bpm: 97, ...PARTIAL }));
+    expect(cache.getAudio("broken")).toMatchObject({ bpm: 97, confidence: "low" });
+  });
+});
+
+describe("SonicCache write errors", () => {
+  let db: Database.Database;
+  let cache: SonicCache;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    runMigrations(db);
+    cache = new SonicCache(db);
+  });
+  afterEach(() => db.close());
+
+  /** Makes every insert into `table` fail, as a full disk or a locked file would. */
+  const failInserts = (table: string) =>
+    db.exec(
+      `CREATE TRIGGER fail_${table} BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'write failed'); END`,
+    );
+
+  it("putAudio rethrows", () => {
+    failInserts("audio_cache");
+    expect(() => cache.putAudio("a", measured())).toThrow("write failed");
+  });
+
+  it("putResearch rethrows", () => {
+    failInserts("research_cache");
     expect(() =>
       cache.putResearch("r", { samples: [], productionTrivia: [], relatedArtists: [] }),
-    ).toThrow();
+    ).toThrow("write failed");
+  });
+
+  it("putArtwork rethrows", () => {
+    failInserts("artwork_cache");
+    expect(() =>
+      cache.putArtwork("k", {
+        coverUrl: null,
+        spotifyUrl: null,
+        previewUrl: null,
+        spotifyId: null,
+        trackTitle: null,
+        trackArtist: null,
+      }),
+    ).toThrow("write failed");
   });
 });
 

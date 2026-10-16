@@ -31,6 +31,18 @@ describe("SqliteStore search", () => {
     expect(await namespaces(["tracks"])).toEqual([]);
   });
 
+  it("matches nested namespaces exactly too", async () => {
+    await store.put(["axb", "c"], "k", { v: 1 });
+    await store.put(["Mixed", "c"], "k", { v: 2 });
+    await store.put(["a%b", "c"], "k", { v: 3 });
+
+    expect(await namespaces(["a_b"])).toEqual([]);
+    expect(await namespaces(["mixed"])).toEqual([]);
+    expect(await namespaces(["a%"])).toEqual([]);
+    expect(await namespaces(["a%b"])).toEqual(['["a%b","c"]']);
+    expect(await namespaces(["Mixed"])).toEqual(['["Mixed","c"]']);
+  });
+
   it("includes namespaces below the prefix", async () => {
     await store.put(["p"], "k", { v: 1 });
     await store.put(["p", "child"], "k", { v: 2 });

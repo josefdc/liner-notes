@@ -3,7 +3,13 @@ import Database from "better-sqlite3";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
 import { runMigrations } from "./migrations.js";
-import { DEFAULT_RETENTION, pruneDatabase, retentionFromEnv } from "./retention.js";
+import {
+  DEFAULT_RETENTION,
+  pruneDatabase,
+  RETENTION_INTERVAL_MS,
+  retentionFromEnv,
+  startRetention,
+} from "./retention.js";
 import { getRun, startRun, updateRun } from "./runs.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -128,6 +134,59 @@ describe("pruneDatabase", () => {
       runs: 0,
     });
     fresh.close();
+  });
+});
+
+describe("startRetention", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("prunes at start and then every hour, and purges the cache each time", () => {
+    vi.useFakeTimers({ now: NOW });
+    const db = new Database(":memory:");
+    runMigrations(db);
+    const insertRun = db.prepare(
+      "INSERT INTO runs (run_id, thread_id, query, status, created_at, finished_at) VALUES (?, 't', 'q', 'completed', ?, ?)",
+    );
+    const sec = (ms: number) => Math.floor(ms / 1000);
+    const runIds = () => db.prepare("SELECT run_id FROM runs ORDER BY run_id").pluck().all();
+    // Past the 30-day run retention now; another that passes it 30 minutes from now.
+    insertRun.run("expired", sec(NOW - 31 * DAY), sec(NOW - 31 * DAY));
+    insertRun.run("expires-soon", sec(NOW - 31 * DAY), sec(NOW - 30 * DAY + 30 * 60 * 1000));
+    const cache = { purgeExpired: vi.fn() };
+
+    const stop = startRetention(db, cache);
+    expect(runIds()).toEqual(["expires-soon"]);
+    expect(cache.purgeExpired).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(RETENTION_INTERVAL_MS);
+    expect(runIds()).toEqual([]);
+    expect(cache.purgeExpired).toHaveBeenCalledTimes(2);
+
+    stop();
+    insertRun.run("after-stop", sec(NOW - 40 * DAY), sec(NOW - 40 * DAY));
+    vi.advanceTimersByTime(2 * RETENTION_INTERVAL_MS);
+    expect(runIds()).toEqual(["after-stop"]);
+    db.close();
+  });
+
+  it("keeps pruning when the cache purge fails", () => {
+    vi.useFakeTimers({ now: NOW });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const db = new Database(":memory:");
+    runMigrations(db);
+    db.prepare(
+      "INSERT INTO runs (run_id, thread_id, query, status, created_at) VALUES ('old', 't', 'q', 'running', ?)",
+    ).run(Math.floor((NOW - 40 * DAY) / 1000));
+    const stop = startRetention(db, {
+      purgeExpired: () => {
+        throw new Error("purge failed");
+      },
+    });
+    expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
+    expect(error).toHaveBeenCalledWith("[Retention] Cache purge failed:", expect.any(Error));
+    stop();
+    error.mockRestore();
+    db.close();
   });
 });
 

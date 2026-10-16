@@ -13,10 +13,16 @@
  */
 
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LATEST_SCHEMA_VERSION, runMigrations, SchemaTooNewError } from "./migrations.js";
+import {
+  LATEST_SCHEMA_VERSION,
+  MigrationFailedError,
+  runMigrations,
+  SchemaMismatchError,
+  SchemaTooNewError,
+} from "./migrations.js";
 
 // =============================================================================
 // Errors
@@ -27,6 +33,8 @@ export type DatabaseOpenErrorKind =
   | "busy" // another process holds a lock on the file
   | "permission" // the file or its directory cannot be read or written
   | "schema_too_new" // the file was migrated by a newer release
+  | "schema_mismatch" // a recorded migration differs from this code's migration of that number
+  | "corrupt" // SQLite reported corruption after the integrity check had passed
   | "corrupt_unrecoverable" // corrupt, and it could not be moved aside
   | "open_failed"; // anything else
 
@@ -74,9 +82,36 @@ function toOpenError(err: unknown, dbPath: string): DatabaseOpenError {
       cause: err,
     });
   }
+  if (err instanceof SchemaMismatchError) {
+    return new DatabaseOpenError("schema_mismatch", dbPath, `${err.message} ${LEFT_UNTOUCHED}`, {
+      cause: err,
+    });
+  }
 
-  const code = errorCode(err);
-  const detail = describeError(err);
+  // A failed migration is classified by what made it fail; the message says which migrations
+  // were applied, since the file is no longer as it was found.
+  let cause: unknown = err;
+  let context = "";
+  let outcome = LEFT_UNTOUCHED;
+  if (err instanceof MigrationFailedError) {
+    cause = err.cause;
+    context = `migration ${err.migration.version} (${err.migration.name}) failed, `;
+    outcome = err.outcome;
+  }
+
+  const code = errorCode(cause);
+  const detail = context + describeError(cause);
+
+  if (isCorruptionError(cause)) {
+    return new DatabaseOpenError(
+      "corrupt",
+      dbPath,
+      `Database ${dbPath} reported corruption after passing its integrity check (${detail}). ` +
+        "It was not moved aside automatically; move it aside by hand, then start again." +
+        (err instanceof MigrationFailedError ? ` ${outcome}` : ""),
+      { cause: err },
+    );
+  }
 
   if (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED")) {
     return new DatabaseOpenError(
@@ -84,7 +119,7 @@ function toOpenError(err: unknown, dbPath: string): DatabaseOpenError {
       dbPath,
       `Database ${dbPath} is locked by another process (${detail}). Stop the other process ` +
         "(another API instance or an open sqlite3 shell) or set SQLITE_DB_PATH to a different " +
-        `file. ${LEFT_UNTOUCHED}`,
+        `file. ${outcome}`,
       { cause: err },
     );
   }
@@ -103,7 +138,7 @@ function toOpenError(err: unknown, dbPath: string): DatabaseOpenError {
       dbPath,
       `Cannot open database ${dbPath} for reading and writing (${detail}). Check that the user ` +
         "running the API can read and write the file and its directory, or set SQLITE_DB_PATH " +
-        `to a writable location. ${LEFT_UNTOUCHED}`,
+        `to a writable location. ${outcome}`,
       { cause: err },
     );
   }
@@ -111,7 +146,7 @@ function toOpenError(err: unknown, dbPath: string): DatabaseOpenError {
   return new DatabaseOpenError(
     "open_failed",
     dbPath,
-    `Cannot open database ${dbPath} (${detail}). ${LEFT_UNTOUCHED}`,
+    `Cannot open database ${dbPath} (${detail}). ${outcome}`,
     { cause: err },
   );
 }
@@ -157,19 +192,53 @@ function configurePragmas(db: Database.Database): void {
 // Corruption handling
 // =============================================================================
 
-/** Moves a corrupt database (and its WAL/SHM files) aside. Throws if it cannot. */
-function quarantineCorruptDatabase(dbPath: string, cause: unknown): string {
+function readIfExists(path: string): Buffer | null {
+  try {
+    return readFileSync(path);
+  } catch (err) {
+    if (errorCode(err) === "ENOENT") return null;
+    throw err;
+  }
+}
+
+/**
+ * Runs `quick_check` on a read-only connection. Unlike a read-write connection, closing it never
+ * checkpoints the WAL into the main file or deletes the WAL, so a database judged corrupt can be
+ * moved aside exactly as it was found (a restored backup next to a stale WAL stays recoverable).
+ */
+function checkIntegrity(dbPath: string, busyTimeoutMs: number): void {
+  if (!existsSync(dbPath)) return;
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true, timeout: busyTimeoutMs });
+  try {
+    const check = String(db.pragma("quick_check", { simple: true }));
+    if (check !== "ok") {
+      throw new QuickCheckFailed(`quick_check reported: ${check.slice(0, 500)}`);
+    }
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Moves a corrupt database aside with its WAL and shared-memory files, under one name, as they
+ * were before the integrity check: the check's read-only connection may rebuild the -shm index,
+ * so the -shm content read before the check (`shmBefore`) is what is kept. Throws if it cannot.
+ */
+function quarantineCorruptDatabase(
+  dbPath: string,
+  cause: unknown,
+  shmBefore: Buffer | null,
+): string {
   const corruptPath = `${dbPath}.corrupt.${Date.now()}`;
   console.error(
-    `[Database] ${dbPath} is corrupt (${describeError(cause)}). Moving it to ${corruptPath} and starting empty.`,
+    `[Database] ${dbPath} is corrupt (${describeError(cause)}). Moving it, with its -wal and ` +
+      `-shm files, to ${corruptPath} and starting empty.`,
   );
   try {
     renameSync(dbPath, corruptPath);
-    for (const suffix of ["-wal", "-shm"]) {
-      if (existsSync(`${dbPath}${suffix}`)) {
-        renameSync(`${dbPath}${suffix}`, `${corruptPath}${suffix}`);
-      }
-    }
+    if (existsSync(`${dbPath}-wal`)) renameSync(`${dbPath}-wal`, `${corruptPath}-wal`);
+    if (shmBefore) writeFileSync(`${corruptPath}-shm`, shmBefore);
+    rmSync(`${dbPath}-shm`, { force: true });
   } catch (err) {
     throw new DatabaseOpenError(
       "corrupt_unrecoverable",
@@ -182,15 +251,11 @@ function quarantineCorruptDatabase(dbPath: string, cause: unknown): string {
   return corruptPath;
 }
 
-/** Opens, checks, configures and migrates one file. Closes the handle on any failure. */
+/** Opens a checked file read-write, configures and migrates it. Closes it on any failure. */
 function openAndPrepare(dbPath: string, busyTimeoutMs: number): Database.Database {
   let db: Database.Database | null = null;
   try {
     db = new Database(dbPath, { timeout: busyTimeoutMs });
-    const check = db.pragma("quick_check", { simple: true });
-    if (check !== "ok") {
-      throw new QuickCheckFailed(`quick_check reported: ${String(check)}`);
-    }
     configurePragmas(db);
     runMigrations(db);
     return db;
@@ -262,17 +327,22 @@ export function initializeDatabase(
   }
 
   const busyTimeoutMs = options.busyTimeoutMs ?? 5000;
+
+  // Only the read-only check decides that a file is corrupt; nothing has opened it read-write yet.
+  let shmBefore: Buffer | null = null;
+  try {
+    shmBefore = readIfExists(`${resolvedPath}-shm`);
+    checkIntegrity(resolvedPath, busyTimeoutMs);
+  } catch (err) {
+    if (!isCorruptionError(err)) throw toOpenError(err, resolvedPath);
+    quarantineCorruptDatabase(resolvedPath, err, shmBefore);
+  }
+
   let db: Database.Database;
   try {
     db = openAndPrepare(resolvedPath, busyTimeoutMs);
   } catch (err) {
-    if (!isCorruptionError(err)) throw toOpenError(err, resolvedPath);
-    quarantineCorruptDatabase(resolvedPath, err);
-    try {
-      db = openAndPrepare(resolvedPath, busyTimeoutMs);
-    } catch (retryErr) {
-      throw toOpenError(retryErr, resolvedPath);
-    }
+    throw toOpenError(err, resolvedPath);
   }
 
   dbInstance = db;

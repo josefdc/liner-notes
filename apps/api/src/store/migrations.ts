@@ -11,6 +11,7 @@
  */
 
 import type Database from "better-sqlite3";
+import { LOW_CONFIDENCE_AUDIO_TTL_MS, parseMeasuredAudio } from "./measuredAudio.js";
 
 export interface Migration {
   version: number;
@@ -107,8 +108,10 @@ export const MIGRATIONS: readonly Migration[] = [
       // A measurement may lack energy (or, in principle, tempo or key), so those columns accept
       // null. SQLite cannot drop NOT NULL in place, so the table is rebuilt.
       //
-      // Only rows carrying the `measured` marker are kept. Rows without it were written before
-      // the audio cache held measurements only and may contain estimated or random values.
+      // Only rows the cache would serve are kept: valid measurements carrying the `measured`
+      // marker (see measuredAudio.ts). Rows without it were written before the audio cache held
+      // measurements only and may contain estimated or random values. Kept low-confidence rows
+      // expire within a day, as the cache now writes them.
       db.exec(`
         CREATE TABLE audio_cache_new (
           spotify_id TEXT PRIMARY KEY,
@@ -120,10 +123,40 @@ export const MIGRATIONS: readonly Migration[] = [
           created_at INTEGER DEFAULT (unixepoch()),
           expires_at INTEGER NOT NULL
         );
-        INSERT INTO audio_cache_new
-          SELECT spotify_id, bpm, key_signature, energy, confidence, full_data, created_at, expires_at
-          FROM audio_cache
-          WHERE json_valid(full_data) AND json_extract(full_data, '$.measured') IS 1;
+      `);
+      const rows = db
+        .prepare("SELECT spotify_id, full_data, created_at, expires_at FROM audio_cache")
+        .all() as Array<{
+        spotify_id: string;
+        full_data: string;
+        created_at: number | null;
+        expires_at: number;
+      }>;
+      const insert = db.prepare(
+        `INSERT INTO audio_cache_new
+           (spotify_id, bpm, key_signature, energy, confidence, full_data, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      const lowConfidenceLimit = Math.floor((Date.now() + LOW_CONFIDENCE_AUDIO_TTL_MS) / 1000);
+      for (const row of rows) {
+        const features = parseMeasuredAudio(row.full_data);
+        if (!features) continue;
+        const expiresAt =
+          features.confidence === "low"
+            ? Math.min(row.expires_at, lowConfidenceLimit)
+            : row.expires_at;
+        insert.run(
+          row.spotify_id,
+          features.bpm,
+          features.key,
+          features.energy,
+          features.confidence,
+          row.full_data,
+          row.created_at,
+          expiresAt,
+        );
+      }
+      db.exec(`
         DROP TABLE audio_cache;
         ALTER TABLE audio_cache_new RENAME TO audio_cache;
       `);
@@ -151,10 +184,51 @@ export class SchemaTooNewError extends Error {
   }
 }
 
+/** A recorded migration whose name differs from this code's migration with the same number. */
+export class SchemaMismatchError extends Error {
+  constructor(
+    readonly version: number,
+    readonly recordedName: string,
+    readonly expectedName: string,
+  ) {
+    super(
+      `Database migration ${version} was recorded as "${recordedName}", but this code's ` +
+        `migration ${version} is "${expectedName}". The database was migrated by a different ` +
+        "version of the code; run that version, or point SQLITE_DB_PATH at another file.",
+    );
+    this.name = "SchemaMismatchError";
+  }
+}
+
+/** A migration that threw. It was rolled back; the migrations before it stay applied. */
+export class MigrationFailedError extends Error {
+  constructor(
+    readonly migration: Pick<Migration, "version" | "name">,
+    readonly appliedBefore: number[],
+    options: { cause: unknown },
+  ) {
+    const detail = options.cause instanceof Error ? options.cause.message : String(options.cause);
+    super(`Migration ${migration.version} (${migration.name}) failed: ${detail}`, options);
+    this.name = "MigrationFailedError";
+  }
+
+  /** What state the failure left the database in, for error messages. */
+  get outcome(): string {
+    const before =
+      this.appliedBefore.length > 0
+        ? `Migrations ${this.appliedBefore.join(", ")} were applied by this start and stay applied.`
+        : "No migration was applied by this start.";
+    return `Migration ${this.migration.version} was rolled back. ${before}`;
+  }
+}
+
 /**
  * Applies every pending migration in order. Each one runs in an IMMEDIATE transaction that first
  * re-checks whether another process has applied it, so two processes starting together do not
  * apply a migration twice. Returns the versions applied by this call.
+ *
+ * Throws SchemaTooNewError or SchemaMismatchError (before changing anything) when the recorded
+ * migrations do not match this code, and MigrationFailedError when a migration throws.
  */
 export function runMigrations(
   db: Database.Database,
@@ -175,25 +249,39 @@ export function runMigrations(
   `);
 
   const latest = migrations.length;
-  const appliedMax = () =>
-    (db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get() as { v: number | null })
-      .v ?? 0;
+  const recorded = () =>
+    db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all() as Array<{
+      version: number;
+      name: string;
+    }>;
 
-  const found = appliedMax();
-  if (found > latest) throw new SchemaTooNewError(found, latest);
+  for (const row of recorded()) {
+    if (row.version > latest) throw new SchemaTooNewError(row.version, latest);
+    const expected = migrations[row.version - 1];
+    if (!expected || expected.name !== row.name) {
+      throw new SchemaMismatchError(row.version, row.name, expected?.name ?? "(none)");
+    }
+  }
 
   const applied: number[] = [];
   for (const migration of migrations) {
-    db.transaction(() => {
-      if (appliedMax() >= migration.version) return;
-      migration.up(db);
-      db.prepare("INSERT INTO schema_migrations (version, name) VALUES (?, ?)").run(
-        migration.version,
-        migration.name,
-      );
-      db.pragma(`user_version = ${migration.version}`);
-      applied.push(migration.version);
-    }).immediate();
+    try {
+      db.transaction(() => {
+        const done = db
+          .prepare("SELECT 1 FROM schema_migrations WHERE version = ?")
+          .get(migration.version);
+        if (done) return;
+        migration.up(db);
+        db.prepare("INSERT INTO schema_migrations (version, name) VALUES (?, ?)").run(
+          migration.version,
+          migration.name,
+        );
+        db.pragma(`user_version = ${migration.version}`);
+        applied.push(migration.version);
+      }).immediate();
+    } catch (err) {
+      throw new MigrationFailedError(migration, [...applied], { cause: err });
+    }
   }
   return applied;
 }

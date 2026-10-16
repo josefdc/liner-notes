@@ -2,7 +2,8 @@
 // Configure it first with `window.__mockApi = { suggestions, streams }`:
 //   suggestions: candidates returned by /api/search/suggest
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
-//                opened on that path (e.g. "/api/analyze/stream")
+//                opened on that path (e.g. "/api/analyze/stream"); when they run out the
+//                stream ends like a server response does (onerror unless the app closed it)
 // Every request is recorded in `window.__mockApi.log`. Requests to the API that the
 // configuration does not cover fail, so a test never depends on a real backend.
 
@@ -50,7 +51,14 @@
         this.readyState = 1;
         this.onopen?.(new Event("open"));
         const next = () => {
-          if (this.readyState === 2 || index >= events.length) return;
+          if (this.readyState === 2) return;
+          if (index >= events.length) {
+            // The server has ended the response. A real EventSource reports that through
+            // onerror unless the app already closed the stream (it closes on "done").
+            this.readyState = 0;
+            this.onerror?.(new Event("error"));
+            return;
+          }
           this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(events[index++]) }));
           setTimeout(next, 50);
         };

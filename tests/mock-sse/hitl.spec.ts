@@ -5,19 +5,31 @@ import { expect, test } from "@playwright/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(join(here, "fixtures/hitl.json"), "utf8"));
+const candidates = fixture.streams["/api/analyze/stream"].find(
+  (event: { type: string }) => event.type === "interrupt",
+).candidates as Array<{ id: string; title: string; artist: string; releaseYear: string }>;
 
-test("an ambiguous search shows the track picker with every candidate", async ({ page }) => {
+type MockWindow = { __mockApi: { log: string[] } };
+const requests = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => (window as unknown as MockWindow).__mockApi.log);
+
+test.beforeEach(async ({ page }) => {
   await page.addInitScript((config) => {
     (window as unknown as { __mockApi: unknown }).__mockApi = config;
   }, fixture);
   await page.addInitScript({ path: join(here, "mock-api.js") });
+});
 
+test("an ambiguous search shows the track picker and keeps it until a choice is made", async ({
+  page,
+}) => {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");
   await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
 
-  await expect(page.getByText("Is this the right track?")).toBeVisible();
-  for (const candidate of fixture.streams["/api/analyze/stream"][2].candidates) {
+  const picker = page.getByText("Is this the right track?");
+  await expect(picker).toBeVisible();
+  for (const candidate of candidates) {
     await expect(
       page.getByRole("button", {
         name: `${candidate.title} ${candidate.artist} • ${candidate.releaseYear}`,
@@ -25,8 +37,28 @@ test("an ambiguous search shows the track picker with every candidate", async ({
     ).toBeVisible();
   }
 
-  const log = await page.evaluate(
-    () => (window as unknown as { __mockApi: { log: string[] } }).__mockApi.log,
-  );
+  // The stream has ended ("done"); the picker must stay and no fallback request may follow.
+  await page.waitForTimeout(1000);
+  await expect(picker).toBeVisible();
+  const log = await requests(page);
   expect(log).toContain("stream /api/analyze/stream?query=Hurt");
+  expect(log.filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual([]);
+  expect(log.filter((entry) => entry.includes("/resume"))).toEqual([]);
+});
+
+test("choosing a candidate resumes the analysis with that track", async ({ page }) => {
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+
+  const second = candidates[1];
+  await page
+    .getByRole("button", { name: `${second.title} ${second.artist} • ${second.releaseYear}` })
+    .click();
+
+  await expect
+    .poll(() => requests(page))
+    .toContain(
+      `stream /api/analyze/stream/resume?threadId=thread-hitl&selectedTrackId=${second.id}`,
+    );
 });

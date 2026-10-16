@@ -19,7 +19,9 @@ export default defineConfig({
   webServer: {
     command: `npm run dev -w apps/web -- --port ${port} --strictPort`,
     url: `http://localhost:${port}`,
-    reuseExistingServer: !process.env.CI,
+    // Always start our own server: on a shared machine the port may belong to someone else,
+    // and --strictPort makes a taken port fail instead of silently testing another app.
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

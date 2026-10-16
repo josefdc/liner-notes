@@ -64,6 +64,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Use npm 11.18 or later
+        run: |
+          if ! npx -y semver@7.7.3 -r '>=11.18.0' "$(npm --version)" >/dev/null; then
+            npm install -g npm@11.19.1
+          fi
+          npm --version
       - run: npm ci
       # Uses the Google Chrome preinstalled on the runner image; no browser download.
       - run: npm run test:e2e

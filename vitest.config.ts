@@ -9,15 +9,25 @@ export default defineConfig({
           name: "api",
           root: "apps/api",
           environment: "node",
-          include: ["src/**/*.test.ts"],
+          include: ["src/**/*.test.ts", "test/**/*.test.ts"],
         },
       },
       {
+        // Uses the app's Vite config, so the `@` alias and the React plugin apply in tests.
+        extends: "./apps/web/vite.config.ts",
         test: {
           name: "web",
           root: "apps/web",
           environment: "happy-dom",
-          include: ["src/**/*.test.{ts,tsx}"],
+          include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}"],
+        },
+      },
+      {
+        test: {
+          name: "contract",
+          root: "packages/contract",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
         },
       },
       {
@@ -25,7 +35,7 @@ export default defineConfig({
           name: "scripts",
           root: "scripts",
           environment: "node",
-          include: ["**/*.test.mjs"],
+          include: ["**/*.test.{mjs,ts}"],
         },
       },
     ],

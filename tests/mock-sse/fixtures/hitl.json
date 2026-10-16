@@ -2,7 +2,10 @@
   "suggestions": [],
   "streams": {
     "/api/analyze/stream": [
-      { "type": "connected", "threadId": "thread-hitl" },
+      {
+        "type": "connected",
+        "threadId": "thread-hitl"
+      },
       {
         "type": "status",
         "node": "scout",
@@ -41,6 +44,17 @@
             "popularity": 0
           }
         ]
+      },
+      {
+        "type": "done"
+      }
+    ],
+    "/api/analyze/stream/resume": [
+      {
+        "type": "status",
+        "node": "engineer",
+        "message": "Analyzing audio",
+        "code": "AUDIO-INIT"
       }
     ]
   }

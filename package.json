@@ -14,7 +14,7 @@
     "build": "npm run build -w packages/contract -w apps/web -w apps/api",
     "test:db": "vitest run --project api src/store/database.test.ts",
     "preview": "npm run preview -w apps/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.tools.json",
     "test": "vitest run",
     "lint": "biome check --error-on-warnings .",
     "format": "biome format --write .",

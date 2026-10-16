@@ -82,7 +82,34 @@ describe("string-sentinel-tool-results", () => {
   });
 });
 
+describe("stock-images-web", () => {
+  it.each([
+    ["picsum", "const img = 'https://picsum.photos/200';"],
+    ["unsplash", 'src="https://images.unsplash.com/photo-1"'],
+  ])("counts %s", (_name, line) => {
+    expect(count("stock-images-web", line)).toBe(1);
+  });
+});
+
+describe("tailwind-v3-variable-classes", () => {
+  it("counts each -[--token] class", () => {
+    expect(
+      count("tailwind-v3-variable-classes", 'className="p-[--space-md] rounded-[--radius-sm]"'),
+    ).toBe(2);
+  });
+
+  it("ignores the Tailwind v4 form", () => {
+    expect(count("tailwind-v3-variable-classes", 'className="p-(--space-md)"')).toBe(0);
+  });
+});
+
 describe("baselines", () => {
+  // The CLI runs in a throwaway repository, isolated from the surrounding git setup
+  // (GIT_DIR and friends, hooks, signing, global config).
+  const isolatedEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+  Object.assign(isolatedEnv, { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
   const script = join(dirname(fileURLToPath(import.meta.url)), "guard-honest.mjs");
   let dir;
 
@@ -103,7 +130,8 @@ describe("baselines", () => {
     };
     writeFileSync(join(dir, "scripts/guard-baseline.json"), `${JSON.stringify(full)}\n`);
     writeFileSync(join(dir, "apps/api/src/a.ts"), source);
-    const git = (...args) => execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+    const git = (...args) =>
+      execFileSync("git", args, { cwd: dir, stdio: "ignore", env: isolatedEnv });
     git("init", "-q");
     git("add", ".");
     git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base");
@@ -111,7 +139,11 @@ describe("baselines", () => {
   }
 
   const run = (...args) =>
-    spawnSync("node", ["scripts/guard-honest.mjs", ...args], { cwd: dir, encoding: "utf8" });
+    spawnSync("node", ["scripts/guard-honest.mjs", ...args], {
+      cwd: dir,
+      encoding: "utf8",
+      env: isolatedEnv,
+    });
 
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -119,12 +151,16 @@ describe("baselines", () => {
 
   it("fails above the baseline", () => {
     repo({ "random-values-api": 1 }, "Math.random(); Math.random();\n");
-    expect(run().status).toBe(1);
+    const result = run();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/random-values-api\s+2 \/ 1\s+ABOVE BASELINE/);
   });
 
   it("fails below the baseline until it is lowered, and --update lowers it", () => {
     repo({ "random-values-api": 2 }, "Math.random();\n");
-    expect(run().status).toBe(1);
+    const result = run();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/fell below its baseline/);
     expect(run("--update").status).toBe(0);
     expect(run().status).toBe(0);
   });
@@ -149,6 +185,8 @@ describe("baselines", () => {
 
   it("rejects a baseline that is not a non-negative integer", () => {
     repo({ "random-values-api": "many" }, "Math.random();\n");
-    expect(run().status).toBe(1);
+    const result = run();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/must be a non-negative integer/);
   });
 });

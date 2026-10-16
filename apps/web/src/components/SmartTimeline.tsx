@@ -1,13 +1,19 @@
 import type React from 'react';
 import { useMemo } from 'react';
-import type { SongSegment, KeyMoment } from '../types';
+import type { SongSegment, KeyMoment, TrackData } from '../types';
 import { keyMomentColors, colors } from '../styles/theme';
+import { InferenceLabel } from './EstimatedWarning';
 
 interface SmartTimelineProps {
   segments: SongSegment[];
-  duration: number; // total duration in seconds (or 100 for percentage mode)
+  /** Where the segments come from; neither source is a measurement of the audio. */
+  segmentsSource?: TrackData['segmentsSource'];
+  /** Song duration in seconds; undefined when it is not known. */
+  durationSeconds?: number;
   samples?: { time: number; description: string }[];
   keyMoments?: KeyMoment[];
+  /** False when the audio was not analysed (which is why there are no key moments). */
+  audioAnalyzed?: boolean;
 }
 
 /**
@@ -27,46 +33,75 @@ const getMarkerColor = (type: KeyMoment['type']): string => {
   return keyMomentColors[type] || colors.analog;
 };
 
+const SEGMENT_SOURCE_LABEL: Record<NonNullable<TrackData['segmentsSource']>, string> = {
+  template: 'Template — not analysed',
+  inferred: 'Model inference',
+};
+
 const EMPTY_SAMPLES: { time: number; description: string }[] = [];
 const EMPTY_KEY_MOMENTS: KeyMoment[] = [];
 
 const SmartTimeline: React.FC<SmartTimelineProps> = ({
   segments,
-  duration = 225, // Default 3:45 in seconds
+  segmentsSource,
+  durationSeconds,
   samples = EMPTY_SAMPLES,
   keyMoments = EMPTY_KEY_MOMENTS,
+  audioAnalyzed,
 }) => {
-  const { allMarkers, actualDuration } = useMemo(() => {
-    const isPct = duration === 100;
-    const actDur = isPct ? 225 : duration;
-    const timeToPercent = (t: number) => (isPct ? t : (t / actDur) * 100);
+  const duration =
+    typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? durationSeconds
+      : null;
 
-    const markers = [
-      ...samples.map((s) => ({
-        position: timeToPercent(s.time),
-        description: `Sample: ${s.description}`,
-        color: colors.analog,
-        type: 'sample' as const,
-        intensity: 1,
-      })),
-      ...keyMoments.map((k) => ({
-        position: timeToPercent(k.time),
-        description: k.description,
-        color: getMarkerColor(k.type),
-        type: k.type,
-        intensity: k.intensity,
-      })),
-    ].sort((a, b) => a.position - b.position);
+  const markers = useMemo(
+    () =>
+      [
+        ...samples.map((s) => ({
+          time: s.time,
+          description: `Sample: ${s.description} (position from the model)`,
+          color: colors.analog,
+          intensity: 1,
+        })),
+        ...keyMoments.map((k) => ({
+          time: k.time,
+          description: `${k.description} (detected in the audio preview at ${formatTime(k.time)})`,
+          color: getMarkerColor(k.type),
+          intensity: k.intensity,
+        })),
+      ]
+        .filter((m) => Number.isFinite(m.time) && m.time >= 0)
+        .sort((a, b) => a.time - b.time),
+    [samples, keyMoments],
+  );
 
-    return { allMarkers: markers, isPercentageMode: isPct, actualDuration: actDur };
-  }, [samples, keyMoments, duration]);
+  let markerNote: string | null = null;
+  if (markers.length === 0) {
+    markerNote =
+      audioAnalyzed === false
+        ? 'No key moments — the audio was not analysed'
+        : 'No key moments detected';
+  } else if (duration === null) {
+    markerNote = `Duration unknown: ${markers.length} marker${markers.length === 1 ? '' : 's'} cannot be placed`;
+  }
 
   return (
-    <div className="w-full mt-8" aria-roledescription="timeline" aria-label="Song structure">
-      {/* Dynamic time labels */}
+    <div className="w-full mt-8" role="group" aria-label="Song structure">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+          Structure
+        </span>
+        {segments.length > 0 && (
+          <InferenceLabel>
+            {segmentsSource ? SEGMENT_SOURCE_LABEL[segmentsSource] : 'Not measured'}
+          </InferenceLabel>
+        )}
+      </div>
+
+      {/* Time labels: the end label only when the duration is known */}
       <div className="flex justify-between mb-2 text-xs font-mono text-text-tertiary uppercase tracking-widest">
         <span>0:00</span>
-        <span>{formatTime(actualDuration)}</span>
+        <span>{duration !== null ? formatTime(duration) : 'Duration unknown'}</span>
       </div>
 
       {/* Structure Bar */}
@@ -74,13 +109,14 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         <div className="h-3 w-full flex rounded-[--radius-xs] overflow-hidden relative" role="list">
           {segments.map((seg) => (
             <div
-              key={seg.label}
+              // Labels repeat (two choruses); a segment's span is unique.
+              key={`${seg.start}-${seg.end}-${seg.label}`}
               role="listitem"
               aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
               tabIndex={0}
               className="h-full relative group transition-all duration-[--duration-normal] hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/50"
               style={{
-                width: `${seg.end - seg.start}%`,
+                width: `${Math.max(seg.end - seg.start, 0)}%`,
                 backgroundColor: seg.color,
               }}
             >
@@ -99,14 +135,17 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       )}
 
-      {/* Dynamic Sample/KeyMoment Markers */}
-      <div className="relative h-6 w-full mt-1">
-        {allMarkers.length > 0 ? (
-          allMarkers.map((marker) => (
+      {/* Sample and key-moment markers, placed only when the duration is known */}
+      {duration !== null && markers.length > 0 && (
+        <div className="relative h-6 w-full mt-1">
+          {markers.map((marker, index) => (
             <div
-              key={`${marker.type}-${marker.position}`}
+              // biome-ignore lint/suspicious/noArrayIndexKey: markers can share a time and type
+              key={index}
               className="absolute top-0 -translate-x-1/2 cursor-pointer group"
-              style={{ left: `${Math.min(Math.max(marker.position, 2), 98)}%` }}
+              style={{
+                left: `${Math.min(Math.max((marker.time / duration) * 100, 2), 98)}%`,
+              }}
               tabIndex={0}
               role="img"
               aria-label={marker.description}
@@ -127,14 +166,14 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
                 {marker.description}
               </div>
             </div>
-          ))
-        ) : (
-          /* Fallback placeholder marker when no moments detected */
-          <div className="absolute top-0 -translate-x-1/2" style={{ left: '75%' }}>
-            <div className="w-2 h-2 rotate-45 bg-analog border border-black opacity-30"></div>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
+      {markerNote && (
+        <p className="mt-2 text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+          {markerNote}
+        </p>
+      )}
     </div>
   );
 };

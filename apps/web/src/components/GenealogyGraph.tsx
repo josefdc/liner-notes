@@ -10,6 +10,17 @@ import { colors, genealogyColors, linkColors } from '../styles/theme';
 import type { GenealogyGraphProps, CustomNode, CustomLink } from './genealogy/types';
 import { useAudioPreview } from './genealogy/useAudioPreview';
 import { isValidImageUrl } from '../utils/image';
+import type { TrackData } from '../types';
+
+/**
+ * The part of a genealogy that can be drawn: links whose source and target are both in the
+ * node list. d3-force throws on a link to an unknown node id, which would take the whole page
+ * down, so such links are left out.
+ */
+export function drawableLinks(data: TrackData['genealogy']): TrackData['genealogy']['links'] {
+  const ids = new Set(data.nodes.map((node) => node.id));
+  return data.links.filter((link) => ids.has(link.source) && ids.has(link.target));
+}
 
 /**
  * Generate SVG placeholder pattern for nodes without images
@@ -138,7 +149,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       ...n,
       size: n.size * nodeScale, // Scale node sizes for mobile
     }));
-    const links: CustomLink[] = JSON.parse(JSON.stringify(data.links));
+    const links: CustomLink[] = JSON.parse(JSON.stringify(drawableLinks(data)));
 
     // Create simulation centered at viewport center
     const simulation = forceSimulation(nodes)

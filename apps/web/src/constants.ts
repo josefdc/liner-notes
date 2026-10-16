@@ -1,106 +1,82 @@
-import type { TrackData } from './types';
+import type { AudioUnavailableReason, TrackData } from './types';
 
-// Placeholder images (internal only)
-const IMAGES = {
-  ALBUM_1: 'https://picsum.photos/seed/sonic1/600/600',
-  ALBUM_2: 'https://picsum.photos/seed/sonic2/600/600',
-  ALBUM_3: 'https://picsum.photos/seed/sonic3/600/600',
-  ALBUM_4: 'https://picsum.photos/seed/sonic4/600/600',
+// How the result screens describe values that are missing. Nothing here stands in for a
+// value: when a value is not known, the screens say so with this text.
+
+/** Why the audio values are missing, in words, for each reason the API sends. */
+export const AUDIO_UNAVAILABLE_TEXT: Record<AudioUnavailableReason, string> = {
+  service_unavailable: 'The audio analysis service did not respond.',
+  no_preview: 'No audio preview is available for this track.',
+  preview_rejected: 'The audio preview is not from an allowed source, so it was not analysed.',
+  analysis_failed: 'The audio analysis failed.',
+  not_detected: 'The analysis ran but could not detect the tempo or key.',
+  not_run: 'The audio analysis did not run.',
 };
 
-export const CURRENT_TRACK: TrackData = {
-  id: 't1',
-  title: 'Midnight City',
-  artist: 'M83',
-  album: "Hurry Up, We're Dreaming",
-  coverUrl: IMAGES.ALBUM_1,
-  bpm: 105,
-  segments: [
-    { label: 'Intro', start: 0, end: 10, color: '#374151' },
-    { label: 'Verse 1', start: 10, end: 30, color: '#1F2937' },
-    { label: 'Chorus', start: 30, end: 50, color: '#00F0FF' },
-    { label: 'Verse 2', start: 50, end: 70, color: '#1F2937' },
-    { label: 'Bridge', start: 70, end: 85, color: '#FFB000' },
-    { label: 'Outro', start: 85, end: 100, color: '#374151' },
-  ],
-  samples: [{ time: 75, description: 'Vocal chop from "Downtown" (1984)' }],
-  factoids: [
-    {
-      id: 'f1',
-      title: 'Production Insight',
-      content:
-        'The famous saxophone solo at the end was almost cut from the final mix. The producer felt it was "too 80s" until the very last listening session.',
-      type: 'production',
-    },
-    {
-      id: 'f2',
-      title: 'Lyrical Analysis',
-      content:
-        'The phrase "waiting in the car" is a metaphor for liminal spaces—the state of being between two destinations, much like the band\'s transition between genres.',
-      type: 'lyrics',
-    },
-    {
-      id: 'f3',
-      title: 'Sample Trivia',
-      content:
-        "The iconic vocal riff isn't a synth; it is a human voice heavily processed through a bitcrusher and reverb.",
-      type: 'trivia',
-    },
-  ],
-  genealogy: {
-    nodes: [
-      { id: 'current', group: 1, label: 'Midnight City', img: IMAGES.ALBUM_1, size: 40 },
-      { id: 'origin', group: 2, label: 'Downtown (1984)', img: IMAGES.ALBUM_2, size: 30 },
-      { id: 'sib1', group: 3, label: 'City Lights', img: IMAGES.ALBUM_3, size: 20 },
-      { id: 'sib2', group: 3, label: 'Neon drive', img: IMAGES.ALBUM_4, size: 20 },
-      { id: 'child1', group: 4, label: 'Remix 2023', img: IMAGES.ALBUM_1, size: 15 },
-    ],
-    links: [
-      { source: 'origin', target: 'current', value: 5 },
-      { source: 'origin', target: 'sib1', value: 3 },
-      { source: 'origin', target: 'sib2', value: 3 },
-      { source: 'current', target: 'child1', value: 2 },
-    ],
-  },
-};
+export function audioUnavailableText(reason: string | undefined): string {
+  if (reason && Object.hasOwn(AUDIO_UNAVAILABLE_TEXT, reason)) {
+    return AUDIO_UNAVAILABLE_TEXT[reason as AudioUnavailableReason];
+  }
+  return reason ? `The audio was not analysed (${reason}).` : 'No reason was given.';
+}
 
-// Fallback radar data when no genre profile is available
-export const RADAR_DATA = [
-  { subject: 'Electronic', A: 50, fullMark: 100 },
-  { subject: 'Rock', A: 50, fullMark: 100 },
-  { subject: 'Hip Hop', A: 50, fullMark: 100 },
-  { subject: 'Jazz', A: 50, fullMark: 100 },
-  { subject: 'Pop', A: 50, fullMark: 100 },
-  { subject: 'R&B', A: 50, fullMark: 100 },
+/** The value when it was measured (a finite number), otherwise null. */
+export function measuredNumber(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** The value when it is a non-empty string, otherwise null. */
+export function measuredText(value: string | null | undefined): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+/** A 0-1 audio-model score as shown to users: two decimals, never a percentage. */
+export function formatScore(score: number): string {
+  return score.toFixed(2);
+}
+
+/** Mood word for a measured valence score (0 = melancholic, 1 = euphoric). */
+export function moodLabel(valence: number): string {
+  if (valence > 0.7) return 'Euphoric';
+  if (valence > 0.5) return 'Upbeat';
+  if (valence > 0.3) return 'Mellow';
+  return 'Melancholic';
+}
+
+interface AudioField {
+  label: string;
+  value: (track: TrackData) => number | string | null;
+}
+
+/** Values measured from the audio signal. */
+export const MEASURED_AUDIO_FIELDS: AudioField[] = [
+  { label: 'BPM', value: (t) => measuredNumber(t.bpm) },
+  { label: 'key', value: (t) => measuredText(t.key) },
+  { label: 'energy', value: (t) => measuredNumber(t.energy) },
 ];
 
-export const RECOMMENDATIONS = [
-  {
-    id: 'r1',
-    title: 'Plastic Love',
-    artist: 'Mariya Takeuchi',
-    reason: 'City Pop aesthetic match',
-    img: 'https://picsum.photos/seed/rec1/300/300',
-  },
-  {
-    id: 'r2',
-    title: 'Nightcall',
-    artist: 'Kavinsky',
-    reason: 'High BPM + Synth texture',
-    img: 'https://picsum.photos/seed/rec2/300/300',
-  },
-  {
-    id: 'r3',
-    title: 'Space Song',
-    artist: 'Beach House',
-    reason: 'Melancholic progression',
-    img: 'https://picsum.photos/seed/rec3/300/300',
-  },
-  {
-    id: 'r4',
-    title: 'After Dark',
-    artist: 'Mr. Kitty',
-    reason: 'Lo-fi atmosphere affinity',
-    img: 'https://picsum.photos/seed/rec4/300/300',
-  },
+/** Scores from audio models run over the preview (estimates, not probabilities). */
+export const AUDIO_MODEL_FIELDS: AudioField[] = [
+  { label: 'mood', value: (t) => measuredNumber(t.valence) },
+  { label: 'danceability', value: (t) => measuredNumber(t.danceability) },
+  { label: 'acousticness', value: (t) => measuredNumber(t.acousticness) },
 ];
+
+/** Names of the audio values that were not measured, signal measurements first. */
+export function missingAudioValues(track: TrackData): string[] {
+  return [...MEASURED_AUDIO_FIELDS, ...AUDIO_MODEL_FIELDS]
+    .filter((field) => field.value(track) === null)
+    .map((field) => field.label);
+}
+
+/** Parts of a result the model writes that this result does not have. */
+export function missingModelOutput(track: TrackData): string[] {
+  const missing: string[] = [];
+  if (!track.genreProfile?.length) missing.push('genre profile');
+  if (track.segmentsSource === 'template') {
+    missing.push('song structure (a generic template is shown)');
+  }
+  if (!track.factoids?.length) missing.push('insights');
+  if (!track.genealogy?.nodes?.some((node) => node.group !== 1)) missing.push('connected tracks');
+  return missing;
+}

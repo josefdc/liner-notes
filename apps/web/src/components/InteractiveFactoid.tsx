@@ -1,14 +1,5 @@
 import React, { useMemo } from 'react';
-import {
-  Info,
-  ChevronRight,
-  Mic2,
-  Music,
-  Users,
-  Sparkles,
-  Link2,
-  MessageCircle,
-} from 'lucide-react';
+import { Info, ChevronRight, Mic2, Music, Users, Sparkles, Link2 } from 'lucide-react';
 import type { Factoid, FactoidEntity } from '../types';
 
 interface InteractiveFactoidProps {
@@ -32,8 +23,6 @@ function getBorderColor(type: Factoid['type']): string {
   switch (type) {
     case 'production':
       return 'border-l-cyber';
-    case 'lyrics':
-      return 'border-l-accent-pink';
     case 'credits':
       return 'border-l-analog';
     case 'sample':
@@ -52,8 +41,6 @@ function getHoverBorderColor(type: Factoid['type']): string {
   switch (type) {
     case 'production':
       return 'hover:border-cyber/25';
-    case 'lyrics':
-      return 'hover:border-accent-pink/25';
     case 'credits':
       return 'hover:border-analog/25';
     case 'sample':
@@ -76,8 +63,6 @@ function getFactoidStyle(type: Factoid['type']): {
   switch (type) {
     case 'production':
       return { icon: <Mic2 size={14} />, color: 'text-cyber', label: 'PRODUCTION' };
-    case 'lyrics':
-      return { icon: <MessageCircle size={14} />, color: 'text-accent-pink', label: 'LYRICS' };
     case 'credits':
       return { icon: <Users size={14} />, color: 'text-analog', label: 'CREDITS' };
     case 'sample':
@@ -160,17 +145,15 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
         className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[--duration-slow] pointer-events-none bg-gradient-to-br from-transparent via-transparent ${
           factoid.type === 'production'
             ? 'to-cyber/[0.03]'
-            : factoid.type === 'lyrics'
-              ? 'to-accent-pink/[0.03]'
-              : factoid.type === 'credits'
-                ? 'to-analog/[0.03]'
-                : factoid.type === 'sample'
-                  ? 'to-accent-purple/[0.03]'
-                  : factoid.type === 'curiosity'
-                    ? 'to-accent-amber/[0.03]'
-                    : factoid.type === 'connection'
-                      ? 'to-accent-green/[0.03]'
-                      : 'to-analog/[0.03]'
+            : factoid.type === 'credits'
+              ? 'to-analog/[0.03]'
+              : factoid.type === 'sample'
+                ? 'to-accent-purple/[0.03]'
+                : factoid.type === 'curiosity'
+                  ? 'to-accent-amber/[0.03]'
+                  : factoid.type === 'connection'
+                    ? 'to-accent-green/[0.03]'
+                    : 'to-analog/[0.03]'
         }`}
       />
 

@@ -6,20 +6,17 @@ import {
   Pause,
   Music,
   ExternalLink,
-  Heart,
-  Disc,
   Search,
   ChevronDown,
   Lock,
   Unlock,
 } from 'lucide-react';
-import { CURRENT_TRACK } from '../constants';
+import { measuredNumber, measuredText } from '../constants';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
-import EstimatedWarning from './EstimatedWarning';
+import { AudioStats, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
-import { Badge } from './ui/Badge';
 import type { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types';
 
 interface PlayerProps {
@@ -43,8 +40,36 @@ interface PlayerProps {
 // ─── P2:24 Default visible factoids count ───────────────────────────────────
 const INITIAL_VISIBLE_FACTOIDS = 3;
 
-const Player: React.FC<PlayerProps> = ({
-  trackData,
+/** Shown when there is no analysis to display: never a demo track in its place. */
+const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'headingRef'>> = ({
+  onBack,
+  onNewSearch,
+  headingRef,
+}) => (
+  <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-void p-6 text-center">
+    <h1
+      ref={headingRef}
+      tabIndex={-1}
+      className="text-xl font-light text-white tracking-tight outline-none"
+    >
+      No analysis loaded
+    </h1>
+    <p className="text-xs font-mono text-text-tertiary">Search for a song to see its analysis.</p>
+    <div className="flex items-center gap-3">
+      <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
+        BACK TO BASE
+      </Button>
+      {onNewSearch && (
+        <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
+          NEW SEARCH
+        </Button>
+      )}
+    </div>
+  </div>
+);
+
+const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }> = ({
+  track,
   onBack,
   onDecryptMoreStream,
   onAnalyzeTrack,
@@ -64,8 +89,8 @@ const Player: React.FC<PlayerProps> = ({
   // P0:7 — Audio preview ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Use provided trackData or fallback to mock data
-  const track = trackData || CURRENT_TRACK;
+  const bpm = measuredNumber(track.bpm);
+  const key = measuredText(track.key);
   const allFactoids = useMemo(
     () => [...track.factoids, ...additionalFactoids],
     [track.factoids, additionalFactoids],
@@ -213,11 +238,9 @@ const Player: React.FC<PlayerProps> = ({
         </div>
         <div className="hidden md:flex items-center gap-3 text-xs font-mono text-cyber">
           <span>
-            DEEP_DIVE_MODE {'//'} {track.bpm} BPM {track.key && `// ${track.key}`}
+            DEEP_DIVE_MODE {'//'} {bpm !== null ? `${bpm} BPM` : 'BPM not measured'}
+            {key !== null && ` // ${key}`}
           </span>
-          <EstimatedWarning
-            show={track.audioConfidence === 'low' || track.audioSource === 'estimated'}
-          />
         </div>
       </div>
 
@@ -328,6 +351,8 @@ const Player: React.FC<PlayerProps> = ({
             ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
         `}
         >
+          <ResultNotices track={track} className="w-full max-w-lg mb-4" />
+
           {/* Album Art Container */}
           <div className="relative w-56 h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 mb-8 mt-4 group flex-shrink-0">
             <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-[--duration-dramatic]"></div>
@@ -367,45 +392,8 @@ const Player: React.FC<PlayerProps> = ({
                 )}
               </div>
             )}
-            {/* Audio Stats */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
-              {track.bpm != null && <Badge variant="cyber">{track.bpm} BPM</Badge>}
-              {track.key && <Badge variant="cyber">{track.key}</Badge>}
-              {track.valence !== undefined && (
-                <Badge
-                  variant="gray"
-                  icon={
-                    <Heart
-                      size={10}
-                      className={track.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
-                    />
-                  }
-                  title="Mood"
-                >
-                  <span className={track.valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}>
-                    {track.valence > 0.7
-                      ? 'Euphoric'
-                      : track.valence > 0.5
-                        ? 'Upbeat'
-                        : track.valence > 0.3
-                          ? 'Mellow'
-                          : 'Melancholic'}
-                  </span>
-                </Badge>
-              )}
-              {track.danceability !== undefined && (
-                <Badge
-                  variant="gray"
-                  icon={<Disc size={10} className="text-analog" />}
-                  title="Danceability"
-                >
-                  <span className="text-analog">{Math.round(track.danceability * 100)}%</span>
-                </Badge>
-              )}
-              <EstimatedWarning
-                show={track.audioConfidence === 'low' || track.audioSource === 'estimated'}
-              />
-            </div>
+            {/* Audio Stats: measured values, or "not measured" */}
+            <AudioStats track={track} className="mt-3" />
             {/* Spotify Link */}
             {track.spotifyUrl && (
               <a
@@ -446,9 +434,13 @@ const Player: React.FC<PlayerProps> = ({
           <div className="w-full max-w-lg">
             <SmartTimeline
               segments={track.segments}
-              duration={track.durationSeconds || 100}
+              segmentsSource={track.segmentsSource}
+              durationSeconds={track.durationSeconds}
               samples={track.samples}
               keyMoments={track.keyMoments}
+              audioAnalyzed={
+                track.audioSource === undefined ? undefined : track.audioSource === 'analyzed'
+              }
             />
           </div>
         </div>
@@ -527,5 +519,8 @@ const Player: React.FC<PlayerProps> = ({
     </div>
   );
 };
+
+const Player: React.FC<PlayerProps> = ({ trackData, ...props }) =>
+  trackData ? <PlayerView track={trackData} {...props} /> : <NoAnalysis {...props} />;
 
 export default Player;

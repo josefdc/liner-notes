@@ -5,7 +5,7 @@
 # Virtual environment (platform-specific, must be rebuilt in container)
 .venv
 
-# Local models and data (models are downloaded during the image build)
+# Local models and data (the container fetches the models when it starts)
 models/
 data/
 
@@ -46,14 +46,15 @@ wheels/
 # Documentation
 *.md
 
-# Test files
+# Test files and tool caches
 tests/
 *.test.py
 pytest.ini
+.pytest_cache
+.ruff_cache
 
 # Logs
 *.log
 
-# Environment files
-.env
-!.env.example
+# Environment files (none of them belong in the image)
+.env*

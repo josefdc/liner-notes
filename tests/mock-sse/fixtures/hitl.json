@@ -1,0 +1,47 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      { "type": "connected", "threadId": "thread-hitl" },
+      {
+        "type": "status",
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "interrupt",
+        "threadId": "thread-hitl",
+        "candidates": [
+          {
+            "id": "c1",
+            "title": "Hurt",
+            "artist": "Johnny Cash",
+            "album": "American IV: The Man Comes Around",
+            "coverUrl": "",
+            "releaseYear": "2002",
+            "popularity": 0
+          },
+          {
+            "id": "c2",
+            "title": "Hurt",
+            "artist": "Nine Inch Nails",
+            "album": "The Downward Spiral",
+            "coverUrl": "",
+            "releaseYear": "1994",
+            "popularity": 0
+          },
+          {
+            "id": "c3",
+            "title": "Hurt",
+            "artist": "Christina Aguilera",
+            "album": "Back to Basics",
+            "coverUrl": "",
+            "releaseYear": "2006",
+            "popularity": 0
+          }
+        ]
+      }
+    ]
+  }
+}

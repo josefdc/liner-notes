@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { runMigrations } from "./migrations.js";
+import { zodToJsonSchema } from "zod-to-json-schema";
+import { MIGRATION_3_FROZEN, runMigrations } from "./migrations.js";
+import { LOW_CONFIDENCE_AUDIO_TTL_MS, MeasuredAudioSchema } from "./measuredAudio.js";
 import { SonicCache, isMeasuredAudio } from "./cache.js";
 import type { AudioFeatures } from "../agent/state.js";
 
@@ -182,5 +184,16 @@ describe("SonicCache research", () => {
     cache.putResearch("good", { samples: ["a"], productionTrivia: [], relatedArtists: [] });
     expect(cache.getResearch("good")?.samples).toEqual(["a"]);
     db.close();
+  });
+});
+
+describe("migration 3's frozen copy of the audio cache rules", () => {
+  // Migration 3 keeps its own copy so that later edits cannot change a shipped migration. If the
+  // live rules change on purpose, update this test (not the copy) and say why in the change.
+  it("still matches the live rules", () => {
+    expect(zodToJsonSchema(MIGRATION_3_FROZEN.measuredAudioSchema)).toEqual(
+      zodToJsonSchema(MeasuredAudioSchema),
+    );
+    expect(MIGRATION_3_FROZEN.lowConfidenceTtlMs).toBe(LOW_CONFIDENCE_AUDIO_TTL_MS);
   });
 });

@@ -18,8 +18,11 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import {
   initializeDatabase,
@@ -522,6 +525,19 @@ async function importWithBrokenDriver(error: Error): Promise<typeof import("./da
 
 const isRoot = process.getuid?.() === 0;
 
+const betterSqlitePath = createRequire(import.meta.url).resolve("better-sqlite3");
+const apiRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const repoRoot = join(apiRoot, "..", "..");
+
+/** Runs a CommonJS snippet in a child Node process with `Database` (better-sqlite3) in scope. */
+function runChild(code: string, ...args: string[]) {
+  return spawnSync(
+    process.execPath,
+    ["-e", `const Database = require(${JSON.stringify(betterSqlitePath)});\n${code}`, ...args],
+    { encoding: "utf8", timeout: 30_000 },
+  );
+}
+
 describe("opening a database that cannot be used", () => {
   afterEach(() => {
     vi.resetModules();
@@ -690,6 +706,85 @@ describe("opening a database that cannot be used", () => {
     expect(readFileSync(`${movedPath}-wal`).equals(original.wal)).toBe(true);
     expect(readFileSync(`${movedPath}-shm`).equals(original.shm)).toBe(true);
   });
+
+  it("rolls back a transaction cut short by a crash (hot journal) instead of failing", () => {
+    const dbPath = setup();
+    const child = runChild(
+      `const db = new Database(process.argv[1]);
+       db.pragma("journal_mode = DELETE");
+       db.exec("CREATE TABLE big (x BLOB)");
+       db.transaction(() => {
+         for (let i = 0; i < 20; i++) db.prepare("INSERT INTO big VALUES (randomblob(1000))").run();
+       })();
+       db.pragma("cache_size = 10");
+       db.exec("BEGIN");
+       const insert = db.prepare("INSERT INTO big VALUES (randomblob(3000))");
+       for (let i = 0; i < 500; i++) insert.run();
+       process.kill(process.pid, "SIGKILL");`,
+      dbPath,
+    );
+    expect(child.signal).toBe("SIGKILL");
+    expect(readdirSync(tmpDir).sort()).toEqual(["test.db", "test.db-journal"]);
+
+    const db = initializeDatabase(dbPath);
+    expect(db.prepare("SELECT COUNT(*) FROM big").pluck().get()).toBe(20);
+    expect(readdirSync(tmpDir).filter((f) => f.includes("corrupt"))).toEqual([]);
+    expect(readdirSync(tmpDir)).not.toContain("test.db-journal");
+  });
+
+  it("does not move into quarantine a -wal that only the integrity check created", () => {
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    raw.pragma("journal_mode = WAL");
+    raw.exec("CREATE TABLE filler (x TEXT)");
+    raw.transaction(() => {
+      const insert = raw.prepare("INSERT INTO filler VALUES (?)");
+      for (let i = 0; i < 200; i++) insert.run(`row-${i}-${"x".repeat(200)}`);
+    })();
+    raw.close();
+    expect(readdirSync(tmpDir)).toEqual(["test.db"]);
+    const fd = openSync(dbPath, "r+");
+    writeSync(fd, Buffer.alloc(4096, 0xa5), 0, 4096, 4096);
+    closeSync(fd);
+
+    initializeDatabase(dbPath);
+    const moved = readdirSync(tmpDir).filter((f) => f.startsWith("test.db.corrupt."));
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatch(/^test\.db\.corrupt\.\d+$/);
+  });
+
+  it.skipIf(isRoot)(
+    "the API entry point exits 1 on an unreadable database and leaves it untouched",
+    () => {
+      const dbPath = setup();
+      makeHealthyDb(dbPath);
+      const original = readFileSync(dbPath);
+      chmodSync(dbPath, 0o000);
+      let result: ReturnType<typeof spawnSync>;
+      try {
+        result = spawnSync(process.execPath, ["--import", "tsx", "src/index.ts"], {
+          cwd: apiRoot,
+          encoding: "utf8",
+          timeout: 60_000,
+          env: {
+            ...process.env,
+            SQLITE_DB_PATH: dbPath,
+            SPOTIFY_CLIENT_ID: "test-client-id",
+            SPOTIFY_CLIENT_SECRET: "test-client-secret",
+            PORT: "3122",
+          },
+        });
+      } finally {
+        chmodSync(dbPath, 0o644);
+      }
+      expect(result.status).toBe(1);
+      expect(String(result.stderr)).toContain("[Database] Cannot open database");
+      expect(String(result.stderr)).toContain("left untouched");
+      expect(readFileSync(dbPath).equals(original)).toBe(true);
+      expect(readdirSync(tmpDir)).toEqual(["test.db"]);
+    },
+    90_000,
+  );
 
   it("refuses a database migrated by a newer release and leaves it untouched", () => {
     const dbPath = setup();
@@ -928,6 +1023,58 @@ describe("migrations", () => {
     expect(db.pragma("user_version", { simple: true })).toBe(1);
     db.close();
   });
+
+  it("lets two processes migrate the same file at once, applying each migration once", async () => {
+    const dbPath = setup();
+    const script = join(tmpDir, "migrate.mts");
+    const migrationsPath = join(apiRoot, "src", "store", "migrations.ts");
+    writeFileSync(
+      script,
+      `import { runMigrations } from ${JSON.stringify(migrationsPath)};
+       import BetterSqlite from ${JSON.stringify(betterSqlitePath)};
+       const [dbPath, startAt] = process.argv.slice(2);
+       const sleep = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+       const slow = (version: number, table: string) => ({
+         version,
+         name: "slow_" + table,
+         up(db: any) {
+           sleep(400);
+           db.exec("CREATE TABLE IF NOT EXISTS " + table + " (x)");
+         },
+       });
+       const db = new BetterSqlite(dbPath, { timeout: 10000 });
+       db.pragma("journal_mode = WAL");
+       while (Date.now() < Number(startAt)) {}
+       runMigrations(db, [slow(1, "one"), slow(2, "two")]);
+       db.close();`,
+    );
+    const startAt = String(Date.now() + 4000);
+    const runOne = () =>
+      new Promise<{ code: number | null; stderr: string }>((done) => {
+        const child = spawn(process.execPath, ["--import", "tsx", script, dbPath, startAt], {
+          cwd: repoRoot,
+        });
+        let stderr = "";
+        child.stderr.on("data", (chunk) => {
+          stderr += chunk;
+        });
+        child.on("close", (code) => done({ code, stderr }));
+      });
+
+    const results = await Promise.all([runOne(), runOne()]);
+    expect(
+      results.map((r) => r.code),
+      results.map((r) => r.stderr).join("\n"),
+    ).toEqual([0, 0]);
+    const db = new Database(dbPath, { readonly: true });
+    expect(
+      db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all(),
+    ).toEqual([
+      { version: 1, name: "slow_one" },
+      { version: 2, name: "slow_two" },
+    ]);
+    db.close();
+  }, 60_000);
 
   it("requires migrations numbered 1..n in order", () => {
     const db = new Database(":memory:");

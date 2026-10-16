@@ -201,13 +201,7 @@ function readIfExists(path: string): Buffer | null {
   }
 }
 
-/**
- * Runs `quick_check` on a read-only connection. Unlike a read-write connection, closing it never
- * checkpoints the WAL into the main file or deletes the WAL, so a database judged corrupt can be
- * moved aside exactly as it was found (a restored backup next to a stale WAL stays recoverable).
- */
-function checkIntegrity(dbPath: string, busyTimeoutMs: number): void {
-  if (!existsSync(dbPath)) return;
+function quickCheckReadOnly(dbPath: string, busyTimeoutMs: number): void {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true, timeout: busyTimeoutMs });
   try {
     const check = String(db.pragma("quick_check", { simple: true }));
@@ -220,14 +214,45 @@ function checkIntegrity(dbPath: string, busyTimeoutMs: number): void {
 }
 
 /**
+ * Runs `quick_check` on a read-only connection. Unlike a read-write connection, closing it never
+ * checkpoints the WAL into the main file or deletes the WAL, so a database judged corrupt can be
+ * moved aside exactly as it was found (a restored backup next to a stale WAL stays recoverable).
+ *
+ * A read-only connection cannot roll back a hot journal (a rollback-mode transaction cut short by
+ * a crash) and fails with SQLITE_READONLY_ROLLBACK. Rollback mode involves no WAL, so the file is
+ * then opened read-write once, which rolls the unfinished transaction back to the last committed
+ * state, and checked again. Any error from that open or the second check is reported as is.
+ */
+function checkIntegrity(dbPath: string, busyTimeoutMs: number): void {
+  if (!existsSync(dbPath)) return;
+  try {
+    quickCheckReadOnly(dbPath, busyTimeoutMs);
+  } catch (err) {
+    if (errorCode(err) !== "SQLITE_READONLY_ROLLBACK") throw err;
+    console.warn(
+      `[Database] ${dbPath} has an unfinished transaction from a crash; rolling it back.`,
+    );
+    const db = new Database(dbPath, { fileMustExist: true, timeout: busyTimeoutMs });
+    try {
+      db.prepare("SELECT COUNT(*) FROM sqlite_master").get();
+    } finally {
+      db.close();
+    }
+    quickCheckReadOnly(dbPath, busyTimeoutMs);
+  }
+}
+
+/**
  * Moves a corrupt database aside with its WAL and shared-memory files, under one name, as they
- * were before the integrity check: the check's read-only connection may rebuild the -shm index,
- * so the -shm content read before the check (`shmBefore`) is what is kept. Throws if it cannot.
+ * were before the integrity check. The check's read-only connection may create an empty -wal and
+ * rebuild the -shm index, so only a -wal that existed before is moved (one it created is
+ * deleted), and the -shm content read before the check (`before.shm`) is what is kept.
+ * Throws if it cannot.
  */
 function quarantineCorruptDatabase(
   dbPath: string,
   cause: unknown,
-  shmBefore: Buffer | null,
+  before: { walExisted: boolean; shm: Buffer | null },
 ): string {
   const corruptPath = `${dbPath}.corrupt.${Date.now()}`;
   console.error(
@@ -236,8 +261,9 @@ function quarantineCorruptDatabase(
   );
   try {
     renameSync(dbPath, corruptPath);
-    if (existsSync(`${dbPath}-wal`)) renameSync(`${dbPath}-wal`, `${corruptPath}-wal`);
-    if (shmBefore) writeFileSync(`${corruptPath}-shm`, shmBefore);
+    if (before.walExisted) renameSync(`${dbPath}-wal`, `${corruptPath}-wal`);
+    else rmSync(`${dbPath}-wal`, { force: true });
+    if (before.shm) writeFileSync(`${corruptPath}-shm`, before.shm);
     rmSync(`${dbPath}-shm`, { force: true });
   } catch (err) {
     throw new DatabaseOpenError(
@@ -329,13 +355,14 @@ export function initializeDatabase(
   const busyTimeoutMs = options.busyTimeoutMs ?? 5000;
 
   // Only the read-only check decides that a file is corrupt; nothing has opened it read-write yet.
-  let shmBefore: Buffer | null = null;
+  const before = { walExisted: false, shm: null as Buffer | null };
   try {
-    shmBefore = readIfExists(`${resolvedPath}-shm`);
+    before.walExisted = existsSync(`${resolvedPath}-wal`);
+    before.shm = readIfExists(`${resolvedPath}-shm`);
     checkIntegrity(resolvedPath, busyTimeoutMs);
   } catch (err) {
     if (!isCorruptionError(err)) throw toOpenError(err, resolvedPath);
-    quarantineCorruptDatabase(resolvedPath, err, shmBefore);
+    quarantineCorruptDatabase(resolvedPath, err, before);
   }
 
   let db: Database.Database;

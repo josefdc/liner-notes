@@ -90,6 +90,37 @@ describe("pruneDatabase", () => {
     expect(threads()).toEqual(["opaque"]);
   });
 
+  it("keeps a thread whose run is open or interrupted until the run retention", async () => {
+    vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
+    await checkpointAt("paused", NOW);
+    startRun(db, { runId: "paused-run", threadId: "paused", query: "q" });
+    updateRun(db, "paused-run", { status: "interrupted" });
+    await checkpointAt("running", NOW);
+    startRun(db, { runId: "running-run", threadId: "running", query: "q" });
+    await checkpointAt("done", NOW);
+    startRun(db, { runId: "done-run", threadId: "done", query: "q" });
+    updateRun(db, "done-run", { status: "completed" });
+
+    pruneDatabase(db, DEFAULT_RETENTION, NOW + 25 * HOUR);
+    expect(threads()).toEqual(["paused", "running"]);
+
+    pruneDatabase(db, DEFAULT_RETENTION, NOW + 31 * DAY);
+    expect(threads()).toEqual([]);
+  });
+
+  it('never age-prunes the user\'s track choices under ["disambiguation"]', () => {
+    const put = db.prepare("INSERT INTO store_items VALUES (?, ?, '{}', ?, ?)");
+    const old = new Date(NOW - 90 * DAY).toISOString();
+    put.run('["disambiguation"]', "midnight city", old, old);
+    put.run('["tracks"]', "midnight city", old, old);
+
+    pruneDatabase(db, DEFAULT_RETENTION, NOW);
+
+    expect(db.prepare("SELECT namespace FROM store_items").pluck().all()).toEqual([
+      '["disambiguation"]',
+    ]);
+  });
+
   it("deletes store items not updated within the store retention", () => {
     const put = db.prepare("INSERT INTO store_items VALUES (?, ?, '{}', ?, ?)");
     const iso = (ms: number) => new Date(ms).toISOString();
@@ -213,6 +244,22 @@ describe("retentionFromEnv", () => {
       runRetentionMs: 7 * DAY,
     });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("STORE_RETENTION_DAYS"));
+    warn.mockRestore();
+  });
+});
+
+describe("retention settings", () => {
+  it("raises values below the minimum: 1 hour for checkpoints, 1 day for store and runs", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(
+      retentionFromEnv({
+        CHECKPOINT_RETENTION_HOURS: "0.0001",
+        STORE_RETENTION_DAYS: "0.5",
+        RUN_RETENTION_DAYS: "0.01",
+      }),
+    ).toEqual({ checkpointRetentionMs: HOUR, storeRetentionMs: DAY, runRetentionMs: DAY });
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("CHECKPOINT_RETENTION_HOURS"));
     warn.mockRestore();
   });
 });

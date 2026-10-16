@@ -11,7 +11,53 @@
  */
 
 import type Database from "better-sqlite3";
-import { LOW_CONFIDENCE_AUDIO_TTL_MS, parseMeasuredAudio } from "./measuredAudio.js";
+import { z } from "zod";
+
+// =============================================================================
+// Frozen inputs of migration 3
+// =============================================================================
+
+/**
+ * What migration 3 keeps as a measurement, and how long a low-confidence one may stay cached.
+ * These are copies of measuredAudio.ts as of this migration, so later changes to the live cache
+ * rules cannot change what a shipped migration does. A test checks that they still match today;
+ * when the live rules change on purpose, that test is updated, not these.
+ */
+const unitScoreV3 = z.number().min(0).max(1).nullable();
+const MEASURED_AUDIO_V3 = z
+  .object({
+    bpm: z.number().positive(),
+    key: z.string().min(1),
+    energy: unitScoreV3,
+    valence: unitScoreV3,
+    danceability: unitScoreV3,
+    acousticness: unitScoreV3,
+    instrumentalness: unitScoreV3,
+    confidence: z.enum(["low", "high"]),
+    keyMoments: z.array(z.unknown()).optional(),
+    unavailableReason: z.undefined(),
+    measured: z.literal(true),
+    analyzer: z.literal("audio-service"),
+  })
+  .passthrough();
+const LOW_CONFIDENCE_TTL_MS_V3 = 24 * 60 * 60 * 1000;
+
+/** Exposed for the test that compares them with the live rules; not for other use. */
+export const MIGRATION_3_FROZEN = {
+  measuredAudioSchema: MEASURED_AUDIO_V3,
+  lowConfidenceTtlMs: LOW_CONFIDENCE_TTL_MS_V3,
+};
+
+function parseMeasuredAudioV3(fullData: string): z.infer<typeof MEASURED_AUDIO_V3> | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(fullData);
+  } catch {
+    return null;
+  }
+  const parsed = MEASURED_AUDIO_V3.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 export interface Migration {
   version: number;
@@ -109,7 +155,7 @@ export const MIGRATIONS: readonly Migration[] = [
       // null. SQLite cannot drop NOT NULL in place, so the table is rebuilt.
       //
       // Only rows the cache would serve are kept: valid measurements carrying the `measured`
-      // marker (see measuredAudio.ts). Rows without it were written before the audio cache held
+      // marker (MEASURED_AUDIO_V3 above). Rows without it were written before the audio cache held
       // measurements only and may contain estimated or random values. Kept low-confidence rows
       // expire within a day, as the cache now writes them.
       db.exec(`
@@ -137,9 +183,9 @@ export const MIGRATIONS: readonly Migration[] = [
            (spotify_id, bpm, key_signature, energy, confidence, full_data, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
-      const lowConfidenceLimit = Math.floor((Date.now() + LOW_CONFIDENCE_AUDIO_TTL_MS) / 1000);
+      const lowConfidenceLimit = Math.floor((Date.now() + LOW_CONFIDENCE_TTL_MS_V3) / 1000);
       for (const row of rows) {
-        const features = parseMeasuredAudio(row.full_data);
+        const features = parseMeasuredAudioV3(row.full_data);
         if (!features) continue;
         const expiresAt =
           features.confidence === "low"

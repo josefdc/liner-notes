@@ -60,6 +60,7 @@ USER sonic
 # Environment configuration
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV SQLITE_DB_PATH=/app/data/sonic-agent.db
 
 EXPOSE 3001
 

@@ -46,6 +46,8 @@ All settings are optional environment variables.
 | `AUDIO_SERVICE_TOKEN` | empty (no check) | Shared secret. When set, `POST /analyze` requires the same value in the `X-Audio-Token` header and answers `401` otherwise. |
 | `MODELS_DIR` | `./models` (`/app/models` in the image) | Where the Essentia models are read from and downloaded to. |
 | `ANALYSIS_TIMEOUT_S` | `60` | Seconds allowed for decoding and analysing one preview (`504` after that). |
+| `MAX_CONCURRENT_ANALYSES` | `4` | Analyses allowed at once; further requests get `503` until one finishes. |
+| `AUDIO_ENABLE_DOCS` | unset | Set to `1` to serve `/docs` and `/openapi.json` (off by default). |
 | `AUDIO_FETCH_MODELS` | `1` | Image only: set to `0` to skip the model download on start. |
 | `MODEL_FETCH_TIMEOUT_S` | `90` | Image only: time limit for the model download on start. |
 | `PORT` | `3002` | Image only: port uvicorn listens on. |
@@ -93,6 +95,7 @@ Errors carry a generic `detail`; the cause is only written to the service log.
 | Status | Meaning |
 |---|---|
 | `400` | `preview_url` is not an allowed preview URL (see below) |
+| `503` | `MAX_CONCURRENT_ANALYSES` analyses are already running |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `422` | Request body is not `{"preview_url": "<string>"}` |
 | `502` | The preview could not be downloaded within the limits |

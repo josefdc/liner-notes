@@ -108,3 +108,23 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3102/analyze \
             -H 'content-type: application/json' \
             -d '{"preview_url":"http://169.254.169.254/#dzcdn.net"}')" = 400
+
+          # Docker's own health check must turn healthy (it waits for the first interval).
+          for _ in $(seq 1 45); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' audio-smoke)
+            [ "$status" = healthy ] && break
+            sleep 2
+          done
+          echo "health status: $status"
+          test "$status" = healthy
+
+          # A failed model download (no network) must leave the service running, degraded.
+          docker run -d --name audio-offline --network none -e MODEL_FETCH_TIMEOUT_S=10 \
+            liner-notes-audio:ci
+          trap 'docker logs audio-smoke; docker rm -f audio-smoke audio-offline' EXIT
+          for _ in $(seq 1 30); do
+            docker exec audio-offline python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:3002/health', timeout=2).read().decode())" > offline-health.json 2>/dev/null && break
+            sleep 2
+          done
+          cat offline-health.json
+          grep -q '"status":"degraded"' offline-health.json

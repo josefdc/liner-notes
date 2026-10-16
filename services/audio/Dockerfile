@@ -50,6 +50,6 @@ USER 10001:10001
 EXPOSE 3002
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3002/health', timeout=5)"]
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT', '3002')}/health\", timeout=5)"]
 
 CMD ["sh", "/app/docker-entrypoint.sh"]

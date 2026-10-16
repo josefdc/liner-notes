@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import signal
 import sys
 from dataclasses import dataclass
 
@@ -172,4 +173,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # The image's entrypoint stops a slow download with SIGTERM; exiting normally lets the
+    # partial file be removed.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     sys.exit(main())

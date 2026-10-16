@@ -16,6 +16,8 @@ Settings (environment variables, all optional):
     AUDIO_SERVICE_TOKEN    shared secret; when set, /analyze requires X-Audio-Token
     MODELS_DIR             directory with the Essentia models (default: ./models)
     ANALYSIS_TIMEOUT_S     seconds allowed for decoding and analysis (default: 60)
+    MAX_CONCURRENT_ANALYSES  analyses at once before answering 503 (default: 4)
+    AUDIO_ENABLE_DOCS      set to 1 to serve /docs and /openapi.json
 """
 
 import asyncio

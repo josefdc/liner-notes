@@ -264,6 +264,7 @@ export const AudioUnavailableReasonSchema = z.enum([
   "preview_rejected",
   "service_unavailable",
   "analysis_failed",
+  "not_detected",
   "not_run",
 ]);
 
@@ -351,9 +352,9 @@ export const TrackDataSchema = z.object({
   ),
 
   // Context & trivia (ENHANCED: more factoids allowed)
+  // No minimum: when the model is unavailable, fewer factoids is the honest result.
   factoids: z
     .array(FactoidSchema)
-    .min(3)
     .max(8)
     .describe(
       "Interesting facts. PRIORITY: research data > knowledge. Include at least one of each type when data available: production, sample, credits, curiosity.",
@@ -660,7 +661,6 @@ export const ResearchPlanSchema = z.object({
     .enum([
       "search_samples",
       "search_production",
-      "search_meaning",
       "search_general",
       "search_musicbrainz",
       "search_artist_collaborators",

@@ -123,6 +123,21 @@ describe("composerNode", () => {
     expect(out.trackData?.modelUnavailable).toBeUndefined();
   });
 
+  it("never sends song-meaning text from older state to the model", async () => {
+    model.generateStructuredOutput.mockResolvedValue({ data: null, model: "m", error: "x" });
+    const state = stateWith(measured);
+    state.researchData = {
+      ...state.researchData,
+      songMeaning: ["Song meaning page: LINE_OF_SONG_TEXT"],
+    };
+
+    await composerNode(state, config);
+
+    const prompt = model.generateStructuredOutput.mock.calls[0][0].prompt as string;
+    expect(prompt).not.toContain("SONG_TEXT");
+    expect(prompt).not.toContain("songMeaning");
+  });
+
   it("returns null audio values with a reason when nothing was measured", async () => {
     model.generateStructuredOutput.mockImplementation(async ({ schema }) => ({
       data: schema.parse(modelOutput),

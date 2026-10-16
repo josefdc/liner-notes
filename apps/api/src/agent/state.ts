@@ -103,6 +103,7 @@ export interface KeyMoment {
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed
+ * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio)
  * - not_run: audio analysis did not run for this track
  */
 export type AudioUnavailableReason =
@@ -110,6 +111,7 @@ export type AudioUnavailableReason =
   | "preview_rejected"
   | "service_unavailable"
   | "analysis_failed"
+  | "not_detected"
   | "not_run";
 
 /**
@@ -135,12 +137,23 @@ export interface AudioFeatures {
   unavailableReason?: AudioUnavailableReason;
   /** Human-readable detail for unavailableReason (e.g. the service error message) */
   unavailableDetail?: string;
+  /**
+   * Set to true only on features built from an audio service measurement. Cached rows without
+   * it were written before estimates were removed and are not trusted.
+   */
+  measured?: true;
+  /** What produced the measurement (the audio analysis service) */
+  analyzer?: "audio-service";
 }
 
 export interface ResearchData {
   samples: string[];
   productionTrivia: string[];
-  songMeaning: string[];
+  /**
+   * No longer collected: song-meaning web pages can quote the song. Optional only so research
+   * cached before its removal still type-checks; it is dropped when that research is read.
+   */
+  songMeaning?: string[];
   relatedArtists: string[];
   /** Artist collaborators from MusicBrainz */
   collaborators?: string[];
@@ -195,7 +208,6 @@ export interface ResearchPlan {
   nextAction:
     | "search_samples"
     | "search_production"
-    | "search_meaning"
     | "search_general"
     | "search_musicbrainz"
     | "search_artist_collaborators"
@@ -277,7 +289,6 @@ export const SonicAgentState = Annotation.Root({
     reducer: (prev, next) => ({
       samples: [...prev.samples, ...next.samples],
       productionTrivia: [...prev.productionTrivia, ...next.productionTrivia],
-      songMeaning: [...prev.songMeaning, ...next.songMeaning],
       relatedArtists: [...prev.relatedArtists, ...next.relatedArtists],
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
       artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
@@ -299,7 +310,6 @@ export const SonicAgentState = Annotation.Root({
     default: () => ({
       samples: [],
       productionTrivia: [],
-      songMeaning: [],
       relatedArtists: [],
       collaborators: [],
       artistTopTracks: [],

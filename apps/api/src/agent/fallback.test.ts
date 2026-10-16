@@ -1,6 +1,6 @@
 /**
  * Fallback track data (used when the model call fails): no invented values, missing
- * fields omitted, and no song text from research cached before the Genius source was removed.
+ * fields omitted, and no song-meaning text (which can carry lyrics), even from old research.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,7 @@ vi.mock("./geminiClient.js", () => ({
 }));
 
 import { createFallbackTrackData } from "./fallback.js";
+import { TrackDataSchema } from "./schema.js";
 import type { AudioFeatures, ResearchData, SonicAgentStateType, SpotifyData } from "./state.js";
 
 const spotify: SpotifyData = {
@@ -101,6 +102,32 @@ describe("createFallbackTrackData", () => {
     expect(profile?.content).not.toMatch(/mood|Danceability/i);
   });
 
+  it("prints the same BPM as the payload", async () => {
+    const td = await build({
+      bpm: 98.5,
+      key: "A Minor",
+      energy: null,
+      valence: null,
+      danceability: null,
+      acousticness: null,
+      instrumentalness: null,
+      confidence: "low",
+    });
+    expect(td.bpm).toBe(98.5);
+    expect(allText(td.factoids)).toContain("98.5 BPM in A Minor");
+  });
+
+  it("returns a schema-valid payload with no factoids when nothing is known", async () => {
+    const td = await build(null, emptyResearch, {
+      releaseDate: "",
+      album: "",
+      popularity: undefined as unknown as number,
+    });
+    expect(td.factoids).toEqual([]);
+    const parsed = TrackDataSchema.safeParse(td);
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+  });
+
   it("omits missing metadata instead of printing undefined or Unknown", async () => {
     const td = await build(null, emptyResearch, {
       releaseDate: "",
@@ -112,7 +139,7 @@ describe("createFallbackTrackData", () => {
     expect(text).toContain('Released on "To the Extreme".');
   });
 
-  it("parses MusicBrainz tags and leaves out structured data and legacy song text", async () => {
+  it("parses MusicBrainz tags and leaves out structured data and song-meaning text", async () => {
     const td = await build(null, {
       samples: ['[MusicBrainz Samples] [{"title":"Under Pressure","artist":"Queen"}]'],
       productionTrivia: [
@@ -121,6 +148,7 @@ describe("createFallbackTrackData", () => {
       songMeaning: [
         "[Genius Lyrics]\nLINE_ONE_OF_SONG_TEXT line two line three line four line five",
         '[Genius Annotations] [{"fragment":"LINE_TWO_OF_SONG_TEXT","annotation":"x"}]',
+        "The song is about LINE_THREE_OF_SONG_TEXT and more words to pass any length filter",
       ],
       relatedArtists: [],
     });

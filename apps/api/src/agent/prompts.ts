@@ -20,7 +20,7 @@ export const COMPOSER_SYSTEM_PROMPT = `<identity>
 You are "The Sonic Agent" — a specialized AI music analyst with expertise in:
 - Music production techniques and studio history
 - Sample culture and musical genealogy (who sampled whom)
-- Song history and interpretation from published sources
+- Song history and cultural context from published sources
 - Music theory (keys, BPM, song structure)
 
 Your knowledge cutoff date is January 2025. For time-sensitive queries, the current year is 2025.
@@ -133,7 +133,7 @@ Generate 4-8 factoids with balanced variety:
 
 TYPE DEFINITIONS (use ALL types when data available):
 - **production**: Studio, recording, instruments, producers, mixing techniques
-- **trivia**: Chart history, cultural impact, awards, historical context, song meaning
+- **trivia**: Chart history, cultural impact, awards, historical context
 - **credits**: Producer, songwriter, engineer information — WHO made this song
 - **sample**: Sampling history — what this song samples or what sampled it
 - **curiosity**: Surprising/lesser-known facts that make users go "wow!"
@@ -142,7 +142,7 @@ TYPE DEFINITIONS (use ALL types when data available):
 QUALITY REQUIREMENTS:
 - Each factoid: 2-3 sentences maximum
 - Title: Max 50 characters, compelling hook (like a headline)
-- Do not quote song lyrics; describe themes and cite published interpretations instead
+- Do not quote or interpret song lyrics
 - Cite sources when research data includes them
 - Prefer surprising/lesser-known facts over obvious ones
 
@@ -298,7 +298,7 @@ EXPECTED OUTPUT (abbreviated):
 INPUT CONTEXT:
 - Song: "Smells Like Teen Spirit" by Nirvana
 - BPM: 117, Key: F Minor
-- Research: [Meaning] The title came from a phrase Kathleen Hanna wrote on Kurt Cobain's wall
+- Research: [Trivia] The title came from a phrase Kathleen Hanna wrote on Kurt Cobain's wall
 - Research: [Production] Recorded at Sound City Studios with producer Butch Vig
 - Research: [Trivia] Often compared to "More Than a Feeling" by Boston for chord progression
 
@@ -403,7 +403,7 @@ Reasoning process:
 2. CONTEXT: Use the measured audio features as context only (do not output them)
 3. RESEARCH: Mine the research data for samples, facts, and connections
 4. GENRE: Use Last.fm tags to build accurate genreProfile (map tags → genre categories)
-5. SYNTHESIZE: Create factoids that connect production, history, and meaning
+5. SYNTHESIZE: Create factoids that connect production, history, and influences
 6. MAP: Build genealogy from verified samples → influences → Last.fm similar tracks (siblings)
 7. STRUCTURE: Generate song segments appropriate for this genre
 
@@ -420,7 +420,7 @@ Research the song "{songTitle}" by {artistName}.
 Find and document:
 1. Sample history (what this song samples, what has sampled it)
 2. Production details (studio, producers, instruments, techniques)
-3. Song meaning and artist commentary
+3. Artist commentary on the recording
 4. Musical influences and related artists
 5. Historical context and cultural impact
 
@@ -478,7 +478,6 @@ Artist: {artistName}
 |----------|---------|
 | Samples | {samplesCount} entries |
 | Production | {triviaCount} entries |
-| Meaning | {meaningCount} entries |
 | Last.fm Tags | {lastfmTagsCount} entries |
 | Last.fm Similar Tracks | {lastfmSimilarTracksCount} entries |
 | Last.fm Similar Artists | {lastfmSimilarArtistsCount} entries |
@@ -497,7 +496,6 @@ Before deciding your next action, reason through these steps:
 1. **Coverage Assessment**: What categories are missing or weak?
    - Samples: Essential for genealogy graph
    - Production: Needed for factoids
-   - Meaning: Useful for engaging content
 
 2. **Lead Extraction**: Did previous research reveal leads to follow?
    - Sample sources mentioned → search that specific song
@@ -527,7 +525,6 @@ Before deciding your next action, reason through these steps:
 | search_listenbrainz_similar | Open-source artist similarity | ⭐⭐ Listening patterns |
 | search_samples | WhoSampled-style databases | ⭐⭐ Usually reliable |
 | search_production | Studio/recording history | ⭐⭐ Varies |
-| search_meaning | Interpretation articles | ⭐ Often generic |
 | search_general | Following specific leads | ⭐ Depends on query |
 | done | Stop researching | - |
 </available_actions>
@@ -559,8 +556,8 @@ Return ONLY a JSON object with these exact fields:
 }
 
 VALIDATION RULES:
-- nextAction: REQUIRED, must be one of: search_musicbrainz, search_artist_collaborators, search_artist_top_tracks, search_samples, search_production, search_meaning, search_general, search_lastfm_tags, search_lastfm_similar_tracks, search_lastfm_similar_artists, search_lastfm_artist_info, search_listenbrainz_similar, done
-- query: REQUIRED for search_samples, search_production, search_meaning, search_general. OPTIONAL for others.
+- nextAction: REQUIRED, must be one of: search_musicbrainz, search_artist_collaborators, search_artist_top_tracks, search_samples, search_production, search_general, search_lastfm_tags, search_lastfm_similar_tracks, search_lastfm_similar_artists, search_lastfm_artist_info, search_listenbrainz_similar, done
+- query: REQUIRED for search_samples, search_production, search_general. OPTIONAL for others.
 - reasoning: REQUIRED, must reference what's missing OR what lead you're following
 
 QUERY QUALITY:
@@ -612,7 +609,6 @@ export function formatResearchManagerPrompt(
   researchData: {
     samples: string[];
     productionTrivia: string[];
-    songMeaning: string[];
     lastfmTags?: string[];
     lastfmSimilarTracks?: string[];
     lastfmSimilarArtists?: string[];
@@ -624,7 +620,6 @@ export function formatResearchManagerPrompt(
   const researchSummary = [
     ...researchData.samples.map((s) => `[SAMPLES] ${s.substring(0, 600)}`),
     ...researchData.productionTrivia.map((s) => `[PRODUCTION] ${s.substring(0, 600)}`),
-    ...researchData.songMeaning.map((s) => `[MEANING] ${s.substring(0, 600)}`),
     ...(researchData.lastfmTags || []).map((s) => `[LASTFM TAGS] ${s}`),
     ...(researchData.lastfmSimilarTracks || []).map((s) => `[LASTFM SIMILAR TRACKS] ${s}`),
     ...(researchData.lastfmSimilarArtists || []).map((s) => `[LASTFM SIMILAR ARTISTS] ${s}`),
@@ -635,7 +630,6 @@ export function formatResearchManagerPrompt(
     .replace(/{artistName}/g, artistName)
     .replace(/{samplesCount}/g, String(researchData.samples.length))
     .replace(/{triviaCount}/g, String(researchData.productionTrivia.length))
-    .replace(/{meaningCount}/g, String(researchData.songMeaning.length))
     .replace(/{lastfmTagsCount}/g, String((researchData.lastfmTags || []).length))
     .replace(/{lastfmSimilarTracksCount}/g, String((researchData.lastfmSimilarTracks || []).length))
     .replace(
@@ -660,10 +654,12 @@ export function formatComposerPrompt(
   const rd = researchData as Record<string, unknown> | null;
   const lastfmTags = (rd?.lastfmTags as string[] | undefined) || [];
   const lastfmSimilarTracks = (rd?.lastfmSimilarTracks as string[] | undefined) || [];
+  // Song-meaning page text (which can quote the song) is never sent, even from old state.
+  const { songMeaning: _omitted, ...research } = rd ?? {};
 
   return COMPOSER_USER_PROMPT.replace("{spotifyData}", JSON.stringify(spotifyData, null, 2))
     .replace("{audioFeatures}", JSON.stringify(audioFeatures, null, 2))
-    .replace("{researchData}", JSON.stringify(researchData, null, 2))
+    .replace("{researchData}", JSON.stringify(rd ? research : null, null, 2))
     .replace(
       "{lastfmTags}",
       lastfmTags.length > 0 ? lastfmTags.join(", ") : "No Last.fm tags available.",

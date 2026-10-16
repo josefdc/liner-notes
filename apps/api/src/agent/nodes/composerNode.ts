@@ -158,7 +158,6 @@ export async function composerNode(
         hasResearchData: {
           samples: state.researchData?.samples?.length || 0,
           productionTrivia: state.researchData?.productionTrivia?.length || 0,
-          songMeaning: state.researchData?.songMeaning?.length || 0,
         },
       },
       null,

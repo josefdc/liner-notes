@@ -19,12 +19,7 @@ import dotenv from "dotenv";
 import { generateStructuredOutput, GEMINI_MODEL_PRO } from "./geminiClient.js";
 import { ResearchPlanSchema } from "./schema.js";
 import { formatResearchManagerPrompt } from "./prompts.js";
-import {
-  searchSamples,
-  searchProductionHistory,
-  searchSongMeaning,
-  searchMusicInfo,
-} from "../sources/search.js";
+import { searchSamples, searchProductionHistory, searchMusicInfo } from "../sources/search.js";
 import { getMusicBrainzRelations, getMusicBrainzArtist } from "../sources/musicbrainz.js";
 import { getArtistTopTracks } from "../sources/spotify.js";
 import {
@@ -59,7 +54,6 @@ export const ResearcherState = Annotation.Root({
     reducer: (prev, next) => ({
       samples: [...prev.samples, ...(next.samples || [])],
       productionTrivia: [...prev.productionTrivia, ...(next.productionTrivia || [])],
-      songMeaning: [...prev.songMeaning, ...(next.songMeaning || [])],
       relatedArtists: [...prev.relatedArtists, ...(next.relatedArtists || [])],
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
       artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
@@ -81,7 +75,6 @@ export const ResearcherState = Annotation.Root({
     default: () => ({
       samples: [],
       productionTrivia: [],
-      songMeaning: [],
       relatedArtists: [],
       collaborators: [],
       artistTopTracks: [],
@@ -278,7 +271,6 @@ async function researchToolNode(
   const newData: ResearchData = {
     samples: [],
     productionTrivia: [],
-    songMeaning: [],
     relatedArtists: [],
     collaborators: [],
     artistTopTracks: [],
@@ -310,16 +302,6 @@ async function researchToolNode(
         });
         if (!result.startsWith("Error") && !result.startsWith("No production")) {
           newData.productionTrivia.push(result);
-        }
-        break;
-
-      case "search_meaning":
-        result = await searchSongMeaning.invoke({
-          songTitle: title,
-          artistName: artist,
-        });
-        if (!result.startsWith("Error") && !result.startsWith("No song meaning")) {
-          newData.songMeaning.push(result);
         }
         break;
 

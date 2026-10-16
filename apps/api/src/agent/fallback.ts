@@ -57,7 +57,8 @@ function truncate(text: string, max = 300): string {
 /** A sentence describing the measured audio values, or null when nothing was measured. */
 function describeMeasuredAudio(audio: AudioFeatures | null): string | null {
   if (!audio || audio.bpm == null || audio.key == null) return null;
-  const parts = [`${Math.round(audio.bpm)} BPM in ${audio.key}.`];
+  // The same values as the payload, unrounded, so the text and the numbers agree.
+  const parts = [`${audio.bpm} BPM in ${audio.key}.`];
   if (audio.energy != null) {
     parts.push(`${audio.energy > 0.7 ? "High" : audio.energy > 0.4 ? "Moderate" : "Low"} energy.`);
   }
@@ -106,14 +107,12 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   const research: ResearchData = state.researchData || {
     samples: [],
     productionTrivia: [],
-    songMeaning: [],
     relatedArtists: [],
   };
 
   console.log("📊 [Fallback] Building factoids from research data:", {
     samples: research.samples?.length || 0,
     productionTrivia: research.productionTrivia?.length || 0,
-    songMeaning: research.songMeaning?.length || 0,
     artistTopTracks: research.artistTopTracks?.length || 0,
     collaborators: research.collaborators?.length || 0,
   });
@@ -172,21 +171,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     }
   }
 
-  // 3. Song meaning from interpretation articles (prose only). Entries from the removed Genius
-  //    source can still arrive from research cached before its removal; they are skipped.
-  const meaningText = (research.songMeaning || [])
-    .filter((s) => !isStructured(s) && !splitTag(s).tag?.startsWith("Genius"))
-    .map((s) => splitTag(s).body.trim())
-    .join(" ")
-    .trim();
-  if (meaningText.length > 30) {
-    factoids.push({
-      id: generateId(),
-      title: "Song Meaning",
-      content: truncate(meaningText),
-      type: "trivia",
-    });
-  }
+  // 3. Song-meaning research is not used (its page text can quote the song).
 
   // 4. Artist collaborators network
   if (research.collaborators && research.collaborators.length > 0) {

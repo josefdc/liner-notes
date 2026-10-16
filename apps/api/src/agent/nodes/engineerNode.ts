@@ -4,6 +4,8 @@
  *
  * Every value it returns is measured by the audio analysis service or null. When no
  * measurement is possible the features carry `unavailableReason`, and nothing is cached.
+ * Cached rows are only reused when they carry the `measured` marker; rows written before
+ * estimates were removed have none and are measured again.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -51,10 +53,13 @@ export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
   };
 
   if (features.bpm == null || features.key == null) {
+    const missing = [features.bpm == null && "tempo", features.key == null && "key"]
+      .filter(Boolean)
+      .join(" and ");
     return {
       ...features,
-      unavailableReason: "analysis_failed",
-      unavailableDetail: "The analysis did not return a tempo and key",
+      unavailableReason: "not_detected",
+      unavailableDetail: `The analysis found no ${missing}`,
     };
   }
 
@@ -64,7 +69,24 @@ export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
     features.danceability != null &&
     features.acousticness != null &&
     features.instrumentalness != null;
-  return { ...features, confidence: complete ? "high" : "low" };
+  return {
+    ...features,
+    confidence: complete ? "high" : "low",
+    measured: true,
+    analyzer: "audio-service",
+  };
+}
+
+/** True for a cached row this code wrote from a measurement. */
+function isTrustedCacheRow(row: AudioFeatures | null | undefined): row is AudioFeatures {
+  return (
+    row?.measured === true &&
+    row.analyzer === "audio-service" &&
+    typeof row.bpm === "number" &&
+    row.bpm > 0 &&
+    typeof row.key === "string" &&
+    row.key !== ""
+  );
 }
 
 export async function engineerNode(
@@ -77,11 +99,14 @@ export async function engineerNode(
 
   const writer = config.writer;
 
-  // Check persistent audio cache first
+  // Check persistent audio cache first. Rows without the measured marker are ignored.
   try {
     const cache = getCache();
     const cachedAudio = cache.getAudio(state.spotifyData.id);
-    if (cachedAudio) {
+    if (cachedAudio && !isTrustedCacheRow(cachedAudio)) {
+      console.log("🎧 [Engineer] Ignoring unmarked cached audio for:", state.spotifyData.title);
+    }
+    if (isTrustedCacheRow(cachedAudio)) {
       console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
       writer?.({
         type: "status",
@@ -140,11 +165,12 @@ export async function engineerNode(
     };
   }
 
-  // Only measurements are cached.
+  // Only measurements are cached. A failed write (e.g. a column that does not accept null
+  // energy yet) is logged and the run continues; nothing reports the result as cached.
   try {
     getCache().putAudio(state.spotifyData.id, audioFeatures);
-  } catch {
-    // Non-critical — continue without caching
+  } catch (error) {
+    console.warn("⚠️ [Engineer] Could not cache audio:", error);
   }
 
   const partial =

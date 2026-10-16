@@ -52,13 +52,15 @@ export interface AudioAnalysisResult {
   error?: string;
 }
 
+// What the service may return. It sends null bpm when no tempo is found and null key/mode
+// for unpitched audio; any field may also be missing in older service versions.
 interface AudioServiceResponse {
-  bpm: number | null;
-  key: string | null;
-  mode: string | null;
-  energy: number | null;
-  duration: number | null;
-  source: string;
+  bpm?: number | null;
+  key?: string | null;
+  mode?: string | null;
+  energy?: number | null;
+  duration?: number | null;
+  source?: string;
   keyMoments?: KeyMoment[];
   // Perceptual features from Essentia (present when models are available)
   valence?: number | null;
@@ -75,17 +77,47 @@ interface AudioServiceResponse {
 const audioServiceUrl = () => process.env.AUDIO_ANALYSIS_URL || "http://localhost:3002";
 const SERVICE_TIMEOUT = 30000; // 30 seconds for audio processing
 
-// Preview clips are only sent for analysis when they come from the Deezer or Spotify CDNs.
-const PREVIEW_HOST_SUFFIXES = [".dzcdn.net", ".scdn.co", ".spotifycdn.com"];
+// Optional shared secret the service requires on /analyze when it is configured.
+const audioServiceToken = () => process.env.AUDIO_SERVICE_TOKEN || "";
+
+// Preview clips are only sent for analysis when they come from the Spotify or Deezer CDNs.
+// Same rules as the audio service (services/audio/preview.py), so a URL the service would
+// refuse is reported here as preview_rejected instead of failing inside the analysis.
+const PREVIEW_HOSTS = new Set(["p.scdn.co"]);
+const PREVIEW_HOST_SUFFIX = ".dzcdn.net";
+const MAX_PREVIEW_URL_LENGTH = 2048;
+const URL_CHARS = /^[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+$/;
+const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const HOSTNAME = new RegExp(`^${DNS_LABEL}(?:\\.${DNS_LABEL})+$`);
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 export function isAllowedPreviewUrl(previewUrl: string): boolean {
-  try {
-    const url = new URL(previewUrl);
-    if (url.protocol !== "https:") return false;
-    return PREVIEW_HOST_SUFFIXES.some((suffix) => url.hostname.endsWith(suffix));
-  } catch {
-    return false;
-  }
+  if (!previewUrl || previewUrl.length > MAX_PREVIEW_URL_LENGTH) return false;
+  if (!URL_CHARS.test(previewUrl) || !previewUrl.startsWith("https://")) return false;
+
+  // Authority as written (before any normalisation by the URL parser)
+  const authority = previewUrl.slice("https://".length).split(/[/?#]/, 1)[0];
+  if (authority.includes("@")) return false;
+  const [host, port, ...rest] = authority.split(":");
+  if (rest.length > 0 || (port !== undefined && port !== "443")) return false;
+  if (!HOSTNAME.test(host) || IPV4.test(host)) return false;
+  if (host.split(".").some((label) => label.startsWith("xn--"))) return false;
+  return PREVIEW_HOSTS.has(host) || host.endsWith(PREVIEW_HOST_SUFFIX);
+}
+
+/** A measured tempo: a finite number above zero, else null. */
+function measuredBpm(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** A finite number, else null. */
+function measuredNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** A non-empty string, else null. */
+function measuredText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
 function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnalysisResult {
@@ -173,6 +205,7 @@ async function analyzeWithService(previewUrl: string): Promise<AudioServiceRespo
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(audioServiceToken() ? { "X-Audio-Token": audioServiceToken() } : {}),
       },
       body: JSON.stringify({ preview_url: previewUrl }),
       signal: controller.signal,
@@ -245,19 +278,21 @@ export const analyzeAudioPreview = tool(
         `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
       );
 
+      // Values outside their valid range are treated as not measured (null), never as 0.
+      const key = measuredText(result.key);
       const measured: AudioAnalysisResult = {
         source: "analyzed",
-        bpm: result.bpm ?? null,
-        key: result.key ?? null,
-        mode: result.mode ?? null,
-        energy: result.energy ?? null,
-        duration: result.duration ?? null,
-        keyMoments: result.keyMoments || [],
+        bpm: measuredBpm(result.bpm),
+        key,
+        mode: key ? measuredText(result.mode) : null,
+        energy: measuredNumber(result.energy),
+        duration: measuredNumber(result.duration),
+        keyMoments: Array.isArray(result.keyMoments) ? result.keyMoments : [],
         // Perceptual features from Essentia (null when the models are unavailable)
-        valence: result.valence ?? null,
-        danceability: result.danceability ?? null,
-        acousticness: result.acousticness ?? null,
-        instrumentalness: result.instrumentalness ?? null,
+        valence: measuredNumber(result.valence),
+        danceability: measuredNumber(result.danceability),
+        acousticness: measuredNumber(result.acousticness),
+        instrumentalness: measuredNumber(result.instrumentalness),
       };
       return JSON.stringify(measured);
     } catch (error) {

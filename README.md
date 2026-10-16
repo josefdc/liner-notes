@@ -94,23 +94,21 @@ The system consists of three services that run simultaneously:
 ### 1. Install Dependencies
 
 ```bash
-# Frontend
-npm install
-
-# Backend
-cd server && npm install
+# Web app, API and shared packages (npm workspaces, one lockfile)
+npm ci
 
 # Python audio service
-cd server/analysis && uv sync
+cd services/audio && uv sync
 ```
 
 ### 2. Environment Variables
 
 ```bash
-cp server/.env.example server/.env
+cp apps/api/.env.example apps/api/.env
+chmod 600 apps/api/.env
 ```
 
-Edit `server/.env` with your API keys (all required):
+Edit `apps/api/.env` with your API keys. The API refuses to start without the Spotify pair:
 
 | Variable                 | Source                                                  |
 |--------------------------|---------------------------------------------------------|
@@ -124,22 +122,14 @@ Edit `server/.env` with your API keys (all required):
 
 ### 3. Run All Services
 
-Open **3 terminals** and run:
-
-**Terminal 1 - Audio Analysis (port 3002)**
-```bash
-cd server/analysis && uv run uvicorn main:app --host 0.0.0.0 --port 3002 --reload
-```
-
-**Terminal 2 - Backend API (port 3001)**
-```bash
-cd server && npm run dev
-```
-
-**Terminal 3 - Frontend (port 3000)**
 ```bash
 npm run dev
 ```
+
+This starts the web app (port 3000), the API (port 3001) and the audio service (port 3002).
+Override the ports with `WEB_PORT`, `API_PORT` and `AUDIO_PORT`, or pick services with
+`DEV_SERVICES=web,api`. Each service can also run alone: `npm run dev -w apps/web`,
+`npm run dev -w apps/api`, `npm run dev -w services/audio`.
 
 Then open http://localhost:3000
 
@@ -158,8 +148,6 @@ docker-compose up --build
 | Frontend       | http://localhost (port 80)  |
 | Backend API    | http://localhost:3001       |
 | Audio Analysis | http://localhost:3002       |
-
-> **Note:** The server Dockerfile currently references `npm run build` but no build script exists in `server/package.json`. The server container will fail to build until this is addressed.
 
 ---
 

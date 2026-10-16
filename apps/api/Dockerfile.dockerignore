@@ -1,0 +1,28 @@
+# =============================================================================
+# Docker Ignore - API build (context: repository root, Dockerfile: apps/api/Dockerfile)
+# Allowlist: only the root manifests, the workspace manifests and the API.
+# =============================================================================
+
+**
+
+!package.json
+!package-lock.json
+!.npmrc
+!apps/api
+!apps/web/package.json
+!services/audio/package.json
+!packages/contract/package.json
+
+# Never send these, even inside allowed directories (env comes from compose env_file)
+**/node_modules
+**/dist
+**/.env
+**/.env.local
+**/data
+**/*.db
+**/*.db-*
+**/*.md
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+**/*.log

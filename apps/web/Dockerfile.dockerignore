@@ -1,0 +1,26 @@
+# =============================================================================
+# Docker Ignore - Web build (context: repository root, Dockerfile: apps/web/Dockerfile)
+# Allowlist: only the root manifests, the workspace manifests and the web app.
+# =============================================================================
+
+**
+
+!package.json
+!package-lock.json
+!.npmrc
+!apps/web
+!apps/api/package.json
+!services/audio/package.json
+!packages/contract/package.json
+
+# Never send these, even inside allowed directories
+**/node_modules
+**/dist
+**/.env*
+**/*.md
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/__tests__
+**/*.log

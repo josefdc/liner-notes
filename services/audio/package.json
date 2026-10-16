@@ -1,0 +1,10 @@
+{
+  "name": "@liner-notes/audio",
+  "private": true,
+  "version": "0.0.0",
+  "description": "FastAPI audio analysis service (Python, managed with uv); this manifest only exposes npm scripts",
+  "scripts": {
+    "dev": "uv run uvicorn main:app --host 0.0.0.0 --port ${AUDIO_PORT:-3002}",
+    "docker": "docker build -t liner-notes-audio . && docker run -p 3002:3002 liner-notes-audio"
+  }
+}

@@ -19,7 +19,7 @@ ENV/
 .ruff_cache/
 
 # Essentia TensorFlow models (large binary files, download via download_models.py)
-server/analysis/models/*.pb
+services/audio/models/*.pb
 
 # Build outputs
 dist
@@ -31,7 +31,7 @@ build
 .env
 .env.local
 .env.*.local
-server/.env
+apps/api/.env
 
 # Logs
 logs
@@ -80,4 +80,4 @@ temp
 *.db-shm
 
 # Local runtime data (SQLite DB, quarantined files)
-server/data/
+apps/api/data/

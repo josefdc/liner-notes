@@ -7,7 +7,6 @@
 
 !package.json
 !package-lock.json
-!.npmrc
 !apps/api
 !apps/web/package.json
 !services/audio/package.json

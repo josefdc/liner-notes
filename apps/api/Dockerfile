@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Build context is the repository root (one lockfile for all workspaces).
 # Install dependencies first (for better caching)
-COPY package.json package-lock.json .npmrc ./
+COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY services/audio/package.json services/audio/
@@ -34,7 +34,7 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
 # Install production dependencies only
-COPY package.json package-lock.json .npmrc ./
+COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY services/audio/package.json services/audio/

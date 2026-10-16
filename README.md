@@ -142,9 +142,10 @@ Then open http://localhost:3000
 ```bash
 npm run lint           # Biome (lint + formatting); `npm run format` rewrites files
 npm run typecheck      # TypeScript in every workspace
-npm run guard:honest   # counts of placeholder-data patterns; may only go down
+npm run guard:honest   # counts of placeholder-data patterns; lower the baseline with -- --update
 npm run test:db -w apps/api && npm run test:lastfm -w apps/api
-cd services/audio && uv run ruff check . && uv run pytest
+cd services/audio && uv run ruff check . && uv run ruff format --check .
+cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
 ```
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).

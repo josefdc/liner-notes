@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Pull requests: newer pushes cancel older runs. main: one group per commit, so every merge is checked.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -26,6 +27,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The parent commit holds the base branch's guard baselines.
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
@@ -43,7 +46,7 @@ jobs:
         run: npm run lint
       - name: Honesty guard
         if: matrix.node == 24
-        run: npm run guard:honest
+        run: npm run guard:honest -- --base HEAD^1
       - run: npm run typecheck
       - name: API tests
         run: |

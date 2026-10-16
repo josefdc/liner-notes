@@ -30,7 +30,7 @@
       }
     },
     {
-      "includes": ["**/*.css"],
+      "includes": ["apps/web/src/styles/index.css"],
       "linter": {
         "rules": {
           "complexity": {
@@ -40,19 +40,45 @@
       }
     },
     {
-      "includes": [
-        "apps/web/src/components/ActivityLog.tsx",
-        "apps/web/src/components/Dashboard.tsx",
-        "apps/web/src/components/Onboarding.tsx",
-        "apps/web/src/components/SmartTimeline.tsx"
-      ],
+      "includes": ["apps/web/src/components/ActivityLog.tsx"],
       "linter": {
         "rules": {
           "a11y": {
-            "useSemanticElements": "off",
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/components/Dashboard.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
             "noStaticElementInteractions": "off",
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/components/Onboarding.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
             "noNoninteractiveTabindex": "off",
-            "useAriaPropsSupportedByRole": "off"
+            "noStaticElementInteractions": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/components/SmartTimeline.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noNoninteractiveTabindex": "off",
+            "useAriaPropsSupportedByRole": "off",
+            "useSemanticElements": "off"
           }
         }
       }

@@ -2,11 +2,13 @@
 // Honesty guard: counts patterns that put invented or placeholder data in front of users
 // (or that hide where data comes from) and fails when any count rises above its baseline.
 //
-//   npm run guard:honest            check against scripts/guard-baseline.json
-//   npm run guard:honest -- --update lower baselines to the current counts (never raises them)
+//   npm run guard:honest                     check against scripts/guard-baseline.json
+//   npm run guard:honest -- --update          lower baselines to the current counts
+//   npm run guard:honest -- --base <git-ref>  also fail if a baseline is higher than at <git-ref>
 //
-// A rule whose baseline is 0 is a hard zero: any match fails. Baselines only go down, as the
-// issue that owns each rule removes the pattern.
+// Baselines only go down: a count above its baseline fails, and so does a count below it until
+// the baseline is lowered in the same change (--update), so removed occurrences cannot be added
+// back later. A rule whose baseline is 0 is a hard zero.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -24,11 +26,13 @@ const isScript = (path) => /\.[cm]?[jt]sx?$/.test(path);
 // Each marker allows exactly one match on its line.
 const allowMarker = (line, id) => new RegExp(`guard-allow:\\s*${id}\\s*[—-]\\s*\\S`).test(line);
 
-// Drops comment-only lines and trailing ` // …` comments (URLs such as https:// are kept).
+// Removes comments from a line: `/* … */` spans, JSDoc continuation lines (` * …`), `//` lines
+// and trailing ` // …` comments (URLs such as https:// are kept).
 const withoutComments = (line) => {
-  const trimmed = line.trim();
-  if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return "";
-  return line.replace(/\s\/\/.*$/, "");
+  const code = line.replace(/\/\*.*?\*\//g, "");
+  const trimmed = code.trim();
+  if (trimmed.startsWith("//") || /^\*(\s|\/|$)/.test(trimmed)) return "";
+  return code.replace(/\s\/\/.*$/, "");
 };
 
 const rules = [
@@ -37,7 +41,8 @@ const rules = [
     owner: "#9",
     description: "Math.random in API code (values must be measured or missing, never random)",
     files: (p) => p.startsWith("apps/api/src/") && isScript(p) && !isTest(p),
-    pattern: /\bMath\.random\b|\{\s*random\s*\}\s*=\s*Math\b/g,
+    pattern:
+      /\bMath\s*\??\.\s*random\b|\{[^}]*\brandom\b[^}]*\}\s*=\s*Math\b|\b(?:randomInt|getRandomValues|randomBytes)\s*\(/g,
   },
   {
     id: "stock-images-web",
@@ -56,11 +61,13 @@ const rules = [
   {
     id: "hex-colours-outside-tokens",
     owner: "#30",
-    description: "Hex colours in web code outside the design tokens (apps/web/src/styles)",
+    description:
+      "Hex colours in web code outside the design tokens (styles/index.css, styles/theme.ts)",
     files: (p) =>
       ((p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p)) ||
         p === "apps/web/index.html") &&
-      !p.startsWith("apps/web/src/styles/") &&
+      p !== "apps/web/src/styles/index.css" &&
+      p !== "apps/web/src/styles/theme.ts" &&
       !isTest(p),
     pattern: /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g,
     stripComments: true,
@@ -71,7 +78,8 @@ const rules = [
     description: "dotenv.config() outside apps/api/src/config (the API loads its env once, first)",
     files: (p) =>
       p.startsWith("apps/api/src/") && isScript(p) && !p.startsWith("apps/api/src/config/"),
-    pattern: /dotenv\.config\(/g,
+    pattern:
+      /dotenv\.config\(|["']dotenv\/config["']|import\s*\{[^}]*\bconfig\b[^}]*\}\s*from\s*["']dotenv["']/g,
   },
   {
     id: "string-sentinel-tool-results",
@@ -79,7 +87,7 @@ const rules = [
     description: 'Tool results checked by their text ("Error…", "No …") instead of typed results',
     files: (p) => p.startsWith("apps/api/src/") && isScript(p) && !isTest(p),
     pattern:
-      /\.startsWith\(\s*["'`](?:Error|No )|\.includes\(\s*["'`]Error|===?\s*["'`](?:Error|No )/g,
+      /\.(?:startsWith|includes)\(\s*["'`](?:Error|No )|===?\s*["'`](?:Error|No )|\/\^(?:Error|No )/g,
   },
 ];
 
@@ -115,8 +123,33 @@ function count(rule, files) {
   return { total, locations };
 }
 
-const update = process.argv.includes("--update");
+const args = process.argv.slice(2);
+const update = args.includes("--update");
+const baseRef = args.includes("--base") ? args[args.indexOf("--base") + 1] : null;
 const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+
+// A change may lower baselines but never raise them, including in its own diff.
+if (baseRef) {
+  let previous = null;
+  try {
+    previous = JSON.parse(
+      execFileSync("git", ["show", `${baseRef}:scripts/guard-baseline.json`], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    );
+  } catch {
+    console.log(`[guard] no baseline at ${baseRef}; skipping the comparison`);
+  }
+  const raised = Object.entries(baseline).filter(
+    ([id, value]) => previous && id in previous && value > previous[id],
+  );
+  for (const [id, value] of raised) {
+    console.error(`[guard] baseline for "${id}" was raised from ${previous[id]} to ${value}`);
+  }
+  if (raised.length > 0) process.exit(1);
+}
 const files = sourceFiles();
 
 let failed = false;
@@ -141,8 +174,13 @@ for (const rule of rules) {
     status = "ABOVE BASELINE";
     failed = true;
   } else if (total < limit) {
-    status = update ? "lowered" : "below baseline (run with --update)";
-    if (update) next[rule.id] = total;
+    if (update) {
+      status = "lowered";
+      next[rule.id] = total;
+    } else {
+      status = "BELOW BASELINE";
+      failed = true;
+    }
   }
   rows.push({ rule, total, limit, status, locations });
 }
@@ -165,14 +203,21 @@ for (const { rule, total, limit, status, locations } of rows) {
   }
 }
 
-if (update && !failed) {
+if (update && !rows.some((row) => row.status === "ABOVE BASELINE")) {
   writeFileSync(baselinePath, `${JSON.stringify(next, null, 2)}\n`);
   console.log("[guard] baseline updated");
 }
 
 if (failed) {
-  console.error(
-    "[guard] a count rose above its baseline; remove the new occurrences instead of raising the baseline",
-  );
+  if (rows.some((row) => row.status === "ABOVE BASELINE")) {
+    console.error(
+      "[guard] a count rose above its baseline; remove the new occurrences instead of raising the baseline",
+    );
+  }
+  if (rows.some((row) => row.status === "BELOW BASELINE")) {
+    console.error(
+      "[guard] a count fell below its baseline; lower it in this change: npm run guard:honest -- --update",
+    );
+  }
   process.exit(1);
 }

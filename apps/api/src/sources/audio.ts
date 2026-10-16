@@ -46,6 +46,8 @@ export interface AudioAnalysisResult {
   danceability?: number | null;
   acousticness?: number | null;
   instrumentalness?: number | null;
+  /** Fields the service returned outside their valid range (reported as null) */
+  outOfRange?: string[];
   /** Set when source is "unavailable" */
   reason?: AudioUnavailableReason;
   /** Error detail for reason */
@@ -118,6 +120,12 @@ function measuredNumber(value: unknown): number | null {
 /** A non-empty string, else null. */
 function measuredText(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/** "Major" or "Minor" (any case), else null. */
+function measuredMode(value: unknown): "Major" | "Minor" | null {
+  const text = measuredText(value)?.toLowerCase();
+  return text === "major" ? "Major" : text === "minor" ? "Minor" : null;
 }
 
 function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnalysisResult {
@@ -278,22 +286,47 @@ export const analyzeAudioPreview = tool(
         `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
       );
 
-      // Values outside their valid range are treated as not measured (null), never as 0.
-      const key = measuredText(result.key);
+      // Only a reply that says it analysed the clip is a measurement.
+      if (result.source !== "analyzed") {
+        return JSON.stringify(
+          unavailable(
+            "analysis_failed",
+            `Service reply source is ${JSON.stringify(result.source)}`,
+          ),
+        );
+      }
+
+      // Missing values stay null, never 0 or a default. A key needs both a pitch class and a
+      // mode: when either is missing (e.g. unpitched audio) both are null. 0..1 scores outside
+      // that range are dropped and listed in outOfRange.
+      const outOfRange: string[] = [];
+      const unit = (name: string, value: unknown): number | null => {
+        const n = measuredNumber(value);
+        if (n === null) return null;
+        if (n < 0 || n > 1) {
+          outOfRange.push(name);
+          return null;
+        }
+        return n;
+      };
+      const keyName = measuredText(result.key);
+      const mode = measuredMode(result.mode);
+      const pitched = keyName !== null && mode !== null;
       const measured: AudioAnalysisResult = {
         source: "analyzed",
         bpm: measuredBpm(result.bpm),
-        key,
-        mode: key ? measuredText(result.mode) : null,
-        energy: measuredNumber(result.energy),
+        key: pitched ? keyName : null,
+        mode: pitched ? mode : null,
+        energy: unit("energy", result.energy),
         duration: measuredNumber(result.duration),
         keyMoments: Array.isArray(result.keyMoments) ? result.keyMoments : [],
-        // Perceptual features from Essentia (null when the models are unavailable)
-        valence: measuredNumber(result.valence),
-        danceability: measuredNumber(result.danceability),
-        acousticness: measuredNumber(result.acousticness),
-        instrumentalness: measuredNumber(result.instrumentalness),
+        // Scores from the Essentia models (null when the models are unavailable)
+        valence: unit("valence", result.valence),
+        danceability: unit("danceability", result.danceability),
+        acousticness: unit("acousticness", result.acousticness),
+        instrumentalness: unit("instrumentalness", result.instrumentalness),
       };
+      if (outOfRange.length > 0) measured.outOfRange = outOfRange;
       return JSON.stringify(measured);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

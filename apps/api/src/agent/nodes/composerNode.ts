@@ -28,6 +28,10 @@ export function modelErrorReason(error: string | undefined): string {
   return error.slice(0, 300);
 }
 
+// Audio problems that may clear up on the next run. A result missing audio for one of these
+// reasons is not stored, so it is not served after the analysis service recovers.
+const TRANSIENT_AUDIO_REASONS = new Set(["service_unavailable", "analysis_failed", "not_run"]);
+
 export async function composerNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
@@ -126,8 +130,9 @@ export async function composerNode(
 
     writer?.({ type: "complete", data: trackData });
 
-    // Cache successful result in long-term memory
-    if (store) {
+    // Cache successful result in long-term memory (unless the audio may be measurable later)
+    const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
+    if (store && !transientAudio) {
       const normalizedQuery = state.songQuery.toLowerCase().trim();
       try {
         await store.put(["tracks"], normalizedQuery, {

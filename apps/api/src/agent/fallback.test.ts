@@ -1,17 +1,24 @@
 /**
  * Fallback track data (used when the model call fails): no invented values, missing
- * fields omitted, and no song-meaning text (which can carry lyrics), even from old research.
+ * fields omitted, no model-generated facts, and no song-meaning text, even from old research.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./geminiClient.js", () => ({
-  generateStructuredOutput: async () => ({
-    data: null,
-    model: "test-model",
+// A working model: any call made while building the fallback would add its facts.
+const model = vi.hoisted(() => ({
+  generateStructuredOutput: vi.fn(async () => ({
+    data: {
+      factoids: [
+        { title: "MODEL_FACT", content: "MODEL_FACT invented by a model", type: "trivia" },
+      ],
+    },
+    model: "fast-model",
     groundingUsed: false,
-    error: "Client not initialized",
-  }),
+  })),
+}));
+vi.mock("./geminiClient.js", () => ({
+  generateStructuredOutput: model.generateStructuredOutput,
 }));
 
 import { createFallbackTrackData } from "./fallback.js";
@@ -137,6 +144,46 @@ describe("createFallbackTrackData", () => {
     const text = allText(td.factoids);
     expect(text).not.toMatch(/undefined|Unknown|null|NaN/);
     expect(text).toContain('Released on "To the Extreme".');
+  });
+
+  it("makes no model call and contains no model-generated facts", async () => {
+    model.generateStructuredOutput.mockClear();
+    const td = await build(null);
+    expect(model.generateStructuredOutput).not.toHaveBeenCalled();
+    expect(allText(td.factoids)).not.toContain("MODEL_FACT");
+  });
+
+  it("labels audio model scores as estimates and tempo, key and energy as measured", async () => {
+    const td = await build({
+      bpm: 116,
+      key: "D Minor",
+      energy: 0.72,
+      valence: 0.2,
+      danceability: 0.64,
+      acousticness: 0.1,
+      instrumentalness: 0.01,
+      confidence: "high",
+    });
+    const profile = td.factoids.find((f) => f.title === "Sonic Profile")?.content ?? "";
+    expect(profile).toContain("116 BPM in D Minor.");
+    expect(profile).toContain("High measured energy.");
+    expect(profile).toContain("Mood (audio model estimate): dark.");
+    expect(profile).toContain("Danceability score (audio model estimate): 0.64.");
+    expect(profile).not.toMatch(/%|Measured mood/);
+  });
+
+  it("never turns search tool status or error text into a factoid", async () => {
+    const td = await build(null, {
+      samples: ["Web search is not available. Please set TAVILY_API_KEY."],
+      productionTrivia: [
+        "Web search is not available. Please set TAVILY_API_KEY.",
+        "Error searching for production history: upstream request timed out after 30s",
+        'No production history found for "Ice Ice Baby" by Vanilla Ice.',
+      ],
+      relatedArtists: [],
+    });
+    const text = allText(td.factoids);
+    expect(text).not.toMatch(/TAVILY|Web search|Error searching|No production history/);
   });
 
   it("parses MusicBrainz tags and leaves out structured data and song-meaning text", async () => {

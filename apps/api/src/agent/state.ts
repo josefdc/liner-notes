@@ -115,8 +115,11 @@ export type AudioUnavailableReason =
   | "not_run";
 
 /**
- * Audio features measured from the preview clip. Every value is either measured by the
- * analysis service or null; nothing here is estimated.
+ * Audio features from the analysis service, computed on the preview clip, or null.
+ * - bpm, key and energy are measured from the signal (tempo tracking, key profiles, RMS).
+ * - valence, danceability, acousticness and instrumentalness are scores from audio models
+ *   (Essentia) run over the clip: model estimates, not signal measurements.
+ * No value is filled in by this code or by a language model; missing values stay null.
  */
 export interface AudioFeatures {
   bpm: number | null;
@@ -137,6 +140,8 @@ export interface AudioFeatures {
   unavailableReason?: AudioUnavailableReason;
   /** Human-readable detail for unavailableReason (e.g. the service error message) */
   unavailableDetail?: string;
+  /** Fields the service returned outside their valid range; they are null here */
+  outOfRange?: string[];
   /**
    * Set to true only on features built from an audio service measurement. Cached rows without
    * it were written before estimates were removed and are not trusted.

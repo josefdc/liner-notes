@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const model = vi.hoisted(() => ({ generateStructuredOutput: vi.fn() }));
+const store = vi.hoisted(() => ({ put: vi.fn() }));
 vi.mock("../geminiClient.js", () => ({
   GEMINI_MODEL_PRO: "test-model",
   generateStructuredOutput: model.generateStructuredOutput,
@@ -17,7 +18,7 @@ vi.mock("../enricher.js", () => ({
 }));
 vi.mock("@langchain/langgraph", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@langchain/langgraph")>()),
-  getStore: () => undefined,
+  getStore: () => store,
 }));
 
 import { composerNode } from "./composerNode.js";
@@ -97,6 +98,75 @@ describe("composerNode", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("adds no model-generated facts when the main call fails and a fast model works", async () => {
+    model.generateStructuredOutput.mockImplementation(async ({ tier }) =>
+      tier === "pro"
+        ? { data: null, model: "pro-model", groundingUsed: false, error: "503 overloaded" }
+        : {
+            data: {
+              factoids: [{ title: "MODEL_FACT", content: "MODEL_FACT invented", type: "trivia" }],
+            },
+            model: "fast-model",
+            groundingUsed: false,
+          },
+    );
+
+    const out = await composerNode(stateWith(null), config);
+
+    expect(out.trackData?.modelUnavailable).toBe(true);
+    expect(JSON.stringify(out.trackData?.factoids)).not.toContain("MODEL_FACT");
+    const tiers = model.generateStructuredOutput.mock.calls.map(([options]) => options.tier);
+    expect(tiers.every((tier) => tier === "pro")).toBe(true);
+  });
+
+  describe("long-term store", () => {
+    const succeed = () =>
+      model.generateStructuredOutput.mockImplementation(async ({ schema }) => ({
+        data: schema.parse(modelOutput),
+        model: "test-model",
+        groundingUsed: false,
+      }));
+    const unavailable = (reason: AudioFeatures["unavailableReason"]): AudioFeatures => ({
+      ...measured,
+      bpm: null,
+      key: null,
+      energy: null,
+      unavailableReason: reason,
+    });
+
+    beforeEach(() => store.put.mockClear());
+
+    it.each(["service_unavailable", "analysis_failed"] as const)(
+      "does not store a result whose audio failed transiently (%s)",
+      async (reason) => {
+        succeed();
+        await composerNode(stateWith(unavailable(reason)), config);
+        expect(store.put).not.toHaveBeenCalled();
+      },
+    );
+
+    it("does not store a result when audio analysis did not run", async () => {
+      succeed();
+      await composerNode(stateWith(null), config);
+      expect(store.put).not.toHaveBeenCalled();
+    });
+
+    it.each(["no_preview", "preview_rejected", "not_detected"] as const)(
+      "stores a result whose audio is missing for a stable reason (%s)",
+      async (reason) => {
+        succeed();
+        await composerNode(stateWith(unavailable(reason)), config);
+        expect(store.put).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("stores a result with measured audio", async () => {
+      succeed();
+      await composerNode(stateWith(measured), config);
+      expect(store.put).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("uses the measured tempo and key, not the model's", async () => {

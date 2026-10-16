@@ -35,11 +35,8 @@ export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
     return unavailableFeatures(analysis.reason ?? "analysis_failed", analysis.error);
   }
 
-  const key = analysis.key
-    ? analysis.mode
-      ? `${analysis.key} ${analysis.mode}`
-      : analysis.key
-    : null;
+  // A key is a pitch class plus a mode; with either missing there is no key.
+  const key = analysis.key && analysis.mode ? `${analysis.key} ${analysis.mode}` : null;
   const features: AudioFeatures = {
     bpm: analysis.bpm ?? null,
     key,
@@ -50,6 +47,7 @@ export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
     instrumentalness: analysis.instrumentalness ?? null,
     confidence: "low",
     keyMoments: analysis.keyMoments || [],
+    ...(analysis.outOfRange?.length ? { outOfRange: analysis.outOfRange } : {}),
   };
 
   if (features.bpm == null || features.key == null) {
@@ -151,17 +149,23 @@ export async function engineerNode(
 
   if (audioFeatures.unavailableReason) {
     const reason = audioFeatures.unavailableReason;
+    // Say what is missing: "not_detected" can leave a measured tempo without a key, or the
+    // reverse; the other reasons mean nothing was measured.
+    const summary =
+      reason === "not_detected"
+        ? `${audioFeatures.unavailableDetail ?? "The analysis found no tempo or key"} (${reason})`
+        : `Audio not measured (${reason}): BPM and key unavailable`;
     writer?.({
       type: "status",
       code: "AUDIO-ERROR",
-      message: `Audio not measured (${reason}): BPM and key unavailable`,
+      message: summary,
       node: "engineer",
       timestamp: new Date().toISOString(),
     });
-    console.log(`⚠️ [Engineer] Audio not measured: ${reason}`);
+    console.log(`⚠️ [Engineer] ${summary}`);
     return {
       audioFeatures,
-      statusMessages: [`⚠️ Audio not measured (${reason})`],
+      statusMessages: [`⚠️ ${summary}`],
     };
   }
 

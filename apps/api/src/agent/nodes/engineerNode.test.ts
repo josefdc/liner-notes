@@ -285,12 +285,18 @@ describe("engineerNode", () => {
       expect(out.audioFeatures?.measured).toBeUndefined();
       expect(cache.putAudio).not.toHaveBeenCalled();
       expect(text).not.toMatch(/\b0 BPM|120 BPM/);
+      expect(text).toContain("found no tempo");
+      expect(text).not.toContain("BPM and key unavailable");
     });
 
     it.each([
       ["null key and mode", { key: null, mode: null }],
       ["missing key", { key: undefined }],
       ["empty key", { key: "" }],
+      ["key without a mode", { mode: null }],
+      ["key with a missing mode", { mode: undefined }],
+      ["mode without a key", { key: null, mode: "Minor" }],
+      ["an unknown mode", { mode: "Dorian" }],
     ])("treats %s as no key", async (_label, change) => {
       stubNetwork("librosa-only", PREVIEW, { ...LIBROSA_ONLY, ...change });
       const { out, text } = await run("K");
@@ -300,7 +306,55 @@ describe("engineerNode", () => {
         unavailableReason: "not_detected",
       });
       expect(cache.putAudio).not.toHaveBeenCalled();
-      expect(text).not.toMatch(/C Major/);
+      expect(text).not.toMatch(/C Major|D Major/);
+      expect(text).toContain("found no key");
+      expect(text).not.toContain("BPM and key unavailable");
+    });
+
+    it.each([
+      ["null energy", { energy: null }, []],
+      ["missing energy", { energy: undefined }, []],
+      ["energy above 1", { energy: 1.7 }, ["energy"]],
+      ["negative energy", { energy: -0.1 }, ["energy"]],
+    ])("keeps %s as null", async (_label, change, outOfRange) => {
+      stubNetwork("librosa-only", PREVIEW, { ...LIBROSA_ONLY, ...change });
+      const { out } = await run("N");
+      expect(out.audioFeatures).toMatchObject({ bpm: 116, key: "D Minor", energy: null });
+      expect(out.audioFeatures?.outOfRange ?? []).toEqual(outOfRange);
+    });
+
+    it("drops audio model scores outside 0..1", async () => {
+      stubNetwork("librosa-only", PREVIEW, {
+        ...LIBROSA_ONLY,
+        valence: 1.2,
+        danceability: -0.3,
+        acousticness: 0.4,
+        instrumentalness: 2,
+      });
+      const { out } = await run("S");
+      expect(out.audioFeatures).toMatchObject({
+        valence: null,
+        danceability: null,
+        acousticness: 0.4,
+        instrumentalness: null,
+        outOfRange: ["valence", "danceability", "instrumentalness"],
+      });
+    });
+
+    it.each([
+      ["source estimated", { source: "estimated" }],
+      ["source missing", { source: undefined }],
+    ])("does not treat a reply with %s as a measurement", async (_label, change) => {
+      stubNetwork("librosa-only", PREVIEW, { ...LIBROSA_ONLY, ...change });
+      const { out } = await run("X");
+      expect(out.audioFeatures).toMatchObject({
+        bpm: null,
+        key: null,
+        energy: null,
+        unavailableReason: "analysis_failed",
+      });
+      expect(out.audioFeatures?.measured).toBeUndefined();
+      expect(cache.putAudio).not.toHaveBeenCalled();
     });
   });
 

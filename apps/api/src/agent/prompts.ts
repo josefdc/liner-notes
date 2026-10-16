@@ -60,7 +60,7 @@ PRIORITY ORDER (follow exactly):
 FORBIDDEN:
 - Inventing sample relationships not in research data
 - Making up production facts without sources
-- Quoting song lyrics
+- Song lyrics (do not quote them)
 - Outputting or estimating measured audio values (bpm, key, energy, valence, danceability, acousticness)
 - Adding genealogy songs you cannot verify exist on Spotify
 </grounding_rules>
@@ -344,7 +344,7 @@ EXPECTED OUTPUT (abbreviated):
 Before returning your response, verify against user intent:
 1. Did I use research data for factoids, NOT invented facts?
 2. Are ALL genealogy songs real and verifiably on Spotify?
-3. Did I leave out measured audio fields (bpm, key, energy, ...) and avoid quoting lyrics?
+3. Did I leave out measured audio fields (bpm, key, energy, ...) and not quote song lyrics?
 4. Are segments contiguous covering exactly 0-100% with no gaps?
 5. Is the output pure JSON with NO markdown formatting?
 6. Did I copy Spotify metadata (id, title, artist, album, coverUrl) EXACTLY?

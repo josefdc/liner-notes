@@ -19,7 +19,7 @@ import type { SonicAgentStateType, ResearchData } from "../state.js";
 
 /**
  * Research cached before song-meaning research was removed may hold page text from that
- * search (which can quote the song) or from the removed Genius source; it is dropped.
+ * search (which can quote the song) or from an earlier song-text source; it is dropped.
  */
 export function withoutSongMeaning(research: ResearchData): ResearchData {
   const { songMeaning: _dropped, ...rest } = research;

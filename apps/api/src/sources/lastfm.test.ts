@@ -39,10 +39,16 @@ for (const [name, lastfmTool, input] of cases) {
   try {
     const result = await lastfmTool.invoke(input as never);
     const data = JSON.parse(String(result));
-    if (typeof data.error === "string" && data.error.includes("not configured")) {
+    const dataKeys = ["tags", "tracks", "artists", "name"].filter((key) => key in data);
+    if (
+      typeof data.error === "string" &&
+      data.error.includes("not configured") &&
+      data.found !== true &&
+      dataKeys.length === 0
+    ) {
       console.log(`ok   ${name}: reports "not configured"`);
     } else {
-      console.log(`FAIL ${name}: expected a "not configured" error, got ${JSON.stringify(data)}`);
+      console.log(`FAIL ${name}: expected only a "not configured" error, got ${JSON.stringify(data)}`);
       failed++;
     }
   } catch (error) {
@@ -51,10 +57,8 @@ for (const [name, lastfmTool, input] of cases) {
   }
 }
 
+console.log(`\n${cases.length - failed}/${cases.length} Last.fm tools degrade without a key`);
 if (networkCalls > 0) {
   console.log(`FAIL ${networkCalls} network call(s) attempted without an API key`);
-  failed++;
 }
-
-console.log(`\n${cases.length - failed}/${cases.length} Last.fm tools degrade without a key`);
-process.exit(failed > 0 ? 1 : 0);
+process.exit(failed > 0 || networkCalls > 0 ? 1 : 0);

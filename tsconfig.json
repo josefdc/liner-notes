@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "./apps/web" },
-    { "path": "./apps/api" },
-    { "path": "./packages/contract" }
+    {
+      "path": "./apps/web"
+    },
+    {
+      "path": "./apps/web/tsconfig.node.json"
+    },
+    {
+      "path": "./apps/api"
+    },
+    {
+      "path": "./packages/contract"
+    }
   ]
 }

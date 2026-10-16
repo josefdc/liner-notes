@@ -63,6 +63,10 @@ except ImportError:
 VERSION = "1.0.0"
 TOKEN_HEADER = "X-Audio-Token"
 ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
+MAX_DECODE_SECONDS = 35.0
+# Analyses run in worker threads; beyond this many at once the service answers 503.
+MAX_CONCURRENT_ANALYSES = int(os.environ.get("MAX_CONCURRENT_ANALYSES") or 4)
+_analysis_slots = asyncio.Semaphore(MAX_CONCURRENT_ANALYSES)
 
 
 def _cors_origins() -> list[str]:
@@ -73,7 +77,12 @@ def _cors_origins() -> list[str]:
     return origins
 
 
+_docs_enabled = os.environ.get("AUDIO_ENABLE_DOCS") == "1"
 app = FastAPI(
+    # The interactive docs and schema are off unless explicitly enabled.
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
     title="Liner Notes audio analysis",
     description="Measures tempo, key and audio features from 30-second previews",
     version=VERSION,
@@ -197,9 +206,9 @@ class KeyMoment(BaseModel):
 class AudioAnalysisResult(BaseModel):
     """Analysis result with extracted features"""
 
-    bpm: int
-    key: str
-    mode: str  # "Major" or "Minor"
+    bpm: int | None  # null when no tempo was found
+    key: str | None  # null when no key could be measured
+    mode: str | None  # "Major" or "Minor"; null with key
     energy: float  # 0-1 scale
     duration: float  # seconds
     source: str = "analyzed"  # "analyzed" or "estimated"
@@ -232,7 +241,7 @@ MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 
 MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 
 
-def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str, str]:
+def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str | None, str | None]:
     """
     Detect key using Krumhansl-Kessler algorithm.
 
@@ -240,11 +249,15 @@ def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str, str]:
         chroma: Chromagram (12 x time frames)
 
     Returns:
-        Tuple of (key, mode) e.g., ("C", "Major")
+        Tuple of (key, mode) e.g., ("C", "Major"), or (None, None) when the audio has no
+        pitched content to correlate (e.g. silence) — never a default key.
     """
     # Sum chroma over time to get overall pitch class distribution
     chroma_sum = np.sum(chroma, axis=1)
     chroma_sum = chroma_sum / (np.sum(chroma_sum) + 1e-10)  # Normalize
+
+    if not np.all(np.isfinite(chroma_sum)) or np.ptp(chroma_sum) < 1e-6:
+        return None, None
 
     best_corr = -2
     best_key = 0
@@ -269,6 +282,8 @@ def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str, str]:
             best_key = shift
             best_mode = "Minor"
 
+    if best_corr == -2:  # every correlation was undefined
+        return None, None
     return PITCH_CLASSES[best_key], best_mode
 
 
@@ -513,7 +528,8 @@ def analyze_audio_file(file_path: str) -> dict:
     and optionally valence, danceability, acousticness, instrumentalness.
     """
     # Load audio (librosa handles MP3 via audioread/ffmpeg)
-    y, sr = librosa.load(file_path, sr=22050, mono=True)
+    # Previews are 30 s; never decode more than that, whatever the file claims.
+    y, sr = librosa.load(file_path, sr=22050, mono=True, duration=MAX_DECODE_SECONDS)
 
     # Get duration
     duration = librosa.get_duration(y=y, sr=sr)
@@ -522,10 +538,13 @@ def analyze_audio_file(file_path: str) -> dict:
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
 
     # Handle tempo being an array in newer librosa versions
+    # No tempo found is reported as null, never as a default.
     if isinstance(tempo, np.ndarray):
-        bpm = float(tempo[0]) if len(tempo) > 0 else 120.0
+        bpm = float(tempo[0]) if len(tempo) > 0 else None
     else:
         bpm = float(tempo)
+    if bpm is not None and not (bpm > 0 and np.isfinite(bpm)):
+        bpm = None
 
     # Chromagram for key detection
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
@@ -538,7 +557,7 @@ def analyze_audio_file(file_path: str) -> dict:
     key_moments = detect_key_moments(y, sr)
 
     result = {
-        "bpm": round(bpm),
+        "bpm": round(bpm) if bpm is not None else None,
         "key": key,
         "mode": mode,
         "energy": round(energy, 3),
@@ -611,8 +630,11 @@ async def analyze_preview(request: AnalyzeRequest):
     are loaded, also estimates valence, danceability, acousticness and instrumentalness.
     Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
     """
+    if _analysis_slots.locked():
+        raise HTTPException(status_code=503, detail="The analysis service is busy; try again")
     try:
-        result = await analyze_preview_url(request.preview_url)
+        async with _analysis_slots:
+            result = await analyze_preview_url(request.preview_url)
     except PreviewURLError as e:
         logger.info("Rejected preview URL: %s", e)
         raise HTTPException(

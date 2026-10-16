@@ -63,7 +63,10 @@ def validate_preview_url(url: str) -> str:
     if not url.startswith("https://"):
         raise PreviewURLError("URL must use https")
 
-    netloc = urlsplit(url).netloc
+    try:
+        netloc = urlsplit(url).netloc
+    except ValueError as e:
+        raise PreviewURLError("URL is not well formed") from e
     if "@" in netloc:
         raise PreviewURLError("URL must not contain userinfo")
     host, has_port, port = netloc.partition(":")
@@ -71,6 +74,9 @@ def validate_preview_url(url: str) -> str:
         raise PreviewURLError("URL must use the default https port")
     if not _HOSTNAME.fullmatch(host) or _is_ip_literal(host):
         raise PreviewURLError("URL host must be a lowercase DNS name")
+    # The preview CDNs use plain ASCII names; internationalised (punycode) labels are refused.
+    if any(label.startswith("xn--") for label in host.split(".")):
+        raise PreviewURLError("URL host must not use internationalised labels")
     if host not in ALLOWED_HOSTS and not host.endswith(ALLOWED_HOST_SUFFIXES):
         raise PreviewURLError("URL host is not a supported preview CDN")
     return url
@@ -119,7 +125,7 @@ def _check_headers(response: httpx.Response, max_bytes: int) -> str:
     if response.status_code != 200:
         raise PreviewDownloadError(f"unexpected status {response.status_code}")
     media_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-    if not media_type.startswith("audio/"):
+    if media_type not in _SUFFIXES:
         raise PreviewDownloadError(f"unexpected content type {media_type!r}")
     encoding = response.headers.get("content-encoding", "identity").strip().lower()
     if encoding not in ("", "identity"):
@@ -161,7 +167,8 @@ async def fetch_to_file(
         return path
     except TimeoutError as e:
         raise PreviewDownloadError(f"download exceeded {deadline_s} s") from e
-    except httpx.HTTPError as e:
+    except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as e:
+        # UnicodeError covers IDNA failures raised while httpx encodes the host.
         raise PreviewDownloadError(f"{type(e).__name__}: {e}") from e
     finally:
         if path is not None and not complete:

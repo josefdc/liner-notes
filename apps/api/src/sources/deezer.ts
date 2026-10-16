@@ -94,10 +94,7 @@ function fuzzyMatch(a: string, b: string): boolean {
  * Search Deezer for a track by title and artist
  * Returns the best matching track with preview URL
  */
-async function searchDeezerTrack(
-  title: string,
-  artist: string
-): Promise<DeezerTrack | null> {
+async function searchDeezerTrack(title: string, artist: string): Promise<DeezerTrack | null> {
   // Build search query: "artist track" format works best for Deezer
   const query = encodeURIComponent(`${artist} ${title}`);
   const url = `${DEEZER_API_BASE}/search/track?q=${query}&limit=5`;
@@ -148,9 +145,7 @@ async function searchDeezerTrack(
     });
 
     if (exactMatch) {
-      console.log(
-        `✅ [Deezer] Exact match: "${exactMatch.title}" by ${exactMatch.artist.name}`
-      );
+      console.log(`✅ [Deezer] Exact match: "${exactMatch.title}" by ${exactMatch.artist.name}`);
       return exactMatch;
     }
 
@@ -162,20 +157,16 @@ async function searchDeezerTrack(
     });
 
     if (artistMatch) {
-      console.log(
-        `✅ [Deezer] Artist match: "${artistMatch.title}" by ${artistMatch.artist.name}`
-      );
+      console.log(`✅ [Deezer] Artist match: "${artistMatch.title}" by ${artistMatch.artist.name}`);
       return artistMatch;
     }
 
     // Fallback: any track with a preview
-    const withPreview = data.data.find(
-      (track) => track.preview && track.preview.length > 0
-    );
+    const withPreview = data.data.find((track) => track.preview && track.preview.length > 0);
 
     if (withPreview) {
       console.log(
-        `⚠️ [Deezer] Fallback match: "${withPreview.title}" by ${withPreview.artist.name}`
+        `⚠️ [Deezer] Fallback match: "${withPreview.title}" by ${withPreview.artist.name}`,
       );
       return withPreview;
     }
@@ -226,9 +217,7 @@ export const searchDeezerPreview = tool(
         } satisfies DeezerSearchResult);
       }
 
-      console.log(
-        `✅ [Deezer] Found preview: ${track.title} by ${track.artist.name}`
-      );
+      console.log(`✅ [Deezer] Found preview: ${track.title} by ${track.artist.name}`);
 
       return JSON.stringify({
         found: true,
@@ -260,7 +249,7 @@ export const searchDeezerPreview = tool(
       title: z.string().describe("The song title"),
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 // =============================================================================

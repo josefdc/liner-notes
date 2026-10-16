@@ -3,16 +3,10 @@
  * Run: npm run test:db -w apps/api
  */
 
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-import {
-  initializeDatabase,
-  closeDatabase,
-  isDatabaseHealthy,
-  getDb,
-} from "./database.js";
+import { initializeDatabase, closeDatabase, isDatabaseHealthy, getDb } from "./database.js";
 import { SqliteStore } from "./store.js";
 import { SonicCache } from "./cache.js";
 
@@ -59,7 +53,9 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
     console.log(`  ✅ ${message}`);
   } else {
     failCount++;
-    console.error(`  ❌ ${message} (expected: ${JSON.stringify(expected)}, got: ${JSON.stringify(actual)})`);
+    console.error(
+      `  ❌ ${message} (expected: ${JSON.stringify(expected)}, got: ${JSON.stringify(actual)})`,
+    );
   }
 }
 
@@ -135,7 +131,11 @@ async function testSqliteStore(): Promise<void> {
     const store = new SqliteStore(db);
 
     // Put an item
-    await store.put(["tracks"], "track-123", { title: "Midnight City", artist: "M83", timestamp: Date.now() });
+    await store.put(["tracks"], "track-123", {
+      title: "Midnight City",
+      artist: "M83",
+      timestamp: Date.now(),
+    });
 
     // Get it back
     const item = await store.get(["tracks"], "track-123");
@@ -144,7 +144,11 @@ async function testSqliteStore(): Promise<void> {
     assertEqual(item?.key, "track-123", "Item key matches");
 
     // Update it
-    await store.put(["tracks"], "track-123", { title: "Midnight City", artist: "M83", updated: true });
+    await store.put(["tracks"], "track-123", {
+      title: "Midnight City",
+      artist: "M83",
+      updated: true,
+    });
     const updated = await store.get(["tracks"], "track-123");
     assertEqual(updated?.value?.updated, true, "Item was updated");
 
@@ -305,20 +309,37 @@ async function testSonicCacheTTL(): Promise<void> {
     const cache = new SonicCache(db);
 
     // Put with TTL of 0ms (already expired)
-    cache.putAudio("expired-1", {
-      bpm: 120, key: "C Major", energy: 0.5, valence: 0.5,
-      danceability: 0.5, acousticness: 0.5, instrumentalness: 0.1,
-      confidence: "low", keyMoments: [],
-    }, 0);
+    cache.putAudio(
+      "expired-1",
+      {
+        bpm: 120,
+        key: "C Major",
+        energy: 0.5,
+        valence: 0.5,
+        danceability: 0.5,
+        acousticness: 0.5,
+        instrumentalness: 0.1,
+        confidence: "low",
+        keyMoments: [],
+      },
+      0,
+    );
 
     // Should be expired
     const expired = cache.getAudio("expired-1");
     assertEqual(expired, null, "Expired audio entry returns null");
 
     // Purge expired
-    cache.putResearch("expired-r", {
-      samples: [], productionTrivia: [], songMeaning: [], relatedArtists: [],
-    }, 0);
+    cache.putResearch(
+      "expired-r",
+      {
+        samples: [],
+        productionTrivia: [],
+        songMeaning: [],
+        relatedArtists: [],
+      },
+      0,
+    );
     const purgeResult = cache.purgeExpired();
     assert(purgeResult.audio >= 1, "Purged at least 1 expired audio entry");
     assert(purgeResult.research >= 1, "Purged at least 1 expired research entry");
@@ -388,16 +409,24 @@ async function testConcurrentWrites(): Promise<void> {
     // Simulate parallel writes from engineer and historian
     const engineerWrite = Promise.resolve().then(() => {
       cache.putAudio("concurrent-1", {
-        bpm: 128, key: "A Minor", energy: 0.9, valence: 0.7,
-        danceability: 0.8, acousticness: 0.1, instrumentalness: 0.05,
-        confidence: "high", keyMoments: [],
+        bpm: 128,
+        key: "A Minor",
+        energy: 0.9,
+        valence: 0.7,
+        danceability: 0.8,
+        acousticness: 0.1,
+        instrumentalness: 0.05,
+        confidence: "high",
+        keyMoments: [],
       });
     });
 
     const historianWrite = Promise.resolve().then(() => {
       cache.putResearch("concurrent-1", {
-        samples: ["Sample 1"], productionTrivia: ["Trivia 1"],
-        songMeaning: ["Meaning"], relatedArtists: ["Artist A"],
+        samples: ["Sample 1"],
+        productionTrivia: ["Trivia 1"],
+        songMeaning: ["Meaning"],
+        relatedArtists: ["Artist A"],
       });
     });
 
@@ -427,7 +456,7 @@ async function testConcurrentWrites(): Promise<void> {
 // =============================================================================
 
 async function runAllTests(): Promise<void> {
-  console.log("🧪 Running Sonic Agent Database Tests\n" + "=".repeat(50));
+  console.log(`🧪 Running Sonic Agent Database Tests\n${"=".repeat(50)}`);
 
   await testDbInitialization();
   await testSchemaVersioning();
@@ -440,7 +469,7 @@ async function runAllTests(): Promise<void> {
   await testGracefulDegradation();
   await testConcurrentWrites();
 
-  console.log("\n" + "=".repeat(50));
+  console.log(`\n${"=".repeat(50)}`);
   console.log(`Results: ${passCount}/${testCount} passed, ${failCount} failed`);
 
   if (failCount > 0) {

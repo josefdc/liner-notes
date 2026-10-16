@@ -17,15 +17,14 @@ Dependencies:
     pip install fastapi uvicorn librosa numpy requests pydantic essentia-tensorflow
 """
 
+import asyncio
 import os
 import tempfile
-import asyncio
-from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
-import requests
 import librosa
 import numpy as np
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
@@ -38,10 +37,11 @@ ESSENTIA_AVAILABLE = False
 try:
     from essentia.standard import (
         MonoLoader,
-        TensorflowPredictMusiCNN,
-        TensorflowPredictEffnetDiscogs,
         TensorflowPredict2D,
+        TensorflowPredictEffnetDiscogs,
+        TensorflowPredictMusiCNN,
     )
+
     ESSENTIA_AVAILABLE = True
 except ImportError:
     pass
@@ -52,10 +52,10 @@ except ImportError:
 
 # Allowed preview URL domains for audio analysis
 ALLOWED_PREVIEW_DOMAINS = [
-    "scdn.co",       # Spotify CDN
-    "spotify.com",   # Spotify direct
-    "dzcdn.net",     # Deezer CDN
-    "deezer.com",    # Deezer direct
+    "scdn.co",  # Spotify CDN
+    "spotify.com",  # Spotify direct
+    "dzcdn.net",  # Deezer CDN
+    "deezer.com",  # Deezer direct
     "cdns-preview",  # Deezer preview CDN pattern
 ]
 
@@ -66,9 +66,9 @@ app = FastAPI(
 )
 
 # CORS -- configurable via CORS_ORIGINS env var (comma-separated)
-CORS_ORIGINS = os.environ.get(
-    "CORS_ORIGINS", "http://localhost:3000,http://localhost:3001"
-).split(",")
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(
+    ","
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -173,20 +173,25 @@ ESSENTIA_MODELS_LOADED = _init_essentia_models()
 # Data Models
 # =============================================================================
 
+
 class AnalyzeRequest(BaseModel):
     """Request body for audio analysis"""
+
     preview_url: HttpUrl
+
 
 class KeyMoment(BaseModel):
     """A significant moment detected in the audio"""
+
     time: float  # Time in seconds
-    type: str    # "energy_peak" | "energy_drop" | "onset" | "harmonic_change" | "silence"
+    type: str  # "energy_peak" | "energy_drop" | "onset" | "harmonic_change" | "silence"
     intensity: float  # 0-1 scale for marker visualization
     description: str  # Human-readable description
 
 
 class AudioAnalysisResult(BaseModel):
     """Analysis result with extracted features"""
+
     bpm: int
     key: str
     mode: str  # "Major" or "Minor"
@@ -195,16 +200,19 @@ class AudioAnalysisResult(BaseModel):
     source: str = "analyzed"  # "analyzed" or "estimated"
     keyMoments: list[KeyMoment] = []  # Key moments detected in the audio
     # Perceptual features from Essentia (None when models unavailable)
-    valence: Optional[float] = None
-    danceability: Optional[float] = None
-    acousticness: Optional[float] = None
-    instrumentalness: Optional[float] = None
+    valence: float | None = None
+    danceability: float | None = None
+    acousticness: float | None = None
+    instrumentalness: float | None = None
+
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     version: str
     essentia: bool  # Whether essentia models are loaded
+
 
 # =============================================================================
 # Audio Analysis Functions
@@ -226,7 +234,7 @@ def download_preview(url: str) -> str:
 
     fd, path = tempfile.mkstemp(suffix=".mp3")
     try:
-        with os.fdopen(fd, 'wb') as f:
+        with os.fdopen(fd, "wb") as f:
             f.write(response.content)
     except:
         os.close(fd)
@@ -318,12 +326,14 @@ def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
             if idx < len(rms_times):
                 current_time = float(rms_times[idx])
                 if current_time - last_peak_time > 2.0:
-                    moments.append({
-                        "time": round(current_time, 2),
-                        "type": "energy_peak",
-                        "intensity": float(min(rms[idx] / (threshold + 1e-10), 1.0)),
-                        "description": "Energy peak / Drop"
-                    })
+                    moments.append(
+                        {
+                            "time": round(current_time, 2),
+                            "type": "energy_peak",
+                            "intensity": float(min(rms[idx] / (threshold + 1e-10), 1.0)),
+                            "description": "Energy peak / Drop",
+                        }
+                    )
                     last_peak_time = current_time
 
     # 2. Energy drops (sudden decrease in energy)
@@ -334,16 +344,18 @@ def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
 
         for idx in drop_indices[:3]:  # Limit to top 3 drops
             if idx < len(rms_times):
-                moments.append({
-                    "time": round(float(rms_times[idx]), 2),
-                    "type": "energy_drop",
-                    "intensity": float(min(abs(rms_diff[idx] / (drop_threshold - 1e-10)), 1.0)),
-                    "description": "Breakdown / Drop"
-                })
+                moments.append(
+                    {
+                        "time": round(float(rms_times[idx]), 2),
+                        "type": "energy_drop",
+                        "intensity": float(min(abs(rms_diff[idx] / (drop_threshold - 1e-10)), 1.0)),
+                        "description": "Breakdown / Drop",
+                    }
+                )
 
     # 3. Onset detection for significant beat transitions
     try:
-        onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units='frames')
+        onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units="frames")
         onset_times = librosa.frames_to_time(onset_frames, sr=sr)
         onset_strength = librosa.onset.onset_strength(y=y, sr=sr)
 
@@ -357,12 +369,14 @@ def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
                 # Find significant onsets
                 for i, _ in enumerate(valid_frames[:10]):
                     if frame_strengths[i] > strength_threshold and i < len(onset_times):
-                        moments.append({
-                            "time": round(float(onset_times[i]), 2),
-                            "type": "onset",
-                            "intensity": 0.8,
-                            "description": "Beat transition"
-                        })
+                        moments.append(
+                            {
+                                "time": round(float(onset_times[i]), 2),
+                                "type": "onset",
+                                "intensity": 0.8,
+                                "description": "Beat transition",
+                            }
+                        )
     except Exception:
         pass  # Onset detection can fail on some audio
 
@@ -374,10 +388,9 @@ def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
         if chroma.shape[1] > 10:
             # Calculate rolling variance of chroma
             window_size = 10
-            chroma_var = np.array([
-                np.var(chroma[:, max(0, i-window_size):i+1])
-                for i in range(chroma.shape[1])
-            ])
+            chroma_var = np.array(
+                [np.var(chroma[:, max(0, i - window_size) : i + 1]) for i in range(chroma.shape[1])]
+            )
 
             # Find sudden harmonic changes
             var_threshold = np.percentile(chroma_var, 90)
@@ -388,12 +401,14 @@ def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
                 if idx < len(chroma_times):
                     current_time = float(chroma_times[idx])
                     if current_time - last_harmonic_time > 2.0:
-                        moments.append({
-                            "time": round(current_time, 2),
-                            "type": "harmonic_change",
-                            "intensity": 0.7,
-                            "description": "Harmonic shift"
-                        })
+                        moments.append(
+                            {
+                                "time": round(current_time, 2),
+                                "type": "harmonic_change",
+                                "intensity": 0.7,
+                                "description": "Harmonic shift",
+                            }
+                        )
                         last_harmonic_time = current_time
     except Exception:
         pass  # Chroma analysis can fail on some audio
@@ -408,12 +423,14 @@ def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
             if idx < len(rms_times):
                 current_time = float(rms_times[idx])
                 if current_time - last_silence_time > 1.0 and current_time > 0.5:
-                    moments.append({
-                        "time": round(current_time, 2),
-                        "type": "silence",
-                        "intensity": 0.5,
-                        "description": "Silence break"
-                    })
+                    moments.append(
+                        {
+                            "time": round(current_time, 2),
+                            "type": "silence",
+                            "intensity": 0.5,
+                            "description": "Silence break",
+                        }
+                    )
                     last_silence_time = current_time
 
     # Sort by time and deduplicate (remove moments within 0.5s of each other)
@@ -565,12 +582,14 @@ async def analyze_preview_async(url: str) -> dict:
         # Cleanup temp file
         try:
             os.remove(file_path)
-        except:
+        except OSError:
             pass
+
 
 # =============================================================================
 # API Endpoints
 # =============================================================================
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -596,8 +615,7 @@ async def analyze_preview(request: AnalyzeRequest):
     # Validate it's a supported preview URL (Spotify or Deezer)
     if not any(domain in preview_url for domain in ALLOWED_PREVIEW_DOMAINS):
         raise HTTPException(
-            status_code=400,
-            detail="Invalid preview URL. Must be a Spotify or Deezer preview URL."
+            status_code=400, detail="Invalid preview URL. Must be a Spotify or Deezer preview URL."
         )
 
     try:
@@ -618,15 +636,9 @@ async def analyze_preview(request: AnalyzeRequest):
         )
 
     except requests.RequestException as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to download preview: {str(e)}"
-        )
+        raise HTTPException(status_code=502, detail=f"Failed to download preview: {str(e)}") from e
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audio analysis failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Audio analysis failed: {str(e)}") from e
 
 
 @app.post("/analyze-test", response_model=AudioAnalysisResult)
@@ -659,15 +671,9 @@ async def analyze_test(request: AnalyzeRequest):
         )
 
     except requests.RequestException as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to download audio: {str(e)}"
-        )
+        raise HTTPException(status_code=502, detail=f"Failed to download audio: {str(e)}") from e
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audio analysis failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Audio analysis failed: {str(e)}") from e
 
 
 @app.get("/")
@@ -680,8 +686,9 @@ async def root():
         "endpoints": {
             "/health": "Health check",
             "/analyze": "POST - Analyze preview URL",
-        }
+        },
     }
+
 
 # =============================================================================
 # Main Entry Point
@@ -689,4 +696,5 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=3002)

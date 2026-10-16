@@ -11,7 +11,7 @@ const router = Router();
  */
 router.get("/api/search/suggest", async (req, res) => {
   const query = req.query.query as string;
-  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 10);
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 5, 1), 10);
 
   if (!query || typeof query !== "string" || query.length < 2) {
     res.status(400).json({

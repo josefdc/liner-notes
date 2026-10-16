@@ -40,10 +40,14 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   const releaseYear = spotify.releaseDate?.split("-")[0];
 
   // Generate valence description
-  const valenceLabel = audio.valence > 0.7 ? "euphoric"
-    : audio.valence > 0.5 ? "positive"
-    : audio.valence > 0.3 ? "melancholic"
-    : "dark";
+  const valenceLabel =
+    audio.valence > 0.7
+      ? "euphoric"
+      : audio.valence > 0.5
+        ? "positive"
+        : audio.valence > 0.3
+          ? "melancholic"
+          : "dark";
 
   // ==========================================================================
   // Generate RICH factoids from research data instead of boring templates
@@ -67,7 +71,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   // 1. Production trivia from research (filter out MusicBrainz raw data)
   if (research.productionTrivia && research.productionTrivia.length > 0) {
     research.productionTrivia
-      .filter(t => !t.startsWith("[MusicBrainz]") && t.length > 20)
+      .filter((t) => !t.startsWith("[MusicBrainz]") && t.length > 20)
       .slice(0, 2)
       .forEach((trivia, idx) => {
         // Clean up trivia text - extract the most interesting sentence
@@ -76,7 +80,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
           factoids.push({
             id: generateId(),
             title: idx === 0 ? "Studio Intel" : "Behind the Boards",
-            content: cleanTrivia.length > 300 ? cleanTrivia.substring(0, 297) + "..." : cleanTrivia,
+            content: cleanTrivia.length > 300 ? `${cleanTrivia.substring(0, 297)}...` : cleanTrivia,
             type: "production",
           });
         }
@@ -86,7 +90,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   // 2. Samples discovered - parse from research data strings
   if (research.samples && research.samples.length > 0) {
     // Try to extract structured samples from MusicBrainz data
-    let parsedSamples: Array<{title: string; artist: string}> = [];
+    const parsedSamples: Array<{ title: string; artist: string }> = [];
 
     for (const sampleStr of research.samples) {
       if (sampleStr.includes("[MusicBrainz]")) {
@@ -96,7 +100,9 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
             const samples = JSON.parse(jsonMatch[1]);
             parsedSamples.push(...samples.slice(0, 3));
           }
-        } catch { /* ignore parse errors */ }
+        } catch {
+          /* ignore parse errors */
+        }
       } else {
         // Text description of samples - create a factoid from it
         const cleanText = sampleStr.replace(/\[.*?\]/g, "").trim();
@@ -104,7 +110,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
           factoids.push({
             id: generateId(),
             title: "Sample Detective",
-            content: cleanText.length > 300 ? cleanText.substring(0, 297) + "..." : cleanText,
+            content: cleanText.length > 300 ? `${cleanText.substring(0, 297)}...` : cleanText,
             type: "sample",
           });
         }
@@ -113,13 +119,16 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
 
     // If we found structured samples, create a rich factoid
     if (parsedSamples.length > 0) {
-      const samplesList = parsedSamples.slice(0, 3).map(s => `"${s.title}" by ${s.artist}`).join(", ");
+      const samplesList = parsedSamples
+        .slice(0, 3)
+        .map((s) => `"${s.title}" by ${s.artist}`)
+        .join(", ");
       factoids.push({
         id: generateId(),
         title: "Sample DNA",
         content: `This track samples: ${samplesList}. ${parsedSamples.length > 3 ? `Plus ${parsedSamples.length - 3} more hidden gems.` : ""}`,
         type: "sample",
-        entities: parsedSamples.slice(0, 3).map(s => ({
+        entities: parsedSamples.slice(0, 3).map((s) => ({
           id: generateId(),
           text: `${s.title} - ${s.artist}`,
           type: "sample" as const,
@@ -132,7 +141,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   // 3. Song meaning / lyrics analysis (clean up raw lyrics data)
   if (research.songMeaning && research.songMeaning.length > 0) {
     const meaningText = research.songMeaning
-      .filter(s => !s.includes("[Genius Lyrics] Raw lyrics"))
+      .filter((s) => !s.includes("[Genius Lyrics] Raw lyrics"))
       .join(" ")
       .replace(/\[.*?\]/g, "")
       .trim();
@@ -141,7 +150,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
       factoids.push({
         id: generateId(),
         title: "Lyrical Decode",
-        content: meaningText.length > 300 ? meaningText.substring(0, 297) + "..." : meaningText,
+        content: meaningText.length > 300 ? `${meaningText.substring(0, 297)}...` : meaningText,
         type: "trivia",
       });
     }
@@ -155,7 +164,7 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
       title: "Collaboration Network",
       content: `${spotify.artist} has worked with: ${collabNames}. These connections shaped their sonic DNA.`,
       type: "connection",
-      entities: research.collaborators.slice(0, 4).map(name => ({
+      entities: research.collaborators.slice(0, 4).map((name) => ({
         id: generateId(),
         text: name,
         type: "artist" as const,
@@ -167,16 +176,16 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
   // 5. Artist discography context
   if (research.artistTopTracks && research.artistTopTracks.length > 0) {
     const otherHits = research.artistTopTracks
-      .filter(t => t.title.toLowerCase() !== spotify.title.toLowerCase())
+      .filter((t) => t.title.toLowerCase() !== spotify.title.toLowerCase())
       .slice(0, 3);
     if (otherHits.length > 0) {
-      const hitsList = otherHits.map(t => `"${t.title}"`).join(", ");
+      const hitsList = otherHits.map((t) => `"${t.title}"`).join(", ");
       factoids.push({
         id: generateId(),
         title: "Discography Context",
         content: `From the same artist: ${hitsList}. See how their sound evolved across releases.`,
         type: "connection",
-        entities: otherHits.map(t => ({
+        entities: otherHits.map((t) => ({
           id: generateId(),
           text: t.title,
           type: "sample" as const, // Using 'sample' as the closest type for songs
@@ -188,7 +197,9 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
 
   // 6. If we still don't have enough factoids, try a quick LLM call for factoids only
   if (factoids.length < 3) {
-    console.log("🔄 [Fallback] Not enough research data, attempting secondary LLM call for factoids...");
+    console.log(
+      "🔄 [Fallback] Not enough research data, attempting secondary LLM call for factoids...",
+    );
     try {
       const quickFactoids = await generateQuickFactoids(spotify.title, spotify.artist);
       if (quickFactoids && quickFactoids.length > 0) {
@@ -228,7 +239,9 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     factoids.push({ id: generateId(), ...template });
   }
 
-  console.log(`✅ [Fallback] Generated ${factoids.length} factoids (${factoids.filter(f => f.entities?.length).length} with entities)`);
+  console.log(
+    `✅ [Fallback] Generated ${factoids.length} factoids (${factoids.filter((f) => f.entities?.length).length} with entities)`,
+  );
 
   return {
     id: spotify.id,
@@ -274,15 +287,23 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
 // =============================================================================
 
 const QuickFactoidSchema = z.object({
-  factoids: z.array(z.object({
-    title: z.string().describe("Short catchy title for the factoid"),
-    content: z.string().describe("The interesting fact, 1-2 sentences max"),
-    type: z.enum(["trivia", "production", "sample", "credits", "curiosity", "connection"]),
-    entities: z.array(z.object({
-      text: z.string().describe("Display text for the entity"),
-      type: z.enum(["artist", "sample", "album", "producer", "synth", "technique", "year"]),
-    })).optional(),
-  })).max(4),
+  factoids: z
+    .array(
+      z.object({
+        title: z.string().describe("Short catchy title for the factoid"),
+        content: z.string().describe("The interesting fact, 1-2 sentences max"),
+        type: z.enum(["trivia", "production", "sample", "credits", "curiosity", "connection"]),
+        entities: z
+          .array(
+            z.object({
+              text: z.string().describe("Display text for the entity"),
+              type: z.enum(["artist", "sample", "album", "producer", "synth", "technique", "year"]),
+            }),
+          )
+          .optional(),
+      }),
+    )
+    .max(4),
 });
 
 async function generateQuickFactoids(title: string, artist: string): Promise<Factoid[]> {
@@ -315,18 +336,20 @@ Generate factoids now:`;
 
     if (result.data?.factoids) {
       return result.data.factoids
-        .filter(f => f.title && f.content && f.type)
-        .map(f => ({
+        .filter((f) => f.title && f.content && f.type)
+        .map((f) => ({
           id: generateId(),
           title: f.title!,
           content: f.content!,
           type: f.type! as Factoid["type"],
-          entities: f.entities?.filter(e => e.text && e.type).map(e => ({
-            id: generateId(),
-            text: e.text!,
-            type: e.type! as FactoidEntity["type"],
-            searchQuery: e.text,
-          })),
+          entities: f.entities
+            ?.filter((e) => e.text && e.type)
+            .map((e) => ({
+              id: generateId(),
+              text: e.text!,
+              type: e.type! as FactoidEntity["type"],
+              searchQuery: e.text,
+            })),
         }));
     }
   } catch (e) {

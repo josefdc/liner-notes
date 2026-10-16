@@ -65,10 +65,19 @@ export const ResearcherState = Annotation.Root({
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
       artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
       lastfmTags: [...(prev.lastfmTags || []), ...(next.lastfmTags || [])],
-      lastfmSimilarTracks: [...(prev.lastfmSimilarTracks || []), ...(next.lastfmSimilarTracks || [])],
-      lastfmSimilarArtists: [...(prev.lastfmSimilarArtists || []), ...(next.lastfmSimilarArtists || [])],
+      lastfmSimilarTracks: [
+        ...(prev.lastfmSimilarTracks || []),
+        ...(next.lastfmSimilarTracks || []),
+      ],
+      lastfmSimilarArtists: [
+        ...(prev.lastfmSimilarArtists || []),
+        ...(next.lastfmSimilarArtists || []),
+      ],
       lastfmArtistBio: next.lastfmArtistBio || prev.lastfmArtistBio,
-      listenbrainzSimilarArtists: [...(prev.listenbrainzSimilarArtists || []), ...(next.listenbrainzSimilarArtists || [])],
+      listenbrainzSimilarArtists: [
+        ...(prev.listenbrainzSimilarArtists || []),
+        ...(next.listenbrainzSimilarArtists || []),
+      ],
     }),
     default: () => ({
       samples: [],
@@ -119,7 +128,7 @@ export type ResearcherStateType = typeof ResearcherState.State;
 
 async function researchManagerNode(
   state: ResearcherStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<ResearcherStateType>> {
   const writer = config.writer;
   const iteration = state.researchIteration;
@@ -164,12 +173,7 @@ async function researchManagerNode(
     timestamp: new Date().toISOString(),
   });
 
-  const prompt = formatResearchManagerPrompt(
-    title,
-    artist,
-    state.researchData,
-    iteration
-  );
+  const prompt = formatResearchManagerPrompt(title, artist, state.researchData, iteration);
 
   // Use unified Gemini client for structured output (Pro tier for reasoning)
   const result = await generateStructuredOutput({
@@ -250,7 +254,7 @@ function extractMbidFromResearch(researchData: ResearchData): string | null {
 
 async function researchToolNode(
   state: ResearcherStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<ResearcherStateType>> {
   const writer = config.writer;
   const plan = state.researchPlan;
@@ -320,7 +324,7 @@ async function researchToolNode(
         }
         break;
 
-      case "search_general":
+      case "search_general": {
         // Use the custom query from the plan (for following leads)
         const query = plan.query || `${title} ${artist} music history`;
         result = await searchMusicInfo.invoke({ query });
@@ -329,6 +333,7 @@ async function researchToolNode(
           newData.productionTrivia.push(result);
         }
         break;
+      }
 
       case "search_lyrics":
         // Use Genius to fetch raw lyrics
@@ -336,9 +341,7 @@ async function researchToolNode(
         try {
           const lyricsData = JSON.parse(result);
           if (lyricsData.lyrics) {
-            newData.songMeaning.push(
-              `[Genius Lyrics]\n${lyricsData.lyrics}`
-            );
+            newData.songMeaning.push(`[Genius Lyrics]\n${lyricsData.lyrics}`);
           }
         } catch {
           // If parse fails, add raw result
@@ -355,7 +358,7 @@ async function researchToolNode(
           const annotData = JSON.parse(result);
           if (annotData.topAnnotations?.length > 0) {
             newData.songMeaning.push(
-              `[Genius Annotations] ${JSON.stringify(annotData.topAnnotations)}`
+              `[Genius Annotations] ${JSON.stringify(annotData.topAnnotations)}`,
             );
           }
         } catch {
@@ -373,19 +376,13 @@ async function researchToolNode(
           if (mbData.found && mbData.genealogy) {
             const { samples, covers, remixes } = mbData.genealogy;
             if (samples?.length > 0) {
-              newData.samples.push(
-                `[MusicBrainz Samples] ${JSON.stringify(samples)}`
-              );
+              newData.samples.push(`[MusicBrainz Samples] ${JSON.stringify(samples)}`);
             }
             if (covers?.length > 0) {
-              newData.productionTrivia.push(
-                `[MusicBrainz Covers] ${JSON.stringify(covers)}`
-              );
+              newData.productionTrivia.push(`[MusicBrainz Covers] ${JSON.stringify(covers)}`);
             }
             if (remixes?.length > 0) {
-              newData.productionTrivia.push(
-                `[MusicBrainz Remixes] ${JSON.stringify(remixes)}`
-              );
+              newData.productionTrivia.push(`[MusicBrainz Remixes] ${JSON.stringify(remixes)}`);
             }
           }
         } catch {
@@ -402,11 +399,10 @@ async function researchToolNode(
           const artistData = JSON.parse(result);
           if (artistData.found && artistData.collaborators?.length > 0) {
             newData.collaborators = artistData.collaborators.map(
-              (c: { name: string; relationship: string }) => 
-                `${c.name} (${c.relationship})`
+              (c: { name: string; relationship: string }) => `${c.name} (${c.relationship})`,
             );
             newData.productionTrivia.push(
-              `[MusicBrainz Artist] ${artist} collaborators: ${JSON.stringify(artistData.collaborators)}`
+              `[MusicBrainz Artist] ${artist} collaborators: ${JSON.stringify(artistData.collaborators)}`,
             );
           }
         } catch {
@@ -416,7 +412,7 @@ async function researchToolNode(
         }
         break;
 
-      case "search_artist_top_tracks":
+      case "search_artist_top_tracks": {
         // Use Spotify to get artist's top tracks for "More from this artist"
         const artistId = state.spotifyData.artistIds?.[0];
         if (artistId) {
@@ -426,7 +422,7 @@ async function researchToolNode(
             if (topTracksData.topTracks?.length > 0) {
               newData.artistTopTracks = topTracksData.topTracks;
               newData.relatedArtists.push(
-                `[Spotify Top Tracks] ${JSON.stringify(topTracksData.topTracks)}`
+                `[Spotify Top Tracks] ${JSON.stringify(topTracksData.topTracks)}`,
               );
             }
           } catch {
@@ -438,6 +434,7 @@ async function researchToolNode(
           console.log("⚠️ [Research Tool] No artist ID available for top tracks");
         }
         break;
+      }
 
       case "search_lastfm_tags":
         // Fetch both track and artist tags in parallel
@@ -452,10 +449,12 @@ async function researchToolNode(
               const data = JSON.parse(trackTagsResult.value);
               if (data.found && data.tags?.length > 0) {
                 newData.lastfmTags = data.tags.map(
-                  (t: { name: string; count: number }) => `${t.name} (${t.count})`
+                  (t: { name: string; count: number }) => `${t.name} (${t.count})`,
                 );
               }
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }
 
           if (artistTagsResult.status === "fulfilled") {
@@ -463,14 +462,18 @@ async function researchToolNode(
               const data = JSON.parse(artistTagsResult.value);
               if (data.found && data.tags?.length > 0) {
                 const existingNames = new Set(
-                  (newData.lastfmTags || []).map((t: string) => t.replace(/\s*\(\d+\)$/, "").toLowerCase())
+                  (newData.lastfmTags || []).map((t: string) =>
+                    t.replace(/\s*\(\d+\)$/, "").toLowerCase(),
+                  ),
                 );
                 const newTags = data.tags
                   .filter((t: { name: string }) => !existingNames.has(t.name.toLowerCase()))
                   .map((t: { name: string; count: number }) => `${t.name} (${t.count})`);
                 newData.lastfmTags = [...(newData.lastfmTags || []), ...newTags];
               }
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }
         }
         break;
@@ -482,7 +485,7 @@ async function researchToolNode(
           if (data.found && data.tracks?.length > 0) {
             newData.lastfmSimilarTracks = data.tracks.map(
               (t: { name: string; artist: string; match: number }) =>
-                `${t.name} by ${t.artist} (match: ${(t.match * 100).toFixed(0)}%)`
+                `${t.name} by ${t.artist} (match: ${(t.match * 100).toFixed(0)}%)`,
             );
           }
         } catch {
@@ -499,10 +502,10 @@ async function researchToolNode(
           if (data.found && data.artists?.length > 0) {
             newData.lastfmSimilarArtists = data.artists.map(
               (a: { name: string; match: number; mbid?: string }) =>
-                `${a.name} (match: ${(a.match * 100).toFixed(0)}%${a.mbid ? `, mbid: ${a.mbid}` : ""})`
+                `${a.name} (match: ${(a.match * 100).toFixed(0)}%${a.mbid ? `, mbid: ${a.mbid}` : ""})`,
             );
             newData.relatedArtists.push(
-              `[Last.fm Similar Artists] ${JSON.stringify(data.artists)}`
+              `[Last.fm Similar Artists] ${JSON.stringify(data.artists)}`,
             );
           }
         } catch {
@@ -552,10 +555,10 @@ async function researchToolNode(
             if (data.found && data.artists?.length > 0) {
               newData.listenbrainzSimilarArtists = data.artists.map(
                 (a: { name: string; similarity: number }) =>
-                  `${a.name} (similarity: ${(a.similarity * 100).toFixed(0)}%)`
+                  `${a.name} (similarity: ${(a.similarity * 100).toFixed(0)}%)`,
               );
               newData.relatedArtists.push(
-                `[ListenBrainz Similar Artists] ${JSON.stringify(data.artists)}`
+                `[ListenBrainz Similar Artists] ${JSON.stringify(data.artists)}`,
               );
             }
           } catch {

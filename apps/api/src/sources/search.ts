@@ -79,7 +79,7 @@ export const searchSamples = tool(
       songTitle: z.string().describe("The title of the song"),
       artistName: z.string().describe("The artist/band name"),
     }),
-  }
+  },
 );
 
 /**
@@ -117,7 +117,7 @@ export const searchProductionHistory = tool(
       songTitle: z.string().describe("The title of the song"),
       artistName: z.string().describe("The artist/band name"),
     }),
-  }
+  },
 );
 
 /**
@@ -155,7 +155,7 @@ export const searchSongMeaning = tool(
       songTitle: z.string().describe("The title of the song"),
       artistName: z.string().describe("The artist/band name"),
     }),
-  }
+  },
 );
 
 /**
@@ -191,7 +191,7 @@ export const searchMusicInfo = tool(
     schema: z.object({
       query: z.string().describe("The search query"),
     }),
-  }
+  },
 );
 
 // =============================================================================

@@ -163,7 +163,7 @@ function cleanBio(bio: string, maxLength = 300): string {
     .replace(/\s+/g, " ")
     .trim();
   if (cleaned.length <= maxLength) return cleaned;
-  return cleaned.substring(0, maxLength).replace(/\s+\S*$/, "") + "...";
+  return `${cleaned.substring(0, maxLength).replace(/\s+\S*$/, "")}...`;
 }
 
 // =============================================================================
@@ -185,7 +185,10 @@ export const getLastfmTrackTags = tool(
       })) as { toptags?: { tag?: LastfmTag[] }; error?: number; message?: string };
 
       if (data.error) {
-        return JSON.stringify({ found: false, error: data.message || `Last.fm error ${data.error}` });
+        return JSON.stringify({
+          found: false,
+          error: data.message || `Last.fm error ${data.error}`,
+        });
       }
 
       const rawTags = data.toptags?.tag || [];
@@ -208,7 +211,7 @@ export const getLastfmTrackTags = tool(
       title: z.string().describe("The exact song title"),
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 /**
@@ -225,7 +228,10 @@ export const getLastfmArtistTags = tool(
       })) as { toptags?: { tag?: LastfmTag[] }; error?: number; message?: string };
 
       if (data.error) {
-        return JSON.stringify({ found: false, error: data.message || `Last.fm error ${data.error}` });
+        return JSON.stringify({
+          found: false,
+          error: data.message || `Last.fm error ${data.error}`,
+        });
       }
 
       const rawTags = data.toptags?.tag || [];
@@ -247,7 +253,7 @@ export const getLastfmArtistTags = tool(
     schema: z.object({
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 /**
@@ -266,7 +272,10 @@ export const getLastfmSimilarTracks = tool(
       })) as { similartracks?: { track?: LastfmSimilarTrack[] }; error?: number; message?: string };
 
       if (data.error) {
-        return JSON.stringify({ found: false, error: data.message || `Last.fm error ${data.error}` });
+        return JSON.stringify({
+          found: false,
+          error: data.message || `Last.fm error ${data.error}`,
+        });
       }
 
       const rawTracks = data.similartracks?.track || [];
@@ -293,7 +302,7 @@ export const getLastfmSimilarTracks = tool(
       title: z.string().describe("The exact song title"),
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 /**
@@ -308,10 +317,17 @@ export const getLastfmSimilarArtists = tool(
         method: "artist.getSimilar",
         artist: artist,
         limit: "5",
-      })) as { similarartists?: { artist?: LastfmSimilarArtist[] }; error?: number; message?: string };
+      })) as {
+        similarartists?: { artist?: LastfmSimilarArtist[] };
+        error?: number;
+        message?: string;
+      };
 
       if (data.error) {
-        return JSON.stringify({ found: false, error: data.message || `Last.fm error ${data.error}` });
+        return JSON.stringify({
+          found: false,
+          error: data.message || `Last.fm error ${data.error}`,
+        });
       }
 
       const rawArtists = data.similarartists?.artist || [];
@@ -337,7 +353,7 @@ export const getLastfmSimilarArtists = tool(
     schema: z.object({
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 /**
@@ -354,7 +370,10 @@ export const getLastfmArtistInfo = tool(
       })) as { artist?: LastfmArtistInfo; error?: number; message?: string };
 
       if (data.error) {
-        return JSON.stringify({ found: false, error: data.message || `Last.fm error ${data.error}` });
+        return JSON.stringify({
+          found: false,
+          error: data.message || `Last.fm error ${data.error}`,
+        });
       }
 
       const info = data.artist;
@@ -393,7 +412,7 @@ export const getLastfmArtistInfo = tool(
     schema: z.object({
       artist: z.string().describe("The artist name"),
     }),
-  }
+  },
 );
 
 // =============================================================================

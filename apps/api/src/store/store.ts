@@ -52,9 +52,7 @@ export class SqliteStore extends BaseStore {
     this.db = db;
   }
 
-  async batch<Op extends readonly Operation[]>(
-    operations: Op
-  ): Promise<OperationResults<Op>> {
+  async batch<Op extends readonly Operation[]>(operations: Op): Promise<OperationResults<Op>> {
     const results: unknown[] = [];
 
     for (const op of operations) {
@@ -94,7 +92,9 @@ export class SqliteStore extends BaseStore {
   private handleGet(op: GetOperation): Item | null {
     const nsKey = JSON.stringify(op.namespace);
     const row = this.db
-      .prepare("SELECT value, created_at, updated_at FROM store_items WHERE namespace = ? AND key = ?")
+      .prepare(
+        "SELECT value, created_at, updated_at FROM store_items WHERE namespace = ? AND key = ?",
+      )
       .get(nsKey, op.key) as { value: string; created_at: string; updated_at: string } | undefined;
 
     if (!row) return null;
@@ -112,9 +112,7 @@ export class SqliteStore extends BaseStore {
     if (op.value === null) {
       // Delete
       const nsKey = JSON.stringify(op.namespace);
-      this.db
-        .prepare("DELETE FROM store_items WHERE namespace = ? AND key = ?")
-        .run(nsKey, op.key);
+      this.db.prepare("DELETE FROM store_items WHERE namespace = ? AND key = ?").run(nsKey, op.key);
     } else {
       // Upsert
       const nsKey = JSON.stringify(op.namespace);
@@ -125,7 +123,7 @@ export class SqliteStore extends BaseStore {
            VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(namespace, key) DO UPDATE SET
              value = excluded.value,
-             updated_at = excluded.updated_at`
+             updated_at = excluded.updated_at`,
         )
         .run(nsKey, op.key, JSON.stringify(op.value), now, now);
     }
@@ -136,15 +134,21 @@ export class SqliteStore extends BaseStore {
     // Match rows whose namespace starts with the prefix array
     // We use a LIKE pattern on the JSON-encoded namespace
     // e.g., '["tracks"]' matches '["tracks"]' and '["tracks","sub"]'
-    const likePattern = nsPrefix.slice(0, -1) + "%";
+    const likePattern = `${nsPrefix.slice(0, -1)}%`;
 
-    let rows: Array<{ namespace: string; key: string; value: string; created_at: string; updated_at: string }>;
+    let rows: Array<{
+      namespace: string;
+      key: string;
+      value: string;
+      created_at: string;
+      updated_at: string;
+    }>;
 
     if (op.namespacePrefix.length === 0) {
       // Empty prefix matches everything
       rows = this.db
         .prepare(
-          "SELECT namespace, key, value, created_at, updated_at FROM store_items LIMIT ? OFFSET ?"
+          "SELECT namespace, key, value, created_at, updated_at FROM store_items LIMIT ? OFFSET ?",
         )
         .all(op.limit ?? 10, op.offset ?? 0) as typeof rows;
     } else {
@@ -152,9 +156,14 @@ export class SqliteStore extends BaseStore {
         .prepare(
           `SELECT namespace, key, value, created_at, updated_at FROM store_items
            WHERE namespace = ? OR namespace LIKE ?
-           LIMIT ? OFFSET ?`
+           LIMIT ? OFFSET ?`,
         )
-        .all(nsPrefix, likePattern.replace("]", ",%" ), op.limit ?? 10, op.offset ?? 0) as typeof rows;
+        .all(
+          nsPrefix,
+          likePattern.replace("]", ",%"),
+          op.limit ?? 10,
+          op.offset ?? 0,
+        ) as typeof rows;
     }
 
     // Apply in-memory filter if specified
@@ -174,18 +183,16 @@ export class SqliteStore extends BaseStore {
   }
 
   private handleListNamespaces(op: ListNamespacesOperation): string[][] {
-    const rows = this.db
-      .prepare("SELECT DISTINCT namespace FROM store_items")
-      .all() as Array<{ namespace: string }>;
+    const rows = this.db.prepare("SELECT DISTINCT namespace FROM store_items").all() as Array<{
+      namespace: string;
+    }>;
 
     let namespaces: string[][] = rows.map((r) => JSON.parse(r.namespace));
 
     // Apply match conditions
     if (op.matchConditions && op.matchConditions.length > 0) {
       for (const condition of op.matchConditions) {
-        namespaces = namespaces.filter((ns) =>
-          matchesCondition(ns, condition)
-        );
+        namespaces = namespaces.filter((ns) => matchesCondition(ns, condition));
       }
     }
 
@@ -195,7 +202,7 @@ export class SqliteStore extends BaseStore {
         .map((ns) => ns.slice(0, op.maxDepth!))
         .filter(
           (ns, i, arr) =>
-            arr.findIndex((other) => JSON.stringify(other) === JSON.stringify(ns)) === i
+            arr.findIndex((other) => JSON.stringify(other) === JSON.stringify(ns)) === i,
         );
     }
 
@@ -231,10 +238,7 @@ function matchesCondition(ns: string[], condition: MatchCondition): boolean {
  * Simple filter matching: check if the value object matches all filter conditions.
  * Supports direct equality and operator objects ($eq, $ne, $gt, $gte, $lt, $lte).
  */
-function matchesFilter(
-  value: Record<string, unknown>,
-  filter: Record<string, unknown>
-): boolean {
+function matchesFilter(value: Record<string, unknown>, filter: Record<string, unknown>): boolean {
   for (const [key, condition] of Object.entries(filter)) {
     const actual = value[key];
 
@@ -242,10 +246,14 @@ function matchesFilter(
       const ops = condition as Record<string, unknown>;
       if ("$eq" in ops && actual !== ops.$eq) return false;
       if ("$ne" in ops && actual === ops.$ne) return false;
-      if ("$gt" in ops && !(typeof actual === "number" && actual > (ops.$gt as number))) return false;
-      if ("$gte" in ops && !(typeof actual === "number" && actual >= (ops.$gte as number))) return false;
-      if ("$lt" in ops && !(typeof actual === "number" && actual < (ops.$lt as number))) return false;
-      if ("$lte" in ops && !(typeof actual === "number" && actual <= (ops.$lte as number))) return false;
+      if ("$gt" in ops && !(typeof actual === "number" && actual > (ops.$gt as number)))
+        return false;
+      if ("$gte" in ops && !(typeof actual === "number" && actual >= (ops.$gte as number)))
+        return false;
+      if ("$lt" in ops && !(typeof actual === "number" && actual < (ops.$lt as number)))
+        return false;
+      if ("$lte" in ops && !(typeof actual === "number" && actual <= (ops.$lte as number)))
+        return false;
     } else {
       // Direct equality
       if (actual !== condition) return false;

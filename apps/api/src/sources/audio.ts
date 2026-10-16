@@ -27,7 +27,7 @@ dotenv.config();
 // =============================================================================
 
 export interface KeyMoment {
-  time: number;      // Time in seconds
+  time: number; // Time in seconds
   type: "energy_peak" | "energy_drop" | "onset" | "harmonic_change" | "silence";
   intensity: number; // 0-1 scale
   description: string;
@@ -89,7 +89,11 @@ function estimateBPM(title: string, artist: string): number {
   if (combined.includes("dance") || combined.includes("club") || combined.includes("house")) {
     return 120 + Math.floor(Math.random() * 15); // 120-135
   }
-  if (combined.includes("drum and bass") || combined.includes("dnb") || combined.includes("jungle")) {
+  if (
+    combined.includes("drum and bass") ||
+    combined.includes("dnb") ||
+    combined.includes("jungle")
+  ) {
     return 170 + Math.floor(Math.random() * 10); // 170-180
   }
   if (combined.includes("rock") || combined.includes("punk") || combined.includes("metal")) {
@@ -127,7 +131,11 @@ function estimateKey(): { key: string; mode: string } {
 function estimateEnergy(title: string, artist: string): number {
   const combined = `${title} ${artist}`.toLowerCase();
 
-  if (combined.includes("ballad") || combined.includes("acoustic") || combined.includes("ambient")) {
+  if (
+    combined.includes("ballad") ||
+    combined.includes("acoustic") ||
+    combined.includes("ambient")
+  ) {
     return 0.2 + Math.random() * 0.2; // 0.2-0.4
   }
   if (combined.includes("dance") || combined.includes("rock") || combined.includes("metal")) {
@@ -159,10 +167,7 @@ function generateEstimatedFeatures(title: string, artist: string): AudioAnalysis
  * Try to get a preview URL from Deezer (primary audio source).
  * Deezer provides more reliable preview availability than Spotify.
  */
-async function tryDeezerFallback(
-  title: string,
-  artist: string
-): Promise<string | null> {
+async function tryDeezerFallback(title: string, artist: string): Promise<string | null> {
   if (!title && !artist) {
     return null;
   }
@@ -230,7 +235,9 @@ async function analyzeWithService(previewUrl: string): Promise<AudioServiceRespo
     clearTimeout(timeout);
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: "Unknown error" })) as { detail?: string };
+      const error = (await response.json().catch(() => ({ detail: "Unknown error" }))) as {
+        detail?: string;
+      };
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
 
@@ -287,7 +294,7 @@ export const analyzeAudioPreview = tool(
       const result = await analyzeWithService(effectivePreviewUrl);
 
       console.log(
-        `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`
+        `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
       );
 
       return JSON.stringify({
@@ -328,7 +335,9 @@ export const analyzeAudioPreview = tool(
         .string()
         .nullable()
         .optional()
-        .describe("The Spotify preview URL (30-second MP3). Can be null to trigger Deezer fallback."),
+        .describe(
+          "The Spotify preview URL (30-second MP3). Can be null to trigger Deezer fallback.",
+        ),
       title: z
         .string()
         .optional()
@@ -338,7 +347,7 @@ export const analyzeAudioPreview = tool(
         .optional()
         .describe("Artist name (required for Deezer fallback and estimation)"),
     }),
-  }
+  },
 );
 
 /**
@@ -357,7 +366,7 @@ export const checkAudioServiceHealth = tool(
         });
       }
 
-      const data = await response.json() as { version?: string };
+      const data = (await response.json()) as { version?: string };
       return JSON.stringify({
         available: true,
         url: AUDIO_SERVICE_URL,
@@ -375,7 +384,7 @@ export const checkAudioServiceHealth = tool(
     name: "check_audio_service",
     description: "Check if the audio analysis microservice is available.",
     schema: z.object({}),
-  }
+  },
 );
 
 // =============================================================================

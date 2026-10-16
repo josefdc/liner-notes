@@ -160,7 +160,7 @@ export function initializeDatabase(dbPath?: string): Database.Database {
 
     console.log(`[Database] Initialized at ${resolvedPath} (v${SCHEMA_VERSION}, WAL mode)`);
     return dbInstance;
-  } catch (err) {
+  } catch {
     // If open itself fails (e.g., file is corrupt binary)
     if (dbInstance) {
       try {

@@ -11,7 +11,7 @@ import type { SonicAgentStateType, AudioFeatures } from "../state.js";
 
 export async function engineerNode(
   state: SonicAgentStateType,
-  config: LangGraphRunnableConfig
+  config: LangGraphRunnableConfig,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
     return { statusMessages: ["⚠️ Skipping audio analysis - no track data"] };
@@ -25,7 +25,13 @@ export async function engineerNode(
     const cachedAudio = cache.getAudio(state.spotifyData.id);
     if (cachedAudio) {
       console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
-      writer?.({ type: "status", code: "AUDIO-COMPLETE", message: `Audio cache hit: ${cachedAudio.bpm} BPM // ${cachedAudio.key}`, node: "engineer", timestamp: new Date().toISOString() });
+      writer?.({
+        type: "status",
+        code: "AUDIO-COMPLETE",
+        message: `Audio cache hit: ${cachedAudio.bpm} BPM // ${cachedAudio.key}`,
+        node: "engineer",
+        timestamp: new Date().toISOString(),
+      });
       return {
         audioFeatures: cachedAudio,
         statusMessages: [`🎵 Audio (cached): ${cachedAudio.bpm} BPM, ${cachedAudio.key}`],
@@ -35,7 +41,13 @@ export async function engineerNode(
     // Cache not available — proceed with fresh analysis
   }
 
-  writer?.({ type: "status", code: "AUDIO-INIT", message: "Initializing audio waveform parser...", node: "engineer", timestamp: new Date().toISOString() });
+  writer?.({
+    type: "status",
+    code: "AUDIO-INIT",
+    message: "Initializing audio waveform parser...",
+    node: "engineer",
+    timestamp: new Date().toISOString(),
+  });
 
   console.log("🎧 [Engineer] Analyzing:", state.spotifyData.title);
 
@@ -46,7 +58,7 @@ export async function engineerNode(
         previewUrl: state.spotifyData!.previewUrl,
         title: state.spotifyData!.title,
         artist: state.spotifyData!.artist,
-      })
+      }),
     );
 
     const analysis = JSON.parse(analysisResult) as AudioAnalysisResult;
@@ -55,21 +67,28 @@ export async function engineerNode(
     const fullKey = analysis.mode ? `${analysis.key} ${analysis.mode}` : analysis.key;
 
     // Real perceptual features from Essentia (null/undefined when models unavailable)
-    const hasEssentiaFeatures = analysis.valence != null && analysis.danceability != null
-      && analysis.acousticness != null && analysis.instrumentalness != null;
+    const hasEssentiaFeatures =
+      analysis.valence != null &&
+      analysis.danceability != null &&
+      analysis.acousticness != null &&
+      analysis.instrumentalness != null;
 
     // Confidence is "high" only when both librosa and Essentia provide real data
-    const confidence = (analysis.source === "analyzed" && hasEssentiaFeatures) ? "high" : "low";
+    const confidence = analysis.source === "analyzed" && hasEssentiaFeatures ? "high" : "low";
 
     const audioFeatures: AudioFeatures = {
       bpm: analysis.bpm,
       key: fullKey,
       energy: analysis.energy,
       // Use real Essentia values when available; fall back to energy-based estimation
-      valence: analysis.valence ?? (0.5 + Math.random() * 0.3),
-      danceability: analysis.danceability ?? (analysis.energy > 0.6 ? 0.6 + Math.random() * 0.3 : 0.4 + Math.random() * 0.2),
-      acousticness: analysis.acousticness ?? (analysis.energy < 0.4 ? 0.5 + Math.random() * 0.3 : Math.random() * 0.3),
-      instrumentalness: analysis.instrumentalness ?? (Math.random() * 0.2),
+      valence: analysis.valence ?? 0.5 + Math.random() * 0.3,
+      danceability:
+        analysis.danceability ??
+        (analysis.energy > 0.6 ? 0.6 + Math.random() * 0.3 : 0.4 + Math.random() * 0.2),
+      acousticness:
+        analysis.acousticness ??
+        (analysis.energy < 0.4 ? 0.5 + Math.random() * 0.3 : Math.random() * 0.3),
+      instrumentalness: analysis.instrumentalness ?? Math.random() * 0.2,
       confidence,
       keyMoments: analysis.keyMoments || [],
     };
@@ -82,12 +101,25 @@ export async function engineerNode(
     }
 
     const sourceLabel = analysis.source === "analyzed" ? "verified" : "estimated";
-    writer?.({ type: "status", code: "AUDIO-COMPLETE", message: `Frequency analysis (${sourceLabel}): ${audioFeatures.bpm} BPM // ${audioFeatures.key}`, node: "engineer", timestamp: new Date().toISOString() });
-    console.log(`✅ [Engineer] Analysis complete (${analysis.source}):`, audioFeatures.bpm, "BPM,", audioFeatures.key);
+    writer?.({
+      type: "status",
+      code: "AUDIO-COMPLETE",
+      message: `Frequency analysis (${sourceLabel}): ${audioFeatures.bpm} BPM // ${audioFeatures.key}`,
+      node: "engineer",
+      timestamp: new Date().toISOString(),
+    });
+    console.log(
+      `✅ [Engineer] Analysis complete (${analysis.source}):`,
+      audioFeatures.bpm,
+      "BPM,",
+      audioFeatures.key,
+    );
 
     return {
       audioFeatures,
-      statusMessages: [`🎵 Audio (${analysis.source}): ${audioFeatures.bpm} BPM, ${audioFeatures.key}`],
+      statusMessages: [
+        `🎵 Audio (${analysis.source}): ${audioFeatures.bpm} BPM, ${audioFeatures.key}`,
+      ],
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -64,13 +64,16 @@ app.use(factoidsRouter);
 // Periodic Cache Purge (every hour)
 // =============================================================================
 
-const purgeInterval = setInterval(() => {
-  try {
-    getCache().purgeExpired();
-  } catch {
-    // Non-critical
-  }
-}, 60 * 60 * 1000);
+const purgeInterval = setInterval(
+  () => {
+    try {
+      getCache().purgeExpired();
+    } catch {
+      // Non-critical
+    }
+  },
+  60 * 60 * 1000,
+);
 
 // =============================================================================
 // Graceful Shutdown

@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { SongSegment, KeyMoment } from '../types';
+import type React from 'react';
+import { useMemo } from 'react';
+import type { SongSegment, KeyMoment } from '../types';
 import { keyMomentColors, colors } from '../styles/theme';
 
 interface SmartTimelineProps {
@@ -33,28 +34,28 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   segments,
   duration = 225, // Default 3:45 in seconds
   samples = EMPTY_SAMPLES,
-  keyMoments = EMPTY_KEY_MOMENTS
+  keyMoments = EMPTY_KEY_MOMENTS,
 }) => {
-  const { allMarkers, isPercentageMode, actualDuration } = useMemo(() => {
+  const { allMarkers, actualDuration } = useMemo(() => {
     const isPct = duration === 100;
     const actDur = isPct ? 225 : duration;
-    const timeToPercent = (t: number) => isPct ? t : (t / actDur) * 100;
+    const timeToPercent = (t: number) => (isPct ? t : (t / actDur) * 100);
 
     const markers = [
-      ...samples.map(s => ({
+      ...samples.map((s) => ({
         position: timeToPercent(s.time),
         description: `Sample: ${s.description}`,
         color: colors.analog,
         type: 'sample' as const,
-        intensity: 1
+        intensity: 1,
       })),
-      ...keyMoments.map(k => ({
+      ...keyMoments.map((k) => ({
         position: timeToPercent(k.time),
         description: k.description,
         color: getMarkerColor(k.type),
         type: k.type,
-        intensity: k.intensity
-      }))
+        intensity: k.intensity,
+      })),
     ].sort((a, b) => a.position - b.position);
 
     return { allMarkers: markers, isPercentageMode: isPct, actualDuration: actDur };
@@ -80,7 +81,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               className="h-full relative group transition-all duration-[--duration-normal] hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/50"
               style={{
                 width: `${seg.end - seg.start}%`,
-                backgroundColor: seg.color
+                backgroundColor: seg.color,
               }}
             >
               {/* Tooltip */}
@@ -92,7 +93,9 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       ) : (
         <div className="h-3 w-full rounded-[--radius-xs] bg-white/5 flex items-center justify-center">
-          <span className="text-[8px] font-mono text-text-tertiary uppercase tracking-widest">STRUCTURE DATA UNAVAILABLE</span>
+          <span className="text-[8px] font-mono text-text-tertiary uppercase tracking-widest">
+            STRUCTURE DATA UNAVAILABLE
+          </span>
         </div>
       )}
 
@@ -113,7 +116,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
                 className="w-2 h-2 rotate-45 border border-black group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
                 style={{
                   backgroundColor: marker.color,
-                  opacity: marker.intensity || 1
+                  opacity: marker.intensity || 1,
                 }}
               />
               {/* Tooltip */}
@@ -127,10 +130,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
           ))
         ) : (
           /* Fallback placeholder marker when no moments detected */
-          <div
-            className="absolute top-0 -translate-x-1/2"
-            style={{ left: '75%' }}
-          >
+          <div className="absolute top-0 -translate-x-1/2" style={{ left: '75%' }}>
             <div className="w-2 h-2 rotate-45 bg-analog border border-black opacity-30"></div>
           </div>
         )}

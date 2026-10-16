@@ -65,19 +65,19 @@ interface SpotifySearchResponse {
 }
 
 interface SpotifyAudioFeatures {
-  danceability: number;      // 0.0 - 1.0: How suitable for dancing
-  energy: number;            // 0.0 - 1.0: Perceptual intensity
-  key: number;               // 0-11: Pitch class (C=0, C#=1, D=2...)
-  loudness: number;          // -60 to 0 dB: Overall loudness
-  mode: number;              // 0=Minor, 1=Major
-  speechiness: number;       // 0.0 - 1.0: Presence of spoken words
-  acousticness: number;      // 0.0 - 1.0: Confidence track is acoustic
-  instrumentalness: number;  // 0.0 - 1.0: Predicts no vocals (>0.5)
-  liveness: number;          // 0.0 - 1.0: Presence of audience
-  valence: number;           // 0.0 - 1.0: Musical positiveness/happiness
-  tempo: number;             // BPM
+  danceability: number; // 0.0 - 1.0: How suitable for dancing
+  energy: number; // 0.0 - 1.0: Perceptual intensity
+  key: number; // 0-11: Pitch class (C=0, C#=1, D=2...)
+  loudness: number; // -60 to 0 dB: Overall loudness
+  mode: number; // 0=Minor, 1=Major
+  speechiness: number; // 0.0 - 1.0: Presence of spoken words
+  acousticness: number; // 0.0 - 1.0: Confidence track is acoustic
+  instrumentalness: number; // 0.0 - 1.0: Predicts no vocals (>0.5)
+  liveness: number; // 0.0 - 1.0: Presence of audience
+  valence: number; // 0.0 - 1.0: Musical positiveness/happiness
+  tempo: number; // BPM
   id: string;
-  time_signature: number;    // Beats per bar (3-7)
+  time_signature: number; // Beats per bar (3-7)
   duration_ms: number;
 }
 
@@ -125,7 +125,7 @@ class SpotifyAuthManager {
 
     if (!clientId || !clientSecret) {
       throw new Error(
-        "Missing Spotify credentials. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in apps/api/.env"
+        "Missing Spotify credentials. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in apps/api/.env",
       );
     }
 
@@ -138,7 +138,7 @@ class SpotifyAuthManager {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       },
       body: params,
     });
@@ -257,9 +257,11 @@ export const searchTrack = tool(
     schema: z.object({
       query: z
         .string()
-        .describe('The song title and optionally artist name, e.g. "Midnight City M83" or "Bohemian Rhapsody"'),
+        .describe(
+          'The song title and optionally artist name, e.g. "Midnight City M83" or "Bohemian Rhapsody"',
+        ),
     }),
-  }
+  },
 );
 
 /**
@@ -294,7 +296,7 @@ export const getTrackDetails = tool(
 
       const track = (await response.json()) as SpotifyTrack & { preview_url?: string };
 
-      if (!track || !track.id) {
+      if (!track?.id) {
         return `No track data available for ID "${trackId}".`;
       }
 
@@ -331,7 +333,7 @@ export const getTrackDetails = tool(
         .string()
         .describe("The Spotify Track ID (22 character string like '6GyFP1nfCDB8lbD2bG0Hq9')"),
     }),
-  }
+  },
 );
 
 /**
@@ -347,7 +349,7 @@ export const getArtistTopTracks = tool(
 
       const response = await fetch(
         `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=${market}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
       if (!response.ok) {
@@ -386,15 +388,10 @@ export const getArtistTopTracks = tool(
       "Useful for discovering more songs by the same artist. " +
       "Requires an Artist ID (available from spotify_search or get_track_details).",
     schema: z.object({
-      artistId: z
-        .string()
-        .describe("The Spotify Artist ID (22 character string)"),
-      market: z
-        .string()
-        .optional()
-        .describe("ISO 3166-1 alpha-2 country code (default: US)"),
+      artistId: z.string().describe("The Spotify Artist ID (22 character string)"),
+      market: z.string().optional().describe("ISO 3166-1 alpha-2 country code (default: US)"),
     }),
-  }
+  },
 );
 
 // Legacy alias for compatibility
@@ -464,10 +461,10 @@ export const searchMultipleTracks = tool(
       "Search for multiple tracks by query. " +
       "Returns up to 5 candidates for disambiguation when a search is ambiguous.",
     schema: z.object({
-      query: z.string().describe('The song title and/or artist name'),
+      query: z.string().describe("The song title and/or artist name"),
       limit: z.number().optional().describe("Max results to return (1-10, default 5)"),
     }),
-  }
+  },
 );
 
 // =============================================================================

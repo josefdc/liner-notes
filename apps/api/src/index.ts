@@ -1,18 +1,42 @@
 /**
- * Sonic Agent Express Server v2
- *
- * Exposes the LangGraph agent via REST API with SSE streaming support.
+ * API entry point: loads and validates the configuration (first import), opens the database,
+ * settles runs a previous process left open, opens the cache, starts retention, creates the app
+ * and listens. Routes and middleware live in http/app.ts.
  */
 
-import "./config/env.js";
-import express from "express";
-import { healthRouter, searchRouter, analyzeRouter, factoidsRouter } from "./http/routes/index.js";
-import { initializeDatabase, closeDatabase } from "./store/database.js";
-import { initCache, getCache } from "./store/cache.js";
+import { settings } from "./config/env.js";
+import { createApp } from "./http/app.js";
+import { getCache, initCache } from "./store/cache.js";
+import { closeDatabase, initializeDatabase } from "./store/database.js";
 import { startRetention } from "./store/retention.js";
+import { settleOpenRuns } from "./store/runs.js";
+import { isWaitingAtInterrupt } from "./store/threads.js";
+
+/** How long open streams may keep running after a shutdown signal before they are closed. */
+const STREAM_DRAIN_MS = 3_000;
+/** Exit even if connections are still open this long after the signal (Docker waits 10 s). */
+const SHUTDOWN_TIMEOUT_MS = 8_000;
 
 // =============================================================================
-// Database Initialization (must happen before routes that use the graph)
+// Process-level errors
+// =============================================================================
+
+// A rejected promise nobody handled is a bug, but not one that should take every other request
+// down with it: it is logged and the process keeps serving.
+process.on("unhandledRejection", (reason) => {
+  console.error("[Process] Unhandled promise rejection:", reason);
+});
+
+// After an uncaught exception the process state is unknown, so it is logged and the process
+// exits with status 1 (Docker's restart policy or the dev watcher brings it back).
+process.on("uncaughtException", (error) => {
+  console.error("[Process] Uncaught exception; exiting:", error);
+  closeDatabase();
+  process.exit(1);
+});
+
+// =============================================================================
+// Database, cache and retention
 // =============================================================================
 
 let db: ReturnType<typeof initializeDatabase>;
@@ -22,102 +46,101 @@ try {
   console.error(`[Database] ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 }
+
+/**
+ * Finalizes runs still recorded as running: interrupted when the thread waits for the user's
+ * choice, otherwise cancelled. Never throws.
+ */
+async function settleRuns(when: string): Promise<void> {
+  try {
+    const { interrupted, cancelled } = await settleOpenRuns(db, (threadId) =>
+      isWaitingAtInterrupt(db, threadId),
+    );
+    if (interrupted + cancelled > 0) {
+      console.log(
+        `[Runs] ${when}: ${cancelled} open runs cancelled, ${interrupted} left waiting for a choice`,
+      );
+    }
+  } catch (err) {
+    console.error(`[Runs] ${when}: could not settle open runs:`, err);
+  }
+}
+
+// Runs left "running" by a process that stopped are not running any more.
+await settleRuns("Startup");
+
 initCache(db);
-
-const app = express();
-const PORT = Number(process.env.PORT) || 3001;
-
-// =============================================================================
-// Middleware
-// =============================================================================
-
-app.use(express.json());
-
-// CORS middleware for frontend integration
-app.use((req, res, next) => {
-  // In development, allow any origin (for mobile testing via network IP)
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Cache-Control");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.sendStatus(200);
-    return;
-  }
-
-  next();
-});
-
-// =============================================================================
-// Routes
-// =============================================================================
-
-app.use(healthRouter);
-app.use(searchRouter);
-app.use(analyzeRouter);
-app.use(factoidsRouter);
-
-// =============================================================================
-// Start Server
-// =============================================================================
-
-// =============================================================================
-// Cache purge and retention (at startup, then every hour)
-// =============================================================================
-
 const stopRetention = startRetention(db, getCache());
 
 // =============================================================================
-// Graceful Shutdown
+// Server
 // =============================================================================
 
-function shutdown() {
-  console.log("\n[Server] Shutting down gracefully...");
+const app = createApp({ http: settings.http });
+
+const server = app.listen(settings.port, settings.host, () => {
+  const address = server.address();
+  const bound =
+    typeof address === "object" && address
+      ? `${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`
+      : String(address);
+  console.log(`[Server] Liner Notes API listening on http://${bound}`);
+  console.log(
+    `[Server] CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
+  );
+  if (settings.replayOnly) console.log("[Server] REPLAY_MODE=only");
+});
+
+server.on("error", (error) => {
+  console.error("[Server] Could not listen:", error);
   stopRetention();
   closeDatabase();
-  process.exit(0);
+  process.exit(1);
+});
+
+// =============================================================================
+// Graceful shutdown
+// =============================================================================
+
+let shuttingDown = false;
+
+function shutdown(signal: string) {
+  if (shuttingDown) {
+    console.warn(`[Server] ${signal} again; exiting now`);
+    process.exit(1);
+  }
+  shuttingDown = true;
+  console.log(`[Server] ${signal} received; shutting down`);
+
+  stopRetention();
+
+  // Runs still in flight are recorded as ended before the database closes, so retention does
+  // not keep their threads as open runs.
+  let closing: Promise<void> | undefined;
+  const closeStore = () => {
+    closing ??= settleRuns("Shutdown").then(closeDatabase);
+    return closing;
+  };
+
+  const forced = setTimeout(() => {
+    console.error("[Server] Connections still open after the shutdown timeout; exiting");
+    void closeStore().then(() => process.exit(1));
+  }, SHUTDOWN_TIMEOUT_MS);
+  forced.unref();
+
+  // Stop accepting connections; the callback runs once every open connection has ended.
+  server.close(() => {
+    clearTimeout(forced);
+    void closeStore().then(() => {
+      console.log("[Server] Stopped");
+      process.exit(0);
+    });
+  });
+  server.closeIdleConnections();
+
+  // Open event streams get a short drain, then their connections are closed (which aborts them).
+  setTimeout(() => server.closeAllConnections(), STREAM_DRAIN_MS).unref();
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
-
-// =============================================================================
-// Start Server
-// =============================================================================
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`
-🚀 Sonic Agent Server v2 running on http://0.0.0.0:${PORT}
-
-Endpoints:
-  GET  /api/health              - Health check
-  GET  /api/search/suggest      - Autocomplete suggestions
-  POST /api/analyze             - Analyze a song (synchronous)
-  GET  /api/analyze/stream      - SSE streaming analysis
-  POST /api/analyze/resume      - Resume after disambiguation
-  GET  /api/analyze/stream/resume - Resume streaming
-  POST /api/factoids/decrypt    - Generate additional obscure facts
-  GET  /api/factoids/decrypt/stream - SSE streaming factoids (one-by-one)
-
-Features:
-  ✓ Map-Reduce parallel execution
-  ✓ Human-in-the-loop disambiguation
-  ✓ Real-time SSE streaming
-  ✓ Structured output validation
-  ✓ Persistent SQLite cache
-
-Example:
-  curl -X POST http://localhost:${PORT}/api/analyze \\
-    -H "Content-Type: application/json" \\
-    -d '{"query": "Midnight City M83"}'
-
-  # Or with streaming:
-  curl -N "http://localhost:${PORT}/api/analyze/stream?query=Midnight+City+M83"
-`);
-});
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

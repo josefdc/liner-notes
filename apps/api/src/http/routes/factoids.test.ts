@@ -74,6 +74,8 @@ describe("POST /api/factoids/decrypt", () => {
     ["a blank title", { ...validBody, trackTitle: "   " }],
     ["an artist of 201 characters", { ...validBody, trackArtist: "a".repeat(201) }],
     ["a title with a control character", { ...validBody, trackTitle: "Mid\u0000night" }],
+    ["a title of only format characters", { ...validBody, trackTitle: "\u200B\u202E\u2066" }],
+    ["an artist of only format characters", { ...validBody, trackArtist: "\u200D\uFEFF" }],
     [
       "51 existing ids",
       { ...validBody, existingFactoidIds: Array.from({ length: 51 }, (_, i) => `f${i}`) },
@@ -277,6 +279,9 @@ describe("GET /api/factoids/decrypt/stream", () => {
 
     stream.close();
     await until(() => vi.getTimerCount() === 0); // the heartbeat is cleared on close
+    // The route stops waiting for the call in flight as soon as the client is gone.
+    const log = vi.mocked(console.log);
+    await until(() => log.mock.calls.some(([line]) => String(line).includes("Client left")));
 
     pending.resolve({ data: factoid("f3"), model: "stub", groundingUsed: false });
     await new Promise((r) => setTimeout(r, 100));
@@ -344,5 +349,18 @@ describe("GET /api/factoids/decrypt/stream", () => {
     const { schema } = model.generate.mock.calls[0][0] as { schema: z.ZodTypeAny };
     expect(schema.safeParse({ ...factoid("f3"), type: "sample" }).success).toBe(true);
     expect(schema.safeParse({ ...factoid("f3"), type: "lyrics" }).success).toBe(false);
+  });
+
+  it("does not ask the model about lyrics", async () => {
+    model.generate.mockResolvedValue({ data: factoid("f3"), model: "stub", groundingUsed: false });
+
+    const stream = await openStream(QUERY);
+    await stream.waitFor(ofType("done"));
+
+    const prompts = model.generate.mock.calls.map(
+      ([options]) => (options as { prompt: string }).prompt,
+    );
+    expect(prompts).toHaveLength(3);
+    for (const prompt of prompts) expect(prompt).not.toMatch(/lyric/i);
   });
 });

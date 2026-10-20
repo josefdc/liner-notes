@@ -1,42 +1,32 @@
 /**
- * API entry point: loads and validates the configuration (first import), opens the database,
- * settles runs a previous process left open, opens the cache, starts retention, creates the app
- * and listens. Routes and middleware live in http/app.ts.
+ * API entry point: loads and validates the configuration (first import), opens the database and
+ * cache, creates the app and listens. Once listening it settles the runs a previous process left
+ * open (requests wait for that), then starts retention. Routes and middleware live in
+ * http/app.ts, shutdown and process-level errors in lifecycle.ts.
+ *
+ * One API process per database file: the runs recorded as running are taken to be this
+ * process's, so a second process on the same file would settle the first one's runs.
  */
 
 import { settings } from "./config/env.js";
+import { createServer } from "node:http";
 import { createApp } from "./http/app.js";
+import {
+  createShutdown,
+  installProcessHandlers,
+  SHUTDOWN_TIMEOUT_MS,
+  STREAM_DRAIN_MS,
+} from "./lifecycle.js";
 import { getCache, initCache } from "./store/cache.js";
 import { closeDatabase, initializeDatabase } from "./store/database.js";
 import { startRetention } from "./store/retention.js";
 import { settleOpenRuns } from "./store/runs.js";
 import { isWaitingAtInterrupt } from "./store/threads.js";
 
-/** How long open streams may keep running after a shutdown signal before they are closed. */
-const STREAM_DRAIN_MS = 3_000;
-/** Exit even if connections are still open this long after the signal (Docker waits 10 s). */
-const SHUTDOWN_TIMEOUT_MS = 8_000;
+installProcessHandlers(closeDatabase);
 
 // =============================================================================
-// Process-level errors
-// =============================================================================
-
-// A rejected promise nobody handled is a bug, but not one that should take every other request
-// down with it: it is logged and the process keeps serving.
-process.on("unhandledRejection", (reason) => {
-  console.error("[Process] Unhandled promise rejection:", reason);
-});
-
-// After an uncaught exception the process state is unknown, so it is logged and the process
-// exits with status 1 (Docker's restart policy or the dev watcher brings it back).
-process.on("uncaughtException", (error) => {
-  console.error("[Process] Uncaught exception; exiting:", error);
-  closeDatabase();
-  process.exit(1);
-});
-
-// =============================================================================
-// Database, cache and retention
+// Database and cache
 // =============================================================================
 
 let db: ReturnType<typeof initializeDatabase>;
@@ -46,6 +36,7 @@ try {
   console.error(`[Database] ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 }
+initCache(db);
 
 /**
  * Finalizes runs still recorded as running: interrupted when the thread waits for the user's
@@ -66,19 +57,29 @@ async function settleRuns(when: string): Promise<void> {
   }
 }
 
-// Runs left "running" by a process that stopped are not running any more.
-await settleRuns("Startup");
-
-initCache(db);
-const stopRetention = startRetention(db, getCache());
-
 // =============================================================================
 // Server
 // =============================================================================
 
 const app = createApp({ http: settings.http });
+let stopRetention = () => {};
 
-const server = app.listen(settings.port, settings.host, () => {
+// Requests wait until startup has settled the runs left open, so a run they start is never
+// mistaken for one a stopped process left behind.
+let started: Promise<void> | null = null;
+const server = createServer((req, res) => {
+  if (started) void started.then(() => app(req, res));
+  else app(req, res);
+});
+
+server.on("error", (error) => {
+  // Not listening (e.g. the port is taken): the runs belong to whichever process is.
+  console.error("[Server] Could not listen:", error);
+  closeDatabase();
+  process.exit(1);
+});
+
+server.listen(settings.port, settings.host, () => {
   const address = server.address();
   const bound =
     typeof address === "object" && address
@@ -89,58 +90,28 @@ const server = app.listen(settings.port, settings.host, () => {
     `[Server] CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
   );
   if (settings.replayOnly) console.log("[Server] REPLAY_MODE=only");
-});
 
-server.on("error", (error) => {
-  console.error("[Server] Could not listen:", error);
-  stopRetention();
-  closeDatabase();
-  process.exit(1);
+  // Runs left "running" by a process that stopped are not running any more.
+  started = settleRuns("Startup").then(() => {
+    stopRetention = startRetention(db, getCache());
+    started = null;
+  });
 });
 
 // =============================================================================
 // Graceful shutdown
 // =============================================================================
 
-let shuttingDown = false;
-
-function shutdown(signal: string) {
-  if (shuttingDown) {
-    console.warn(`[Server] ${signal} again; exiting now`);
-    process.exit(1);
-  }
-  shuttingDown = true;
-  console.log(`[Server] ${signal} received; shutting down`);
-
-  stopRetention();
-
+const shutdown = createShutdown({
+  server,
+  stopBackground: () => stopRetention(),
   // Runs still in flight are recorded as ended before the database closes, so retention does
   // not keep their threads as open runs.
-  let closing: Promise<void> | undefined;
-  const closeStore = () => {
-    closing ??= settleRuns("Shutdown").then(closeDatabase);
-    return closing;
-  };
-
-  const forced = setTimeout(() => {
-    console.error("[Server] Connections still open after the shutdown timeout; exiting");
-    void closeStore().then(() => process.exit(1));
-  }, SHUTDOWN_TIMEOUT_MS);
-  forced.unref();
-
-  // Stop accepting connections; the callback runs once every open connection has ended.
-  server.close(() => {
-    clearTimeout(forced);
-    void closeStore().then(() => {
-      console.log("[Server] Stopped");
-      process.exit(0);
-    });
-  });
-  server.closeIdleConnections();
-
-  // Open event streams get a short drain, then their connections are closed (which aborts them).
-  setTimeout(() => server.closeAllConnections(), STREAM_DRAIN_MS).unref();
-}
+  closeStore: () => settleRuns("Shutdown").then(closeDatabase),
+  exit: (code) => process.exit(code),
+  drainMs: STREAM_DRAIN_MS,
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
+});
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

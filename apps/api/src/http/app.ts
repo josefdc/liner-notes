@@ -7,7 +7,8 @@ import express, { type Router } from "express";
 import type { HttpSettings } from "../config/settings.js";
 import { cors } from "./middleware/cors.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
-import { perIpLimit } from "./middleware/rateLimit.js";
+import { listedOriginsOnly } from "./middleware/origin.js";
+import { globalLimit, perIpLimit } from "./middleware/rateLimit.js";
 import { analyzeRouter, factoidsRouter, healthRouter, searchRouter } from "./routes/index.js";
 
 /** Largest accepted JSON body. The API's bodies are a query or a few ids. */
@@ -29,8 +30,14 @@ export function createApp({ http, routers }: AppDeps): express.Express {
   app.use(cors(http.corsOrigins));
 
   // Routes that cost money: the analysis (POST and both streams), factoids and search (Spotify).
-  // Every request counts, so the limit runs before the body is parsed or validated.
-  app.use(["/api/analyze", "/api/factoids"], perIpLimit(http.rateLimit));
+  // Requests other sites make a visitor's browser send are refused first, so they cost nothing
+  // and use no one's budget. Every other request counts, valid or not: the limits run before
+  // the body is parsed or validated. The per-IP limit runs before the shared one, so a client
+  // past its own limit does not use up everyone's.
+  const paidRoutes = ["/api/analyze", "/api/factoids", "/api/search"];
+  const modelRoutes = ["/api/analyze", "/api/factoids"];
+  app.use(paidRoutes, listedOriginsOnly(http.corsOrigins));
+  app.use(modelRoutes, perIpLimit(http.rateLimit), globalLimit(http.globalRateLimit));
   app.use("/api/search", perIpLimit(http.searchRateLimit));
 
   app.use(express.json({ limit: JSON_BODY_LIMIT }));

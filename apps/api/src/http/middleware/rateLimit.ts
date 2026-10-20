@@ -1,18 +1,27 @@
-import { rateLimit } from "express-rate-limit";
+import { type Options, rateLimit } from "express-rate-limit";
 import type { RateLimitSettings } from "../../config/settings.js";
-import { sendError } from "./errors.js";
+import { refuse } from "./errors.js";
+
+const options = ({ windowMs, max }: RateLimitSettings): Partial<Options> => ({
+  windowMs,
+  limit: max,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  // JSON 429 with Retry-After; an event-stream request gets the error inside a 200 stream,
+  // because an EventSource cannot read a 429.
+  handler: (req, res) => refuse(req, res, "rate_limited"),
+});
 
 /**
- * A per-IP limit: past `max` requests in `windowMs`, requests get 429 with a JSON body and
- * Retry-After. Every request counts, including invalid ones. The client IP is `req.ip`, so behind
- * a proxy it is only right when the app's `trust proxy` hop count matches (TRUST_PROXY).
+ * A per-IP limit: past `max` requests in `windowMs`, requests are refused. Every request counts,
+ * including invalid ones. The client IP is `req.ip`, so behind a proxy it is only right when the
+ * app's `trust proxy` hop count matches (TRUST_PROXY).
  */
-export function perIpLimit({ windowMs, max }: RateLimitSettings) {
-  return rateLimit({
-    windowMs,
-    limit: max,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-    handler: (_req, res) => sendError(res, "rate_limited"),
-  });
+export function perIpLimit(limit: RateLimitSettings) {
+  return rateLimit(options(limit));
+}
+
+/** One limit shared by every client: caps the total spend however many addresses send requests. */
+export function globalLimit(limit: RateLimitSettings) {
+  return rateLimit({ ...options(limit), keyGenerator: () => "all-clients" });
 }

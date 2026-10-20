@@ -1,4 +1,5 @@
 import { Annotation, Command, END, interrupt, START, StateGraph } from "@langchain/langgraph";
+import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,6 +51,29 @@ describe("isWaitingAtInterrupt", () => {
 
     await graph.invoke(new Command({ resume: "a" }), thread("paused"));
     expect(await isWaitingAtInterrupt(db, "paused")).toBe(false);
+  });
+});
+
+describe("isWaitingAtInterrupt, from the checkpoint alone", () => {
+  /** Saves one checkpoint for the thread with a pending write on `channel`. */
+  async function pendingWrite(threadId: string, channel: string) {
+    const saver = new SqliteSaver(db);
+    const config = await saver.put(
+      { configurable: { thread_id: threadId, checkpoint_ns: "" } },
+      emptyCheckpoint(),
+      { source: "loop", step: 1, parents: {} },
+    );
+    await saver.putWrites(config, [[channel, { value: "x" }]], "task-1");
+  }
+
+  it("is true for a pending __interrupt__ write and false for any other pending write", async () => {
+    await pendingWrite("interrupted", "__interrupt__");
+    await pendingWrite("writing", "query");
+    await pendingWrite("erred", "__error__");
+
+    expect(await isWaitingAtInterrupt(db, "interrupted")).toBe(true);
+    expect(await isWaitingAtInterrupt(db, "writing")).toBe(false);
+    expect(await isWaitingAtInterrupt(db, "erred")).toBe(false);
   });
 });
 

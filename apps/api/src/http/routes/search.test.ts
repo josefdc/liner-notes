@@ -31,6 +31,7 @@ describe("GET /api/search/suggest", () => {
     ["a query of 201 characters", `query=${"a".repeat(201)}`],
     ["a repeated query", "query=midnight&query=city"],
     ["a query with a control character", "query=mid%00night"],
+    ["a query of only format characters", "query=%E2%80%8B%E2%80%AE%E2%80%8B"],
     ["a limit above 10", "query=midnight&limit=11"],
     ["a limit of 0", "query=midnight&limit=0"],
     ["a non-numeric limit", "query=midnight&limit=five"],

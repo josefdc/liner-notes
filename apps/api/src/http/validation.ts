@@ -13,16 +13,24 @@ export const MAX_EXISTING_IDS = 50;
 
 const CONTROL_CHARACTER = /\p{Cc}/u;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+// Whitespace and format characters (bidi controls, zero-width spaces): invisible on their own.
+const INVISIBLE = /[\s\p{Cf}]/gu;
 
 const codePoints = (value: string) => [...value].length;
 
-/** Text of `min` to MAX_TEXT_LENGTH code points after trimming. */
+/**
+ * Text of `min` to MAX_TEXT_LENGTH code points after trimming. Text that is not empty must have
+ * a visible character: a value of only format characters is refused, as the analyze route does.
+ */
 export function boundedText(min: number) {
   return z
     .string()
     .transform((value) => value.trim())
     .refine((value) => !CONTROL_CHARACTER.test(value) && !LONE_SURROGATE.test(value), {
       message: "must not contain control characters",
+    })
+    .refine((value) => value === "" || value.replace(INVISIBLE, "") !== "", {
+      message: "must contain a visible character",
     })
     .refine((value) => codePoints(value) >= min, {
       message: min === 1 ? "is required" : `must be at least ${min} characters`,

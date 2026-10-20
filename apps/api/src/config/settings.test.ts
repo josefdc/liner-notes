@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_GLOBAL_RATE_LIMIT_MAX,
   DEFAULT_HOST,
   DEFAULT_RATE_LIMIT,
   developmentOrigins,
@@ -30,6 +31,34 @@ describe("readSettings", () => {
   it("needs no Spotify or model keys with REPLAY_MODE=only", () => {
     const settings = settingsOf({ REPLAY_MODE: "only" });
     expect(settings.replayOnly).toBe(true);
+  });
+
+  it("accepts REPLAY_MODE only as only, off or unset", () => {
+    expect(settingsOf({ ...KEYS, REPLAY_MODE: "off" }).replayOnly).toBe(false);
+    expect(settingsOf({ ...KEYS, REPLAY_MODE: "" }).replayOnly).toBe(false);
+    expect(settingsOf(KEYS).replayOnly).toBe(false);
+    for (const value of ["on", "ONLY", "true", "1"]) {
+      expect(errorsOf({ ...KEYS, REPLAY_MODE: value })).toContain("REPLAY_MODE");
+    }
+  });
+
+  it("warns when CORS_ORIGINS is set but empty", () => {
+    const result = readSettings({ ...KEYS, CORS_ORIGINS: " , " });
+    expect(result.ok && result.warnings.join(" ")).toContain("CORS_ORIGINS is empty");
+    const listed = readSettings({ ...KEYS, CORS_ORIGINS: "http://localhost:3000" });
+    expect(listed.ok && listed.warnings).toEqual([]);
+  });
+
+  it("has a limit across all clients on the paid routes, over the per-IP window", () => {
+    expect(settingsOf(KEYS).http.globalRateLimit).toEqual({
+      windowMs: DEFAULT_RATE_LIMIT.windowMs,
+      max: DEFAULT_GLOBAL_RATE_LIMIT_MAX,
+    });
+    expect(
+      settingsOf({ ...KEYS, RATE_LIMIT_GLOBAL_MAX: "50", RATE_LIMIT_WINDOW_MS: "60000" }).http
+        .globalRateLimit,
+    ).toEqual({ windowMs: 60_000, max: 50 });
+    expect(errorsOf({ ...KEYS, RATE_LIMIT_GLOBAL_MAX: "0" })).toContain("RATE_LIMIT_GLOBAL_MAX");
   });
 
   it("binds 127.0.0.1 by default and takes HOST and PORT from the environment", () => {

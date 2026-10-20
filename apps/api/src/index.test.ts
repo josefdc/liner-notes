@@ -1,23 +1,69 @@
 /**
  * Starts the real entry point in a child process (dummy keys, a scratch database, no .env in its
- * working directory) and checks that a malformed request does not take the process down, that
- * it binds 127.0.0.1 by default, that runs left open are settled at startup and shutdown, and
- * that it shuts down cleanly on SIGTERM.
+ * working directory): malformed requests do not take it down, it binds 127.0.0.1 by default, it
+ * settles runs left open only once it listens, it refuses invalid configuration, and it shuts
+ * down cleanly on SIGTERM. Also checks the process-level error handlers with a small fixture.
+ *
+ * Each child is a single node process (tsx is loaded with --import, no wrapper process), and
+ * every child still running at the end is killed, so no server outlives the tests.
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
-import { createServer } from "node:net";
+import { connect, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "./store/migrations.js";
 import { getRun, startRun } from "./store/runs.js";
 
 const ENTRY = join(import.meta.dirname, "index.ts");
-const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli");
+const PROCESS_ERRORS_FIXTURE = join(import.meta.dirname, "../test/fixtures/process-errors.ts");
+const TSX_LOADER = pathToFileURL(
+  join(dirname(createRequire(import.meta.url).resolve("tsx/package.json")), "dist/loader.mjs"),
+).href;
+
+interface Child {
+  process: ChildProcess;
+  output: () => string;
+  exit: Promise<number | null>;
+}
+
+const children = new Set<Child>();
+
+/** Starts `entry` in one node process with only the given environment. */
+function start(entry: string, cwd: string, env: Record<string, string>): Child {
+  const child = spawn(process.execPath, ["--import", TSX_LOADER, entry], {
+    cwd,
+    env: { PATH: process.env.PATH ?? "", ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  child.stdout?.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr?.on("data", (chunk) => {
+    output += chunk;
+  });
+  const handle: Child = {
+    process: child,
+    output: () => output,
+    exit: new Promise((resolve) => child.on("exit", (code) => resolve(code))),
+  };
+  children.add(handle);
+  void handle.exit.then(() => children.delete(handle));
+  return handle;
+}
+
+afterAll(async () => {
+  for (const child of children) {
+    child.process.kill("SIGKILL");
+    await child.exit;
+  }
+});
 
 async function freePort(): Promise<number> {
   const server = createServer();
@@ -28,68 +74,69 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
+const dirs: string[] = [];
+afterAll(() => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+});
+
+/** A scratch directory with a migrated database holding one run left "running". */
+function scratch(): { dir: string; dbPath: string } {
+  const dir = mkdtempSync(join(tmpdir(), "api-entry-"));
+  dirs.push(dir);
+  const dbPath = join(dir, "api.db");
+  const db = new Database(dbPath);
+  runMigrations(db);
+  startRun(db, { runId: "left-open", threadId: "left-open", query: "q" });
+  db.close();
+  return { dir, dbPath };
+}
+
+function withDatabase<T>(dbPath: string, use: (db: Database.Database) => T): T {
+  const db = new Database(dbPath);
+  try {
+    return use(db);
+  } finally {
+    db.close();
+  }
+}
+
+const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}) => ({
+  NODE_ENV: "development",
+  PORT: String(port),
+  SQLITE_DB_PATH: dbPath,
+  SPOTIFY_CLIENT_ID: "x",
+  SPOTIFY_CLIENT_SECRET: "x",
+  // Set and empty, so no .env file can supply real keys.
+  GEMINI_API_KEY: "",
+  TAVILY_API_KEY: "",
+  LASTFM_API_KEY: "",
+  ...extra,
+});
+
 describe("the API process", () => {
-  let dir: string;
+  let dbPath: string;
   let port: number;
-  let child: ChildProcess;
-  let output = "";
-  let exit: Promise<number | null>;
+  let api: Child;
 
   beforeAll(async () => {
-    dir = mkdtempSync(join(tmpdir(), "api-entry-"));
+    const paths = scratch();
+    dbPath = paths.dbPath;
     port = await freePort();
-
-    // A run a previous process left "running".
-    const db = new Database(join(dir, "api.db"));
-    runMigrations(db);
-    startRun(db, { runId: "left-open", threadId: "left-open", query: "q" });
-    db.close();
-
-    child = spawn(process.execPath, [TSX_CLI, ENTRY], {
-      cwd: dir,
-      env: {
-        PATH: process.env.PATH,
-        NODE_ENV: "development",
-        PORT: String(port),
-        SQLITE_DB_PATH: join(dir, "api.db"),
-        SPOTIFY_CLIENT_ID: "x",
-        SPOTIFY_CLIENT_SECRET: "x",
-        // Set and empty, so no .env file can supply real keys.
-        GEMINI_API_KEY: "",
-        TAVILY_API_KEY: "",
-        LASTFM_API_KEY: "",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    child.stdout?.on("data", (chunk) => {
-      output += chunk;
-    });
-    child.stderr?.on("data", (chunk) => {
-      output += chunk;
-    });
-    exit = new Promise((resolve) => child.on("exit", (code) => resolve(code)));
+    api = start(ENTRY, paths.dir, apiEnv(port, dbPath));
 
     const deadline = Date.now() + 30_000;
     for (;;) {
-      if (child.exitCode !== null) throw new Error(`the API exited at startup:\n${output}`);
+      if (api.process.exitCode !== null) throw new Error(`exited at startup:\n${api.output()}`);
       try {
         const res = await fetch(`http://127.0.0.1:${port}/api/health`);
         if (res.ok) break;
       } catch {
         // not listening yet
       }
-      if (Date.now() > deadline) throw new Error(`the API did not start:\n${output}`);
+      if (Date.now() > deadline) throw new Error(`did not start:\n${api.output()}`);
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }, 40_000);
-
-  afterAll(async () => {
-    if (child && child.exitCode === null) {
-      child.kill("SIGKILL");
-      await exit;
-    }
-    rmSync(dir, { recursive: true, force: true });
-  });
 
   // The issue's body, and one that passes the required-field check that used to come first and
   // so reached `existingFactoidIds.join` outside any try (which ended the process).
@@ -108,37 +155,116 @@ describe("the API process", () => {
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    expect(child.exitCode).toBeNull();
+    expect(api.process.exitCode).toBeNull();
     const health = await fetch(`http://127.0.0.1:${port}/api/health`);
     expect(health.status).toBe(200);
   }, 15_000);
 
   it("binds 127.0.0.1 by default", () => {
-    expect(output).toContain(`listening on http://127.0.0.1:${port}`);
+    expect(api.output()).toContain(`listening on http://127.0.0.1:${port}`);
   });
 
-  /** Runs a query on the API's database file from this process. */
-  function withDatabase<T>(use: (db: Database.Database) => T): T {
-    const db = new Database(join(dir, "api.db"));
-    try {
-      return use(db);
-    } finally {
-      db.close();
+  it("cancels runs left open by a previous process once it listens", () => {
+    expect(withDatabase(dbPath, (db) => getRun(db, "left-open")?.status)).toBe("cancelled");
+  });
+
+  it("drains on SIGTERM, ignores the relayed duplicate, settles runs in flight and exits 0", async () => {
+    withDatabase(dbPath, (db) =>
+      startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }),
+    );
+
+    // A request still in progress (its body never completes) keeps a connection open, so the
+    // shutdown has to drain.
+    const socket = connect(port, "127.0.0.1");
+    await new Promise((resolve) => socket.once("connect", resolve));
+    socket.on("error", () => {});
+    socket.write(
+      "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+        "Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
+    );
+    const socketClosed = new Promise((resolve) => socket.once("close", resolve));
+
+    // In development the signal arrives twice within milliseconds: the second one is sent as
+    // soon as the first has been handled (two pending signals would be delivered as one).
+    const signalledAt = Date.now();
+    api.process.kill("SIGTERM");
+    while (!api.output().includes("SIGTERM received")) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
     }
-  }
+    api.process.kill("SIGTERM");
+    expect(await api.exit).toBe(0);
+    await socketClosed;
+    // The open connection was given the drain (3 s) and closed well before the timeout (8 s).
+    expect(Date.now() - signalledAt).toBeGreaterThanOrEqual(2900);
+    expect(Date.now() - signalledAt).toBeLessThan(7000);
 
-  it("cancels runs left open by a previous process before listening", () => {
-    expect(withDatabase((db) => getRun(db, "left-open")?.status)).toBe("cancelled");
+    expect(api.output()).toContain("ignored as a duplicate");
+    expect(api.output()).toContain("[Database] Connection closed.");
+    expect(api.output()).toContain("[Server] Stopped");
+    expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
+  }, 15_000);
+});
+
+describe("an API process that cannot listen", () => {
+  let blocker: Server | undefined;
+
+  afterEach(async () => {
+    await new Promise((resolve) => (blocker ? blocker.close(resolve) : resolve(undefined)));
+    blocker = undefined;
   });
 
-  it("closes the server and the database on SIGTERM and exits 0", async () => {
-    // A run in flight when the signal arrives.
-    withDatabase((db) => startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }));
+  it("exits 1 and leaves the runs alone when the port is taken", async () => {
+    const { dir, dbPath } = scratch();
+    const port = await freePort();
+    blocker = createServer();
+    await new Promise<void>((resolve) => blocker?.listen(port, "127.0.0.1", resolve));
 
-    child.kill("SIGTERM");
-    expect(await exit).toBe(0);
-    expect(withDatabase((db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
-    expect(output).toContain("[Database] Connection closed.");
-    expect(output).toContain("[Server] Stopped");
-  }, 15_000);
+    const api = start(ENTRY, dir, apiEnv(port, dbPath));
+    expect(await api.exit).toBe(1);
+
+    expect(api.output()).toContain("Could not listen");
+    expect(withDatabase(dbPath, (db) => getRun(db, "left-open")?.status)).toBe("running");
+  }, 30_000);
+});
+
+describe("an API process with invalid configuration", () => {
+  it.each([
+    ["a port that is not a number", { PORT: "abc" }, "PORT"],
+    ["an unknown replay mode", { REPLAY_MODE: "on" }, "REPLAY_MODE"],
+    ["a wildcard CORS origin", { CORS_ORIGINS: "*" }, "CORS_ORIGINS"],
+    ["no Spotify keys", { SPOTIFY_CLIENT_ID: "", SPOTIFY_CLIENT_SECRET: "" }, "SPOTIFY_CLIENT_ID"],
+  ])(
+    "exits 1 before opening the database: %s",
+    async (_label, extra, key) => {
+      const { dir, dbPath } = scratch();
+
+      const api = start(ENTRY, dir, apiEnv(await freePort(), dbPath, extra));
+      expect(await api.exit).toBe(1);
+
+      expect(api.output()).toContain("[config]");
+      expect(api.output()).toContain(key);
+      expect(api.output()).not.toContain("[Database] Initialized");
+      expect(api.output()).not.toMatch(/\n\s+at /); // a message, not a crash
+    },
+    30_000,
+  );
+});
+
+describe("process-level error handlers", () => {
+  it("log an unhandled rejection and keep running; exit 1 after an uncaught exception", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "api-errors-"));
+    dirs.push(dir);
+
+    const child = start(PROCESS_ERRORS_FIXTURE, dir, {});
+    expect(await child.exit).toBe(1);
+
+    const output = child.output();
+    expect(output).toContain("[Process] Unhandled promise rejection");
+    expect(output).toContain("rejection nobody handled");
+    expect(output).toContain("still running after the rejection");
+    expect(output).toContain("[Process] Uncaught exception; exiting");
+    expect(output).toContain("exception nobody caught");
+    expect(output).toContain("fatal hook ran");
+    expect(output).not.toContain("still running after the exception");
+  }, 30_000);
 });

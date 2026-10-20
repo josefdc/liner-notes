@@ -16,15 +16,17 @@ export interface HttpSettings {
   corsOrigins: string[];
   /** Number of reverse proxies in front of the API whose X-Forwarded-For is trusted; 0 = none. */
   trustProxy: number;
-  /** Limit for the routes that call paid services (analysis and factoids). */
+  /** Per-IP limit for the routes that call paid services (analysis and factoids). */
   rateLimit: RateLimitSettings;
+  /** Limit shared by all clients on the same routes, over the same window. */
+  globalRateLimit: RateLimitSettings;
   /** Limit for search suggestions (Spotify). */
   searchRateLimit: RateLimitSettings;
 }
 
 export interface Settings {
   production: boolean;
-  /** REPLAY_MODE=only: answers come from recordings, so no Spotify or model keys are needed. */
+  /** REPLAY_MODE=only (replaying recorded runs): no Spotify or model keys are required. */
   replayOnly: boolean;
   host: string;
   port: number;
@@ -41,6 +43,7 @@ export const REQUIRED_KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"] as c
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 3001;
 export const DEFAULT_RATE_LIMIT: RateLimitSettings = { windowMs: 10 * 60_000, max: 30 };
+export const DEFAULT_GLOBAL_RATE_LIMIT_MAX = 300;
 export const DEFAULT_SEARCH_RATE_LIMIT: RateLimitSettings = { windowMs: 60_000, max: 60 };
 
 // The web dev server's ports: 3000, the worktree slots 3100-3190 and Vite's preview port.
@@ -97,7 +100,11 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
   const errors: string[] = [];
   const warnings: string[] = [];
   const production = env.NODE_ENV === "production";
-  const replayOnly = env.REPLAY_MODE === "only";
+  const replayMode = env.REPLAY_MODE?.trim() ?? "";
+  if (!["", "off", "only"].includes(replayMode)) {
+    errors.push(`REPLAY_MODE: expected "only" or "off", got "${replayMode}"`);
+  }
+  const replayOnly = replayMode === "only";
 
   if (!replayOnly) {
     const missing = REQUIRED_KEYS.filter((key) => !env[key]);
@@ -112,6 +119,9 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
   let corsOrigins: string[];
   if (env.CORS_ORIGINS !== undefined) {
     corsOrigins = parseOrigins(env.CORS_ORIGINS, errors);
+    if (corsOrigins.length === 0) {
+      warnings.push("CORS_ORIGINS is empty: browsers on other origins cannot call the API");
+    }
   } else if (production) {
     corsOrigins = [];
     warnings.push("CORS_ORIGINS is not set: browsers on other origins cannot call the API");
@@ -132,6 +142,17 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
       errors,
     ),
     max: parseInteger(env, "RATE_LIMIT_MAX", DEFAULT_RATE_LIMIT.max, 1, 100_000, errors),
+  };
+  const globalRateLimit: RateLimitSettings = {
+    windowMs: rateLimit.windowMs,
+    max: parseInteger(
+      env,
+      "RATE_LIMIT_GLOBAL_MAX",
+      DEFAULT_GLOBAL_RATE_LIMIT_MAX,
+      1,
+      10_000_000,
+      errors,
+    ),
   };
   const searchRateLimit: RateLimitSettings = {
     windowMs: parseInteger(
@@ -161,7 +182,7 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
       replayOnly,
       host,
       port,
-      http: { corsOrigins, trustProxy, rateLimit, searchRateLimit },
+      http: { corsOrigins, trustProxy, rateLimit, globalRateLimit, searchRateLimit },
     },
   };
 }

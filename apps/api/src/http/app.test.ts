@@ -37,6 +37,7 @@ function settings(overrides: Partial<HttpSettings> = {}): HttpSettings {
     corsOrigins: [LISTED],
     trustProxy: 0,
     rateLimit: DEFAULT_RATE_LIMIT,
+    globalRateLimit: { windowMs: DEFAULT_RATE_LIMIT.windowMs, max: 10_000 },
     searchRateLimit: DEFAULT_SEARCH_RATE_LIMIT,
     ...overrides,
   };
@@ -51,6 +52,14 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+/** The `data:` messages of an event-stream response. */
+function messages(res: request.Response): Array<Record<string, unknown>> {
+  return res.text
+    .split("\n\n")
+    .filter((part) => part.startsWith("data: "))
+    .map((part) => JSON.parse(part.slice(6)));
+}
 
 /** No stack frames or absolute paths in a response body. */
 function expectNoInternals(text: string) {
@@ -226,8 +235,73 @@ describe("rate limits", () => {
 
     const stream = await request(server).get("/api/factoids/decrypt/stream?trackTitle=x");
     const resume = await request(server).get("/api/analyze/stream/resume");
-    expect(stream.status).toBe(429);
-    expect(resume.status).toBe(429);
+    for (const res of [stream, resume]) {
+      expect(messages(res)).toEqual([
+        {
+          type: "error",
+          code: "rate_limited",
+          error: "Too many requests. Please try again later.",
+        },
+        { type: "done", timestamp: expect.any(String) },
+      ]);
+    }
+  });
+
+  it("refuses an event-stream request in the stream with 200, a JSON one with 429", async () => {
+    const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
+    await request(server).post("/api/factoids/decrypt").send({});
+
+    const stream = await request(server).get("/api/factoids/decrypt/stream?trackTitle=x");
+    expect(stream.status).toBe(200);
+    expect(stream.headers["content-type"]).toContain("text/event-stream");
+    expect(messages(stream).map((m) => [m.type, m.code])).toEqual([
+      ["error", "rate_limited"],
+      ["done", undefined],
+    ]);
+
+    // A request for an event stream (an EventSource sends this Accept header) on any route.
+    const accepting = await request(server)
+      .get("/api/factoids/decrypt")
+      .set("Accept", "text/event-stream");
+    expect(accepting.status).toBe(200);
+    expect(messages(accepting)[0]).toMatchObject({ type: "error", code: "rate_limited" });
+
+    const json = await request(server).post("/api/factoids/decrypt").send({});
+    expect(json.status).toBe(429);
+    expect(Number(json.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("counts requests whose JSON is invalid: the limit runs before the body is parsed", async () => {
+    const server = app({ rateLimit: { windowMs: 60_000, max: 2 } });
+    const statuses = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await request(server)
+        .post("/api/factoids/decrypt")
+        .set("Content-Type", "application/json")
+        .send("{bad");
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([400, 400, 429]);
+  });
+
+  it("caps the paid routes across all clients", async () => {
+    const server = app({
+      trustProxy: 1,
+      rateLimit: { windowMs: 60_000, max: 100 },
+      globalRateLimit: { windowMs: 60_000, max: 3 },
+    });
+    const statuses = [];
+    for (let i = 0; i < 5; i++) {
+      const res = await request(server)
+        .post(i % 2 ? "/api/analyze" : "/api/factoids/decrypt")
+        .set("X-Forwarded-For", `203.0.113.${i + 1}`)
+        .send({});
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([400, 400, 400, 429, 429]);
+    // Health and search are outside the shared cap.
+    expect((await request(server).get("/api/health")).status).toBe(200);
+    expect((await request(server).get("/api/search/suggest?query=a")).status).toBe(400);
   });
 
   it("limits search separately and never limits health", async () => {
@@ -268,5 +342,152 @@ describe("rate limits", () => {
 
     expect(res.status).toBe(429);
     expect(res.headers["access-control-allow-origin"]).toBe(LISTED);
+  });
+});
+
+describe("requests other sites make a browser send", () => {
+  const EVIL = "https://evil.example";
+
+  it("refuses a paid JSON route with 403 when the Origin is not listed", async () => {
+    for (const send of [
+      (server: ReturnType<typeof app>) =>
+        request(server).post("/api/factoids/decrypt").set("Origin", EVIL).send({}),
+      (server: ReturnType<typeof app>) =>
+        request(server).post("/api/analyze").set("Origin", "null").send({ query: "x" }),
+      (server: ReturnType<typeof app>) =>
+        request(server).get("/api/search/suggest?query=midnight").set("Origin", EVIL),
+    ]) {
+      const res = await send(app());
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({
+        success: false,
+        code: "forbidden_origin",
+        error: "Requests from this site are not allowed.",
+      });
+    }
+  });
+
+  it("refuses a paid event stream in the stream when the Origin is not listed", async () => {
+    for (const path of [
+      "/api/factoids/decrypt/stream?trackTitle=Midnight+City",
+      "/api/analyze/stream?query=Midnight+City",
+      "/API/Analyze/Stream/Resume/?threadId=a&selectedTrackId=b",
+    ]) {
+      const res = await request(app()).get(path).set("Origin", EVIL);
+      expect(res.status).toBe(200);
+      expect(messages(res).map((m) => [m.type, m.code])).toEqual([
+        ["error", "forbidden_origin"],
+        ["done", undefined],
+      ]);
+    }
+  });
+
+  it("refuses a cross-site request with no Origin (an <img> or a no-cors GET)", async () => {
+    const stream = await request(app())
+      .get("/api/factoids/decrypt/stream?trackTitle=Midnight+City")
+      .set("Sec-Fetch-Site", "cross-site");
+    expect(messages(stream)[0]).toMatchObject({ type: "error", code: "forbidden_origin" });
+
+    const search = await request(app())
+      .get("/api/search/suggest?query=midnight")
+      .set("Sec-Fetch-Site", "cross-site");
+    expect(search.status).toBe(403);
+  });
+
+  it("lets the web app's own requests through", async () => {
+    // Cross-origin fetch or EventSource from the listed web origin (a different port).
+    const listed = await request(app())
+      .post("/api/factoids/decrypt")
+      .set("Origin", LISTED)
+      .set("Sec-Fetch-Site", "same-site")
+      .send({});
+    expect(listed.status).toBe(400); // reached validation
+    // The listed origin on another site (a deployment with the API on its own domain).
+    const otherSite = await request(app())
+      .get("/api/analyze/stream")
+      .set("Origin", LISTED)
+      .set("Sec-Fetch-Site", "cross-site");
+    expect(messages(otherSite)[0]).toMatchObject({ code: "invalid_input" });
+    // Same-origin GET behind a proxy: no Origin.
+    const sameOrigin = await request(app())
+      .get("/api/search/suggest?query=a")
+      .set("Sec-Fetch-Site", "same-origin");
+    expect(sameOrigin.status).toBe(400);
+  });
+
+  it("lets requests with neither header through (curl, server to server)", async () => {
+    const res = await request(app()).post("/api/factoids/decrypt").send({});
+    expect(res.status).toBe(400);
+  });
+
+  it("does not guard health, and refused requests use no rate-limit budget", async () => {
+    const server = app({ rateLimit: { windowMs: 60_000, max: 1 } });
+    expect((await request(server).get("/api/health").set("Origin", EVIL)).status).toBe(200);
+    for (let i = 0; i < 3; i++) {
+      await request(server).post("/api/factoids/decrypt").set("Origin", EVIL).send({});
+    }
+    expect((await request(server).post("/api/factoids/decrypt").send({})).status).toBe(400);
+  });
+});
+
+describe("error messages", () => {
+  it("are the same on every route for the same code", async () => {
+    const analyze = await request(app()).post("/api/analyze").send({});
+    const factoids = await request(app()).post("/api/factoids/decrypt").send({});
+    expect(analyze.body.code).toBe("invalid_input");
+    expect(analyze.body.error).toBe(factoids.body.error);
+
+    const stream = await request(app()).get("/api/analyze/stream");
+    expect(messages(stream)[0]).toMatchObject({
+      code: "invalid_input",
+      error: factoids.body.error,
+    });
+  });
+});
+
+describe("OPTIONS and exposed headers", () => {
+  it("answers an OPTIONS request that is not a preflight with 204 and Allow", async () => {
+    const res = await request(app()).options("/api/health");
+    expect(res.status).toBe(204);
+    expect(res.headers.allow).toBe("GET, POST, OPTIONS");
+    expect(res.text).toBe("");
+  });
+
+  it("lets only a listed origin read the rate-limit headers", async () => {
+    const listed = await request(app()).get("/api/health").set("Origin", LISTED);
+    expect(listed.headers["access-control-expose-headers"]).toBe(
+      "RateLimit, RateLimit-Policy, Retry-After",
+    );
+    const other = await request(app()).get("/api/health").set("Origin", "https://evil.example");
+    expect(other.headers["access-control-expose-headers"]).toBeUndefined();
+  });
+});
+
+describe("logging", () => {
+  const logged = (marker: string) =>
+    vi
+      .mocked(console.warn)
+      .mock.calls.map((args) => args.join(" "))
+      .find((line) => line.includes(marker));
+
+  it("keeps a client's text from breaking the log line", async () => {
+    // The parser's message quotes the start of the body, line breaks included.
+    await request(app())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send('{"a": bad\n[Server] forged line\n}');
+
+    const line = logged("invalid_json");
+    expect(line).toContain("[Serve");
+    expect(line).not.toMatch(/[\n\r]/);
+  });
+
+  it("caps a client's text in the log", async () => {
+    const origin = `https://${"a".repeat(1000)}.example`;
+    await request(app()).post("/api/factoids/decrypt").set("Origin", origin).send({});
+
+    const line = logged("refused origin");
+    expect(line).toBeDefined();
+    expect(line?.length).toBeLessThan(300);
   });
 });

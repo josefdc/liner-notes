@@ -333,6 +333,21 @@ describe("content encodings", () => {
           code: "unsupported_media_type",
         });
       }
+      // A chunked body (no Content-Length) is refused the same way.
+      expect(
+        await post(
+          "/api/factoids/decrypt",
+          {
+            "Content-Type": "application/json",
+            "Content-Encoding": "br",
+            "Transfer-Encoding": "chunked",
+          },
+          body,
+        ),
+      ).toEqual({ status: 415, code: "unsupported_media_type" });
+      // An empty header means identity: the body reaches validation.
+      const plain = Buffer.from(JSON.stringify({ padding: "a" }));
+      expect(await postEncoded(post, "", plain)).toEqual({ status: 400, code: "invalid_input" });
       // A request without a body passes, whatever it says about the body's encoding.
       const health = await request(app()).get("/api/health").set("Content-Encoding", "br");
       expect(health.status).toBe(200);

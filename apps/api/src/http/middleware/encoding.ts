@@ -11,11 +11,9 @@ const ACCEPTED_CODINGS = new Set(["identity", "gzip", "deflate"]);
  */
 export const acceptedEncodingsOnly: RequestHandler = (req, _res, next) => {
   const coding = req.headers["content-encoding"];
-  if (
-    coding === undefined ||
-    !hasBody(req.headers) ||
-    ACCEPTED_CODINGS.has(coding.trim().toLowerCase())
-  ) {
+  // An empty header means identity, as the body parser reads it.
+  const name = coding?.trim().toLowerCase() ?? "";
+  if (name === "" || !hasBody(req.headers) || ACCEPTED_CODINGS.has(name)) {
     next();
     return;
   }

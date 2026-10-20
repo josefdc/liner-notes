@@ -11,14 +11,22 @@ The API (`apps/api`) calls it server to server. It is not meant to be exposed to
 
 ### Local development
 
+Python 3.12 and [uv](https://docs.astral.sh/uv/) 0.9.17 or newer are required. Older uv
+cannot parse the relative `exclude-newer = "14 days"` in `pyproject.toml`: it warns, ignores
+the whole `[tool.uv]` table and re-resolves the lock with newer packages. `--locked` makes
+that an error instead of a rewritten `uv.lock`.
+
 ```bash
 cd services/audio
-uv sync
+uv sync --locked                    # tempo, key and energy
+uv sync --locked --extra models     # optional: also installs essentia-tensorflow
 uv run python download_models.py   # optional: perceptual models (about 22 MB)
 uv run uvicorn main:app --host 127.0.0.1 --port 3002 --reload
 ```
 
-Decoding MP3 needs `libsndfile` 1.1 or newer (bundled with the `soundfile` wheel) or `ffmpeg`.
+Without the `models` extra (or without the downloaded models) the service runs without
+perceptual features and `/health` reports `degraded`. Audio is decoded by `soundfile` with the
+`libsndfile` bundled in its wheel (1.1 or newer reads MP3); `ffmpeg` is not needed.
 
 ### Docker
 
@@ -27,7 +35,7 @@ docker build -t liner-notes-audio services/audio
 docker run --rm -p 127.0.0.1:3002:3002 -v liner-notes-models:/app/models liner-notes-audio
 ```
 
-The image runs as an unprivileged user (uid 10001). The models are not part of the image: on
+The image includes the `models` extra and runs as an unprivileged user (uid 10001). The models are not part of the image: on
 start, the container downloads them into `/app/models` (a volume, so they survive container
 re-creation) and checks each file against the SHA-256 pinned in `download_models.py`. If the
 download fails or times out, the service starts anyway without perceptual features and
@@ -59,11 +67,14 @@ All settings are optional environment variables.
 ### `GET /health` (and `HEAD /health`)
 
 Always `200` while the service can measure tempo and key. `status` is `ok` when the perceptual
-models are loaded and `degraded` when they are not.
+models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
+analysis output (`ANALYZER_VERSION` in `main.py`); it changes whenever a measurement can change
+for the same input, and every successful (`200`) `/analyze` response carries it. Error
+responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","version":"1.0.0","models":false}
+# {"status":"degraded","analyzer_version":"1.1.0","models":false}
 ```
 
 ### `POST /analyze`
@@ -86,6 +97,7 @@ Response (perceptual fields are `null` without the models):
   "energy": 0.67,
   "duration": 29.99,
   "source": "analyzed",
+  "analyzer_version": "1.1.0",
   "keyMoments": [{ "time": 0.51, "type": "onset", "intensity": 0.8, "description": "Beat transition" }],
   "valence": null,
   "danceability": null,
@@ -100,7 +112,8 @@ when beat tracking finds no tempo (for example silence or audio without onsets),
 silence). Noise or unpitched audio still gets the best-matching key, so treat a key on such
 material with care.
 
-Errors carry a generic `detail`; the cause is only written to the service log.
+Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
+only written to the service log.
 
 | Status | Meaning |
 |---|---|
@@ -131,7 +144,8 @@ must finish within 20 s. The temporary file is removed after the analysis, whate
 ## How it works
 
 1. **Download** the preview as described above.
-2. **Decode** with `librosa.load()` at 22.05 kHz mono.
+2. **Decode** with `librosa.load()` (`soundfile`, resampled with `soxr`) at 22.05 kHz mono,
+   at most 35 s.
 3. **Tempo**: `librosa.beat.beat_track()` (onset strength envelope and dynamic-programming beat
    tracking).
 4. **Key and mode**: constant-Q chromagram (`librosa.feature.chroma_cqt`) correlated against the
@@ -153,10 +167,19 @@ uv run ruff format --check .
 ```
 
 The tests run without network access: a local HTTP server stands in for the CDN.
+`tests/test_fixtures.py` runs the real analysis on audio generated at test time: click tracks at
+85, 120, 140 and 174 BPM, an A major triad, the progressions C–F–G–C and Am–Dm–E–Am, silence,
+1 s clips, white noise and a DC offset, as WAV and MP3, plus 44.1 kHz stereo MP3 variants. The
+tempo tolerance is the estimator's resolution, explained in `tempo_bounds`. Known gaps (a tempo
+for a 1 s clip, a key and a tempo for noise, energy 0 for a loud click track and 1 for DC) are
+recorded as strict `xfail`s.
 
 ## Troubleshooting
 
-- **`NoBackendError` / "Format not recognised"**: neither `libsndfile` nor `ffmpeg` could decode
-  the file. Install `ffmpeg` (`sudo apt install ffmpeg`, `brew install ffmpeg`).
+- **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
+  needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
+  platform without a bundled library and an old system `libsndfile`. AAC and M4A cannot be
+  decoded at all: librosa 1.0 decodes only through `libsndfile`, which does not read them (the
+  preview hosts the service accepts serve MP3).
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

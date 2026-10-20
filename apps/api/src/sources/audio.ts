@@ -353,7 +353,7 @@ export const analyzeAudioPreview = tool(
 export const checkAudioServiceHealth = tool(
   async (): Promise<string> => {
     try {
-      const data = await fetchJson<{ version?: string }>({
+      const data = await fetchJson<{ analyzer_version?: string; version?: string }>({
         source: "audio",
         url: `${audioServiceUrl()}/health`,
         timeoutMs: 5000,
@@ -362,7 +362,8 @@ export const checkAudioServiceHealth = tool(
       return JSON.stringify({
         available: true,
         url: audioServiceUrl(),
-        version: data?.version,
+        // The service reports `analyzer_version`; older builds sent `version`.
+        version: data?.analyzer_version ?? data?.version,
       });
     } catch (error) {
       return JSON.stringify({

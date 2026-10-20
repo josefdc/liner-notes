@@ -1,23 +1,33 @@
 [project]
-name = "sonic-audio-analysis"
-version = "1.0.0"
+name = "liner-notes-audio"
+# Never published. The version clients see is ANALYZER_VERSION in main.py.
+version = "0.0.0"
 description = "Liner Notes audio analysis service: measures tempo, key and audio features from 30-second previews"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
-    "audioread>=3.1.0",
-    "essentia-tensorflow>=2.1b6.dev1389",
     "fastapi>=0.125.0",
     "httpx>=0.28.1",
-    "librosa>=0.11.0",
+    "librosa==1.0.0",
     "numpy>=2.3.5",
     "pydantic>=2.12.5",
     "soundfile>=0.13.1",
     "uvicorn>=0.38.0",
 ]
 
+[project.optional-dependencies]
+# Perceptual features (valence, danceability, acousticness, instrumentalness). Without this
+# extra the service still measures tempo, key and energy, and /health reports "degraded".
+models = [
+    "essentia-tensorflow==2.1b6.dev1389",
+]
+
 [tool.uv]
 package = false
+# Only resolve releases that have been public for two weeks.
+exclude-newer = "14 days"
+# ruff 0.17.1 (2026-10-15) was pinned before this rule; the exception can go after 2026-10-29.
+exclude-newer-package = { ruff = "2026-10-16T00:00:00Z" }
 
 [dependency-groups]
 dev = [
@@ -27,7 +37,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP", "B"]

@@ -66,6 +66,18 @@ describe("audio service client", () => {
     expect(data.error).toMatch(/no answer within 5000 ms/);
   });
 
+  it("reads the analyzer version the service reports", async () => {
+    stubFetch((call) =>
+      call.url === `${SERVICE}/health`
+        ? json({ status: "degraded", analyzer_version: "1.1.0", models: false })
+        : undefined,
+    );
+
+    const data = JSON.parse(await checkAudioServiceHealth.invoke({}));
+
+    expect(data).toMatchObject({ available: true, version: "1.1.0" });
+  });
+
   it("reports the service's own explanation of a failed analysis", async () => {
     stubFetch((call) => {
       if (call.url.startsWith("https://api.deezer.com/search/track?")) {

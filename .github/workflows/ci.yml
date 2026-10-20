@@ -109,8 +109,9 @@ jobs:
         run: |
           uv run --frozen --only-group dev ruff check .
           uv run --frozen --only-group dev ruff format --check .
+      # Without the "models" extra: the suite covers the service as it runs without Essentia.
       - run: uv sync --frozen
-      # Exit code 5 means "no tests collected": the service has no tests yet.
-      # Remove the allowance once the audio test suite exists (#14).
       - name: Pytest
-        run: uv run --frozen pytest || [ $? -eq 5 ]
+        run: |
+          uv run --frozen python -VV
+          uv run --frozen pytest -rxX

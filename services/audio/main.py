@@ -1,12 +1,16 @@
 """
 Audio analysis service for Liner Notes.
 
-Downloads a 30-second Deezer or Spotify preview and measures:
+Downloads a 30-second Deezer or Spotify preview and analyses it.
+Decoding goes through soundfile (libsndfile), which librosa 1.0 uses for every format.
+
+Measures:
 - tempo (librosa.beat.beat_track)
 - key and mode (Krumhansl-Kessler profiles on a constant-Q chromagram)
 - energy and notable moments
-- valence, danceability, acousticness and instrumentalness, when the Essentia TensorFlow
-  models are present and verified (see download_models.py)
+- valence, danceability, acousticness and instrumentalness, when essentia-tensorflow is
+  installed (the "models" extra: uv sync --extra models) and the models are present and
+  verified (see download_models.py)
 
 Run locally:
     uv run uvicorn main:app --host 127.0.0.1 --port 3002
@@ -65,10 +69,17 @@ except ImportError:
 # Configuration
 # =============================================================================
 
-VERSION = "1.0.0"
+# Version of the analysis output: bump it whenever a measurement can change for the same input
+# (algorithm, parameters, decoder or model change). Clients use it to tell results apart.
+ANALYZER_VERSION = "1.1.0"
 TOKEN_HEADER = "X-Audio-Token"
 ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
 MAX_DECODE_SECONDS = 35.0
+# Previews are decoded to this rate, and the beat tracker's onset envelope uses this hop
+# (librosa's defaults). Together they set the tempo resolution: 60 * SAMPLE_RATE /
+# (BEAT_HOP_LENGTH * lag) BPM for a whole lag in frames.
+SAMPLE_RATE = 22050
+BEAT_HOP_LENGTH = 512
 # Analyses run in worker threads, at most this many at once. Further requests wait up to
 # QUEUE_WAIT_S for a slot (at most MAX_QUEUED_ANALYSES of them) before a 503. The wait stays
 # well below the API's 30 s client timeout and does not count against ANALYSIS_TIMEOUT_S.
@@ -111,7 +122,10 @@ def _init_essentia_models() -> bool:
     global _valence_model, _danceability_model, _acousticness_model, _instrumentalness_model
 
     if not ESSENTIA_AVAILABLE:
-        logger.info("essentia-tensorflow is not installed; perceptual features disabled")
+        logger.info(
+            "essentia-tensorflow is not installed (uv sync --extra models); "
+            "perceptual features disabled"
+        )
         return False
 
     directory = models_dir()
@@ -202,6 +216,7 @@ class AudioAnalysisResult(BaseModel):
     energy: float  # 0-1 scale
     duration: float  # seconds
     source: str = "analyzed"  # "analyzed" or "estimated"
+    analyzer_version: str  # ANALYZER_VERSION of the service that measured it
     keyMoments: list[KeyMoment] = []  # Key moments detected in the audio
     # Perceptual features from Essentia (None when models unavailable)
     valence: float | None = None
@@ -214,7 +229,7 @@ class HealthResponse(BaseModel):
     """Health check response"""
 
     status: str  # "ok", or "degraded" when the perceptual models are not loaded
-    version: str
+    analyzer_version: str
     models: bool  # Whether the Essentia models are verified and loaded
 
 
@@ -520,15 +535,15 @@ def analyze_audio_file(file_path: str) -> dict:
     Returns dict with bpm, key, mode, energy, duration, keyMoments,
     and optionally valence, danceability, acousticness, instrumentalness.
     """
-    # Load audio (librosa handles MP3 via audioread/ffmpeg)
+    # librosa 1.0 decodes with soundfile (libsndfile 1.1+ reads MP3) and resamples with soxr.
     # Previews are 30 s; never decode more than that, whatever the file claims.
-    y, sr = librosa.load(file_path, sr=22050, mono=True, duration=MAX_DECODE_SECONDS)
+    y, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True, duration=MAX_DECODE_SECONDS)
 
     # Get duration
     duration = librosa.get_duration(y=y, sr=sr)
 
     # Beat tracking for BPM
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr, hop_length=BEAT_HOP_LENGTH)
 
     # Handle tempo being an array in newer librosa versions
     # No tempo found is reported as null, never as a default.
@@ -598,7 +613,7 @@ async def health_check():
     """
     return {
         "status": "ok" if MODELS_LOADED else "degraded",
-        "version": VERSION,
+        "analyzer_version": ANALYZER_VERSION,
         "models": MODELS_LOADED,
     }
 
@@ -645,6 +660,7 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
         energy=result["energy"],
         duration=result["duration"],
         source="analyzed",
+        analyzer_version=ANALYZER_VERSION,
         keyMoments=[KeyMoment(**m) for m in result.get("keyMoments", [])],
         valence=result.get("valence"),
         danceability=result.get("danceability"),
@@ -657,7 +673,7 @@ async def root():
     """Root endpoint with API info."""
     return {
         "service": "Liner Notes audio analysis",
-        "version": VERSION,
+        "analyzer_version": ANALYZER_VERSION,
         "models": MODELS_LOADED,
         "endpoints": {
             "/health": "Health and model status",
@@ -685,7 +701,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if docs_enabled else None,
         title="Liner Notes audio analysis",
         description="Measures tempo, key and audio features from 30-second previews",
-        version=VERSION,
+        version=ANALYZER_VERSION,
         lifespan=lifespan,
     )
     application.add_api_route(

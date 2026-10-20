@@ -22,7 +22,9 @@ export async function clarificationNode(
   console.log("⏸️ [Clarification] Waiting for user to select track...");
   const store = getStore();
 
-  // Use LangGraph interrupt to pause execution
+  // Pauses the run: the first time through, interrupt() stops the graph and the route sends the
+  // payload's candidates to the client. On resume (Command({ resume })) the node runs again from
+  // the top and interrupt() returns the selected track id instead.
   // Type parameters: <payload, resume value> — compile-time hint only
   const selectedId = interrupt<DisambiguationInterrupt, string>({
     type: "disambiguation",
@@ -89,7 +91,8 @@ export async function clarificationNode(
       statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
     };
   } catch {
-    // Fallback: create minimal SpotifyData from candidate
+    // Fallback: minimal SpotifyData from the candidate. The duration is unknown here, so it is
+    // left empty (0 is read as missing downstream) rather than guessed.
     return {
       spotifyData: {
         id: selected.id,
@@ -100,8 +103,8 @@ export async function clarificationNode(
         releaseDate: selected.releaseYear || "",
         coverUrl: selected.coverUrl,
         popularity: selected.popularity,
-        duration: "3:00",
-        durationMs: 180000,
+        duration: "",
+        durationMs: 0,
         explicit: false,
         spotifyUrl: `https://open.spotify.com/track/${selected.id}`,
         previewUrl: null,

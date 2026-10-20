@@ -33,7 +33,7 @@
     "@types/d3-selection": "3.0.11",
     "@types/d3-transition": "3.0.9",
     "@types/d3-zoom": "3.0.8",
-    "@types/node": "22.19.3",
+    "@types/node": "24.19.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "5.1.2",

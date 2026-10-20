@@ -30,6 +30,8 @@ export function globalLimit(limit: RateLimitSettings) {
   return rateLimit({
     ...options(limit),
     keyGenerator: () => "all-clients",
+    // HEAD on a stream answers headers only and costs nothing.
+    skip: (req) => req.method === "HEAD",
     skipFailedRequests: true,
     requestWasSuccessful: (_req, res) => !requestFailed(res),
   });

@@ -61,13 +61,14 @@ USER sonic
 # Environment configuration
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV HOST=0.0.0.0
 ENV SQLITE_DB_PATH=/app/data/sonic-agent.db
 
 EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD wget -q --spider http://localhost:3001/api/health || exit 1
+    CMD wget -q --spider http://127.0.0.1:3001/api/health || exit 1
 
 # Start server
 CMD ["node", "dist/index.js"]

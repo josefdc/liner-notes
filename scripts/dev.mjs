@@ -111,11 +111,16 @@ for (const name of selected) {
   prefix(name, child.stdout, process.stdout);
   prefix(name, child.stderr, process.stderr);
   child.on("exit", (code, signal) => {
-    children.delete(name);
     if (!shuttingDown) {
       console.error(`[dev] ${name} exited (${signal ?? code}); stopping the other services`);
       shutdown(code || 1);
     }
+  });
+  // npm exits as soon as it is signalled, but the server it started may still be draining.
+  // "close" comes once every process writing to the service's output has exited, so the
+  // launcher keeps reading the server's log until the server is done (or the stop timeout).
+  child.on("close", () => {
+    children.delete(name);
     if (children.size === 0) process.exit(exitCode);
   });
 }

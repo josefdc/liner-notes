@@ -42,9 +42,13 @@ services:
         condition: service_healthy
     env_file:
       - ./apps/api/.env
+    # Values here override apps/api/.env. CORS_ORIGINS comes from the shell running compose
+    # (default: the web app at http://localhost and http://127.0.0.1), not from apps/api/.env.
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - HOST=0.0.0.0
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
       - AUDIO_ANALYSIS_URL=http://sonic-analysis:3002
       - SQLITE_DB_PATH=/app/data/sonic-agent.db
     volumes:
@@ -53,7 +57,7 @@ services:
       - sonic-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3001/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,18 +1,33 @@
 /**
- * Sonic Agent Express Server v2
+ * API entry point: loads and validates the configuration (first import), opens the database and
+ * cache, creates the app and listens. Once listening it settles the runs a previous process left
+ * open (requests wait for that), then starts retention. Routes and middleware live in
+ * http/app.ts, shutdown and process-level errors in lifecycle.ts.
  *
- * Exposes the LangGraph agent via REST API with SSE streaming support.
+ * One API process per database file: the runs recorded as running are taken to be this
+ * process's, so a second process on the same file would settle the first one's runs.
  */
 
-import "./config/env.js";
-import express from "express";
-import { healthRouter, searchRouter, analyzeRouter, factoidsRouter } from "./http/routes/index.js";
-import { initializeDatabase, closeDatabase } from "./store/database.js";
-import { initCache, getCache } from "./store/cache.js";
+import { settings } from "./config/env.js";
+import { createServer } from "node:http";
+import { createApp } from "./http/app.js";
+import {
+  createShutdown,
+  installProcessHandlers,
+  requestGate,
+  SHUTDOWN_TIMEOUT_MS,
+  STREAM_DRAIN_MS,
+} from "./lifecycle.js";
+import { getCache, initCache } from "./store/cache.js";
+import { closeDatabase, initializeDatabase } from "./store/database.js";
 import { startRetention } from "./store/retention.js";
+import { settleOpenRuns } from "./store/runs.js";
+import { isWaitingAtInterrupt } from "./store/threads.js";
+
+installProcessHandlers(closeDatabase);
 
 // =============================================================================
-// Database Initialization (must happen before routes that use the graph)
+// Database and cache
 // =============================================================================
 
 let db: ReturnType<typeof initializeDatabase>;
@@ -24,100 +39,79 @@ try {
 }
 initCache(db);
 
-const app = express();
-const PORT = Number(process.env.PORT) || 3001;
-
-// =============================================================================
-// Middleware
-// =============================================================================
-
-app.use(express.json());
-
-// CORS middleware for frontend integration
-app.use((req, res, next) => {
-  // In development, allow any origin (for mobile testing via network IP)
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
+/**
+ * Finalizes runs still recorded as running: interrupted when the thread waits for the user's
+ * choice, otherwise cancelled. Never throws.
+ */
+async function settleRuns(when: string): Promise<void> {
+  try {
+    const { interrupted, cancelled } = await settleOpenRuns(db, (threadId) =>
+      isWaitingAtInterrupt(db, threadId),
+    );
+    if (interrupted + cancelled > 0) {
+      console.log(
+        `[Runs] ${when}: ${cancelled} open runs cancelled, ${interrupted} left waiting for a choice`,
+      );
+    }
+  } catch (err) {
+    console.error(`[Runs] ${when}: could not settle open runs:`, err);
   }
-
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Cache-Control");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.sendStatus(200);
-    return;
-  }
-
-  next();
-});
-
-// =============================================================================
-// Routes
-// =============================================================================
-
-app.use(healthRouter);
-app.use(searchRouter);
-app.use(analyzeRouter);
-app.use(factoidsRouter);
-
-// =============================================================================
-// Start Server
-// =============================================================================
-
-// =============================================================================
-// Cache purge and retention (at startup, then every hour)
-// =============================================================================
-
-const stopRetention = startRetention(db, getCache());
-
-// =============================================================================
-// Graceful Shutdown
-// =============================================================================
-
-function shutdown() {
-  console.log("\n[Server] Shutting down gracefully...");
-  stopRetention();
-  closeDatabase();
-  process.exit(0);
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
-
 // =============================================================================
-// Start Server
+// Server
 // =============================================================================
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`
-🚀 Sonic Agent Server v2 running on http://0.0.0.0:${PORT}
+const app = createApp({ http: settings.http });
+let stopRetention = () => {};
 
-Endpoints:
-  GET  /api/health              - Health check
-  GET  /api/search/suggest      - Autocomplete suggestions
-  POST /api/analyze             - Analyze a song (synchronous)
-  GET  /api/analyze/stream      - SSE streaming analysis
-  POST /api/analyze/resume      - Resume after disambiguation
-  GET  /api/analyze/stream/resume - Resume streaming
-  POST /api/factoids/decrypt    - Generate additional obscure facts
-  GET  /api/factoids/decrypt/stream - SSE streaming factoids (one-by-one)
+// Requests wait while startup settles the runs left open. Settling reads the open runs at once,
+// so a run a request starts meanwhile is not among them; but a resume of a run left open would
+// reopen it while it is being settled, and then be recorded as cancelled while it runs.
+const gate = requestGate(app);
+const server = createServer(gate.handler);
 
-Features:
-  ✓ Map-Reduce parallel execution
-  ✓ Human-in-the-loop disambiguation
-  ✓ Real-time SSE streaming
-  ✓ Structured output validation
-  ✓ Persistent SQLite cache
-
-Example:
-  curl -X POST http://localhost:${PORT}/api/analyze \\
-    -H "Content-Type: application/json" \\
-    -d '{"query": "Midnight City M83"}'
-
-  # Or with streaming:
-  curl -N "http://localhost:${PORT}/api/analyze/stream?query=Midnight+City+M83"
-`);
+server.on("error", (error) => {
+  // Not listening (e.g. the port is taken): the runs belong to whichever process is.
+  console.error("[Server] Could not listen:", error);
+  closeDatabase();
+  process.exit(1);
 });
+
+server.listen(settings.port, settings.host, () => {
+  const address = server.address();
+  const bound =
+    typeof address === "object" && address
+      ? `${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`
+      : String(address);
+  console.log(`[Server] Liner Notes API listening on http://${bound}`);
+  console.log(
+    `[Server] CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
+  );
+  if (settings.replayOnly) console.log("[Server] REPLAY_MODE=only");
+
+  // Runs left "running" by a process that stopped are not running any more.
+  void gate.until(
+    settleRuns("Startup").then(() => {
+      stopRetention = startRetention(db, getCache());
+    }),
+  );
+});
+
+// =============================================================================
+// Graceful shutdown
+// =============================================================================
+
+const shutdown = createShutdown({
+  server,
+  stopBackground: () => stopRetention(),
+  // Runs still in flight are recorded as ended before the database closes, so retention does
+  // not keep their threads as open runs.
+  closeStore: () => settleRuns("Shutdown").then(closeDatabase),
+  exit: (code) => process.exit(code),
+  drainMs: STREAM_DRAIN_MS,
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
+});
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

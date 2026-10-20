@@ -5,6 +5,7 @@ import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { getDb } from "../../store/database.js";
 import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
+import { asyncRoute, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
 
 const router = Router();
 
@@ -34,11 +35,12 @@ export function setRunDeadlineForTests(ms: number): () => void {
 
 /**
  * Errors the client can see: a code, the HTTP status the POST routes answer with, and a short
- * message. Details stay in the server log. The stream routes always answer 200 (EventSource
+ * message (shared with the other routes where the code is the same). Details stay in the server
+ * log. The stream routes always answer 200 (EventSource
  * cannot read any other status) and send the code and message as an `error` message.
  */
 const ERRORS = {
-  invalid_input: { status: 400, message: "The request is not valid. Please search again." },
+  invalid_input: HTTP_ERRORS.invalid_input,
   resume_in_progress: { status: 409, message: "This choice is already being processed." },
   choice_expired: {
     status: 404,
@@ -51,12 +53,9 @@ const ERRORS = {
     message: "The selected track is not one of the offered choices.",
   },
   no_match: { status: 422, message: "No song matched that search." },
-  upstream_unavailable: {
-    status: 502,
-    message: "The music service is not responding right now. Please try again later.",
-  },
+  upstream_unavailable: HTTP_ERRORS.upstream_unavailable,
   timeout: { status: 504, message: "The analysis took too long. Please try again." },
-  failed: { status: 500, message: "The analysis could not be completed. Please try again." },
+  failed: HTTP_ERRORS.failed,
 } as const;
 
 type ErrorCode = keyof typeof ERRORS;
@@ -561,28 +560,31 @@ function sendJsonOutcome(
  * { status: "interrupted", threadId, interrupt: { candidates } }; resume with
  * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS.
  */
-router.post("/api/analyze", async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  const query = parseQuery(req.body?.query);
-  if (!query) {
-    sendJsonError(res, "invalid_input", {
-      detail: QUERY_ERROR,
-      example: { query: "Midnight City M83" },
-    });
-    return;
-  }
+router.post(
+  "/api/analyze",
+  asyncRoute(async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const query = parseQuery(req.body?.query);
+    if (!query) {
+      sendJsonError(res, "invalid_input", {
+        detail: QUERY_ERROR,
+        example: { query: "Midnight City M83" },
+      });
+      return;
+    }
 
-  const threadId = startAnalysis(query);
-  console.log(`[Run ${threadId}] Analysis: "${query}"`);
-  const control = new RunControl(req, res, threadId);
-  try {
-    const outcome = await executeRun({ songQuery: query }, threadId, control);
-    sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
-  } finally {
-    control.dispose();
-    activeThreads.delete(threadId);
-  }
-});
+    const threadId = startAnalysis(query);
+    console.log(`[Run ${threadId}] Analysis: "${query}"`);
+    const control = new RunControl(req, res, threadId);
+    try {
+      const outcome = await executeRun({ songQuery: query }, threadId, control);
+      sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
+    } finally {
+      control.dispose();
+      activeThreads.delete(threadId);
+    }
+  }),
+);
 
 /**
  * Stream analysis with Server-Sent Events
@@ -598,27 +600,31 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
  * - error { code, error }: a code from ERRORS and a short message
  * - done: the stream is over
  */
-router.get("/api/analyze/stream", async (req: Request, res: Response) => {
-  const stream = openEventStream(res);
-  const query = parseQuery(req.query.query);
-  if (!query) {
-    stream.error("invalid_input");
-    stream.done();
-    return;
-  }
+router.get(
+  "/api/analyze/stream",
+  asyncRoute(async (req: Request, res: Response) => {
+    const stream = openEventStream(res);
+    const query = parseQuery(req.query.query);
+    if (!query) {
+      markFailed(res);
+      stream.error("invalid_input");
+      stream.done();
+      return;
+    }
 
-  const threadId = startAnalysis(query);
-  console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
-  const control = new RunControl(req, res, threadId);
-  stream.send({ type: "connected", threadId, timestamp: timestamp() });
-  try {
-    const outcome = await executeRun({ songQuery: query }, threadId, control, stream.send);
-    sendStreamOutcome(stream, outcome, threadId);
-  } finally {
-    control.dispose();
-    activeThreads.delete(threadId);
-  }
-});
+    const threadId = startAnalysis(query);
+    console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
+    const control = new RunControl(req, res, threadId);
+    stream.send({ type: "connected", threadId, timestamp: timestamp() });
+    try {
+      const outcome = await executeRun({ songQuery: query }, threadId, control, stream.send);
+      sendStreamOutcome(stream, outcome, threadId);
+    } finally {
+      control.dispose();
+      activeThreads.delete(threadId);
+    }
+  }),
+);
 
 /**
  * Resume after Human-in-the-loop selection
@@ -628,23 +634,26 @@ router.get("/api/analyze/stream", async (req: Request, res: Response) => {
  * Refusals: 409 resume_in_progress; 404 choice_expired, not_waiting or run_interrupted;
  * 400 invalid_selection or invalid_input.
  */
-router.post("/api/analyze/resume", async (req: Request, res: Response) => {
-  const threadId = parseId(req.body?.threadId);
-  const selectedTrackId = parseId(req.body?.selectedTrackId);
-  if (!threadId || !selectedTrackId) {
-    sendJsonError(res, "invalid_input", {
-      detail: RESUME_ERROR,
-      example: { threadId: "<threadId>", selectedTrackId: "6GyFP1nfCDB8lbD2bG0Hq9" },
-    });
-    return;
-  }
+router.post(
+  "/api/analyze/resume",
+  asyncRoute(async (req: Request, res: Response) => {
+    const threadId = parseId(req.body?.threadId);
+    const selectedTrackId = parseId(req.body?.selectedTrackId);
+    if (!threadId || !selectedTrackId) {
+      sendJsonError(res, "invalid_input", {
+        detail: RESUME_ERROR,
+        example: { threadId: "<threadId>", selectedTrackId: "6GyFP1nfCDB8lbD2bG0Hq9" },
+      });
+      return;
+    }
 
-  await resumeThread(req, res, threadId, selectedTrackId, {
-    refuse: (code) => sendJsonError(res, code),
-    started: () => {},
-    finish: (outcome) => sendJsonOutcome(res, outcome, threadId, { selectedTrackId }),
-  });
-});
+    await resumeThread(req, res, threadId, selectedTrackId, {
+      refuse: (code) => sendJsonError(res, code),
+      started: () => {},
+      finish: (outcome) => sendJsonOutcome(res, outcome, threadId, { selectedTrackId }),
+    });
+  }),
+);
 
 /**
  * Resume streaming after selection
@@ -654,27 +663,31 @@ router.post("/api/analyze/resume", async (req: Request, res: Response) => {
  * The messages of /api/analyze/stream, starting with `resuming`. A resume that cannot run gets
  * one error message (codes as on POST /api/analyze/resume), then done.
  */
-router.get("/api/analyze/stream/resume", async (req: Request, res: Response) => {
-  const stream = openEventStream(res);
-  const threadId = parseId(req.query.threadId);
-  const selectedTrackId = parseId(req.query.selectedTrackId);
-  if (!threadId || !selectedTrackId) {
-    stream.error("invalid_input");
-    stream.done();
-    return;
-  }
-
-  await resumeThread(req, res, threadId, selectedTrackId, {
-    refuse: (code) => {
-      stream.error(code);
+router.get(
+  "/api/analyze/stream/resume",
+  asyncRoute(async (req: Request, res: Response) => {
+    const stream = openEventStream(res);
+    const threadId = parseId(req.query.threadId);
+    const selectedTrackId = parseId(req.query.selectedTrackId);
+    if (!threadId || !selectedTrackId) {
+      markFailed(res);
+      stream.error("invalid_input");
       stream.done();
-    },
-    started: () => stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
-    emit: stream.send,
-    finish: (outcome) => {
-      sendStreamOutcome(stream, outcome, threadId);
-    },
-  });
-});
+      return;
+    }
+
+    await resumeThread(req, res, threadId, selectedTrackId, {
+      refuse: (code) => {
+        stream.error(code);
+        stream.done();
+      },
+      started: () => stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
+      emit: stream.send,
+      finish: (outcome) => {
+        sendStreamOutcome(stream, outcome, threadId);
+      },
+    });
+  }),
+);
 
 export default router;

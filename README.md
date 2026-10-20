@@ -89,7 +89,6 @@ The system consists of three services that run simultaneously:
 - Node.js 18+
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- ffmpeg (for audio processing)
 
 ### 1. Install Dependencies
 

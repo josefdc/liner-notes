@@ -11,7 +11,8 @@ The API (`apps/api`) calls it server to server. It is not meant to be exposed to
 
 ### Local development
 
-Python 3.12 and [uv](https://docs.astral.sh/uv/) are required.
+Python 3.12 and [uv](https://docs.astral.sh/uv/) newer than 0.9.0 are required (older uv
+cannot read the relative `exclude-newer = "14 days"` in `pyproject.toml`).
 
 ```bash
 cd services/audio
@@ -66,7 +67,8 @@ All settings are optional environment variables.
 Always `200` while the service can measure tempo and key. `status` is `ok` when the perceptual
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output (`ANALYZER_VERSION` in `main.py`); it changes whenever a measurement can change
-for the same input, and every `/analyze` response carries it.
+for the same input, and every successful (`200`) `/analyze` response carries it. Error
+responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
@@ -108,7 +110,8 @@ when beat tracking finds no tempo (for example silence or audio without onsets),
 silence). Noise or unpitched audio still gets the best-matching key, so treat a key on such
 material with care.
 
-Errors carry a generic `detail`; the cause is only written to the service log.
+Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
+only written to the service log.
 
 | Status | Meaning |
 |---|---|
@@ -162,10 +165,12 @@ uv run ruff format --check .
 ```
 
 The tests run without network access: a local HTTP server stands in for the CDN.
-`tests/test_fixtures.py` runs the real analysis on audio generated at test time (click tracks at
-85, 120, 140 and 174 BPM, an A major triad, silence, a 1 s clip and white noise, as WAV and MP3).
-The tempo tolerance is the estimator's resolution, explained in `tempo_bounds`. Known gaps (a
-tempo for a 1 s clip, a key and a tempo for noise) are recorded as strict `xfail`s.
+`tests/test_fixtures.py` runs the real analysis on audio generated at test time: click tracks at
+85, 120, 140 and 174 BPM, an A major triad, the progressions C–F–G–C and Am–Dm–E–Am, silence,
+1 s clips, white noise and a DC offset, as WAV and MP3, plus 44.1 kHz stereo MP3 variants. The
+tempo tolerance is the estimator's resolution, explained in `tempo_bounds`. Known gaps (a tempo
+for a 1 s clip, a key and a tempo for noise, energy 0 for a loud click track and 1 for DC) are
+recorded as strict `xfail`s.
 
 ## Troubleshooting
 

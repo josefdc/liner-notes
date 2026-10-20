@@ -75,6 +75,11 @@ ANALYZER_VERSION = "1.1.0"
 TOKEN_HEADER = "X-Audio-Token"
 ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
 MAX_DECODE_SECONDS = 35.0
+# Previews are decoded to this rate, and the beat tracker's onset envelope uses this hop
+# (librosa's defaults). Together they set the tempo resolution: 60 * SAMPLE_RATE /
+# (BEAT_HOP_LENGTH * lag) BPM for a whole lag in frames.
+SAMPLE_RATE = 22050
+BEAT_HOP_LENGTH = 512
 # Analyses run in worker threads, at most this many at once. Further requests wait up to
 # QUEUE_WAIT_S for a slot (at most MAX_QUEUED_ANALYSES of them) before a 503. The wait stays
 # well below the API's 30 s client timeout and does not count against ANALYSIS_TIMEOUT_S.
@@ -532,13 +537,13 @@ def analyze_audio_file(file_path: str) -> dict:
     """
     # librosa 1.0 decodes with soundfile (libsndfile 1.1+ reads MP3) and resamples with soxr.
     # Previews are 30 s; never decode more than that, whatever the file claims.
-    y, sr = librosa.load(file_path, sr=22050, mono=True, duration=MAX_DECODE_SECONDS)
+    y, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True, duration=MAX_DECODE_SECONDS)
 
     # Get duration
     duration = librosa.get_duration(y=y, sr=sr)
 
     # Beat tracking for BPM
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr, hop_length=BEAT_HOP_LENGTH)
 
     # Handle tempo being an array in newer librosa versions
     # No tempo found is reported as null, never as a default.

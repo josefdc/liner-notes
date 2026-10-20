@@ -25,9 +25,19 @@ dotenv.config();
 // TypeScript Interfaces
 // =============================================================================
 
+interface MBRelease {
+  title?: string;
+  date?: string;
+  status?: string;
+  "release-group"?: { "primary-type"?: string; "secondary-types"?: string[] };
+}
+
 interface MBRecording {
   id: string;
   title: string;
+  disambiguation?: string;
+  "first-release-date"?: string;
+  releases?: MBRelease[];
   "artist-credit"?: MBArtistCredit[];
   relations?: MBRelation[];
 }
@@ -77,7 +87,24 @@ const ARTIST_CREDIT_SHAPE: Shape = [
 ];
 const RECORDING_SEARCH_SHAPE: Shape = {
   count: true,
-  recordings: [{ id: true, title: true, score: true, "artist-credit": ARTIST_CREDIT_SHAPE }],
+  recordings: [
+    {
+      id: true,
+      title: true,
+      score: true,
+      disambiguation: true,
+      "first-release-date": true,
+      "artist-credit": ARTIST_CREDIT_SHAPE,
+      releases: [
+        {
+          title: true,
+          date: true,
+          status: true,
+          "release-group": { "primary-type": true, "secondary-types": true },
+        },
+      ],
+    },
+  ],
 };
 const RECORDING_SHAPE: Shape = {
   id: true,
@@ -302,41 +329,116 @@ function creditedTo(recording: MBRecording, artist: string, artistNames?: string
   );
 }
 
+/** Release-group types that mark a release as not the original one. */
+const NOT_ORIGINAL = new Set(["compilation", "dj-mix", "live", "remix", "mixtape/street"]);
+
+/** True when the recording is on at least one official release that is not a compilation, live, DJ-mix or remix release. */
+function onOriginalRelease(recording: MBRecording): boolean {
+  return (recording.releases ?? []).some((release) => {
+    const status = release?.status?.toLowerCase();
+    if (status && status !== "official") return false;
+    const secondary = release?.["release-group"]?.["secondary-types"] ?? [];
+    return !secondary.some((type) => NOT_ORIGINAL.has(String(type).toLowerCase()));
+  });
+}
+
+/** An album title without an edition suffix: "X (Remastered 2009)", "X - Deluxe Edition". */
+function withoutEdition(album: string): string {
+  return album
+    .replace(
+      /\s*[([][^)\]]*(?:remaster|deluxe|edition|expanded|anniversary|version)[^)\]]*[)\]]/gi,
+      "",
+    )
+    .replace(/\s+-\s+[^-]*(?:remaster|deluxe|edition|expanded|anniversary|version).*$/i, "")
+    .trim();
+}
+
+type RecordingSearch =
+  | { recording: MBRecording }
+  | { recording: null; reason: "not_found" | "ambiguous"; detail: string };
+
+/** Orders candidates: no disambiguation first, then most releases, then the earliest release. */
+function compareCandidates(a: MBRecording, b: MBRecording): number {
+  const disambiguated = (r: MBRecording) => (r.disambiguation?.trim() ? 1 : 0);
+  const releases = (r: MBRecording) => r.releases?.length ?? 0;
+  const first = (r: MBRecording) => r["first-release-date"] || "9999";
+  return (
+    disambiguated(a) - disambiguated(b) ||
+    releases(b) - releases(a) ||
+    first(a).localeCompare(first(b))
+  );
+}
+
 /**
- * The recording whose title (without a featured-artist suffix) and credited artists match
- * exactly, or null: a near title or a partial credit never matches, and an unrelated first hit
- * is never used. A title or artist with nothing to compare sends no request.
+ * The original recording of a song, or why there is none.
+ *
+ * A candidate's title (without a featured-artist suffix) and credited artists must match
+ * exactly; a near title or a partial credit never matches. Popular songs have many exact
+ * matches (compilations, live and DJ-mix recordings), so the pick is the candidate with no
+ * disambiguation comment that is on an original release (not a compilation, live, DJ-mix or
+ * remix release), with the most releases and then the earliest release date. With `album` the
+ * search is narrowed to that release. When no candidate is an original, or the best two cannot
+ * be told apart, the answer is "ambiguous" rather than a guess. A title or artist with nothing
+ * to compare sends no request.
  */
 async function searchRecording(
   title: string,
   artist: string,
   artistNames?: string[],
-): Promise<MBRecording | null> {
+  album?: string,
+): Promise<RecordingSearch> {
   const bareTitle = withoutFeatured(title);
   const wantedTitle = normalizeName(bareTitle);
   const parts = (artistNames?.length ? artistNames : artist.split(","))
     .map((p) => p.trim())
     .filter((p) => normalizeName(p));
-  if (!wantedTitle || !normalizeName(artist) || parts.length === 0) return null;
+  if (!wantedTitle || !normalizeName(artist) || parts.length === 0) {
+    return { recording: null, reason: "not_found", detail: "nothing to search for" };
+  }
 
   // Every part as its own phrase, so the search finds "Earth, Wind & Fire" and "A feat. B".
   const artistQuery = parts.map((p) => `artist:"${escapeLucene(p)}"`).join(" AND ");
-  const query = `recording:"${escapeLucene(bareTitle)}" AND ${artistQuery}`;
+  const release = album ? withoutEdition(album) : "";
+  const releaseQuery = normalizeName(release) ? ` AND release:"${escapeLucene(release)}"` : "";
+  const query = `recording:"${escapeLucene(bareTitle)}" AND ${artistQuery}${releaseQuery}`;
   const data = await mbFetch<MBSearchResponse>(
     "recording",
-    { query, limit: "10" },
+    { query, limit: "25" },
     RECORDING_SEARCH_SHAPE,
   );
 
-  return (
-    (Array.isArray(data?.recordings) ? data.recordings : []).find((r) => {
-      if (!isMbid(r?.id) || typeof r.title !== "string") return false;
-      return (
-        normalizeName(withoutFeatured(r.title)) === wantedTitle &&
-        creditedTo(r, artist, artistNames)
-      );
-    }) ?? null
+  const exact = (Array.isArray(data?.recordings) ? data.recordings : []).filter(
+    (r) =>
+      isMbid(r?.id) &&
+      typeof r.title === "string" &&
+      normalizeName(withoutFeatured(r.title)) === wantedTitle &&
+      creditedTo(r, artist, artistNames),
   );
+  if (exact.length === 0) {
+    return {
+      recording: null,
+      reason: "not_found",
+      detail: "no recording with this title and artist",
+    };
+  }
+
+  const candidates = exact.filter(onOriginalRelease).sort(compareCandidates);
+  const [best, next] = candidates;
+  if (!best || best.disambiguation?.trim()) {
+    return {
+      recording: null,
+      reason: "ambiguous",
+      detail: `${exact.length} matching recordings, none on an original release`,
+    };
+  }
+  if (next && compareCandidates(best, next) === 0) {
+    return {
+      recording: null,
+      reason: "ambiguous",
+      detail: `${candidates.length} matching recordings that cannot be told apart`,
+    };
+  }
+  return { recording: best };
 }
 
 /**
@@ -372,7 +474,8 @@ async function searchArtistExact(name: string): Promise<MBArtist | null> {
  * The MusicBrainz artist for a name, or null; never a different artist.
  *
  * `name` is searched whole and only an exact (normalised) name match is accepted, so
- * "Earth, Wind & Fire" and "Tyler, The Creator" resolve to themselves. A Spotify artist string
+ * "Earth, Wind & Fire" and "Tyler, The Creator" resolve to themselves. When several artists share
+ * that exact name, the first one in MusicBrainz's ranking is taken. A Spotify artist string
  * joins several artists with ", ", which cannot be told apart from a comma in one name; when the
  * caller passes the separate `artistNames`, the first one is tried if the whole name has no
  * match. Goes through the rate-limited queue; ListenBrainz resolves artists here too.
@@ -429,20 +532,22 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
  * Get structured sample and genealogy data from MusicBrainz
  */
 export const getMusicBrainzRelations = tool(
-  async ({ title, artist, artistNames }): Promise<string> => {
+  async ({ title, artist, artistNames, album }): Promise<string> => {
     try {
       console.log(`🧠 [MusicBrainz] Searching: "${title}" by ${artist}`);
 
       // Step 1: Search for recording
-      const recording = await searchRecording(title, artist, artistNames);
+      const search = await searchRecording(title, artist, artistNames, album);
 
-      if (!recording) {
+      if (!search.recording) {
         return JSON.stringify({
           found: false,
-          message: `No recording found on MusicBrainz for "${title}" by ${artist}`,
+          reason: search.reason,
+          message: `No recording identified on MusicBrainz for "${title}" by ${artist}: ${search.detail}`,
           relations: [],
         });
       }
+      const recording = search.recording;
 
       console.log(`🧠 [MusicBrainz] Found MBID: ${recording.id}`);
 
@@ -501,6 +606,10 @@ export const getMusicBrainzRelations = tool(
         .array(z.string())
         .optional()
         .describe("The track's artists one by one, when known (e.g. Spotify's artist list)"),
+      album: z
+        .string()
+        .optional()
+        .describe("The album the track is on, when known; narrows the search to that release"),
     }),
   },
 );

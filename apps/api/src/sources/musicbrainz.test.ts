@@ -22,6 +22,16 @@ import tylerTheCreator from "./fixtures/musicbrainz-artist-search-tyler-the-crea
 import mcgee from "./fixtures/musicbrainz-recording-search-me-and-bobby-mcgee.json" with {
   type: "json",
 };
+import iceLookup from "./fixtures/musicbrainz-recording-ice-ice-baby.json" with { type: "json" };
+import iceSearch from "./fixtures/musicbrainz-recording-search-ice-ice-baby.json" with {
+  type: "json",
+};
+import iceToTheExtreme from "./fixtures/musicbrainz-recording-search-ice-ice-baby-to-the-extreme.json" with {
+  type: "json",
+};
+import backInBlack from "./fixtures/musicbrainz-recording-search-back-in-black.json" with {
+  type: "json",
+};
 import {
   escapeLucene,
   findArtist,
@@ -34,6 +44,13 @@ const MB = "https://musicbrainz.org/ws/2";
 const RECORDING_ID = "5b11f4ce-a62d-471e-81fc-a69a8278c7da";
 const SAMPLED_ID = "32c7e292-14f1-4080-bddf-ef852e0a4c59";
 
+const ORIGINAL_RELEASE = {
+  title: "To the Extreme",
+  date: "1990",
+  status: "Official",
+  "release-group": { "primary-type": "Album", "secondary-types": [] as string[] },
+};
+
 const recording = (title: string, artist: string, id = RECORDING_ID) => ({
   id,
   title,
@@ -41,6 +58,8 @@ const recording = (title: string, artist: string, id = RECORDING_ID) => ({
   "artist-credit": [
     { name: artist, artist: { id: "f2fb0ff0-5679-42ec-a55c-15109ce6e320", name: artist } },
   ],
+  // An original release (an album, not a compilation or live release).
+  releases: [ORIGINAL_RELEASE],
 });
 
 const lookup = {
@@ -269,24 +288,30 @@ describe("MusicBrainz client", () => {
 
   it("reads & and and as the same word (real search answer)", async () => {
     let query: string | null = null;
-    const bobby = mcgee.recordings[0].id;
-    stubFetch((call) => {
-      if (call.url.startsWith(`${MB}/recording?`)) {
-        query = searchQuery(call);
-        return json(mcgee);
-      }
-      if (call.url.startsWith(`${MB}/recording/${bobby}?`)) {
-        return json({ ...mcgee.recordings[0], relations: [] });
-      }
-      return undefined;
+    const net = stubFetch((call) => {
+      if (!call.url.startsWith(`${MB}/recording?`)) return undefined;
+      query = searchQuery(call);
+      return json(mcgee);
     });
 
     const data = JSON.parse(
       await getMusicBrainzRelations.invoke({ title: "Me & Bobby McGee", artist: "Janis Joplin" }),
     );
 
-    expect(data).toMatchObject({ found: true, mbid: bobby });
+    // The titles match ("&" is "and"); every match is on a compilation, so none is picked.
+    expect(data).toMatchObject({ found: false, reason: "ambiguous" });
     expect(query).toContain('recording:"Me \\& Bobby McGee"');
+    expect(net.calls).toHaveLength(1);
+  });
+
+  it("picks a recording whose title differs only by & and and", async () => {
+    musicbrainz([recording("Ice and Ice Baby", "Vanilla Ice")]);
+
+    const data = JSON.parse(
+      await getMusicBrainzRelations.invoke({ title: "Ice & Ice Baby", artist: "Vanilla Ice" }),
+    );
+
+    expect(data).toMatchObject({ found: true, mbid: RECORDING_ID });
   });
 
   it("drops a featured-artist suffix and matches a credit of several artists", async () => {
@@ -458,5 +483,173 @@ describe("MusicBrainz client", () => {
     for (let i = 1; i < starts.length; i++) {
       expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(55);
     }
+  });
+
+  describe("choosing among exact matches (real search answers)", () => {
+    const ICE_ICE_BABY = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
+
+    /** Answers a search narrowed to the album with `narrowed`, any other with `plain`. */
+    const searches = (plain: unknown, narrowed: unknown = plain) =>
+      stubFetch((call) => {
+        if (call.url.startsWith(`${MB}/recording?`)) {
+          return json(searchQuery(call)?.includes(" AND release:") ? narrowed : plain);
+        }
+        if (call.url.startsWith(`${MB}/recording/${ICE_ICE_BABY}?`)) return json(iceLookup);
+        return undefined;
+      });
+    const lookups = (calls: FetchCall[]) =>
+      calls.filter((c) => c.url.startsWith(`${MB}/recording/`));
+
+    it("Ice Ice Baby: only compilation recordings match, so none is picked", async () => {
+      const net = searches(iceSearch);
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+      );
+
+      expect(data).toMatchObject({ found: false, reason: "ambiguous" });
+      expect(lookups(net.calls)).toHaveLength(0);
+    });
+
+    it("Ice Ice Baby on To the Extreme: the original recording and its samples", async () => {
+      let query: string | null = null;
+      const net = stubFetch((call) => {
+        if (call.url.startsWith(`${MB}/recording?`)) {
+          query = searchQuery(call);
+          return json(query?.includes(" AND release:") ? iceToTheExtreme : iceSearch);
+        }
+        if (call.url.startsWith(`${MB}/recording/${ICE_ICE_BABY}?`)) return json(iceLookup);
+        return undefined;
+      });
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({
+          title: "Ice Ice Baby",
+          artist: "Vanilla Ice",
+          album: "To the Extreme",
+        }),
+      );
+
+      expect(query).toBe(
+        'recording:"Ice Ice Baby" AND artist:"Vanilla Ice" AND release:"To the Extreme"',
+      );
+      expect(data).toMatchObject({ found: true, mbid: ICE_ICE_BABY });
+      expect(data.genealogy.samples.map((s: { title: string }) => s.title)).toContain(
+        "Under Pressure",
+      );
+      expect(lookups(net.calls)).toHaveLength(1);
+    });
+
+    it("an album's edition suffix is left out of the release filter", async () => {
+      let query: string | null = null;
+      stubFetch((call) => {
+        if (!call.url.startsWith(`${MB}/recording?`)) return undefined;
+        query = searchQuery(call);
+        return json({ count: 0, recordings: [] });
+      });
+
+      await getMusicBrainzRelations.invoke({
+        title: "Ice Ice Baby",
+        artist: "Vanilla Ice",
+        album: "To the Extreme (Remastered 2009)",
+      });
+
+      expect(query).toContain(' AND release:"To the Extreme"');
+    });
+
+    it("Back in Black: never the 1991 Paris live recording", async () => {
+      const net = searches(backInBlack);
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title: "Back in Black", artist: "AC/DC" }),
+      );
+
+      expect(data).toMatchObject({ found: false, reason: "ambiguous" });
+      expect(lookups(net.calls)).toHaveLength(0);
+    });
+
+    const candidate = (
+      id: string,
+      releases: number,
+      first: string,
+      disambiguation = "",
+      secondary: string[] = [],
+    ) => ({
+      ...recording("Ice Ice Baby", "Vanilla Ice", id),
+      disambiguation,
+      "first-release-date": first,
+      releases: Array.from({ length: releases }, () => ({
+        ...ORIGINAL_RELEASE,
+        "release-group": { "primary-type": "Album", "secondary-types": secondary },
+      })),
+    });
+    const A = "00000000-0000-4000-8000-00000000000a";
+    const B = "00000000-0000-4000-8000-00000000000b";
+
+    it.each([
+      [
+        "no disambiguation over a disambiguated one",
+        [candidate(A, 1, "1995", "radio edit"), candidate(B, 1, "1995")],
+        B,
+      ],
+      ["more releases over fewer", [candidate(A, 2, "1990"), candidate(B, 5, "1990")], B],
+      [
+        "the earlier release on equal counts",
+        [candidate(A, 3, "1991-02-01"), candidate(B, 3, "1990-09-04")],
+        B,
+      ],
+      [
+        "an original over a compilation with more releases",
+        [candidate(A, 1, "1990"), candidate(B, 9, "1989", "", ["Compilation"])],
+        A,
+      ],
+      [
+        "an original over a live recording",
+        [candidate(A, 1, "1992"), candidate(B, 4, "1990", "", ["Live"])],
+        A,
+      ],
+    ])("prefers %s", async (_name, found, expected) => {
+      stubFetch((call) => {
+        if (call.url.startsWith(`${MB}/recording?`))
+          return json({ count: found.length, recordings: found });
+        if (call.url.startsWith(`${MB}/recording/${expected}?`)) {
+          return json({ ...recording("Ice Ice Baby", "Vanilla Ice", expected), relations: [] });
+        }
+        return undefined;
+      });
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+      );
+
+      expect(data).toMatchObject({ found: true, mbid: expected });
+    });
+
+    it("two originals that cannot be told apart are ambiguous", async () => {
+      const net = searches({
+        count: 2,
+        recordings: [candidate(A, 3, "1990"), candidate(B, 3, "1990")],
+      });
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+      );
+
+      expect(data).toMatchObject({ found: false, reason: "ambiguous" });
+      expect(lookups(net.calls)).toHaveLength(0);
+    });
+
+    it("a match only on bootleg releases is not an original", async () => {
+      const bootleg = candidate(A, 2, "1990");
+      for (const release of bootleg.releases) release.status = "Bootleg";
+
+      const net = searches({ count: 1, recordings: [bootleg] });
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+      );
+
+      expect(data).toMatchObject({ found: false, reason: "ambiguous" });
+      expect(lookups(net.calls)).toHaveLength(0);
+    });
   });
 });

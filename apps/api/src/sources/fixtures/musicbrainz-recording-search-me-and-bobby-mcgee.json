@@ -5,12 +5,24 @@
       "id": "4fb40bda-30d3-406c-90bc-e9c7df5ddc16",
       "title": "Me and Bobby McGee",
       "score": 100,
+      "first-release-date": "1998",
       "artist-credit": [
         {
           "name": "Janis Joplin",
           "artist": {
             "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
             "name": "Janis Joplin"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Tower Records: 30 Years in San Francisco",
+          "date": "1998",
+          "status": "Promotion",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
           }
         }
       ]
@@ -19,12 +31,24 @@
       "id": "b9f64855-e163-4db0-bf5d-bd46e67ea655",
       "title": "Me and Bobby McGee",
       "score": 100,
+      "first-release-date": "1998",
       "artist-credit": [
         {
           "name": "Janis Joplin",
           "artist": {
             "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
             "name": "Janis Joplin"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "The Women of Rock",
+          "date": "1998",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
           }
         }
       ]
@@ -33,6 +57,7 @@
       "id": "a134a5a8-0e02-439d-9976-7665c98b841a",
       "title": "Me and Bobby McGee",
       "score": 100,
+      "first-release-date": "2001",
       "artist-credit": [
         {
           "name": "Janis Joplin",
@@ -41,18 +66,76 @@
             "name": "Janis Joplin"
           }
         }
+      ],
+      "releases": [
+        {
+          "title": "Singers and Songwriters: 1970–1972",
+          "date": "2001",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Singers and Songwriters: 1970–1972",
+          "date": "2002",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
       ]
     },
     {
       "id": "f2ef4bae-8ae2-41d5-9ca8-27427d4cc414",
       "title": "Me And Bobby McGee",
       "score": 100,
+      "first-release-date": "2003",
       "artist-credit": [
         {
           "name": "Janis Joplin",
           "artist": {
             "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
             "name": "Janis Joplin"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Acoustic Nights",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "5e604b56-2dfb-4753-8387-f3e23be0bf29",
+      "title": "Me and Bobby McGee",
+      "score": 100,
+      "first-release-date": "2003",
+      "artist-credit": [
+        {
+          "name": "Janis Joplin",
+          "artist": {
+            "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
+            "name": "Janis Joplin"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Lady Sings the Blues",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
           }
         }
       ]

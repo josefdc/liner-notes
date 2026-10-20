@@ -1,0 +1,264 @@
+{
+  "count": 215,
+  "recordings": [
+    {
+      "id": "5efa2fe7-11ca-445c-8d11-129aa1fa7860",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Body Combat 4",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "2eeb3da8-f363-4458-980f-88fc846beeee",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "1990",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "1991: The Gun Hits",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "1dbf0314-484a-42d5-98ea-0cfe4037e122",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "disambiguation": "part of “Jimmy Z prestens… 4PLAY: Anthems, Vol. 1” DJ‐mix",
+      "first-release-date": "2006",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Jimmy Z prestens… 4PLAY: Anthems, Vol. 1",
+          "date": "2006",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation", "DJ-mix"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "b7e04fc2-a895-4d4f-9dc2-d5d3f2b11dac",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "1999",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Best of the 90’s – 60 Fantastic Songs",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "4f0fcd05-e11e-4d20-88fd-5832f16f9ba0",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "2019-02-21",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "m2o OLD Session 1",
+          "date": "2019-02-21",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "9cbb25e9-f2ef-448f-949b-7dbb2f3f420b",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "1995",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "The Very Best of Pop Music 1989–90",
+          "date": "1995",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "9ad9447b-b9e3-475f-b38d-d0664c26fa11",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "2021-08-20",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Smithsonian Anthology of Hip-Hop and Rap",
+          "date": "2021-08-20",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "b21d7d5b-0b22-4195-a6bb-940a47abc393",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "2008",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Countdown: One Hit Wonders",
+          "date": "2008",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "60a3be71-e6e5-4859-a761-be20c3665fec",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "2006",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Het Beste Uit 40 Jaar De Pre Historie",
+          "date": "2006",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "5086f7bd-165b-4d8f-80a3-9a4c4115561f",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "1991",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Smash Hits Massive",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    }
+  ]
+}

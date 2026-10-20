@@ -1,8 +1,8 @@
 /**
  * ListenBrainz similar artists with a stubbed API. The labs `similar-artists/json` answer
- * (fixtures/listenbrainz-similar-artists.json, the shape the live endpoint returns, cut to six
- * rows) is parsed; an HTML or other non-JSON answer is a typed error, and so is any API error:
- * these tests fail on an error instead of passing over it.
+ * (fixtures/listenbrainz-similar-artists.json: a live answer, all 100 rows, cut to the fields
+ * the client reads) is parsed; an HTML or other non-JSON answer is a typed error, and so is
+ * any API error: these tests fail on an error instead of passing over it.
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";

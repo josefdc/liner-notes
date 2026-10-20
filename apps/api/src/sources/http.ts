@@ -27,7 +27,10 @@ import { fileURLToPath } from "node:url";
 // Redaction
 // =============================================================================
 
-const MAX_TEXT = 500;
+/** Cap for recorded data the pipeline reads: well above what any consumer reads (800). */
+const MAX_TEXT = 4000;
+/** Cap for recorded error and text bodies, which only feed error messages. */
+const MAX_ERROR_TEXT = 500;
 const MAX_DETAIL = 200;
 
 /** Values of the environment's credentials, so an echoed key is recognised wherever it appears. */
@@ -38,7 +41,8 @@ function knownSecrets(): string[] {
 }
 
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
-  [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]"],
+  // Case-sensitive and token-shaped, so prose such as "the basic track" is left alone.
+  [/\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g, "$1 [redacted]"],
   [
     /\b(api_?key|key|token|access_token|refresh_token|client_secret|password|secret)=([^&\s"'<>]+)/gi,
     "$1=[redacted]",
@@ -53,14 +57,26 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
 ];
 
 /** Removes credentials from text: known key values, bearer tokens, `key=…` pairs, token shapes. */
-export function redactText(text: string): string {
+function redactSecrets(text: string): string {
   let out = text;
   for (const secret of knownSecrets()) out = out.split(secret).join("[redacted]");
-  // An invalid header value is echoed in quotes by fetch; the value is the credential.
-  if (/header/i.test(out)) out = out.replace(/"[^"]*"/g, '"[redacted]"');
   for (const [pattern, replacement] of SECRET_PATTERNS) out = out.replace(pattern, replacement);
   return out;
 }
+
+/**
+ * Removes credentials from an error message or log line. Besides `redactSecrets`, a quoted value
+ * in a message about a header is removed: fetch echoes an invalid header value, which is the
+ * credential.
+ */
+export function redactText(text: string): string {
+  const out = /header/i.test(text) ? text.replace(/"[^"]*"/g, '"[redacted]"') : text;
+  return redactSecrets(out);
+}
+
+/** Ids the pipeline reads (MBIDs, Spotify ids, ISRCs) are never rewritten by a scrubber. */
+const ID_SHAPED =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9A-Za-z]{22}|[A-Z]{2}[A-Z0-9]{3}\d{7})$/i;
 
 const MEDIA_HOST =
   /(?:^|\.)(?:scdn\.co|dzcdn\.net|coverartarchive\.org|us\.archive\.org|lastfm\.freetls\.fastly\.net|mzstatic\.com|ytimg\.com|ggpht\.com)$/i;
@@ -81,19 +97,37 @@ export function isMediaUrl(value: string): boolean {
 
 const URL_IN_TEXT = /(?:https?:)?\/\/[^\s"'<>()[\]{}]+/gi;
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
-const PHONE_LIKE = /\+?\(?\d[\d\s().-]{7,}\d/g;
+// Not inside a longer token (a UUID's digit groups are not a phone number).
+const PHONE_LIKE = /(?<![\w-])\+?\(?\d[\d\s().-]{7,}\d(?![\w-])/g;
 
-/** Redacts and masks text for a cassette: secrets, media URLs, e-mails, phone numbers; capped. */
+const withoutMediaUrls = (text: string) =>
+  text.replace(URL_IN_TEXT, (url) => (isMediaUrl(url) ? "[media]" : url));
+
+/**
+ * A string the pipeline reads, for a cassette: secrets redacted and media URLs removed, capped
+ * well above what consumers read. Nothing else changes, so replay reproduces the recorded run;
+ * id-shaped values are kept as they are.
+ */
+export function scrubReadText(text: string): string {
+  if (ID_SHAPED.test(text)) return text;
+  const out = withoutMediaUrls(redactSecrets(text));
+  return out.length > MAX_TEXT ? out.slice(0, MAX_TEXT) : out;
+}
+
+/**
+ * An error or text body for a cassette: secrets, media URLs, e-mails and phone numbers removed,
+ * capped. These bodies only feed error messages.
+ */
 export function scrubText(text: string): string {
-  const out = redactText(text)
-    .replace(URL_IN_TEXT, (url) => (isMediaUrl(url) ? "[media]" : url))
+  if (ID_SHAPED.test(text)) return text;
+  const out = withoutMediaUrls(redactText(text))
     .replace(EMAIL, "[email]")
     .replace(PHONE_LIKE, (match) => {
       const digits = match.replace(/\D/g, "").length;
       const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
       return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
     });
-  return out.length > MAX_TEXT ? out.slice(0, MAX_TEXT) : out;
+  return out.length > MAX_ERROR_TEXT ? out.slice(0, MAX_ERROR_TEXT) : out;
 }
 
 // =============================================================================
@@ -190,11 +224,16 @@ function defaultTimeoutMs(): number {
 type CassetteMode = "off" | "record" | "replay";
 
 function requestedMode(): CassetteMode {
-  const mode = process.env.SOURCE_CASSETTE;
-  return mode === "record" || mode === "replay" ? mode : "off";
+  const mode = process.env.SOURCE_CASSETTE?.trim() ?? "";
+  if (mode === "record" || mode === "replay") return mode;
+  if (mode === "" || mode === "off") return "off";
+  throw new Error(`SOURCE_CASSETTE: expected "record", "replay" or "off", got "${mode}"`);
 }
 
-/** Throws when a cassette mode is set in production; called at startup and on every request. */
+/**
+ * Throws on an unknown SOURCE_CASSETTE value, and when a cassette mode is set in production;
+ * called at startup and on every request.
+ */
 export function assertCassetteAllowed(): void {
   const mode = requestedMode();
   if (mode !== "off" && process.env.NODE_ENV === "production") {
@@ -287,21 +326,32 @@ const SECRET_KEYS = new Set([
 const MEDIA_KEY =
   /^(?:preview|images?|picture|cover|thumbnail|artwork|favicon|avatar)(?:[_-]?\w*)$/i;
 
-/**
- * Drops preview and image fields and media URLs, redacts secrets (by key and by value), masks
- * e-mails and phone numbers, and caps long text. Applied to every recorded value.
- */
-export function scrubPayload(value: unknown): unknown {
-  if (typeof value === "string") return isMediaUrl(value.trim()) ? null : scrubText(value);
-  if (Array.isArray(value)) return value.map(scrubPayload);
-  if (value === null || typeof value !== "object") return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, inner] of Object.entries(value)) {
-    if (MEDIA_KEY.test(key)) continue;
-    out[key] = SECRET_KEYS.has(key.toLowerCase()) ? "[redacted]" : scrubPayload(inner);
-  }
-  return out;
+function scrubWith(text: (value: string) => string) {
+  const scrub = (value: unknown): unknown => {
+    if (typeof value === "string") return isMediaUrl(value.trim()) ? null : text(value);
+    if (Array.isArray(value)) return value.map(scrub);
+    if (value === null || typeof value !== "object") return value;
+    const out: Record<string, unknown> = {};
+    for (const [key, inner] of Object.entries(value)) {
+      if (MEDIA_KEY.test(key)) continue;
+      out[key] = SECRET_KEYS.has(key.toLowerCase()) ? "[redacted]" : scrub(inner);
+    }
+    return out;
+  };
+  return scrub;
 }
+
+/**
+ * Data the pipeline reads (a successful answer, already cut to its shape): drops preview and
+ * image fields and media URLs and redacts secrets (by key and by value). Values are otherwise
+ * kept byte for byte, so a replayed run matches the recorded one.
+ */
+export const scrubReadPayload = scrubWith(scrubReadText);
+
+/**
+ * An error body: as scrubReadPayload, and also masks e-mails and phone numbers and caps text.
+ */
+export const scrubPayload = scrubWith(scrubText);
 
 const SECRET_PARAMS = new Set([
   "api_key",
@@ -382,22 +432,46 @@ const LOCK_WAIT_MS = 5000;
 const LOCK_STALE_MS = 30_000;
 let tmpCounter = 0;
 
-/** A lock file shared with other recording processes; returns the release function. */
+/** False when no process has this pid (a recorder that crashed while holding the lock). */
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * A lock file shared with other recording processes, holding the owner's pid; returns the
+ * release function. A lock whose owner is no longer alive, or older than 30 s, is broken.
+ */
 async function acquireLock(path: string): Promise<() => Promise<void>> {
   const lock = `${path}.lock`;
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
       const handle = await open(lock, "wx");
-      await handle.close();
+      try {
+        await handle.writeFile(String(process.pid));
+      } finally {
+        await handle.close();
+      }
       return () => unlink(lock).catch(() => {});
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const owner = Number(await readFile(lock, "utf8").catch(() => ""));
       const age = await stat(lock).then(
         (s) => Date.now() - s.mtimeMs,
         () => 0,
       );
-      if (age > LOCK_STALE_MS) await unlink(lock).catch(() => {});
+      const dead = Number.isSafeInteger(owner) && owner > 0 && !processAlive(owner);
+      if (dead || age > LOCK_STALE_MS) {
+        // Only if it is still the same lock: another recorder may have broken it and taken it.
+        const again = Number(await readFile(lock, "utf8").catch(() => ""));
+        if (again === owner) await unlink(lock).catch(() => {});
+        continue;
+      }
       if (Date.now() > deadline) throw new Error(`cassette lock ${lock} is held`);
       await new Promise((r) => setTimeout(r, 10));
     }
@@ -421,9 +495,15 @@ async function writeEntry(source: SourceName, key: string, entry: Recorded): Pro
       const sorted = Object.fromEntries(
         Object.entries(cassette.entries).sort(([a], [b]) => a.localeCompare(b)),
       );
+      // A partial write (full disk, crash) leaves the previous cassette intact.
       const tmp = `${path}.${process.pid}.${++tmpCounter}.tmp`;
-      await writeFile(tmp, `${JSON.stringify({ version: 1, entries: sorted }, null, 2)}\n`);
-      await rename(tmp, path);
+      try {
+        await writeFile(tmp, `${JSON.stringify({ version: 1, entries: sorted }, null, 2)}\n`);
+        await rename(tmp, path);
+      } catch (error) {
+        await unlink(tmp).catch(() => {});
+        throw error;
+      }
     } finally {
       await release();
     }
@@ -435,6 +515,20 @@ async function writeEntry(source: SourceName, key: string, entry: Recorded): Pro
 
 // Writes from this process run one at a time; the lock file orders them with other processes.
 let writeQueue: Promise<unknown> = Promise.resolve();
+
+let lostRecordings = 0;
+
+/** Counts an answer that could not be recorded; the count is reported once when the process exits. */
+function recordingLost(): void {
+  if (lostRecordings++ === 0) {
+    process.once("exit", () => {
+      console.warn(
+        `[sources] SOURCE_CASSETTE=record: ${lostRecordings} answer(s) could not be recorded; ` +
+          `the cassettes in ${cassetteDir()} are incomplete. Record again.`,
+      );
+    });
+  }
+}
 
 function queueWrite(source: SourceName, key: string, entry: Recorded): Promise<void> {
   const next = writeQueue.then(() => writeEntry(source, key, entry));
@@ -576,7 +670,9 @@ function forCassette(req: SourceRequest, answer: Recorded): Recorded {
   if (answer.retryAfterMs !== undefined) entry.retryAfterMs = answer.retryAfterMs;
   const ok = answer.status >= 200 && answer.status <= 299;
   if (answer.json !== undefined) {
-    entry.json = scrubPayload(ok && req.scrub ? pick(answer.json, req.scrub) : answer.json);
+    entry.json = ok
+      ? scrubReadPayload(req.scrub ? pick(answer.json, req.scrub) : answer.json)
+      : scrubPayload(answer.json);
   } else {
     entry.text = scrubText(answer.text ?? "");
   }
@@ -609,6 +705,7 @@ export async function fetchJson<T>(req: SourceRequest): Promise<T> {
     } catch (error) {
       // The live answer is still good; only the recording is lost.
       console.error(`[sources] ${describeError(error)}`);
+      recordingLost();
     }
   }
 

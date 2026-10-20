@@ -3,8 +3,9 @@
  * (SOURCE_CASSETTE=record|replay, SOURCE_CASSETTE_DIR). Fetch is stubbed throughout.
  */
 
-import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFile, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,9 +20,16 @@ import {
   redactText,
   SourceError,
   scrubPayload,
+  scrubReadPayload,
   scrubText,
 } from "./http.js";
 import { html, json, never, stubFetch } from "./testing/fetchStub.js";
+
+// Pass-through, so one test can make a write fail half-way.
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, writeFile: vi.fn(actual.writeFile) };
+});
 
 const URL_A = "https://api.example.test/v1/thing?b=2&a=1";
 
@@ -162,11 +170,11 @@ describe("scrubbing", () => {
 
   it("redacts secrets inside text values, not only under secret keys", () => {
     const text = scrubText(
-      "Authorization: Bearer abc.def-123 then ?api_key=K1&key=K2&token=K3 and tvly-dev-XYZ123 " +
+      "Authorization: Bearer abc.def-123456789 then ?api_key=K1&key=K2&token=K3 and tvly-dev-XYZ123 " +
         `and BQ${"x1Y".repeat(30)} and ${"aB3".repeat(25)}`,
     );
 
-    for (const leaked of ["abc.def-123", "K1", "K2", "K3", "XYZ123", "x1Y", "aB3aB3"]) {
+    for (const leaked of ["abc.def-123456789", "K1", "K2", "K3", "XYZ123", "x1Y", "aB3aB3"]) {
       expect(text).not.toContain(leaked);
     }
   });
@@ -195,8 +203,11 @@ describe("scrubbing", () => {
   it("keeps ordinary links, dates and counts, and masks e-mails and phone numbers", () => {
     const text = scrubText(
       "Released 1990-10-02 (10016 plays), https://www.whosampled.com/Vanilla-Ice/ — " +
-        "write to fan.mail@example.org or call +1 (555) 123-4567.",
+        "write to fan.mail@example.org or call +1 (555) 123-4567. " +
+        "Artist e21857d5-3256-4547-afb3-4b6ded592596.",
     );
+
+    expect(text).toContain("e21857d5-3256-4547-afb3-4b6ded592596");
 
     expect(text).toContain("1990-10-02");
     expect(text).toContain("10016");
@@ -205,17 +216,47 @@ describe("scrubbing", () => {
     expect(text).not.toContain("123-4567");
   });
 
-  it("redacts credentials from error text, including a header value fetch echoes", () => {
-    process.env.TEST_SERVICE_API_KEY = "tvly-known-secret-value";
+  it("redacts a header value that fetch echoes in its error", () => {
+    // Not a known key and no token shape: only the header rule can catch it.
+    const error = new TypeError('Headers.append: "plain value 42\n" is an invalid header value.');
+
+    expect(describeError(error)).not.toContain("plain value 42");
+    expect(describeError(error)).toContain("invalid header value");
+  });
+
+  it("redacts the value of a configured credential wherever it appears", () => {
+    process.env.TEST_SERVICE_API_KEY = "plainsecretvalue123";
     try {
-      const error = new TypeError(
-        'Headers.append: "Bearer tvly-known-secret-value\n" is an invalid header value.',
+      expect(redactText("request for plainsecretvalue123 failed")).not.toContain(
+        "plainsecretvalue123",
       );
-      expect(describeError(error)).not.toContain("known-secret");
-      expect(redactText("echo tvly-known-secret-value")).not.toContain("known-secret");
+      expect(describeError(new Error("bad key plainsecretvalue123"))).not.toContain(
+        "plainsecretvalue123",
+      );
     } finally {
       delete process.env.TEST_SERVICE_API_KEY;
     }
+  });
+
+  it("never rewrites id-shaped values in data the pipeline reads", () => {
+    // A configured credential that happens to be part of an MBID must not alter the MBID.
+    process.env.TEST_SHORT_TOKEN = "0aa8294b";
+    try {
+      const ids = {
+        mbid: "0aa8294b-6332-4b65-b677-e3a1f8591d3b",
+        spotify: "3Fcfwhm8oRrBvBZ8KGhtea",
+        isrc: "USSB10000001",
+      };
+      expect(scrubReadPayload(ids)).toEqual(ids);
+    } finally {
+      delete process.env.TEST_SHORT_TOKEN;
+    }
+  });
+
+  it("keeps data the pipeline reads byte for byte: no e-mail or phone masking, long text", () => {
+    const text = `"1-800-273-8255" by Logic; booking@example.org; ${"x".repeat(1500)}`;
+
+    expect(scrubReadPayload({ content: text })).toEqual({ content: text });
   });
 
   it("cassette keys drop secret parameters in any case and URL user info", () => {
@@ -410,6 +451,71 @@ describe("cassettes", () => {
     expect(Object.keys(entries)).toHaveLength(30);
   });
 
+  it("a write that fails half-way leaves the previous cassette intact", async () => {
+    process.env.SOURCE_CASSETTE = "record";
+    stubFetch(() => json({ ok: true }));
+    await fetchJson({ source: "deezer", url: "https://api.deezer.test/first" });
+
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fsPromises.writeFile).mockImplementationOnce(async (path, data) => {
+      await actual.writeFile(path, String(data).slice(0, 25));
+      throw new Error("ENOSPC: no space left on device");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await fetchJson({ source: "deezer", url: "https://api.deezer.test/second" });
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    const entries = JSON.parse(readFileSync(join(dir, "deezer.json"), "utf8")).entries;
+    expect(Object.keys(entries)).toEqual(["GET https://api.deezer.test/first"]);
+    expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("breaks a lock left by a recorder that is no longer running", async () => {
+    // The pid of a process that has exited.
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    writeFileSync(join(dir, "deezer.json.lock"), String(dead));
+    process.env.SOURCE_CASSETTE = "record";
+    stubFetch(() => json({ ok: true }));
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+
+    const started = Date.now();
+    try {
+      await fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" });
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    expect(errors).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(2000);
+    const entries = JSON.parse(readFileSync(join(dir, "deezer.json"), "utf8")).entries;
+    expect(Object.keys(entries)).toEqual(["GET https://api.deezer.test/after-crash"]);
+    expect(existsSync(join(dir, "deezer.json.lock"))).toBe(false);
+  });
+
+  it("a record run that loses answers says how many when it ends", {
+    timeout: 30_000,
+  }, async () => {
+    const worker = join(dirname(fileURLToPath(import.meta.url)), "testing", "recordWorker.ts");
+    // A file where the cassette directory should be: every write fails.
+    const blocked = join(dir, "not-a-dir");
+    writeFileSync(blocked, "");
+
+    const { stderr } = await promisify(execFile)(
+      process.execPath,
+      ["--import", "tsx", worker, blocked, "lost", "3"],
+      { env: { ...process.env, SOURCE_CASSETTE: undefined, NODE_ENV: "test" } },
+    );
+
+    expect(stderr).toMatch(/3 answer\(s\) could not be recorded/);
+    expect(stderr.match(/could not be recorded/g)).toHaveLength(1);
+  });
+
   it("an unreadable cassette is a typed cassette_io error", async () => {
     process.env.SOURCE_CASSETTE = "replay";
     writeFileSync(join(dir, "spotify.json"), '{"version":1,"entries":{"GET ');
@@ -466,6 +572,22 @@ describe("cassettes", () => {
     process.env.SOURCE_CASSETTE = "replay";
     expect(credential("TEST_MISSING_KEY")).toBe("replay");
     vi.restoreAllMocks();
+  });
+
+  it("refuses an unknown SOURCE_CASSETTE value, at startup and per request", async () => {
+    process.env.SOURCE_CASSETTE = "recrod";
+    const net = stubFetch(() => json(live));
+    try {
+      await expect(fetchJson(request)).rejects.toThrow(
+        /SOURCE_CASSETTE: expected "record", "replay" or "off", got "recrod"/,
+      );
+      vi.resetModules();
+      await expect(import("./http.js")).rejects.toThrow(/SOURCE_CASSETTE/);
+      expect(net.calls).toHaveLength(0);
+    } finally {
+      delete process.env.SOURCE_CASSETTE;
+      vi.resetModules();
+    }
   });
 
   it("refuses a cassette mode in production, at startup and per request", async () => {

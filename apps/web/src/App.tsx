@@ -77,11 +77,13 @@ interface PhaseViewProps {
   logs: AgentLog[];
   trackData: TrackData | null;
   error: string | null;
+  errorCode: string | null;
   isLoading: boolean;
   isComplete: boolean;
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
+  retry: () => void;
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
   // Player props
   decryptMoreFactoidsStream: (
@@ -89,6 +91,7 @@ interface PhaseViewProps {
     trackArtist: string,
     existingIds: string[],
     onFactoid: (factoid: Factoid) => void,
+    signal?: AbortSignal,
   ) => Promise<void>;
   // Navigation
   onAnalysisComplete: (trackData: TrackData) => void;
@@ -115,11 +118,13 @@ const PhaseView = React.memo<PhaseViewProps>(
     logs,
     trackData,
     error,
+    errorCode,
     isLoading,
     isComplete,
     candidates,
     analyze,
     selectCandidate,
+    retry,
     searchSuggest,
     decryptMoreFactoidsStream,
     onAnalysisComplete,
@@ -142,10 +147,12 @@ const PhaseView = React.memo<PhaseViewProps>(
             logs={logs}
             trackData={trackData}
             error={error}
+            errorCode={errorCode}
             isLoading={isLoading}
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
+            retry={retry}
             searchSuggest={searchSuggest}
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
@@ -184,10 +191,12 @@ const PhaseView = React.memo<PhaseViewProps>(
             logs={logs}
             trackData={trackData}
             error={error}
+            errorCode={errorCode}
             isLoading={isLoading}
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
+            retry={retry}
             searchSuggest={searchSuggest}
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
@@ -198,6 +207,15 @@ const PhaseView = React.memo<PhaseViewProps>(
   },
 );
 
+/** What the app stores in each browser history entry. */
+interface HistoryEntry {
+  phase: AppPhase;
+  /** In-app entries behind this one. */
+  index: number;
+  /** Pushed when a search started; its result replaces it. */
+  search?: boolean;
+}
+
 const App: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>(AppPhase.ONBOARDING);
   const {
@@ -206,10 +224,12 @@ const App: React.FC = () => {
     trackData,
     candidates,
     error,
+    errorCode,
     isLoading,
     isComplete,
     analyze,
     selectCandidate,
+    retry,
     decryptMoreFactoidsStream,
     searchSuggest,
     reset,
@@ -364,50 +384,90 @@ const App: React.FC = () => {
   }, [reset, effectiveTrackData]);
 
   // ─── P1:15 Browser history support ────────────────────────────────────────
-  // Records the initial phase once on mount; later phases are pushed by navigation.
+  // One history entry per screen; the steps of an analysis add none. Each entry records how
+  // many in-app entries lie behind it (`index`). The entry a search pushes (`search`) is
+  // taken over by its result.
+  const entryRef = useRef<HistoryEntry>({ phase, index: 0 });
+  const writeHistory = useCallback((entry: HistoryEntry, mode: 'push' | 'replace') => {
+    entryRef.current = entry;
+    if (mode === 'push') window.history.pushState(entry, '');
+    else window.history.replaceState(entry, '');
+  }, []);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs only on mount
   useEffect(() => {
-    window.history.replaceState({ phase }, '');
+    writeHistory({ phase, index: 0 }, 'replace');
   }, []);
 
   useEffect(() => {
-    // Don't push during analysis (would create noise)
-    if (
-      status !== 'idle' &&
-      status !== 'complete' &&
-      status !== 'error' &&
-      phase === AppPhase.ONBOARDING
-    ) {
-      return;
+    const entry = entryRef.current;
+    // Already recorded: the initial entry, or the entry the browser just moved to.
+    if (entry.phase === phase) return;
+    if (entry.search && phase === AppPhase.DASHBOARD) {
+      writeHistory({ phase, index: entry.index }, 'replace');
+    } else {
+      writeHistory({ phase, index: entry.index + 1 }, 'push');
     }
-    window.history.pushState({ phase }, '');
-  }, [phase, status]);
+  }, [phase, writeHistory]);
+
+  // A search started on an entry with nothing of the app behind it (the first search after
+  // loading the page, or one after going back to the search) gets an entry of its own, so
+  // Back reaches the guard below instead of leaving the app. Called from the click or submit
+  // handler: an entry pushed without a user action may be skipped by the browser's Back.
+  const markSearchEntry = useCallback(() => {
+    const entry = entryRef.current;
+    if (entry.search || entry.index > 0) return;
+    writeHistory({ phase: AppPhase.ONBOARDING, index: entry.index + 1, search: true }, 'push');
+  }, [writeHistory]);
+
+  const startSearch = useCallback(
+    (query: string) => {
+      markSearchEntry();
+      return analyze(query);
+    },
+    [markSearchEntry, analyze],
+  );
+
+  const retrySearch = useCallback(() => {
+    markSearchEntry();
+    retry();
+  }, [markSearchEntry, retry]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (event.state?.phase) {
-        const targetPhase = event.state.phase as AppPhase;
-        // Guard: don't interrupt a running analysis
-        if (phase === AppPhase.ONBOARDING && isLoading) {
-          // Re-push current state to prevent navigation
-          window.history.pushState({ phase }, '');
-          return;
-        }
-        // Guard: don't navigate to dashboard/player without track data
-        if (
-          (targetPhase === AppPhase.DASHBOARD || targetPhase === AppPhase.PLAYER) &&
-          !effectiveTrackData
-        ) {
-          setPhase(AppPhase.ONBOARDING);
-          return;
-        }
-        setPhase(targetPhase);
+      const target = event.state as HistoryEntry | null;
+      const targetPhase = target?.phase;
+      if (!target || !targetPhase) return;
+      // Guard: don't interrupt a running analysis or an open track picker
+      if (phase === AppPhase.ONBOARDING && (isLoading || status === 'disambiguation')) {
+        // Re-push the entry the user was on to prevent navigation
+        writeHistory(entryRef.current, 'push');
+        return;
       }
+      entryRef.current = { phase: targetPhase, index: target.index ?? 0, search: target.search };
+      if (targetPhase === AppPhase.ONBOARDING) {
+        // Back from a result starts a new search; the result stays available to restore.
+        if (phase !== AppPhase.ONBOARDING) handleNewSearch();
+        return;
+      }
+      if (!effectiveTrackData) {
+        // Forward to a result left with Back: show it again, without a new analysis.
+        if (previousTrackDataRef.current) {
+          setOverrideTrackData(previousTrackDataRef.current);
+          setIsRestoredSession(true);
+          setPhase(targetPhase);
+        } else {
+          // Guard: don't navigate to dashboard/player without track data
+          setPhase(AppPhase.ONBOARDING);
+        }
+        return;
+      }
+      setPhase(targetPhase);
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [phase, isLoading, effectiveTrackData]);
+  }, [phase, isLoading, status, effectiveTrackData, handleNewSearch, writeHistory]);
 
   return (
     <Layout>
@@ -419,11 +479,13 @@ const App: React.FC = () => {
             logs={logs}
             trackData={effectiveTrackData}
             error={error}
+            errorCode={errorCode}
             isLoading={isLoading}
             isComplete={isComplete}
             candidates={candidates}
-            analyze={analyze}
+            analyze={startSearch}
             selectCandidate={selectCandidate}
+            retry={retrySearch}
             searchSuggest={searchSuggest}
             decryptMoreFactoidsStream={decryptMoreFactoidsStream}
             onAnalysisComplete={handleAnalysisComplete}

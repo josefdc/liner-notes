@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
+import soundfile as sf
 from fastapi.testclient import TestClient
 
 import main
@@ -189,27 +190,32 @@ def test_health_answers_head_for_wget_spider(monkeypatch):
         assert c.head("/health").status_code == 200
 
 
-def test_essentia_input_is_cut_to_the_decode_span(monkeypatch):
+def test_model_input_is_cut_to_the_decode_span(monkeypatch, tmp_path):
+    """The models read the decoded signal (no second decode), so the same 35 s at 16 kHz."""
     seen = []
-
-    def loader(**kwargs):
-        return lambda: np.zeros(16000 * 1800, dtype=np.float32)  # half an hour of audio
 
     def embed(audio):
         seen.append(len(audio))
-        return np.zeros((3, 8), dtype=np.float32)
+        return np.full((3, 8), 0.5, dtype=np.float32)
 
     def head(embeddings):
         return np.full((len(embeddings), 2), 0.5, dtype=np.float32)
 
-    monkeypatch.setattr(main, "MODELS_LOADED", True)
-    monkeypatch.setattr(main, "MonoLoader", loader, raising=False)
-    monkeypatch.setattr(main, "_musicnn_extractor", embed)
-    monkeypatch.setattr(main, "_effnet_extractor", embed)
-    for name in ("_valence_model", "_danceability_model", "_acousticness_model"):
-        monkeypatch.setattr(main, name, head)
-    monkeypatch.setattr(main, "_instrumentalness_model", head)
+    sr = 22050
+    t = np.arange(sr * 40) / sr  # 40 s of an A major triad
+    chord = sum(np.sin(2 * np.pi * f * t) for f in (220.0, 277.18, 329.63)) / 4
+    path = tmp_path / "long.wav"
+    sf.write(path, chord.astype(np.float32), sr)
 
-    features = main.analyze_perceptual_features("unused.mp3")
-    assert seen == [int(16000 * main.MAX_DECODE_SECONDS)] * 2
-    assert features["danceability"] == 0.5
+    monkeypatch.setattr(main, "MODELS_LOADED", True)
+    monkeypatch.setattr(main, "STYLE_TOP_K", 3)
+    models = {name: embed for name in ("styles", "effnet", "tags", "musicnn")}
+    models |= {name: head for name in ("valence", "danceability", "acousticness")}
+    models["instrumentalness"] = head
+    monkeypatch.setattr(main, "_models", models)
+    monkeypatch.setattr(main, "DISCOGS_STYLES", [f"style {i}" for i in range(8)])
+    monkeypatch.setattr(main, "MSD_TAGS", [f"tag {i}" for i in range(8)])
+
+    result = main.analyze_audio_file(str(path))
+    assert seen == [int(main.MODEL_SAMPLE_RATE * main.MAX_DECODE_SECONDS)] * 4
+    assert result["danceability"] == 0.5

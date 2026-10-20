@@ -2,15 +2,21 @@
 Audio analysis service for Liner Notes.
 
 Downloads a 30-second Deezer or Spotify preview and analyses it.
-Decoding goes through soundfile (libsndfile), which librosa 1.0 uses for every format.
+Decoding goes through soundfile (libsndfile), which librosa 1.0 uses for every format; the
+preview is decoded once and every step shares that signal.
 
-Measures:
-- tempo (librosa.beat.beat_track)
-- key and mode (Krumhansl-Kessler profiles on a constant-Q chromagram)
-- energy and notable moments
-- valence, danceability, acousticness and instrumentalness, when essentia-tensorflow is
-  installed (the "models" extra: uv sync --extra models) and the models are present and
-  verified (see download_models.py)
+The response has two layers:
+- the v1 fields (bpm, key, mode, energy, keyMoments and the perceptual scores), kept until
+  the API reads v2;
+- `v2`, AudioFeatures v2 from packages/contract (camelCase, as the contract names them):
+  a gate for too-short, silent and noise-like input, tempo and key with a confidence
+  (estimators.py), loudness, the beat grid, the energy contour, neutral sections and key
+  moments (signal_features.py), and the model fingerprint (Discogs styles, MusiCNN tags and
+  mood heads) when essentia-tensorflow is installed (the "models" extra) and the models are
+  present and verified (see download_models.py).
+
+A gate that does not pass nulls every v2 measurement and the v1 bpm, key, mode, key moments
+and perceptual scores: silence is never "C Major".
 
 Run locally:
     uv run uvicorn main:app --host 127.0.0.1 --port 3002
@@ -18,6 +24,7 @@ Run locally:
 Settings (environment variables, all optional):
     CORS_ORIGINS           comma-separated browser origins allowed to call the service
     AUDIO_SERVICE_TOKEN    shared secret; when set, /analyze requires X-Audio-Token
+    AUDIO_ESTIMATOR        tempo and key estimator: essentia (default when installed) or librosa
     MODELS_DIR             directory with the Essentia models (default: ./models)
     ANALYSIS_TIMEOUT_S     seconds allowed for decoding and analysis (default: 60)
     MAX_CONCURRENT_ANALYSES  analyses that run at once (default: 4)
@@ -28,9 +35,11 @@ Settings (environment variables, all optional):
 
 import asyncio
 import logging
+import math
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from typing import Any
 
 # Keep TensorFlow's C++ logging to warnings and errors.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -41,8 +50,12 @@ from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
+import estimators  # noqa: E402
+import signal_features  # noqa: E402
 from download_models import MODELS, is_verified, models_dir  # noqa: E402
+from estimators import Signals, krumhansl_key, select_estimator  # noqa: E402
 from guards import AnalysisSlots, RequestGuardMiddleware, ServiceBusyError  # noqa: E402
+from model_labels import DISCOGS_STYLES, MSD_TAGS  # noqa: E402
 from preview import PreviewDownloadError, PreviewURLError, download_preview  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -55,7 +68,6 @@ logger = logging.getLogger("audio")
 ESSENTIA_AVAILABLE = False
 try:
     from essentia.standard import (
-        MonoLoader,
         TensorflowPredict2D,
         TensorflowPredictEffnetDiscogs,
         TensorflowPredictMusiCNN,
@@ -71,15 +83,20 @@ except ImportError:
 
 # Version of the analysis output: bump it whenever a measurement can change for the same input
 # (algorithm, parameters, decoder or model change). Clients use it to tell results apart.
-ANALYZER_VERSION = "1.1.0"
+ANALYZER_VERSION = "2.0.0"
+# AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
+AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
 ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
 MAX_DECODE_SECONDS = 35.0
 # Previews are decoded to this rate, and the beat tracker's onset envelope uses this hop
-# (librosa's defaults). Together they set the tempo resolution: 60 * SAMPLE_RATE /
-# (BEAT_HOP_LENGTH * lag) BPM for a whole lag in frames.
-SAMPLE_RATE = 22050
-BEAT_HOP_LENGTH = 512
+# (librosa's defaults). Together they set the resolution of the v1 tempo: 60 * SAMPLE_RATE /
+# (BEAT_HOP_LENGTH * lag) BPM for a whole lag in frames. The v2 tempo is refined from the beat
+# positions and is not limited to that grid.
+SAMPLE_RATE = estimators.SAMPLE_RATE
+BEAT_HOP_LENGTH = estimators.HOP_LENGTH
+# The embedding models read 16 kHz audio.
+MODEL_SAMPLE_RATE = 16000
 # Analyses run in worker threads, at most this many at once. Further requests wait up to
 # QUEUE_WAIT_S for a slot (at most MAX_QUEUED_ANALYSES of them) before a 503. The wait stays
 # well below the API's 30 s client timeout and does not count against ANALYSIS_TIMEOUT_S.
@@ -87,6 +104,11 @@ MAX_CONCURRENT_ANALYSES = int(os.environ.get("MAX_CONCURRENT_ANALYSES") or 4)
 MAX_QUEUED_ANALYSES = int(os.environ.get("MAX_QUEUED_ANALYSES") or 16)
 QUEUE_WAIT_S = float(os.environ.get("QUEUE_WAIT_S") or 10)
 RETRY_AFTER_S = 5
+# Discogs styles reported in the fingerprint, highest activation first.
+STYLE_TOP_K = 10
+# Licence of the MTG model weights (essentia.upf.edu/models: CC BY-NC-SA 4.0, a proprietary
+# licence on request).
+MODEL_LICENCE = "CC BY-NC-SA 4.0"
 
 
 def _cors_origins() -> list[str]:
@@ -104,23 +126,25 @@ def _service_token() -> str:
 # Thread pool for CPU-bound audio processing, one thread per analysis slot
 executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ANALYSES)
 
+# Tempo and key estimator for v2 (AUDIO_ESTIMATOR; Essentia when installed).
+ESTIMATOR = select_estimator()
+
 # =============================================================================
 # Essentia Model Loading
 # =============================================================================
 
-_musicnn_extractor = None
-_effnet_extractor = None
-_valence_model = None
-_danceability_model = None
-_acousticness_model = None
-_instrumentalness_model = None
+# Loaded predictors by role; empty without the models.
+_models: dict[str, Any] = {}
+
+
+def model_ref(name: str) -> dict:
+    """The contract's ModelRef for a model in download_models.MODELS."""
+    model = next(m for m in MODELS if m.name == name)
+    return {"id": model.filename.removesuffix(".pb"), "licence": MODEL_LICENCE}
 
 
 def _init_essentia_models() -> bool:
     """Load the Essentia models once their checksums are verified. Returns True on success."""
-    global _musicnn_extractor, _effnet_extractor
-    global _valence_model, _danceability_model, _acousticness_model, _instrumentalness_model
-
     if not ESSENTIA_AVAILABLE:
         logger.info(
             "essentia-tensorflow is not installed (uv sync --extra models); "
@@ -138,54 +162,60 @@ def _init_essentia_models() -> bool:
         )
         return False
 
-    model_files = {m.name: os.path.join(directory, m.filename) for m in MODELS}
+    files = {m.name: os.path.join(directory, m.filename) for m in MODELS}
     try:
-        # MusiCNN: raw audio → 200-dim embeddings
-        _musicnn_extractor = TensorflowPredictMusiCNN(
-            graphFilename=model_files["musicnn"],
-            output="model/dense/BiasAdd",
-        )
-
-        # EffNet-Discogs: raw audio → 1280-dim embeddings
-        _effnet_extractor = TensorflowPredictEffnetDiscogs(
-            graphFilename=model_files["effnet"],
-            output="PartitionedCall:1",
-        )
-
-        # Classification heads
-        # DEAM: regression model → [valence, arousal]
-        _valence_model = TensorflowPredict2D(
-            graphFilename=model_files["valence"],
-            output="model/Identity",
-        )
-
-        # Danceability: softmax → [danceable, not_danceable]
-        _danceability_model = TensorflowPredict2D(
-            graphFilename=model_files["danceability"],
-            output="model/Softmax",
-        )
-
-        # Mood acoustic: softmax → [acoustic, non_acoustic]
-        _acousticness_model = TensorflowPredict2D(
-            graphFilename=model_files["acousticness"],
-            output="model/Softmax",
-        )
-
-        # Voice/instrumental: softmax → [instrumental, voice]
-        _instrumentalness_model = TensorflowPredict2D(
-            graphFilename=model_files["instrumentalness"],
-            output="model/Softmax",
-        )
+        # Output nodes and class order follow each model's metadata file in the MTG model zoo.
+        # The predictors take one output each, so the two backbones are loaded twice: once for
+        # their predictions and once for the embeddings the heads read.
+        loaded = {
+            # EffNet-Discogs: sigmoid activations over the 400 Discogs styles, and embeddings.
+            "styles": TensorflowPredictEffnetDiscogs(
+                graphFilename=files["effnet"], output="PartitionedCall:0"
+            ),
+            "effnet": TensorflowPredictEffnetDiscogs(
+                graphFilename=files["effnet"], output="PartitionedCall:1"
+            ),
+            # MusiCNN: sigmoid activations over the 50 MSD tags, and 200-dim embeddings.
+            "tags": TensorflowPredictMusiCNN(
+                graphFilename=files["musicnn"], output="model/Sigmoid"
+            ),
+            "musicnn": TensorflowPredictMusiCNN(
+                graphFilename=files["musicnn"], output="model/dense/BiasAdd"
+            ),
+            # DEAM regression on MusiCNN embeddings: [valence, arousal] on the 1-9 DEAM scale.
+            "valence": TensorflowPredict2D(graphFilename=files["valence"], output="model/Identity"),
+            # Softmax heads: [danceable, not_danceable] and [instrumental, voice] on MusiCNN,
+            # [acoustic, non_acoustic] on EffNet.
+            "danceability": TensorflowPredict2D(
+                graphFilename=files["danceability"], output="model/Softmax"
+            ),
+            "instrumentalness": TensorflowPredict2D(
+                graphFilename=files["instrumentalness"], output="model/Softmax"
+            ),
+            "acousticness": TensorflowPredict2D(
+                graphFilename=files["acousticness"], output="model/Softmax"
+            ),
+        }
     except Exception:
         logger.exception("Failed to load the Essentia models")
         return False
 
+    _models.update(loaded)
     logger.info("Essentia models loaded")
     return True
 
 
 # Load models at module level (once per worker)
 MODELS_LOADED = _init_essentia_models()
+
+
+def analyzer_version_v2() -> str:
+    """ANALYZER_VERSION plus the estimator and, when loaded, every model id (a cache key)."""
+    parts = [ANALYZER_VERSION, ESTIMATOR.name]
+    if MODELS_LOADED:
+        parts += [model_ref(m.name)["id"] for m in MODELS]
+    return "+".join(parts)
+
 
 # =============================================================================
 # Data Models
@@ -210,19 +240,21 @@ class KeyMoment(BaseModel):
 class AudioAnalysisResult(BaseModel):
     """Analysis result with extracted features"""
 
-    bpm: int | None  # null when no tempo was found
-    key: str | None  # null when no key could be measured
+    bpm: int | None  # null when no tempo was found or the gate did not pass
+    key: str | None  # null when no key could be measured or the gate did not pass
     mode: str | None  # "Major" or "Minor"; null with key
-    energy: float  # 0-1 scale
+    energy: float | None  # loudness on 0-1 (see v1_energy); null when nothing was decoded
     duration: float  # seconds
     source: str = "analyzed"  # "analyzed" or "estimated"
     analyzer_version: str  # ANALYZER_VERSION of the service that measured it
     keyMoments: list[KeyMoment] = []  # Key moments detected in the audio
-    # Perceptual features from Essentia (None when models unavailable)
+    # Perceptual features from Essentia (None when models unavailable or the gate did not pass)
     valence: float | None = None
     danceability: float | None = None
     acousticness: float | None = None
     instrumentalness: float | None = None
+    # AudioFeatures v2 (packages/contract/schemas/audio-features.schema.json)
+    v2: dict[str, Any] | None = None
 
 
 class HealthResponse(BaseModel):
@@ -237,347 +269,248 @@ class HealthResponse(BaseModel):
 # Audio Analysis Functions
 # =============================================================================
 
-# Pitch class mapping
-PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-# Krumhansl-Kessler key profiles for major and minor
-# These are correlation weights for determining key
-MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+# v1 energy: the mean frame RMS (DC removed) in dBFS, mapped linearly from
+# [V1_ENERGY_FLOOR_DBFS, 0] dBFS to [0, 1]. Digital silence and a pure DC offset measure 0; a
+# click track at 0.8 peak (mean RMS 0.011, -39 dBFS) about 0.35; full-scale noise near 1.
+V1_ENERGY_FLOOR_DBFS = -60.0
 
 
-def detect_key_krumhansl(chroma: np.ndarray) -> tuple[str | None, str | None]:
-    """
-    Detect key using Krumhansl-Kessler algorithm.
+def v1_energy(loudness: signal_features.Levels | None) -> float | None:
+    """The v1 `energy` field: loudness on 0-1 (not perceptual energy), None without audio."""
+    if loudness is None:
+        return None
+    if not loudness.mean > 0:
+        return 0.0
+    dbfs = 20 * math.log10(loudness.mean)
+    return round(float(np.clip((dbfs - V1_ENERGY_FLOOR_DBFS) / -V1_ENERGY_FLOOR_DBFS, 0, 1)), 3)
 
-    Args:
-        chroma: Chromagram (12 x time frames)
 
-    Returns:
-        Tuple of (key, mode) e.g., ("C", "Major"), or (None, None) when the chroma profile is
-        flat or undefined (e.g. digital silence) — never a default key. Noise or unpitched
-        audio still yields the best-correlating key.
-    """
-    # Sum chroma over time to get overall pitch class distribution
-    chroma_sum = np.sum(chroma, axis=1)
-    chroma_sum = chroma_sum / (np.sum(chroma_sum) + 1e-10)  # Normalize
+def v1_tempo(signals: Signals) -> int | None:
+    """librosa.beat.beat_track's tempo, rounded (v1; unchanged until the API reads v2)."""
+    tempo, _ = librosa.beat.beat_track(
+        onset_envelope=signals.onset_envelope, sr=signals.sr, hop_length=BEAT_HOP_LENGTH
+    )
+    bpm = float(np.atleast_1d(tempo)[0]) if np.size(tempo) else 0.0
+    return round(bpm) if bpm > 0 and np.isfinite(bpm) else None
 
-    if not np.all(np.isfinite(chroma_sum)) or np.ptp(chroma_sum) < 1e-6:
+
+def v1_key(signals: Signals) -> tuple[str | None, str | None]:
+    """Krumhansl-Kessler key on the constant-Q chromagram, as ("A", "Major") (v1)."""
+    found = krumhansl_key(signals.chroma_mean)
+    if found is None:
         return None, None
-
-    best_corr = -2
-    best_key = 0
-    best_mode = "Major"
-
-    # Try all 12 keys for both major and minor
-    for shift in range(12):
-        # Rotate the chroma to align with each potential key
-        rotated = np.roll(chroma_sum, -shift)
-
-        # Correlate with major profile
-        major_corr = np.corrcoef(rotated, MAJOR_PROFILE)[0, 1]
-        if major_corr > best_corr:
-            best_corr = major_corr
-            best_key = shift
-            best_mode = "Major"
-
-        # Correlate with minor profile
-        minor_corr = np.corrcoef(rotated, MINOR_PROFILE)[0, 1]
-        if minor_corr > best_corr:
-            best_corr = minor_corr
-            best_key = shift
-            best_mode = "Minor"
-
-    if best_corr == -2:  # every correlation was undefined
-        return None, None
-    return PITCH_CLASSES[best_key], best_mode
+    tonic, mode, _ = found
+    return tonic, mode.capitalize()
 
 
-def compute_energy(y: np.ndarray) -> float:
+def _mean_head(head, embeddings: np.ndarray, column: int) -> float:
+    return float(np.mean(head(embeddings)[:, column]))
+
+
+def _model_score(value: float, low: float, high: float, name: str) -> dict:
+    # Regression outputs can leave the scale the head was trained on; they are clipped to it.
+    return {
+        "value": round(float(np.clip(value, low, high)), 4),
+        "range": [low, high],
+        "model": model_ref(name),
+        "basis": "model",
+    }
+
+
+def fingerprint(audio_16k: np.ndarray) -> dict | None:
     """
-    Compute a normalized energy metric (0-1).
-    Based on RMS energy relative to typical music ranges.
-    """
-    rms = librosa.feature.rms(y=y)[0]
-    mean_rms = np.mean(rms)
-
-    # Normalize to 0-1 range (typical RMS for music is 0.05-0.3)
-    energy = np.clip((mean_rms - 0.02) / 0.25, 0, 1)
-    return float(energy)
-
-
-def detect_key_moments(y: np.ndarray, sr: int) -> list[dict]:
-    """
-    Detect significant moments in the audio using librosa.
-
-    Detects:
-    - Energy peaks/drops (RMS analysis)
-    - Beat onsets (librosa.onset.onset_detect)
-    - Harmonic changes (chroma variance)
-    - Silence breaks (amplitude thresholds)
-
-    Returns:
-        List of key moment dictionaries sorted by time
-    """
-    moments = []
-
-    # 1. RMS Energy analysis for peaks/drops
-    rms = librosa.feature.rms(y=y)[0]
-    rms_times = librosa.times_like(rms, sr=sr)
-
-    # Find energy peaks (top 10% of energy moments)
-    if len(rms) > 0:
-        threshold = np.percentile(rms, 90)
-        peak_indices = np.where(rms > threshold)[0]
-
-        # Cluster nearby peaks and take representative (at least 2 seconds apart)
-        last_peak_time = -3.0
-        for idx in peak_indices:
-            if idx < len(rms_times):
-                current_time = float(rms_times[idx])
-                if current_time - last_peak_time > 2.0:
-                    moments.append(
-                        {
-                            "time": round(current_time, 2),
-                            "type": "energy_peak",
-                            "intensity": float(min(rms[idx] / (threshold + 1e-10), 1.0)),
-                            "description": "Energy peak / Drop",
-                        }
-                    )
-                    last_peak_time = current_time
-
-    # 2. Energy drops (sudden decrease in energy)
-    if len(rms) > 1:
-        rms_diff = np.diff(rms)
-        drop_threshold = np.percentile(rms_diff, 5)  # Bottom 5% = sudden drops
-        drop_indices = np.where(rms_diff < drop_threshold)[0]
-
-        for idx in drop_indices[:3]:  # Limit to top 3 drops
-            if idx < len(rms_times):
-                moments.append(
-                    {
-                        "time": round(float(rms_times[idx]), 2),
-                        "type": "energy_drop",
-                        "intensity": float(min(abs(rms_diff[idx] / (drop_threshold - 1e-10)), 1.0)),
-                        "description": "Breakdown / Drop",
-                    }
-                )
-
-    # 3. Onset detection for significant beat transitions
-    try:
-        onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units="frames")
-        onset_times = librosa.frames_to_time(onset_frames, sr=sr)
-        onset_strength = librosa.onset.onset_strength(y=y, sr=sr)
-
-        if len(onset_frames) > 0 and len(onset_strength) > 0:
-            # Get onset strengths at detected frames
-            valid_frames = onset_frames[onset_frames < len(onset_strength)]
-            if len(valid_frames) > 0:
-                frame_strengths = onset_strength[valid_frames]
-                strength_threshold = np.percentile(onset_strength, 85)
-
-                # Find significant onsets
-                for i, _ in enumerate(valid_frames[:10]):
-                    if frame_strengths[i] > strength_threshold and i < len(onset_times):
-                        moments.append(
-                            {
-                                "time": round(float(onset_times[i]), 2),
-                                "type": "onset",
-                                "intensity": 0.8,
-                                "description": "Beat transition",
-                            }
-                        )
-    except Exception:
-        pass  # Onset detection can fail on some audio
-
-    # 4. Harmonic changes via chroma variance
-    try:
-        chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-        chroma_times = librosa.times_like(chroma, sr=sr)
-
-        if chroma.shape[1] > 10:
-            # Calculate rolling variance of chroma
-            window_size = 10
-            chroma_var = np.array(
-                [np.var(chroma[:, max(0, i - window_size) : i + 1]) for i in range(chroma.shape[1])]
-            )
-
-            # Find sudden harmonic changes
-            var_threshold = np.percentile(chroma_var, 90)
-            harmonic_changes = np.where(chroma_var > var_threshold)[0]
-
-            last_harmonic_time = -3.0
-            for idx in harmonic_changes[:5]:
-                if idx < len(chroma_times):
-                    current_time = float(chroma_times[idx])
-                    if current_time - last_harmonic_time > 2.0:
-                        moments.append(
-                            {
-                                "time": round(current_time, 2),
-                                "type": "harmonic_change",
-                                "intensity": 0.7,
-                                "description": "Harmonic shift",
-                            }
-                        )
-                        last_harmonic_time = current_time
-    except Exception:
-        pass  # Chroma analysis can fail on some audio
-
-    # 5. Silence detection
-    silence_threshold = 0.01
-    silence_indices = np.where(rms < silence_threshold)[0]
-
-    if len(silence_indices) > 0:
-        last_silence_time = -2.0
-        for idx in silence_indices[:3]:
-            if idx < len(rms_times):
-                current_time = float(rms_times[idx])
-                if current_time - last_silence_time > 1.0 and current_time > 0.5:
-                    moments.append(
-                        {
-                            "time": round(current_time, 2),
-                            "type": "silence",
-                            "intensity": 0.5,
-                            "description": "Silence break",
-                        }
-                    )
-                    last_silence_time = current_time
-
-    # Sort by time and deduplicate (remove moments within 0.5s of each other)
-    moments.sort(key=lambda x: x["time"])
-
-    deduplicated = []
-    last_time = -1.0
-    for m in moments:
-        if m["time"] - last_time > 0.5:
-            deduplicated.append(m)
-            last_time = m["time"]
-
-    return deduplicated[:10]  # Return top 10 moments
-
-
-def analyze_perceptual_features(file_path: str) -> dict:
-    """
-    Analyze perceptual audio features using Essentia TensorFlow models.
-
-    Uses pre-trained MusiCNN and EffNet-Discogs models from the MTG model zoo:
-    - Valence: DEAM regression model (emotional positivity, 0=sad to 1=happy)
-    - Danceability: MusiCNN classifier (probability of being danceable)
-    - Acousticness: EffNet classifier (probability of being acoustic)
-    - Instrumentalness: MusiCNN classifier (probability of being instrumental)
-
-    All models process audio at 16kHz. MusiCNN embeddings are computed once
-    and reused for valence, danceability, and instrumentalness heads.
-
-    Returns:
-        dict with valence, danceability, acousticness, instrumentalness (all 0-1),
-        or empty dict if models are unavailable.
+    The model fingerprint of the v2 block: Discogs style activations (top STYLE_TOP_K),
+    MusiCNN tag activations (all 50) and the mood heads, averaged over the model patches.
+    Activations are scores, not probabilities. None when the models are not loaded or the
+    backbones fail; a head that fails is null on its own.
     """
     if not MODELS_LOADED:
-        return {}
-
+        return None
     try:
-        # Load audio at 16kHz mono (required by the embedding models)
-        audio = MonoLoader(filename=file_path, sampleRate=16000, resampleQuality=4)()
-        # MonoLoader always decodes the whole file; keep the same span librosa analyses.
-        audio = audio[: int(16000 * MAX_DECODE_SECONDS)]
-
-        # MusiCNN embeddings (200-dim per frame, reused for 3 classification heads)
-        musicnn_embeddings = _musicnn_extractor(audio)
-
-        # --- Valence (DEAM regression) ---
-        # Output shape: (N, 2) → columns are [valence, arousal] per frame
-        valence_preds = _valence_model(musicnn_embeddings)
-        valence_mean = np.mean(valence_preds, axis=0)
-        valence_raw = float(valence_mean[0])  # First column = valence
-
-        # DEAM annotations are in [1, 9]; normalize to [0, 1]
-        if valence_raw > 1.5:
-            valence = (valence_raw - 1.0) / 8.0
-        else:
-            # Already in ~[0, 1] range (some model versions output normalized values)
-            valence = valence_raw
-        valence = float(np.clip(valence, 0, 1))
-
-        # --- Danceability (softmax classifier) ---
-        # Output shape: (N, 2) → [danceable, not_danceable] per frame
-        dance_preds = _danceability_model(musicnn_embeddings)
-        danceability = float(np.clip(np.mean(dance_preds[:, 0]), 0, 1))
-
-        # --- Instrumentalness (softmax classifier) ---
-        # Output shape: (N, 2) → [instrumental, voice] per frame
-        inst_preds = _instrumentalness_model(musicnn_embeddings)
-        instrumentalness = float(np.clip(np.mean(inst_preds[:, 0]), 0, 1))
-
-        # --- Acousticness (EffNet-based, separate embedding model) ---
-        # EffNet embeddings: 1280-dim per frame
-        effnet_embeddings = _effnet_extractor(audio)
-        # Output shape: (N, 2) → [acoustic, non_acoustic] per frame
-        acoustic_preds = _acousticness_model(effnet_embeddings)
-        acousticness = float(np.clip(np.mean(acoustic_preds[:, 0]), 0, 1))
-
-        return {
-            "valence": round(valence, 3),
-            "danceability": round(danceability, 3),
-            "acousticness": round(acousticness, 3),
-            "instrumentalness": round(instrumentalness, 3),
-        }
-
+        styles = np.mean(_models["styles"](audio_16k), axis=0)
+        effnet = _models["effnet"](audio_16k)
+        tags = np.mean(_models["tags"](audio_16k), axis=0)
+        musicnn = _models["musicnn"](audio_16k)
     except Exception as e:
-        logger.warning("Essentia perceptual analysis failed: %s", e)
-        return {}
+        logger.warning("Essentia model analysis failed: %s", e)
+        return None
+
+    def head(fn):
+        try:
+            return fn()
+        except Exception as e:
+            logger.warning("Essentia head failed: %s", e)
+            return None
+
+    deam = head(lambda: np.mean(_models["valence"](musicnn), axis=0))
+    top = np.argsort(styles)[::-1][:STYLE_TOP_K]
+    return {
+        "styles": {
+            "model": model_ref("effnet"),
+            "top": [{"label": DISCOGS_STYLES[i], "score": round(float(styles[i]), 4)} for i in top],
+            "basis": "model",
+        },
+        "tags": {
+            "model": model_ref("musicnn"),
+            "scores": [
+                {"label": MSD_TAGS[i], "score": round(float(tags[i]), 4)}
+                for i in np.argsort(tags)[::-1]
+            ],
+            "basis": "model",
+        },
+        "moods": {
+            "danceability": head(
+                lambda: _model_score(
+                    _mean_head(_models["danceability"], musicnn, 0), 0, 1, "danceability"
+                )
+            ),
+            "acoustic": head(
+                lambda: _model_score(
+                    _mean_head(_models["acousticness"], effnet, 0), 0, 1, "acousticness"
+                )
+            ),
+            "instrumental": head(
+                lambda: _model_score(
+                    _mean_head(_models["instrumentalness"], musicnn, 0), 0, 1, "instrumentalness"
+                )
+            ),
+            # One DEAM head ("valence" in download_models) gives both, on DEAM's 1-9 scale.
+            "valence": None if deam is None else _model_score(deam[0], 1, 9, "valence"),
+            "arousal": None if deam is None else _model_score(deam[1], 1, 9, "valence"),
+        },
+    }
+
+
+def v1_perceptual(fp: dict | None) -> dict:
+    """The v1 perceptual fields from the fingerprint, all on 0-1."""
+    moods = (fp or {}).get("moods") or {}
+
+    def value(name: str) -> float | None:
+        score = moods.get(name)
+        return None if score is None else round(score["value"], 3)
+
+    valence = value("valence")
+    return {
+        # DEAM's 1-9 scale mapped linearly onto 0-1 (no longer switching mapping at 1.5).
+        "valence": None if valence is None else round((valence - 1.0) / 8.0, 3),
+        "danceability": value("danceability"),
+        "acousticness": value("acoustic"),
+        "instrumentalness": value("instrumental"),
+    }
+
+
+def _signal_block(**fields) -> dict:
+    return {**fields, "basis": "signal"}
+
+
+def analyze_signals(signals: Signals, estimator=None) -> dict:
+    """The v1 fields and the v2 block for one decoded preview."""
+    estimator = estimator or ESTIMATOR
+    duration = signals.duration
+    loudness = signal_features.levels(signals) if signals.native.size else None
+    gate = signal_features.check_gate(signals, loudness)
+
+    v2: dict[str, Any] = {
+        "version": AUDIO_FEATURES_VERSION,
+        "analyzerVersion": analyzer_version_v2(),
+        "window": {"kind": "preview-30s", "durationSeconds": round(duration, 3)},
+        "gate": {"passed": gate.passed, "reason": gate.reason},
+        "tempo": None,
+        "key": None,
+        "loudness": None,
+        "beats": None,
+        "energyContour": None,
+        "sections": None,
+        "keyMoments": [],
+        "fingerprint": None,
+    }
+    result: dict[str, Any] = {
+        "bpm": None,
+        "key": None,
+        "mode": None,
+        "energy": v1_energy(loudness),
+        "duration": round(duration, 2),
+        "keyMoments": [],
+        **v1_perceptual(None),
+        "v2": v2,
+    }
+    if not gate.passed:
+        return result
+
+    tempo = _estimate(estimator.tempo, signals, "tempo")
+    key = _estimate(estimator.key, signals, "key")
+    harmonic = signal_features.harmony(signals, tempo.beats if tempo else None)
+    moments = signal_features.key_moments(signals, loudness, harmonic)
+    fp = fingerprint(signals.at(MODEL_SAMPLE_RATE))
+
+    if tempo is not None:
+        raw = tempo.raw_confidence
+        v2["tempo"] = _signal_block(
+            bpm=round(float(tempo.bpm), 2),
+            confidence=None if tempo.confidence is None else round(tempo.confidence, 3),
+            rawConfidence=None if raw is None else {"value": round(raw[0], 3), "range": [*raw[1]]},
+            method=tempo.method,
+        )
+        times = np.sort(np.clip(np.asarray(tempo.beats, dtype=float), 0.0, duration))
+        v2["beats"] = _signal_block(
+            times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]
+        )
+    if key is not None:
+        v2["key"] = _signal_block(
+            tonic=key.tonic,
+            mode=key.mode,
+            strength=None if key.strength is None else round(key.strength, 3),
+            profile=key.profile,
+            method=key.method,
+        )
+    level_method = (
+        f"frame RMS, {signal_features.RMS_FRAME}-sample frames at {signals.sr} Hz, DC removed"
+    )
+    v2["loudness"] = _signal_block(rmsMean=round(loudness.mean, 5), method=f"mean {level_method}")
+    v2["energyContour"] = _signal_block(
+        hopSeconds=round(loudness.hop_seconds, 5),
+        values=[round(float(v), 5) for v in loudness.frames],
+        method=level_method,
+    )
+    v2["sections"] = _signal_block(segments=harmonic.segments, method=harmonic.method)
+    v2["keyMoments"] = moments
+    v2["fingerprint"] = fp
+
+    v1_key_name, v1_mode = v1_key(signals)
+    result.update(
+        bpm=v1_tempo(signals),
+        key=v1_key_name,
+        mode=v1_mode,
+        keyMoments=moments,
+        **v1_perceptual(fp),
+    )
+    return result
+
+
+def _estimate(method, signals: Signals, what: str):
+    try:
+        return method(signals)
+    except Exception:
+        logger.warning("The %s estimate failed; reporting it as missing", what, exc_info=True)
+        return None
+
+
+def decode(file_path: str) -> Signals:
+    """
+    Decode a file once, downmixed to mono at its own rate; the analysis resamples it (soxr)
+    once per rate it needs. librosa 1.0 decodes with soundfile (libsndfile 1.1+ reads MP3).
+    Previews are 30 s; never decode more than MAX_DECODE_SECONDS, whatever the file claims.
+    """
+    native, native_sr = librosa.load(file_path, sr=None, mono=True, duration=MAX_DECODE_SECONDS)
+    return Signals(native, native_sr)
 
 
 def analyze_audio_file(file_path: str) -> dict:
     """
-    Perform full audio analysis on a file.
-
-    Returns dict with bpm, key, mode, energy, duration, keyMoments,
-    and optionally valence, danceability, acousticness, instrumentalness.
+    Analyse a file: the v1 fields (bpm, key, mode, energy, duration, keyMoments and the
+    perceptual scores) plus the `v2` block.
     """
-    # librosa 1.0 decodes with soundfile (libsndfile 1.1+ reads MP3) and resamples with soxr.
-    # Previews are 30 s; never decode more than that, whatever the file claims.
-    y, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True, duration=MAX_DECODE_SECONDS)
-
-    # Get duration
-    duration = librosa.get_duration(y=y, sr=sr)
-
-    # Beat tracking for BPM
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr, hop_length=BEAT_HOP_LENGTH)
-
-    # Handle tempo being an array in newer librosa versions
-    # No tempo found is reported as null, never as a default.
-    if isinstance(tempo, np.ndarray):
-        bpm = float(tempo[0]) if len(tempo) > 0 else None
-    else:
-        bpm = float(tempo)
-    if bpm is not None and not (bpm > 0 and np.isfinite(bpm)):
-        bpm = None
-
-    # Chromagram for key detection
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    key, mode = detect_key_krumhansl(chroma)
-
-    # Energy
-    energy = compute_energy(y)
-
-    # Detect key moments (drops, peaks, transitions)
-    key_moments = detect_key_moments(y, sr)
-
-    result = {
-        "bpm": round(bpm) if bpm is not None else None,
-        "key": key,
-        "mode": mode,
-        "energy": round(energy, 3),
-        "duration": round(duration, 2),
-        "keyMoments": key_moments,
-    }
-
-    # Perceptual features via Essentia (if models are loaded)
-    perceptual = analyze_perceptual_features(file_path)
-    result.update(perceptual)
-
-    return result
+    return analyze_signals(decode(file_path))
 
 
 class AnalysisTimeoutError(Exception):
@@ -622,8 +555,9 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
     """
     Analyze a Deezer or Spotify preview URL.
 
-    Measures BPM, key, mode and energy from the 30-second preview. When the Essentia models
-    are loaded, also estimates valence, danceability, acousticness and instrumentalness.
+    Measures BPM, key, mode and energy from the 30-second preview, and the AudioFeatures v2
+    block (`v2`). When the Essentia models are loaded, also estimates valence, danceability,
+    acousticness and instrumentalness (and the v2 fingerprint).
     Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
     """
     slots: AnalysisSlots = http_request.app.state.analysis_slots
@@ -666,6 +600,7 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
         danceability=result.get("danceability"),
         acousticness=result.get("acousticness"),
         instrumentalness=result.get("instrumentalness"),
+        v2=result.get("v2"),
     )
 
 

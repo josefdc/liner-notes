@@ -10,10 +10,9 @@ as MP3 (the preview format), so the tests also cover decoding through libsndfile
 - a click track and the triad as 44.1 kHz stereo MP3, like a real preview, with the material
   split across the channels so that only a correct downmix (and resampling) gives the answer.
 
-Known gaps are marked xfail(strict=True, raises=AssertionError) with the measured behaviour in
-the reason: the analyzer has no minimum-length or confidence gate yet, and its energy is not a
-loudness measure. A strict xfail fails as soon as the gap is closed, so the marker has to be
-removed along with it; raises=AssertionError keeps a crash from passing as the known gap.
+These tests pin the v1 fields. The gate (signal_features.check_gate) nulls the v1 bpm, key and
+mode of too-short, silent and noise-like input; energy is the mean RMS level in dBFS on 0-1.
+The v2 block has its own tests in test_v2.py.
 """
 
 import math
@@ -223,34 +222,32 @@ def test_silence_has_no_tempo_and_no_key(analyse, fmt):
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_one_second_triad_measures_like_the_long_one(analyse, fmt):
-    """A 1 s cut of a steady chord gets the same key, mode and energy as 10 s of it."""
+def test_one_second_triad_is_too_short_for_a_key(analyse, fmt):
+    """A 1 s cut of a steady chord gets no key or tempo, but the same energy as 10 s of it."""
     short = analyse(a_major_triad(seconds=1.0, gain=0.4), fmt)
     long = analyse(a_major_triad(seconds=10.0, gain=0.4), fmt)
     # Neither 0 nor clipped at 1, so comparing the two energies means something.
     assert 0.0 < long["energy"] < 1.0
+    assert (long["key"], long["mode"]) == ("A", "Major")
     assert short["duration"] == pytest.approx(1.0, abs=0.05)
-    assert short["bpm"] is None  # a steady chord has no onsets to track
-    assert (short["key"], short["mode"]) == ("A", "Major")
+    assert short["bpm"] is None
+    assert (short["key"], short["mode"]) == (None, None)
+    assert short["keyMoments"] == []
     assert short["energy"] == pytest.approx(long["energy"], abs=0.05)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
-def test_one_second_click_clip_measures_like_the_long_one(analyse, fmt):
-    """A 1 s cut of a click track is analysed without error and agrees with 30 s of it."""
+def test_one_second_click_clip_is_too_short_to_measure(analyse, fmt):
+    """A 1 s cut of a click track is analysed without error, has the energy of 30 s of it, and
+    gets no key (30 s of it does)."""
     short = analyse(click_track(120, seconds=1.0), fmt)
     long = analyse(click_track(120), fmt)
     assert_in_range(short, 1.0)
-    assert (short["key"], short["mode"]) == (long["key"], long["mode"])
+    assert long["key"] is not None
+    assert (short["key"], short["mode"]) == (None, None)
     assert short["energy"] == pytest.approx(long["energy"], abs=0.05)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="no minimum-length gate: the two clicks of a 1 s clip are reported as a tempo "
-    "(117 BPM) with no confidence attached",
-)
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_one_second_clip_has_no_tempo(analyse, fmt):
     assert analyse(click_track(120, seconds=1.0), fmt)["bpm"] is None
@@ -261,24 +258,12 @@ def test_noise_is_analysed_with_values_in_range(analyse, fmt):
     assert_in_range(analyse(white_noise(), fmt), 10.0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="no key-strength threshold: white noise gets the best-correlating key "
-    "(G Minor) with no confidence attached",
-)
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_noise_has_no_key(analyse, fmt):
     result = analyse(white_noise(), fmt)
     assert (result["key"], result["mode"]) == (None, None)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="no onset-strength gate: white noise is reported with a tempo (129 BPM from WAV, "
-    "96 BPM from MP3) and no confidence attached",
-)
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_noise_has_no_tempo(analyse, fmt):
     assert analyse(white_noise(), fmt)["bpm"] is None
@@ -299,34 +284,33 @@ def test_louder_signal_does_not_measure_lower_energy(analyse, make):
     assert energies == sorted(energies), energies
 
 
-def test_energy_is_the_scaled_mean_rms(analyse):
+def test_energy_is_the_mean_rms_in_dbfs(analyse):
     """
-    Pins today's definition (README, "How it works"): energy = (mean frame RMS - 0.02) / 0.25,
-    clipped to 0..1. Five seconds of noise at RMS 0.05 then five at 0.15 have a mean frame RMS
-    of 0.1, so energy 0.32; the peak frame RMS (0.15) would give 0.52. Changing the definition
-    means bumping ANALYZER_VERSION and this test (#16 replaces it with a loudness measure).
+    Pins the definition (README, "How it works"): energy = (20 log10(mean frame RMS) + 60) / 60,
+    clipped to 0..1, with frames of 2048 samples after removing DC. Five seconds of noise at RMS
+    0.05 then five at 0.15 have a mean frame RMS of 0.1 (-20 dBFS), so energy 0.667; the overall
+    RMS (0.112) would give 0.675 and the peak frame RMS (0.15) 0.725. Changing the definition
+    means bumping ANALYZER_VERSION and this test.
     """
     y = np.concatenate(
         [white_noise(seconds=5.0, rms=0.05, seed=1), white_noise(seconds=5.0, rms=0.15, seed=2)]
     )
-    assert analyse(y, "WAV")["energy"] == pytest.approx(0.32, abs=0.02)
+    assert analyse(y, "WAV")["energy"] == pytest.approx(0.667, abs=0.004)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="energy is not loudness: a click track at 0.8 peak has a mean RMS under the 0.02 "
-    "floor and measures 0.0, the same as silence",
-)
 def test_audible_click_track_has_energy(analyse):
-    assert analyse(click_track(120), "WAV")["energy"] != 0.0
+    # Mean frame RMS 0.011 (-39 dBFS): quiet, but not silence.
+    assert analyse(click_track(120), "WAV")["energy"] == pytest.approx(0.35, abs=0.02)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="energy is not loudness: an inaudible DC offset of 0.5 measures 1.0 (and gets a key)",
-)
 def test_dc_offset_has_no_energy(analyse):
     result = analyse(np.full(10 * FIXTURE_SR, 0.5, dtype=np.float32), "WAV")
     assert result["energy"] in (None, 0.0)
+    assert (result["bpm"], result["key"], result["mode"]) == (None, None, None)
+
+
+def test_zero_length_file_has_no_energy(analyse):
+    result = analyse(np.zeros(0, dtype=np.float32), "WAV")
+    assert result["energy"] is None
+    assert result["duration"] == 0.0
+    assert (result["bpm"], result["key"], result["keyMoments"]) == (None, None, [])

@@ -43,6 +43,14 @@ describe("GET /api/search/suggest", () => {
     expect(spotify.invoke).not.toHaveBeenCalled();
   });
 
+  it("reads bracketed query parameters as plain names, never as objects", async () => {
+    const res = await request(app()).get("/api/search/suggest?query[a]=midnight&limit[b]=3");
+
+    expect(res.status).toBe(400);
+    expect(res.body.issues).toEqual(["query: Required"]);
+    expect(spotify.invoke).not.toHaveBeenCalled();
+  });
+
   it("passes a query of 200 code points and the limit to Spotify", async () => {
     spotify.invoke.mockResolvedValue(JSON.stringify([{ id: "t1" }]));
     const query = "\u{1F3B5}".repeat(200);

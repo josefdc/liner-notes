@@ -1,12 +1,13 @@
 # =============================================================================
 # Docker Ignore - Web build (context: repository root, Dockerfile: apps/web/Dockerfile)
-# Allowlist: only the root manifests, the workspace manifests and the web app.
+# Allowlist: only the root manifests and .npmrc, the workspace manifests and the web app.
 # =============================================================================
 
 **
 
 !package.json
 !package-lock.json
+!.npmrc
 !apps/web
 !apps/api/package.json
 !services/audio/package.json

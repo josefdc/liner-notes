@@ -11,7 +11,9 @@ import {
   DEFAULT_SEARCH_RATE_LIMIT,
   type HttpSettings,
 } from "../config/settings.js";
+import { request as httpRequest } from "node:http";
 import { connect } from "node:net";
+import { brotliCompressSync, gzipSync } from "node:zlib";
 import express from "express";
 import { generateStructuredOutput } from "../agent/geminiClient.js";
 import { createApp } from "./app.js";
@@ -162,6 +164,85 @@ describe("error handling", () => {
         error: "Something went wrong. Please try again.",
       });
       expect(res.text).not.toContain("secret");
+    }
+  });
+
+  it("handles a rejected promise once, from a wrapped or a plain async handler", async () => {
+    const router = Router();
+    router.get(
+      "/api/wrapped",
+      asyncRoute(async () => {
+        throw new Error("wrapped");
+      }),
+    );
+    router.get("/api/plain", async () => {
+      throw new Error("plain");
+    });
+    const server = createApp({ http: settings(), routers: [router] });
+
+    for (const path of ["/api/wrapped", "/api/plain"]) {
+      vi.mocked(console.error).mockClear();
+      const res = await request(server).get(path).timeout(2000);
+      expect(res.status).toBe(500);
+      expect(res.body.code).toBe("internal_error");
+      expect(vi.mocked(console.error)).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("decodes a compressed body and applies the size limit to the decoded body", async () => {
+    const server = app().listen(0, "127.0.0.1");
+    await new Promise((resolve) => server.once("listening", resolve));
+    const { port } = server.address() as { port: number };
+    // Sent with node:http: the body must go out byte for byte, as compressed.
+    const post = (encoding: string, body: Buffer) =>
+      new Promise<{ status?: number; code?: string }>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port,
+            method: "POST",
+            path: "/api/factoids/decrypt",
+            headers: {
+              "Content-Type": "application/json",
+              "Content-Encoding": encoding,
+              "Content-Length": body.length,
+            },
+          },
+          (res) => {
+            let text = "";
+            res.setEncoding("utf8");
+            res.on("data", (chunk) => {
+              text += chunk;
+            });
+            res.on("end", () => resolve({ status: res.statusCode, code: JSON.parse(text).code }));
+          },
+        );
+        req.on("error", reject);
+        req.end(body);
+      });
+
+    try {
+      const small = JSON.stringify({ padding: "a" });
+      for (const [encoding, body] of [
+        ["gzip", gzipSync(small)],
+        ["br", brotliCompressSync(small)],
+      ] as const) {
+        expect(await post(encoding, body)).toEqual({ status: 400, code: "invalid_input" });
+      }
+
+      // Under 1 kB on the wire, 64 kB once decoded.
+      const large = brotliCompressSync(JSON.stringify({ padding: "a".repeat(64 * 1024) }));
+      expect(large.length).toBeLessThan(1024);
+      expect(await post("br", large)).toEqual({ status: 413, code: "payload_too_large" });
+
+      expect(await post("compress", Buffer.from(small))).toEqual({
+        status: 415,
+        code: "unsupported_media_type",
+      });
+      expect(await post("br", Buffer.from(small))).toEqual({ status: 400, code: "bad_request" });
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
     }
   });
 

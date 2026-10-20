@@ -128,3 +128,38 @@ jobs:
           done
           cat offline-health.json
           grep -q '"status":"degraded"' offline-health.json
+      # Loads the API image to check how it runs: Node 24, as a non-root user, with the native
+      # SQLite module loading (/api/ready) and Docker's health check turning healthy.
+      - name: Load the API image
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-compose.yml
+          targets: sonic-server
+          load: true
+          set: |
+            sonic-server.tags=liner-notes-api:ci
+            sonic-server.cache-from=type=gha,scope=sonic-server
+      - name: Check the API image
+        run: |
+          docker run --rm liner-notes-api:ci node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'
+          uid=$(docker run --rm liner-notes-api:ci id -u)
+          echo "API image runs as uid $uid"
+          test "$uid" -ne 0
+
+          docker run -d --name api-smoke -e REPLAY_MODE=only -p 127.0.0.1:3101:3001 liner-notes-api:ci
+          trap 'docker logs api-smoke; docker rm -f api-smoke' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3101/api/ready && break
+            sleep 2
+          done
+          echo
+          curl -fsS http://127.0.0.1:3101/api/ready | grep -q '"status":"ready"'
+          test "$(docker exec api-smoke id -u)" -ne 0
+          for _ in $(seq 1 45); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' api-smoke)
+            [ "$status" = healthy ] && break
+            sleep 2
+          done
+          echo "health status: $status"
+          test "$status" = healthy

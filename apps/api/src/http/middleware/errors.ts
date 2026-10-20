@@ -92,8 +92,8 @@ export function logText(value: unknown): string {
 }
 
 /**
- * Wraps an async route so a rejection reaches the error handler. Express 4 does not await route
- * handlers: without this, a rejection is unhandled and the request never gets an answer.
+ * Wraps an async route so a rejection reaches the error handler. Express 5 forwards a rejected
+ * promise itself too; the wrapper returns nothing, so each rejection is passed on exactly once.
  */
 export function asyncRoute(
   handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,

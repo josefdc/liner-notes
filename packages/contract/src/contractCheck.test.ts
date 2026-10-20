@@ -179,4 +179,23 @@ describe("contract-check", { timeout: 30_000 }, () => {
     expect(result.out).toContain("cannot read packages/contract/snapshots");
     expect(result.out).not.toContain("nothing to compare");
   });
+
+  it("exits 2 when the base lists the snapshots but cannot read them", () => {
+    // packages/contract/snapshots points at a tree that was never written.
+    const missingTree = "1".repeat(git("rev-parse", "HEAD").length);
+    const mktree = (input: string, ...flags: string[]) =>
+      execFileSync("git", ["-C", repo, "mktree", ...flags], {
+        encoding: "utf8",
+        env: gitEnv,
+        input,
+      }).trim();
+    const contract = mktree(`040000 tree ${missingTree}\tsnapshots\n`, "--missing");
+    const packages = mktree(`040000 tree ${contract}\tcontract\n`);
+    const root = mktree(`040000 tree ${packages}\tpackages\n`);
+    const base = git("commit-tree", root, "-m", "snapshots listed but unreadable");
+    const result = check(base);
+    expect(result.status).toBe(2);
+    expect(result.out).toContain("cannot read packages/contract/snapshots");
+    expect(result.out).not.toContain("nothing to compare");
+  });
 });

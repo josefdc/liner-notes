@@ -92,7 +92,8 @@ export async function clarificationNode(
     };
   } catch {
     // Fallback: minimal SpotifyData from the candidate. The duration is unknown here, so it is
-    // left empty (0 is read as missing downstream) rather than guessed.
+    // left empty rather than guessed: 0 means unknown, though the composer still falls back to
+    // the model's value until #22.
     return {
       spotifyData: {
         id: selected.id,

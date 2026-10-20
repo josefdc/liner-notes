@@ -21,6 +21,16 @@ export const HEARTBEAT_INTERVAL_MS = 15_000;
 
 /** Longest a run may take; past it the route aborts the run and reports a timeout. */
 export const RUN_DEADLINE_MS = 3 * 60_000;
+let runDeadlineMs = RUN_DEADLINE_MS;
+
+/** For tests: sets the run deadline. Returns a function that restores the previous one. */
+export function setRunDeadlineForTests(ms: number): () => void {
+  const previous = runDeadlineMs;
+  runDeadlineMs = ms;
+  return () => {
+    runDeadlineMs = previous;
+  };
+}
 
 /**
  * Errors the client can see: a code, the HTTP status the POST routes answer with, and a short
@@ -63,12 +73,13 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 const INVISIBLE = /[\s\p{Cf}]/gu;
 
 /**
- * A query is a string of 1 to MAX_QUERY_LENGTH characters after trimming, with no control
+ * A query is a string of 1 to MAX_QUERY_LENGTH characters once runs of whitespace (tabs and
+ * newlines included) are collapsed to one space and the ends trimmed, with no other control
  * characters or unpaired surrogates, and at least one visible character.
  */
 function parseQuery(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const query = value.trim();
+  const query = value.replace(/\s+/g, " ").trim();
   if (CONTROL_CHARACTER.test(query) || LONE_SURROGATE.test(query)) return null;
   if (query.replace(INVISIBLE, "") === "") return null;
   return [...query].length <= MAX_QUERY_LENGTH ? query : null;
@@ -160,8 +171,8 @@ class RunControl {
   startDeadline(): void {
     this.deadline = setTimeout(() => {
       this.timedOut = true;
-      this.abort(`No result after ${RUN_DEADLINE_MS / 1000} s`);
-    }, RUN_DEADLINE_MS);
+      this.abort(`No result after ${runDeadlineMs / 1000} s`);
+    }, runDeadlineMs);
   }
 
   dispose(): void {
@@ -210,7 +221,7 @@ interface DisambiguationPayload {
 function classifyNodeError(node: string, error: string): FailureCode {
   if (node !== "scout") return "failed";
   if (/^No tracks? (found|data)/i.test(error)) return "no_match"; // guard-allow: string-sentinel-tool-results — until #11
-  if (/^(Error|Scout error)\b/.test(error)) return "upstream_unavailable";
+  if (/^Error\b|^Scout error\b/.test(error)) return "upstream_unavailable"; // guard-allow: string-sentinel-tool-results — until #11
   return "failed";
 }
 

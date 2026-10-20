@@ -28,7 +28,7 @@ import { closeDatabase, getDb, initializeDatabase } from "../../store/database.j
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
 import { getRun } from "../../store/runs.js";
 import { createTestApp } from "../testApp.js";
-import analyzeRouter, { RUN_DEADLINE_MS } from "./analyze.js";
+import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "./analyze.js";
 
 type Hook = null | ((signal: AbortSignal | undefined) => Promise<void>);
 
@@ -280,7 +280,10 @@ describe("analyze routes", () => {
     stub.detailsStep = null;
     stub.detailsFail = false;
   });
+  let restoreDeadline: (() => void) | null = null;
   afterEach(() => {
+    restoreDeadline?.();
+    restoreDeadline = null;
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -773,6 +776,56 @@ describe("analyze routes", () => {
     });
   });
 
+  describe("run deadline with a short deadline", () => {
+    // Real timers: the clarification step uses the LangGraph store, whose batching polls with
+    // setTimeout(0), so fake timers would stall it.
+    const SHORT_DEADLINE_MS = 200;
+
+    it("a resume that fails at the deadline before the choice is applied keeps the choice open", async () => {
+      const threadId = await pausedThread();
+      const gate = deferred();
+      // The track lookup hangs and ignores the abort signal.
+      stub.detailsStep = () => gate.promise;
+      restoreDeadline = setRunDeadlineForTests(SHORT_DEADLINE_MS);
+
+      const { events } = await sse(resumePath(threadId, "track-a"));
+
+      expect(ofType(events, "error")).toEqual([expect.objectContaining({ code: "timeout" })]);
+      expect(runStatus(threadId)).toBe("interrupted");
+      stub.detailsStep = null;
+      gate.resolve();
+      await settle();
+      restoreDeadline();
+      restoreDeadline = null;
+
+      pruneDatabase(getDb(), DEFAULT_RETENTION, Date.now() + 25 * HOUR);
+
+      const again = await sse(resumePath(threadId, "track-b"));
+      const [complete] = ofType(again.events, "complete");
+      expect(complete?.data).toMatchObject({ spotify: { id: "track-b" } });
+    });
+
+    it("a run that fails at the deadline after the choice gives run_interrupted later", async () => {
+      const threadId = await pausedThread();
+      const gate = deferred();
+      // The engineer hangs and ignores the abort signal.
+      stub.engineerStep = () => gate.promise;
+      restoreDeadline = setRunDeadlineForTests(SHORT_DEADLINE_MS);
+
+      const { events } = await sse(resumePath(threadId, "track-a"));
+      gate.resolve();
+
+      expect(ofType(events, "error")).toEqual([expect.objectContaining({ code: "timeout" })]);
+      expect(runStatus(threadId)).toBe("failed");
+      const again = await sse(resumePath(threadId, "track-b"));
+      expect(types(again.events)).toEqual(["error", "done"]);
+      expect(again.events[0]).toMatchObject({ code: "run_interrupted" });
+      const post = await postResume(threadId, "track-b");
+      expect(post.status).toBe(404);
+      expect(post.body.code).toBe("run_interrupted");
+    });
+  });
+
   describe("input validation", () => {
     it("POST rejects a missing, blank or overlong query and malformed resume ids with 400", async () => {
       const post = (query: unknown) => request(app).post("/api/analyze").send({ query });
@@ -800,6 +853,16 @@ describe("analyze routes", () => {
         expect(stream.events[0]).toMatchObject({ type: "error", code: "invalid_input" });
       }
       expect(stub.calls.scout).toBe(0);
+    });
+
+    it("accepts tabs and newlines inside a query, collapsed to one space", async () => {
+      const res = await request(app).post("/api/analyze").send({ query: "Hurt\tJohnny\n\n Cash" });
+      expect(res.status).toBe(200);
+      expect(getRun(getDb(), res.body.threadId)?.query).toBe("Hurt Johnny Cash");
+
+      const stream = await sse(streamPath("Hurt\tJohnny Cash"));
+      expect(ofType(stream.events, "error")).toHaveLength(0);
+      expect(ofType(stream.events, "complete")).toHaveLength(1);
     });
 
     it("counts characters, not UTF-16 units, and trims before counting", async () => {

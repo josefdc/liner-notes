@@ -15,15 +15,16 @@ COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY services/audio/package.json services/audio/
 COPY packages/contract/package.json packages/contract/
-RUN npm ci -w apps/web
+RUN npm ci -w apps/web -w packages/contract
 
-# Copy source files
+# Copy source files: the shared contract and the web app
+COPY packages/contract packages/contract
 COPY apps/web apps/web
 
 # Build for production
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
-RUN npm run build -w apps/web
+RUN npm run build -w packages/contract && npm run build -w apps/web
 
 # Stage 2: Nginx Production
 FROM nginx:alpine AS production

@@ -20,11 +20,12 @@ COPY packages/contract/package.json packages/contract/
 # Full install: build tools resolve exactly as in a local checkout
 RUN npm ci
 
-# Copy source files
+# Copy source files: the shared contract and the API
+COPY packages/contract packages/contract
 COPY apps/api apps/api
 
-# Build TypeScript
-RUN npm run build -w apps/api
+# Build TypeScript: the contract first (its dist/ is not in the repository), then the API
+RUN npm run build -w packages/contract && npm run build -w apps/api
 
 # Stage 2: Production
 FROM node:20-alpine3.19 AS production
@@ -44,7 +45,8 @@ RUN npm ci -w apps/api --omit=dev && npm cache clean --force
 # Remove build tools after native addon compilation
 RUN apk del python3 make g++
 
-# Copy built files from builder
+# Copy built files from builder (the contract's dist/ is what its package.json exports)
+COPY --from=builder /app/packages/contract/dist ./packages/contract/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
 # Create non-root user for security

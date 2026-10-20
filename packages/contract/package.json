@@ -3,21 +3,27 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Schemas shared by the web app and the API",
+  "description": "Schemas shared by the web app, the API and the audio service",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./audio-features.schema.json": "./dist/audio-features.schema.json"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "build": "tsc -p tsconfig.build.json && node scripts/export-json-schema.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --project contract",
+    "snapshot:update": "UPDATE_CONTRACT_SNAPSHOT=1 vitest run --root ../.. --project contract snapshot"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

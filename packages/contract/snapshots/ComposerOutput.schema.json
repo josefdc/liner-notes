@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ComposerOutput.schema.json",
+  "type": "object",
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": { "description": "One factual statement about the track", "type": "string" },
+          "about": {
+            "type": "string",
+            "enum": [
+              "track",
+              "credit",
+              "sample",
+              "cover",
+              "history",
+              "sound",
+              "production",
+              "connection",
+              "trivia"
+            ]
+          },
+          "evidenceIds": {
+            "description": "Ids of evidence items from the evidence pack that support this; [] when none",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "field": {
+            "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null",
+            "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }]
+          }
+        },
+        "required": ["text", "about", "evidenceIds", "field"],
+        "additionalProperties": false
+      }
+    },
+    "factoids": {
+      "description": "At most 8",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "description": "Short title, no colon at the end", "type": "string" },
+          "text": { "description": "One to three sentences", "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+          },
+          "entities": {
+            "description": "Names in the text worth exploring (people, instruments, records, years)",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": { "type": "string" },
+                "type": {
+                  "type": "string",
+                  "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                }
+              },
+              "required": ["text", "type"],
+              "additionalProperties": false
+            }
+          },
+          "evidenceIds": {
+            "description": "Ids of evidence items from the evidence pack that support this; [] when none",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["title", "text", "type", "entities", "evidenceIds"],
+        "additionalProperties": false
+      }
+    },
+    "genealogyNodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Short unique id; 'current' for the analysed track",
+            "type": "string"
+          },
+          "role": { "type": "string", "enum": ["current", "source", "derived", "influence"] },
+          "label": { "description": "'Title - Artist (Year)'", "type": "string" },
+          "trackTitle": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "trackArtist": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "year": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+        },
+        "required": ["id", "role", "label", "trackTitle", "trackArtist", "year"],
+        "additionalProperties": false
+      }
+    },
+    "genealogyLinks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "description": "Node id", "type": "string" },
+          "target": { "description": "Node id", "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
+          },
+          "evidenceIds": {
+            "description": "Ids of evidence items from the evidence pack that support this; [] when none",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["source", "target", "type", "evidenceIds"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["claims", "factoids", "genealogyNodes", "genealogyLinks"],
+  "additionalProperties": false
+}

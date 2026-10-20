@@ -1,0 +1,141 @@
+{
+  "id": "6GyFP1nfCDB8lbD2bG0Hq9",
+  "title": "Midnight City",
+  "artist": "M83",
+  "album": "Hurry Up, We're Dreaming",
+  "coverUrl": "https://i.scdn.co/image/ab67616d0000b273midnight",
+  "spotifyUrl": "https://open.spotify.com/track/6GyFP1nfCDB8lbD2bG0Hq9",
+  "releaseYear": "2011",
+  "explicit": false,
+  "bpm": 105,
+  "key": "A Major",
+  "energy": 0.71,
+  "valence": 0.42,
+  "danceability": 0.58,
+  "acousticness": 0.08,
+  "keyMoments": [
+    {
+      "time": 4.2,
+      "type": "onset",
+      "intensity": 0.8,
+      "description": "Beat transition"
+    },
+    {
+      "time": 17.9,
+      "type": "energy_peak",
+      "intensity": 1,
+      "description": "Energy peak / Drop"
+    }
+  ],
+  "audioSource": "analyzed",
+  "audioConfidence": "high",
+  "durationSeconds": 244,
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8,
+      "color": "#374151"
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25,
+      "color": "#1F2937"
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42,
+      "color": "#00F0FF"
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58,
+      "color": "#1F2937"
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75,
+      "color": "#FFB000"
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92,
+      "color": "#00F0FF"
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100,
+      "color": "#374151"
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "5edb633c-acd4-457d-9d76-43d552522787",
+      "title": "Studio Intel",
+      "content": "Recorded at Motorbass Studio in Paris with producer Justin Meldal-Johnsen.",
+      "type": "production"
+    },
+    {
+      "id": "08351c60-deb1-45a3-9193-b4d71b6f5b20",
+      "title": "Sample DNA",
+      "content": "This track samples: \"Under Pressure\" by Queen.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "5376c497-1391-4034-9275-cd44aeb43026",
+          "text": "Under Pressure - Queen",
+          "type": "sample",
+          "searchQuery": "Under Pressure Queen"
+        }
+      ]
+    },
+    {
+      "id": "1e4babcf-8e22-4f27-95d7-3ba2234996ac",
+      "title": "Collaboration Network",
+      "content": "M83 has worked with: Justin Meldal-Johnsen, Zola Jesus.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "19d22d92-c3a4-46f4-8239-95d2f014b445",
+          "text": "Justin Meldal-Johnsen",
+          "type": "artist",
+          "searchQuery": "Justin Meldal-Johnsen"
+        },
+        {
+          "id": "4091af65-3966-4af6-a3f7-8e23c1d76b72",
+          "text": "Zola Jesus",
+          "type": "artist",
+          "searchQuery": "Zola Jesus"
+        }
+      ]
+    },
+    {
+      "id": "a27e8be5-1d11-4b9d-8c9b-a7a21c944e9c",
+      "title": "Sonic Profile",
+      "content": "105 BPM in A Major. High measured energy. Mood (audio model estimate): melancholic. Danceability score (audio model estimate): 0.58.",
+      "type": "production"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Midnight City",
+        "img": "https://i.scdn.co/image/ab67616d0000b273midnight",
+        "size": 40
+      }
+    ],
+    "links": []
+  },
+  "modelUnavailable": true,
+  "modelUnavailableReason": "timeout"
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Claim.schema.json",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "text": { "type": "string" },
+    "about": {
+      "type": "string",
+      "enum": [
+        "track",
+        "credit",
+        "sample",
+        "cover",
+        "history",
+        "sound",
+        "production",
+        "connection",
+        "trivia"
+      ]
+    },
+    "kind": { "type": "string", "enum": ["measured", "sourced", "inferred"] },
+    "origin": { "type": "string", "enum": ["code", "model"] },
+    "evidenceIds": { "type": "array", "items": { "type": "string" } },
+    "verdict": {
+      "description": "null: not judged (e.g. beyond the 20-claim judge batch)",
+      "anyOf": [
+        { "type": "string", "enum": ["supported", "partial", "unsupported", "contradicted"] },
+        { "type": "null" }
+      ]
+    },
+    "verdictReason": {
+      "description": "The judge's or the deterministic step's reason",
+      "anyOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "numericCheck": { "type": "string", "enum": ["consistent", "conflict", "contradicted", "n/a"] },
+    "field": { "type": "string", "enum": ["tempo", "key"] },
+    "factoid": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+              }
+            },
+            "required": ["text", "type"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["title", "type", "entities"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "text",
+    "about",
+    "kind",
+    "origin",
+    "evidenceIds",
+    "verdict",
+    "verdictReason",
+    "numericCheck"
+  ],
+  "additionalProperties": false
+}

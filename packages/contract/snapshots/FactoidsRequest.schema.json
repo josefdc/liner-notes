@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "FactoidsRequest.schema.json",
+  "type": "object",
+  "properties": {
+    "trackId": { "type": "string", "minLength": 1 },
+    "trackTitle": { "type": "string", "minLength": 1 },
+    "trackArtist": { "type": "string" },
+    "existingFactoidIds": { "type": "array", "items": { "type": "string" } },
+    "runId": {
+      "description": "The analysis the factoids are for, so they do not repeat",
+      "type": "string"
+    }
+  },
+  "required": ["trackId", "trackTitle"],
+  "additionalProperties": false
+}

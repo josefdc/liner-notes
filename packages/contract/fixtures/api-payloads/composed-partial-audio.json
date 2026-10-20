@@ -1,0 +1,144 @@
+{
+  "id": "6GyFP1nfCDB8lbD2bG0Hq9",
+  "title": "Midnight City",
+  "artist": "M83",
+  "album": "Hurry Up, We're Dreaming",
+  "coverUrl": "https://i.scdn.co/image/ab67616d0000b273midnight",
+  "spotifyUrl": "https://open.spotify.com/track/6GyFP1nfCDB8lbD2bG0Hq9",
+  "releaseYear": "2011",
+  "explicit": false,
+  "durationSeconds": 244,
+  "genreProfile": [
+    {
+      "genre": "Synthpop",
+      "value": 90
+    },
+    {
+      "genre": "Electronic",
+      "value": 75
+    },
+    {
+      "genre": "Shoegaze",
+      "value": 60
+    },
+    {
+      "genre": "Dream Pop",
+      "value": 45
+    },
+    {
+      "genre": "Rock",
+      "value": 30
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 12,
+      "color": "#374151"
+    },
+    {
+      "label": "Verse",
+      "start": 12,
+      "end": 40,
+      "color": "#1F2937"
+    },
+    {
+      "label": "Chorus",
+      "start": 40,
+      "end": 70,
+      "color": "#00F0FF"
+    },
+    {
+      "label": "Bridge",
+      "start": 70,
+      "end": 88,
+      "color": "#6B21A8"
+    },
+    {
+      "label": "Outro",
+      "start": 88,
+      "end": 100,
+      "color": "#374151"
+    }
+  ],
+  "segmentsSource": "inferred",
+  "samples": [
+    {
+      "time": 0,
+      "description": "Synth hook resampled from the band's own demo"
+    }
+  ],
+  "credits": {
+    "producers": ["Justin Meldal-Johnsen", "Anthony Gonzalez"],
+    "writers": ["Anthony Gonzalez"],
+    "label": "Naïve"
+  },
+  "factoids": [
+    {
+      "id": "f1",
+      "title": "A Bedroom Demo",
+      "content": "The hook started as a demo.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "e6060011b-27f1-4417-8937-b30c20f63c5b",
+          "text": "Anthony Gonzalez",
+          "type": "producer",
+          "searchQuery": "Anthony Gonzalez"
+        },
+        {
+          "id": "e11dbd75b-076b-4a67-966d-758c51afe3fc",
+          "text": "Roland Juno-106",
+          "type": "synth",
+          "searchQuery": "Roland Juno-106"
+        }
+      ]
+    },
+    {
+      "id": "f2",
+      "title": "The Saxophone Outro",
+      "content": "The outro features a saxophone solo.",
+      "type": "curiosity"
+    },
+    {
+      "id": "f3",
+      "title": "Charting",
+      "content": "It became the band's best-known single.",
+      "type": "trivia"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Midnight City - M83 (2011)",
+        "size": 40
+      },
+      {
+        "id": "derived1",
+        "group": 3,
+        "label": "Example Song - Example Artist (2013)",
+        "size": 28
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "derived1",
+        "value": 3
+      }
+    ]
+  },
+  "bpm": 105,
+  "key": "A Major",
+  "energy": 0.71,
+  "valence": null,
+  "danceability": null,
+  "acousticness": null,
+  "keyMoments": [],
+  "audioSource": "analyzed",
+  "audioConfidence": "low",
+  "previewUrl": "https://p.scdn.co/mp3-preview/abc"
+}

@@ -1,0 +1,123 @@
+{
+  "id": "6GyFP1nfCDB8lbD2bG0Hq9",
+  "title": "Midnight City",
+  "artist": "M83",
+  "album": "Hurry Up, We're Dreaming",
+  "coverUrl": "https://i.scdn.co/image/ab67616d0000b273midnight",
+  "spotifyUrl": "https://open.spotify.com/track/6GyFP1nfCDB8lbD2bG0Hq9",
+  "releaseYear": "2011",
+  "explicit": false,
+  "bpm": null,
+  "key": null,
+  "energy": null,
+  "valence": null,
+  "danceability": null,
+  "acousticness": null,
+  "keyMoments": [],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_run",
+  "durationSeconds": 244,
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8,
+      "color": "#374151"
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25,
+      "color": "#1F2937"
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42,
+      "color": "#00F0FF"
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58,
+      "color": "#1F2937"
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75,
+      "color": "#FFB000"
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92,
+      "color": "#00F0FF"
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100,
+      "color": "#374151"
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "3990402e-1b36-4384-87bb-1b65f25a4dca",
+      "title": "Studio Intel",
+      "content": "Recorded at Motorbass Studio in Paris with producer Justin Meldal-Johnsen.",
+      "type": "production"
+    },
+    {
+      "id": "da0b51a4-c4b1-4d7e-a1b2-d041acc58570",
+      "title": "Sample DNA",
+      "content": "This track samples: \"Under Pressure\" by Queen.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "5bd7fcc1-e1c5-44d7-a701-e5d018bf2552",
+          "text": "Under Pressure - Queen",
+          "type": "sample",
+          "searchQuery": "Under Pressure Queen"
+        }
+      ]
+    },
+    {
+      "id": "2046602f-c17d-4fb2-a3d2-5e6f8ee639d4",
+      "title": "Collaboration Network",
+      "content": "M83 has worked with: Justin Meldal-Johnsen, Zola Jesus.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "cd95da68-1311-4333-9591-261583859553",
+          "text": "Justin Meldal-Johnsen",
+          "type": "artist",
+          "searchQuery": "Justin Meldal-Johnsen"
+        },
+        {
+          "id": "2f5890a3-e924-4fae-b4e1-5e971c0b6f84",
+          "text": "Zola Jesus",
+          "type": "artist",
+          "searchQuery": "Zola Jesus"
+        }
+      ]
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Midnight City",
+        "img": "https://i.scdn.co/image/ab67616d0000b273midnight",
+        "size": 40
+      }
+    ],
+    "links": []
+  },
+  "modelUnavailable": true,
+  "modelUnavailableReason": "rate_limited"
+}

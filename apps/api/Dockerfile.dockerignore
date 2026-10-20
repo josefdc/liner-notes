@@ -10,7 +10,7 @@
 !apps/api
 !apps/web/package.json
 !services/audio/package.json
-!packages/contract/package.json
+!packages/contract
 
 # Never send these, even inside allowed directories (env comes from compose env_file)
 **/node_modules
@@ -27,3 +27,8 @@ coverage
 **/*.spec.ts
 **/__tests__
 **/*.log
+
+# The contract's tests, fixtures and schema snapshots are not needed to build it
+packages/contract/snapshots
+packages/contract/fixtures
+packages/contract/src/testing

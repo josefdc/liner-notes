@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "RunResponse.schema.json",
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean", "const": true },
+    "run": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["running", "interrupted", "completed", "failed", "cancelled"]
+        },
+        "mode": { "type": "string", "enum": ["live", "replay"] },
+        "spotifyId": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["id", "status", "mode", "spotifyId", "createdAt", "finishedAt"],
+      "additionalProperties": false
+    },
+    "analysis": { "anyOf": [{ "$ref": "TrackAnalysis.schema.json" }, { "type": "null" }] }
+  },
+  "required": ["success", "run", "analysis"],
+  "additionalProperties": false
+}

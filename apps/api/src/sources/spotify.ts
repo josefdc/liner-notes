@@ -1,20 +1,23 @@
 /**
- * Spotify Tools for LangGraph Agent
+ * Spotify client and the LangGraph tools built on it.
  *
- * These tools provide the "Ears" for The Sonic Agent:
- * - searchTrack: Find songs by name/artist and get Spotify ID
- * - getAudioFeatures: Extract BPM, Key, Energy, and other audio characteristics
- *
- * Best Practices Implemented:
- * - Token caching with Singleton pattern (avoids rate limits)
- * - Strict TypeScript interfaces for API responses
- * - Comprehensive error handling
- * - Rich descriptions for LLM tool calling
+ * The typed functions (searchTracks, fetchTrack, fetchArtistTopTracks) resolve with data or
+ * reject with a SourceError. The tools wrap them and return strings: JSON on success, and text
+ * starting "Error:" when Spotify could not answer. A search with no match is `[]`, not an error.
+ * Ids are checked before they reach a URL.
  */
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
+import {
+  credential,
+  describeError,
+  fetchJson,
+  isSourceError,
+  type Shape,
+  SourceError,
+} from "./http.js";
 
 // Load environment variables
 dotenv.config();
@@ -42,7 +45,7 @@ interface SpotifyImage {
 
 interface SpotifyAlbum {
   name: string;
-  images: SpotifyImage[];
+  images?: SpotifyImage[];
   release_date: string;
 }
 
@@ -55,6 +58,7 @@ interface SpotifyTrack {
   duration_ms: number;
   explicit: boolean;
   external_urls: { spotify: string };
+  preview_url?: string | null;
 }
 
 interface SpotifySearchResponse {
@@ -81,22 +85,70 @@ interface SpotifyAudioFeatures {
   duration_ms: number;
 }
 
+/** A track as the pipeline uses it (SpotifyData in agent/state.ts). */
+export interface SpotifyTrackSummary {
+  id: string;
+  title: string;
+  artist: string;
+  artistIds: string[];
+  album: string;
+  releaseDate: string;
+  coverUrl: string;
+  popularity: number;
+  duration: string;
+  durationMs: number;
+  explicit: boolean;
+  spotifyUrl: string;
+  previewUrl: string | null;
+}
+
+// Fields the pipeline reads, kept when a response is recorded to a cassette.
+const TRACK_SHAPE: Shape = {
+  id: true,
+  name: true,
+  artists: [{ id: true, name: true }],
+  album: { name: true, release_date: true },
+  popularity: true,
+  duration_ms: true,
+  explicit: true,
+  external_urls: { spotify: true },
+};
+const SEARCH_SHAPE: Shape = { tracks: { items: [TRACK_SHAPE], total: true } };
+const TOP_TRACKS_SHAPE: Shape = { tracks: [TRACK_SHAPE] };
+const TOKEN_SHAPE: Shape = { access_token: true, token_type: true, expires_in: true };
+
+// =============================================================================
+// Input checks
+// =============================================================================
+
+/** Spotify ids are 22 base-62 characters; anything else never reaches a URL. */
+const SPOTIFY_ID = /^[0-9A-Za-z]{22}$/;
+const MARKET = /^[A-Z]{2}$/;
+
+export function isSpotifyId(value: unknown): value is string {
+  return typeof value === "string" && SPOTIFY_ID.test(value);
+}
+
+function requireSpotifyId(value: string, what: string): string {
+  if (!isSpotifyId(value)) {
+    throw new SourceError("spotify", "invalid_input", `not a Spotify ${what} id`);
+  }
+  return value;
+}
+
 // =============================================================================
 // Spotify Authentication Manager (Singleton Pattern)
 // =============================================================================
 
 /**
- * Singleton class to manage Spotify OAuth tokens.
- *
- * Why Singleton?
- * - Prevents requesting new tokens for every API call
- * - Caches token until 60 seconds before expiration
- * - Avoids Spotify rate limits (429 errors)
+ * Caches the client-credentials token until 60 s before it expires. Concurrent callers share
+ * one refresh instead of each requesting a token.
  */
 class SpotifyAuthManager {
   private static instance: SpotifyAuthManager;
   private token: string | null = null;
   private tokenExpiresAt: number = 0;
+  private pending: Promise<string> | null = null;
 
   private constructor() {}
 
@@ -107,62 +159,75 @@ class SpotifyAuthManager {
     return SpotifyAuthManager.instance;
   }
 
-  /**
-   * Get a valid access token, refreshing if necessary.
-   * Uses Client Credentials Flow (server-to-server, no user auth needed).
-   */
+  /** A valid access token, refreshed when needed (Client Credentials Flow). */
   async getToken(): Promise<string> {
-    const now = Date.now();
-
-    // Return cached token if still valid (with 60s safety margin)
-    if (this.token && now < this.tokenExpiresAt - 60000) {
+    if (this.token && Date.now() < this.tokenExpiresAt - 60_000) {
       return this.token;
     }
+    if (!this.pending) {
+      this.pending = this.refresh().finally(() => {
+        this.pending = null;
+      });
+    }
+    return this.pending;
+  }
 
-    // Validate environment variables
-    const clientId = process.env.SPOTIFY_CLIENT_ID;
-    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  private async refresh(): Promise<string> {
+    const clientId = credential("SPOTIFY_CLIENT_ID");
+    const clientSecret = credential("SPOTIFY_CLIENT_SECRET");
 
     if (!clientId || !clientSecret) {
-      throw new Error(
-        "Missing Spotify credentials. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in apps/api/.env",
+      throw new SourceError(
+        "spotify",
+        "unavailable",
+        "missing credentials; set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in apps/api/.env",
       );
     }
 
     console.log("🔄 [Spotify] Refreshing access token...");
+    const startedAt = Date.now();
 
-    const params = new URLSearchParams();
-    params.append("grant_type", "client_credentials");
-
-    const response = await fetch("https://accounts.spotify.com/api/token", {
+    const data = await fetchJson<SpotifyToken>({
+      source: "spotify",
+      url: "https://accounts.spotify.com/api/token",
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       },
-      body: params,
+      body: new URLSearchParams({ grant_type: "client_credentials" }).toString(),
+      scrub: TOKEN_SHAPE,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Spotify auth failed: ${response.status} - ${errorText}`);
+    if (typeof data?.access_token !== "string" || typeof data.expires_in !== "number") {
+      throw new SourceError("spotify", "parse", "token response has no access_token");
     }
-
-    const data = (await response.json()) as SpotifyToken;
     this.token = data.access_token;
-    this.tokenExpiresAt = now + data.expires_in * 1000;
+    this.tokenExpiresAt = startedAt + data.expires_in * 1000;
 
     console.log("✅ [Spotify] Token refreshed, expires in", data.expires_in, "seconds");
-
     return this.token;
   }
 
-  /**
-   * Clear cached token (useful for testing or forced refresh)
-   */
+  /** Clears the cached token (forced refresh, tests). */
   clearToken(): void {
     this.token = null;
     this.tokenExpiresAt = 0;
+  }
+}
+
+/** GET from the Web API; a 401 (token revoked or expired early) refreshes the token once. */
+async function spotifyGet<T>(url: URL, scrub: Shape): Promise<T> {
+  const auth = SpotifyAuthManager.getInstance();
+  const request = (token: string) =>
+    fetchJson<T>({ source: "spotify", url, headers: { Authorization: `Bearer ${token}` }, scrub });
+  const token = await auth.getToken();
+  try {
+    return await request(token);
+  } catch (error) {
+    if (!isSourceError(error, "http") || error.status !== 401) throw error;
+    auth.clearToken();
+    return request(await auth.getToken());
   }
 }
 
@@ -191,6 +256,86 @@ function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function summarize(track: SpotifyTrack): SpotifyTrackSummary {
+  return {
+    id: track.id,
+    title: track.name,
+    artist: track.artists.map((a) => a.name).join(", "),
+    artistIds: track.artists.map((a) => a.id),
+    album: track.album.name,
+    releaseDate: track.album.release_date,
+    coverUrl: track.album.images?.[0]?.url || "",
+    popularity: track.popularity,
+    duration: formatDuration(track.duration_ms),
+    durationMs: track.duration_ms,
+    explicit: track.explicit,
+    spotifyUrl: track.external_urls.spotify,
+    previewUrl: track.preview_url || null,
+  };
+}
+
+/**
+ * The text a tool returns when Spotify could not answer; it always starts "Error:". A rate
+ * limit names "Rate limit" and 429, which the scout's retry looks for.
+ */
+function errorText(action: string, error: unknown): string {
+  if (isSourceError(error, "rate_limited")) {
+    const after = error.retryAfterMs;
+    const wait = after === undefined ? "" : `; retry after ${Math.ceil(after / 1000)} s`;
+    return `Error: Rate limited by Spotify (429) while ${action}${wait}`;
+  }
+  return `Error: ${action} failed: ${describeError(error)}`;
+}
+
+// =============================================================================
+// Typed client
+// =============================================================================
+
+/** Up to `limit` (1-10) tracks for a query; [] when nothing matches. */
+export async function searchTracks(query: string, limit = 5): Promise<SpotifyTrackSummary[]> {
+  if (!query.trim()) throw new SourceError("spotify", "invalid_input", "empty search query");
+  const url = new URL("https://api.spotify.com/v1/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("type", "track");
+  url.searchParams.set("limit", String(Math.min(Math.max(Math.trunc(limit) || 1, 1), 10)));
+
+  const data = await spotifyGet<SpotifySearchResponse>(url, SEARCH_SHAPE);
+  const items = data?.tracks?.items;
+  if (!Array.isArray(items)) {
+    throw new SourceError("spotify", "parse", "search response has no tracks.items");
+  }
+  return items.filter((track) => track?.id).map(summarize);
+}
+
+/** One track by id; rejects (invalid_input) before any request when the id is malformed. */
+export async function fetchTrack(trackId: string): Promise<SpotifyTrackSummary> {
+  const id = requireSpotifyId(trackId, "track");
+  const track = await spotifyGet<SpotifyTrack>(
+    new URL(`https://api.spotify.com/v1/tracks/${id}`),
+    TRACK_SHAPE,
+  );
+  if (!track?.id) throw new SourceError("spotify", "parse", "track response has no id");
+  return summarize(track);
+}
+
+/** An artist's top tracks in a market. */
+export async function fetchArtistTopTracks(
+  artistId: string,
+  market = "US",
+): Promise<SpotifyTrackSummary[]> {
+  const id = requireSpotifyId(artistId, "artist");
+  if (!MARKET.test(market)) {
+    throw new SourceError("spotify", "invalid_input", "market must be an ISO 3166-1 alpha-2 code");
+  }
+  const url = new URL(`https://api.spotify.com/v1/artists/${id}/top-tracks`);
+  url.searchParams.set("market", market);
+  const data = await spotifyGet<{ tracks?: SpotifyTrack[] }>(url, TOP_TRACKS_SHAPE);
+  if (!Array.isArray(data?.tracks)) {
+    throw new SourceError("spotify", "parse", "top-tracks response has no tracks");
+  }
+  return data.tracks.map(summarize);
+}
+
 // =============================================================================
 // LangGraph Tools
 // =============================================================================
@@ -203,49 +348,25 @@ function formatDuration(ms: number): string {
 export const searchTrack = tool(
   async ({ query }): Promise<string> => {
     try {
-      const auth = SpotifyAuthManager.getInstance();
-      const token = await auth.getToken();
-
-      const searchUrl = new URL("https://api.spotify.com/v1/search");
-      searchUrl.searchParams.set("q", query);
-      searchUrl.searchParams.set("type", "track");
-      searchUrl.searchParams.set("limit", "1");
-
-      const response = await fetch(searchUrl.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          return "Rate limited by Spotify. Please wait a moment and try again.";
-        }
-        throw new Error(`Spotify API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as SpotifySearchResponse;
-      const track = data.tracks.items[0];
-
+      const [track] = await searchTracks(query, 1);
       if (!track) {
         return `No track found for "${query}". Try a different spelling or include the artist name.`;
       }
-
-      // Return rich metadata for the LLM
       return JSON.stringify({
         id: track.id,
-        title: track.name,
-        artist: track.artists.map((a) => a.name).join(", "),
-        album: track.album.name,
-        releaseDate: track.album.release_date,
-        coverUrl: track.album.images[0]?.url || "",
-        popularity: track.popularity, // 0-100 score
-        duration: formatDuration(track.duration_ms),
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        releaseDate: track.releaseDate,
+        coverUrl: track.coverUrl,
+        popularity: track.popularity,
+        duration: track.duration,
         explicit: track.explicit,
-        spotifyUrl: track.external_urls.spotify,
+        spotifyUrl: track.spotifyUrl,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Spotify] Search error:", message);
-      return `Error searching for track: ${message}`;
+      console.error("❌ [Spotify] Search error:", describeError(error));
+      return errorText("searching for track", error);
     }
   },
   {
@@ -272,54 +393,14 @@ export const searchTrack = tool(
  *
  * NOTE: Spotify deprecated audio-features endpoint for new apps (Nov 2024).
  * We use the /tracks endpoint which provides useful metadata.
- * For BPM/Key analysis, consider integrating Essentia.js or similar in the future.
  */
 export const getTrackDetails = tool(
   async ({ trackId }): Promise<string> => {
     try {
-      const auth = SpotifyAuthManager.getInstance();
-      const token = await auth.getToken();
-
-      const response = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return `Track not found for ID "${trackId}".`;
-        }
-        if (response.status === 429) {
-          return "Rate limited by Spotify. Please wait a moment and try again.";
-        }
-        throw new Error(`Spotify API error: ${response.status} ${response.statusText}`);
-      }
-
-      const track = (await response.json()) as SpotifyTrack & { preview_url?: string };
-
-      if (!track?.id) {
-        return `No track data available for ID "${trackId}".`;
-      }
-
-      // Return extended track information
-      return JSON.stringify({
-        id: track.id,
-        title: track.name,
-        artist: track.artists.map((a) => a.name).join(", "),
-        artistIds: track.artists.map((a) => a.id),
-        album: track.album.name,
-        releaseDate: track.album.release_date,
-        coverUrl: track.album.images[0]?.url || "",
-        popularity: track.popularity,
-        duration: formatDuration(track.duration_ms),
-        durationMs: track.duration_ms,
-        explicit: track.explicit,
-        spotifyUrl: track.external_urls.spotify,
-        previewUrl: track.preview_url || null,
-      });
+      return JSON.stringify(await fetchTrack(trackId));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Spotify] Track details error:", message);
-      return `Error getting track details: ${message}`;
+      console.error("❌ [Spotify] Track details error:", describeError(error));
+      return errorText("getting track details", error);
     }
   },
   {
@@ -344,41 +425,17 @@ export const getTrackDetails = tool(
 export const getArtistTopTracks = tool(
   async ({ artistId, market = "US" }): Promise<string> => {
     try {
-      const auth = SpotifyAuthManager.getInstance();
-      const token = await auth.getToken();
-
-      const response = await fetch(
-        `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=${market}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return `Artist not found for ID "${artistId}".`;
-        }
-        throw new Error(`Spotify API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as { tracks: SpotifyTrack[] };
-      const tracks = data.tracks;
-
-      if (!tracks || tracks.length === 0) {
-        return `No top tracks found for artist ID "${artistId}".`;
-      }
-
-      // Return top 5 tracks
+      const tracks = await fetchArtistTopTracks(artistId, market);
       const topTracks = tracks.slice(0, 5).map((t) => ({
         id: t.id,
-        title: t.name,
-        album: t.album.name,
+        title: t.title,
+        album: t.album,
         popularity: t.popularity,
       }));
-
       return JSON.stringify({ artistId, topTracks });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Spotify] Artist top tracks error:", message);
-      return `Error getting artist top tracks: ${message}`;
+      console.error("❌ [Spotify] Artist top tracks error:", describeError(error));
+      return errorText("getting artist top tracks", error);
     }
   },
   {
@@ -400,59 +457,17 @@ export const getAudioFeatures = getTrackDetails;
 /**
  * Tool 4: Search for multiple tracks (for disambiguation)
  *
- * Returns up to 5 candidates for Human-in-the-loop selection.
+ * Returns a JSON array of up to `limit` candidates; `[]` when nothing matches.
  */
 export const searchMultipleTracks = tool(
   async ({ query, limit = 5 }): Promise<string> => {
     try {
-      const auth = SpotifyAuthManager.getInstance();
-      const token = await auth.getToken();
-
-      const searchUrl = new URL("https://api.spotify.com/v1/search");
-      searchUrl.searchParams.set("q", query);
-      searchUrl.searchParams.set("type", "track");
-      searchUrl.searchParams.set("limit", Math.min(limit, 10).toString());
-
-      const response = await fetch(searchUrl.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          return "Error: Rate limited by Spotify.";
-        }
-        throw new Error(`Spotify API error: ${response.status}`);
-      }
-
-      const data = (await response.json()) as SpotifySearchResponse;
-      const tracks = data.tracks.items;
-
-      if (!tracks || tracks.length === 0) {
-        return `No tracks found for "${query}".`;
-      }
-
-      // Return array of candidates
-      const candidates = tracks.map((track) => ({
-        id: track.id,
-        title: track.name,
-        artist: track.artists.map((a) => a.name).join(", "),
-        artistIds: track.artists.map((a) => a.id),
-        album: track.album.name,
-        releaseDate: track.album.release_date,
-        coverUrl: track.album.images[0]?.url || "",
-        popularity: track.popularity,
-        duration: formatDuration(track.duration_ms),
-        durationMs: track.duration_ms,
-        explicit: track.explicit,
-        spotifyUrl: track.external_urls.spotify,
-        previewUrl: null,
-      }));
-
-      return JSON.stringify(candidates);
+      const tracks = await searchTracks(query, limit);
+      // Search results carry no preview; the engineer looks one up separately.
+      return JSON.stringify(tracks.map((track) => ({ ...track, previewUrl: null })));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Spotify] Multi-search error:", message);
-      return `Error searching for tracks: ${message}`;
+      console.error("❌ [Spotify] Multi-search error:", describeError(error));
+      return errorText("searching for tracks", error);
     }
   },
   {

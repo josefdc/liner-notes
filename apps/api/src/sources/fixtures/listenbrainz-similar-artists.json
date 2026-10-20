@@ -1,0 +1,32 @@
+[
+  {
+    "artist_mbid": "c6d571dd-c0ae-4ac8-9500-780b1b9b25e5",
+    "name": "Nile Rodgers",
+    "score": 10016
+  },
+  {
+    "artist_mbid": "e21857d5-3256-4547-afb3-4b6ded592596",
+    "name": "Gorillaz",
+    "score": 8405
+  },
+  {
+    "artist_mbid": "fa0e2024-95ff-44b6-9a86-f0ab120b6a72",
+    "name": "Todd Edwards",
+    "score": 8367
+  },
+  {
+    "artist_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+    "name": "Radiohead",
+    "score": 8197
+  },
+  {
+    "artist_mbid": "c8b03190-306c-4120-bb0b-6f2ebfc06ea9",
+    "name": "The Weeknd",
+    "score": 7493
+  },
+  {
+    "artist_mbid": "cc197bad-dc9c-440d-a5b5-d52ba2e14234",
+    "name": "Coldplay",
+    "score": 7210
+  }
+]

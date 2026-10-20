@@ -11,6 +11,7 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { fetchJson, type Shape, SourceError } from "./http.js";
 
 // =============================================================================
 // TypeScript Interfaces
@@ -64,7 +65,22 @@ export interface DeezerSearchResult {
 // =============================================================================
 
 const DEEZER_API_BASE = "https://api.deezer.com";
-const REQUEST_TIMEOUT = 10000; // 10 seconds
+
+// Fields kept when a response is recorded. Preview and cover URLs are left out (they expire),
+// so a replayed search finds no preview.
+const SEARCH_SHAPE: Shape = {
+  total: true,
+  error: true,
+  data: [
+    {
+      id: true,
+      title: true,
+      duration: true,
+      artist: { id: true, name: true },
+      album: { id: true, title: true },
+    },
+  ],
+};
 
 // =============================================================================
 // Helper Functions
@@ -96,91 +112,70 @@ function fuzzyMatch(a: string, b: string): boolean {
  */
 async function searchDeezerTrack(title: string, artist: string): Promise<DeezerTrack | null> {
   // Build search query: "artist track" format works best for Deezer
-  const query = encodeURIComponent(`${artist} ${title}`);
-  const url = `${DEEZER_API_BASE}/search/track?q=${query}&limit=5`;
+  const url = new URL(`${DEEZER_API_BASE}/search/track`);
+  url.searchParams.set("q", `${artist} ${title}`);
+  url.searchParams.set("limit", "5");
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  console.log(`🔍 [Deezer] Searching: ${url.href}`);
 
-  try {
-    console.log(`🔍 [Deezer] Searching: ${url}`);
+  const data = await fetchJson<DeezerSearchResponse>({
+    source: "deezer",
+    url,
+    headers: { Accept: "application/json" },
+    scrub: SEARCH_SHAPE,
+  });
 
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-      },
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      throw new Error(`Deezer API error: HTTP ${response.status}`);
-    }
-
-    const data = (await response.json()) as DeezerSearchResponse;
-
-    // Check for API error response
-    if (data.error) {
-      throw new Error(`Deezer API: ${data.error.message}`);
-    }
-
-    if (!data.data || data.data.length === 0) {
-      console.log("⚠️ [Deezer] No results found");
-      return null;
-    }
-
-    console.log(`📋 [Deezer] Found ${data.data.length} results`);
-
-    // Find best match: prioritize tracks with previews and matching artist/title
-    const normalizedArtist = artist.split(",")[0].trim(); // Take first artist if multiple
-    const normalizedTitle = title;
-
-    // First pass: exact-ish match with preview
-    const exactMatch = data.data.find((track) => {
-      const hasPreview = track.preview && track.preview.length > 0;
-      const artistMatch = fuzzyMatch(track.artist.name, normalizedArtist);
-      const titleMatch = fuzzyMatch(track.title, normalizedTitle);
-      return hasPreview && artistMatch && titleMatch;
-    });
-
-    if (exactMatch) {
-      console.log(`✅ [Deezer] Exact match: "${exactMatch.title}" by ${exactMatch.artist.name}`);
-      return exactMatch;
-    }
-
-    // Second pass: any track with matching artist and preview
-    const artistMatch = data.data.find((track) => {
-      const hasPreview = track.preview && track.preview.length > 0;
-      const artistMatch = fuzzyMatch(track.artist.name, normalizedArtist);
-      return hasPreview && artistMatch;
-    });
-
-    if (artistMatch) {
-      console.log(`✅ [Deezer] Artist match: "${artistMatch.title}" by ${artistMatch.artist.name}`);
-      return artistMatch;
-    }
-
-    // Fallback: any track with a preview
-    const withPreview = data.data.find((track) => track.preview && track.preview.length > 0);
-
-    if (withPreview) {
-      console.log(
-        `⚠️ [Deezer] Fallback match: "${withPreview.title}" by ${withPreview.artist.name}`,
-      );
-      return withPreview;
-    }
-
-    console.log("⚠️ [Deezer] No tracks with previews found");
-    return null;
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Deezer API request timed out");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+  // Deezer reports errors (including its quota) in a 200 answer.
+  if (data.error) {
+    throw new SourceError("deezer", "http", `Deezer API: ${data.error.message}`);
   }
+
+  if (!Array.isArray(data.data) || data.data.length === 0) {
+    console.log("⚠️ [Deezer] No results found");
+    return null;
+  }
+
+  console.log(`📋 [Deezer] Found ${data.data.length} results`);
+
+  // Find best match: prioritize tracks with previews and matching artist/title
+  const normalizedArtist = artist.split(",")[0].trim(); // Take first artist if multiple
+  const normalizedTitle = title;
+
+  // First pass: exact-ish match with preview
+  const exactMatch = data.data.find((track) => {
+    const hasPreview = track.preview && track.preview.length > 0;
+    const artistMatch = fuzzyMatch(track.artist.name, normalizedArtist);
+    const titleMatch = fuzzyMatch(track.title, normalizedTitle);
+    return hasPreview && artistMatch && titleMatch;
+  });
+
+  if (exactMatch) {
+    console.log(`✅ [Deezer] Exact match: "${exactMatch.title}" by ${exactMatch.artist.name}`);
+    return exactMatch;
+  }
+
+  // Second pass: any track with matching artist and preview
+  const artistMatch = data.data.find((track) => {
+    const hasPreview = track.preview && track.preview.length > 0;
+    const artistMatch = fuzzyMatch(track.artist.name, normalizedArtist);
+    return hasPreview && artistMatch;
+  });
+
+  if (artistMatch) {
+    console.log(`✅ [Deezer] Artist match: "${artistMatch.title}" by ${artistMatch.artist.name}`);
+    return artistMatch;
+  }
+
+  // Fallback: any track with a preview
+  const withPreview = data.data.find((track) => track.preview && track.preview.length > 0);
+
+  if (withPreview) {
+    console.log(`⚠️ [Deezer] Fallback match: "${withPreview.title}" by ${withPreview.artist.name}`);
+    return withPreview;
+  }
+
+  console.log("⚠️ [Deezer] No tracks with previews found");
+  return null;
 }
 
 // =============================================================================

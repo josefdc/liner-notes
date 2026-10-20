@@ -7,7 +7,9 @@
  * - Remix relationships
  * - Artist collaborations
  *
- * Uses MusicBrainz API v2 with rate limiting (1 req/sec)
+ * Every request goes through one queue that keeps to MusicBrainz's limit of one request per
+ * second, and each request has a timeout, so a stuck request cannot hold the queue. A search
+ * whose results do not match the title and artist reports "not found" rather than the first hit.
  *
  * @see https://musicbrainz.org/doc/MusicBrainz_API
  */
@@ -15,6 +17,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
+import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
 
 dotenv.config();
 
@@ -48,6 +51,14 @@ interface MBSearchResponse {
   count: number;
 }
 
+interface MBArtist {
+  id: string;
+  name: string;
+  type?: string;
+  country?: string;
+  "life-span"?: { begin?: string };
+}
+
 interface GenealogyRelation {
   type: "sample" | "cover" | "remix" | "influence";
   direction: "source" | "derived";
@@ -57,6 +68,41 @@ interface GenealogyRelation {
   relationshipType: string;
 }
 
+// Fields the pipeline reads, kept when a response is recorded to a cassette.
+const ARTIST_CREDIT_SHAPE: Shape = [{ name: true, artist: { id: true, name: true } }];
+const RECORDING_SEARCH_SHAPE: Shape = {
+  count: true,
+  recordings: [{ id: true, title: true, score: true, "artist-credit": ARTIST_CREDIT_SHAPE }],
+};
+const RECORDING_SHAPE: Shape = {
+  id: true,
+  title: true,
+  "artist-credit": ARTIST_CREDIT_SHAPE,
+  relations: [
+    {
+      type: true,
+      "type-id": true,
+      direction: true,
+      recording: { id: true, title: true },
+      work: { id: true, title: true },
+      artist: { id: true, name: true },
+      attributes: true,
+      "target-credit": true,
+    },
+  ],
+};
+const ARTIST_SEARCH_SHAPE: Shape = {
+  count: true,
+  artists: [{ id: true, name: true, score: true, type: true, country: true }],
+};
+const ARTIST_SHAPE: Shape = {
+  id: true,
+  name: true,
+  type: true,
+  country: true,
+  relations: [{ type: true, artist: { id: true, name: true } }],
+};
+
 // =============================================================================
 // Rate Limiter (Singleton with Queue)
 // MusicBrainz requires max 1 request per second
@@ -65,7 +111,7 @@ interface GenealogyRelation {
 class MusicBrainzRateLimiter {
   private static instance: MusicBrainzRateLimiter;
   private lastRequestTime: number = 0;
-  private readonly minInterval: number = 1100; // 1.1 seconds for safety margin
+  private minInterval: number = 1100; // 1.1 seconds for safety margin
   private queue: Array<() => Promise<void>> = [];
   private processing: boolean = false;
 
@@ -78,22 +124,31 @@ class MusicBrainzRateLimiter {
     return MusicBrainzRateLimiter.instance;
   }
 
+  /** Tests only: shortens the spacing between requests; returns a restore function. */
+  setIntervalForTests(ms: number): () => void {
+    const previous = this.minInterval;
+    this.minInterval = ms;
+    return () => {
+      this.minInterval = previous;
+    };
+  }
+
   /**
-   * Execute a request with rate limiting
+   * Execute a request with rate limiting. `fn` must settle on its own (every MusicBrainz request
+   * has a timeout), so one request can never stall the queue.
    */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     return new Promise((resolve, reject) => {
       this.queue.push(async () => {
         try {
-          const result = await fn();
-          resolve(result);
+          resolve(await fn());
         } catch (error) {
           reject(error);
         }
       });
 
       if (!this.processing) {
-        this.processQueue();
+        void this.processQueue();
       }
     });
   }
@@ -104,8 +159,7 @@ class MusicBrainzRateLimiter {
     this.processing = true;
 
     while (this.queue.length > 0) {
-      const now = Date.now();
-      const elapsed = now - this.lastRequestTime;
+      const elapsed = Date.now() - this.lastRequestTime;
 
       if (elapsed < this.minInterval) {
         await this.delay(this.minInterval - elapsed);
@@ -131,7 +185,6 @@ class MusicBrainzRateLimiter {
 // =============================================================================
 
 const MB_API_BASE = "https://musicbrainz.org/ws/2";
-const USER_AGENT = process.env.MUSICBRAINZ_USER_AGENT || "SonicAgent/1.0 (contact@example.com)";
 
 // Relationship types we care about for genealogy
 const GENEALOGY_RELATION_TYPES = [
@@ -146,74 +199,108 @@ const GENEALOGY_RELATION_TYPES = [
   "quotation",
 ];
 
+const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isMbid(value: unknown): value is string {
+  return typeof value === "string" && MBID.test(value);
+}
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
 
 const rateLimiter = MusicBrainzRateLimiter.getInstance();
 
-/**
- * Make a rate-limited request to MusicBrainz API
- */
-async function mbFetch<T>(url: string): Promise<T> {
-  return rateLimiter.execute(async () => {
-    console.log(`🧠 [MusicBrainz] Request: ${url.replace(MB_API_BASE, "")}`);
+/** Escapes Lucene query syntax so a title or name is searched as plain text. */
+export function escapeLucene(text: string): string {
+  return text.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, "\\$&");
+}
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "application/json",
-      },
+/** Lowercase, without accents, punctuation or extra spaces, for comparing names. */
+function normalizeName(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** A rate-limited GET to the MusicBrainz API (JSON), with a timeout. */
+async function mbFetch<T>(path: string, params: Record<string, string>, scrub: Shape): Promise<T> {
+  const url = new URL(`${MB_API_BASE}/${path}`);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  url.searchParams.set("fmt", "json");
+  return rateLimiter.execute(() => {
+    console.log(`🧠 [MusicBrainz] Request: /${path}`);
+    return fetchJson<T>({
+      source: "musicbrainz",
+      url,
+      headers: { Accept: "application/json" },
+      rateLimitStatuses: [429, 503],
+      scrub,
     });
-
-    if (response.status === 503) {
-      throw new Error("MusicBrainz rate limited - please retry later");
-    }
-
-    if (!response.ok) {
-      throw new Error(`MusicBrainz API error: ${response.status}`);
-    }
-
-    return response.json() as Promise<T>;
   });
 }
 
 /**
- * Search for a recording by title and artist
+ * The recording matching the title and the (first credited) artist, or null when no result
+ * matches: an unrelated first hit is never used.
  */
 async function searchRecording(title: string, artist: string): Promise<MBRecording | null> {
-  const query = encodeURIComponent(`recording:"${title}" AND artist:"${artist}"`);
-  const url = `${MB_API_BASE}/recording?query=${query}&limit=5&fmt=json`;
+  const firstArtist = artist.split(",")[0].trim();
+  const query = `recording:"${escapeLucene(title)}" AND artist:"${escapeLucene(firstArtist)}"`;
+  const data = await mbFetch<MBSearchResponse>(
+    "recording",
+    { query, limit: "5" },
+    RECORDING_SEARCH_SHAPE,
+  );
 
-  const data = await mbFetch<MBSearchResponse>(url);
+  const normalizedTitle = normalizeName(title);
+  const normalizedArtist = normalizeName(firstArtist);
+  if (!normalizedTitle || !normalizedArtist) return null;
 
-  if (!data.recordings || data.recordings.length === 0) {
-    return null;
-  }
-
-  // Find best match
-  const normalizedTitle = title.toLowerCase().trim();
-  const normalizedArtist = artist.toLowerCase().split(",")[0].trim();
-
-  const match =
-    data.recordings.find((r) => {
-      const rTitle = r.title.toLowerCase();
-      const rArtist = r["artist-credit"]?.[0]?.name?.toLowerCase() || "";
-      return (
-        (rTitle === normalizedTitle || rTitle.includes(normalizedTitle)) &&
-        (rArtist === normalizedArtist || rArtist.includes(normalizedArtist))
-      );
-    }) || data.recordings[0];
-
-  return match;
+  return (
+    (data.recordings ?? []).find((r) => {
+      if (!isMbid(r?.id) || typeof r.title !== "string") return false;
+      const rTitle = normalizeName(r.title);
+      const rArtist = normalizeName(r["artist-credit"]?.[0]?.name ?? "");
+      return rTitle.includes(normalizedTitle) && rArtist.includes(normalizedArtist);
+    }) ?? null
+  );
 }
 
 /**
  * Get full recording details with relationships
  */
-async function getRecordingWithRelations(mbid: string): Promise<MBRecording | null> {
-  const url = `${MB_API_BASE}/recording/${mbid}?inc=recording-rels+work-rels+artist-rels&fmt=json`;
-  return mbFetch<MBRecording>(url);
+async function getRecordingWithRelations(mbid: string): Promise<MBRecording> {
+  if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
+  return mbFetch<MBRecording>(
+    `recording/${mbid}`,
+    // Spaces are sent as "+", the separator MusicBrainz expects.
+    { inc: "recording-rels work-rels artist-rels" },
+    RECORDING_SHAPE,
+  );
+}
+
+/**
+ * The artist whose name matches `name` (ignoring case, accents and punctuation), or null.
+ * Goes through the rate-limited queue; other sources (ListenBrainz) resolve artists here.
+ */
+export async function findArtist(name: string): Promise<MBArtist | null> {
+  const firstArtist = name.split(",")[0].trim();
+  const wanted = normalizeName(firstArtist);
+  if (!wanted) return null;
+  const data = await mbFetch<{ artists?: MBArtist[] }>(
+    "artist",
+    { query: `artist:"${escapeLucene(firstArtist)}"`, limit: "5" },
+    ARTIST_SEARCH_SHAPE,
+  );
+  return (
+    (data.artists ?? []).find(
+      (a) => isMbid(a?.id) && typeof a.name === "string" && normalizeName(a.name) === wanted,
+    ) ?? null
+  );
 }
 
 /**
@@ -280,18 +367,8 @@ export const getMusicBrainzRelations = tool(
       // Step 2: Get full recording with relationships
       const fullRecording = await getRecordingWithRelations(recording.id);
 
-      if (!fullRecording) {
-        return JSON.stringify({
-          found: true,
-          mbid: recording.id,
-          title: recording.title,
-          relations: [],
-          message: "Recording found but no relationships available",
-        });
-      }
-
       // Step 3: Parse relationships
-      const relations = fullRecording.relations || [];
+      const relations = Array.isArray(fullRecording?.relations) ? fullRecording.relations : [];
       const genealogy = parseRelations(relations);
 
       // Categorize relationships
@@ -308,7 +385,7 @@ export const getMusicBrainzRelations = tool(
       return JSON.stringify({
         found: true,
         mbid: recording.id,
-        title: fullRecording.title,
+        title: fullRecording.title ?? recording.title,
         artist: fullRecording["artist-credit"]?.[0]?.name,
         totalRelations: relations.length,
         genealogy: {
@@ -321,7 +398,7 @@ export const getMusicBrainzRelations = tool(
         relationTypes: [...new Set(relations.map((r) => r.type))],
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = describeError(error);
       console.error("❌ [MusicBrainz] Error:", message);
       return JSON.stringify({
         found: false,
@@ -350,41 +427,25 @@ export const getMusicBrainzArtist = tool(
     try {
       console.log(`🧠 [MusicBrainz] Searching artist: "${artistName}"`);
 
-      // Search for artist
-      const query = encodeURIComponent(`artist:"${artistName}"`);
-      const searchUrl = `${MB_API_BASE}/artist?query=${query}&limit=1&fmt=json`;
-
-      const searchData = await mbFetch<{
-        artists: Array<{
-          id: string;
-          name: string;
-          type?: string;
-          country?: string;
-          "life-span"?: { begin?: string };
-        }>;
-      }>(searchUrl);
-
-      if (!searchData.artists || searchData.artists.length === 0) {
+      const artist = await findArtist(artistName);
+      if (!artist) {
         return JSON.stringify({
           found: false,
           message: `Artist "${artistName}" not found`,
         });
       }
 
-      const artist = searchData.artists[0];
-
       // Get artist relationships
-      const artistUrl = `${MB_API_BASE}/artist/${artist.id}?inc=artist-rels+recording-rels&fmt=json`;
       const artistData = await mbFetch<{
         id: string;
         name: string;
         type?: string;
         country?: string;
         relations?: MBRelation[];
-      }>(artistUrl);
+      }>(`artist/${artist.id}`, { inc: "artist-rels recording-rels" }, ARTIST_SHAPE);
 
       // Extract collaborators and influences
-      const relations = artistData.relations || [];
+      const relations = Array.isArray(artistData.relations) ? artistData.relations : [];
       const collaborators = relations
         .filter((r) => r.artist && r.type !== "member of band")
         .map((r) => ({
@@ -403,7 +464,7 @@ export const getMusicBrainzArtist = tool(
         totalRelations: relations.length,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = describeError(error);
       console.error("❌ [MusicBrainz] Artist error:", message);
       return JSON.stringify({ found: false, error: message });
     }

@@ -213,15 +213,16 @@ interface DisambiguationPayload {
 }
 
 /**
- * Reads why the scout ended a run from the error it put in the state: Spotify found nothing,
- * or Spotify could not be reached (its tools return "Error …" strings; a thrown error becomes
- * "Scout error: …"). Anything else is a plain failure. This reads the scout's text because its
- * tools return strings; it goes once they return typed results (#11).
+ * Reads why the scout ended a run from the error it put in the state. The scout reports three:
+ * "No tracks found" when the Spotify search answered `[]`; the Spotify client's text, which
+ * always starts "Error: ", when Spotify could not answer; and "Scout error: …" when something
+ * threw. Anything else is a plain failure. The state carries text, not a code, so this matches
+ * those exact forms; it goes when the scout reports a typed outcome.
  */
 function classifyNodeError(node: string, error: string): FailureCode {
   if (node !== "scout") return "failed";
-  if (/^No tracks? (found|data)/i.test(error)) return "no_match"; // guard-allow: string-sentinel-tool-results — until #11
-  if (/^Error\b|^Scout error\b/.test(error)) return "upstream_unavailable"; // guard-allow: string-sentinel-tool-results — until #11
+  if (error === "No tracks found") return "no_match"; // guard-allow: string-sentinel-tool-results — scout state is text until it reports a typed outcome
+  if (/^Error: |^Scout error: /.test(error)) return "upstream_unavailable"; // guard-allow: string-sentinel-tool-results — scout state is text until it reports a typed outcome
   return "failed";
 }
 

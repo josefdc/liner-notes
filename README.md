@@ -75,7 +75,7 @@ Built for performance and complex data visualization:
 | **Icons**          | Lucide React                                                 |
 | **Agent Backend**  | Node.js, Express, LangGraph (AI orchestration), Gemini Flash |
 | **External APIs**  | Spotify, MusicBrainz, Last.fm, Tavily (web search), Deezer   |
-| **Audio Analysis** | Python 3.11+, FastAPI, librosa (BPM/Key extraction)          |
+| **Audio Analysis** | Python 3.12+, FastAPI, librosa (BPM/Key extraction)          |
 | **Package Mgmt**   | npm (JS), uv (Python)                                        |
 
 ---
@@ -87,7 +87,7 @@ The system consists of three services that run simultaneously:
 ### Prerequisites
 
 - Node.js 18+
-- Python 3.11+
+- Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - ffmpeg (for audio processing)
 

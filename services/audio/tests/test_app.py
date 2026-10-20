@@ -1,5 +1,7 @@
 """HTTP behaviour of the service (FastAPI TestClient, no internet)."""
 
+import re
+
 import numpy as np
 import pytest
 import soundfile as sf
@@ -22,12 +24,27 @@ def test_health_reports_missing_models_as_degraded(client, monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "degraded", "version": main.VERSION, "models": False}
+    assert response.json() == {
+        "status": "degraded",
+        "analyzer_version": main.ANALYZER_VERSION,
+        "models": False,
+    }
 
 
 def test_health_reports_loaded_models(client, monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", True)
-    assert client.get("/health").json() == {"status": "ok", "version": main.VERSION, "models": True}
+    assert client.get("/health").json() == {
+        "status": "ok",
+        "analyzer_version": main.ANALYZER_VERSION,
+        "models": True,
+    }
+
+
+def test_one_analyzer_version_everywhere(client):
+    assert re.fullmatch(r"\d+\.\d+\.\d+", main.ANALYZER_VERSION)
+    assert main.app.version == main.ANALYZER_VERSION
+    assert client.get("/").json()["analyzer_version"] == main.ANALYZER_VERSION
+    assert "version" not in client.get("/health").json()
 
 
 def test_models_are_not_loaded_without_verified_files(tmp_path, monkeypatch):
@@ -90,6 +107,7 @@ def test_analyzes_a_downloaded_preview_and_removes_it(client, monkeypatch, tmp_p
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["source"] == "analyzed"
+    assert body["analyzer_version"] == main.ANALYZER_VERSION
     assert 5.5 < body["duration"] < 6.5
     assert not path.exists()
 

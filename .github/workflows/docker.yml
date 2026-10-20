@@ -102,7 +102,7 @@ jobs:
             sleep 2
           done
           echo
-          curl -fsS http://127.0.0.1:3102/health | grep -q '"status":"degraded","version":"[^"]*","models":false'
+          curl -fsS http://127.0.0.1:3102/health | grep -q '"status":"degraded","analyzer_version":"[^"]*","models":false'
           test "$(docker exec audio-smoke id -u)" -ne 0
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3102/analyze-test)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3102/analyze \

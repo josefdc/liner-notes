@@ -11,14 +11,19 @@ The API (`apps/api`) calls it server to server. It is not meant to be exposed to
 
 ### Local development
 
+Python 3.12 and [uv](https://docs.astral.sh/uv/) are required.
+
 ```bash
 cd services/audio
-uv sync
+uv sync                             # tempo, key and energy
+uv sync --extra models              # optional: also installs essentia-tensorflow
 uv run python download_models.py   # optional: perceptual models (about 22 MB)
 uv run uvicorn main:app --host 127.0.0.1 --port 3002 --reload
 ```
 
-Decoding MP3 needs `libsndfile` 1.1 or newer (bundled with the `soundfile` wheel) or `ffmpeg`.
+Without the `models` extra (or without the downloaded models) the service runs without
+perceptual features and `/health` reports `degraded`. Audio is decoded by `soundfile` with the
+`libsndfile` bundled in its wheel (1.1 or newer reads MP3); `ffmpeg` is not needed.
 
 ### Docker
 
@@ -27,7 +32,7 @@ docker build -t liner-notes-audio services/audio
 docker run --rm -p 127.0.0.1:3002:3002 -v liner-notes-models:/app/models liner-notes-audio
 ```
 
-The image runs as an unprivileged user (uid 10001). The models are not part of the image: on
+The image includes the `models` extra and runs as an unprivileged user (uid 10001). The models are not part of the image: on
 start, the container downloads them into `/app/models` (a volume, so they survive container
 re-creation) and checks each file against the SHA-256 pinned in `download_models.py`. If the
 download fails or times out, the service starts anyway without perceptual features and
@@ -59,11 +64,13 @@ All settings are optional environment variables.
 ### `GET /health` (and `HEAD /health`)
 
 Always `200` while the service can measure tempo and key. `status` is `ok` when the perceptual
-models are loaded and `degraded` when they are not.
+models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
+analysis output (`ANALYZER_VERSION` in `main.py`); it changes whenever a measurement can change
+for the same input, and every `/analyze` response carries it.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","version":"1.0.0","models":false}
+# {"status":"degraded","analyzer_version":"1.1.0","models":false}
 ```
 
 ### `POST /analyze`
@@ -86,6 +93,7 @@ Response (perceptual fields are `null` without the models):
   "energy": 0.67,
   "duration": 29.99,
   "source": "analyzed",
+  "analyzer_version": "1.1.0",
   "keyMoments": [{ "time": 0.51, "type": "onset", "intensity": 0.8, "description": "Beat transition" }],
   "valence": null,
   "danceability": null,
@@ -131,7 +139,8 @@ must finish within 20 s. The temporary file is removed after the analysis, whate
 ## How it works
 
 1. **Download** the preview as described above.
-2. **Decode** with `librosa.load()` at 22.05 kHz mono.
+2. **Decode** with `librosa.load()` (`soundfile`, resampled with `soxr`) at 22.05 kHz mono,
+   at most 35 s.
 3. **Tempo**: `librosa.beat.beat_track()` (onset strength envelope and dynamic-programming beat
    tracking).
 4. **Key and mode**: constant-Q chromagram (`librosa.feature.chroma_cqt`) correlated against the
@@ -153,10 +162,15 @@ uv run ruff format --check .
 ```
 
 The tests run without network access: a local HTTP server stands in for the CDN.
+`tests/test_fixtures.py` runs the real analysis on audio generated at test time (click tracks at
+85, 120, 140 and 174 BPM, an A major triad, silence, a 1 s clip and white noise, as WAV and MP3).
+The tempo tolerance is the estimator's resolution, explained in `tempo_bounds`. Known gaps (a
+tempo for a 1 s clip, a key and a tempo for noise) are recorded as strict `xfail`s.
 
 ## Troubleshooting
 
-- **`NoBackendError` / "Format not recognised"**: neither `libsndfile` nor `ffmpeg` could decode
-  the file. Install `ffmpeg` (`sudo apt install ffmpeg`, `brew install ffmpeg`).
+- **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
+  needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
+  platform without a bundled library and an old system `libsndfile`.
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

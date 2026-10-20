@@ -98,13 +98,13 @@ export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS) {
  * Get similar artists from ListenBrainz based on listening patterns
  */
 export const getListenBrainzSimilarArtists = tool(
-  async ({ artistMbid, artistName }): Promise<string> => {
+  async ({ artistMbid, artistName, artistNames }): Promise<string> => {
     try {
       // Resolve MBID from name if not directly provided
       let mbid = artistMbid;
       if (!mbid && artistName) {
         console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName}"...`);
-        mbid = (await findArtist(artistName))?.id;
+        mbid = (await findArtist(artistName, artistNames))?.id;
         if (!mbid) {
           return JSON.stringify({
             found: false,
@@ -146,6 +146,10 @@ export const getListenBrainzSimilarArtists = tool(
         .string()
         .optional()
         .describe("Artist name (will be resolved to MBID via MusicBrainz search)"),
+      artistNames: z
+        .array(z.string())
+        .optional()
+        .describe("When artistName joins several artists: the artists one by one"),
     }),
   },
 );

@@ -1,10 +1,10 @@
 /**
  * Spotify client and the LangGraph tools built on it.
  *
- * The typed functions (searchTracks, fetchTrack, fetchArtistTopTracks) resolve with data or
- * reject with a SourceError. The tools wrap them and return strings: JSON on success, and text
- * starting "Error:" when Spotify could not answer. A search with no match is `[]`, not an error.
- * Ids are checked before they reach a URL.
+ * The typed functions (searchTracks, fetchTrack) resolve with data or reject with a
+ * SourceError. The tools wrap them and return strings: JSON on success, and text starting
+ * "Error:" when Spotify could not answer. A search with no match is `[]`, not an error. Ids are
+ * checked before they reach a URL.
  */
 
 import { tool } from "@langchain/core/tools";
@@ -114,7 +114,6 @@ const TRACK_SHAPE: Shape = {
   external_urls: { spotify: true },
 };
 const SEARCH_SHAPE: Shape = { tracks: { items: [TRACK_SHAPE], total: true } };
-const TOP_TRACKS_SHAPE: Shape = { tracks: [TRACK_SHAPE] };
 const TOKEN_SHAPE: Shape = { access_token: true, token_type: true, expires_in: true };
 
 // =============================================================================
@@ -123,7 +122,6 @@ const TOKEN_SHAPE: Shape = { access_token: true, token_type: true, expires_in: t
 
 /** Spotify ids are 22 base-62 characters; anything else never reaches a URL. */
 const SPOTIFY_ID = /^[0-9A-Za-z]{22}$/;
-const MARKET = /^[A-Z]{2}$/;
 
 export function isSpotifyId(value: unknown): value is string {
   return typeof value === "string" && SPOTIFY_ID.test(value);
@@ -214,6 +212,14 @@ class SpotifyAuthManager {
     this.token = null;
     this.tokenExpiresAt = 0;
   }
+
+  /**
+   * Drops `rejected` after Spotify refused it. A token refreshed meanwhile (by another request
+   * that saw the same 401) is kept.
+   */
+  invalidate(rejected: string): void {
+    if (this.token === rejected) this.clearToken();
+  }
 }
 
 /** GET from the Web API; a 401 (token revoked or expired early) refreshes the token once. */
@@ -226,7 +232,7 @@ async function spotifyGet<T>(url: URL, scrub: Shape): Promise<T> {
     return await request(token);
   } catch (error) {
     if (!isSourceError(error, "http") || error.status !== 401) throw error;
-    auth.clearToken();
+    auth.invalidate(token);
     return request(await auth.getToken());
   }
 }
@@ -318,24 +324,6 @@ export async function fetchTrack(trackId: string): Promise<SpotifyTrackSummary> 
   return summarize(track);
 }
 
-/** An artist's top tracks in a market. */
-export async function fetchArtistTopTracks(
-  artistId: string,
-  market = "US",
-): Promise<SpotifyTrackSummary[]> {
-  const id = requireSpotifyId(artistId, "artist");
-  if (!MARKET.test(market)) {
-    throw new SourceError("spotify", "invalid_input", "market must be an ISO 3166-1 alpha-2 code");
-  }
-  const url = new URL(`https://api.spotify.com/v1/artists/${id}/top-tracks`);
-  url.searchParams.set("market", market);
-  const data = await spotifyGet<{ tracks?: SpotifyTrack[] }>(url, TOP_TRACKS_SHAPE);
-  if (!Array.isArray(data?.tracks)) {
-    throw new SourceError("spotify", "parse", "top-tracks response has no tracks");
-  }
-  return data.tracks.map(summarize);
-}
-
 // =============================================================================
 // LangGraph Tools
 // =============================================================================
@@ -420,30 +408,24 @@ export const getTrackDetails = tool(
 /**
  * Tool 3: Get artist's top tracks
  *
- * Useful for finding related songs by the same artist.
+ * Spotify removed `GET /artists/{id}/top-tracks` for development-mode apps (February 2026), so
+ * this makes no request and reports the source as unavailable. The answer is JSON with an empty
+ * `topTracks`, which the researcher reads as "nothing found".
  */
 export const getArtistTopTracks = tool(
-  async ({ artistId, market = "US" }): Promise<string> => {
-    try {
-      const tracks = await fetchArtistTopTracks(artistId, market);
-      const topTracks = tracks.slice(0, 5).map((t) => ({
-        id: t.id,
-        title: t.title,
-        album: t.album,
-        popularity: t.popularity,
-      }));
-      return JSON.stringify({ artistId, topTracks });
-    } catch (error) {
-      console.error("❌ [Spotify] Artist top tracks error:", describeError(error));
-      return errorText("getting artist top tracks", error);
-    }
-  },
+  async ({ artistId }): Promise<string> =>
+    JSON.stringify({
+      artistId,
+      topTracks: [],
+      found: false,
+      unavailable: true,
+      reason: "Spotify no longer offers artist top tracks to this app",
+    }),
   {
     name: "get_artist_top_tracks",
     description:
-      "Get the top tracks for a Spotify artist. " +
-      "Useful for discovering more songs by the same artist. " +
-      "Requires an Artist ID (available from spotify_search or get_track_details).",
+      "Unavailable: Spotify no longer offers artist top tracks to this app, so this always " +
+      "returns no tracks.",
     schema: z.object({
       artistId: z.string().describe("The Spotify Artist ID (22 character string)"),
       market: z.string().optional().describe("ISO 3166-1 alpha-2 country code (default: US)"),

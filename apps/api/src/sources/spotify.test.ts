@@ -4,6 +4,9 @@
  * request that never answers times out.
  */
 
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type FetchCall, json, never, stubFetch } from "./testing/fetchStub.js";
 
@@ -71,16 +74,6 @@ describe("Spotify client", () => {
 
       expect(net.calls, "no request, not even for a token").toHaveLength(0);
       expect(result).toMatch(/^Error: /);
-    });
-
-    it("getArtistTopTracks rejects a traversal id and a malformed market", async () => {
-      const net = stubFetch(() => undefined);
-
-      expect(await getArtistTopTracks.invoke({ artistId: "../tracks/abc" })).toMatch(/^Error: /);
-      expect(
-        await getArtistTopTracks.invoke({ artistId: "7GaxyUddsPok8BuhxN6OUW", market: "US&x=1" }),
-      ).toMatch(/^Error: /);
-      expect(net.calls).toHaveLength(0);
     });
 
     it("a valid id reaches exactly /v1/tracks/{id}", async () => {
@@ -185,5 +178,120 @@ describe("Spotify client", () => {
 
     expect(result).toHaveLength(1);
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
+  });
+
+  it("artist top tracks (removed by Spotify) makes no request and reports unavailable", async () => {
+    const net = stubFetch(() => undefined);
+
+    const data = JSON.parse(
+      await getArtistTopTracks.invoke({ artistId: "7GaxyUddsPok8BuhxN6OUW" }),
+    );
+
+    expect(net.calls).toHaveLength(0);
+    expect(data).toMatchObject({ topTracks: [], found: false, unavailable: true });
+  });
+
+  it("caches the token while it is valid", async () => {
+    const net = spotify((call) =>
+      call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined,
+    );
+
+    await getTrackDetails.invoke({ trackId: TRACK_ID });
+    await getTrackDetails.invoke({ trackId: TRACK_ID });
+
+    expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(1);
+  });
+
+  it("refreshes a token that expires within a minute", async () => {
+    const net = stubFetch((call) => {
+      if (call.url === TOKEN_URL) {
+        return json({ access_token: "short-lived", token_type: "Bearer", expires_in: 30 });
+      }
+      return call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined;
+    });
+
+    await getTrackDetails.invoke({ trackId: TRACK_ID });
+    await getTrackDetails.invoke({ trackId: TRACK_ID });
+
+    expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
+  });
+
+  it.each([
+    [50, "10"],
+    [0, "1"],
+    [-3, "1"],
+    [3, "3"],
+  ])("a search limit of %i is sent as %s", async (limit, sent) => {
+    const net = spotify((call) =>
+      call.url.startsWith(`${API}/search?`) ? json(searchAnswer([])) : undefined,
+    );
+
+    await searchMultipleTracks.invoke({ query: "ice ice baby", limit });
+
+    const search = apiCalls(net.calls)[0];
+    expect(new URL(search.url).searchParams.get("limit")).toBe(sent);
+  });
+
+  it("a 401 that arrives after a refresh keeps the fresh token", async () => {
+    let tokens = 0;
+    let releaseLate!: () => void;
+    const late = new Promise<void>((r) => {
+      releaseLate = r;
+    });
+    let staleCalls = 0;
+    const net = stubFetch(async (call) => {
+      if (call.url === TOKEN_URL) {
+        tokens++;
+        return json({ access_token: `token-${tokens}`, token_type: "Bearer", expires_in: 3600 });
+      }
+      if (!call.url.startsWith(`${API}/tracks/`)) return undefined;
+      if (call.headers.authorization === "Bearer token-1") {
+        staleCalls++;
+        // The first request is refused at once; the second one's refusal arrives late.
+        if (staleCalls === 2) await late;
+        return json({ error: { status: 401, message: "expired" } }, { status: 401 });
+      }
+      return json(track());
+    });
+
+    const first = getTrackDetails.invoke({ trackId: TRACK_ID });
+    const second = getTrackDetails.invoke({ trackId: TRACK_ID });
+    await first;
+    releaseLate();
+    await second;
+
+    expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
+  });
+
+  it("a recorded token exchange keeps neither the access token nor the client secret", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "spotify-cassette-"));
+    process.env.SOURCE_CASSETTE = "record";
+    process.env.SOURCE_CASSETTE_DIR = dir;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubFetch((call) => {
+      if (call.url === TOKEN_URL) {
+        return json({
+          access_token: "live-access-token-0123456789",
+          token_type: "Bearer",
+          expires_in: 3600,
+        });
+      }
+      return call.url.startsWith(`${API}/search?`) ? json(searchAnswer([track()])) : undefined;
+    });
+    try {
+      await searchMultipleTracks.invoke({ query: "ice ice baby" });
+
+      const recorded = readdirSync(dir)
+        .map((f) => readFileSync(join(dir, f), "utf8"))
+        .join("\n");
+      expect(recorded).toContain("accounts.spotify.com/api/token");
+      expect(recorded).not.toContain("live-access-token-0123456789");
+      expect(recorded).not.toContain("test-secret");
+      expect(recorded).not.toContain(Buffer.from("test-client:test-secret").toString("base64"));
+    } finally {
+      delete process.env.SOURCE_CASSETTE;
+      delete process.env.SOURCE_CASSETTE_DIR;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

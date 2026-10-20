@@ -1,0 +1,61 @@
+{
+  "count": 62,
+  "recordings": [
+    {
+      "id": "4fb40bda-30d3-406c-90bc-e9c7df5ddc16",
+      "title": "Me and Bobby McGee",
+      "score": 100,
+      "artist-credit": [
+        {
+          "name": "Janis Joplin",
+          "artist": {
+            "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
+            "name": "Janis Joplin"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b9f64855-e163-4db0-bf5d-bd46e67ea655",
+      "title": "Me and Bobby McGee",
+      "score": 100,
+      "artist-credit": [
+        {
+          "name": "Janis Joplin",
+          "artist": {
+            "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
+            "name": "Janis Joplin"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a134a5a8-0e02-439d-9976-7665c98b841a",
+      "title": "Me and Bobby McGee",
+      "score": 100,
+      "artist-credit": [
+        {
+          "name": "Janis Joplin",
+          "artist": {
+            "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
+            "name": "Janis Joplin"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f2ef4bae-8ae2-41d5-9ca8-27427d4cc414",
+      "title": "Me And Bobby McGee",
+      "score": 100,
+      "artist-credit": [
+        {
+          "name": "Janis Joplin",
+          "artist": {
+            "id": "76c9a186-75bd-436a-85c0-823e3efddb7f",
+            "name": "Janis Joplin"
+          }
+        }
+      ]
+    }
+  ]
+}

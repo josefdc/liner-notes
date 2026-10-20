@@ -1,0 +1,30 @@
+{
+  "count": 1201,
+  "artists": [
+    {
+      "id": "0aa8294b-6332-4b65-b677-e3a1f8591d3b",
+      "name": "Bonnie Tyler",
+      "score": 100
+    },
+    {
+      "id": "23d89243-79c9-4afc-8db5-fce27e7ba78d",
+      "name": "Brian Tyler",
+      "score": 98
+    },
+    {
+      "id": "03cfec4a-9885-444c-9e74-5fbab5861106",
+      "name": "Tyler Bates",
+      "score": 91
+    },
+    {
+      "id": "f6beac20-5dfe-4d1f-ae02-0b0a740aafd6",
+      "name": "Tyler, The Creator",
+      "score": 83
+    },
+    {
+      "id": "21555153-2d8b-4154-980e-7917a85bc4b4",
+      "name": "Wat Tyler",
+      "score": 78
+    }
+  ]
+}

@@ -74,7 +74,10 @@ describe("Last.fm tools without an API key", () => {
     expect(networkCalls).toBe(0);
   });
 
-  it("reported the missing key once", () => {
+  it("reports the missing key once", async () => {
+    // Runs tools itself, so it holds in any test order.
+    await getLastfmTrackTags.invoke({ title: "Bohemian Rhapsody", artist: "Queen" });
+    await getLastfmArtistTags.invoke({ artist: "Queen" });
     expect(warnings.filter((line) => line.includes("LASTFM_API_KEY"))).toHaveLength(1);
   });
 });
@@ -145,5 +148,19 @@ describe("Last.fm tools with a key", () => {
     expect(data.found).toBe(false);
     expect(data.error).toContain("Track not found");
     expect(data).not.toHaveProperty("tags");
+  });
+
+  it("reads an error sent with HTTP 200", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(API)
+        ? json({ error: 6, message: "The artist you supplied could not be found" })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Nobody At All" }));
+
+    expect(data.found).toBe(false);
+    expect(data.error).toContain("could not be found");
+    expect(data).not.toHaveProperty("name");
   });
 });

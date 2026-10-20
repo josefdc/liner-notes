@@ -219,7 +219,7 @@ interface DisambiguationPayload {
  * threw. Anything else is a plain failure. The state carries text, not a code, so this matches
  * those exact forms; it goes when the scout reports a typed outcome.
  */
-function classifyNodeError(node: string, error: string): FailureCode {
+export function classifyNodeError(node: string, error: string): FailureCode {
   if (node !== "scout") return "failed";
   if (error === "No tracks found") return "no_match"; // guard-allow: string-sentinel-tool-results — scout state is text until it reports a typed outcome
   if (/^Error: |^Scout error: /.test(error)) return "upstream_unavailable"; // guard-allow: string-sentinel-tool-results — scout state is text until it reports a typed outcome

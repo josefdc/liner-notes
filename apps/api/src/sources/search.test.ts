@@ -13,6 +13,7 @@ vi.hoisted(() => {
 });
 
 import * as search from "./search.js";
+import { EXCLUDED_DOMAINS, isLyricPage } from "./search.js";
 
 const { searchMusicInfo, searchProductionHistory, searchSamples } = search;
 const TAVILY = "https://api.tavily.com/search";
@@ -89,7 +90,15 @@ describe("web research searches", () => {
 
     expect(net.calls).toHaveLength(1);
     const body = JSON.parse(net.calls[0].body ?? "{}");
-    expect(body.exclude_domains).toEqual(expect.arrayContaining(["genius.com", "azlyrics.com"]));
+    expect(body.exclude_domains).toEqual(
+      expect.arrayContaining([
+        "genius.com",
+        "azlyrics.com",
+        "songtexte.com",
+        "tekstowo.pl",
+        "genius-com.translate.goog",
+      ]),
+    );
     expect(text).not.toContain("LYRIC_TEXT_SHOULD_NOT_APPEAR");
     expect(text).not.toContain("genius.com");
   });
@@ -111,8 +120,10 @@ describe("web research searches", () => {
       artistName: "Vanilla Ice",
     });
 
-    expect(text).toMatch(/^No sample information found/);
+    expect(text).toMatch(/^Error: no web results: no sample information found/);
     expect(researcherKeeps(text)).toBe(false);
+    // historianNode keeps any search text that does not start with "Error".
+    expect(text.startsWith("Error")).toBe(true);
   });
 
   it.each([
@@ -140,5 +151,71 @@ describe("web research searches", () => {
     for (const t of search.searchTools) {
       expect(t.description).not.toMatch(/lyric/i);
     }
+  });
+
+  describe("lyric filter", () => {
+    it.each([
+      "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "https://genius.com/Vanilla-ice-ice-ice-baby-annotated",
+      "https://www.lyricsondemand.com/v/vanillaice/iceicebaby.html",
+      "https://www.azlyrics.com/lyrics/vanillaice/iceicebaby.html",
+      "https://www.songtexte.com/songtext/vanilla-ice/ice-ice-baby-1bd6a5f4.html",
+      "https://www.songtexte.bz/vanilla-ice/ice-ice-baby.html",
+      "https://www.tekstowo.pl/piosenka,vanilla_ice,ice_ice_baby.html",
+      "https://www.paroles-musique.com/paroles-Vanilla_Ice-Ice_Ice_Baby-lyrics,p1.html",
+      "https://www.musica.com/letras.asp?letra=123",
+      "https://www.letras.mus.br/vanilla-ice/ice-ice-baby/",
+    ])("blocks the lyric site %s", (url) => {
+      expect(isLyricPage(url)).toBe(true);
+    });
+
+    it.each([
+      ["no scheme", "genius.com/Vanilla-ice-ice-ice-baby-annotated"],
+      ["no scheme, www", "www.genius.com/Vanilla-ice-ice-ice-baby-annotated"],
+      ["protocol-relative", "//genius.com/Vanilla-ice-ice-ice-baby-annotated"],
+    ])("parses a URL with %s", (_name, url) => {
+      expect(isLyricPage(url)).toBe(true);
+    });
+
+    it.each([
+      "https://genius-com.translate.goog/Vanilla-ice-ice-ice-baby?_x_tr_sl=en",
+      "https://www-azlyrics-com.translate.goog/lyrics/vanillaice/iceicebaby.html",
+      "https://translate.google.com/translate?u=https://genius.com/Vanilla-ice-ice-ice-baby",
+    ])("sees through the translate proxy %s", (url) => {
+      expect(isLyricPage(url)).toBe(true);
+    });
+
+    it.each([
+      ["lyrics", "https://news.example.test/music/ice-ice-baby-lyrics"],
+      ["songtext", "https://www.example.de/songtext/vanilla-ice/ice-ice-baby"],
+      ["paroles", "https://www.example.fr/paroles/vanilla-ice"],
+      ["letras", "https://www.example.es/letras/vanilla-ice"],
+      ["tekst", "https://www.example.pl/tekst-piosenki/ice-ice-baby"],
+    ])("blocks a page whose path says %s", (_word, url) => {
+      expect(isLyricPage(url)).toBe(true);
+    });
+
+    it.each([
+      "https://www.rollingstone.com/music/music-news/vanilla-ice-lyric-video-123456/",
+      "https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby/",
+      "https://en.wikipedia.org/wiki/Ice_Ice_Baby",
+      "https://www.soundonsound.com/people/making-of-ice-ice-baby",
+    ])("does not block %s", (url) => {
+      expect(isLyricPage(url)).toBe(false);
+    });
+
+    it("excludes the new lyric sites and their translate proxies in the request", () => {
+      expect(EXCLUDED_DOMAINS).toEqual(
+        expect.arrayContaining([
+          "songtexte.com",
+          "songtexte.bz",
+          "tekstowo.pl",
+          "paroles-musique.com",
+          "musica.com",
+          "genius-com.translate.goog",
+          "paroles--musique-com.translate.goog",
+        ]),
+      );
+    });
   });
 });

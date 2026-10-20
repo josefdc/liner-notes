@@ -17,7 +17,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
-import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
+import { describeError, fetchJson, isSourceError, type Shape, SourceError } from "./http.js";
 
 dotenv.config();
 
@@ -28,11 +28,14 @@ dotenv.config();
 interface MBRecording {
   id: string;
   title: string;
-  "artist-credit"?: Array<{
-    name: string;
-    artist: { id: string; name: string };
-  }>;
+  "artist-credit"?: MBArtistCredit[];
   relations?: MBRelation[];
+}
+
+interface MBArtistCredit {
+  name: string;
+  joinphrase?: string;
+  artist: { id: string; name: string };
 }
 
 interface MBRelation {
@@ -69,7 +72,9 @@ interface GenealogyRelation {
 }
 
 // Fields the pipeline reads, kept when a response is recorded to a cassette.
-const ARTIST_CREDIT_SHAPE: Shape = [{ name: true, artist: { id: true, name: true } }];
+const ARTIST_CREDIT_SHAPE: Shape = [
+  { name: true, joinphrase: true, artist: { id: true, name: true } },
+];
 const RECORDING_SEARCH_SHAPE: Shape = {
   count: true,
   recordings: [{ id: true, title: true, score: true, "artist-credit": ARTIST_CREDIT_SHAPE }],
@@ -216,56 +221,120 @@ export function escapeLucene(text: string): string {
   return text.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, "\\$&");
 }
 
-/** Lowercase, without accents, punctuation or extra spaces, for comparing names. */
-function normalizeName(text: string): string {
+/**
+ * Lowercase, without accents, punctuation or extra spaces, and "&" read as "and", for comparing
+ * names: "Me & Bobby McGee" and "Me and Bobby McGee" are the same title.
+ */
+export function normalizeName(text: string): string {
   return text
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{M}+/gu, "")
     .toLowerCase()
+    .replace(/&/g, " and ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
-/** A rate-limited GET to the MusicBrainz API (JSON), with a timeout. */
+/** A title without a featured-artist suffix: "Song (feat. X)", "Song - feat. X", "Song ft. X". */
+export function withoutFeatured(title: string): string {
+  return title
+    .replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, "")
+    .replace(/\s+(?:-\s+)?(?:feat\.?|ft\.?|featuring)\s.*$/i, "")
+    .trim();
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The longest wait honoured from a Retry-After before the one retry. */
+const MAX_RETRY_WAIT_MS = 2000;
+
+/**
+ * A rate-limited GET to the MusicBrainz API (JSON), with a timeout. When MusicBrainz sheds the
+ * request (503, or 429) it is retried once, after its Retry-After (at most 2 s), through the
+ * queue again.
+ */
 async function mbFetch<T>(path: string, params: Record<string, string>, scrub: Shape): Promise<T> {
   const url = new URL(`${MB_API_BASE}/${path}`);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   url.searchParams.set("fmt", "json");
-  return rateLimiter.execute(() => {
-    console.log(`🧠 [MusicBrainz] Request: /${path}`);
-    return fetchJson<T>({
-      source: "musicbrainz",
-      url,
-      headers: { Accept: "application/json" },
-      rateLimitStatuses: [429, 503],
-      scrub,
+  const attempt = () =>
+    rateLimiter.execute(() => {
+      console.log(`🧠 [MusicBrainz] Request: /${path}`);
+      return fetchJson<T>({
+        source: "musicbrainz",
+        url,
+        headers: { Accept: "application/json" },
+        rateLimitStatuses: [429, 503],
+        scrub,
+      });
     });
-  });
+  try {
+    return await attempt();
+  } catch (error) {
+    if (!isSourceError(error, "rate_limited")) throw error;
+    await delay(Math.min(error.retryAfterMs ?? MAX_RETRY_WAIT_MS, MAX_RETRY_WAIT_MS));
+    return attempt();
+  }
 }
 
 /**
- * The recording matching the title and the (first credited) artist, or null when no result
- * matches: an unrelated first hit is never used.
+ * True when the recording is credited to exactly the requested artist: the whole credit
+ * ("Queen & David Bowie") equals the artist string, or the credited artists are exactly the
+ * requested ones, each matched by its credited or canonical name. The requested artists are
+ * `artistNames` when given, else the comma-separated parts of `artist` (a Spotify artist
+ * string); a part alone never matches, so "Earth, Wind & Fire" is not "Earth".
  */
-async function searchRecording(title: string, artist: string): Promise<MBRecording | null> {
-  const firstArtist = artist.split(",")[0].trim();
-  const query = `recording:"${escapeLucene(title)}" AND artist:"${escapeLucene(firstArtist)}"`;
+function creditedTo(recording: MBRecording, artist: string, artistNames?: string[]): boolean {
+  const credits = (recording["artist-credit"] ?? []).filter((c) => typeof c?.name === "string");
+  if (credits.length === 0) return false;
+  const full = normalizeName(credits.map((c) => `${c.name}${c.joinphrase ?? ""}`).join(""));
+  if (full === normalizeName(artist)) return true;
+
+  const wanted = [
+    ...new Set((artistNames?.length ? artistNames : artist.split(",")).map(normalizeName)),
+  ].filter(Boolean);
+  if (wanted.length !== credits.length) return false;
+  const namesOf = (c: MBArtistCredit) =>
+    [c.name, c.artist?.name].filter((n): n is string => typeof n === "string").map(normalizeName);
+  return (
+    credits.every((c) => namesOf(c).some((n) => wanted.includes(n))) &&
+    wanted.every((w) => credits.some((c) => namesOf(c).includes(w)))
+  );
+}
+
+/**
+ * The recording whose title (without a featured-artist suffix) and credited artists match
+ * exactly, or null: a near title or a partial credit never matches, and an unrelated first hit
+ * is never used. A title or artist with nothing to compare sends no request.
+ */
+async function searchRecording(
+  title: string,
+  artist: string,
+  artistNames?: string[],
+): Promise<MBRecording | null> {
+  const bareTitle = withoutFeatured(title);
+  const wantedTitle = normalizeName(bareTitle);
+  const parts = (artistNames?.length ? artistNames : artist.split(","))
+    .map((p) => p.trim())
+    .filter((p) => normalizeName(p));
+  if (!wantedTitle || !normalizeName(artist) || parts.length === 0) return null;
+
+  // Every part as its own phrase, so the search finds "Earth, Wind & Fire" and "A feat. B".
+  const artistQuery = parts.map((p) => `artist:"${escapeLucene(p)}"`).join(" AND ");
+  const query = `recording:"${escapeLucene(bareTitle)}" AND ${artistQuery}`;
   const data = await mbFetch<MBSearchResponse>(
     "recording",
-    { query, limit: "5" },
+    { query, limit: "10" },
     RECORDING_SEARCH_SHAPE,
   );
 
-  const normalizedTitle = normalizeName(title);
-  const normalizedArtist = normalizeName(firstArtist);
-  if (!normalizedTitle || !normalizedArtist) return null;
-
   return (
-    (data.recordings ?? []).find((r) => {
+    (Array.isArray(data?.recordings) ? data.recordings : []).find((r) => {
       if (!isMbid(r?.id) || typeof r.title !== "string") return false;
-      const rTitle = normalizeName(r.title);
-      const rArtist = normalizeName(r["artist-credit"]?.[0]?.name ?? "");
-      return rTitle.includes(normalizedTitle) && rArtist.includes(normalizedArtist);
+      return (
+        normalizeName(withoutFeatured(r.title)) === wantedTitle &&
+        creditedTo(r, artist, artistNames)
+      );
     }) ?? null
   );
 }
@@ -283,24 +352,37 @@ async function getRecordingWithRelations(mbid: string): Promise<MBRecording> {
   );
 }
 
-/**
- * The artist whose name matches `name` (ignoring case, accents and punctuation), or null.
- * Goes through the rate-limited queue; other sources (ListenBrainz) resolve artists here.
- */
-export async function findArtist(name: string): Promise<MBArtist | null> {
-  const firstArtist = name.split(",")[0].trim();
-  const wanted = normalizeName(firstArtist);
+/** The artist named exactly `name` (after normalising) among MusicBrainz's matches, or null. */
+async function searchArtistExact(name: string): Promise<MBArtist | null> {
+  const wanted = normalizeName(name);
   if (!wanted) return null;
   const data = await mbFetch<{ artists?: MBArtist[] }>(
     "artist",
-    { query: `artist:"${escapeLucene(firstArtist)}"`, limit: "5" },
+    { query: `artist:"${escapeLucene(name.trim())}"`, limit: "10" },
     ARTIST_SEARCH_SHAPE,
   );
   return (
-    (data.artists ?? []).find(
+    (Array.isArray(data?.artists) ? data.artists : []).find(
       (a) => isMbid(a?.id) && typeof a.name === "string" && normalizeName(a.name) === wanted,
     ) ?? null
   );
+}
+
+/**
+ * The MusicBrainz artist for a name, or null; never a different artist.
+ *
+ * `name` is searched whole and only an exact (normalised) name match is accepted, so
+ * "Earth, Wind & Fire" and "Tyler, The Creator" resolve to themselves. A Spotify artist string
+ * joins several artists with ", ", which cannot be told apart from a comma in one name; when the
+ * caller passes the separate `artistNames`, the first one is tried if the whole name has no
+ * match. Goes through the rate-limited queue; ListenBrainz resolves artists here too.
+ */
+export async function findArtist(name: string, artistNames?: string[]): Promise<MBArtist | null> {
+  const whole = await searchArtistExact(name);
+  if (whole) return whole;
+  const first = artistNames?.find((n) => normalizeName(n));
+  if (first && normalizeName(first) !== normalizeName(name)) return searchArtistExact(first);
+  return null;
 }
 
 /**
@@ -347,12 +429,12 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
  * Get structured sample and genealogy data from MusicBrainz
  */
 export const getMusicBrainzRelations = tool(
-  async ({ title, artist }): Promise<string> => {
+  async ({ title, artist, artistNames }): Promise<string> => {
     try {
       console.log(`🧠 [MusicBrainz] Searching: "${title}" by ${artist}`);
 
       // Step 1: Search for recording
-      const recording = await searchRecording(title, artist);
+      const recording = await searchRecording(title, artist, artistNames);
 
       if (!recording) {
         return JSON.stringify({
@@ -414,7 +496,11 @@ export const getMusicBrainzRelations = tool(
       "with samples, covers, remixes. HIGHEST PRIORITY for genealogy accuracy.",
     schema: z.object({
       title: z.string().describe("The exact song title"),
-      artist: z.string().describe("The artist name"),
+      artist: z.string().describe("The artist name, or Spotify's artist string (joined by ', ')"),
+      artistNames: z
+        .array(z.string())
+        .optional()
+        .describe("The track's artists one by one, when known (e.g. Spotify's artist list)"),
     }),
   },
 );
@@ -423,11 +509,11 @@ export const getMusicBrainzRelations = tool(
  * Get artist discography and related artists
  */
 export const getMusicBrainzArtist = tool(
-  async ({ artistName }): Promise<string> => {
+  async ({ artistName, artistNames }): Promise<string> => {
     try {
       console.log(`🧠 [MusicBrainz] Searching artist: "${artistName}"`);
 
-      const artist = await findArtist(artistName);
+      const artist = await findArtist(artistName, artistNames);
       if (!artist) {
         return JSON.stringify({
           found: false,
@@ -476,6 +562,10 @@ export const getMusicBrainzArtist = tool(
       "Use for artist-based genealogy connections.",
     schema: z.object({
       artistName: z.string().describe("The artist or band name"),
+      artistNames: z
+        .array(z.string())
+        .optional()
+        .describe("When artistName joins several artists: the artists one by one"),
     }),
   },
 );

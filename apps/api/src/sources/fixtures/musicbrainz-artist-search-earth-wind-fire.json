@@ -1,0 +1,30 @@
+{
+  "count": 877,
+  "artists": [
+    {
+      "id": "535afeda-2538-435d-9dd1-5e10be586774",
+      "name": "Earth, Wind & Fire",
+      "score": 100
+    },
+    {
+      "id": "8a0e10a9-80c7-40e0-bf5b-89f1d57f9537",
+      "name": "Iced Earth",
+      "score": 94
+    },
+    {
+      "id": "83e9c775-84ea-4cf6-abdf-b9ffa8c3d060",
+      "name": "Manfred Mann\u2019s Earth Band",
+      "score": 91
+    },
+    {
+      "id": "670cc8bc-a6e1-40cd-b20a-86753456d6fa",
+      "name": "Rare Earth",
+      "score": 89
+    },
+    {
+      "id": "60dd41cf-8f9d-46d8-bc19-dc7e5acb24c8",
+      "name": "Earth",
+      "score": 89
+    }
+  ]
+}

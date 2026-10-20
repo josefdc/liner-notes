@@ -69,7 +69,10 @@ describe("web search without an API key", () => {
     }
   });
 
-  it("logs the missing key once", () => {
+  it("logs the missing key once", async () => {
+    // Runs searches itself, so it holds in any test order.
+    await searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" });
+    await searchMusicInfo.invoke({ query: "Ice Ice Baby" });
     expect(warnings.filter((line) => line.includes("TAVILY_API_KEY"))).toHaveLength(1);
   });
 });

@@ -3,10 +3,11 @@
  * background.
  *
  * `webSearch` resolves with normalised results (title, URL, text) or rejects with a
- * SourceError. The tools return strings, which the researcher and historian filter by prefix:
+ * SourceError. The tools return strings:
  *   - results: one block per result, "title / URL / text", separated by blank lines;
- *   - nothing found: a sentence starting "No …";
- *   - search unavailable (no key, timeout, API error): text starting "Error:".
+ *   - nothing found, or search unavailable (no key, timeout, API error): text starting
+ *     "Error:". The historian keeps any search text that does not start with "Error", so
+ *     "nothing found" uses that prefix too; neither ever becomes research.
  * Lyric sites are excluded from every search, so no lyric text reaches research.
  */
 
@@ -40,23 +41,64 @@ export const LYRIC_SITES = [
   "lyricfind.com",
   "letras.com",
   "letras.mus.br",
+  "musica.com",
   "lyrics.az",
   "elyrics.net",
   "lyrics.fandom.com",
+  "songtexte.com",
+  "songtexte.bz",
+  "tekstowo.pl",
+  "paroles-musique.com",
+  "paroles.net",
 ] as const;
 
-/** True for a URL on a lyric site, or a page that is evidently lyrics. */
+/** A host as Google's translate proxy writes it: "genius.com" → "genius-com.translate.goog". */
+function translateProxyHost(host: string): string {
+  return `${host.replace(/-/g, "--").replace(/\./g, "-")}.translate.goog`;
+}
+
+/** The host a translate.goog proxy host stands for: "genius-com.translate.goog" → "genius.com". */
+function unproxyHost(host: string): string {
+  const label = host.slice(0, -".translate.goog".length);
+  return label.replace(/--/g, "\0").replace(/-/g, ".").replace(/\0/g, "-");
+}
+
+/** Domains sent as `exclude_domains`: the lyric sites and their translate-proxy hosts. */
+export const EXCLUDED_DOMAINS = [...LYRIC_SITES, ...LYRIC_SITES.map(translateProxyHost)];
+
+function isLyricHost(host: string): boolean {
+  if (LYRIC_SITES.some((site) => host === site || host.endsWith(`.${site}`))) return true;
+  return /lyric|songtext|paroles|tekstowo/.test(host) || host.startsWith("letras.");
+}
+
+// Path words that mark a lyrics page. "lyric" alone is not one: "lyric-video" pages are news.
+const LYRIC_PATH = /(?:^|[/_.,-])(?:lyrics|songtexte?|paroles|letras?|teksty?)(?=[/_.,?#-]|$)/i;
+
+/**
+ * True for a URL on a lyric site (also through a translate proxy, and with or without a
+ * scheme), or a page whose path says it is lyrics.
+ */
 export function isLyricPage(url: string): boolean {
+  const text = url.trim();
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    const withScheme = text.startsWith("//")
+      ? `https:${text}`
+      : /^[a-z][a-z0-9+.-]*:\/\//i.test(text)
+        ? text
+        : `https://${text}`;
+    parsed = new URL(withScheme);
   } catch {
     return false;
   }
-  const host = parsed.hostname.toLowerCase();
-  if (LYRIC_SITES.some((site) => host === site || host.endsWith(`.${site}`))) return true;
-  if (host.includes("lyric") || host.startsWith("letras.")) return true;
-  return /(?:^|[/-])lyrics?(?:[/.-]|$)/i.test(parsed.pathname);
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+  if (isLyricHost(host)) return true;
+  if (host.endsWith(".translate.goog") && isLyricHost(unproxyHost(host))) return true;
+  if (/^translate\.google\./.test(host)) {
+    const inner = parsed.searchParams.get("u") ?? parsed.searchParams.get("url");
+    if (inner && isLyricPage(inner)) return true;
+  }
+  return LYRIC_PATH.test(parsed.pathname);
 }
 
 const RESPONSE_SHAPE: Shape = { results: [{ title: true, url: true, content: true }] };
@@ -103,7 +145,7 @@ export async function webSearch(query: string): Promise<WebResult[]> {
       include_answer: false,
       include_images: false,
       include_raw_content: false,
-      exclude_domains: LYRIC_SITES,
+      exclude_domains: EXCLUDED_DOMAINS,
     }),
     scrub: RESPONSE_SHAPE,
   });
@@ -127,12 +169,12 @@ export function formatResults(results: WebResult[]): string {
   return results.map((r) => `${r.title}\n${r.url}\n${r.content}`).join("\n\n");
 }
 
-/** Runs a search for a tool: results text, the `none` sentence, or text starting "Error:". */
+/** Runs a search for a tool: results text, or text starting "Error:" (nothing found, unavailable). */
 async function searchText(label: string, query: string, none: string): Promise<string> {
   console.log(`🔍 [Search] ${label}: ${query}`);
   try {
     const results = await webSearch(query);
-    return results.length > 0 ? formatResults(results) : none;
+    return results.length > 0 ? formatResults(results) : `Error: no web results: ${none}`;
   } catch (error) {
     const message = describeError(error);
     console.error(`❌ [Search] ${label} unavailable:`, message);
@@ -152,7 +194,7 @@ export const searchSamples = tool(
     searchText(
       "Samples",
       `"${songTitle}" "${artistName}" sampled by OR samples from whosampled`,
-      `No sample information found for "${songTitle}" by ${artistName}.`,
+      `no sample information found for "${songTitle}" by ${artistName}`,
     ),
   {
     name: "search_samples",
@@ -174,7 +216,7 @@ export const searchProductionHistory = tool(
     searchText(
       "Production history",
       `"${songTitle}" "${artistName}" production history recording studio trivia making of`,
-      `No production history found for "${songTitle}" by ${artistName}.`,
+      `no production history found for "${songTitle}" by ${artistName}`,
     ),
   {
     name: "search_production_history",
@@ -193,7 +235,7 @@ export const searchProductionHistory = tool(
  */
 export const searchMusicInfo = tool(
   async ({ query }): Promise<string> =>
-    searchText("General music search", query, `No results found for "${query}".`),
+    searchText("General music search", query, `nothing found for "${query}"`),
   {
     name: "search_music_info",
     description:

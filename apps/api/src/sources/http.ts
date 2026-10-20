@@ -9,14 +9,92 @@
  *   SOURCE_CASSETTE_DIR      where cassettes live (default: apps/api/cassettes)
  *   SOURCE_TIMEOUT_MS        default timeout per request (default: 10000)
  *
- * Recorded payloads keep only the fields the pipeline reads (the request's `scrub`), lose
- * preview and image URLs and secrets, and have long text capped, so a cassette can be committed.
+ * Cassettes are for tests and evals: either mode is refused when NODE_ENV=production.
+ *
+ * Recorded payloads keep only the fields the pipeline reads (the request's `scrub`); every
+ * recorded value, error and text bodies included, loses secrets, media URLs, e-mail addresses
+ * and phone numbers, and long text is capped, so a cassette can be committed. Error messages
+ * are redacted the same way before they reach a log or a tool result.
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// =============================================================================
+// Redaction
+// =============================================================================
+
+const MAX_TEXT = 500;
+const MAX_DETAIL = 200;
+
+/** Values of the environment's credentials, so an echoed key is recognised wherever it appears. */
+function knownSecrets(): string[] {
+  return Object.entries(process.env)
+    .filter(([name, value]) => /KEY|SECRET|TOKEN|PASSWORD/i.test(name) && (value?.length ?? 0) >= 8)
+    .map(([, value]) => value as string);
+}
+
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]"],
+  [
+    /\b(api_?key|key|token|access_token|refresh_token|client_secret|password|secret)=([^&\s"'<>]+)/gi,
+    "$1=[redacted]",
+  ],
+  [/\btvly-[A-Za-z0-9_-]+/g, "tvly-[redacted]"],
+  // Spotify access tokens, and any long mixed-case token-like run.
+  [/\bBQ[A-Za-z0-9_-]{40,}/g, "[redacted]"],
+  [
+    /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{64,}\b/g,
+    "[redacted]",
+  ],
+];
+
+/** Removes credentials from text: known key values, bearer tokens, `key=…` pairs, token shapes. */
+export function redactText(text: string): string {
+  let out = text;
+  for (const secret of knownSecrets()) out = out.split(secret).join("[redacted]");
+  // An invalid header value is echoed in quotes by fetch; the value is the credential.
+  if (/header/i.test(out)) out = out.replace(/"[^"]*"/g, '"[redacted]"');
+  for (const [pattern, replacement] of SECRET_PATTERNS) out = out.replace(pattern, replacement);
+  return out;
+}
+
+const MEDIA_HOST =
+  /(?:^|\.)(?:scdn\.co|dzcdn\.net|coverartarchive\.org|us\.archive\.org|lastfm\.freetls\.fastly\.net|mzstatic\.com|ytimg\.com|ggpht\.com)$/i;
+const MEDIA_PATH =
+  /\.(?:jpe?g|png|gif|webp|avif|svg|bmp|ico|heic|mp3|mp4|m4a|aac|ogg|oga|opus|flac|wav|webm|mov)$|\/images?(?:\/|$)/i;
+
+/** True for a URL (absolute or protocol-relative) to an image, audio or video file or CDN. */
+export function isMediaUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value.startsWith("//") ? `https:${value}` : value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  return MEDIA_HOST.test(url.hostname) || MEDIA_PATH.test(url.pathname);
+}
+
+const URL_IN_TEXT = /(?:https?:)?\/\/[^\s"'<>()[\]{}]+/gi;
+const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+const PHONE_LIKE = /\+?\(?\d[\d\s().-]{7,}\d/g;
+
+/** Redacts and masks text for a cassette: secrets, media URLs, e-mails, phone numbers; capped. */
+export function scrubText(text: string): string {
+  const out = redactText(text)
+    .replace(URL_IN_TEXT, (url) => (isMediaUrl(url) ? "[media]" : url))
+    .replace(EMAIL, "[email]")
+    .replace(PHONE_LIKE, (match) => {
+      const digits = match.replace(/\D/g, "").length;
+      const isDate = /^\d{4}-\d{2}-\d{2}/.test(match);
+      return digits >= 9 && digits <= 15 && !isDate ? "[phone]" : match;
+    });
+  return out.length > MAX_TEXT ? out.slice(0, MAX_TEXT) : out;
+}
 
 // =============================================================================
 // Typed errors
@@ -50,7 +128,9 @@ export type SourceErrorKind =
   /** A JSON content type whose body does not parse, or a body of the wrong shape. */
   | "parse"
   /** Replay mode and the cassette has no entry for this request. */
-  | "cassette_miss";
+  | "cassette_miss"
+  /** A cassette could not be read, parsed or written. */
+  | "cassette_io";
 
 export class SourceError extends Error {
   override readonly name = "SourceError";
@@ -65,7 +145,10 @@ export class SourceError extends Error {
     message: string,
     details: { status?: number; retryAfterMs?: number; body?: unknown; cause?: unknown } = {},
   ) {
-    super(`${source}: ${message}`, details.cause === undefined ? {} : { cause: details.cause });
+    super(
+      redactText(`${source}: ${message}`),
+      details.cause === undefined ? {} : { cause: details.cause },
+    );
     this.status = details.status;
     this.retryAfterMs = details.retryAfterMs;
     this.body = details.body;
@@ -76,10 +159,9 @@ export function isSourceError(error: unknown, kind?: SourceErrorKind): error is 
   return error instanceof SourceError && (kind === undefined || error.kind === kind);
 }
 
-/** One line for logs and tool results; never includes response bodies beyond a short detail. */
+/** One line for logs and tool results, with credentials redacted. */
 export function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+  return redactText(error instanceof Error ? error.message : String(error));
 }
 
 // =============================================================================
@@ -87,8 +169,6 @@ export function describeError(error: unknown): string {
 // =============================================================================
 
 const DEFAULT_TIMEOUT_MS = 10_000;
-const MAX_TEXT = 500;
-const MAX_DETAIL = 200;
 
 /**
  * Identifies the app to the APIs that ask for it (MusicBrainz requires a name, version and
@@ -109,10 +189,40 @@ function defaultTimeoutMs(): number {
 
 type CassetteMode = "off" | "record" | "replay";
 
-export function cassetteMode(): CassetteMode {
+function requestedMode(): CassetteMode {
   const mode = process.env.SOURCE_CASSETTE;
   return mode === "record" || mode === "replay" ? mode : "off";
 }
+
+/** Throws when a cassette mode is set in production; called at startup and on every request. */
+export function assertCassetteAllowed(): void {
+  const mode = requestedMode();
+  if (mode !== "off" && process.env.NODE_ENV === "production") {
+    throw new Error(
+      `SOURCE_CASSETTE=${mode} is not allowed when NODE_ENV=production: cassettes are for tests ` +
+        "and evals. Unset SOURCE_CASSETTE.",
+    );
+  }
+}
+
+let loggedMode: CassetteMode | null = null;
+
+export function cassetteMode(): CassetteMode {
+  assertCassetteAllowed();
+  const mode = requestedMode();
+  if (mode !== "off" && loggedMode !== mode) {
+    loggedMode = mode;
+    console.warn(
+      `[sources] SOURCE_CASSETTE=${mode}: ${
+        mode === "replay" ? "answers come from" : "answers are recorded to"
+      } ${cassetteDir()}`,
+    );
+  }
+  return mode;
+}
+
+// A cassette mode in production stops the server at startup, not at the first request.
+assertCassetteAllowed();
 
 function apiRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -125,10 +235,13 @@ function apiRoot(): string {
 
 /**
  * A credential from the environment. Under replay nothing is sent, so a missing credential is
- * a placeholder and the cassette decides the answer.
+ * a placeholder and the cassette decides the answer. In any other mode a missing credential
+ * stays missing.
  */
 export function credential(name: string): string | undefined {
-  return process.env[name] || (cassetteMode() === "replay" ? "replay" : undefined);
+  const value = process.env[name];
+  if (value) return value;
+  return requestedMode() === "replay" && cassetteMode() === "replay" ? "replay" : undefined;
 }
 
 export function cassetteDir(): string {
@@ -168,34 +281,50 @@ const SECRET_KEYS = new Set([
   "client_secret",
   "password",
   "token",
+  "secret",
+  "authorization",
 ]);
 const MEDIA_KEY =
   /^(?:preview|images?|picture|cover|thumbnail|artwork|favicon|avatar)(?:[_-]?\w*)$/i;
-const MEDIA_URL =
-  /^https?:\/\/[^\s]*(?:\.(?:jpe?g|png|gif|webp|svg|mp3|m4a|aac|ogg|wav)(?:[?#]|$)|scdn\.co\/|dzcdn\.net\/|fastly\.net\/i\/)/i;
 
-/** Drops preview and image URLs and secrets, and caps long text. Applied to every recording. */
+/**
+ * Drops preview and image fields and media URLs, redacts secrets (by key and by value), masks
+ * e-mails and phone numbers, and caps long text. Applied to every recorded value.
+ */
 export function scrubPayload(value: unknown): unknown {
-  if (typeof value === "string") {
-    if (MEDIA_URL.test(value)) return null;
-    return value.length > MAX_TEXT ? value.slice(0, MAX_TEXT) : value;
-  }
+  if (typeof value === "string") return isMediaUrl(value.trim()) ? null : scrubText(value);
   if (Array.isArray(value)) return value.map(scrubPayload);
   if (value === null || typeof value !== "object") return value;
   const out: Record<string, unknown> = {};
   for (const [key, inner] of Object.entries(value)) {
     if (MEDIA_KEY.test(key)) continue;
-    out[key] = SECRET_KEYS.has(key.toLowerCase()) ? "redacted" : scrubPayload(inner);
+    out[key] = SECRET_KEYS.has(key.toLowerCase()) ? "[redacted]" : scrubPayload(inner);
   }
   return out;
 }
 
-const SECRET_PARAMS = ["api_key", "apikey", "key", "token", "access_token", "client_secret"];
+const SECRET_PARAMS = new Set([
+  "api_key",
+  "apikey",
+  "key",
+  "token",
+  "access_token",
+  "client_secret",
+  "secret",
+  "password",
+]);
 
-/** The cassette key: method, URL without secret parameters, and a digest of the body. */
+/**
+ * The cassette key: method, URL without credentials (secret parameters in any case, user info)
+ * and a digest of the body, so two POSTs to one URL with different bodies are different entries.
+ */
 export function cassetteKey(method: string, url: string, body?: string): string {
   const parsed = new URL(url);
-  for (const name of SECRET_PARAMS) parsed.searchParams.delete(name);
+  parsed.username = "";
+  parsed.password = "";
+  for (const name of [...parsed.searchParams.keys()]) {
+    if (SECRET_PARAMS.has(name.toLowerCase())) parsed.searchParams.delete(name);
+  }
   parsed.searchParams.sort();
   const digest = body ? ` #${createHash("sha256").update(body).digest("hex").slice(0, 16)}` : "";
   return `${method} ${parsed.href}${digest}`;
@@ -223,23 +352,94 @@ function cassettePath(source: SourceName): string {
   return join(cassetteDir(), `${source}.json`);
 }
 
-function readCassette(source: SourceName): Cassette {
-  const path = cassettePath(source);
-  if (!existsSync(path)) return { version: 1, entries: {} };
-  return JSON.parse(readFileSync(path, "utf8")) as Cassette;
+function parseCassette(source: SourceName, text: string): Cassette {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    throw new SourceError(source, "cassette_io", `cassette is not valid JSON`, { cause: error });
+  }
+  const entries = (data as { entries?: unknown })?.entries;
+  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+    throw new SourceError(source, "cassette_io", "cassette has no entries object");
+  }
+  return { version: 1, entries: entries as Record<string, Recorded> };
 }
 
-function writeEntry(source: SourceName, key: string, entry: Recorded): void {
-  const cassette = readCassette(source);
-  cassette.entries[key] = entry;
-  const sorted = Object.fromEntries(
-    Object.entries(cassette.entries).sort(([a], [b]) => a.localeCompare(b)),
-  );
-  mkdirSync(cassetteDir(), { recursive: true });
-  writeFileSync(
-    cassettePath(source),
-    `${JSON.stringify({ version: 1, entries: sorted }, null, 2)}\n`,
-  );
+function readCassette(source: SourceName): Cassette {
+  const path = cassettePath(source);
+  let text: string;
+  try {
+    if (!existsSync(path)) return { version: 1, entries: {} };
+    text = readFileSync(path, "utf8");
+  } catch (error) {
+    throw new SourceError(source, "cassette_io", `cannot read cassette: ${describeError(error)}`);
+  }
+  return parseCassette(source, text);
+}
+
+const LOCK_WAIT_MS = 5000;
+const LOCK_STALE_MS = 30_000;
+let tmpCounter = 0;
+
+/** A lock file shared with other recording processes; returns the release function. */
+async function acquireLock(path: string): Promise<() => Promise<void>> {
+  const lock = `${path}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      const handle = await open(lock, "wx");
+      await handle.close();
+      return () => unlink(lock).catch(() => {});
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const age = await stat(lock).then(
+        (s) => Date.now() - s.mtimeMs,
+        () => 0,
+      );
+      if (age > LOCK_STALE_MS) await unlink(lock).catch(() => {});
+      if (Date.now() > deadline) throw new Error(`cassette lock ${lock} is held`);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+}
+
+/** Adds one entry: under the lock, re-reads the file and replaces it atomically (temp + rename). */
+async function writeEntry(source: SourceName, key: string, entry: Recorded): Promise<void> {
+  const path = cassettePath(source);
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    const release = await acquireLock(path);
+    try {
+      const text = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      const cassette: Cassette =
+        text === null ? { version: 1, entries: {} } : parseCassette(source, text);
+      cassette.entries[key] = entry;
+      const sorted = Object.fromEntries(
+        Object.entries(cassette.entries).sort(([a], [b]) => a.localeCompare(b)),
+      );
+      const tmp = `${path}.${process.pid}.${++tmpCounter}.tmp`;
+      await writeFile(tmp, `${JSON.stringify({ version: 1, entries: sorted }, null, 2)}\n`);
+      await rename(tmp, path);
+    } finally {
+      await release();
+    }
+  } catch (error) {
+    if (isSourceError(error)) throw error;
+    throw new SourceError(source, "cassette_io", `cannot write cassette: ${describeError(error)}`);
+  }
+}
+
+// Writes from this process run one at a time; the lock file orders them with other processes.
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function queueWrite(source: SourceName, key: string, entry: Recorded): Promise<void> {
+  const next = writeQueue.then(() => writeEntry(source, key, entry));
+  writeQueue = next.catch(() => {});
+  return next;
 }
 
 // =============================================================================
@@ -327,7 +527,8 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
         cause: error,
       });
     }
-    throw new SourceError(req.source, "network", describeError(error), { cause: error });
+    // No cause: a fetch error can echo a header value, which may be a credential.
+    throw new SourceError(req.source, "network", describeError(error));
   }
 }
 
@@ -369,6 +570,19 @@ function interpret<T>(req: SourceRequest, answer: Recorded): T {
   return answer.json as T;
 }
 
+/** The answer as it is written to a cassette: picked (2xx JSON), scrubbed, capped. */
+function forCassette(req: SourceRequest, answer: Recorded): Recorded {
+  const entry: Recorded = { status: answer.status, contentType: answer.contentType };
+  if (answer.retryAfterMs !== undefined) entry.retryAfterMs = answer.retryAfterMs;
+  const ok = answer.status >= 200 && answer.status <= 299;
+  if (answer.json !== undefined) {
+    entry.json = scrubPayload(ok && req.scrub ? pick(answer.json, req.scrub) : answer.json);
+  } else {
+    entry.text = scrubText(answer.text ?? "");
+  }
+  return entry;
+}
+
 /**
  * Requests JSON from a source. Resolves with the parsed body of a 2xx JSON answer; anything
  * else rejects with a SourceError.
@@ -390,15 +604,12 @@ export async function fetchJson<T>(req: SourceRequest): Promise<T> {
   const answer = await fetchLive(req, url, method);
 
   if (mode === "record") {
-    const entry: Recorded = { status: answer.status, contentType: answer.contentType };
-    if (answer.retryAfterMs !== undefined) entry.retryAfterMs = answer.retryAfterMs;
-    const ok = answer.status >= 200 && answer.status <= 299;
-    if (answer.json !== undefined) {
-      entry.json = scrubPayload(ok && req.scrub ? pick(answer.json, req.scrub) : answer.json);
-    } else {
-      entry.text = (answer.text ?? "").slice(0, MAX_TEXT);
+    try {
+      await queueWrite(req.source, key, forCassette(req, answer));
+    } catch (error) {
+      // The live answer is still good; only the recording is lost.
+      console.error(`[sources] ${describeError(error)}`);
     }
-    writeEntry(req.source, key, entry);
   }
 
   return interpret<T>(req, answer);

@@ -6,6 +6,9 @@
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import earthWindFire from "./fixtures/musicbrainz-artist-search-earth-wind-fire.json" with {
+  type: "json",
+};
 import fixture from "./fixtures/listenbrainz-similar-artists.json" with { type: "json" };
 import { type FetchCall, html, json, stubFetch } from "./testing/fetchStub.js";
 
@@ -146,5 +149,49 @@ describe("ListenBrainz similar artists", () => {
     expect(data.found).toBe(false);
     expect(data.error).toMatch(/Could not resolve/);
     expect(net.calls.filter((c) => c.url.includes("listenbrainz.org"))).toHaveLength(0);
+  });
+
+  it("orders by score and drops rows without a usable score", async () => {
+    const rows = [
+      { artist_mbid: "00000000-0000-4000-8000-000000000001", name: "Low", score: 10 },
+      { artist_mbid: "00000000-0000-4000-8000-000000000002", name: "Zero", score: 0 },
+      { artist_mbid: "00000000-0000-4000-8000-000000000003", name: "High", score: 500 },
+      { artist_mbid: "00000000-0000-4000-8000-000000000004", name: "Text", score: "900" },
+      { artist_mbid: "00000000-0000-4000-8000-000000000005", name: "Negative", score: -4 },
+      { artist_mbid: "not-an-mbid", name: "Broken", score: 800 },
+    ];
+    stubFetch((call) => (isLabs(call) ? json(rows) : undefined));
+
+    const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistMbid: DAFT_PUNK }));
+
+    expect(data.artists.map((a: { name: string }) => a.name)).toEqual(["High", "Low"]);
+    expect(data.artists[0].similarity).toBe(1);
+    expect(data.artists[1].similarity).toBe(0.02);
+  });
+
+  it("resolves the real Earth, Wind & Fire, not the band Earth", async () => {
+    const net = stubFetch((call) => {
+      if (call.url.startsWith(MB_ARTIST_SEARCH)) {
+        const query = new URL(call.url).searchParams.get("query");
+        return json(
+          query === 'artist:"Earth, Wind \\& Fire"'
+            ? earthWindFire
+            : {
+                count: 1,
+                artists: [
+                  { id: "60dd41cf-8f9d-46d8-bc19-dc7e5acb24c8", name: "Earth", score: 100 },
+                ],
+              },
+        );
+      }
+      return isLabs(call) ? json(fixture) : undefined;
+    });
+
+    await getListenBrainzSimilarArtists.invoke({ artistName: "Earth, Wind & Fire" });
+
+    const labs = net.calls.find(isLabs);
+    expect(new URL(labs?.url ?? "https://x").searchParams.get("artist_mbids")).toBe(
+      "535afeda-2538-435d-9dd1-5e10be586774",
+    );
   });
 });

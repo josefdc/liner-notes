@@ -22,12 +22,16 @@ import type { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types'
 interface PlayerProps {
   trackData: TrackData | null;
   onBack: () => void;
-  /** Stream factoids one-by-one via SSE for faster perceived speed */
+  /**
+   * Stream factoids one-by-one via SSE for faster perceived speed. Aborting `signal` closes
+   * the stream and rejects with an AbortError.
+   */
   onDecryptMoreStream?: (
     trackTitle: string,
     trackArtist: string,
     existingIds: string[],
     onFactoid: (factoid: Factoid) => void,
+    signal?: AbortSignal,
   ) => Promise<void>;
   // Callback for navigating to a new track from genealogy graph
   onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
@@ -120,6 +124,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // Refs for transient values in handleDecryptMore
   const isDecryptingRef = useRef(false);
   const additionalFactoidsRef = useRef<Factoid[]>([]);
+  // The running DECRYPT MORE stream; closed when the Player goes away.
+  const decryptControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      decryptControllerRef.current?.abort();
+      decryptControllerRef.current = null;
+      isDecryptingRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     additionalFactoidsRef.current = additionalFactoids;
@@ -184,18 +198,26 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
     isDecryptingRef.current = true;
     setIsDecrypting(true);
+    const controller = new AbortController();
+    decryptControllerRef.current = controller;
     let newCount = 0;
     try {
       const existingIds = [...track.factoids, ...additionalFactoidsRef.current].map((f) => f.id);
 
       // Stream factoids - each one is added immediately when received
-      await onDecryptMoreStream(track.title, track.artist, existingIds, (newFactoid) => {
-        // Only factoids that are shown count (lyric factoids are dropped).
-        const shown = displayableFactoids([newFactoid]);
-        if (shown.length === 0) return;
-        setAdditionalFactoids((prev) => [...prev, ...shown]);
-        newCount++;
-      });
+      await onDecryptMoreStream(
+        track.title,
+        track.artist,
+        existingIds,
+        (newFactoid) => {
+          // Only factoids that are shown count (lyric factoids are dropped).
+          const shown = displayableFactoids([newFactoid]);
+          if (shown.length === 0) return;
+          setAdditionalFactoids((prev) => [...prev, ...shown]);
+          newCount++;
+        },
+        controller.signal,
+      );
 
       // P3:25 — Show completion toast
       if (newCount > 0) {
@@ -204,10 +226,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         setTimeout(() => setShowDecryptToast(false), 1000);
       }
     } catch (error) {
-      console.error('Decrypt stream error:', error);
+      // Leaving the Player (or starting a new analysis) cancels the stream: not an error.
+      if ((error as { name?: unknown } | null)?.name !== 'AbortError') {
+        console.error('Decrypt stream error:', error);
+      }
     } finally {
-      isDecryptingRef.current = false;
-      setIsDecrypting(false);
+      if (decryptControllerRef.current === controller) {
+        decryptControllerRef.current = null;
+        isDecryptingRef.current = false;
+        setIsDecrypting(false);
+      }
     }
   }, [onDecryptMoreStream, track.title, track.artist, track.factoids]);
 

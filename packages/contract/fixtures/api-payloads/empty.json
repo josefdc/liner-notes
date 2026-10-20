@@ -1,0 +1,52 @@
+{
+  "id": "6GyFP1nfCDB8lbD2bG0Hq9",
+  "title": "Midnight City",
+  "artist": "M83",
+  "album": "",
+  "coverUrl": "",
+  "spotifyUrl": "https://open.spotify.com/track/6GyFP1nfCDB8lbD2bG0Hq9",
+  "bpm": null,
+  "key": null,
+  "energy": null,
+  "valence": null,
+  "danceability": null,
+  "acousticness": null,
+  "keyMoments": [],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_run",
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 10,
+      "color": "#374151"
+    },
+    {
+      "label": "Main",
+      "start": 10,
+      "end": 90,
+      "color": "#1F2937"
+    },
+    {
+      "label": "Outro",
+      "start": 90,
+      "end": 100,
+      "color": "#374151"
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Midnight City",
+        "size": 40
+      }
+    ],
+    "links": []
+  }
+}

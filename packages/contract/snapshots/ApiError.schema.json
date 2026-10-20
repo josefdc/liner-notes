@@ -1,0 +1,29 @@
+{
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ApiError.schema.json",
+    "type": "object",
+    "properties": {
+      "success": { "type": "boolean", "const": false },
+      "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
+      "error": { "type": "string" }
+    },
+    "required": ["success", "code", "error"],
+    "additionalProperties": {}
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ApiError.schema.json",
+    "type": "object",
+    "properties": {
+      "success": { "type": "boolean", "const": false },
+      "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
+      "error": { "type": "string" }
+    },
+    "required": ["success", "code", "error"],
+    "additionalProperties": {}
+  },
+  "unknownKeys": { "$": "passthrough" },
+  "refinements": [],
+  "tolerant": []
+}

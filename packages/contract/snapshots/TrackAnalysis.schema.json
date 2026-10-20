@@ -1,0 +1,799 @@
+{
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TrackAnalysis.schema.json",
+    "type": "object",
+    "properties": {
+      "contractVersion": {
+        "description": "TrackAnalysis version the producer wrote (1)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "id": { "description": "Spotify track id", "type": "string" },
+      "title": { "type": "string" },
+      "artist": { "type": "string" },
+      "album": { "type": "string" },
+      "coverUrl": { "description": "Album cover URL; empty when unknown", "type": "string" },
+      "spotifyUrl": { "type": "string" },
+      "previewUrl": { "type": "string" },
+      "releaseYear": { "type": "string" },
+      "explicit": { "type": "boolean" },
+      "durationSeconds": { "type": "number", "minimum": 0 },
+      "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "bpm": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "key": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "energy": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "valence": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "danceability": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "acousticness": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "keyMoments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "time": {
+              "description": "Seconds from the start of the preview",
+              "type": "number",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "enum": ["energy_peak", "energy_drop", "onset", "harmonic_change", "silence"]
+            },
+            "intensity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "description": { "type": "string" }
+          },
+          "required": ["time", "type", "intensity", "description"]
+        }
+      },
+      "audioSource": { "type": "string", "enum": ["analyzed", "unavailable"] },
+      "audioConfidence": { "type": "string", "enum": ["high", "low"] },
+      "audioUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "no_preview",
+          "preview_rejected",
+          "service_unavailable",
+          "analysis_failed",
+          "not_detected",
+          "not_run",
+          "low_confidence"
+        ]
+      },
+      "segments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string" },
+            "start": { "type": "number", "minimum": 0, "maximum": 100 },
+            "end": { "type": "number", "minimum": 0, "maximum": 100 },
+            "color": { "type": "string" }
+          },
+          "required": ["label", "start", "end"]
+        },
+        "default": []
+      },
+      "segmentsSource": {
+        "description": "template: a generic default; inferred: written by the model; measured: sections",
+        "type": "string",
+        "enum": ["template", "inferred", "measured"]
+      },
+      "samples": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "time": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+            "description": { "type": "string" },
+            "claimId": { "type": "string" }
+          },
+          "required": ["time", "description"]
+        },
+        "default": []
+      },
+      "credits": {
+        "type": "object",
+        "properties": {
+          "producers": { "type": "array", "items": { "type": "string" } },
+          "writers": { "type": "array", "items": { "type": "string" } },
+          "engineers": { "type": "array", "items": { "type": "string" } },
+          "label": { "type": "string" }
+        },
+        "required": ["producers", "writers"]
+      },
+      "factoids": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "type": {
+              "type": "string",
+              "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                  },
+                  "searchQuery": { "type": "string" }
+                },
+                "required": ["id", "text", "type"]
+              }
+            },
+            "claimId": { "type": "string" }
+          },
+          "required": ["id", "title", "content", "type"]
+        },
+        "default": []
+      },
+      "genealogy": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "group": {
+                  "description": "1 = this track, 2 = it samples, 3 = sampled by, 4 = influence",
+                  "type": "number"
+                },
+                "label": { "type": "string" },
+                "img": { "type": "string" },
+                "size": { "type": "number" },
+                "previewUrl": { "type": "string" },
+                "spotifyId": { "type": "string" },
+                "trackTitle": { "type": "string" },
+                "trackArtist": { "type": "string" }
+              },
+              "required": ["id", "group", "label", "size"]
+            },
+            "default": []
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": { "type": "string" },
+                "target": { "type": "string" },
+                "value": {
+                  "description": "Strength 1-3: 1 = weak influence, 3 = direct sample",
+                  "type": "number"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
+                },
+                "kind": {
+                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+                  "type": "string",
+                  "enum": ["sourced", "inferred"]
+                },
+                "origin": {
+                  "description": "code: from a source record; model: proposed by it",
+                  "type": "string",
+                  "enum": ["code", "model"]
+                },
+                "claimId": {
+                  "description": "The claim that states this relation",
+                  "type": "string"
+                },
+                "evidenceIds": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["source", "target", "value"]
+            },
+            "default": []
+          }
+        }
+      },
+      "genreProfile": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "genre": { "type": "string" },
+            "value": { "type": "number", "minimum": 0, "maximum": 100 }
+          },
+          "required": ["genre", "value"]
+        }
+      },
+      "modelUnavailable": { "type": "boolean" },
+      "modelUnavailableReason": {
+        "type": "string",
+        "enum": ["no_output", "rate_limited", "timeout", "auth", "error", "budget_exhausted"]
+      },
+      "audio": {
+        "description": "null when not measured, or when this reader cannot read the measurement",
+        "default": null,
+        "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }]
+      },
+      "preview": {
+        "default": null,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string", "enum": ["deezer", "spotify"] },
+              "method": { "type": "string", "enum": ["isrc", "search"] },
+              "score": {
+                "description": "Match score of a search match; null for ISRC",
+                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+              }
+            },
+            "required": ["provider", "method", "score"]
+          },
+          { "type": "null" }
+        ]
+      },
+      "evidence": { "type": "array", "items": { "$ref": "Evidence.schema.json" } },
+      "claims": { "type": "array", "items": { "$ref": "Claim.schema.json" } },
+      "run": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "mode": { "type": "string", "enum": ["live", "replay"] },
+          "recordedAt": {
+            "description": "When the run was recorded; null for live runs",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "commit": {
+            "description": "Commit of the code that recorded the run",
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "analyzerVersion": {
+            "description": "AudioFeatures analyzerVersion; null if none",
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "durationMs": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+              { "type": "null" }
+            ]
+          },
+          "fallback": {
+            "description": "True when the composer failed and the result was built from source data only",
+            "type": "boolean"
+          },
+          "usage": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "llmCalls": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "inputTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "outputTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "reasoningTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "usd": {
+                    "description": "Cost at the configured price table",
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": ["llmCalls", "inputTokens", "outputTokens", "reasoningTokens", "usd"]
+              },
+              { "type": "null" }
+            ]
+          },
+          "verifier": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "judged": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "unjudged": {
+                    "description": "Claims beyond the judge batch; shown as inferred",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["judged", "unjudged"]
+              },
+              { "type": "null" }
+            ]
+          },
+          "sourceErrors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "spotify",
+                    "deezer",
+                    "musicbrainz",
+                    "discogs",
+                    "secondhandsongs",
+                    "listenbrainz",
+                    "lastfm",
+                    "genius",
+                    "tavily"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "not_configured",
+                    "unavailable",
+                    "timeout",
+                    "rate_limited",
+                    "invalid_response"
+                  ]
+                },
+                "message": { "type": "string" }
+              },
+              "required": ["source", "code"]
+            }
+          }
+        },
+        "required": ["id", "mode", "recordedAt", "commit", "analyzerVersion"]
+      }
+    },
+    "required": ["id", "title", "artist", "album", "coverUrl", "bpm", "genealogy"]
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TrackAnalysis.schema.json",
+    "type": "object",
+    "properties": {
+      "contractVersion": {
+        "description": "TrackAnalysis version the producer wrote (1)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "id": { "description": "Spotify track id", "type": "string" },
+      "title": { "type": "string" },
+      "artist": { "type": "string" },
+      "album": { "type": "string" },
+      "coverUrl": { "description": "Album cover URL; empty when unknown", "type": "string" },
+      "spotifyUrl": { "type": "string" },
+      "previewUrl": { "type": "string" },
+      "releaseYear": { "type": "string" },
+      "explicit": { "type": "boolean" },
+      "durationSeconds": { "type": "number", "minimum": 0 },
+      "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "bpm": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "key": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "energy": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "valence": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "danceability": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "acousticness": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "keyMoments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "time": {
+              "description": "Seconds from the start of the preview",
+              "type": "number",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "enum": ["energy_peak", "energy_drop", "onset", "harmonic_change", "silence"]
+            },
+            "intensity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "description": { "type": "string" }
+          },
+          "required": ["time", "type", "intensity", "description"],
+          "additionalProperties": false
+        }
+      },
+      "audioSource": { "type": "string", "enum": ["analyzed", "unavailable"] },
+      "audioConfidence": { "type": "string", "enum": ["high", "low"] },
+      "audioUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "no_preview",
+          "preview_rejected",
+          "service_unavailable",
+          "analysis_failed",
+          "not_detected",
+          "not_run",
+          "low_confidence"
+        ]
+      },
+      "segments": {
+        "default": [],
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string" },
+            "start": { "type": "number", "minimum": 0, "maximum": 100 },
+            "end": { "type": "number", "minimum": 0, "maximum": 100 },
+            "color": { "type": "string" }
+          },
+          "required": ["label", "start", "end"],
+          "additionalProperties": false
+        }
+      },
+      "segmentsSource": {
+        "description": "template: a generic default; inferred: written by the model; measured: sections",
+        "type": "string",
+        "enum": ["template", "inferred", "measured"]
+      },
+      "samples": {
+        "default": [],
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "time": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+            "description": { "type": "string" },
+            "claimId": { "type": "string" }
+          },
+          "required": ["time", "description"],
+          "additionalProperties": false
+        }
+      },
+      "credits": {
+        "type": "object",
+        "properties": {
+          "producers": { "type": "array", "items": { "type": "string" } },
+          "writers": { "type": "array", "items": { "type": "string" } },
+          "engineers": { "type": "array", "items": { "type": "string" } },
+          "label": { "type": "string" }
+        },
+        "required": ["producers", "writers"],
+        "additionalProperties": false
+      },
+      "factoids": {
+        "default": [],
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "type": {
+              "type": "string",
+              "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                  },
+                  "searchQuery": { "type": "string" }
+                },
+                "required": ["id", "text", "type"],
+                "additionalProperties": false
+              }
+            },
+            "claimId": { "type": "string" }
+          },
+          "required": ["id", "title", "content", "type"],
+          "additionalProperties": false
+        }
+      },
+      "genealogy": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "group": {
+                  "description": "1 = this track, 2 = it samples, 3 = sampled by, 4 = influence",
+                  "type": "number"
+                },
+                "label": { "type": "string" },
+                "img": { "type": "string" },
+                "size": { "type": "number" },
+                "previewUrl": { "type": "string" },
+                "spotifyId": { "type": "string" },
+                "trackTitle": { "type": "string" },
+                "trackArtist": { "type": "string" }
+              },
+              "required": ["id", "group", "label", "size"],
+              "additionalProperties": false
+            }
+          },
+          "links": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": { "type": "string" },
+                "target": { "type": "string" },
+                "value": {
+                  "description": "Strength 1-3: 1 = weak influence, 3 = direct sample",
+                  "type": "number"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
+                },
+                "kind": {
+                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+                  "type": "string",
+                  "enum": ["sourced", "inferred"]
+                },
+                "origin": {
+                  "description": "code: from a source record; model: proposed by it",
+                  "type": "string",
+                  "enum": ["code", "model"]
+                },
+                "claimId": {
+                  "description": "The claim that states this relation",
+                  "type": "string"
+                },
+                "evidenceIds": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["source", "target", "value"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["nodes", "links"],
+        "additionalProperties": false
+      },
+      "genreProfile": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "genre": { "type": "string" },
+            "value": { "type": "number", "minimum": 0, "maximum": 100 }
+          },
+          "required": ["genre", "value"],
+          "additionalProperties": false
+        }
+      },
+      "modelUnavailable": { "type": "boolean" },
+      "modelUnavailableReason": {
+        "type": "string",
+        "enum": ["no_output", "rate_limited", "timeout", "auth", "error", "budget_exhausted"]
+      },
+      "audio": {
+        "description": "null when not measured, or when this reader cannot read the measurement",
+        "default": null,
+        "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }]
+      },
+      "preview": {
+        "default": null,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string", "enum": ["deezer", "spotify"] },
+              "method": { "type": "string", "enum": ["isrc", "search"] },
+              "score": {
+                "description": "Match score of a search match; null for ISRC",
+                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+              }
+            },
+            "required": ["provider", "method", "score"],
+            "additionalProperties": false
+          },
+          { "type": "null" }
+        ]
+      },
+      "evidence": { "type": "array", "items": { "$ref": "Evidence.schema.json" } },
+      "claims": { "type": "array", "items": { "$ref": "Claim.schema.json" } },
+      "run": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "mode": { "type": "string", "enum": ["live", "replay"] },
+          "recordedAt": {
+            "description": "When the run was recorded; null for live runs",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "commit": {
+            "description": "Commit of the code that recorded the run",
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "analyzerVersion": {
+            "description": "AudioFeatures analyzerVersion; null if none",
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "durationMs": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+              { "type": "null" }
+            ]
+          },
+          "fallback": {
+            "description": "True when the composer failed and the result was built from source data only",
+            "type": "boolean"
+          },
+          "usage": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "llmCalls": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "inputTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "outputTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "reasoningTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "usd": {
+                    "description": "Cost at the configured price table",
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": ["llmCalls", "inputTokens", "outputTokens", "reasoningTokens", "usd"],
+                "additionalProperties": false
+              },
+              { "type": "null" }
+            ]
+          },
+          "verifier": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "judged": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+                  "unjudged": {
+                    "description": "Claims beyond the judge batch; shown as inferred",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["judged", "unjudged"],
+                "additionalProperties": false
+              },
+              { "type": "null" }
+            ]
+          },
+          "sourceErrors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "spotify",
+                    "deezer",
+                    "musicbrainz",
+                    "discogs",
+                    "secondhandsongs",
+                    "listenbrainz",
+                    "lastfm",
+                    "genius",
+                    "tavily"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "not_configured",
+                    "unavailable",
+                    "timeout",
+                    "rate_limited",
+                    "invalid_response"
+                  ]
+                },
+                "message": { "type": "string" }
+              },
+              "required": ["source", "code"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["id", "mode", "recordedAt", "commit", "analyzerVersion"],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "artist",
+      "album",
+      "coverUrl",
+      "bpm",
+      "segments",
+      "samples",
+      "factoids",
+      "genealogy"
+    ],
+    "additionalProperties": false
+  },
+  "unknownKeys": {
+    "$": "strip",
+    "$.keyMoments[]": "strip",
+    "$.segments[]": "strip",
+    "$.samples[]": "strip",
+    "$.credits": "strip",
+    "$.factoids[]": "strip",
+    "$.factoids[].entities[]": "strip",
+    "$.genealogy": "strip",
+    "$.genealogy.nodes[]": "strip",
+    "$.genealogy.links[]": "strip",
+    "$.genreProfile[]": "strip",
+    "$.preview": "strip",
+    "$.run": "strip",
+    "$.run.usage": "strip",
+    "$.run.verifier": "strip",
+    "$.run.sourceErrors[]": "strip"
+  },
+  "refinements": [],
+  "tolerant": [
+    "$.audio: absent when unreadable",
+    "$.audioConfidence: absent when unreadable",
+    "$.audioSource: absent when unreadable",
+    "$.audioUnavailableReason: absent when unreadable",
+    "$.claims: drops unreadable items",
+    "$.evidence: drops unreadable items",
+    "$.factoids: drops unreadable items",
+    "$.factoids[].entities: drops unreadable items",
+    "$.genealogy.links: drops unreadable items",
+    "$.genealogy.nodes: drops unreadable items",
+    "$.genreProfile: drops unreadable items",
+    "$.keyMoments: drops unreadable items",
+    "$.modelUnavailableReason: absent when unreadable",
+    "$.preview: absent when unreadable",
+    "$.run.sourceErrors: drops unreadable items",
+    "$.run.usage: absent when unreadable",
+    "$.run.verifier: absent when unreadable",
+    "$.samples: drops unreadable items",
+    "$.segments: drops unreadable items",
+    "$.segmentsSource: absent when unreadable"
+  ]
+}

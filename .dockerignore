@@ -12,7 +12,7 @@
 !apps/web
 !apps/api
 !services/audio/package.json
-!packages/contract/package.json
+!packages/contract
 
 **/node_modules
 **/dist
@@ -24,3 +24,8 @@
 **/coverage
 **/*.md
 **/*.log
+
+# The contract's tests, fixtures and schema snapshots are not needed to build it
+packages/contract/snapshots
+packages/contract/fixtures
+packages/contract/src/testing

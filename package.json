@@ -10,16 +10,17 @@
     "packages/contract"
   ],
   "scripts": {
-    "dev": "exec node scripts/dev.mjs",
+    "dev": "npm run build -w packages/contract && exec node scripts/dev.mjs",
     "build": "npm run build -w packages/contract -w apps/web -w apps/api",
-    "test:db": "vitest run --project api src/store/database.test.ts",
+    "test:db": "npm run build -w packages/contract && vitest run --project api src/store/database.test.ts",
     "preview": "npm run preview -w apps/web",
-    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.tools.json",
-    "test": "vitest run",
+    "typecheck": "npm run build -w packages/contract && npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.tools.json",
+    "test": "npm run build -w packages/contract && vitest run",
     "lint": "biome check --error-on-warnings .",
     "format": "biome format --write .",
     "guard:honest": "node scripts/guard-honest.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs"
   },
   "allowScripts": {
     "better-sqlite3@12.10.0": true,

@@ -15,7 +15,7 @@
  *            (interrupt if ambiguous)
  */
 
-import { StateGraph, END, START, Command } from "@langchain/langgraph";
+import { StateGraph, END, START } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { getDb } from "../store/database.js";
 import { SqliteStore } from "../store/store.js";
@@ -123,10 +123,11 @@ function compileGraph() {
     // Composer ends the workflow
     .addEdge("composer", END);
 
+  // The clarification node pauses itself with interrupt(); no static interruptBefore, which
+  // would stop the graph a second time at the same node.
   return workflow.compile({
     checkpointer: getCheckpointer(),
     store: getStore(),
-    interruptBefore: ["clarification"],
   });
 }
 
@@ -136,91 +137,6 @@ export function createSonicAgentGraph() {
     console.log("✅ [Graph] Compiled and cached LangGraph workflow");
   }
   return cachedGraph;
-}
-
-// =============================================================================
-// Main Entry Point (non-streaming)
-// =============================================================================
-
-export async function analyzeSong(songQuery: string): Promise<TrackData | null> {
-  console.log("\n🚀 [Sonic Agent v2] Starting analysis for:", songQuery);
-  console.log("=".repeat(60));
-
-  const graph = createSonicAgentGraph();
-
-  const result = await graph.invoke(
-    { songQuery },
-    { configurable: { thread_id: `analysis-${Date.now()}` } },
-  );
-
-  if (result.error) {
-    console.error("❌ [Sonic Agent] Error:", result.error);
-    return null;
-  }
-
-  console.log("=".repeat(60));
-  console.log("✅ [Sonic Agent v2] Analysis complete!");
-
-  return result.trackData;
-}
-
-// =============================================================================
-// Streaming Entry Point
-// =============================================================================
-
-export async function* streamAnalysis(
-  songQuery: string,
-  threadId?: string,
-): AsyncGenerator<{ type: string; data: unknown }> {
-  console.log("\n🚀 [Sonic Agent v2] Starting streaming analysis for:", songQuery);
-
-  const graph = createSonicAgentGraph();
-  const configThreadId = threadId || `analysis-${Date.now()}`;
-
-  const stream = await graph.stream(
-    { songQuery },
-    {
-      configurable: { thread_id: configThreadId },
-      streamMode: ["updates", "custom"],
-    },
-  );
-
-  for await (const event of stream) {
-    const [mode, chunk] = event as unknown as [string, unknown];
-    if (mode === "custom") {
-      yield { type: "event", data: chunk };
-    } else if (mode === "updates") {
-      // Emit node updates
-      for (const [nodeName, nodeData] of Object.entries(chunk as Record<string, unknown>)) {
-        yield { type: "update", data: { node: nodeName, state: nodeData } };
-      }
-    }
-  }
-}
-
-// =============================================================================
-// Resume after Human-in-the-loop
-// =============================================================================
-
-export async function resumeWithSelection(
-  threadId: string,
-  selectedTrackId: string,
-): Promise<TrackData | null> {
-  console.log("\n🔄 [Sonic Agent v2] Resuming with selection:", selectedTrackId);
-
-  const graph = createSonicAgentGraph();
-
-  // Use Command({ resume: ... }) to continue from interrupt with the selected value
-  const result = await graph.invoke(new Command({ resume: selectedTrackId }), {
-    configurable: { thread_id: threadId },
-  });
-
-  if (result.error) {
-    console.error("❌ [Sonic Agent] Error:", result.error);
-    return null;
-  }
-
-  return result.trackData;
 }
 
 // =============================================================================

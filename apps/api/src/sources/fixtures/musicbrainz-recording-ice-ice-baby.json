@@ -1,0 +1,248 @@
+{
+  "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+  "title": "Ice Ice Baby",
+  "relations": [
+    {
+      "type": "producer",
+      "type-id": "5c0ceac3-feb4-41f0-868d-dc06f6e27fc0",
+      "direction": "backward",
+      "artist": {
+        "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+        "name": "Vanilla Ice"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "vocal",
+      "type-id": "0fdbe3c6-7700-4a31-ae54-b53f06ae1cfa",
+      "direction": "backward",
+      "artist": {
+        "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+        "name": "Vanilla Ice"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "DJ-mix",
+      "type-id": "451076df-61cf-46ab-9921-555cab2f050d",
+      "direction": "backward",
+      "recording": {
+        "id": "d3c062c0-35dc-4ef7-a97f-95eed20c9bd3",
+        "title": "DJ IKU日本代表で参加したチャリティーイベント ミックス"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "d73d89b4-2376-48c7-bd26-6a4cbd20e66c",
+        "title": "Another One Bites the Booty"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "53b8ec23-66b3-4312-990c-57e9443205d0",
+        "title": "Cold Energy (Latto vs. Vanilla Ice vs. Maroon 5 vs. Bruno Mars)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "ba26838f-074a-4c3e-91be-81106b726815",
+        "title": "Funk Funk Baby (Daft Punk vs. Vanilla Ice vs. David Bowie & Queen)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "b51aff8c-3ee6-4ca5-8cee-9e31ee182bea",
+        "title": "Hello Girl, Let’s Party Til the End (Martin Solveig feat. Dragonette vs. Britney Spears vs. LMFAO vs. No Doubt vs. Sum 41 vs. Vanilla Ice)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "270b158e-1e79-43ac-8335-500ca880686b",
+        "title": "I Wanna (Spice Girls vs. Pinkfong vs. Major Lazer feat. Vybz Kartel vs. Yolanda Be Cool & DCUP vs. Rugrats vs. Vanilla Ice vs. Salt‐N‐Pepa vs. Seal vs. 2Pac ft. Talent vs. The Rembrandts)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "27c87d74-b68d-44bb-a188-9a720fda64ac",
+        "title": "Ice Ice Baby (Vanilla Ice vs. Gwen Stefani)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "fcfd2a6f-7d5e-4181-bcf9-5a24baaf83f5",
+        "title": "Ice Ice Baby vs. Straight Up (Vanilla Ice vs. Paula Abdul)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "9d61323e-6f1d-49b6-a543-36552a05e32b",
+        "title": "Ice Ice Baby vs. U Can’t Touch This (Vanilla Ice vs. MC Hammer)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "a5e52666-a495-4a9d-af1d-373a3b208cd5",
+        "title": "Ice Ice Kylie (Kylie Minogue vs. Vanilla Ice vs. Modern Talking vs. The Pussycat Dolls)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "ed5d2ba2-e794-4744-bfee-6277c29629b2",
+        "title": "My Icey Blue Heaven (Vanilla Ice vs. Enoch Light)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "ff55ef1a-d6d3-4284-adc4-25ecb036b5f5",
+        "title": "Psychosocial Ice Ice Baby (Get Up Closer) (Slipknot vs. Vanilla Ice vs. Linkin’ Park vs. Five)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "2b05334c-d27b-4fda-a7b7-6193dda67992",
+        "title": "Pumped Up Baby"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "9dc581f8-857c-475d-815b-51a45e2eea84",
+        "title": "Under Ice"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "mashes up",
+      "type-id": "579d0b4c-bf77-479d-aa59-a8af1f518958",
+      "direction": "backward",
+      "recording": {
+        "id": "0309abc2-e2d0-4bf9-8321-a1074005168b",
+        "title": "Under Pressure, Building [French remix] (Muse vs Vanilla Ice & Queen featuring David Bowie)"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "music video",
+      "type-id": "ce3de655-7451-44d1-9224-87eb948c205d",
+      "direction": "forward",
+      "recording": {
+        "id": "b21d7d5b-0b22-4195-a6bb-940a47abc393",
+        "title": "Ice Ice Baby"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "samples material",
+      "type-id": "9efd9ce9-e702-448b-8e76-641515e8fe62",
+      "direction": "forward",
+      "recording": {
+        "id": "32c7e292-14f1-4080-bddf-ef852e0a4c59",
+        "title": "Under Pressure"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "samples material",
+      "type-id": "9efd9ce9-e702-448b-8e76-641515e8fe62",
+      "direction": "backward",
+      "recording": {
+        "id": "6507f9c2-48c9-4648-9daa-4c9271e0f983",
+        "title": "Ice Ice Bacon"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "samples material",
+      "type-id": "9efd9ce9-e702-448b-8e76-641515e8fe62",
+      "direction": "backward",
+      "recording": {
+        "id": "51a54bec-25d2-49de-bb9f-bfff669367cc",
+        "title": "Pushin' Ice"
+      },
+      "attributes": [],
+      "target-credit": ""
+    },
+    {
+      "type": "performance",
+      "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+      "direction": "forward",
+      "work": {
+        "id": "e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+        "title": "Ice Ice Baby"
+      },
+      "attributes": [],
+      "target-credit": ""
+    }
+  ]
+}

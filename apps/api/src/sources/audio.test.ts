@@ -1,10 +1,11 @@
 /**
- * Preview URL check: the same rules as the audio service (https only, host p.scdn.co or a
- * subdomain of dzcdn.net, default port, no userinfo, no IP literal).
+ * Audio service client. The preview URL check uses the same rules as the audio service (https
+ * only, host p.scdn.co or a subdomain of dzcdn.net, default port, no userinfo, no IP literal).
  */
 
-import { describe, expect, it } from "vitest";
-import { isAllowedPreviewUrl } from "./audio.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { analyzeAudioPreview, checkAudioServiceHealth, isAllowedPreviewUrl } from "./audio.js";
+import { json, never, stubFetch } from "./testing/fetchStub.js";
 
 describe("isAllowedPreviewUrl", () => {
   it.each([
@@ -38,5 +39,62 @@ describe("isAllowedPreviewUrl", () => {
     ["empty", ""],
   ])("rejects %s", (_label, url) => {
     expect(isAllowedPreviewUrl(url)).toBe(false);
+  });
+});
+
+describe("audio service client", () => {
+  const SERVICE = "http://audio.test:3002";
+  const PREVIEW_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3?hdnea=exp=1";
+
+  beforeEach(() => {
+    process.env.AUDIO_ANALYSIS_URL = SERVICE;
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    delete process.env.AUDIO_ANALYSIS_URL;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("gives up on a health check after 5 s", { timeout: 9000 }, async () => {
+    stubFetch((call) => (call.url === `${SERVICE}/health` ? never(call) : undefined));
+
+    const data = JSON.parse(await checkAudioServiceHealth.invoke({}));
+
+    expect(data.available).toBe(false);
+    expect(data.error).toMatch(/no answer within 5000 ms/);
+  });
+
+  it("reports the service's own explanation of a failed analysis", async () => {
+    stubFetch((call) => {
+      if (call.url.startsWith("https://api.deezer.com/search/track?")) {
+        return json({
+          total: 1,
+          data: [
+            {
+              id: 1,
+              title: "Ice Ice Baby",
+              preview: PREVIEW_CLIP,
+              duration: 270,
+              artist: { id: 1, name: "Vanilla Ice" },
+              album: { id: 1, title: "To the Extreme", cover_medium: "" },
+            },
+          ],
+        });
+      }
+      if (call.url === `${SERVICE}/health`) return json({ status: "ok" });
+      if (call.url === `${SERVICE}/analyze`) {
+        return json({ detail: "could not decode the clip" }, { status: 422 });
+      }
+      return undefined;
+    });
+
+    const data = JSON.parse(
+      await analyzeAudioPreview.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+    );
+
+    expect(data).toMatchObject({ source: "unavailable", reason: "analysis_failed" });
+    expect(data.error).toBe("could not decode the clip");
   });
 });

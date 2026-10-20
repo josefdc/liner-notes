@@ -1,18 +1,18 @@
 /**
  * ListenBrainz Tools for LangGraph Agent
  *
- * Provides open-source artist similarity data:
- * - Similar artists based on listening patterns (no API key required)
+ * Similar artists from listening sessions, via the ListenBrainz Labs `similar-artists` dataset
+ * (no API key). Takes a MusicBrainz artist MBID, or a name that is resolved through the
+ * MusicBrainz client (and so its rate-limited queue).
  *
- * Uses ListenBrainz Labs API. Requires MusicBrainz artist MBID.
- * Can resolve artist name → MBID via MusicBrainz search.
- *
- * @see https://listenbrainz.readthedocs.io/en/latest/users/api/
+ * @see https://labs.api.listenbrainz.org/similar-artists
  */
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
+import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
+import { findArtist, isMbid } from "./musicbrainz.js";
 
 dotenv.config();
 
@@ -20,49 +20,74 @@ dotenv.config();
 // Configuration
 // =============================================================================
 
-const LISTENBRAINZ_API = "https://api.listenbrainz.org";
-const MB_API_BASE = "https://musicbrainz.org/ws/2";
-const REQUEST_TIMEOUT = 10000; // 10 seconds
-const USER_AGENT = process.env.MUSICBRAINZ_USER_AGENT || "SonicAgent/1.0 (contact@example.com)";
+const LABS_SIMILAR_ARTISTS = "https://labs.api.listenbrainz.org/similar-artists/json";
+// The dataset ListenBrainz itself uses for artist similarity on its site.
+const ALGORITHM =
+  "session_based_days_7500_session_300_contribution_5_threshold_10_limit_100_filter_True_skip_30";
+const MAX_ARTISTS = 5;
+
+// The answer is a list ordered by score; the pipeline reads the first few.
+const SIMILAR_SHAPE: Shape = [{ artist_mbid: true, name: true, score: true }];
 
 // =============================================================================
-// Helper Functions
+// Typed client
 // =============================================================================
+
+export interface SimilarArtist {
+  name: string;
+  mbid: string;
+  /** The dataset's raw score (a count of shared listening sessions, not 0-1). */
+  score: number;
+  /** score relative to the most similar artist in the answer (that artist is 1). */
+  similarity: number;
+}
+
+interface LabsSimilarArtist {
+  artist_mbid?: unknown;
+  name?: unknown;
+  score?: unknown;
+}
 
 /**
- * Resolve artist name to MusicBrainz MBID via MusicBrainz search API
+ * Artists similar to `mbid`, most similar first; [] when the dataset has none. An answer that
+ * is not a JSON list (e.g. an HTML page) rejects with a SourceError.
  */
-async function resolveArtistMbid(artistName: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS) {
+  if (!isMbid(mbid)) throw new SourceError("listenbrainz", "invalid_input", "not an MBID");
+  const url = new URL(LABS_SIMILAR_ARTISTS);
+  url.searchParams.set("artist_mbids", mbid);
+  url.searchParams.set("algorithm", ALGORITHM);
 
-  try {
-    const query = encodeURIComponent(`artist:"${artistName}"`);
-    const url = `${MB_API_BASE}/artist?query=${query}&limit=1&fmt=json`;
-
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "application/json",
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as {
-      artists?: Array<{ id: string; name: string }>;
-    };
-
-    return data.artists?.[0]?.id || null;
-  } catch {
-    clearTimeout(timeout);
-    return null;
+  const data = await fetchJson<unknown>({
+    source: "listenbrainz",
+    url,
+    headers: { Accept: "application/json" },
+    scrub: SIMILAR_SHAPE,
+  });
+  if (!Array.isArray(data)) {
+    throw new SourceError("listenbrainz", "parse", "similar-artists answer is not a list");
   }
+
+  const rows = (data as LabsSimilarArtist[])
+    .filter(
+      (a): a is { artist_mbid: string; name: string; score: number } =>
+        isMbid(a?.artist_mbid) &&
+        typeof a.name === "string" &&
+        typeof a.score === "number" &&
+        Number.isFinite(a.score) &&
+        a.score > 0,
+    )
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  const top = rows[0]?.score ?? 0;
+  return rows.map(
+    (a): SimilarArtist => ({
+      name: a.name,
+      mbid: a.artist_mbid,
+      score: a.score,
+      similarity: Math.round((a.score / top) * 100) / 100,
+    }),
+  );
 }
 
 // =============================================================================
@@ -73,13 +98,13 @@ async function resolveArtistMbid(artistName: string): Promise<string | null> {
  * Get similar artists from ListenBrainz based on listening patterns
  */
 export const getListenBrainzSimilarArtists = tool(
-  async ({ artistMbid, artistName }): Promise<string> => {
+  async ({ artistMbid, artistName, artistNames }): Promise<string> => {
     try {
       // Resolve MBID from name if not directly provided
       let mbid = artistMbid;
       if (!mbid && artistName) {
         console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName}"...`);
-        mbid = (await resolveArtistMbid(artistName)) ?? undefined;
+        mbid = (await findArtist(artistName, artistNames))?.id;
         if (!mbid) {
           return JSON.stringify({
             found: false,
@@ -97,92 +122,11 @@ export const getListenBrainzSimilarArtists = tool(
       }
 
       console.log(`🔗 [ListenBrainz] Getting similar artists for MBID: ${mbid}`);
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-      try {
-        const url = `${LISTENBRAINZ_API}/1/explore/similar-artists/${mbid}`;
-
-        const response = await fetch(url, {
-          headers: {
-            "User-Agent": USER_AGENT,
-            Accept: "application/json",
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-          // Try the labs endpoint as fallback
-          const labsController = new AbortController();
-          const labsTimeout = setTimeout(() => labsController.abort(), REQUEST_TIMEOUT);
-
-          try {
-            const labsUrl = "https://labs.api.listenbrainz.org/similar-artists/json";
-            const labsResponse = await fetch(labsUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "User-Agent": USER_AGENT,
-              },
-              body: JSON.stringify([{ artist_mbid: mbid }]),
-              signal: labsController.signal,
-            });
-
-            clearTimeout(labsTimeout);
-
-            if (!labsResponse.ok) {
-              throw new Error(`ListenBrainz API error: HTTP ${labsResponse.status}`);
-            }
-
-            const labsData = (await labsResponse.json()) as Array<{
-              artist_mbid: string;
-              similar_artists?: Array<{
-                artist_mbid: string;
-                name?: string;
-                score: number;
-              }>;
-            }>;
-
-            const similar = labsData?.[0]?.similar_artists || [];
-            const artists = similar.slice(0, 5).map((a) => ({
-              name: a.name || a.artist_mbid,
-              mbid: a.artist_mbid,
-              similarity: a.score,
-            }));
-
-            console.log(`✅ [ListenBrainz] Found ${artists.length} similar artists (labs API)`);
-            return JSON.stringify({ found: artists.length > 0, artists });
-          } finally {
-            clearTimeout(labsTimeout);
-          }
-        }
-
-        const data = (await response.json()) as {
-          payload?: Array<{
-            artist_mbid: string;
-            name?: string;
-            score?: number;
-            reference_mbid?: string;
-          }>;
-        };
-
-        const similar = data.payload || [];
-        const artists = similar.slice(0, 5).map((a) => ({
-          name: a.name || a.artist_mbid,
-          mbid: a.artist_mbid,
-          similarity: a.score ?? 0,
-        }));
-
-        console.log(`✅ [ListenBrainz] Found ${artists.length} similar artists`);
-        return JSON.stringify({ found: artists.length > 0, artists });
-      } finally {
-        clearTimeout(timeout);
-      }
+      const artists = await fetchSimilarArtists(mbid);
+      console.log(`✅ [ListenBrainz] Found ${artists.length} similar artists`);
+      return JSON.stringify({ found: artists.length > 0, artists });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = describeError(error);
       console.error("❌ [ListenBrainz] Similar artists error:", message);
       return JSON.stringify({ found: false, error: message });
     }
@@ -202,6 +146,10 @@ export const getListenBrainzSimilarArtists = tool(
         .string()
         .optional()
         .describe("Artist name (will be resolved to MBID via MusicBrainz search)"),
+      artistNames: z
+        .array(z.string())
+        .optional()
+        .describe("When artistName joins several artists: the artists one by one"),
     }),
   },
 );

@@ -7,8 +7,9 @@
  * - Similar artists (for genealogy edges)
  * - Artist bio and metadata (for factoids)
  *
- * Uses Last.fm API v2. Requires LASTFM_API_KEY in environment.
- * Gracefully degrades if API key is not configured.
+ * Uses Last.fm API v2. Requires LASTFM_API_KEY in environment. Without it every tool reports
+ * the source as unavailable (`unavailable: true`), never as "0 results", and the missing key is
+ * logged once.
  *
  * @see https://www.last.fm/api
  */
@@ -16,6 +17,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
+import { credential, describeError, fetchJson, isSourceError, type Shape } from "./http.js";
 
 dotenv.config();
 
@@ -24,7 +26,6 @@ dotenv.config();
 // =============================================================================
 
 const LASTFM_API_BASE = "https://ws.audioscrobbler.com/2.0/";
-const REQUEST_TIMEOUT = 10000; // 10 seconds
 
 // Tags that are not useful genre indicators — filter these out
 const TAG_BLOCKLIST = new Set([
@@ -99,57 +100,111 @@ interface LastfmArtistInfo {
   url?: string;
   stats?: { listeners: string; playcount: string };
   bio?: { summary: string; content: string };
-  tags?: { tag: LastfmTag[] };
-  similar?: { artist: LastfmSimilarArtist[] };
+  tags?: { tag?: LastfmTag | LastfmTag[] };
+  similar?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] };
 }
 
 // =============================================================================
 // Shared Helper
 // =============================================================================
 
-/**
- * Make a request to the Last.fm API with timeout and error handling
- */
-async function callLastfm(params: Record<string, string>): Promise<unknown> {
-  const apiKey = process.env.LASTFM_API_KEY;
-  if (!apiKey) {
-    return { error: "LASTFM_API_KEY not configured" };
+// Fields the pipeline reads, kept when a response is recorded to a cassette.
+const TAGS_SHAPE: Shape = { tag: [{ name: true, count: true }] };
+const RESPONSE_SHAPE: Shape = {
+  error: true,
+  message: true,
+  toptags: TAGS_SHAPE,
+  similartracks: { track: [{ name: true, match: true, artist: { name: true, mbid: true } }] },
+  similarartists: { artist: [{ name: true, match: true, mbid: true }] },
+  artist: {
+    name: true,
+    mbid: true,
+    stats: { listeners: true, playcount: true },
+    bio: { summary: true },
+    tags: TAGS_SHAPE,
+    similar: { artist: [{ name: true, mbid: true }] },
+  },
+};
+
+const NOT_CONFIGURED = "Last.fm is not configured (LASTFM_API_KEY is not set)";
+let reportedMissingKey = false;
+
+/** True when LASTFM_API_KEY is set. Without it the source is unavailable; reported once. */
+export function lastfmConfigured(): boolean {
+  if (credential("LASTFM_API_KEY")) return true;
+  if (!reportedMissingKey) {
+    reportedMissingKey = true;
+    console.warn(`⚠️ [Last.fm] ${NOT_CONFIGURED}; Last.fm tags and similar items are unavailable.`);
   }
+  return false;
+}
+
+/** Last.fm's error answer: a numeric code and a message (also sent with HTTP 4xx). */
+interface LastfmError {
+  error?: number;
+  message?: string;
+}
+
+type LastfmResult<T> = { ok: true; data: T } | { ok: false; error: string; unavailable?: true };
+
+/**
+ * Calls a Last.fm method. Resolves with the data, or with the reason it is missing: not
+ * configured (no request made), Last.fm's own error message, or the request's typed error.
+ * Methods that take names get `autocorrect=1`, so a misspelt name resolves to the canonical one.
+ */
+async function callLastfm<T extends object>(
+  params: Record<string, string>,
+): Promise<LastfmResult<T>> {
+  if (!lastfmConfigured()) return { ok: false, error: NOT_CONFIGURED, unavailable: true };
 
   const url = new URL(LASTFM_API_BASE);
-  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("api_key", credential("LASTFM_API_KEY") as string);
   url.searchParams.set("format", "json");
+  url.searchParams.set("autocorrect", "1");
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
+  let data: T & LastfmError;
   try {
-    const response = await fetch(url.toString(), {
-      headers: { "User-Agent": "SonicAgent/1.0" },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      throw new Error(`Last.fm API error: HTTP ${response.status}`);
+    data = await fetchJson<T & LastfmError>({ source: "lastfm", url, scrub: RESPONSE_SHAPE });
+  } catch (error) {
+    // Last.fm answers errors with HTTP 4xx and a JSON body; keep its message.
+    const body = isSourceError(error) ? (error.body as LastfmError | undefined) : undefined;
+    if (body && typeof body.message === "string" && body.message) {
+      return { ok: false, error: `Last.fm error ${body.error ?? "?"}: ${body.message}` };
     }
-
-    return await response.json();
-  } finally {
-    clearTimeout(timeout);
+    return { ok: false, error: describeError(error) };
   }
+  if (data.error) {
+    return { ok: false, error: `Last.fm error ${data.error}: ${data.message ?? "no message"}` };
+  }
+  return { ok: true, data };
+}
+
+/** The tool result for a call that returned no data. */
+function failure(result: { error: string; unavailable?: true }): string {
+  return JSON.stringify(
+    result.unavailable
+      ? { found: false, unavailable: true, error: result.error }
+      : { found: false, error: result.error },
+  );
+}
+
+/** Last.fm sends a single item as an object instead of a one-item list. */
+function asList<T>(value: T | T[] | undefined | null): T[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
 }
 
 /**
  * Filter noise tags using the blocklist
  */
-function cleanTags(tags: LastfmTag[]): Array<{ name: string; count: number }> {
-  return tags
-    .filter((t) => !TAG_BLOCKLIST.has(t.name.toLowerCase()))
+function cleanTags(
+  tags: LastfmTag | LastfmTag[] | undefined,
+): Array<{ name: string; count: number }> {
+  return asList(tags)
+    .filter((t) => typeof t?.name === "string" && !TAG_BLOCKLIST.has(t.name.toLowerCase()))
     .map((t) => ({ name: t.name, count: Number(t.count) || 0 }))
     .slice(0, 10);
 }
@@ -175,32 +230,20 @@ function cleanBio(bio: string, maxLength = 300): string {
  */
 export const getLastfmTrackTags = tool(
   async ({ title, artist }): Promise<string> => {
-    try {
-      console.log(`🏷️ [Last.fm] Getting track tags: "${title}" by ${artist}`);
-
-      const data = (await callLastfm({
-        method: "track.getTopTags",
-        track: title,
-        artist: artist,
-      })) as { toptags?: { tag?: LastfmTag[] }; error?: number; message?: string };
-
-      if (data.error) {
-        return JSON.stringify({
-          found: false,
-          error: data.message || `Last.fm error ${data.error}`,
-        });
-      }
-
-      const rawTags = data.toptags?.tag || [];
-      const tags = cleanTags(rawTags);
-
-      console.log(`✅ [Last.fm] Found ${tags.length} track tags`);
-      return JSON.stringify({ found: tags.length > 0, tags });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Last.fm] Track tags error:", message);
-      return JSON.stringify({ found: false, error: message });
+    console.log(`🏷️ [Last.fm] Getting track tags: "${title}" by ${artist}`);
+    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>({
+      method: "track.getTopTags",
+      track: title,
+      artist: artist,
+    });
+    if (!result.ok) {
+      console.error("❌ [Last.fm] Track tags error:", result.error);
+      return failure(result);
     }
+
+    const tags = cleanTags(result.data.toptags?.tag);
+    console.log(`✅ [Last.fm] Found ${tags.length} track tags`);
+    return JSON.stringify({ found: tags.length > 0, tags });
   },
   {
     name: "lastfm_track_tags",
@@ -219,31 +262,19 @@ export const getLastfmTrackTags = tool(
  */
 export const getLastfmArtistTags = tool(
   async ({ artist }): Promise<string> => {
-    try {
-      console.log(`🏷️ [Last.fm] Getting artist tags: "${artist}"`);
-
-      const data = (await callLastfm({
-        method: "artist.getTopTags",
-        artist: artist,
-      })) as { toptags?: { tag?: LastfmTag[] }; error?: number; message?: string };
-
-      if (data.error) {
-        return JSON.stringify({
-          found: false,
-          error: data.message || `Last.fm error ${data.error}`,
-        });
-      }
-
-      const rawTags = data.toptags?.tag || [];
-      const tags = cleanTags(rawTags);
-
-      console.log(`✅ [Last.fm] Found ${tags.length} artist tags`);
-      return JSON.stringify({ found: tags.length > 0, tags });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Last.fm] Artist tags error:", message);
-      return JSON.stringify({ found: false, error: message });
+    console.log(`🏷️ [Last.fm] Getting artist tags: "${artist}"`);
+    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>({
+      method: "artist.getTopTags",
+      artist: artist,
+    });
+    if (!result.ok) {
+      console.error("❌ [Last.fm] Artist tags error:", result.error);
+      return failure(result);
     }
+
+    const tags = cleanTags(result.data.toptags?.tag);
+    console.log(`✅ [Last.fm] Found ${tags.length} artist tags`);
+    return JSON.stringify({ found: tags.length > 0, tags });
   },
   {
     name: "lastfm_artist_tags",
@@ -261,37 +292,31 @@ export const getLastfmArtistTags = tool(
  */
 export const getLastfmSimilarTracks = tool(
   async ({ title, artist }): Promise<string> => {
-    try {
-      console.log(`🔗 [Last.fm] Getting similar tracks: "${title}" by ${artist}`);
+    console.log(`🔗 [Last.fm] Getting similar tracks: "${title}" by ${artist}`);
+    const result = await callLastfm<{
+      similartracks?: { track?: LastfmSimilarTrack | LastfmSimilarTrack[] };
+    }>({
+      method: "track.getSimilar",
+      track: title,
+      artist: artist,
+      limit: "5",
+    });
+    if (!result.ok) {
+      console.error("❌ [Last.fm] Similar tracks error:", result.error);
+      return failure(result);
+    }
 
-      const data = (await callLastfm({
-        method: "track.getSimilar",
-        track: title,
-        artist: artist,
-        limit: "5",
-      })) as { similartracks?: { track?: LastfmSimilarTrack[] }; error?: number; message?: string };
-
-      if (data.error) {
-        return JSON.stringify({
-          found: false,
-          error: data.message || `Last.fm error ${data.error}`,
-        });
-      }
-
-      const rawTracks = data.similartracks?.track || [];
-      const tracks = rawTracks.slice(0, 5).map((t) => ({
+    const tracks = asList(result.data.similartracks?.track)
+      .filter((t) => typeof t?.name === "string" && typeof t.artist?.name === "string")
+      .slice(0, 5)
+      .map((t) => ({
         name: t.name,
         artist: t.artist.name,
-        match: typeof t.match === "number" ? t.match : Number(t.match) || 0,
+        match: Number(t.match) || 0,
       }));
 
-      console.log(`✅ [Last.fm] Found ${tracks.length} similar tracks`);
-      return JSON.stringify({ found: tracks.length > 0, tracks });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Last.fm] Similar tracks error:", message);
-      return JSON.stringify({ found: false, error: message });
-    }
+    console.log(`✅ [Last.fm] Found ${tracks.length} similar tracks`);
+    return JSON.stringify({ found: tracks.length > 0, tracks });
   },
   {
     name: "lastfm_similar_tracks",
@@ -310,40 +335,30 @@ export const getLastfmSimilarTracks = tool(
  */
 export const getLastfmSimilarArtists = tool(
   async ({ artist }): Promise<string> => {
-    try {
-      console.log(`🔗 [Last.fm] Getting similar artists: "${artist}"`);
+    console.log(`🔗 [Last.fm] Getting similar artists: "${artist}"`);
+    const result = await callLastfm<{
+      similarartists?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] };
+    }>({
+      method: "artist.getSimilar",
+      artist: artist,
+      limit: "5",
+    });
+    if (!result.ok) {
+      console.error("❌ [Last.fm] Similar artists error:", result.error);
+      return failure(result);
+    }
 
-      const data = (await callLastfm({
-        method: "artist.getSimilar",
-        artist: artist,
-        limit: "5",
-      })) as {
-        similarartists?: { artist?: LastfmSimilarArtist[] };
-        error?: number;
-        message?: string;
-      };
-
-      if (data.error) {
-        return JSON.stringify({
-          found: false,
-          error: data.message || `Last.fm error ${data.error}`,
-        });
-      }
-
-      const rawArtists = data.similarartists?.artist || [];
-      const artists = rawArtists.slice(0, 5).map((a) => ({
+    const artists = asList(result.data.similarartists?.artist)
+      .filter((a) => typeof a?.name === "string")
+      .slice(0, 5)
+      .map((a) => ({
         name: a.name,
-        match: typeof a.match === "string" ? parseFloat(a.match) : Number(a.match) || 0,
+        match: Number(a.match) || 0,
         mbid: a.mbid || undefined,
       }));
 
-      console.log(`✅ [Last.fm] Found ${artists.length} similar artists`);
-      return JSON.stringify({ found: artists.length > 0, artists });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Last.fm] Similar artists error:", message);
-      return JSON.stringify({ found: false, error: message });
-    }
+    console.log(`✅ [Last.fm] Found ${artists.length} similar artists`);
+    return JSON.stringify({ found: artists.length > 0, artists });
   },
   {
     name: "lastfm_similar_artists",
@@ -361,48 +376,41 @@ export const getLastfmSimilarArtists = tool(
  */
 export const getLastfmArtistInfo = tool(
   async ({ artist }): Promise<string> => {
-    try {
-      console.log(`📋 [Last.fm] Getting artist info: "${artist}"`);
+    console.log(`📋 [Last.fm] Getting artist info: "${artist}"`);
+    const result = await callLastfm<{ artist?: LastfmArtistInfo }>({
+      method: "artist.getInfo",
+      artist: artist,
+    });
+    if (!result.ok) {
+      console.error("❌ [Last.fm] Artist info error:", result.error);
+      return failure(result);
+    }
 
-      const data = (await callLastfm({
-        method: "artist.getInfo",
-        artist: artist,
-      })) as { artist?: LastfmArtistInfo; error?: number; message?: string };
+    const info = result.data.artist;
+    if (!info || typeof info.name !== "string") {
+      return JSON.stringify({ found: false, error: "Artist not found" });
+    }
 
-      if (data.error) {
-        return JSON.stringify({
-          found: false,
-          error: data.message || `Last.fm error ${data.error}`,
-        });
-      }
-
-      const info = data.artist;
-      if (!info) {
-        return JSON.stringify({ found: false, error: "Artist not found" });
-      }
-
-      const tags = cleanTags(info.tags?.tag || []);
-      const similarArtists = (info.similar?.artist || []).slice(0, 5).map((a) => ({
+    const tags = cleanTags(info.tags?.tag);
+    const similarArtists = asList(info.similar?.artist)
+      .filter((a) => typeof a?.name === "string")
+      .slice(0, 5)
+      .map((a) => ({
         name: a.name,
         mbid: a.mbid || undefined,
       }));
-      const bio = info.bio?.summary ? cleanBio(info.bio.summary) : undefined;
+    const bio = info.bio?.summary ? cleanBio(info.bio.summary) : undefined;
 
-      console.log(`✅ [Last.fm] Got artist info: ${info.name}`);
-      return JSON.stringify({
-        found: true,
-        name: info.name,
-        bio,
-        listeners: info.stats?.listeners ? parseInt(info.stats.listeners, 10) : undefined,
-        playcount: info.stats?.playcount ? parseInt(info.stats.playcount, 10) : undefined,
-        tags,
-        similarArtists,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ [Last.fm] Artist info error:", message);
-      return JSON.stringify({ found: false, error: message });
-    }
+    console.log(`✅ [Last.fm] Got artist info: ${info.name}`);
+    return JSON.stringify({
+      found: true,
+      name: info.name,
+      bio,
+      listeners: info.stats?.listeners ? parseInt(info.stats.listeners, 10) : undefined,
+      playcount: info.stats?.playcount ? parseInt(info.stats.playcount, 10) : undefined,
+      tags,
+      similarArtists,
+    });
   },
   {
     name: "lastfm_artist_info",

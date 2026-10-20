@@ -19,6 +19,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import { searchDeezerPreview, type DeezerSearchResult } from "./deezer.js";
+import { describeError, fetchJson, isSourceError } from "./http.js";
 import type { AudioUnavailableReason } from "../agent/state.js";
 
 // =============================================================================
@@ -187,15 +188,13 @@ async function tryDeezerFallback(title: string, artist: string): Promise<string 
  */
 async function isServiceAvailable(): Promise<boolean> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const response = await fetch(`${audioServiceUrl()}/health`, {
-      signal: controller.signal,
+    await fetchJson({
+      source: "audio",
+      url: `${audioServiceUrl()}/health`,
+      timeoutMs: 5000,
+      cassette: false,
     });
-
-    clearTimeout(timeout);
-    return response.ok;
+    return true;
   } catch {
     return false;
   }
@@ -205,32 +204,26 @@ async function isServiceAvailable(): Promise<boolean> {
  * Call the audio analysis service
  */
 async function analyzeWithService(previewUrl: string): Promise<AudioServiceResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SERVICE_TIMEOUT);
-
   try {
-    const response = await fetch(`${audioServiceUrl()}/analyze`, {
+    return await fetchJson<AudioServiceResponse>({
+      source: "audio",
+      url: `${audioServiceUrl()}/analyze`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(audioServiceToken() ? { "X-Audio-Token": audioServiceToken() } : {}),
       },
       body: JSON.stringify({ preview_url: previewUrl }),
-      signal: controller.signal,
+      timeoutMs: SERVICE_TIMEOUT,
+      cassette: false,
     });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const error = (await response.json().catch(() => ({ detail: "Unknown error" }))) as {
-        detail?: string;
-      };
-      throw new Error(error.detail || `HTTP ${response.status}`);
-    }
-
-    return (await response.json()) as AudioServiceResponse;
-  } finally {
-    clearTimeout(timeout);
+  } catch (error) {
+    // The service explains a failed analysis in `detail` (FastAPI).
+    const detail = isSourceError(error, "http")
+      ? (error.body as { detail?: unknown } | undefined)?.detail
+      : undefined;
+    if (typeof detail === "string" && detail) throw new Error(detail);
+    throw error;
   }
 }
 
@@ -360,27 +353,22 @@ export const analyzeAudioPreview = tool(
 export const checkAudioServiceHealth = tool(
   async (): Promise<string> => {
     try {
-      const response = await fetch(`${audioServiceUrl()}/health`);
-
-      if (!response.ok) {
-        return JSON.stringify({
-          available: false,
-          url: audioServiceUrl(),
-          error: `HTTP ${response.status}`,
-        });
-      }
-
-      const data = (await response.json()) as { version?: string };
+      const data = await fetchJson<{ version?: string }>({
+        source: "audio",
+        url: `${audioServiceUrl()}/health`,
+        timeoutMs: 5000,
+        cassette: false,
+      });
       return JSON.stringify({
         available: true,
         url: audioServiceUrl(),
-        version: data.version,
+        version: data?.version,
       });
     } catch (error) {
       return JSON.stringify({
         available: false,
         url: audioServiceUrl(),
-        error: error instanceof Error ? error.message : "Connection failed",
+        error: describeError(error),
       });
     }
   },

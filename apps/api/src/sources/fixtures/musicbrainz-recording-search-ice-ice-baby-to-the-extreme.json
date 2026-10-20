@@ -1,0 +1,1579 @@
+{
+  "count": 1,
+  "recordings": [
+    {
+      "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      "title": "Ice Ice Baby",
+      "score": 100,
+      "first-release-date": "1990-09-04",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "90's Super Hits",
+          "date": "1996",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "90’s Smash‐Hits",
+          "date": "2001",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "90s Best Of by uDiscover",
+          "date": "2025-04-11",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Icon",
+          "date": "2014-09-30",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hooked",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "1000 Original Hits: 1991",
+          "date": "2001",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "Wedding Party Hits 2023",
+          "status": "Withdrawn",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "20 #1's: One Hit Wonders",
+          "date": "2019-04-05",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Top of the Pops: 1990–1994",
+          "date": "2016-09-02",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hits Pop Rock 90’s",
+          "date": "2022-10-14",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Back 2 Back Hits",
+          "date": "1997",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Auto Nostalgia 50 50",
+          "date": "2006",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Complete Nineties",
+          "date": "2005",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Sounds of the 90's Generation",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hearts of Gold: The Rap Collection",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love the 90’s, Volume 4",
+          "date": "2011-03-25",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Video Hits 1 Hit Wonders",
+          "date": "2009",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Back to the 90’s",
+          "date": "2009",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Alle 40 goed: Number One Hits",
+          "date": "2011",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Alle 40 goed: Aprés Ski",
+          "date": "2011-01-31",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "One Shot 1991",
+          "date": "2007",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Everybody Loves… 90’s, Vol. I",
+          "date": "1996",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "To The Extreme",
+          "date": "2020",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "Ultra Mix",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love Music 1990–1994: U Can’t Touch This",
+          "date": "2004",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "100% Hits Summer Party!",
+          "date": "2008",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hit History, CD 3",
+          "date": "1996",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Best of the 90’s",
+          "date": "2007",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Las cien de la 100",
+          "date": "2001",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Number 1 Hits From the 90s",
+          "date": "2013",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Bravo Hits: Best of 91",
+          "date": "1995-11-24",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "De Pre Historie Het Beste Uit de Jaren '90",
+          "date": "2006",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best New Year’s Party Album in the World…Ever!",
+          "date": "2022-04-24",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Best 200 Hits of the 90’s",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "100% 90s",
+          "date": "",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Absolument 90 : Les Plus Grands Tubes internationaux",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Guilty Pleasures",
+          "date": "2011-07-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 Floorfillers",
+          "date": "2010-11-12",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Millennium Pop Box – CD 3",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Ulli Wengers One Hit Wonder, Volume 5",
+          "date": "2003-12-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 90s Hits",
+          "date": "2009",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Retro Hits",
+          "date": "2020-06-12",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best Dance Album in the World … Ever",
+          "date": "1994",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "90’s Movies Hits",
+          "date": "2020-07-24",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Pop News 2/91",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Top Hits of the 90s, Edition 02",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Greatest Hits of the 90’s",
+          "date": "2008",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "RNB Fridays, Volume 2",
+          "date": "2016-04-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Best Of Summer ... Ever ....",
+          "date": "2000",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love the 90’s: The 2020 Party Edition",
+          "date": "2018",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation", "DJ-mix"]
+          }
+        },
+        {
+          "title": "90’s Club Classix Top 100",
+          "date": "2008-09-22",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Greatest Ever One Hit Wonders",
+          "date": "2016-05-20",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Ice Ice Baby",
+          "date": "2006-06-05",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single"
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990-12-03",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "De Maxx Long Player 11: Urban Special",
+          "date": "2007-06-22",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Massive Party Hits",
+          "date": "2009",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Top 40 Hits of All Time, Volume 5",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 Party Songs",
+          "date": "2013-11-01",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best 90s Album in the World…Ever!",
+          "date": "2022-04-20",
+          "status": "Withdrawn",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Fetenhits: Black Classics",
+          "date": "2004-02-23",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Black Classics Party",
+          "date": "2000-12-01",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "90’s One Hit Wonders",
+          "date": "2022-03-04",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "80 From the 90’s",
+          "date": "2011-04-22",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The No.1 DJ Collection: 90s (Digital Collection)",
+          "date": "",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love the 90s: The Party Edition",
+          "date": "2016-03-18",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love The 90’s - The Party Edition",
+          "date": "2016-03-11",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hip Hop",
+          "date": "2000",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "1000 klassiekers, vol. 11",
+          "date": "2019-11-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Absolute 90’s",
+          "date": "2008-03-26",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 Number Ones",
+          "date": "2012-08-17",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Daydreams",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Joe Top 2000, Volume 8",
+          "date": "2016",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "NOW! 25 Top Hits of the 1990’s",
+          "date": "2014-08-19",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The History of Pop 1991 - 1994",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Carpool Karaoke Hits",
+          "date": "2020-09-02",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Ultratop 1001 Hits, Volume 3",
+          "date": "2016-04-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 Number Ones",
+          "date": "2012-08-17",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Foute CD van Q-Music, Volume 3",
+          "date": "2007-05-11",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Alle 40 goed: 90’s",
+          "date": "2010-02-19",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Génération 90",
+          "date": "2010",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Greatest Hits of the 90’s",
+          "date": "2004",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "90s Mixtape",
+          "date": "2017-07-07",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Greatest Hits 1991, Vol. 1",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "One‐Hit Wonders",
+          "date": "2001",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Ultimate 90",
+          "date": "2004",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Frequency 99: Greatest Hits of the ’90s",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Legendary Disco",
+          "date": "2008",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "100% Rap Hits",
+          "date": "1994",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Alive in the 90’s",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Absolute Dance Classics",
+          "date": "1997-04-17",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best Ever Nineties Album",
+          "date": "1998",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "2009-04-21",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "Greatest Ever One Hit Wonders",
+          "date": "2017-09-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "NOW! 25 Top Hits of the 1990’s",
+          "date": "2014-10-07",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Het beste uit de Top 500 van het Foute Uur",
+          "date": "2013",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Suddenly 30",
+          "date": "2004",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Soundtrack"]
+          }
+        },
+        {
+          "title": "1991: Die Stars — die Hits — die Facts",
+          "date": "1998",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 Summer Songs",
+          "date": "2011",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Back 2 Back Hits",
+          "date": "1998",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Monsters of Rap, Volume 1",
+          "date": "2000-07-25",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Living in the 90s",
+          "date": "1995",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "13 Going on 30",
+          "date": "2004-04-20",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Soundtrack"]
+          }
+        },
+        {
+          "title": "Let It Rock… 1990",
+          "date": "2000-04-11",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Nineties Complete",
+          "date": "2000-05-22",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "100% Hits: Best Hits of the Decade 1990–2000",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Super Top 50! Disk2",
+          "date": "1995",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Entertainment Weekly: The Greatest Hits: 1990",
+          "date": "2000",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best of Vanilla Ice",
+          "date": "1999-02-23",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best of Vanilla Ice",
+          "date": "2001-03-13",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love You",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single"
+          }
+        },
+        {
+          "title": "Countdown: One Hit Wonders",
+          "date": "2008",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Die besten Hits der 90er",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The No.1 DJ Collection: 90’s, Volume 1",
+          "date": "2006",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Ice Ice Baby",
+          "date": "2006-06-05",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single"
+          }
+        },
+        {
+          "title": "No.1 Hits",
+          "date": "2000",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "One Hit Wonders",
+          "date": "2005-06",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Monsters of Rap",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990-09-04",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "Absolute One Hit Wonders",
+          "date": "2005-03-16",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The History of Hip Hop",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "20 Years on MTV: 1990",
+          "date": "",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Old School Rap, Volume 4",
+          "date": "1999-06-29",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Tropical Summerhits",
+          "date": "1997",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Rap Fieber",
+          "date": "1997",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Teen Riot",
+          "date": "2000",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "TM Century: GoldDisc 189",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Back in tha Day 2",
+          "date": "1999-09-21",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "20th Century Hits for a New Millennium: 36 Hits of 1990–1994",
+          "date": "1998",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "20th Century Hits for a New Millennium: 36 Hits of 1990–1994",
+          "date": "1999-05-11",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Zona de Baile, Volume 1",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Disco Generation",
+          "date": "2001-10-25",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Heartthrob Hits!",
+          "date": "1998",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "History of Techno ’89–’91",
+          "date": "1997",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Rap Traxx 5",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Rap Traxx 5",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Office Party",
+          "date": "2005",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The History of Pop 1991-1994",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hip Hop Original Masters",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Take 40: Ten Years of No. 1 Hits",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Fast 90’s",
+          "date": "1995",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "20th Century Hits for a New Millennium",
+          "date": "1999-07-26",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Party Starter: Hip Hop Mix",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "mySounds: Ready to Load & Play: Party",
+          "date": "2006",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Move Your Body 2",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Time of Our Lives",
+          "date": "2002",
+          "status": "Pseudo-Release",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Het beste uit de Top 40 van ’91",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "One Shot: Die Eintagsfliegen der 80er und 90er",
+          "date": "2002-09-23",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Europop: The Best of Eurodance Classics, Volume 1",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Greatest Hits of Dance",
+          "date": "1992",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "As 100 mais da antena 1, volume 2",
+          "date": "2009-07-03",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "De Pre Historie 1991, Volume 2",
+          "date": "2003",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Pump It Up",
+          "date": "1998",
+          "status": "Promotion",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Metro Life: The Best of the 90s",
+          "date": "2003",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Rap Attack",
+          "date": "1997",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Pure Gold Hits: Hip Hop",
+          "date": "2000",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "#1 Hits of the 90s",
+          "date": "2007-08-13",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Millennium Hits 1990–1999",
+          "date": "1999",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Best of Better Bodies... Volume 1",
+          "date": "1991",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 One Hit Wonders",
+          "date": "2012-02-24",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "The Best of the 90s",
+          "date": "2003",
+          "status": "Promotion",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "I Love 90s",
+          "date": "2013-06-18",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "101 Moments in Music, Volume 2",
+          "date": "2011-08-15",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Parasta ennen! Timanttista jyystöä, vol. 2",
+          "date": "2012-11-16",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "mySounds: Ready to Load & Play: Party",
+          "date": "2007",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Video Hits - One Hit Wonders",
+          "date": "2009",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Pop Classics Top 100",
+          "date": "2012",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Edge of the 80s: Out of the Eighties",
+          "date": "2004",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Hit Fascination 1/91",
+          "date": "1991-01",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "Rapper’s Delight",
+          "date": "2013-04-22",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "90s Now, Volume 1",
+          "date": "1997-08-26",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        },
+        {
+          "title": "To the Extreme",
+          "date": "1990",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album"
+          }
+        },
+        {
+          "title": "20 #1's: '90s",
+          "date": "2016-09-16",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    }
+  ]
+}

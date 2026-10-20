@@ -95,7 +95,9 @@ vi.mock("../../agent/nodes/index.js", async () => {
       }
       if (query.startsWith("nomatch")) return { error: "No tracks found" };
       if (query.startsWith("outage")) {
-        return { error: "Error searching for tracks: 503 secret-upstream-detail" };
+        return {
+          error: "Error: searching for tracks failed: spotify: HTTP 503 — secret-upstream-detail",
+        };
       }
       if (query.startsWith("odd")) return { error: "secret-odd-detail" };
       if (query.startsWith("ambiguous")) {

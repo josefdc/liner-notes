@@ -1,0 +1,171 @@
+{
+  "count": 181,
+  "recordings": [
+    {
+      "id": "6c86fef8-1664-496e-9592-b020da2e6886",
+      "title": "Back in Black",
+      "score": 100,
+      "disambiguation": "live, 1991-03-28: Palais Omnisports de Paris-Bercy, Paris, France",
+      "artist-credit": [
+        {
+          "name": "AC/DC",
+          "artist": {
+            "id": "66c662b6-6e2f-4930-8610-912e24c63ed1",
+            "name": "AC/DC"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "1991-03-28: Tour de Force: Palais Omnisport Paris Bercy, Paris, France",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Live"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "7fa5a756-0831-4c58-8135-496d4af1e74b",
+      "title": "Back in Black",
+      "score": 100,
+      "first-release-date": "2001",
+      "artist-credit": [
+        {
+          "name": "AC/DC",
+          "artist": {
+            "id": "66c662b6-6e2f-4930-8610-912e24c63ed1",
+            "name": "AC/DC"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Ultimate Volts",
+          "date": "2001",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "633df272-a237-42d6-99ee-0c340bf38d4f",
+      "title": "Back in Black",
+      "score": 100,
+      "first-release-date": "1993",
+      "artist-credit": [
+        {
+          "name": "AC/DC",
+          "artist": {
+            "id": "66c662b6-6e2f-4930-8610-912e24c63ed1",
+            "name": "AC/DC"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Gold: Greatest Hits Live",
+          "date": "1993",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation", "Live"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "23bcab68-3164-46f0-9e0f-2330e06c2003",
+      "title": "Back in Black",
+      "score": 100,
+      "disambiguation": "live, 1991-09-28: Moscow, Russia",
+      "first-release-date": "1993-05-27",
+      "artist-credit": [
+        {
+          "name": "AC/DC",
+          "artist": {
+            "id": "66c662b6-6e2f-4930-8610-912e24c63ed1",
+            "name": "AC/DC"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Big Gun",
+          "date": "1993-06-28",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single",
+            "secondary-types": ["Soundtrack"]
+          }
+        },
+        {
+          "title": "Big Gun",
+          "date": "1994",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single",
+            "secondary-types": ["Soundtrack"]
+          }
+        },
+        {
+          "title": "Big Gun",
+          "date": "1993-07-02",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single",
+            "secondary-types": ["Soundtrack"]
+          }
+        },
+        {
+          "title": "Big Gun",
+          "date": "1993-06-28",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single",
+            "secondary-types": ["Soundtrack"]
+          }
+        },
+        {
+          "title": "Big Gun",
+          "date": "1993-05-27",
+          "status": "Official",
+          "release-group": {
+            "primary-type": "Single",
+            "secondary-types": ["Soundtrack"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "730f90ee-38a5-4644-940e-5f6b36343395",
+      "title": "Back in Black",
+      "score": 100,
+      "first-release-date": "2001",
+      "artist-credit": [
+        {
+          "name": "AC/DC",
+          "artist": {
+            "id": "66c662b6-6e2f-4930-8610-912e24c63ed1",
+            "name": "AC/DC"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "title": "Ultimate Volts",
+          "date": "2001",
+          "status": "Bootleg",
+          "release-group": {
+            "primary-type": "Album",
+            "secondary-types": ["Compilation"]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -2,6 +2,9 @@
 // Configure it first with `window.__mockApi = { suggestions, streams, fetchStatus }`:
 //   suggestions: candidates returned by /api/search/suggest
 //   fetchStatus: { "<path>": <HTTP status> } makes a request on that path fail with it
+//   suggestionsByQuery: { "<query>": [candidate, ...] } overrides `suggestions` per query
+//   suggestWaits: { "<query>": "<name>" } holds the suggestions for that query until the test
+//                calls `window.__mockApi.release("<name>")`
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
 //                stream ends like a server response does (onerror unless the app closed it).
@@ -67,12 +70,13 @@
       });
     }
     if (pathOf(url) === "/api/search/suggest") {
-      return new Response(
-        JSON.stringify({ success: true, suggestions: config.suggestions ?? [] }),
-        {
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      const query = new URL(url, location.href).searchParams.get("query") ?? "";
+      const wait = config.suggestWaits?.[query];
+      if (wait) await new Promise((resolve) => whenReleased(wait, resolve));
+      const suggestions = config.suggestionsByQuery?.[query] ?? config.suggestions ?? [];
+      return new Response(JSON.stringify({ success: true, suggestions }), {
+        headers: { "Content-Type": "application/json" },
+      });
     }
     return new Response(JSON.stringify({ success: false, error: "not mocked" }), { status: 503 });
   };

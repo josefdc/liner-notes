@@ -134,9 +134,22 @@ function pickerTarget(key: string, current: number, count: number): number | nul
   }
 }
 
-// UX: Error hint helper (Item 10 - in-character error copy)
-function getErrorHint(error: string | null): string {
-  if (!error) return 'Unexpected interference. The system is ready to retry.';
+const GENERIC_ERROR_HINT = 'Unexpected interference. The system is ready to retry.';
+
+// What to do next for each failure code the API sends with an error.
+const ERROR_HINTS_BY_CODE: Record<string, string> = {
+  no_match: 'No signal detected. Verify track name and artist.',
+  choice_expired: 'That choice is no longer open. Search again.',
+  run_interrupted: 'That choice is no longer open. Search again.',
+  upstream_unavailable: 'An upstream service is not answering. Try again later.',
+  timeout: 'An upstream service is not answering. Try again later.',
+};
+
+// UX: Error hint helper (Item 10 - in-character error copy). A failure code decides; only an
+// error without one (connection errors, older servers) is matched on its text.
+function getErrorHint(error: string | null, code: string | null): string {
+  if (code) return ERROR_HINTS_BY_CODE[code] ?? GENERIC_ERROR_HINT;
+  if (!error) return GENERIC_ERROR_HINT;
   const lower = error.toLowerCase();
   if (
     lower.includes('timeout') ||
@@ -147,7 +160,7 @@ function getErrorHint(error: string | null): string {
     return 'Uplink unstable. Check your connection and retry.';
   if (lower.includes('not found') || lower.includes('no results') || lower.includes('404'))
     return 'No signal detected. Verify track name and artist.';
-  return 'Unexpected interference. The system is ready to retry.';
+  return GENERIC_ERROR_HINT;
 }
 
 interface OnboardingProps {
@@ -155,6 +168,8 @@ interface OnboardingProps {
   logs: AgentLog[];
   trackData: TrackData | null;
   error: string | null;
+  /** The failure code of the error, when the server sent one. */
+  errorCode: string | null;
   isLoading: boolean;
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
@@ -174,6 +189,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   logs,
   trackData,
   error,
+  errorCode,
   isLoading,
   candidates,
   analyze,
@@ -534,6 +550,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     suggestions.length > 0 && sugDispatch({ type: 'SET_SHOW', show: true })
                   }
                   placeholder="Song title + artist (e.g., Midnight City M83)"
+                  maxLength={200}
                   className={`${inputVisualStyles} pl-12 pr-10`}
                   autoComplete="off"
                   role="combobox"
@@ -622,7 +639,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <p className="text-text-secondary text-xs font-mono text-center">{error}</p>
               )}
               <p className="text-text-tertiary text-xs font-mono text-center">
-                {getErrorHint(error)}
+                {getErrorHint(error, errorCode)}
               </p>
               <div className="flex flex-col items-center gap-3">
                 <Button

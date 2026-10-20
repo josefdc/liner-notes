@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { analyzeAndOpenDashboard, apiRequests, loadFixture, useMockApi } from "./mock";
+import {
+  analyzeAndOpenDashboard,
+  apiRequests,
+  fullResultData,
+  loadFixture,
+  releaseStream,
+  streamLog,
+  useMockApi,
+} from "./mock";
 
 // Browser history around a finished analysis and an open track picker.
 const ANALYZE = "/api/analyze/stream";
@@ -57,4 +65,89 @@ test("back while the track picker is open keeps the picker", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Command Center" })).toHaveCount(0);
   const log = await apiRequests(page);
   expect(log.filter((entry) => entry.startsWith(`stream ${RESUME}`))).toEqual([]);
+});
+
+// Arriving from another site: the first search has no entry of the app behind it.
+const ELSEWHERE = "data:text/html,<title>elsewhere</title><p>elsewhere</p>";
+
+test("back on the first search after arriving keeps the open picker in the app", async ({
+  page,
+}) => {
+  await useMockApi(page, hitl);
+  await page.goto(ELSEWHERE);
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  const picker = page.getByText("Is this the right track?");
+  await expect(picker).toBeVisible();
+
+  await page.goBack();
+  await page.waitForTimeout(500);
+  expect(page.url()).not.toMatch(/^data:/);
+  await expect(picker).toBeVisible();
+  expect((await apiRequests(page)).filter((entry) => entry.includes(RESUME))).toEqual([]);
+});
+
+test("back on the first search after arriving keeps the running analysis", async ({ page }) => {
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: "thread-first" },
+        {
+          type: "status",
+          node: "scout",
+          message: "Searching for the track",
+          code: "SPOTIFY-SEARCH",
+        },
+        { $wait: "result" },
+        { type: "complete", data: fullResultData() },
+        { type: "done" },
+      ],
+    },
+  });
+  await page.goto(ELSEWHERE);
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Bright Lines");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await expect(page.getByText("Searching for the track")).toBeVisible();
+
+  await page.goBack();
+  await page.waitForTimeout(500);
+  expect(page.url()).not.toMatch(/^data:/);
+  expect(await streamLog(page)).not.toContain(`${ANALYZE} closed`);
+
+  // The run goes on and its result is shown, in a single history entry after the search.
+  await releaseStream(page, "result");
+  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByPlaceholder(/Song title/)).toBeVisible();
+  expect(page.url()).not.toMatch(/^data:/);
+});
+
+test("back on a search started after going back to the search keeps the picker", async ({
+  page,
+}) => {
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: { opens: [fullResult.streams[ANALYZE], hitl.streams[ANALYZE]] },
+      [RESUME]: hitl.streams[RESUME],
+    },
+  });
+  await page.goto(ELSEWHERE);
+  await page.goto("/");
+  await analyzeAndOpenDashboard(page, "Bright Lines", { reload: false });
+  await page.goBack();
+  await expect(page.getByPlaceholder(/Song title/)).toBeVisible();
+
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  const picker = page.getByText("Is this the right track?");
+  await expect(picker).toBeVisible();
+  await page.goBack();
+  await page.waitForTimeout(500);
+  expect(page.url()).not.toMatch(/^data:/);
+  await expect(picker).toBeVisible();
 });

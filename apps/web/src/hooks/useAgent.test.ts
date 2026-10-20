@@ -351,3 +351,77 @@ describe('useAgent search suggestions', () => {
     await expect(result.current.searchSuggest('Hurt')).resolves.toEqual(candidates);
   });
 });
+
+// The API's stream protocol: heartbeats as data messages, the picker announced by `interrupt`
+// alone, and refusals sent as an `error` with a code, followed by `done`.
+describe('useAgent with the interrupt-only protocol', () => {
+  it('arms the watchdog on heartbeats sent as data messages', () => {
+    vi.useFakeTimers();
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    for (let i = 0; i < 6; i++) {
+      act(() => vi.advanceTimersByTime(15_000));
+      analysis.send({ type: 'heartbeat' });
+    }
+    expect(result.current.status).not.toBe('error');
+
+    act(() => vi.advanceTimersByTime(STREAM_INACTIVITY_TIMEOUT_MS));
+    expect(result.current.status).toBe('error');
+    expect(analysis.closed).toBe(true);
+  });
+
+  it('opens the picker on an interrupt without a candidates event and resumes', async () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'scout', message: 'Searching' });
+    analysis.send({ type: 'interrupt', reason: 'disambiguation', threadId: 't1', candidates });
+    analysis.send({ type: 'done' });
+    expect(result.current.status).toBe('disambiguation');
+    expect(result.current.candidates).toHaveLength(2);
+    expect(analysis.closed).toBe(true);
+
+    await act(async () => {
+      await result.current.selectCandidate('c2');
+    });
+    const resume = lastStream();
+    expect(resume.url).toContain('threadId=t1&selectedTrackId=c2');
+    resume.send({ type: 'heartbeat' });
+    resume.send({ type: 'resuming', threadId: 't1' });
+    resume.send({ type: 'complete', data: track });
+    resume.send({ type: 'heartbeat' });
+    resume.send({ type: 'done' });
+    expect(result.current.status).toBe('complete');
+    expect(completeLogs(result.current.logs)).toBe(1);
+    expect(resume.closed).toBe(true);
+  });
+
+  it('shows a refused resume with its code, makes no request and retries the search', async () => {
+    const { result } = startAnalysis('Hurt');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'interrupt', threadId: 't1', candidates });
+    analysis.send({ type: 'done' });
+    await act(async () => {
+      await result.current.selectCandidate('c1');
+    });
+    const resume = lastStream();
+    resume.send({
+      type: 'error',
+      code: 'choice_expired',
+      error: 'This choice has expired or was not found. Please search again.',
+    });
+    resume.send({ type: 'done' });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.error).toMatch(/expired/);
+    expect(result.current.errorCode).toBe('choice_expired');
+    expect(resume.closed).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    act(() => result.current.retry());
+    expect(lastStream().url).toContain('/api/analyze/stream?query=Hurt');
+    expect(result.current.errorCode).toBeNull();
+  });
+});

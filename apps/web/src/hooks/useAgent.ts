@@ -25,9 +25,10 @@ import { fetchSuggestions } from './agent/apiClient';
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
 
 /**
- * How long a stream may stay silent once its server has sent a heartbeat (a named
- * `heartbeat` event, every 15 s). The watchdog arms only on the first heartbeat: a server
- * that sends none is never timed out, so a slow step is not cut off.
+ * How long a stream may stay silent once its server has sent a heartbeat (every 15 s). A
+ * heartbeat arrives either as a data message `{"type":"heartbeat"}` (what the API sends) or
+ * as a named `heartbeat` event; both count. The watchdog arms only on the first heartbeat:
+ * a server that sends none is never timed out, so a slow step is not cut off.
  */
 export const STREAM_INACTIVITY_TIMEOUT_MS = 45_000;
 
@@ -38,6 +39,7 @@ const INITIAL_STATE: AgentState = {
   candidates: null,
   threadId: null,
   error: null,
+  errorCode: null,
   isLoading: false,
   isComplete: false,
 };
@@ -133,13 +135,14 @@ export function useAgent(): UseAgentReturn {
 
   /** Ends the run with an error the user can retry. */
   const fail = useCallback(
-    (run: Run, message: string) => {
+    (run: Run, message: string, code?: string) => {
       if (runRef.current !== run || run.phase === 'failed') return;
       run.phase = 'failed';
       setState((prev) => ({
         ...prev,
         status: 'error',
         error: message,
+        errorCode: code ?? null,
         candidates: null,
         isLoading: false,
       }));
@@ -181,7 +184,7 @@ export function useAgent(): UseAgentReturn {
 
         case 'status':
           // Pass the code from the backend event
-          addLog(data.message || 'Processing...', data.code, data.node);
+          addLog(data.message || 'Processing...', data.code as LogCode | undefined, data.node);
           // Update status based on node
           if (data.node === 'scout') {
             setState((prev) => ({ ...prev, status: 'searching' }));
@@ -194,8 +197,9 @@ export function useAgent(): UseAgentReturn {
           }
           break;
 
-        // The server announces the picker twice (`candidates`, then `interrupt` once the
-        // run is paused); both describe the same choice.
+        // `interrupt` (with the thread and the candidates) opens the picker once the run is
+        // paused. Servers from before the interrupt-only protocol also send `candidates`
+        // first; both describe the same choice.
         case 'candidates':
         case 'interrupt': {
           const candidates = data.candidates ?? run.candidates ?? [];
@@ -244,7 +248,7 @@ export function useAgent(): UseAgentReturn {
 
         case 'error':
           close();
-          fail(run, data.error || 'The analysis failed.');
+          fail(run, data.error || 'The analysis failed.', data.code);
           break;
 
         case 'done':
@@ -285,6 +289,7 @@ export function useAgent(): UseAgentReturn {
       source.onopen = () => {
         if (isCurrent()) onOpen?.();
       };
+      // A named `heartbeat` event; the data-message form is handled in onmessage.
       source.addEventListener('heartbeat', () => {
         if (isCurrent()) watchdog.heartbeat();
         else close();

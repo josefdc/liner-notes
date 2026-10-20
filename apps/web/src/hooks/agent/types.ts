@@ -28,6 +28,11 @@ export interface AgentState {
   candidates: SearchCandidate[] | null;
   threadId: string | null;
   error: string | null;
+  /**
+   * Why the run failed, when the server said so (`error` events carry a code such as
+   * no_match, choice_expired or timeout); null for errors without one.
+   */
+  errorCode: string | null;
   isLoading: boolean;
   isComplete: boolean;
 }
@@ -58,7 +63,8 @@ export interface UseAgentReturn extends AgentState {
 export interface AgentStreamEvent {
   type: string;
   message?: string;
-  code?: AgentLog['code'];
+  /** A log code on `status` events, a failure code on `error` events. */
+  code?: string;
   node?: string;
   threadId?: string;
   candidates?: SearchCandidate[];

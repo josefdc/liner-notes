@@ -119,6 +119,16 @@ test.describe("with three candidates", () => {
       .poll(async () => resumes(await apiRequests(page)))
       .toEqual([resumeWith(candidates[2].id)]);
   });
+
+  test("hovering over the picker pauses the countdown", async ({ page }) => {
+    const picker = await openPicker(page);
+    await picker.hover();
+    await expect(page.getByText("(paused)")).toBeVisible();
+    // Well past the 5 s countdown: nothing is chosen while the pointer is on the picker.
+    await page.waitForTimeout(6500);
+    expect(resumes(await apiRequests(page))).toEqual([]);
+    await expect(page.getByText("Is this the right track?")).toBeVisible();
+  });
 });
 
 test("two candidates show the picker instead of choosing one silently", async ({ page }) => {

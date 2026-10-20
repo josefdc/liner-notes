@@ -1,38 +1,29 @@
 /**
- * Loads the API's .env from the apps/api directory (not from the working
- * directory) and stops the process when required keys are missing.
+ * Loads the API's .env from the apps/api directory (not from the working directory), validates
+ * the settings once and stops the process when they are invalid.
  *
- * Imported first by index.ts so modules that read process.env at import
- * time see the loaded values. Variables already set in the environment
- * (e.g. docker compose env_file) take precedence over the file.
+ * Imported first by index.ts so modules that read process.env at import time see the loaded
+ * values. Variables already set in the environment (e.g. docker compose env_file) take
+ * precedence over the file. REPLAY_MODE=only needs no Spotify or model keys.
  */
 
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import dotenv from "dotenv";
+import { API_ROOT } from "./apiPackage.js";
+import { readSettings, type Settings } from "./settings.js";
 
-const REQUIRED_KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"] as const;
-
-// Walk up to the package root: src/config/ in development, dist/ when bundled.
-function findApiRoot(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 4; i++) {
-    if (existsSync(join(dir, "package.json"))) return dir;
-    dir = dirname(dir);
-  }
-  return process.cwd();
-}
-
-export const ENV_PATH = join(findApiRoot(), ".env");
+export const ENV_PATH = join(API_ROOT, ".env");
 
 dotenv.config({ path: ENV_PATH });
 
-const missing = REQUIRED_KEYS.filter((key) => !process.env[key]);
-if (missing.length > 0) {
+const result = readSettings(process.env);
+if (!result.ok) {
+  for (const error of result.errors) console.error(`[config] ${error}`);
   console.error(
-    `[config] Missing required environment variables: ${missing.join(", ")}.\n` +
-      `[config] Set them in ${ENV_PATH} (see .env.example) or in the process environment.`,
+    `[config] Set them in ${ENV_PATH} (see .env.example) or in the process environment.`,
   );
   process.exit(1);
 }
+for (const warning of result.warnings) console.warn(`[config] ${warning}`);
+
+export const settings: Settings = result.settings;

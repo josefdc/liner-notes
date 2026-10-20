@@ -121,3 +121,40 @@ export function getRun(db: Database.Database, runId: string): RunRecord | null {
     payload: row.payload == null ? null : JSON.parse(row.payload),
   };
 }
+
+export interface SettledRuns {
+  interrupted: number;
+  cancelled: number;
+}
+
+/**
+ * Finalizes the runs still recorded as `running`: at shutdown these are the runs in flight, at
+ * startup the ones a stopped process left behind. A run whose thread is paused at an interrupt
+ * (waiting for the user's choice) becomes `interrupted`, so retention keeps the choice open;
+ * any other becomes `cancelled`, also when its thread cannot be read. A row whose status changed
+ * meanwhile (the run recorded its own outcome) is left as it is.
+ */
+export async function settleOpenRuns(
+  db: Database.Database,
+  isWaiting: (threadId: string) => Promise<boolean>,
+): Promise<SettledRuns> {
+  const open = db
+    .prepare("SELECT run_id, thread_id FROM runs WHERE status = 'running'")
+    .all() as Array<Pick<RunRow, "run_id" | "thread_id">>;
+  const settle = db.prepare(
+    "UPDATE runs SET status = ?, finished_at = ? WHERE run_id = ? AND status = 'running'",
+  );
+
+  const settled: SettledRuns = { interrupted: 0, cancelled: 0 };
+  for (const run of open) {
+    let waiting = false;
+    try {
+      waiting = await isWaiting(run.thread_id);
+    } catch (err) {
+      console.error(`[Runs] Could not read thread ${run.thread_id}:`, err);
+    }
+    const status: RunStatus = waiting ? "interrupted" : "cancelled";
+    if (settle.run(status, waiting ? null : nowSec(), run.run_id).changes > 0) settled[status]++;
+  }
+  return settled;
+}

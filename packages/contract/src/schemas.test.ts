@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { ReplayRecord, RunResponse } from "./api.js";
 import { AudioFeatures } from "./audio.js";
-import { AnalyzeStreamEvent } from "./events.js";
+import { AnalyzeStreamEvent, decodeSseStream, encodeSseEvent } from "./events.js";
 import { Claim, Evidence, Measured } from "./evidence.js";
 import {
   type ComposerOutput,
@@ -23,7 +23,7 @@ import {
   sampleEvidence,
   sampleRun,
 } from "./testing/samples.js";
-import { RunInfo, TrackAnalysis } from "./track.js";
+import { RunInfo, TrackAnalysis, type TrackAnalysisInput } from "./track.js";
 
 const ok = (schema: { safeParse(value: unknown): { success: boolean } }, value: unknown) =>
   schema.safeParse(value).success;
@@ -170,7 +170,7 @@ describe("TrackAnalysis (reader)", () => {
     expect(ok(TrackAnalysis, { ...analysis, evidence: undefined })).toBe(true);
   });
 
-  it("keeps the link type, origin and claim, and rejects an unknown type", () => {
+  it("keeps the link type, origin and claim, and drops a link of an unknown type", () => {
     const analysis = sampleAnalysis();
     const link = {
       source: "current",
@@ -182,14 +182,72 @@ describe("TrackAnalysis (reader)", () => {
     };
     const genealogy = { ...analysis.genealogy, links: [link] };
     expect(TrackAnalysis.parse({ ...analysis, genealogy }).genealogy.links[0]).toMatchObject(link);
-    const unknown = { ...genealogy, links: [{ ...link, type: "vibe" }] };
-    expect(ok(TrackAnalysis, { ...analysis, genealogy: unknown })).toBe(false);
+    const unknown = { ...genealogy, links: [link, { ...link, type: "vibe" }] };
+    expect(TrackAnalysis.parse({ ...analysis, genealogy: unknown }).genealogy.links).toEqual([
+      link,
+    ]);
   });
 
   it("accepts a negative sample time and a contract version", () => {
     const analysis = sampleAnalysis();
     const samples = [{ time: -1, description: "Older payloads guessed times" }];
     expect(ok(TrackAnalysis, { ...analysis, samples, contractVersion: 1 })).toBe(true);
+  });
+});
+
+describe("tolerant readers: an unknown value never rejects a result", () => {
+  const analysis = sampleAnalysis() as TrackAnalysisInput & {
+    evidence: unknown[];
+    claims: unknown[];
+  };
+  const wiki = { ...sampleEvidence(), id: "ev-wiki", source: "wikipedia" };
+  const lyrics = { ...sampleClaim(), id: "cl-lyrics", about: "lyrics" };
+  const drop = { time: 1, type: "drop", intensity: 0.5, description: "A new kind of moment" };
+
+  it("drops an evidence item from a source it does not know", () => {
+    const parsed = TrackAnalysis.parse({ ...analysis, evidence: [...analysis.evidence, wiki] });
+    expect(parsed.evidence?.map((item) => item.id)).toEqual(["ev-mb-1"]);
+  });
+
+  it("drops a claim about a subject it does not know", () => {
+    const parsed = TrackAnalysis.parse({ ...analysis, claims: [...analysis.claims, lyrics] });
+    expect(parsed.claims?.map((claim) => claim.id)).toEqual(["cl-1", "cl-2"]);
+  });
+
+  it("drops a key moment of a type it does not know, at the top and in the measurement", () => {
+    const audio = sampleAudio();
+    const parsed = TrackAnalysis.parse({
+      ...analysis,
+      keyMoments: [...audio.keyMoments, drop],
+      audio: { ...audio, keyMoments: [...audio.keyMoments, drop] },
+    });
+    expect(parsed.keyMoments).toEqual(audio.keyMoments);
+    expect(parsed.audio?.keyMoments).toEqual(audio.keyMoments);
+  });
+
+  it("reads a value or a measurement it cannot read as absent", () => {
+    const parsed = TrackAnalysis.parse({
+      ...analysis,
+      audioUnavailableReason: "solar_flare",
+      modelUnavailableReason: "new_reason",
+      audio: { ...sampleAudio(), version: 3 },
+      run: { ...sampleRun(), usage: { llmCalls: "many" } },
+    });
+    expect(parsed.audioUnavailableReason).toBeUndefined();
+    expect(parsed.modelUnavailableReason).toBeUndefined();
+    expect(parsed.audio).toBeNull();
+    expect(parsed.run?.usage).toBeNull();
+  });
+
+  it("still delivers the complete event that carries such items", () => {
+    const data = { ...analysis, evidence: [wiki], claims: [lyrics] };
+    const event = { type: "complete", runId: "run-1", seq: 3, data };
+    const [decoded] = decodeSseStream(encodeSseEvent(event as never), AnalyzeStreamEvent);
+    expect(decoded?.type).toBe("complete");
+    if (decoded?.type === "complete") {
+      expect(decoded.data.evidence).toEqual([]);
+      expect(decoded.data.claims).toEqual([]);
+    }
   });
 });
 
@@ -254,20 +312,34 @@ describe("ReplayRecord", () => {
     expect(issues({ ...record(), analysis: live })).toContain("analysis.run.mode");
   });
 
-  it("rejects metadata that differs from the analysis run", () => {
-    expect(issues({ ...record(), recordedAt: "2020-01-01T00:00:00.000Z" })).toEqual([
-      "analysis.run.recordedAt",
-    ]);
-    expect(issues({ ...record(), commit: "zzz" })).toEqual(["analysis.run.commit"]);
-    expect(issues({ ...record(), analyzerVersion: null })).toEqual([
-      "analysis.run.analyzerVersion",
-    ]);
+  it("rejects metadata that differs from the analysis run (and the streamed result)", () => {
+    for (const [field, value] of [
+      ["recordedAt", "2020-01-01T00:00:00.000Z"],
+      ["commit", "zzz"],
+      ["analyzerVersion", null],
+    ] as const) {
+      expect(issues({ ...record(), [field]: value })).toEqual([
+        `analysis.run.${field}`,
+        `events.2.event.data.run.${field}`,
+      ]);
+    }
   });
 
   it("rejects a streamed result that does not say it is a replay", () => {
     const value = record();
-    value.events[2].event = event(2, { type: "complete", data: { ...analysis, run: sampleRun() } });
+    const live = { ...sampleRun(), recordedAt, commit: "58f9b0a" };
+    value.events[2].event = event(2, { type: "complete", data: { ...analysis, run: live } });
     expect(issues(value)).toEqual(["events.2.event.data.run.mode"]);
+  });
+
+  it("rejects a streamed result whose recording metadata differs from the record", () => {
+    for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {
+      const value = record();
+      const other = field === "recordedAt" ? "2020-01-01T00:00:00.000Z" : "other";
+      const run = { ...replayRun, [field]: other };
+      value.events[2].event = event(2, { type: "complete", data: { ...analysis, run } });
+      expect(issues(value)).toEqual([`events.2.event.data.run.${field}`]);
+    }
   });
 
   it("rejects heartbeats, gaps in seq and times that go back", () => {

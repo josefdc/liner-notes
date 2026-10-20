@@ -22,7 +22,9 @@ export const HEARTBEAT_INTERVAL_MS = 15_000;
 
 /**
  * Error codes sent to clients, in `error` events and in JSON error bodies. The message that
- * comes with a code is short and generic; details stay in the server log.
+ * comes with a code is short and generic; details stay in the server log. Producers use these;
+ * readers take the code as an open string (`OpenErrorCode`), so an error with a code they do
+ * not know yet is still shown, with its message.
  */
 export const ErrorCode = z.enum([
   // Requests
@@ -53,6 +55,9 @@ export const ErrorCode = z.enum([
   "live_disabled",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
+
+/** An ErrorCode, or a code this reader does not know yet (kept as it is). */
+export const OpenErrorCode = z.string().describe("An ErrorCode; other values are kept");
 
 /**
  * Codes of the progress log shown in the console. Producers use these; `status` events carry
@@ -154,7 +159,7 @@ export const HeartbeatEvent = z.object({ type: z.literal("heartbeat"), runId: en
 export const CompleteEvent = event("complete", { data: TrackAnalysis });
 
 export const StreamErrorEvent = event("error", {
-  code: ErrorCode,
+  code: OpenErrorCode,
   error: z.string().describe("Short message for the user"),
 });
 
@@ -194,7 +199,7 @@ export const FactoidStreamEvent = z.discriminatedUnion("type", [
   factoidEvent("factoid", { data: Factoid, claim: Claim.optional() }),
   z.object({ type: z.literal("heartbeat"), runId: factoidEnvelope.runId }),
   factoidEvent("error", {
-    code: ErrorCode,
+    code: OpenErrorCode,
     error: z.string(),
     index: z.int().min(0).optional().describe("Which factoid failed; absent for the stream"),
   }),

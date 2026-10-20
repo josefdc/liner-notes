@@ -6,10 +6,11 @@
  *
  * Every block is `null` when it was not measured: the service gates silence, noise and
  * too-short input (`gate`), and the model blocks are `null` when the models are not loaded.
- * A gate that did not pass leaves every measured block null and no key moments. Readers
- * accept a payload that breaks this rule (one bad block must not hide a whole result) and
- * show nothing measured for it; producers check it with `audioFeaturesIssues()`, and the
- * exported JSON Schema (`audioFeaturesJsonSchema()`) states it with `if`/`then`.
+ * A gate that did not pass leaves every measured block null and no key moments. A
+ * cross-reference violation or an unknown value never rejects a result: readers accept a
+ * payload that breaks this rule and show nothing measured for it; producers check it with
+ * `audioFeaturesIssues()`, and the exported JSON Schema (`audioFeaturesJsonSchema()`) states
+ * it with `if`/`then`.
  * Signal values (`basis: "signal"`) come from DSP; model values (`basis: "model"`) are
  * classifier or regression outputs, i.e. scores and not probabilities, and name the model.
  *
@@ -20,6 +21,7 @@
 
 import { z } from "zod/v4";
 import { ModelRef, UnitInterval } from "./common.js";
+import { tolerantList } from "./tolerant.js";
 
 /** The `version` field of every AudioFeatures object. */
 export const AUDIO_FEATURES_VERSION = 2;
@@ -81,6 +83,7 @@ export const MusicalKey = z.object({
   method: z.string().min(1).describe("Estimator, e.g. 'essentia.KeyExtractor'"),
   basis: SignalBasis,
 });
+export type MusicalKey = z.infer<typeof MusicalKey>;
 
 /** Mean RMS of the preview (what the first service version called "energy"). */
 export const Loudness = z.object({
@@ -190,7 +193,7 @@ export const AudioFeatures = z.object({
   beats: BeatGrid.nullable(),
   energyContour: EnergyContour.nullable(),
   sections: Sections.nullable(),
-  keyMoments: z.array(KeyMoment),
+  keyMoments: tolerantList(KeyMoment),
   fingerprint: Fingerprint.nullable().describe("null when the models are not loaded"),
 });
 export type AudioFeatures = z.infer<typeof AudioFeatures>;

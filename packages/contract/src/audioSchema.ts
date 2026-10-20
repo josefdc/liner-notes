@@ -2,7 +2,8 @@
  * The JSON Schema the audio service validates its own output against.
  *
  * It is the AudioFeatures schema plus the gate rule, which zod states as a producer-side check
- * (`audioFeaturesIssues`) so that readers stay lenient: a gate that did not pass has a reason,
+ * (`audioFeaturesIssues`) so that readers stay tolerant (a cross-reference violation or an
+ * unknown value never rejects a result): a gate that did not pass has a reason,
  * every measured block null and no key moments; a gate that passed has no reason. The file is
  * committed as `packages/contract/schemas/audio-features.schema.json` (a test keeps it up to
  * date) so the service's tests can read it without Node.

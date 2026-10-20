@@ -152,5 +152,6 @@
     "$: replay.analysis-run",
     "$: replay.complete-events-replay",
     "$: replay.event-order"
-  ]
+  ],
+  "tolerant": []
 }

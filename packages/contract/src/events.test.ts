@@ -91,6 +91,20 @@ describe("AnalyzeStreamEvent", () => {
     expect(heartbeat).toEqual({ type: "heartbeat", runId: "r" });
   });
 
+  it("keeps an error with a code it does not know, so the error is still shown", () => {
+    const event = {
+      type: "error",
+      runId: "r",
+      seq: 4,
+      code: "quota_exceeded",
+      error: "Try later.",
+    };
+    const [decoded] = decodeSseStream(encodeSseEvent(event as never), AnalyzeStreamEvent);
+    expect(decoded).toEqual(event);
+    const factoidError = { type: "error", runId: null, seq: 0, code: "new_code", error: "x" };
+    expect(FactoidStreamEvent.parse(factoidError)).toEqual(factoidError);
+  });
+
   it("keeps a status code it does not know", () => {
     const event = { type: "status", runId: "r", seq: 0, message: "m", code: "NEW-CODE-1" };
     expect(AnalyzeStreamEvent.parse(event)).toEqual(event);
@@ -129,7 +143,6 @@ describe("AnalyzeStreamEvent", () => {
     ["without seq", { type: "status", runId: "r", message: "m" }],
     ["with a negative seq", { type: "status", runId: "r", seq: -1, message: "m" }],
     ["with a fractional seq", { type: "status", runId: "r", seq: 1.5, message: "m" }],
-    ["with an unknown error code", { type: "error", runId: "r", seq: 0, code: "nope", error: "x" }],
     ["with the legacy candidates type", { type: "candidates", runId: "r", seq: 0, candidates: [] }],
     [
       "with a complete event without data",

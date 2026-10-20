@@ -85,5 +85,6 @@
     "additionalProperties": false
   },
   "unknownKeys": { "$": "strip", "$.factoids[]": "strip", "$.factoids[].entities[]": "strip" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": ["$.factoids[].entities: drops unreadable items"]
 }

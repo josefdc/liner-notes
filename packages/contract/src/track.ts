@@ -10,18 +10,21 @@
  * `audio` holds the measurement itself. No model output can set them (see llm.ts).
  *
  * Unknown fields are stripped on parse, so a reader keeps working when fields are added.
- * Readers are lenient: one bad claim, evidence item or audio block never rejects the whole
- * result. Rules that relate parts of a result to each other (cited evidence is in the pack,
+ * Readers are tolerant: a cross-reference violation or an unknown value never rejects a
+ * result. Items of a list that this reader cannot read (an evidence item from a new source, a
+ * claim with a new subject, a key moment or link of a new type) are dropped and not shown;
+ * optional values it cannot read become absent, and a measurement it cannot read reads as not
+ * measured (see tolerant.ts). Rules that relate parts of a result to each other (cited evidence is in the pack,
  * a gated measurement reports nothing, at most FACTOID_LIMITS.max factoids, replay metadata)
  * are checked by producers with `analysisIssues()` before a result is sent or stored.
  */
 
 import { z } from "zod/v4";
 import { AudioFeatures, KeyMoment } from "./audio.js";
+import { tolerantList } from "./tolerant.js";
 import { Timestamp, UnitInterval } from "./common.js";
 import {
   Claim,
-  ClaimKind,
   ClaimOrigin,
   Evidence,
   FactoidEntityType,
@@ -82,7 +85,7 @@ export const Factoid = z.object({
   title: z.string(),
   content: z.string(),
   type: FactoidType,
-  entities: z.array(FactoidEntity).optional(),
+  entities: tolerantList(FactoidEntity).optional(),
   claimId: z.string().optional(),
 });
 export type Factoid = z.infer<typeof Factoid>;
@@ -119,6 +122,10 @@ export const LinkType = z.enum([
 ]);
 export type LinkType = z.infer<typeof LinkType>;
 
+/** How a link is known: from evidence in the pack, or proposed by the model. Never measured. */
+export const LinkKind = z.enum(["sourced", "inferred"]);
+export type LinkKind = z.infer<typeof LinkKind>;
+
 /**
  * A relation between two genealogy nodes. A link may name a node that is not in the graph
  * (older results do): readers drop such links instead of failing.
@@ -128,7 +135,9 @@ export const GenealogyLink = z.object({
   target: z.string(),
   value: z.number().describe("Strength 1-3: 1 = weak influence, 3 = direct sample"),
   type: LinkType.optional(),
-  kind: ClaimKind.optional().describe("A sample link without evidence is an inferred influence"),
+  kind: LinkKind.optional().describe(
+    "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+  ),
   origin: ClaimOrigin.optional().describe("code: from a source record; model: proposed by it"),
   claimId: z.string().optional().describe("The claim that states this relation"),
   evidenceIds: z.array(z.string()).optional(),
@@ -136,8 +145,8 @@ export const GenealogyLink = z.object({
 export type GenealogyLink = z.infer<typeof GenealogyLink>;
 
 export const Genealogy = z.object({
-  nodes: z.array(GenealogyNode).default([]),
-  links: z.array(GenealogyLink).default([]),
+  nodes: tolerantList(GenealogyNode).default([]),
+  links: tolerantList(GenealogyLink).default([]),
 });
 
 /** One axis of the genre radar. Written by the model in v1 payloads: a model inference. */
@@ -224,9 +233,9 @@ export const RunInfo = z.object({
     .boolean()
     .optional()
     .describe("True when the composer failed and the result was built from source data only"),
-  usage: RunUsage.nullable().optional(),
-  verifier: VerifierSummary.nullable().optional(),
-  sourceErrors: z.array(SourceError).optional(),
+  usage: RunUsage.nullable().optional().catch(null),
+  verifier: VerifierSummary.nullable().optional().catch(null),
+  sourceErrors: tolerantList(SourceError).optional(),
 });
 export type RunInfo = z.infer<typeof RunInfo>;
 
@@ -261,32 +270,36 @@ export const TrackAnalysis = z.object({
   valence: z.number().nullable().optional(),
   danceability: z.number().nullable().optional(),
   acousticness: z.number().nullable().optional(),
-  keyMoments: z.array(KeyMoment).optional(),
-  audioSource: z.enum(["analyzed", "unavailable"]).optional(),
-  audioConfidence: z.enum(["high", "low"]).optional(),
-  audioUnavailableReason: AudioUnavailableReason.optional(),
+  keyMoments: tolerantList(KeyMoment).optional(),
+  audioSource: z.enum(["analyzed", "unavailable"]).optional().catch(undefined),
+  audioConfidence: z.enum(["high", "low"]).optional().catch(undefined),
+  audioUnavailableReason: AudioUnavailableReason.optional().catch(undefined),
 
   // Structure, samples, credits and context. Lists missing from older payloads read as empty.
-  segments: z.array(SongSegment).default([]),
+  segments: tolerantList(SongSegment).default([]),
   segmentsSource: z
     .enum(["template", "inferred", "measured"])
     .optional()
+    .catch(undefined)
     .describe("template: a generic default; inferred: written by the model; measured: sections"),
-  samples: z.array(Sample).default([]),
+  samples: tolerantList(Sample).default([]),
   credits: ProductionCredits.optional(),
-  factoids: z.array(Factoid).default([]),
+  factoids: tolerantList(Factoid).default([]),
   genealogy: Genealogy,
-  genreProfile: z.array(GenreProfileItem).optional(),
+  genreProfile: tolerantList(GenreProfileItem).optional(),
 
   // Model provenance
   modelUnavailable: z.boolean().optional(),
-  modelUnavailableReason: ModelUnavailableReason.optional(),
+  modelUnavailableReason: ModelUnavailableReason.optional().catch(undefined),
 
   // Added in v1: the measurement, the evidence pack, the claims and the run
-  audio: AudioFeatures.nullable().optional(),
-  preview: PreviewMatch.nullable().optional(),
-  evidence: z.array(Evidence).optional(),
-  claims: z.array(Claim).optional(),
+  audio: AudioFeatures.nullable()
+    .optional()
+    .catch(null)
+    .describe("null when not measured, or when this reader cannot read the measurement"),
+  preview: PreviewMatch.nullable().optional().catch(null),
+  evidence: tolerantList(Evidence).optional(),
+  claims: tolerantList(Claim).optional(),
   run: RunInfo.optional(),
 });
 export type TrackAnalysis = z.infer<typeof TrackAnalysis>;

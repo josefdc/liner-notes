@@ -134,5 +134,6 @@
     "$<status=interrupted>.interrupt": "strip",
     "$<status=interrupted>.interrupt.candidates[]": "strip"
   },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

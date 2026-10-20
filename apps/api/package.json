@@ -5,13 +5,20 @@
   "description": "LangGraph backend for The Sonic Agent",
   "type": "module",
   "scripts": {
+    "predev": "npm run build -w @liner-notes/contract",
     "dev": "tsx watch src/index.ts",
+    "prestart": "npm run build -w @liner-notes/contract",
     "start": "tsx src/index.ts",
+    "pretest:db": "npm run build -w @liner-notes/contract",
     "test:db": "vitest run --root ../.. --project api src/store/database.test.ts",
+    "pretest:lastfm": "npm run build -w @liner-notes/contract",
     "test:lastfm": "vitest run --root ../.. --project api src/sources/lastfm.test.ts",
+    "prebuild": "npm run build -w @liner-notes/contract",
     "build": "tsup",
     "start:prod": "node dist/index.js",
+    "pretypecheck": "npm run build -w @liner-notes/contract",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "pretest": "npm run build -w @liner-notes/contract",
     "test": "vitest run --root ../.. --project api"
   },
   "dependencies": {

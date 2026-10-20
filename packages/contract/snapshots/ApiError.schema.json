@@ -5,32 +5,7 @@
     "type": "object",
     "properties": {
       "success": { "type": "boolean", "const": false },
-      "code": {
-        "type": "string",
-        "enum": [
-          "invalid_input",
-          "invalid_json",
-          "bad_request",
-          "forbidden_origin",
-          "not_found",
-          "payload_too_large",
-          "unsupported_media_type",
-          "rate_limited",
-          "resume_in_progress",
-          "choice_expired",
-          "not_waiting",
-          "run_interrupted",
-          "invalid_selection",
-          "no_match",
-          "upstream_unavailable",
-          "timeout",
-          "failed",
-          "internal_error",
-          "auth_expired",
-          "budget_exhausted",
-          "live_disabled"
-        ]
-      },
+      "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
       "error": { "type": "string" }
     },
     "required": ["success", "code", "error"],
@@ -42,37 +17,13 @@
     "type": "object",
     "properties": {
       "success": { "type": "boolean", "const": false },
-      "code": {
-        "type": "string",
-        "enum": [
-          "invalid_input",
-          "invalid_json",
-          "bad_request",
-          "forbidden_origin",
-          "not_found",
-          "payload_too_large",
-          "unsupported_media_type",
-          "rate_limited",
-          "resume_in_progress",
-          "choice_expired",
-          "not_waiting",
-          "run_interrupted",
-          "invalid_selection",
-          "no_match",
-          "upstream_unavailable",
-          "timeout",
-          "failed",
-          "internal_error",
-          "auth_expired",
-          "budget_exhausted",
-          "live_disabled"
-        ]
-      },
+      "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
       "error": { "type": "string" }
     },
     "required": ["success", "code", "error"],
     "additionalProperties": {}
   },
   "unknownKeys": { "$": "passthrough" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

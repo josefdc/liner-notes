@@ -60,7 +60,11 @@ export const sampleAudio = (): AudioFeatures => ({
     method: "novelty-on-beat-chroma",
     basis: "signal",
   },
-  keyMoments: [{ time: 14.2, type: "energy_peak", intensity: 0.9, description: "Energy peak" }],
+  // The same moments as the API payload in fixtures/api-payloads/composed-measured.json
+  keyMoments: [
+    { time: 4.2, type: "onset", intensity: 0.8, description: "Beat transition" },
+    { time: 17.9, type: "energy_peak", intensity: 1, description: "Energy peak / Drop" },
+  ],
   fingerprint: {
     styles: {
       model: effnet,
@@ -73,7 +77,7 @@ export const sampleAudio = (): AudioFeatures => ({
     tags: { model: musicnn, scores: [{ label: "electronic", score: 0.7 }], basis: "model" },
     moods: {
       danceability: { value: 0.58, range: [0, 1], model: musicnn, basis: "model" },
-      acoustic: null,
+      acoustic: { value: 0.08, range: [0, 1], model: effnet, basis: "model" },
       instrumental: { value: 0.31, range: [0, 1], model: musicnn, basis: "model" },
       valence: { value: 5.2, range: [1, 9], model: musicnn, basis: "model" },
       arousal: { value: 6.1, range: [1, 9], model: musicnn, basis: "model" },

@@ -5,7 +5,7 @@
 
 import { z } from "zod/v4";
 import { Timestamp } from "./common.js";
-import { AnalyzeStreamEvent, ErrorCode } from "./events.js";
+import { AnalyzeStreamEvent, OpenErrorCode } from "./events.js";
 import { refineNamed } from "./refinements.js";
 import { Factoid, RunMode, RunStatus, RunUsage, SearchCandidate, TrackAnalysis } from "./track.js";
 
@@ -29,7 +29,7 @@ export const SPOTIFY_ID_PATTERN = /^[0-9A-Za-z]{22}$/;
  */
 export const ApiError = z.looseObject({
   success: z.literal(false),
-  code: ErrorCode,
+  code: OpenErrorCode,
   error: z.string(),
 });
 export type ApiError = z.infer<typeof ApiError>;
@@ -190,8 +190,8 @@ type ReplayRecordShape = z.infer<typeof ReplayRecordShape>;
  * strictly when it is loaded:
  * - `analysis.run` exists, says `mode: "replay"`, and its `recordedAt`, `commit` and
  *   `analyzerVersion` are the record's own;
- * - every `complete` event's result says `mode: "replay"` too, so a replay is never shown as
- *   live;
+ * - every `complete` event's result says `mode: "replay"` too, with the same recording date,
+ *   commit and analyzer version, so a replay is never shown as live or misdated;
  * - events hold no heartbeats (the replayer sends its own) and are numbered 0, 1, 2, ... in
  *   order, with non-decreasing times, so replaying does not depend on the recording's timing.
  * Recordings are scrubbed before they are written: no preview or image URLs, capped text.
@@ -220,12 +220,24 @@ export const ReplayRecord = refineNamed(
     "replay.complete-events-replay",
     (record: ReplayRecordShape, ctx) => {
       record.events.forEach(({ event }, index) => {
-        if (event.type === "complete" && event.data.run?.mode !== "replay") {
+        if (event.type !== "complete") return;
+        const run = event.data.run;
+        const path = ["events", index, "event", "data", "run"];
+        if (run?.mode !== "replay") {
           ctx.addIssue({
             code: "custom",
-            path: ["events", index, "event", "data", "run", "mode"],
+            path: [...path, "mode"],
             message: "a recorded result must say it is a replay",
           });
+        }
+        for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {
+          if (run && run[field] !== record[field]) {
+            ctx.addIssue({
+              code: "custom",
+              path: [...path, field],
+              message: `differs from the record's ${field}`,
+            });
+          }
         }
       });
     },

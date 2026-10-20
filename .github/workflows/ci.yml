@@ -41,6 +41,8 @@ jobs:
           fi
           npm --version
       - run: npm ci
+      # The contract tests validate the audio JSON Schema with Python jsonschema, run through uv.
+      - uses: astral-sh/setup-uv@v10.3.0
       - name: Lint
         if: matrix.node == 24
         run: npm run lint
@@ -75,6 +77,8 @@ jobs:
           fi
           npm --version
       - run: npm ci
+      # The web app imports @liner-notes/contract, whose dist/ is not in the repository.
+      - run: npm run build -w packages/contract
       # Uses the Google Chrome preinstalled on the runner image; no browser download.
       - run: npm run test:e2e
         env:

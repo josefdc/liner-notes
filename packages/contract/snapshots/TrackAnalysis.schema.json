@@ -62,7 +62,6 @@
         ]
       },
       "segments": {
-        "default": [],
         "type": "array",
         "items": {
           "type": "object",
@@ -73,7 +72,8 @@
             "color": { "type": "string" }
           },
           "required": ["label", "start", "end"]
-        }
+        },
+        "default": []
       },
       "segmentsSource": {
         "description": "template: a generic default; inferred: written by the model; measured: sections",
@@ -81,7 +81,6 @@
         "enum": ["template", "inferred", "measured"]
       },
       "samples": {
-        "default": [],
         "type": "array",
         "items": {
           "type": "object",
@@ -91,7 +90,8 @@
             "claimId": { "type": "string" }
           },
           "required": ["time", "description"]
-        }
+        },
+        "default": []
       },
       "credits": {
         "type": "object",
@@ -104,7 +104,6 @@
         "required": ["producers", "writers"]
       },
       "factoids": {
-        "default": [],
         "type": "array",
         "items": {
           "type": "object",
@@ -135,13 +134,13 @@
             "claimId": { "type": "string" }
           },
           "required": ["id", "title", "content", "type"]
-        }
+        },
+        "default": []
       },
       "genealogy": {
         "type": "object",
         "properties": {
           "nodes": {
-            "default": [],
             "type": "array",
             "items": {
               "type": "object",
@@ -160,10 +159,10 @@
                 "trackArtist": { "type": "string" }
               },
               "required": ["id", "group", "label", "size"]
-            }
+            },
+            "default": []
           },
           "links": {
-            "default": [],
             "type": "array",
             "items": {
               "type": "object",
@@ -179,9 +178,9 @@
                   "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
                 },
                 "kind": {
-                  "description": "A sample link without evidence is an inferred influence",
+                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
                   "type": "string",
-                  "enum": ["measured", "sourced", "inferred"]
+                  "enum": ["sourced", "inferred"]
                 },
                 "origin": {
                   "description": "code: from a source record; model: proposed by it",
@@ -195,7 +194,8 @@
                 "evidenceIds": { "type": "array", "items": { "type": "string" } }
               },
               "required": ["source", "target", "value"]
-            }
+            },
+            "default": []
           }
         }
       },
@@ -215,8 +215,13 @@
         "type": "string",
         "enum": ["no_output", "rate_limited", "timeout", "auth", "error", "budget_exhausted"]
       },
-      "audio": { "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }] },
+      "audio": {
+        "description": "null when not measured, or when this reader cannot read the measurement",
+        "default": null,
+        "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }]
+      },
       "preview": {
+        "default": null,
         "anyOf": [
           {
             "type": "object",
@@ -275,6 +280,7 @@
             "type": "boolean"
           },
           "usage": {
+            "default": null,
             "anyOf": [
               {
                 "type": "object",
@@ -299,6 +305,7 @@
             ]
           },
           "verifier": {
+            "default": null,
             "anyOf": [
               {
                 "type": "object",
@@ -543,9 +550,9 @@
                   "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
                 },
                 "kind": {
-                  "description": "A sample link without evidence is an inferred influence",
+                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
                   "type": "string",
-                  "enum": ["measured", "sourced", "inferred"]
+                  "enum": ["sourced", "inferred"]
                 },
                 "origin": {
                   "description": "code: from a source record; model: proposed by it",
@@ -583,8 +590,13 @@
         "type": "string",
         "enum": ["no_output", "rate_limited", "timeout", "auth", "error", "budget_exhausted"]
       },
-      "audio": { "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }] },
+      "audio": {
+        "description": "null when not measured, or when this reader cannot read the measurement",
+        "default": null,
+        "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }]
+      },
       "preview": {
+        "default": null,
         "anyOf": [
           {
             "type": "object",
@@ -644,6 +656,7 @@
             "type": "boolean"
           },
           "usage": {
+            "default": null,
             "anyOf": [
               {
                 "type": "object",
@@ -669,6 +682,7 @@
             ]
           },
           "verifier": {
+            "default": null,
             "anyOf": [
               {
                 "type": "object",
@@ -759,5 +773,27 @@
     "$.run.verifier": "strip",
     "$.run.sourceErrors[]": "strip"
   },
-  "refinements": []
+  "refinements": [],
+  "tolerant": [
+    "$.audio: absent when unreadable",
+    "$.audioConfidence: absent when unreadable",
+    "$.audioSource: absent when unreadable",
+    "$.audioUnavailableReason: absent when unreadable",
+    "$.claims: drops unreadable items",
+    "$.evidence: drops unreadable items",
+    "$.factoids: drops unreadable items",
+    "$.factoids[].entities: drops unreadable items",
+    "$.genealogy.links: drops unreadable items",
+    "$.genealogy.nodes: drops unreadable items",
+    "$.genreProfile: drops unreadable items",
+    "$.keyMoments: drops unreadable items",
+    "$.modelUnavailableReason: absent when unreadable",
+    "$.preview: absent when unreadable",
+    "$.run.sourceErrors: drops unreadable items",
+    "$.run.usage: absent when unreadable",
+    "$.run.verifier: absent when unreadable",
+    "$.samples: drops unreadable items",
+    "$.segments: drops unreadable items",
+    "$.segmentsSource: absent when unreadable"
+  ]
 }

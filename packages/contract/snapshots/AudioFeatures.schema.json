@@ -1111,5 +1111,6 @@
     "$.fingerprint.moods.arousal": "strip",
     "$.fingerprint.moods.arousal.model": "strip"
   },
-  "refinements": []
+  "refinements": [],
+  "tolerant": ["$.keyMoments: drops unreadable items"]
 }

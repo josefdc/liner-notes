@@ -92,5 +92,6 @@
     "additionalProperties": false
   },
   "unknownKeys": { "$": "strict", "$.factoids[]": "strict", "$.factoids[].entities[]": "strict" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

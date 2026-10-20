@@ -17,4 +17,5 @@ export * from "./jsonSchema.js";
 export * from "./llm.js";
 export * from "./refinements.js";
 export * from "./schemas.js";
+export * from "./tolerant.js";
 export * from "./track.js";

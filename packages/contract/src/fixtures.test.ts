@@ -61,10 +61,6 @@ describe("API payloads", () => {
 });
 
 describe("web mock fixtures", () => {
-  // A payload from before the API stopped estimating audio and dropped lyrics (#9). The
-  // current API cannot produce it (its result cache was purged, #7); the contract rejects it.
-  const PRE_HONEST = new Map([["legacy-estimated", ["audioSource", "factoids.3.type"]]]);
-
   const results = mockFixtures.flatMap(([name, fixture]) =>
     eventsOf(fixture)
       .filter(({ event }) => event.type === "complete")
@@ -75,9 +71,18 @@ describe("web mock fixtures", () => {
     expect(results.length).toBeGreaterThanOrEqual(mockFixtures.length);
   });
 
-  it.each(results)("%s: the result parses", (name, data) => {
-    const expected = PRE_HONEST.get(name) ?? [];
-    expect(issuePaths(TrackAnalysis.safeParse(data))).toEqual(expected);
+  it.each(results)("%s: the result parses", (_name, data) => {
+    expect(issuePaths(TrackAnalysis.safeParse(data))).toEqual([]);
+  });
+
+  it("a pre-honest result reads without what this reader cannot show", () => {
+    // From before the API stopped estimating audio and dropped lyrics (#9); the current API
+    // cannot produce it (its result cache was purged, #7). The lyrics factoid is dropped, and
+    // the "estimated" audio source becomes absent, which readers treat as not measured.
+    const [, legacy] = results.find(([name]) => name === "legacy-estimated") ?? [];
+    const parsed = TrackAnalysis.parse(legacy);
+    expect(parsed.audioSource).toBeUndefined();
+    expect(parsed.factoids.map((factoid) => factoid.id)).toEqual(["f1", "g1", "g2"]);
   });
 
   it("an older result without lists reads them as empty", () => {
@@ -121,11 +126,10 @@ describe("web mock fixtures", () => {
         const withEnvelope = { ...event, runId: factoidStream ? null : "run-1", seq };
         if (!schema.safeParse(withEnvelope).success) misfits.push(event.type);
       });
-      // `candidates` is the protocol before the single `interrupt` event (#8); the factoid with
-      // the lyrics type and the pre-honest results are rejected above for their content.
+      // `candidates` is the protocol before the single `interrupt` event (#8); a factoid event
+      // with the removed lyrics type is one item of the stream, and is skipped as a whole.
       const expected: Record<string, string[]> = {
         hitl: ["candidates"],
-        "legacy-estimated": ["complete"],
         "decrypt-after-model-unavailable": ["factoid"],
       };
       expect(misfits).toEqual(expected[name] ?? []);

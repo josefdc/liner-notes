@@ -43,8 +43,15 @@ export function jsonSchemaOptions(io: "input" | "output") {
     unrepresentable: "throw" as const,
     io,
     override(ctx: { zodSchema: unknown; jsonSchema: JsonSchema }) {
-      const def = (ctx.zodSchema as { _zod: { def: { type: string; rest?: unknown; items?: [] } } })
-        ._zod.def;
+      const def = (
+        ctx.zodSchema as {
+          _zod: { def: { type: string; rest?: unknown; items?: []; defaultValue?: unknown } };
+        }
+      )._zod.def;
+      // zod leaves out the default of a defaulted pipe (a tolerant list); keep it visible.
+      if (def.type === "default" && !("default" in ctx.jsonSchema)) {
+        ctx.jsonSchema.default = JSON.parse(JSON.stringify(def.defaultValue));
+      }
       if (def.type === "tuple" && !def.rest && def.items) {
         ctx.jsonSchema.items = false;
         ctx.jsonSchema.minItems = def.items.length;
@@ -147,6 +154,11 @@ export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
       return;
     }
 
+    // Keywords next to a $ref apply too, so they are checked before the ref is followed.
+    for (const keyword of AZURE_FORBIDDEN_KEYWORDS) {
+      if (keyword in node) violations.push({ path, message: `uses "${keyword}"` });
+    }
+
     if (typeof node.$ref === "string") {
       const name = node.$ref.replace(/^#\/(\$defs|definitions)\//, "");
       if (refs.includes(name)) {
@@ -160,10 +172,6 @@ export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
       }
       visit(target, path, depth, [...refs, name]);
       return;
-    }
-
-    for (const keyword of AZURE_FORBIDDEN_KEYWORDS) {
-      if (keyword in node) violations.push({ path, message: `uses "${keyword}"` });
     }
 
     const hasType = typeof node.type === "string" || Array.isArray(node.type);

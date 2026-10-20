@@ -59,7 +59,8 @@ afterAll(() => {
   if (repo) rmSync(repo, { recursive: true, force: true });
 });
 
-describe("contract-check", () => {
+// Each test spawns node and git several times: allow well beyond the 5 s default.
+describe("contract-check", { timeout: 30_000 }, () => {
   it("passes when the base has no snapshots yet, and fails on an unknown base", () => {
     const empty = commit("empty");
     expect(check(empty)).toMatchObject({ status: 0 });
@@ -114,5 +115,53 @@ describe("contract-check", () => {
     const base = commit("acknowledged at the base");
     expect(git("show", `${base}:packages/contract/BREAKING-CHANGES`)).toContain("legacyField");
     expect(check(base).status).toBe(1);
+  });
+
+  it("lets a later change acknowledge the same line again by adding it once more", () => {
+    const base = git("rev-parse", "HEAD");
+    const acknowledged = readFileSync(ackFile(), "utf8");
+    const lines = acknowledged.split("\n").filter((line) => line.includes("legacyField"));
+    writeFileSync(ackFile(), `${acknowledged}${lines.join("\n")}\n`);
+    expect(check(base).status).toBe(0);
+  });
+
+  it("needs an engine-change line when the comparison code or its CI step changed", () => {
+    // A base whose snapshots match the code, carrying the comparison code and the CI step.
+    cpSync(join(packageDir, "snapshots"), snapshotsDir(), { recursive: true });
+    mkdirSync(join(repo, "packages", "contract", "src"), { recursive: true });
+    mkdirSync(join(repo, ".github", "workflows"), { recursive: true });
+    const compat = join(repo, "packages", "contract", "src", "compat.ts");
+    const ci = join(repo, ".github", "workflows", "ci.yml");
+    writeFileSync(compat, "// comparison\n");
+    writeFileSync(ci, "steps:\n  - run: npm run contract:check -- --base HEAD^1\n");
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
+    const base = commit("engine at the base");
+    expect(check(base).status).toBe(0);
+
+    writeFileSync(compat, "// a looser comparison\n");
+    const changed = check(base);
+    expect(changed.status).toBe(1);
+    expect(changed.out).toContain("the comparison itself changed (not acknowledged)");
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed:\n");
+    expect(check(base).status).toBe(1);
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: stricter enums\n");
+    expect(check(base).status).toBe(0);
+
+    writeFileSync(compat, "// comparison\n");
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
+    writeFileSync(ci, "steps:\n  - run: echo skipped\n");
+    expect(check(base).out).toContain(".github/workflows/ci.yml (the contract step)");
+    expect(check(base).status).toBe(1);
+    writeFileSync(ci, "steps:\n  - run: npm run contract:check -- --base HEAD^1\n");
+    expect(check(base).status).toBe(0);
+  });
+
+  it("exits 2 when git cannot read the base, instead of reporting no snapshots", () => {
+    const base = git("rev-parse", "HEAD");
+    const tree = git("rev-parse", `${base}:packages/contract/snapshots`);
+    rmSync(join(repo, ".git", "objects", tree.slice(0, 2), tree.slice(2)));
+    const result = check(base);
+    expect(result.status).toBe(2);
+    expect(result.out).not.toContain("nothing to compare");
   });
 });

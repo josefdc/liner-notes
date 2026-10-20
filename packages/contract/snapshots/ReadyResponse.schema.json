@@ -40,5 +40,6 @@
     "additionalProperties": {}
   },
   "unknownKeys": { "$": "passthrough" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

@@ -11,6 +11,7 @@
 
 import { z } from "zod/v4";
 import { SourceId, Timestamp, UnitInterval } from "./common.js";
+import { tolerantList } from "./tolerant.js";
 
 // =============================================================================
 // Evidence
@@ -29,7 +30,9 @@ export const EVIDENCE_EXCERPT_MAX = 500;
 
 /**
  * Producers check each item with `evidenceIssues()`: a url or a recordRef, and an excerpt of at
- * most EVIDENCE_EXCERPT_MAX characters. Readers accept items that break those rules.
+ * most EVIDENCE_EXCERPT_MAX characters, and no web search result as a primary record. A
+ * cross-reference violation or an unknown value never rejects a result: readers accept items
+ * that break those rules, and drop items with a value they do not know.
  */
 export const Evidence = z.object({
   id: z.string().min(1),
@@ -126,7 +129,7 @@ export type FactoidEntityType = z.infer<typeof FactoidEntityType>;
 export const FactoidPresentation = z.object({
   title: z.string(),
   type: FactoidType,
-  entities: z.array(z.object({ text: z.string(), type: FactoidEntityType })),
+  entities: tolerantList(z.object({ text: z.string(), type: FactoidEntityType })),
 });
 
 /** The two values the numeric check compared, for the "conflict" display. */
@@ -137,7 +140,8 @@ export const NumericComparison = z.object({
 });
 
 /**
- * One statement shown to the user. Readers accept every claim and decide how to show it with
+ * One statement shown to the user. A cross-reference violation or an unknown value never
+ * rejects a result: readers accept every claim they can read and decide how to show it with
  * `claimDisplayKind()`: a sourced claim citing evidence that is not in the pack, or a model
  * claim the judge did not support, reads as model inference. A code-built claim keeps its
  * kind whatever the judge said; the judge's verdict is kept for the record. Producers check

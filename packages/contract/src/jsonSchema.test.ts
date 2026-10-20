@@ -224,6 +224,16 @@ describe("assertAzureStrict", () => {
     });
   });
 
+  it("checks the keywords written next to a $ref", () => {
+    const schema = {
+      ...withNode({ $ref: "#/$defs/Name", minLength: 3 }),
+      $defs: { Name: { type: "string" } },
+    };
+    expect(azureStrictViolations(schema)).toEqual([
+      { path: "/properties/x", message: 'uses "minLength"' },
+    ]);
+  });
+
   it("escapes / and ~ in property names in the pointer it reports", () => {
     const schema = {
       type: "object",

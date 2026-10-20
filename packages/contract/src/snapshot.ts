@@ -5,7 +5,8 @@
  * - its JSON Schema as a reader accepts it (`input`: optional fields, defaults, whether
  *   unknown keys are allowed) and as a parse returns it (`output`);
  * - the unknown-key policy of each object (`strip`, `strict` or `passthrough`);
- * - its refinements, by id (see refinements.ts), which JSON Schema cannot show.
+ * - its refinements, by id (see refinements.ts), which JSON Schema cannot show;
+ * - the lists and values a reader tolerates when it cannot read them (see tolerant.ts).
  * Snapshots refer to each other (`"$ref": "TrackAnalysis.schema.json"`) instead of repeating a
  * schema wherever it is used, and the facts of one schema stop where another named schema
  * starts.
@@ -16,12 +17,15 @@ import { type Compatibility, compareSchemas, type Schema } from "./compat.js";
 import { jsonSchemaOptions } from "./jsonSchema.js";
 import { refinementId } from "./refinements.js";
 import { CONTRACT_SCHEMAS } from "./schemas.js";
+import { isTolerantFilter } from "./tolerant.js";
 
 export interface ContractSnapshot {
   input: Schema;
   output: Schema;
   unknownKeys: Record<string, "strip" | "strict" | "passthrough">;
   refinements: string[];
+  /** Paths of lists that drop unreadable items and of values that become absent instead. */
+  tolerant: string[];
 }
 
 export const snapshotFileName = (name: string) => `${name}.schema.json`;
@@ -38,9 +42,10 @@ const defOf = (schema: unknown) => (schema as { _zod: { def: ZodDef } })._zod.de
 export function readerFacts(
   root: z.ZodType,
   named: ReadonlySet<unknown> = new Set(Object.values(CONTRACT_SCHEMAS)),
-): Pick<ContractSnapshot, "unknownKeys" | "refinements"> {
+): Pick<ContractSnapshot, "unknownKeys" | "refinements" | "tolerant"> {
   const unknownKeys: ContractSnapshot["unknownKeys"] = {};
   const refinements: string[] = [];
+  const tolerant: string[] = [];
 
   const walk = (schema: unknown, path: string, stack: readonly unknown[]) => {
     if (stack.includes(schema)) return;
@@ -88,11 +93,16 @@ export function readerFacts(
         walk(def.right, path, inner);
         return;
       case "pipe":
+        if (isTolerantFilter(def.in as object)) tolerant.push(`${path}: drops unreadable items`);
         walk(def.in, path, inner);
         walk(def.out, path, inner);
         return;
       case "lazy":
         walk((def.getter as () => unknown)(), path, inner);
+        return;
+      case "catch":
+        tolerant.push(`${path}: absent when unreadable`);
+        walk(def.innerType, path, inner);
         return;
       default:
         if (def.innerType) walk(def.innerType, path, inner);
@@ -100,7 +110,7 @@ export function readerFacts(
   };
 
   walk(root, "$", []);
-  return { unknownKeys, refinements: refinements.sort() };
+  return { unknownKeys, refinements: refinements.sort(), tolerant: tolerant.sort() };
 }
 
 /** The snapshot of every named schema, as the code stands. */
@@ -177,26 +187,79 @@ export function compareSnapshots(
         additive.push(`refinement removed ${refinement}`);
       }
     }
+    const nowTolerant = new Set(now.tolerant ?? []);
+    const oldTolerant = new Set(old.tolerant ?? []);
+    for (const entry of oldTolerant) {
+      if (!nowTolerant.has(entry)) breaking.push(`no longer tolerant ${entry}`);
+    }
+    for (const entry of nowTolerant) {
+      if (!oldTolerant.has(entry)) additive.push(`now tolerant ${entry}`);
+    }
     result[name] = { breaking, additive };
   }
   return result;
 }
 
+const ackLines = (lines: readonly string[]) =>
+  lines.map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
+
 /**
- * Breaking changes against a base, minus the ones acknowledged for this change: lines of the
- * acknowledgement file that the base did not have, each `<Schema> <change>` exactly as
- * reported. Acknowledgements already in the base never excuse a new change.
+ * The acknowledgement lines added by this change: each line counted as many times as it occurs
+ * now, minus the times it occurred at the base. Counting (not a set) lets a later change
+ * acknowledge the same line again by adding it once more.
+ */
+export function freshAcknowledgements(
+  acknowledgedNow: readonly string[],
+  acknowledgedAtBase: readonly string[],
+): Map<string, number> {
+  const fresh = countOf(ackLines(acknowledgedNow));
+  for (const [line, count] of countOf(ackLines(acknowledgedAtBase))) {
+    const left = (fresh.get(line) ?? 0) - count;
+    if (left > 0) fresh.set(line, left);
+    else fresh.delete(line);
+  }
+  return fresh;
+}
+
+/**
+ * Breaking changes against a base, minus the ones acknowledged for this change: each fresh
+ * acknowledgement line (`<Schema> <change>` exactly as reported) excuses one breaking change.
+ * Acknowledgements already at the base never excuse a new change.
  */
 export function unacknowledgedBreaking(
   changes: Record<string, Compatibility>,
   acknowledgedNow: readonly string[],
   acknowledgedAtBase: readonly string[],
 ): string[] {
-  const clean = (lines: readonly string[]) =>
-    lines.map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
-  const base = new Set(clean(acknowledgedAtBase));
-  const fresh = new Set(clean(acknowledgedNow).filter((line) => !base.has(line)));
+  const fresh = freshAcknowledgements(acknowledgedNow, acknowledgedAtBase);
   return Object.entries(changes).flatMap(([name, { breaking }]) =>
-    breaking.map((change) => `${name} ${change}`).filter((line) => !fresh.has(line)),
+    breaking
+      .map((change) => `${name} ${change}`)
+      .filter((line) => {
+        const left = fresh.get(line) ?? 0;
+        if (left === 0) return true;
+        fresh.set(line, left - 1);
+        return false;
+      }),
+  );
+}
+
+/** The prefix of the acknowledgement a change to the comparison itself needs. */
+export const ENGINE_ACK_PREFIX = "engine changed:";
+
+/**
+ * True when the code that compares the contract changed and this change does not say why with
+ * a fresh `engine changed: <reason>` line: otherwise a change could loosen the comparison and
+ * pass its own check.
+ */
+export function engineChangeUnacknowledged(
+  changedFiles: readonly string[],
+  acknowledgedNow: readonly string[],
+  acknowledgedAtBase: readonly string[],
+): boolean {
+  if (changedFiles.length === 0) return false;
+  const fresh = freshAcknowledgements(acknowledgedNow, acknowledgedAtBase);
+  return ![...fresh.keys()].some(
+    (line) => line.startsWith(ENGINE_ACK_PREFIX) && line.slice(ENGINE_ACK_PREFIX.length).trim(),
   );
 }

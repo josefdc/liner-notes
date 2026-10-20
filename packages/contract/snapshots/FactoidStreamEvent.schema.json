@@ -91,32 +91,7 @@
             "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "code": {
-            "type": "string",
-            "enum": [
-              "invalid_input",
-              "invalid_json",
-              "bad_request",
-              "forbidden_origin",
-              "not_found",
-              "payload_too_large",
-              "unsupported_media_type",
-              "rate_limited",
-              "resume_in_progress",
-              "choice_expired",
-              "not_waiting",
-              "run_interrupted",
-              "invalid_selection",
-              "no_match",
-              "upstream_unavailable",
-              "timeout",
-              "failed",
-              "internal_error",
-              "auth_expired",
-              "budget_exhausted",
-              "live_disabled"
-            ]
-          },
+          "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
           "error": { "type": "string" },
           "index": {
             "description": "Which factoid failed; absent for the stream",
@@ -243,32 +218,7 @@
             "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "code": {
-            "type": "string",
-            "enum": [
-              "invalid_input",
-              "invalid_json",
-              "bad_request",
-              "forbidden_origin",
-              "not_found",
-              "payload_too_large",
-              "unsupported_media_type",
-              "rate_limited",
-              "resume_in_progress",
-              "choice_expired",
-              "not_waiting",
-              "run_interrupted",
-              "invalid_selection",
-              "no_match",
-              "upstream_unavailable",
-              "timeout",
-              "failed",
-              "internal_error",
-              "auth_expired",
-              "budget_exhausted",
-              "live_disabled"
-            ]
-          },
+          "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
           "error": { "type": "string" },
           "index": {
             "description": "Which factoid failed; absent for the stream",
@@ -309,5 +259,6 @@
     "$<type=error>": "strip",
     "$<type=done>": "strip"
   },
-  "refinements": []
+  "refinements": [],
+  "tolerant": ["$<type=factoid>.data.entities: drops unreadable items"]
 }

@@ -72,5 +72,6 @@
     "additionalProperties": false
   },
   "unknownKeys": { "$": "strip", "$.method": "strip" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

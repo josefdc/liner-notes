@@ -91,5 +91,6 @@
     "additionalProperties": false
   },
   "unknownKeys": { "$": "strip" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

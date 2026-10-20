@@ -12,9 +12,11 @@ import { ConnectedEvent, StatusEvent } from "./events.js";
 import { Evidence } from "./evidence.js";
 import { toJsonSchema } from "./jsonSchema.js";
 import { refineNamed } from "./refinements.js";
+import { tolerantList } from "./tolerant.js";
 import {
   type ContractSnapshot,
   compareSnapshots,
+  engineChangeUnacknowledged,
   readerFacts,
   unacknowledgedBreaking,
 } from "./snapshot.js";
@@ -325,6 +327,25 @@ describe("snapshot rules", () => {
     expect(additive(strict, strip)).toContain("unknown keys $.a: strict -> strip");
   });
 
+  it("a list or value made strict again breaks; making one tolerant is additive", () => {
+    const strict = z.object({ items: z.array(z.string()), reason: z.enum(["a"]).optional() });
+    const tolerant = z.object({
+      items: tolerantList(z.string()),
+      reason: z.enum(["a"]).optional().catch(undefined),
+    });
+    expect(breaking(tolerant, strict)).toEqual([
+      "no longer tolerant $.items: drops unreadable items",
+      "no longer tolerant $.reason: absent when unreadable",
+    ]);
+    expect(additive(strict, tolerant)).toEqual(
+      expect.arrayContaining([
+        "now tolerant $.items: drops unreadable items",
+        "now tolerant $.reason: absent when unreadable",
+      ]),
+    );
+    expect(breaking(strict, tolerant)).toEqual([]);
+  });
+
   it("a removed schema breaks; a new one is additive", () => {
     const s = snapshotOf(z.object({ a: z.string() }));
     expect(compareSnapshots({ A: s }, {})).toEqual({
@@ -407,6 +428,28 @@ describe("unacknowledgedBreaking", () => {
   it("accepts a line added in this change, ignoring comments and blank lines", () => {
     const now = ["# acknowledged breaking changes", "", "TrackAnalysis input $.album: removed"];
     expect(unacknowledgedBreaking(changes, now, ["# acknowledged breaking changes"])).toEqual([]);
+  });
+
+  it("counts lines: a line added again excuses the same change again", () => {
+    const line = "TrackAnalysis input $.album: removed";
+    expect(unacknowledgedBreaking(changes, [line, line], [line])).toEqual([]);
+    const twice = {
+      TrackAnalysis: {
+        breaking: ["input $.album: removed", "input $.album: removed"],
+        additive: [],
+      },
+    };
+    expect(unacknowledgedBreaking(twice, [line], [])).toEqual([line]);
+  });
+
+  it("needs a fresh engine-change line with a reason when the comparison changed", () => {
+    const files = ["packages/contract/src/compat.ts"];
+    expect(engineChangeUnacknowledged([], [], [])).toBe(false);
+    expect(engineChangeUnacknowledged(files, [], [])).toBe(true);
+    expect(engineChangeUnacknowledged(files, ["engine changed:"], [])).toBe(true);
+    expect(engineChangeUnacknowledged(files, ["engine changed: wider enums"], [])).toBe(false);
+    const old = "engine changed: wider enums";
+    expect(engineChangeUnacknowledged(files, [old], [old])).toBe(true);
   });
 
   it("never lets a line already at the base excuse a new change", () => {

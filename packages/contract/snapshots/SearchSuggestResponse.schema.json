@@ -81,5 +81,6 @@
     "additionalProperties": false
   },
   "unknownKeys": { "$": "strip", "$.suggestions[]": "strip", "$.meta": "strip" },
-  "refinements": []
+  "refinements": [],
+  "tolerant": []
 }

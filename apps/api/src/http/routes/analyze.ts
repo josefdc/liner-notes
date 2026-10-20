@@ -4,51 +4,81 @@ import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { getDb } from "../../store/database.js";
-import { type RunStatus, startRun, updateRun } from "../../store/runs.js";
+import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
 
 const router = Router();
 
 // =============================================================================
-// Limits and messages
+// Limits and errors
 // =============================================================================
 
+/** Longest accepted query, in characters (code points). */
 export const MAX_QUERY_LENGTH = 200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 /** Interval between heartbeat messages on an open event stream. */
 export const HEARTBEAT_INTERVAL_MS = 15_000;
 
-/** What the client is told; details stay in the server log. */
-const MESSAGES = {
-  failed: "The analysis could not be completed. Please try again.",
-  resumeInProgress: "This choice is already being processed.",
-  choiceExpired: "This choice has expired or was not found. Please search again.",
-  notWaiting: "This analysis is not waiting for a choice.",
-  invalidSelection: "The selected track is not one of the offered choices.",
-  disambiguation: "Multiple songs found. Please select the correct one.",
+/** Longest a run may take; past it the route aborts the run and reports a timeout. */
+export const RUN_DEADLINE_MS = 3 * 60_000;
+
+/**
+ * Errors the client can see: a code, the HTTP status the POST routes answer with, and a short
+ * message. Details stay in the server log. The stream routes always answer 200 (EventSource
+ * cannot read any other status) and send the code and message as an `error` message.
+ */
+const ERRORS = {
+  invalid_input: { status: 400, message: "The request is not valid. Please search again." },
+  resume_in_progress: { status: 409, message: "This choice is already being processed." },
+  choice_expired: {
+    status: 404,
+    message: "This choice has expired or was not found. Please search again.",
+  },
+  not_waiting: { status: 404, message: "This analysis is not waiting for a choice." },
+  run_interrupted: { status: 404, message: "The analysis was interrupted. Please search again." },
+  invalid_selection: {
+    status: 400,
+    message: "The selected track is not one of the offered choices.",
+  },
+  no_match: { status: 422, message: "No song matched that search." },
+  upstream_unavailable: {
+    status: 502,
+    message: "The music service is not responding right now. Please try again later.",
+  },
+  timeout: { status: 504, message: "The analysis took too long. Please try again." },
+  failed: { status: 500, message: "The analysis could not be completed. Please try again." },
 } as const;
 
-type ResumeErrorCode =
-  | "resume_in_progress"
-  | "choice_expired"
-  | "not_waiting"
-  | "invalid_selection";
+type ErrorCode = keyof typeof ERRORS;
+type FailureCode = "no_match" | "upstream_unavailable" | "timeout" | "failed";
+
+const DISAMBIGUATION_MESSAGE = "Multiple songs found. Please select the correct one.";
 
 // =============================================================================
 // Input validation
 // =============================================================================
 
+const CONTROL_CHARACTER = /\p{Cc}/u;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const INVISIBLE = /[\s\p{Cf}]/gu;
+
+/**
+ * A query is a string of 1 to MAX_QUERY_LENGTH characters after trimming, with no control
+ * characters or unpaired surrogates, and at least one visible character.
+ */
 function parseQuery(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const query = value.trim();
-  return query.length > 0 && query.length <= MAX_QUERY_LENGTH ? query : null;
+  if (CONTROL_CHARACTER.test(query) || LONE_SURROGATE.test(query)) return null;
+  if (query.replace(INVISIBLE, "") === "") return null;
+  return [...query].length <= MAX_QUERY_LENGTH ? query : null;
 }
 
 function parseId(value: unknown): string | null {
   return typeof value === "string" && ID_PATTERN.test(value) ? value : null;
 }
 
-const QUERY_ERROR = `'query' is required: a non-empty string of at most ${MAX_QUERY_LENGTH} characters`;
+const QUERY_ERROR = `'query' is required: a song name of at most ${MAX_QUERY_LENGTH} characters`;
 const RESUME_ERROR =
   "'threadId' and 'selectedTrackId' are required: 1-100 letters, digits, '-' or '_'";
 
@@ -92,6 +122,60 @@ function reopenRun(threadId: string, query: string): void {
 }
 
 // =============================================================================
+// Run control: disconnect and deadline
+// =============================================================================
+
+/**
+ * Owns a run's AbortController. The run is aborted when the client goes away before the
+ * response is finished (listening on the response: a request's own "close" event also fires
+ * once its body has been read) or when the run deadline passes.
+ */
+class RunControl {
+  private readonly controller = new AbortController();
+  private deadline: ReturnType<typeof setTimeout> | undefined;
+  private disconnected = false;
+  timedOut = false;
+
+  constructor(
+    private readonly req: Request,
+    private readonly res: Response,
+    private readonly threadId: string,
+  ) {
+    res.on("close", () => {
+      if (res.writableEnded) return;
+      this.disconnected = true;
+      this.abort("Client disconnected");
+    });
+  }
+
+  get signal(): AbortSignal {
+    return this.controller.signal;
+  }
+
+  /** True once the client has gone, even if the close event has not been handled yet. */
+  get clientGone(): boolean {
+    return this.disconnected || this.res.destroyed || this.req.socket.destroyed;
+  }
+
+  startDeadline(): void {
+    this.deadline = setTimeout(() => {
+      this.timedOut = true;
+      this.abort(`No result after ${RUN_DEADLINE_MS / 1000} s`);
+    }, RUN_DEADLINE_MS);
+  }
+
+  dispose(): void {
+    clearTimeout(this.deadline);
+  }
+
+  private abort(reason: string): void {
+    if (this.controller.signal.aborted) return;
+    this.controller.abort();
+    console.warn(`[Run ${this.threadId}] ${reason}; run aborted`);
+  }
+}
+
+// =============================================================================
 // Graph runner
 // =============================================================================
 
@@ -103,8 +187,7 @@ type GraphInput = Parameters<ReturnType<typeof createSonicAgentGraph>["stream"]>
 type RunOutcome =
   | { kind: "complete"; trackData: TrackData }
   | { kind: "interrupted"; candidates: SearchCandidate[] }
-  /** `reported`: a node ended the run with an error (e.g. no track found), not an exception. */
-  | { kind: "failed"; reported: boolean }
+  | { kind: "failed"; code: FailureCode }
   | { kind: "cancelled" };
 
 const OUTCOME_STATUS: Record<RunOutcome["kind"], RunStatus> = {
@@ -119,22 +202,36 @@ interface DisambiguationPayload {
 }
 
 /**
+ * Reads why the scout ended a run from the error it put in the state: Spotify found nothing,
+ * or Spotify could not be reached (its tools return "Error …" strings; a thrown error becomes
+ * "Scout error: …"). Anything else is a plain failure. This reads the scout's text because its
+ * tools return strings; it goes once they return typed results (#11).
+ */
+function classifyNodeError(node: string, error: string): FailureCode {
+  if (node !== "scout") return "failed";
+  if (/^No tracks? (found|data)/i.test(error)) return "no_match"; // guard-allow: string-sentinel-tool-results — until #11
+  if (/^(Error|Scout error)\b/.test(error)) return "upstream_unavailable";
+  return "failed";
+}
+
+/**
  * Runs the graph on one thread until it ends or pauses at an interrupt. Progress events go to
  * `emit`. `complete` is emitted exactly once, from here, whichever node produced the result:
  * nodes report it both through the writer and in their state update. Candidates are not
- * forwarded; the caller sends them once, with the interrupt.
+ * forwarded; the caller sends them once, with the interrupt. A result that was already sent
+ * counts as complete even if the run is aborted afterwards.
  */
 async function runGraph(
   input: GraphInput,
   threadId: string,
   signal: AbortSignal,
-  emit: (event: AgentEvent) => void = () => {},
+  emit: (event: AgentEvent) => void,
 ): Promise<RunOutcome> {
   const seen: {
     trackData: TrackData | null;
     interrupt: DisambiguationPayload | null;
-    nodeError: boolean;
-  } = { trackData: null, interrupt: null, nodeError: false };
+    failure: FailureCode | null;
+  } = { trackData: null, interrupt: null, failure: null };
 
   const completeWith = (data: TrackData) => {
     if (seen.trackData) return;
@@ -142,6 +239,7 @@ async function runGraph(
     emit({ type: "complete", data });
   };
 
+  let threw: unknown = null;
   try {
     const graph = createSonicAgentGraph();
     const stream = await graph.stream(input, {
@@ -175,66 +273,90 @@ async function runGraph(
         if (state?.trackData) completeWith(state.trackData);
         if (state?.error) {
           console.error(`[Run ${threadId}] ${node} reported an error:`, state.error);
-          seen.nodeError = true;
+          seen.failure ??= classifyNodeError(node, state.error);
         }
       }
     }
   } catch (err) {
-    if (signal.aborted) return { kind: "cancelled" };
-    console.error(`[Run ${threadId}] Graph error:`, err);
-    return { kind: "failed", reported: false };
+    threw = err;
   }
 
-  if (signal.aborted) return { kind: "cancelled" };
   if (seen.trackData) return { kind: "complete", trackData: seen.trackData };
   if (seen.interrupt) return { kind: "interrupted", candidates: seen.interrupt.candidates ?? [] };
-  if (!seen.nodeError) console.error(`[Run ${threadId}] Graph ended without a result`);
-  return { kind: "failed", reported: seen.nodeError };
+  if (signal.aborted) return { kind: "cancelled" };
+  if (threw) console.error(`[Run ${threadId}] Graph error:`, threw);
+  else if (!seen.failure) console.error(`[Run ${threadId}] Graph ended without a result`);
+  return { kind: "failed", code: seen.failure ?? "failed" };
 }
 
-/** Records the run's outcome and logs it. */
-function finishRun(threadId: string, outcome: RunOutcome): void {
-  const status = OUTCOME_STATUS[outcome.kind];
+/** The clarification interrupt the thread is paused at, or null. */
+async function pendingChoice(threadId: string) {
+  const snapshot = await createSonicAgentGraph().getState({
+    configurable: { thread_id: threadId },
+  });
+  const task = snapshot.tasks.find(
+    (task) => task.name === "clarification" && task.interrupts.length > 0,
+  );
+  return { snapshot, choice: (task?.interrupts[0].value ?? null) as DisambiguationPayload | null };
+}
+
+/**
+ * Runs the graph under `control` and records the outcome. A deadline abort is reported as a
+ * timeout. A run that failed or was cancelled before the choice was applied leaves the thread
+ * waiting for it, so it is recorded as interrupted: retention keeps it and it can be resumed.
+ */
+async function executeRun(
+  input: GraphInput,
+  threadId: string,
+  control: RunControl,
+  emit: (event: AgentEvent) => void = () => {},
+): Promise<RunOutcome> {
+  control.startDeadline();
+  let outcome = await runGraph(input, threadId, control.signal, emit);
+  if (outcome.kind === "cancelled" && control.timedOut)
+    outcome = { kind: "failed", code: "timeout" };
+
+  let status = OUTCOME_STATUS[outcome.kind];
+  if (outcome.kind === "failed" || outcome.kind === "cancelled") {
+    try {
+      if ((await pendingChoice(threadId)).choice) status = "interrupted";
+    } catch (err) {
+      console.error(`[Run ${threadId}] Could not read the thread:`, err);
+    }
+  }
   recordRun("update a run", (db) => updateRun(db, threadId, { status }));
-  console.log(`[Run ${threadId}] ${status}`);
+  console.log(`[Run ${threadId}] ${outcome.kind}; recorded ${status}`);
+  return outcome;
 }
 
 // =============================================================================
 // Resume checks
 // =============================================================================
 
-type ResumeCheck =
-  | { ok: true; query: string }
-  | { ok: false; code: ResumeErrorCode; httpStatus: number; error: string };
+type ResumeCheck = { ok: true; query: string } | { ok: false; code: ErrorCode };
 
 /**
  * Checks that a thread is paused at the clarification interrupt and that the selection is one
  * of the candidates it offered. A thread with no saved state was either never created or pruned
- * by retention; the two cannot be told apart, so both are reported as an expired choice.
+ * by retention; the two cannot be told apart, so both are reported as an expired choice. A
+ * thread past its choice whose last run was cancelled or failed cannot be continued either.
  */
 async function checkResumable(threadId: string, selectedTrackId: string): Promise<ResumeCheck> {
-  const graph = createSonicAgentGraph();
-  const snapshot = await graph.getState({ configurable: { thread_id: threadId } });
+  const { snapshot, choice } = await pendingChoice(threadId);
 
-  if (!snapshot.config?.configurable?.checkpoint_id) {
-    return { ok: false, code: "choice_expired", httpStatus: 404, error: MESSAGES.choiceExpired };
+  if (!snapshot.config?.configurable?.checkpoint_id) return { ok: false, code: "choice_expired" };
+
+  if (!choice) {
+    let status: RunStatus | undefined;
+    recordRun("read a run", (db) => {
+      status = getRun(db, threadId)?.status;
+    });
+    const interrupted = status === "cancelled" || status === "failed";
+    return { ok: false, code: interrupted ? "run_interrupted" : "not_waiting" };
   }
 
-  const pending = snapshot.tasks.find(
-    (task) => task.name === "clarification" && task.interrupts.length > 0,
-  );
-  if (!pending) {
-    return { ok: false, code: "not_waiting", httpStatus: 404, error: MESSAGES.notWaiting };
-  }
-
-  const payload = pending.interrupts[0].value as DisambiguationPayload | undefined;
-  if (!payload?.candidates?.some((candidate) => candidate.id === selectedTrackId)) {
-    return {
-      ok: false,
-      code: "invalid_selection",
-      httpStatus: 400,
-      error: MESSAGES.invalidSelection,
-    };
+  if (!choice.candidates?.some((candidate) => candidate.id === selectedTrackId)) {
+    return { ok: false, code: "invalid_selection" };
   }
 
   const values = snapshot.values as { songQuery?: string };
@@ -243,17 +365,10 @@ async function checkResumable(threadId: string, selectedTrackId: string): Promis
 
 /**
  * Claims the thread, then checks it can be resumed. On success the caller owns the claim and
- * must release it; on failure it is already released.
+ * must release it; otherwise it is already released.
  */
 async function claimResume(threadId: string, selectedTrackId: string): Promise<ResumeCheck> {
-  if (activeThreads.has(threadId)) {
-    return {
-      ok: false,
-      code: "resume_in_progress",
-      httpStatus: 409,
-      error: MESSAGES.resumeInProgress,
-    };
-  }
+  if (activeThreads.has(threadId)) return { ok: false, code: "resume_in_progress" };
   activeThreads.add(threadId);
   try {
     const check = await checkResumable(threadId, selectedTrackId);
@@ -261,7 +376,57 @@ async function claimResume(threadId: string, selectedTrackId: string): Promise<R
     return check;
   } catch (err) {
     activeThreads.delete(threadId);
-    throw err;
+    console.error(`[Run ${threadId}] Could not read the thread:`, err);
+    return { ok: false, code: "failed" };
+  }
+}
+
+interface ResumeReply {
+  refuse(code: ErrorCode): void;
+  started(): void;
+  emit?: (event: AgentEvent) => void;
+  finish(outcome: RunOutcome): void;
+}
+
+/**
+ * Resumes a paused thread with the selected track. The disconnect listener is registered
+ * before anything is awaited; a client that left during the checks gets no run, and the choice
+ * stays open.
+ */
+async function resumeThread(
+  req: Request,
+  res: Response,
+  threadId: string,
+  selectedTrackId: string,
+  reply: ResumeReply,
+): Promise<void> {
+  console.log(`[Run ${threadId}] Resuming with track ${selectedTrackId}`);
+  const control = new RunControl(req, res, threadId);
+
+  const check = await claimResume(threadId, selectedTrackId);
+  if (!check.ok) {
+    console.warn(`[Run ${threadId}] Resume refused: ${check.code}`);
+    reply.refuse(check.code);
+    return;
+  }
+
+  try {
+    if (control.clientGone) {
+      console.warn(`[Run ${threadId}] Client left before the resume started; choice kept`);
+      return;
+    }
+    reply.started();
+    reopenRun(threadId, check.query);
+    const outcome = await executeRun(
+      new Command({ resume: selectedTrackId }),
+      threadId,
+      control,
+      reply.emit,
+    );
+    reply.finish(outcome);
+  } finally {
+    control.dispose();
+    activeThreads.delete(threadId);
   }
 }
 
@@ -269,28 +434,19 @@ async function claimResume(threadId: string, selectedTrackId: string): Promise<R
 // Responses
 // =============================================================================
 
-/**
- * Aborts the run if the client goes away before the response is finished. Listens on the
- * response: a request's own "close" event also fires once its body has been read.
- */
-function abortOnDisconnect(res: Response, controller: AbortController, threadId: string): void {
-  res.on("close", () => {
-    if (res.writableEnded || controller.signal.aborted) return;
-    controller.abort();
-    console.warn(`[Run ${threadId}] Client disconnected; run aborted`);
-  });
-}
-
 interface EventStream {
   send(event: AgentEvent): void;
-  end(): void;
+  error(code: ErrorCode): void;
+  done(): void;
 }
+
+const timestamp = () => new Date().toISOString();
 
 /**
  * Starts a server-sent event stream with status 200. Every message is a plain `data:` line, so
  * EventSource delivers it to `onmessage`: progress, errors (EventSource cannot read the body of
  * any other status) and a heartbeat every HEARTBEAT_INTERVAL_MS that keeps proxies from closing
- * an idle connection.
+ * an idle connection. Headers are flushed at once, before the first message.
  */
 function openEventStream(res: Response): EventStream {
   res.status(200);
@@ -309,38 +465,38 @@ function openEventStream(res: Response): EventStream {
 
   return {
     send,
-    end() {
+    error: (code) => send({ type: "error", code, error: ERRORS[code].message }),
+    done() {
+      send({ type: "done", timestamp: timestamp() });
       stop();
       if (!res.writableEnded) res.end();
     },
   };
 }
 
-const timestamp = () => new Date().toISOString();
-
-function sendDone(stream: EventStream): void {
-  stream.send({ type: "done", timestamp: timestamp() });
-  stream.end();
-}
-
-/** Sends a run's last messages (`complete` was sent as it happened). */
+/**
+ * Sends a run's last messages (`complete` was sent as it happened). A cancelled run's client is
+ * gone, so it only closes the stream.
+ */
 function sendStreamOutcome(stream: EventStream, outcome: RunOutcome, threadId: string): void {
-  if (outcome.kind === "cancelled") {
-    stream.end();
-    return;
-  }
   if (outcome.kind === "interrupted") {
     stream.send({
       type: "interrupt",
       reason: "disambiguation",
       threadId,
       candidates: outcome.candidates,
-      message: MESSAGES.disambiguation,
+      message: DISAMBIGUATION_MESSAGE,
     });
   } else if (outcome.kind === "failed") {
-    stream.send({ type: "error", error: MESSAGES.failed });
+    stream.error(outcome.code);
   }
-  sendDone(stream);
+  stream.done();
+}
+
+function sendJsonError(res: Response, code: ErrorCode, detail?: Record<string, unknown>): void {
+  if (res.writableEnded || res.destroyed) return;
+  const { status, message } = ERRORS[code];
+  res.status(status).json({ success: false, code, error: message, ...detail });
 }
 
 function sendJsonOutcome(
@@ -368,12 +524,12 @@ function sendJsonOutcome(
         interrupt: {
           reason: "disambiguation",
           candidates: outcome.candidates,
-          message: MESSAGES.disambiguation,
+          message: DISAMBIGUATION_MESSAGE,
         },
       });
       return;
     case "failed":
-      res.status(outcome.reported ? 404 : 500).json({ success: false, error: MESSAGES.failed });
+      sendJsonError(res, outcome.code);
       return;
     case "cancelled":
       return;
@@ -391,26 +547,27 @@ function sendJsonOutcome(
  * Body: { "query": "Song name Artist" }
  * Returns { status: "complete", threadId, data } or, when the song is ambiguous,
  * { status: "interrupted", threadId, interrupt: { candidates } }; resume with
- * POST /api/analyze/resume.
+ * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS.
  */
 router.post("/api/analyze", async (req: Request, res: Response) => {
   const startTime = Date.now();
   const query = parseQuery(req.body?.query);
   if (!query) {
-    res.status(400).json({ error: QUERY_ERROR, example: { query: "Midnight City M83" } });
+    sendJsonError(res, "invalid_input", {
+      detail: QUERY_ERROR,
+      example: { query: "Midnight City M83" },
+    });
     return;
   }
 
   const threadId = startAnalysis(query);
-  console.log(`[API] Analysis ${threadId}: "${query}"`);
-  const controller = new AbortController();
-  abortOnDisconnect(res, controller, threadId);
-
+  console.log(`[Run ${threadId}] Analysis: "${query}"`);
+  const control = new RunControl(req, res, threadId);
   try {
-    const outcome = await runGraph({ songQuery: query }, threadId, controller.signal);
-    finishRun(threadId, outcome);
+    const outcome = await executeRun({ songQuery: query }, threadId, control);
     sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
   } finally {
+    control.dispose();
     activeThreads.delete(threadId);
   }
 });
@@ -420,36 +577,33 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
  *
  * GET /api/analyze/stream?query=Song+Name
  *
- * Messages (each a `data:` line with a `type`):
+ * Always answers 200. Messages (each a `data:` line with a `type`):
  * - connected { threadId }
  * - status: agent progress
  * - heartbeat: keeps the connection open; ignore it
  * - interrupt { threadId, candidates }: the user must pick a track; resume with the routes below
  * - complete { data }: the result, exactly once per finished run
- * - error { error }: a short message
+ * - error { code, error }: a code from ERRORS and a short message
  * - done: the stream is over
  */
 router.get("/api/analyze/stream", async (req: Request, res: Response) => {
+  const stream = openEventStream(res);
   const query = parseQuery(req.query.query);
   if (!query) {
-    res
-      .status(400)
-      .json({ error: QUERY_ERROR, example: "/api/analyze/stream?query=Midnight+City+M83" });
+    stream.error("invalid_input");
+    stream.done();
     return;
   }
 
   const threadId = startAnalysis(query);
-  console.log(`[SSE] Analysis ${threadId}: "${query}"`);
-  const stream = openEventStream(res);
-  const controller = new AbortController();
-  abortOnDisconnect(res, controller, threadId);
+  console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
+  const control = new RunControl(req, res, threadId);
   stream.send({ type: "connected", threadId, timestamp: timestamp() });
-
   try {
-    const outcome = await runGraph({ songQuery: query }, threadId, controller.signal, stream.send);
-    finishRun(threadId, outcome);
+    const outcome = await executeRun({ songQuery: query }, threadId, control, stream.send);
     sendStreamOutcome(stream, outcome, threadId);
   } finally {
+    control.dispose();
     activeThreads.delete(threadId);
   }
 });
@@ -459,49 +613,25 @@ router.get("/api/analyze/stream", async (req: Request, res: Response) => {
  *
  * POST /api/analyze/resume
  * Body: { "threadId": "...", "selectedTrackId": "spotify_track_id" }
- * 409 while the thread is being resumed, 404 when it is not waiting for a choice or the choice
- * expired, 400 when the track was not offered. Error bodies carry a `code` (see the stream route).
+ * Refusals: 409 resume_in_progress; 404 choice_expired, not_waiting or run_interrupted;
+ * 400 invalid_selection or invalid_input.
  */
 router.post("/api/analyze/resume", async (req: Request, res: Response) => {
   const threadId = parseId(req.body?.threadId);
   const selectedTrackId = parseId(req.body?.selectedTrackId);
   if (!threadId || !selectedTrackId) {
-    res.status(400).json({
-      error: RESUME_ERROR,
+    sendJsonError(res, "invalid_input", {
+      detail: RESUME_ERROR,
       example: { threadId: "<threadId>", selectedTrackId: "6GyFP1nfCDB8lbD2bG0Hq9" },
     });
     return;
   }
 
-  console.log(`[API] Resuming ${threadId} with track ${selectedTrackId}`);
-  let check: ResumeCheck;
-  try {
-    check = await claimResume(threadId, selectedTrackId);
-  } catch (err) {
-    console.error(`[Run ${threadId}] Could not read the thread:`, err);
-    res.status(500).json({ success: false, error: MESSAGES.failed });
-    return;
-  }
-  if (!check.ok) {
-    console.warn(`[Run ${threadId}] Resume refused: ${check.code}`);
-    res.status(check.httpStatus).json({ success: false, code: check.code, error: check.error });
-    return;
-  }
-
-  const controller = new AbortController();
-  abortOnDisconnect(res, controller, threadId);
-  try {
-    reopenRun(threadId, check.query);
-    const outcome = await runGraph(
-      new Command({ resume: selectedTrackId }),
-      threadId,
-      controller.signal,
-    );
-    finishRun(threadId, outcome);
-    sendJsonOutcome(res, outcome, threadId, { selectedTrackId });
-  } finally {
-    activeThreads.delete(threadId);
-  }
+  await resumeThread(req, res, threadId, selectedTrackId, {
+    refuse: (code) => sendJsonError(res, code),
+    started: () => {},
+    finish: (outcome) => sendJsonOutcome(res, outcome, threadId, { selectedTrackId }),
+  });
 });
 
 /**
@@ -510,56 +640,29 @@ router.post("/api/analyze/resume", async (req: Request, res: Response) => {
  * GET /api/analyze/stream/resume?threadId=...&selectedTrackId=...
  *
  * The messages of /api/analyze/stream, starting with `resuming`. A resume that cannot run gets
- * one error message with a `code` (resume_in_progress, choice_expired, not_waiting,
- * invalid_selection), then done.
+ * one error message (codes as on POST /api/analyze/resume), then done.
  */
 router.get("/api/analyze/stream/resume", async (req: Request, res: Response) => {
+  const stream = openEventStream(res);
   const threadId = parseId(req.query.threadId);
   const selectedTrackId = parseId(req.query.selectedTrackId);
   if (!threadId || !selectedTrackId) {
-    res.status(400).json({
-      error: RESUME_ERROR,
-      example:
-        "/api/analyze/stream/resume?threadId=<threadId>&selectedTrackId=6GyFP1nfCDB8lbD2bG0Hq9",
-    });
+    stream.error("invalid_input");
+    stream.done();
     return;
   }
 
-  console.log(`[SSE] Resuming ${threadId} with track ${selectedTrackId}`);
-  const stream = openEventStream(res);
-
-  let check: ResumeCheck;
-  try {
-    check = await claimResume(threadId, selectedTrackId);
-  } catch (err) {
-    console.error(`[Run ${threadId}] Could not read the thread:`, err);
-    stream.send({ type: "error", error: MESSAGES.failed });
-    sendDone(stream);
-    return;
-  }
-  if (!check.ok) {
-    console.warn(`[Run ${threadId}] Resume refused: ${check.code}`);
-    stream.send({ type: "error", code: check.code, error: check.error });
-    sendDone(stream);
-    return;
-  }
-
-  const controller = new AbortController();
-  abortOnDisconnect(res, controller, threadId);
-  stream.send({ type: "resuming", threadId, timestamp: timestamp() });
-  try {
-    reopenRun(threadId, check.query);
-    const outcome = await runGraph(
-      new Command({ resume: selectedTrackId }),
-      threadId,
-      controller.signal,
-      stream.send,
-    );
-    finishRun(threadId, outcome);
-    sendStreamOutcome(stream, outcome, threadId);
-  } finally {
-    activeThreads.delete(threadId);
-  }
+  await resumeThread(req, res, threadId, selectedTrackId, {
+    refuse: (code) => {
+      stream.error(code);
+      stream.done();
+    },
+    started: () => stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
+    emit: stream.send,
+    finish: (outcome) => {
+      sendStreamOutcome(stream, outcome, threadId);
+    },
+  });
 });
 
 export default router;

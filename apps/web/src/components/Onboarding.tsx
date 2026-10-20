@@ -51,6 +51,8 @@ interface SuggestionState {
   showSuggestions: boolean;
   selectedIndex: number;
   isLoading: boolean;
+  /** The last request for suggestions failed. */
+  error: boolean;
 }
 
 type SuggestionAction =
@@ -66,6 +68,7 @@ const initialSuggestionState: SuggestionState = {
   showSuggestions: false,
   selectedIndex: -1,
   isLoading: false,
+  error: false,
 };
 
 function suggestionReducer(state: SuggestionState, action: SuggestionAction): SuggestionState {
@@ -79,11 +82,26 @@ function suggestionReducer(state: SuggestionState, action: SuggestionAction): Su
         showSuggestions: action.results.length > 0,
         selectedIndex: -1,
         isLoading: false,
+        error: false,
       };
     case 'FETCH_ERROR':
-      return { ...state, suggestions: [], isLoading: false };
+      return {
+        ...state,
+        suggestions: [],
+        showSuggestions: false,
+        selectedIndex: -1,
+        isLoading: false,
+        error: true,
+      };
     case 'CLEAR':
-      return { ...state, suggestions: [], showSuggestions: false, selectedIndex: -1 };
+      return {
+        ...state,
+        suggestions: [],
+        showSuggestions: false,
+        selectedIndex: -1,
+        isLoading: false,
+        error: false,
+      };
     case 'SET_SELECTED':
       return { ...state, selectedIndex: action.index };
     case 'SET_SHOW':
@@ -99,6 +117,22 @@ const ANALYZING_STATUSES = new Set<AgentStatus>([
   'composing',
   'disambiguation',
 ]);
+
+/** The picker row a navigation key moves the highlight to, or null for other keys. */
+function pickerTarget(key: string, current: number, count: number): number | null {
+  switch (key) {
+    case 'ArrowDown':
+      return (current + 1) % count;
+    case 'ArrowUp':
+      return (current - 1 + count) % count;
+    case 'Home':
+      return 0;
+    case 'End':
+      return count - 1;
+    default:
+      return null;
+  }
+}
 
 // UX: Error hint helper (Item 10 - in-character error copy)
 function getErrorHint(error: string | null): string {
@@ -152,7 +186,13 @@ const Onboarding: React.FC<OnboardingProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sugState, sugDispatch] = useReducer(suggestionReducer, initialSuggestionState);
-  const { suggestions, showSuggestions, selectedIndex, isLoading: isLoadingSuggestions } = sugState;
+  const {
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    isLoading: isLoadingSuggestions,
+    error: suggestionsFailed,
+  } = sugState;
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -191,6 +231,8 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   // Fetch suggestions when debounced query changes
   useEffect(() => {
+    // A response for an older query must not replace the current one.
+    let current = true;
     const fetchSuggestions = async () => {
       if (debouncedQuery.length < 2) {
         sugDispatch({ type: 'CLEAR' });
@@ -200,13 +242,16 @@ const Onboarding: React.FC<OnboardingProps> = ({
       sugDispatch({ type: 'FETCH_START' });
       try {
         const results = await searchSuggest(debouncedQuery, 5);
-        sugDispatch({ type: 'FETCH_SUCCESS', results });
+        if (current) sugDispatch({ type: 'FETCH_SUCCESS', results });
       } catch {
-        sugDispatch({ type: 'FETCH_ERROR' });
+        if (current) sugDispatch({ type: 'FETCH_ERROR' });
       }
     };
 
     fetchSuggestions();
+    return () => {
+      current = false;
+    };
   }, [debouncedQuery, searchSuggest]);
 
   // Close dropdown when clicking outside
@@ -379,18 +424,19 @@ const Onboarding: React.FC<OnboardingProps> = ({
     return () => clearTimeout(timer);
   }, [hitlCountdown, hitlPaused, hitlSelectedIndex, handleHitlSelect]);
 
-  // Arrow keys move the highlight (and focus) and stop the countdown; Enter selects the
-  // highlighted row, wherever focus is inside the picker.
+  // Arrow keys, Home and End move the highlight (and focus) and stop the countdown; Enter
+  // selects the highlighted row, wherever focus is inside the picker.
   const handleHitlKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (!candidates || candidates.length === 0) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         handleHitlSelect(hitlSelectedIndex);
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        return;
+      }
+      const next = pickerTarget(e.key, hitlSelectedIndex, candidates.length);
+      if (next !== null) {
         e.preventDefault();
-        const step = e.key === 'ArrowDown' ? 1 : -1;
-        const next = (hitlSelectedIndex + step + candidates.length) % candidates.length;
         setHitlSelectedIndex(next);
         setHitlCountdown(null); // Pause countdown on interaction
         hitlRowRefs.current[next]?.focus();
@@ -496,6 +542,12 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   aria-controls="search-suggestions"
                 />
               </div>
+
+              {suggestionsFailed && (
+                <p role="status" className="mt-2 text-xs font-mono text-text-tertiary text-left">
+                  Suggestions are unavailable right now. You can still search.
+                </p>
+              )}
 
               {/* Suggestions Dropdown */}
               {showSuggestions && suggestions.length > 0 && (
@@ -670,7 +722,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {showPicker && candidates && (
             <div
               ref={hitlRef}
-              className="mb-6 animate-fade-in-up"
+              className="mb-6 animate-fade-in-up rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/40 focus-visible:ring-offset-4 focus-visible:ring-offset-void"
               onKeyDown={handleHitlKeyDown}
               tabIndex={0}
               onMouseEnter={() => setHitlPaused(true)}
@@ -691,8 +743,17 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     ref={(el) => {
                       hitlRowRefs.current[index] = el;
                     }}
+                    aria-current={index === hitlSelectedIndex ? 'true' : undefined}
                     onClick={() => handleHitlSelect(index)}
-                    onFocus={() => setHitlSelectedIndex(index)}
+                    onFocus={(e) => {
+                      // Keyboard focus (Tab) moves the highlight there and stops the
+                      // countdown, as the arrow keys do. A mouse press is left alone: the
+                      // click selects the row, and a layout change between press and
+                      // release would swallow that click.
+                      if (!e.currentTarget.matches(':focus-visible')) return;
+                      setHitlSelectedIndex(index);
+                      setHitlCountdown(null);
+                    }}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-[--radius-sm] text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
                       index === hitlSelectedIndex
                         ? 'bg-cyber/15 border border-cyber/30'

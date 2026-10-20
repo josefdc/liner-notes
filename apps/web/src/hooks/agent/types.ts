@@ -49,6 +49,7 @@ export interface UseAgentReturn extends AgentState {
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
   ) => Promise<void>;
+  /** Rejects when the request fails. */
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
   reset: () => void;
 }

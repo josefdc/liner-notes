@@ -336,3 +336,18 @@ describe('useAgent factoid stream', () => {
     expect(lastStream().closed).toBe(true);
   });
 });
+
+describe('useAgent search suggestions', () => {
+  it('rejects when the suggestion request fails, so the failure can be shown', async () => {
+    const { result } = renderHook(() => useAgent());
+    await expect(result.current.searchSuggest('Hurt')).rejects.toThrow(/HTTP 503/);
+  });
+
+  it('returns the suggestions of a successful request', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, suggestions: candidates }), { status: 200 }),
+    );
+    const { result } = renderHook(() => useAgent());
+    await expect(result.current.searchSuggest('Hurt')).resolves.toEqual(candidates);
+  });
+});

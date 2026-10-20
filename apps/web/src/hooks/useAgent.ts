@@ -100,7 +100,9 @@ function abortError(): Error {
 export function useAgent(): UseAgentReturn {
   const [state, setState] = useState<AgentState>(INITIAL_STATE);
 
-  const runRef = useRef<Run>(newRun(''));
+  // Built once: a fresh run (and AbortController) per render would be wasted.
+  const [initialRun] = useState(() => newRun(''));
+  const runRef = useRef<Run>(initialRun);
   // The run's open stream and the function that closes it (and stops its watchdog).
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
 
@@ -476,7 +478,8 @@ export function useAgent(): UseAgentReturn {
   );
 
   /**
-   * Search suggestions for autocomplete (lightweight, no state changes)
+   * Search suggestions for autocomplete (lightweight, no state changes). A failed request
+   * rejects, so the caller can say that suggestions are unavailable.
    */
   const searchSuggest = useCallback(
     async (query: string, limit: number = 5): Promise<SearchCandidate[]> => {
@@ -484,13 +487,7 @@ export function useAgent(): UseAgentReturn {
       if (!query || query.length < 2) {
         return [];
       }
-
-      try {
-        return await fetchSuggestions(query, limit);
-      } catch (error) {
-        console.error('[useAgent] Search suggest error:', error);
-        return [];
-      }
+      return fetchSuggestions(query, limit);
     },
     [],
   );

@@ -110,6 +110,8 @@ test("a stream that fails shows an error with a retry instead of starting a seco
   await page.waitForTimeout(300);
   expect(posts(await apiRequests(page))).toEqual([]);
   expect(analyses(await apiRequests(page))).toHaveLength(1);
+  // The broken stream was closed, so it did not reconnect (a new run on the server).
+  expect(await streamLog(page)).not.toContain(`${ANALYZE} reconnect`);
 
   await page.getByRole("button", { name: "RETRY ANALYSIS" }).click();
   await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();

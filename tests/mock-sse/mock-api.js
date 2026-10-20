@@ -1,6 +1,7 @@
 // Browser-side stand-in for the API, injected with page.addInitScript before the app loads.
-// Configure it first with `window.__mockApi = { suggestions, streams }`:
+// Configure it first with `window.__mockApi = { suggestions, streams, fetchStatus }`:
 //   suggestions: candidates returned by /api/search/suggest
+//   fetchStatus: { "<path>": <HTTP status> } makes a request on that path fail with it
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
 //                stream ends like a server response does (onerror unless the app closed it).
@@ -13,9 +14,13 @@
 //                                      by listeners added with addEventListener(name)
 // Every API request (any URL whose path starts with /api/) is recorded in
 // `window.__mockApi.log`. What each stream does is recorded in `window.__mockApi.streamLog`
-// as "<path> open", "<path> <event type>", "<path> closed" (by the app) or "<path> ended"
-// (the events ran out). API requests the configuration does not cover fail, so a test never
-// depends on a real backend.
+// as "<path> open", "<path> <event type>", "<path> closed" (by the app), "<path> ended"
+// (the events ran out) or "<path> reconnect".
+// Like a real EventSource, a stream that ends while the app has not closed it reconnects to
+// the same URL after a short delay (a new request, logged in `log` too) and plays that path's
+// events again; only a closed stream stays closed. A stream left open by the app therefore
+// shows up as an extra request. API requests the configuration does not cover fail, so a test
+// never depends on a real backend.
 
 (() => {
   const config = window.__mockApi ?? { suggestions: [], streams: {} };
@@ -54,6 +59,13 @@
     const url = input instanceof Request ? input.url : String(input);
     if (!isApi(url)) return realFetch(input, init);
     config.log.push(`fetch ${pathOf(url)}`);
+    const status = config.fetchStatus?.[pathOf(url)];
+    if (status) {
+      return new Response(JSON.stringify({ success: false, error: "mocked failure" }), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     if (pathOf(url) === "/api/search/suggest") {
       return new Response(
         JSON.stringify({ success: true, suggestions: config.suggestions ?? [] }),
@@ -64,6 +76,9 @@
     }
     return new Response(JSON.stringify({ success: false, error: "not mocked" }), { status: 503 });
   };
+
+  // How long a real EventSource waits before it reconnects (shortened).
+  const RECONNECT_DELAY_MS = 100;
 
   class MockEventSource {
     static CONNECTING = 0;
@@ -77,15 +92,20 @@
       this.onmessage = null;
       this.onerror = null;
       this.listeners = new Map();
-      const path = pathOf(url);
-      this.path = path;
-      config.log.push(`stream ${path}${new URL(url, location.href).search}`);
+      this.path = pathOf(url);
+      this.connect();
+    }
+
+    connect() {
+      const { path } = this;
+      config.log.push(`stream ${path}${new URL(this.url, location.href).search}`);
       config.streamLog.push(`${path} open`);
       const events = eventsFor(path);
       let index = 0;
       setTimeout(() => {
         if (this.readyState === 2) return;
         if (!events) {
+          // The request itself failed (no such stream): a real EventSource gives up.
           this.readyState = 2;
           config.streamLog.push(`${path} ended`);
           this.dispatch("error", new Event("error"));
@@ -97,10 +117,15 @@
           if (this.readyState === 2) return;
           if (index >= events.length) {
             // The server has ended the response. A real EventSource reports that through
-            // onerror unless the app already closed the stream (it closes on "done").
+            // onerror and, unless the app closes the stream, reconnects.
             this.readyState = 0;
             config.streamLog.push(`${path} ended`);
             this.dispatch("error", new Event("error"));
+            setTimeout(() => {
+              if (this.readyState !== 0) return;
+              config.streamLog.push(`${path} reconnect`);
+              this.connect();
+            }, RECONNECT_DELAY_MS);
             return;
           }
           const event = events[index++];

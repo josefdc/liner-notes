@@ -157,9 +157,18 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("exits 2 when git cannot read the base, instead of reporting no snapshots", () => {
-    const base = git("rev-parse", "HEAD");
-    const tree = git("rev-parse", `${base}:packages/contract/snapshots`);
-    rmSync(join(repo, ".git", "objects", tree.slice(0, 2), tree.slice(2)));
+    // A commit whose tree object does not exist: git can resolve the base but not read its
+    // files. Writing the commit directly keeps this independent of how git stores objects
+    // (deleting a loose object fails once the object is packed).
+    const missingTree = "1".repeat(40);
+    const base = execFileSync(
+      "git",
+      ["-C", repo, "hash-object", "-t", "commit", "-w", "--literally", "--stdin"],
+      {
+        encoding: "utf8",
+        input: `tree ${missingTree}\nauthor test <test@example.com> 0 +0000\ncommitter test <test@example.com> 0 +0000\n\nbase without its tree\n`,
+      },
+    ).trim();
     const result = check(base);
     expect(result.status).toBe(2);
     expect(result.out).not.toContain("nothing to compare");

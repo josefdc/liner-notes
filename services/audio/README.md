@@ -11,13 +11,15 @@ The API (`apps/api`) calls it server to server. It is not meant to be exposed to
 
 ### Local development
 
-Python 3.12 and [uv](https://docs.astral.sh/uv/) newer than 0.9.0 are required (older uv
-cannot read the relative `exclude-newer = "14 days"` in `pyproject.toml`).
+Python 3.12 and [uv](https://docs.astral.sh/uv/) 0.9.17 or newer are required. Older uv
+cannot parse the relative `exclude-newer = "14 days"` in `pyproject.toml`: it warns, ignores
+the whole `[tool.uv]` table and re-resolves the lock with newer packages. `--locked` makes
+that an error instead of a rewritten `uv.lock`.
 
 ```bash
 cd services/audio
-uv sync                             # tempo, key and energy
-uv sync --extra models              # optional: also installs essentia-tensorflow
+uv sync --locked                    # tempo, key and energy
+uv sync --locked --extra models     # optional: also installs essentia-tensorflow
 uv run python download_models.py   # optional: perceptual models (about 22 MB)
 uv run uvicorn main:app --host 127.0.0.1 --port 3002 --reload
 ```
@@ -176,6 +178,8 @@ recorded as strict `xfail`s.
 
 - **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
   needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
-  platform without a bundled library and an old system `libsndfile`.
+  platform without a bundled library and an old system `libsndfile`. AAC and M4A cannot be
+  decoded at all: librosa 1.0 decodes only through `libsndfile`, which does not read them (the
+  preview hosts the service accepts serve MP3).
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

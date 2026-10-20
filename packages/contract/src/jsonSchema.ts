@@ -1,5 +1,24 @@
 /**
  * JSON Schema export and the strict structured-output check for model-facing schemas.
+ *
+ * The strict rules follow the provider documentation as read on 2026-10-20:
+ * - Azure OpenAI, "How to use structured outputs" (updated 2026-08-24),
+ *   https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/structured-outputs :
+ *   supported types string, number, boolean, integer, object, array, enum and anyOf (a root
+ *   that is not anyOf); every field required; `additionalProperties: false`; at most 100
+ *   object properties and five levels of nesting; unsupported keywords minLength, maxLength,
+ *   pattern, format, minimum, maximum, multipleOf, patternProperties, unevaluatedProperties,
+ *   propertyNames, minProperties, maxProperties, unevaluatedItems, contains, minContains,
+ *   maxContains, minItems, maxItems and uniqueItems.
+ * - OpenAI, "Structured Outputs", supported schemas,
+ *   https://developers.openai.com/api/docs/guides/structured-outputs : composition keywords
+ *   (allOf, not, dependentRequired, dependentSchemas, if, then, else) are not supported; at
+ *   most 1000 enum values in a schema; an enum of more than 250 string values may total at
+ *   most 15,000 characters; property names, definition names, enum and const values may total
+ *   at most 120,000 characters.
+ * Where the two differ or are silent, the stricter reading wins: Azure's 100 properties and
+ * five levels, a 15,000-character budget for names and values, no `const` (Azure does not
+ * list it), no untyped schemas, no `$ref` recursion and no tuples.
  */
 
 import { z } from "zod/v4";
@@ -10,22 +29,48 @@ export type JsonSchema = { [keyword: string]: unknown };
  * The JSON Schema (draft 2020-12) of a contract schema, describing parsed values. Throws when
  * the schema holds something JSON Schema cannot describe (a transform, a date, a function).
  */
-export function toJsonSchema(schema: z.ZodType): JsonSchema {
-  return z.toJSONSchema(schema, {
-    target: "draft-2020-12",
-    unrepresentable: "throw",
-    io: "output",
-  }) as JsonSchema;
+export function toJsonSchema(schema: z.ZodType, io: "input" | "output" = "output"): JsonSchema {
+  return z.toJSONSchema(schema, jsonSchemaOptions(io)) as JsonSchema;
+}
+
+/**
+ * Options shared by every JSON Schema export: draft 2020-12, nothing unrepresentable, and
+ * tuples closed (`items: false` and an exact length), which zod leaves open.
+ */
+export function jsonSchemaOptions(io: "input" | "output") {
+  return {
+    target: "draft-2020-12" as const,
+    unrepresentable: "throw" as const,
+    io,
+    override(ctx: { zodSchema: unknown; jsonSchema: JsonSchema }) {
+      const def = (ctx.zodSchema as { _zod: { def: { type: string; rest?: unknown; items?: [] } } })
+        ._zod.def;
+      if (def.type === "tuple" && !def.rest && def.items) {
+        ctx.jsonSchema.items = false;
+        ctx.jsonSchema.minItems = def.items.length;
+        ctx.jsonSchema.maxItems = def.items.length;
+      }
+    },
+  };
 }
 
 /** Limits of strict structured output this project holds model-facing schemas to. */
-export const AZURE_STRICT_LIMITS = { maxDepth: 5, maxProperties: 100 } as const;
+export const AZURE_STRICT_LIMITS = {
+  maxDepth: 5,
+  maxProperties: 100,
+  maxEnumValues: 1000,
+  /** An enum with more than this many string values is held to `maxLargeEnumCharacters`. */
+  largeEnumValues: 250,
+  maxLargeEnumCharacters: 15_000,
+  /** Property names, definition names, enum and const values, all together. */
+  maxCharacters: 15_000,
+} as const;
 
 /**
  * Keywords strict mode does not accept. Bounds and formats are checked in code after parsing;
  * `default` would make a field optional; only `anyOf` is accepted for unions.
  */
-const FORBIDDEN_KEYWORDS = [
+export const AZURE_FORBIDDEN_KEYWORDS = [
   "minLength",
   "maxLength",
   "pattern",
@@ -57,6 +102,7 @@ const FORBIDDEN_KEYWORDS = [
   "if",
   "then",
   "else",
+  "const",
 ] as const;
 
 export interface StrictViolation {
@@ -78,7 +124,8 @@ const pointer = (path: string, ...parts: Array<string | number>) =>
  * Every way `schema` breaks the strict structured-output rules: each object closed
  * (`additionalProperties: false`) with every property required (nullable, not optional), at
  * most 5 levels of nested objects and arrays (the root object is level 1), at most 100
- * properties in all, no FORBIDDEN_KEYWORDS, a root that is an object, and no recursive `$ref`.
+ * properties in all, no AZURE_FORBIDDEN_KEYWORDS, a type on every value, the enum and
+ * character budgets, a root that is an object, and no recursive `$ref`.
  */
 export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
   const violations: StrictViolation[] = [];
@@ -87,6 +134,8 @@ export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
     ...(isSchema(schema.$defs) ? schema.$defs : {}),
   };
   let properties = 0;
+  let enumValues = 0;
+  let characters = Object.keys(defs).reduce((sum, name) => sum + name.length, 0);
 
   if (schema.type !== "object") {
     violations.push({ path: "", message: "the root must be an object schema" });
@@ -113,9 +162,29 @@ export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
       return;
     }
 
-    for (const keyword of FORBIDDEN_KEYWORDS) {
+    for (const keyword of AZURE_FORBIDDEN_KEYWORDS) {
       if (keyword in node) violations.push({ path, message: `uses "${keyword}"` });
     }
+
+    const hasType = typeof node.type === "string" || Array.isArray(node.type);
+    if (!hasType && !Array.isArray(node.anyOf) && !Array.isArray(node.enum)) {
+      violations.push({ path, message: "untyped schema (every value needs a type)" });
+    }
+    if (Array.isArray(node.enum)) {
+      enumValues += node.enum.length;
+      const text = node.enum.reduce<number>((sum, value) => sum + String(value).length, 0);
+      characters += text;
+      if (
+        node.enum.length > AZURE_STRICT_LIMITS.largeEnumValues &&
+        text > AZURE_STRICT_LIMITS.maxLargeEnumCharacters
+      ) {
+        violations.push({
+          path,
+          message: `enum of ${node.enum.length} values totals ${text} characters (at most ${AZURE_STRICT_LIMITS.maxLargeEnumCharacters})`,
+        });
+      }
+    }
+    if ("const" in node) characters += String(node.const).length;
 
     const types = Array.isArray(node.type) ? node.type : [node.type];
     const isObject = types.includes("object") || "properties" in node;
@@ -132,6 +201,7 @@ export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
       const props = isSchema(node.properties) ? node.properties : {};
       const keys = Object.keys(props);
       properties += keys.length;
+      characters += keys.reduce((sum, key) => sum + key.length, 0);
       if (node.additionalProperties !== false) {
         violations.push({ path, message: "object without additionalProperties: false" });
       }
@@ -167,6 +237,18 @@ export function azureStrictViolations(schema: JsonSchema): StrictViolation[] {
 
   visit(schema, "", 0, []);
 
+  if (enumValues > AZURE_STRICT_LIMITS.maxEnumValues) {
+    violations.push({
+      path: "",
+      message: `${enumValues} enum values in all (at most ${AZURE_STRICT_LIMITS.maxEnumValues})`,
+    });
+  }
+  if (characters > AZURE_STRICT_LIMITS.maxCharacters) {
+    violations.push({
+      path: "",
+      message: `${characters} characters of names and values (at most ${AZURE_STRICT_LIMITS.maxCharacters})`,
+    });
+  }
   if (properties > AZURE_STRICT_LIMITS.maxProperties) {
     violations.push({
       path: "",

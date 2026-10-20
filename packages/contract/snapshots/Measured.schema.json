@@ -1,37 +1,76 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "Measured.schema.json",
-  "type": "object",
-  "properties": {
-    "field": {
-      "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'",
-      "type": "string",
-      "minLength": 1
-    },
-    "value": { "anyOf": [{ "type": "number" }, { "type": "string" }] },
-    "unit": {
-      "description": "e.g. 'bpm'; null for unitless values such as a key",
-      "anyOf": [{ "type": "string" }, { "type": "null" }]
-    },
-    "confidence": {
-      "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
-    },
-    "method": {
-      "type": "object",
-      "properties": {
-        "algorithm": {
-          "description": "Estimator, or the model id when basis is 'model'",
-          "type": "string",
-          "minLength": 1
-        },
-        "analyzerVersion": { "type": "string", "minLength": 1 }
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Measured.schema.json",
+    "type": "object",
+    "properties": {
+      "field": {
+        "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'",
+        "type": "string",
+        "minLength": 1
       },
-      "required": ["algorithm", "analyzerVersion"],
-      "additionalProperties": false
+      "value": { "anyOf": [{ "type": "number" }, { "type": "string" }] },
+      "unit": {
+        "description": "e.g. 'bpm'; null for unitless values such as a key",
+        "anyOf": [{ "type": "string" }, { "type": "null" }]
+      },
+      "confidence": {
+        "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+      },
+      "method": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "description": "Estimator, or the model id when basis is 'model'",
+            "type": "string",
+            "minLength": 1
+          },
+          "analyzerVersion": { "type": "string", "minLength": 1 }
+        },
+        "required": ["algorithm", "analyzerVersion"]
+      },
+      "window": { "type": "string", "const": "preview-30s" },
+      "basis": { "type": "string", "enum": ["signal", "model"] }
     },
-    "window": { "type": "string", "const": "preview-30s" },
-    "basis": { "type": "string", "enum": ["signal", "model"] }
+    "required": ["field", "value", "unit", "confidence", "method", "window", "basis"]
   },
-  "required": ["field", "value", "unit", "confidence", "method", "window", "basis"],
-  "additionalProperties": false
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Measured.schema.json",
+    "type": "object",
+    "properties": {
+      "field": {
+        "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'",
+        "type": "string",
+        "minLength": 1
+      },
+      "value": { "anyOf": [{ "type": "number" }, { "type": "string" }] },
+      "unit": {
+        "description": "e.g. 'bpm'; null for unitless values such as a key",
+        "anyOf": [{ "type": "string" }, { "type": "null" }]
+      },
+      "confidence": {
+        "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+      },
+      "method": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "description": "Estimator, or the model id when basis is 'model'",
+            "type": "string",
+            "minLength": 1
+          },
+          "analyzerVersion": { "type": "string", "minLength": 1 }
+        },
+        "required": ["algorithm", "analyzerVersion"],
+        "additionalProperties": false
+      },
+      "window": { "type": "string", "const": "preview-30s" },
+      "basis": { "type": "string", "enum": ["signal", "model"] }
+    },
+    "required": ["field", "value", "unit", "confidence", "method", "window", "basis"],
+    "additionalProperties": false
+  },
+  "unknownKeys": { "$": "strip", "$.method": "strip" },
+  "refinements": []
 }

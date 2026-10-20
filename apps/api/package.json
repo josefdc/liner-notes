@@ -21,6 +21,7 @@
     "@langchain/langgraph-checkpoint": "1.0.0",
     "@langchain/langgraph-checkpoint-sqlite": "1.0.1",
     "@langchain/tavily": "1.2.0",
+    "@liner-notes/contract": "0.0.0",
     "better-sqlite3": "12.10.0",
     "dotenv": "16.6.1",
     "express": "4.22.1",

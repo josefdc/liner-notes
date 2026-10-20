@@ -1,66 +1,138 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "AnalyzeResponse.schema.json",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "success": { "type": "boolean", "const": true },
-        "status": { "type": "string", "const": "complete" },
-        "threadId": { "type": "string" },
-        "data": { "$ref": "TrackAnalysis.schema.json" },
-        "meta": {
-          "type": "object",
-          "properties": {
-            "timestamp": {
-              "type": "string",
-              "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-            }
-          },
-          "required": ["timestamp"],
-          "additionalProperties": {}
-        }
-      },
-      "required": ["success", "status", "threadId", "data"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "success": { "type": "boolean", "const": true },
-        "status": { "type": "string", "const": "interrupted" },
-        "threadId": { "type": "string" },
-        "interrupt": {
-          "type": "object",
-          "properties": {
-            "reason": { "type": "string", "const": "disambiguation" },
-            "candidates": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": { "type": "string" },
-                  "title": { "type": "string" },
-                  "artist": { "type": "string" },
-                  "album": { "type": "string" },
-                  "coverUrl": { "type": "string" },
-                  "releaseYear": { "type": "string" },
-                  "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                  "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
-                },
-                "required": ["id", "title", "artist", "album", "coverUrl"],
-                "additionalProperties": false
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "AnalyzeResponse.schema.json",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "status": { "type": "string", "const": "complete" },
+          "threadId": { "type": "string" },
+          "data": { "$ref": "TrackAnalysis.schema.json" },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
               }
             },
-            "message": { "type": "string" }
-          },
-          "required": ["reason", "candidates", "message"],
-          "additionalProperties": false
-        }
+            "required": ["timestamp"],
+            "additionalProperties": {}
+          }
+        },
+        "required": ["success", "status", "threadId", "data"]
       },
-      "required": ["success", "status", "threadId", "interrupt"],
-      "additionalProperties": false
-    }
-  ]
+      {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "status": { "type": "string", "const": "interrupted" },
+          "threadId": { "type": "string" },
+          "interrupt": {
+            "type": "object",
+            "properties": {
+              "reason": { "type": "string", "const": "disambiguation" },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "title": { "type": "string" },
+                    "artist": { "type": "string" },
+                    "album": { "type": "string" },
+                    "coverUrl": { "type": "string" },
+                    "releaseYear": { "type": "string" },
+                    "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                  },
+                  "required": ["id", "title", "artist", "album", "coverUrl"]
+                }
+              },
+              "message": { "type": "string" }
+            },
+            "required": ["reason", "candidates", "message"]
+          }
+        },
+        "required": ["success", "status", "threadId", "interrupt"]
+      }
+    ]
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "AnalyzeResponse.schema.json",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "status": { "type": "string", "const": "complete" },
+          "threadId": { "type": "string" },
+          "data": { "$ref": "TrackAnalysis.schema.json" },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              }
+            },
+            "required": ["timestamp"],
+            "additionalProperties": {}
+          }
+        },
+        "required": ["success", "status", "threadId", "data"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "status": { "type": "string", "const": "interrupted" },
+          "threadId": { "type": "string" },
+          "interrupt": {
+            "type": "object",
+            "properties": {
+              "reason": { "type": "string", "const": "disambiguation" },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "title": { "type": "string" },
+                    "artist": { "type": "string" },
+                    "album": { "type": "string" },
+                    "coverUrl": { "type": "string" },
+                    "releaseYear": { "type": "string" },
+                    "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                  },
+                  "required": ["id", "title", "artist", "album", "coverUrl"],
+                  "additionalProperties": false
+                }
+              },
+              "message": { "type": "string" }
+            },
+            "required": ["reason", "candidates", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["success", "status", "threadId", "interrupt"],
+        "additionalProperties": false
+      }
+    ]
+  },
+  "unknownKeys": {
+    "$<status=complete>": "strip",
+    "$<status=complete>.meta": "passthrough",
+    "$<status=interrupted>": "strip",
+    "$<status=interrupted>.interrupt": "strip",
+    "$<status=interrupted>.interrupt.candidates[]": "strip"
+  },
+  "refinements": []
 }

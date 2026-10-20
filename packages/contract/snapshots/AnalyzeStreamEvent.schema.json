@@ -1,244 +1,429 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "AnalyzeStreamEvent.schema.json",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "connected" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "threadId": { "type": "string" },
-        "timestamp": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-        }
-      },
-      "required": ["type", "runId", "seq", "threadId"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "resuming" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "threadId": { "type": "string" },
-        "timestamp": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-        }
-      },
-      "required": ["type", "runId", "seq", "threadId"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "status" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "message": { "type": "string" },
-        "code": {
-          "type": "string",
-          "enum": [
-            "NET-100",
-            "NET-200",
-            "NET-400",
-            "NET-500",
-            "AUDIO-INIT",
-            "AUDIO-PARSING",
-            "AUDIO-COMPLETE",
-            "AUDIO-ERROR",
-            "GEMINI-CONNECT",
-            "GEMINI-THOUGHT",
-            "GEMINI-RESPONSE",
-            "GEMINI-ERROR",
-            "LLM-CONNECT",
-            "LLM-RESPONSE",
-            "LLM-ERROR",
-            "SPOTIFY-SEARCH",
-            "SPOTIFY-FOUND",
-            "SPOTIFY-NONE",
-            "RESEARCH-START",
-            "RESEARCH-FOUND",
-            "RESEARCH-DEEP",
-            "VERIFY-START",
-            "VERIFY-COMPLETE",
-            "GRAPH-BUILD",
-            "GRAPH-ENRICH",
-            "GRAPH-COMPLETE",
-            "SYS-INIT",
-            "SYS-READY",
-            "SYS-WARN",
-            "SYS-ERROR"
-          ]
-        },
-        "node": { "type": "string" },
-        "timestamp": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-        }
-      },
-      "required": ["type", "runId", "seq", "message"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "interrupt" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "reason": { "type": "string", "const": "disambiguation" },
-        "threadId": { "type": "string" },
-        "candidates": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "artist": { "type": "string" },
-              "album": { "type": "string" },
-              "coverUrl": { "type": "string" },
-              "releaseYear": { "type": "string" },
-              "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-              "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
-            },
-            "required": ["id", "title", "artist", "album", "coverUrl"],
-            "additionalProperties": false
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "AnalyzeStreamEvent.schema.json",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "connected" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "threadId": { "type": "string" },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
           }
         },
-        "message": { "type": "string" }
+        "required": ["type", "runId", "seq", "threadId"]
       },
-      "required": ["type", "runId", "seq", "reason", "threadId", "candidates", "message"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "evidence" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "evidence": { "$ref": "Evidence.schema.json" }
-      },
-      "required": ["type", "runId", "seq", "evidence"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "claim" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "claim": { "$ref": "Claim.schema.json" }
-      },
-      "required": ["type", "runId", "seq", "claim"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "audio" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "audio": { "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }] },
-        "unavailableReason": {
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "no_preview",
-                "preview_rejected",
-                "service_unavailable",
-                "analysis_failed",
-                "not_detected",
-                "not_run",
-                "low_confidence"
-              ]
-            },
-            { "type": "null" }
-          ]
-        }
-      },
-      "required": ["type", "runId", "seq", "audio", "unavailableReason"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "heartbeat" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
-      },
-      "required": ["type", "runId", "seq"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "complete" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "data": { "$ref": "TrackAnalysis.schema.json" }
-      },
-      "required": ["type", "runId", "seq", "data"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "error" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "code": {
-          "type": "string",
-          "enum": [
-            "invalid_input",
-            "invalid_json",
-            "bad_request",
-            "forbidden_origin",
-            "not_found",
-            "payload_too_large",
-            "unsupported_media_type",
-            "rate_limited",
-            "resume_in_progress",
-            "choice_expired",
-            "not_waiting",
-            "run_interrupted",
-            "invalid_selection",
-            "no_match",
-            "upstream_unavailable",
-            "timeout",
-            "failed",
-            "internal_error",
-            "auth_expired",
-            "budget_exhausted",
-            "live_disabled"
-          ]
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "resuming" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "threadId": { "type": "string" },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
         },
-        "error": { "description": "Short message for the user", "type": "string" }
+        "required": ["type", "runId", "seq", "threadId"]
       },
-      "required": ["type", "runId", "seq", "code", "error"],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "const": "done" },
-        "runId": { "type": "string", "minLength": 1 },
-        "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "timestamp": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-        }
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "status" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "message": { "type": "string" },
+          "code": {
+            "description": "A LogCode; other values are kept as they are",
+            "type": "string"
+          },
+          "node": { "type": "string" },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["type", "runId", "seq", "message"]
       },
-      "required": ["type", "runId", "seq"],
-      "additionalProperties": false
-    }
-  ]
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "interrupt" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "reason": { "type": "string", "const": "disambiguation" },
+          "threadId": { "type": "string" },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "artist": { "type": "string" },
+                "album": { "type": "string" },
+                "coverUrl": { "type": "string" },
+                "releaseYear": { "type": "string" },
+                "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
+                "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+              },
+              "required": ["id", "title", "artist", "album", "coverUrl"]
+            }
+          },
+          "message": { "type": "string" }
+        },
+        "required": ["type", "runId", "seq", "reason", "threadId", "candidates", "message"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "evidence" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "evidence": { "$ref": "Evidence.schema.json" }
+        },
+        "required": ["type", "runId", "seq", "evidence"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "claim" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "claim": { "$ref": "Claim.schema.json" }
+        },
+        "required": ["type", "runId", "seq", "claim"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "audio" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "audio": { "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }] },
+          "unavailableReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "no_preview",
+                  "preview_rejected",
+                  "service_unavailable",
+                  "analysis_failed",
+                  "not_detected",
+                  "not_run",
+                  "low_confidence"
+                ]
+              },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": ["type", "runId", "seq", "audio", "unavailableReason"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "heartbeat" },
+          "runId": { "type": "string", "minLength": 1 }
+        },
+        "required": ["type", "runId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "complete" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "data": { "$ref": "TrackAnalysis.schema.json" }
+        },
+        "required": ["type", "runId", "seq", "data"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "error" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_input",
+              "invalid_json",
+              "bad_request",
+              "forbidden_origin",
+              "not_found",
+              "payload_too_large",
+              "unsupported_media_type",
+              "rate_limited",
+              "resume_in_progress",
+              "choice_expired",
+              "not_waiting",
+              "run_interrupted",
+              "invalid_selection",
+              "no_match",
+              "upstream_unavailable",
+              "timeout",
+              "failed",
+              "internal_error",
+              "auth_expired",
+              "budget_exhausted",
+              "live_disabled"
+            ]
+          },
+          "error": { "description": "Short message for the user", "type": "string" }
+        },
+        "required": ["type", "runId", "seq", "code", "error"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "done" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["type", "runId", "seq"]
+      }
+    ]
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "AnalyzeStreamEvent.schema.json",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "connected" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "threadId": { "type": "string" },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["type", "runId", "seq", "threadId"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "resuming" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "threadId": { "type": "string" },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["type", "runId", "seq", "threadId"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "status" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "message": { "type": "string" },
+          "code": {
+            "description": "A LogCode; other values are kept as they are",
+            "type": "string"
+          },
+          "node": { "type": "string" },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["type", "runId", "seq", "message"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "interrupt" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "reason": { "type": "string", "const": "disambiguation" },
+          "threadId": { "type": "string" },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "artist": { "type": "string" },
+                "album": { "type": "string" },
+                "coverUrl": { "type": "string" },
+                "releaseYear": { "type": "string" },
+                "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
+                "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+              },
+              "required": ["id", "title", "artist", "album", "coverUrl"],
+              "additionalProperties": false
+            }
+          },
+          "message": { "type": "string" }
+        },
+        "required": ["type", "runId", "seq", "reason", "threadId", "candidates", "message"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "evidence" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "evidence": { "$ref": "Evidence.schema.json" }
+        },
+        "required": ["type", "runId", "seq", "evidence"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "claim" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "claim": { "$ref": "Claim.schema.json" }
+        },
+        "required": ["type", "runId", "seq", "claim"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "audio" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "audio": { "anyOf": [{ "$ref": "AudioFeatures.schema.json" }, { "type": "null" }] },
+          "unavailableReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "no_preview",
+                  "preview_rejected",
+                  "service_unavailable",
+                  "analysis_failed",
+                  "not_detected",
+                  "not_run",
+                  "low_confidence"
+                ]
+              },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": ["type", "runId", "seq", "audio", "unavailableReason"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "heartbeat" },
+          "runId": { "type": "string", "minLength": 1 }
+        },
+        "required": ["type", "runId"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "complete" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "data": { "$ref": "TrackAnalysis.schema.json" }
+        },
+        "required": ["type", "runId", "seq", "data"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "error" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_input",
+              "invalid_json",
+              "bad_request",
+              "forbidden_origin",
+              "not_found",
+              "payload_too_large",
+              "unsupported_media_type",
+              "rate_limited",
+              "resume_in_progress",
+              "choice_expired",
+              "not_waiting",
+              "run_interrupted",
+              "invalid_selection",
+              "no_match",
+              "upstream_unavailable",
+              "timeout",
+              "failed",
+              "internal_error",
+              "auth_expired",
+              "budget_exhausted",
+              "live_disabled"
+            ]
+          },
+          "error": { "description": "Short message for the user", "type": "string" }
+        },
+        "required": ["type", "runId", "seq", "code", "error"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "done" },
+          "runId": { "type": "string", "minLength": 1 },
+          "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["type", "runId", "seq"],
+        "additionalProperties": false
+      }
+    ]
+  },
+  "unknownKeys": {
+    "$<type=connected>": "strip",
+    "$<type=resuming>": "strip",
+    "$<type=status>": "strip",
+    "$<type=interrupt>": "strip",
+    "$<type=interrupt>.candidates[]": "strip",
+    "$<type=evidence>": "strip",
+    "$<type=claim>": "strip",
+    "$<type=audio>": "strip",
+    "$<type=heartbeat>": "strip",
+    "$<type=complete>": "strip",
+    "$<type=error>": "strip",
+    "$<type=done>": "strip"
+  },
+  "refinements": []
 }

@@ -6,6 +6,10 @@
  *
  * Every block is `null` when it was not measured: the service gates silence, noise and
  * too-short input (`gate`), and the model blocks are `null` when the models are not loaded.
+ * A gate that did not pass leaves every measured block null and no key moments. Readers
+ * accept a payload that breaks this rule (one bad block must not hide a whole result) and
+ * show nothing measured for it; producers check it with `audioFeaturesIssues()`, and the
+ * exported JSON Schema (`audioFeaturesJsonSchema()`) states it with `if`/`then`.
  * Signal values (`basis: "signal"`) come from DSP; model values (`basis: "model"`) are
  * classifier or regression outputs, i.e. scores and not probabilities, and name the model.
  *
@@ -25,7 +29,11 @@ const Seconds = z.number().min(0);
 export const SignalBasis = z.literal("signal");
 export const ModelBasis = z.literal("model");
 
-/** Pitch classes with sharps, as the audio service names them. */
+/**
+ * Pitch classes, always spelled with sharps. Estimators that name flats (Essentia's
+ * KeyExtractor answers Bb, Eb, Ab, Db and Gb) are mapped by the audio service to the
+ * enharmonic sharp: Db -> C#, Eb -> D#, Gb -> F#, Ab -> G#, Bb -> A#.
+ */
 export const PitchClass = z.enum(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]);
 export type PitchClass = z.infer<typeof PitchClass>;
 
@@ -45,15 +53,28 @@ export const KeyMoment = z.object({
 });
 export type KeyMoment = z.infer<typeof KeyMoment>;
 
+/** A value on the estimator's own scale, kept next to its normalised form. */
+export const RawScore = z.object({
+  value: z.number(),
+  range: z.tuple([z.number(), z.number()]).describe("The estimator's scale, e.g. [0, 5.32]"),
+});
+
 export const Tempo = z.object({
   bpm: z.number().positive(),
-  confidence: UnitInterval.nullable().describe("Estimator confidence; null when it gives none"),
+  confidence: UnitInterval.nullable().describe(
+    "Estimator confidence normalised to 0..1 by the audio service; null when the estimator " +
+      "gives none. Essentia's RhythmExtractor2013 reports 0 to 5.32: the service divides by " +
+      "5.32 and clips to 0..1, and keeps the reported value in rawConfidence.",
+  ),
+  rawConfidence: RawScore.nullable()
+    .optional()
+    .describe("The confidence as the estimator reported it, with its scale"),
   method: z.string().min(1).describe("Estimator, e.g. 'essentia.RhythmExtractor2013'"),
   basis: SignalBasis,
 });
 
 export const MusicalKey = z.object({
-  tonic: PitchClass,
+  tonic: PitchClass.describe("Spelled with sharps; the service maps flat names (Bb -> A#)"),
   mode: KeyMode,
   strength: UnitInterval.nullable().describe("Key strength from the estimator; null when none"),
   profile: z.string().min(1).describe("Key profile used, e.g. 'edma' or 'krumhansl'"),
@@ -138,7 +159,8 @@ export const Fingerprint = z.object({
   moods: MoodHeads.nullable(),
 });
 
-const MEASURED_BLOCKS = [
+/** The blocks a gate that did not pass leaves null. */
+export const AUDIO_MEASURED_BLOCKS = [
   "tempo",
   "key",
   "loudness",
@@ -148,44 +170,27 @@ const MEASURED_BLOCKS = [
   "fingerprint",
 ] as const;
 
-export const AudioFeatures = z
-  .object({
-    version: z.literal(AUDIO_FEATURES_VERSION),
-    analyzerVersion: z
-      .string()
-      .min(1)
-      .describe("Semver of the feature contract plus model ids; part of the cache key"),
-    window: z.object({
-      kind: z.literal("preview-30s"),
-      durationSeconds: Seconds.describe("Length of the decoded preview"),
-    }),
-    gate: z
-      .object({
-        passed: z.boolean(),
-        reason: AudioGateReason.nullable().describe("Set exactly when the gate did not pass"),
-      })
-      .refine((gate) => gate.passed === (gate.reason === null), {
-        message: "a gate that did not pass needs a reason, and only then",
-      }),
-    tempo: Tempo.nullable(),
-    key: MusicalKey.nullable(),
-    loudness: Loudness.nullable(),
-    beats: BeatGrid.nullable(),
-    energyContour: EnergyContour.nullable(),
-    sections: Sections.nullable(),
-    keyMoments: z.array(KeyMoment),
-    fingerprint: Fingerprint.nullable().describe("null when the models are not loaded"),
-  })
-  .superRefine((audio, ctx) => {
-    // Gated input (silence, noise, too short) measures nothing: no tempo, no "C major".
-    if (audio.gate.passed) return;
-    for (const block of MEASURED_BLOCKS) {
-      if (audio[block] !== null) {
-        ctx.addIssue({ code: "custom", path: [block], message: "must be null when gated" });
-      }
-    }
-    if (audio.keyMoments.length > 0) {
-      ctx.addIssue({ code: "custom", path: ["keyMoments"], message: "must be empty when gated" });
-    }
-  });
+export const AudioFeatures = z.object({
+  version: z.literal(AUDIO_FEATURES_VERSION),
+  analyzerVersion: z
+    .string()
+    .min(1)
+    .describe("Semver of the feature contract plus model ids; part of the cache key"),
+  window: z.object({
+    kind: z.literal("preview-30s"),
+    durationSeconds: Seconds.describe("Length of the decoded preview"),
+  }),
+  gate: z.object({
+    passed: z.boolean(),
+    reason: AudioGateReason.nullable().describe("Set exactly when the gate did not pass"),
+  }),
+  tempo: Tempo.nullable(),
+  key: MusicalKey.nullable(),
+  loudness: Loudness.nullable(),
+  beats: BeatGrid.nullable(),
+  energyContour: EnergyContour.nullable(),
+  sections: Sections.nullable(),
+  keyMoments: z.array(KeyMoment),
+  fingerprint: Fingerprint.nullable().describe("null when the models are not loaded"),
+});
 export type AudioFeatures = z.infer<typeof AudioFeatures>;

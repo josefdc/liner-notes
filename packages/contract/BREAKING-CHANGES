@@ -1,0 +1,7 @@
+# Acknowledged breaking changes to @liner-notes/contract.
+#
+# The contract is additive-only. `npm run contract:check -- --base <ref>` (run in CI against
+# the base commit) fails on any breaking change unless its exact line, as the check prints it
+# after "[contract] breaking: ", is added to this file in the same change. A change that adds
+# lines here must own the contract and say why in its description. Lines already on the base
+# branch never excuse a new change.

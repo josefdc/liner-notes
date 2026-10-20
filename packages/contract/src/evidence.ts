@@ -24,27 +24,26 @@ import { SourceId, Timestamp, UnitInterval } from "./common.js";
 export const SourceTier = z.enum(["primary-record", "editorial", "web"]);
 export type SourceTier = z.infer<typeof SourceTier>;
 
-/** Longest excerpt an Evidence item may carry. */
+/** Longest excerpt an Evidence item may carry (checked by `evidenceIssues`). */
 export const EVIDENCE_EXCERPT_MAX = 500;
 
-export const Evidence = z
-  .object({
-    id: z.string().min(1),
-    source: SourceId,
-    sourceTier: SourceTier,
-    url: z.string().nullable(),
-    title: z.string(),
-    retrievedAt: Timestamp,
-    excerpt: z.string().max(EVIDENCE_EXCERPT_MAX),
-    recordRef: z
-      .string()
-      .nullable()
-      .describe("Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id"),
-  })
-  .refine((evidence) => evidence.url !== null || evidence.recordRef !== null, {
-    message: "evidence needs a url or a recordRef",
-    path: ["url"],
-  });
+/**
+ * Producers check each item with `evidenceIssues()`: a url or a recordRef, and an excerpt of at
+ * most EVIDENCE_EXCERPT_MAX characters. Readers accept items that break those rules.
+ */
+export const Evidence = z.object({
+  id: z.string().min(1),
+  source: SourceId,
+  sourceTier: SourceTier,
+  url: z.string().nullable(),
+  title: z.string(),
+  retrievedAt: Timestamp,
+  excerpt: z.string(),
+  recordRef: z
+    .string()
+    .nullable()
+    .describe("Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id"),
+});
 export type Evidence = z.infer<typeof Evidence>;
 
 /** A source that could not be read during a run; the UI shows it as "source unavailable". */
@@ -130,40 +129,39 @@ export const FactoidPresentation = z.object({
   entities: z.array(z.object({ text: z.string(), type: FactoidEntityType })),
 });
 
-export const Claim = z
-  .object({
-    id: z.string().min(1),
-    text: z.string(),
-    about: ClaimAbout,
-    kind: ClaimKind,
-    origin: ClaimOrigin,
-    evidenceIds: z.array(z.string()),
-    verdict: Verdict.nullable().describe("null: not judged (e.g. beyond the 20-claim judge batch)"),
-    verdictReason: z.string().nullable().describe("The judge's or the deterministic step's reason"),
-    numericCheck: NumericCheck,
-    field: ClaimField.optional(),
-    factoid: FactoidPresentation.optional(),
-  })
-  .superRefine((claim, ctx) => {
-    // Measured comes only from code; sourced needs a citation that the
-    // verifier found supported (or partly supported). Code-built claims from a source record
-    // are supported by construction and carry the verdict "supported".
-    if (claim.kind === "measured" && claim.origin !== "code") {
-      ctx.addIssue({ code: "custom", path: ["origin"], message: "measured claims come from code" });
-    }
-    if (claim.kind === "sourced") {
-      if (claim.evidenceIds.length === 0) {
-        ctx.addIssue({ code: "custom", path: ["evidenceIds"], message: "sourced claims cite" });
-      }
-      if (claim.verdict !== "supported" && claim.verdict !== "partial") {
-        ctx.addIssue({
-          code: "custom",
-          path: ["verdict"],
-          message: "sourced claims need a supported or partial verdict",
-        });
-      }
-    }
-  });
+/** The two values the numeric check compared, for the "conflict" display. */
+export const NumericComparison = z.object({
+  claimed: z.union([z.number(), z.string()]).describe("The value the claim states"),
+  measured: z.union([z.number(), z.string()]).describe("The measured value"),
+  method: z.string().describe("How it was measured, e.g. 'essentia.RhythmExtractor2013'"),
+});
+
+/**
+ * One statement shown to the user. Readers accept every claim and decide how to show it with
+ * `claimDisplayKind()`: a sourced claim citing evidence that is not in the pack, or a model
+ * claim the judge did not support, reads as model inference. A code-built claim keeps its
+ * kind whatever the judge said; the judge's verdict is kept for the record. Producers check
+ * claims with `claimIssues()`.
+ */
+export const Claim = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  about: ClaimAbout,
+  kind: ClaimKind,
+  origin: ClaimOrigin,
+  evidenceIds: z.array(z.string()),
+  verdict: Verdict.nullable().describe("null: not judged (e.g. beyond the 20-claim judge batch)"),
+  verdictReason: z.string().nullable().describe("Why the judge gave its verdict"),
+  numericCheck: NumericCheck,
+  numericReason: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Why the numeric check gave its result; separate from the judge's reason"),
+  numericComparison: NumericComparison.nullable().optional(),
+  field: ClaimField.optional(),
+  factoid: FactoidPresentation.optional(),
+});
 export type Claim = z.infer<typeof Claim>;
 
 // =============================================================================

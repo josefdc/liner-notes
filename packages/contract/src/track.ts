@@ -10,6 +10,10 @@
  * `audio` holds the measurement itself. No model output can set them (see llm.ts).
  *
  * Unknown fields are stripped on parse, so a reader keeps working when fields are added.
+ * Readers are lenient: one bad claim, evidence item or audio block never rejects the whole
+ * result. Rules that relate parts of a result to each other (cited evidence is in the pack,
+ * a gated measurement reports nothing, at most FACTOID_LIMITS.max factoids, replay metadata)
+ * are checked by producers with `analysisIssues()` before a result is sent or stored.
  */
 
 import { z } from "zod/v4";
@@ -18,6 +22,7 @@ import { Timestamp, UnitInterval } from "./common.js";
 import {
   Claim,
   ClaimKind,
+  ClaimOrigin,
   Evidence,
   FactoidEntityType,
   FactoidType,
@@ -27,7 +32,10 @@ import {
 /** The `version` of TrackAnalysis this module describes. */
 export const TRACK_ANALYSIS_VERSION = 1;
 
-/** Most factoids a result carries; there is no minimum (fewer is the honest result). */
+/**
+ * Most factoids a result carries; there is no minimum (fewer is the honest result). Checked
+ * by `analysisIssues()` and `composerOutputIssues()`.
+ */
 export const FACTOID_LIMITS = { min: 0, max: 8 } as const;
 
 // =============================================================================
@@ -50,10 +58,11 @@ export type SongSegment = z.infer<typeof SongSegment>;
 
 /**
  * A sample used in the track. `time` is where it appears, in seconds; it is null when unknown,
- * which is always the case for a sample found in a source record.
+ * which is always the case for a sample found in a source record. No lower bound: older
+ * payloads carry model-written times that may be negative.
  */
 export const Sample = z.object({
-  time: z.number().min(0).nullable(),
+  time: z.number().nullable(),
   description: z.string(),
   claimId: z.string().optional(),
 });
@@ -120,6 +129,8 @@ export const GenealogyLink = z.object({
   value: z.number().describe("Strength 1-3: 1 = weak influence, 3 = direct sample"),
   type: LinkType.optional(),
   kind: ClaimKind.optional().describe("A sample link without evidence is an inferred influence"),
+  origin: ClaimOrigin.optional().describe("code: from a source record; model: proposed by it"),
+  claimId: z.string().optional().describe("The claim that states this relation"),
   evidenceIds: z.array(z.string()).optional(),
 });
 export type GenealogyLink = z.infer<typeof GenealogyLink>;
@@ -198,106 +209,86 @@ export const VerifierSummary = z.object({
 
 /**
  * The run that produced a result. A replayed run always says when it was recorded, from which
- * commit and with which analyzer, so it is never presented as live.
+ * commit and with which analyzer, so it is never presented as live; a live run carries no
+ * recording metadata. Producers check this with `runIssues()`.
  */
-export const RunInfo = z
-  .object({
-    id: z.string().min(1),
-    mode: RunMode,
-    recordedAt: Timestamp.nullable().describe("When the run was recorded; null for live runs"),
-    commit: z.string().nullable().describe("Commit of the code that recorded the run"),
-    analyzerVersion: z.string().nullable().describe("AudioFeatures analyzerVersion; null if none"),
-    startedAt: Timestamp.optional(),
-    durationMs: z.int().min(0).nullable().optional(),
-    fallback: z
-      .boolean()
-      .optional()
-      .describe("True when the composer failed and the result was built from source data only"),
-    usage: RunUsage.nullable().optional(),
-    verifier: VerifierSummary.nullable().optional(),
-    sourceErrors: z.array(SourceError).optional(),
-  })
-  .superRefine((run, ctx) => {
-    if (run.mode !== "replay") return;
-    for (const field of ["recordedAt", "commit"] as const) {
-      if (run[field] === null) {
-        ctx.addIssue({ code: "custom", path: [field], message: "a replayed run must say this" });
-      }
-    }
-  });
+export const RunInfo = z.object({
+  id: z.string().min(1),
+  mode: RunMode,
+  recordedAt: Timestamp.nullable().describe("When the run was recorded; null for live runs"),
+  commit: z.string().nullable().describe("Commit of the code that recorded the run"),
+  analyzerVersion: z.string().nullable().describe("AudioFeatures analyzerVersion; null if none"),
+  startedAt: Timestamp.optional(),
+  durationMs: z.int().min(0).nullable().optional(),
+  fallback: z
+    .boolean()
+    .optional()
+    .describe("True when the composer failed and the result was built from source data only"),
+  usage: RunUsage.nullable().optional(),
+  verifier: VerifierSummary.nullable().optional(),
+  sourceErrors: z.array(SourceError).optional(),
+});
 export type RunInfo = z.infer<typeof RunInfo>;
 
 // =============================================================================
 // TrackAnalysis
 // =============================================================================
 
-export const TrackAnalysis = z
-  .object({
-    // Track metadata (from Spotify)
-    id: z.string().describe("Spotify track id"),
-    title: z.string(),
-    artist: z.string(),
-    album: z.string(),
-    coverUrl: z.string().describe("Album cover URL; empty when unknown"),
-    spotifyUrl: z.string().optional(),
-    previewUrl: z.string().optional(),
-    releaseYear: z.string().optional(),
-    explicit: z.boolean().optional(),
-    durationSeconds: z.number().min(0).optional(),
-    isrc: z.string().nullable().optional(),
+export const TrackAnalysis = z.object({
+  contractVersion: z
+    .int()
+    .min(1)
+    .optional()
+    .describe(`TrackAnalysis version the producer wrote (${TRACK_ANALYSIS_VERSION})`),
 
-    // Copies of the audio measurement, null when not measured (never filled in)
-    bpm: z.number().nullable(),
-    key: z.string().nullable().optional(),
-    energy: z.number().nullable().optional(),
-    valence: z.number().nullable().optional(),
-    danceability: z.number().nullable().optional(),
-    acousticness: z.number().nullable().optional(),
-    keyMoments: z.array(KeyMoment).optional(),
-    audioSource: z.enum(["analyzed", "unavailable"]).optional(),
-    audioConfidence: z.enum(["high", "low"]).optional(),
-    audioUnavailableReason: AudioUnavailableReason.optional(),
+  // Track metadata (from Spotify)
+  id: z.string().describe("Spotify track id"),
+  title: z.string(),
+  artist: z.string(),
+  album: z.string(),
+  coverUrl: z.string().describe("Album cover URL; empty when unknown"),
+  spotifyUrl: z.string().optional(),
+  previewUrl: z.string().optional(),
+  releaseYear: z.string().optional(),
+  explicit: z.boolean().optional(),
+  durationSeconds: z.number().min(0).optional(),
+  isrc: z.string().nullable().optional(),
 
-    // Structure, samples, credits and context. Lists missing from older payloads read as empty.
-    segments: z.array(SongSegment).default([]),
-    segmentsSource: z
-      .enum(["template", "inferred", "measured"])
-      .optional()
-      .describe("template: a generic default; inferred: written by the model; measured: sections"),
-    samples: z.array(Sample).default([]),
-    credits: ProductionCredits.optional(),
-    factoids: z.array(Factoid).max(FACTOID_LIMITS.max).default([]),
-    genealogy: Genealogy,
-    genreProfile: z.array(GenreProfileItem).optional(),
+  // Copies of the audio measurement, null when not measured (never filled in)
+  bpm: z.number().nullable(),
+  key: z.string().nullable().optional(),
+  energy: z.number().nullable().optional(),
+  valence: z.number().nullable().optional(),
+  danceability: z.number().nullable().optional(),
+  acousticness: z.number().nullable().optional(),
+  keyMoments: z.array(KeyMoment).optional(),
+  audioSource: z.enum(["analyzed", "unavailable"]).optional(),
+  audioConfidence: z.enum(["high", "low"]).optional(),
+  audioUnavailableReason: AudioUnavailableReason.optional(),
 
-    // Model provenance
-    modelUnavailable: z.boolean().optional(),
-    modelUnavailableReason: ModelUnavailableReason.optional(),
+  // Structure, samples, credits and context. Lists missing from older payloads read as empty.
+  segments: z.array(SongSegment).default([]),
+  segmentsSource: z
+    .enum(["template", "inferred", "measured"])
+    .optional()
+    .describe("template: a generic default; inferred: written by the model; measured: sections"),
+  samples: z.array(Sample).default([]),
+  credits: ProductionCredits.optional(),
+  factoids: z.array(Factoid).default([]),
+  genealogy: Genealogy,
+  genreProfile: z.array(GenreProfileItem).optional(),
 
-    // Added in v1: the measurement, the evidence pack, the claims and the run
-    audio: AudioFeatures.nullable().optional(),
-    preview: PreviewMatch.nullable().optional(),
-    evidence: z.array(Evidence).optional(),
-    claims: z.array(Claim).optional(),
-    run: RunInfo.optional(),
-  })
-  .superRefine((analysis, ctx) => {
-    // A sourced claim cites evidence of this result's pack; a claim citing an
-    // unknown id is inferred, never sourced.
-    const known = new Set((analysis.evidence ?? []).map((evidence) => evidence.id));
-    analysis.claims?.forEach((claim, index) => {
-      if (claim.kind !== "sourced") return;
-      for (const id of claim.evidenceIds) {
-        if (!known.has(id)) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["claims", index, "evidenceIds"],
-            message: `cites evidence "${id}", which is not in the evidence pack`,
-          });
-        }
-      }
-    });
-  });
+  // Model provenance
+  modelUnavailable: z.boolean().optional(),
+  modelUnavailableReason: ModelUnavailableReason.optional(),
+
+  // Added in v1: the measurement, the evidence pack, the claims and the run
+  audio: AudioFeatures.nullable().optional(),
+  preview: PreviewMatch.nullable().optional(),
+  evidence: z.array(Evidence).optional(),
+  claims: z.array(Claim).optional(),
+  run: RunInfo.optional(),
+});
 export type TrackAnalysis = z.infer<typeof TrackAnalysis>;
 /** A TrackAnalysis as written, before parsing fills in missing lists. */
 export type TrackAnalysisInput = z.input<typeof TrackAnalysis>;

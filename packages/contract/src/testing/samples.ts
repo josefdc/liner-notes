@@ -34,7 +34,13 @@ export const sampleAudio = (): AudioFeatures => ({
   analyzerVersion: "2.0.0+effnet-discogs-1+musicnn-msd-1",
   window: { kind: "preview-30s", durationSeconds: 30 },
   gate: { passed: true, reason: null },
-  tempo: { bpm: 105.2, confidence: 0.82, method: "essentia.RhythmExtractor2013", basis: "signal" },
+  tempo: {
+    bpm: 105.2,
+    confidence: 0.82,
+    rawConfidence: { value: 4.36, range: [0, 5.32] },
+    method: "essentia.RhythmExtractor2013",
+    basis: "signal",
+  },
   key: {
     tonic: "A",
     mode: "major",

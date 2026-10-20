@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod/v4";
 import { AudioFeatures } from "./audio.js";
 import {
+  AZURE_FORBIDDEN_KEYWORDS,
   AZURE_STRICT_LIMITS,
   AzureStrictError,
   assertAzureStrict,
@@ -143,5 +144,129 @@ describe("assertAzureStrict", () => {
   it("rejects the payload schemas, which are not meant for a model", () => {
     expect(() => assertAzureStrict(toJsonSchema(TrackAnalysis))).toThrow(AzureStrictError);
     expect(() => assertAzureStrict(toJsonSchema(AudioFeatures))).toThrow(AzureStrictError);
+  });
+
+  /** A valid strict schema whose one property `x` is replaced by `node`. */
+  const withNode = (node: unknown): JsonSchema => ({
+    type: "object",
+    properties: { x: node, y: { type: "string" } },
+    required: ["x", "y"],
+    additionalProperties: false,
+  });
+
+  const KEYWORD_VALUES: Record<(typeof AZURE_FORBIDDEN_KEYWORDS)[number], unknown> = {
+    minLength: 1,
+    maxLength: 2,
+    pattern: "^a",
+    format: "date-time",
+    minimum: 0,
+    maximum: 1,
+    exclusiveMinimum: 0,
+    exclusiveMaximum: 1,
+    multipleOf: 2,
+    minItems: 1,
+    maxItems: 2,
+    uniqueItems: true,
+    prefixItems: [{ type: "string" }],
+    contains: { type: "string" },
+    minContains: 1,
+    maxContains: 2,
+    minProperties: 1,
+    maxProperties: 2,
+    patternProperties: { "^a": { type: "string" } },
+    propertyNames: { type: "string" },
+    unevaluatedProperties: false,
+    unevaluatedItems: false,
+    dependentRequired: { a: ["b"] },
+    dependentSchemas: { a: { type: "object" } },
+    default: "a",
+    allOf: [{ type: "string" }],
+    oneOf: [{ type: "string" }],
+    not: { type: "number" },
+    if: { type: "string" },
+    // biome-ignore lint/suspicious/noThenProperty: a JSON Schema keyword, not a thenable
+    then: { type: "string" },
+    else: { type: "string" },
+    const: "a",
+  };
+
+  it.each(AZURE_FORBIDDEN_KEYWORDS)("rejects the %s keyword", (keyword) => {
+    const violations = azureStrictViolations(
+      withNode({ type: "string", [keyword]: KEYWORD_VALUES[keyword] }),
+    );
+    expect(violations).toContainEqual({ path: "/properties/x", message: `uses "${keyword}"` });
+  });
+
+  it.each([
+    ["z.unknown()", toJsonSchema(z.strictObject({ x: z.unknown().nullable(), y: z.string() }))],
+    ["z.any()", toJsonSchema(z.strictObject({ x: z.any(), y: z.string() }))],
+    ["an empty schema", withNode({})],
+  ])("rejects an untyped schema: %s", (_name, schema) => {
+    expect(() => assertAzureStrict(schema)).toThrow("untyped schema");
+  });
+
+  it("rejects a literal (const), conservatively", () => {
+    expect(() => assertAzureStrict(strict({ x: z.literal("a") }))).toThrow('uses "const"');
+  });
+
+  it("rejects a boolean schema, an unresolved reference and an array without items", () => {
+    expect(azureStrictViolations(withNode(true))).toContainEqual({
+      path: "/properties/x",
+      message: "not a schema object (boolean schemas are not accepted)",
+    });
+    expect(azureStrictViolations(withNode({ $ref: "#/$defs/Missing" }))).toContainEqual({
+      path: "/properties/x",
+      message: 'unresolved reference "#/$defs/Missing"',
+    });
+    expect(azureStrictViolations(withNode({ type: "array" }))).toContainEqual({
+      path: "/properties/x",
+      message: "array without a single items schema",
+    });
+  });
+
+  it("escapes / and ~ in property names in the pointer it reports", () => {
+    const schema = {
+      type: "object",
+      properties: { "a/b~c": { type: "string", minLength: 1 } },
+      required: ["a/b~c"],
+      additionalProperties: false,
+    };
+    expect(azureStrictViolations(schema)).toEqual([
+      { path: "/properties/a~1b~0c", message: 'uses "minLength"' },
+    ]);
+  });
+
+  const values = (n: number, width = 1) =>
+    Array.from({ length: n }, (_, i) => `${i}`.padStart(width, "v")) as [string, ...string[]];
+
+  it("enforces the enum budgets: 1000 values in all, 15,000 characters past 250 values", () => {
+    const budget = (shape: z.ZodRawShape) => azureStrictViolations(strict(shape));
+    expect(budget({ a: z.enum(values(500)), b: z.enum(values(500, 4)) })).toEqual([]);
+    expect(budget({ a: z.enum(values(500)), b: z.enum(values(501, 4)) })).toContainEqual({
+      path: "",
+      message: "1001 enum values in all (at most 1000)",
+    });
+    // 251 values of 60 characters: 15,060 characters in one large enum.
+    expect(budget({ a: z.enum(values(251, 60)) })).toContainEqual({
+      path: "/properties/a",
+      message: "enum of 251 values totals 15060 characters (at most 15000)",
+    });
+    // 250 values of 60 characters: not a large enum, but over the character budget.
+    expect(budget({ a: z.enum(values(250, 60)) })).toEqual([
+      { path: "", message: "15001 characters of names and values (at most 15000)" },
+    ]);
+  });
+
+  it("enforces the character budget on property names", () => {
+    const long = (n: number) =>
+      z.strictObject(
+        Object.fromEntries(
+          Array.from({ length: n }, (_, i) => [`${i}`.padStart(200, "p"), z.string()]),
+        ),
+      );
+    expect(azureStrictViolations(toJsonSchema(long(75)))).toEqual([]);
+    expect(azureStrictViolations(toJsonSchema(long(76)))).toEqual([
+      { path: "", message: "15200 characters of names and values (at most 15000)" },
+    ]);
   });
 });

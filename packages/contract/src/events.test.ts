@@ -9,6 +9,7 @@ import {
   decodeSseStream,
   encodeSseEvent,
   FactoidStreamEvent,
+  sseData,
 } from "./events.js";
 import { sampleAnalysis, sampleAudio, sampleClaim, sampleEvidence } from "./testing/samples.js";
 import { TrackAnalysis } from "./track.js";
@@ -22,6 +23,13 @@ const candidate = {
   coverUrl: "",
   releaseYear: "2011",
 };
+
+/** Adds the envelope as a server does: `seq` counts every event except heartbeats. */
+function numbered(runId: string | null) {
+  let seq = 0;
+  return (event: { type: string }) =>
+    event.type === "heartbeat" ? { ...event, runId } : { ...event, runId, seq: seq++ };
+}
 
 /** One event of every type of the analysis stream, in a plausible order. */
 const analyzeEvents = (): AnalyzeStreamEvent[] =>
@@ -44,7 +52,7 @@ const analyzeEvents = (): AnalyzeStreamEvent[] =>
     { type: "complete", data: TrackAnalysis.parse(sampleAnalysis()) },
     { type: "error", code: "budget_exhausted", error: "Live analysis is paused." },
     { type: "done", timestamp: at },
-  ].map((event, seq) => ({ ...event, runId: "run-1", seq }) as AnalyzeStreamEvent);
+  ].map(numbered("run-1")) as AnalyzeStreamEvent[];
 
 const factoidEvents = (): FactoidStreamEvent[] =>
   [
@@ -58,7 +66,7 @@ const factoidEvents = (): FactoidStreamEvent[] =>
     { type: "heartbeat" },
     { type: "error", code: "failed", error: "This fact could not be generated.", index: 2 },
     { type: "done" },
-  ].map((event, seq) => ({ ...event, runId: null, seq }) as FactoidStreamEvent);
+  ].map(numbered(null)) as FactoidStreamEvent[];
 
 describe("AnalyzeStreamEvent", () => {
   it("the round-trip sample covers every event type", () => {
@@ -75,6 +83,32 @@ describe("AnalyzeStreamEvent", () => {
     expect(decodeSseStream(body, AnalyzeStreamEvent)).toEqual(events);
   });
 
+  it("numbers events without counting heartbeats, so numbering does not depend on timing", () => {
+    const events = analyzeEvents();
+    const numbers = events.flatMap((event) => (event.type === "heartbeat" ? [] : [event.seq]));
+    expect(numbers).toEqual(numbers.map((_, i) => i));
+    const heartbeat = AnalyzeStreamEvent.parse({ type: "heartbeat", runId: "r", seq: 4 });
+    expect(heartbeat).toEqual({ type: "heartbeat", runId: "r" });
+  });
+
+  it("keeps a status code it does not know", () => {
+    const event = { type: "status", runId: "r", seq: 0, message: "m", code: "NEW-CODE-1" };
+    expect(AnalyzeStreamEvent.parse(event)).toEqual(event);
+  });
+
+  it("decodes two CRLF-terminated events in a row and data split over several lines", () => {
+    const [first, second, third] = analyzeEvents();
+    const crlf = (event: AnalyzeStreamEvent) => encodeSseEvent(event).replace(/\n\n$/, "\r\n\r\n");
+    const split = JSON.stringify(third).replace('","', '",\ndata: "');
+    const body = `${crlf(first)}${crlf(second)}data: ${split}\r\n\r\n`;
+    expect(split).toContain("\ndata: ");
+    expect(decodeSseStream(body, AnalyzeStreamEvent)).toEqual([first, second, third]);
+  });
+
+  it("joins multi-line data with a newline and ignores other fields", () => {
+    expect(sseData("event: x\r\ndata: a\r\ndata:b\nid: 3")).toBe("a\nb");
+  });
+
   it("decoding skips comments, unknown types, malformed JSON and invalid events", () => {
     const [first, second] = analyzeEvents();
     const body = [
@@ -89,11 +123,12 @@ describe("AnalyzeStreamEvent", () => {
   });
 
   it.each([
-    ["without runId", { type: "heartbeat", seq: 0 }],
-    ["with an empty runId", { type: "heartbeat", runId: "", seq: 0 }],
-    ["without seq", { type: "heartbeat", runId: "r" }],
-    ["with a negative seq", { type: "heartbeat", runId: "r", seq: -1 }],
-    ["with a fractional seq", { type: "heartbeat", runId: "r", seq: 1.5 }],
+    ["without runId", { type: "status", seq: 0, message: "m" }],
+    ["with an empty runId", { type: "status", runId: "", seq: 0, message: "m" }],
+    ["without runId", { type: "heartbeat" }],
+    ["without seq", { type: "status", runId: "r", message: "m" }],
+    ["with a negative seq", { type: "status", runId: "r", seq: -1, message: "m" }],
+    ["with a fractional seq", { type: "status", runId: "r", seq: 1.5, message: "m" }],
     ["with an unknown error code", { type: "error", runId: "r", seq: 0, code: "nope", error: "x" }],
     ["with the legacy candidates type", { type: "candidates", runId: "r", seq: 0, candidates: [] }],
     [

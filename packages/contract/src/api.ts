@@ -6,6 +6,7 @@
 import { z } from "zod/v4";
 import { Timestamp } from "./common.js";
 import { AnalyzeStreamEvent, ErrorCode } from "./events.js";
+import { refineNamed } from "./refinements.js";
 import { Factoid, RunMode, RunStatus, RunUsage, SearchCandidate, TrackAnalysis } from "./track.js";
 
 /** Longest accepted analysis query, in characters. */
@@ -163,33 +164,92 @@ export const ReadyResponse = z.looseObject({
 // Replay records (fixtures/replays/<slug>.json)
 // =============================================================================
 
-/**
- * A recorded run, replayed with the same events at accelerated timing. `run` in `analysis`
- * says `mode: "replay"` with the recording date, commit and analyzer version. Recordings are
- * scrubbed before they are written: no preview or image URLs, capped text.
- */
-export const ReplayRecord = z
-  .object({
-    version: z.literal(1),
-    slug: z.string().regex(/^[a-z0-9-]+$/),
-    request: z.object({
-      query: z.string(),
-      selectedTrackId: z.string().nullable(),
+const ReplayRecordShape = z.object({
+  version: z.literal(1),
+  slug: z.string().regex(/^[a-z0-9-]+$/),
+  request: z.object({
+    query: z.string(),
+    selectedTrackId: z.string().nullable(),
+  }),
+  recordedAt: Timestamp,
+  commit: z.string().min(1),
+  analyzerVersion: z.string().nullable(),
+  events: z.array(
+    z.object({
+      atMs: z.int().min(0).describe("Milliseconds since the stream opened"),
+      event: AnalyzeStreamEvent,
     }),
-    recordedAt: Timestamp,
-    commit: z.string().min(1),
-    analyzerVersion: z.string().nullable(),
-    events: z.array(
-      z.object({
-        atMs: z.int().min(0).describe("Milliseconds since the stream opened"),
-        event: AnalyzeStreamEvent,
-      }),
-    ),
-    analysis: TrackAnalysis,
-    usage: RunUsage.nullable(),
-  })
-  .refine((record) => record.analysis.run?.mode === "replay", {
-    message: "a recorded analysis must say it is a replay (run.mode)",
-    path: ["analysis", "run", "mode"],
-  });
+  ),
+  analysis: TrackAnalysis,
+  usage: RunUsage.nullable(),
+});
+type ReplayRecordShape = z.infer<typeof ReplayRecordShape>;
+
+/**
+ * A recorded run, replayed with the same events at accelerated timing. The record is checked
+ * strictly when it is loaded:
+ * - `analysis.run` exists, says `mode: "replay"`, and its `recordedAt`, `commit` and
+ *   `analyzerVersion` are the record's own;
+ * - every `complete` event's result says `mode: "replay"` too, so a replay is never shown as
+ *   live;
+ * - events hold no heartbeats (the replayer sends its own) and are numbered 0, 1, 2, ... in
+ *   order, with non-decreasing times, so replaying does not depend on the recording's timing.
+ * Recordings are scrubbed before they are written: no preview or image URLs, capped text.
+ */
+export const ReplayRecord = refineNamed(
+  refineNamed(
+    refineNamed(ReplayRecordShape, "replay.analysis-run", (record, ctx) => {
+      const run = record.analysis.run;
+      if (!run) {
+        ctx.addIssue({ code: "custom", path: ["analysis", "run"], message: "a replay has a run" });
+        return;
+      }
+      if (run.mode !== "replay") {
+        ctx.addIssue({ code: "custom", path: ["analysis", "run", "mode"], message: "not replay" });
+      }
+      for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {
+        if (run[field] !== record[field]) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["analysis", "run", field],
+            message: `differs from the record's ${field}`,
+          });
+        }
+      }
+    }),
+    "replay.complete-events-replay",
+    (record: ReplayRecordShape, ctx) => {
+      record.events.forEach(({ event }, index) => {
+        if (event.type === "complete" && event.data.run?.mode !== "replay") {
+          ctx.addIssue({
+            code: "custom",
+            path: ["events", index, "event", "data", "run", "mode"],
+            message: "a recorded result must say it is a replay",
+          });
+        }
+      });
+    },
+  ),
+  "replay.event-order",
+  (record: ReplayRecordShape, ctx) => {
+    let atMs = 0;
+    record.events.forEach(({ event, atMs: at }, index) => {
+      if (event.type === "heartbeat") {
+        ctx.addIssue({ code: "custom", path: ["events", index], message: "no heartbeats" });
+        return;
+      }
+      if (event.seq !== index) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["events", index, "event", "seq"],
+          message: `expected seq ${index}`,
+        });
+      }
+      if (at < atMs) {
+        ctx.addIssue({ code: "custom", path: ["events", index, "atMs"], message: "goes back" });
+      }
+      atMs = at;
+    });
+  },
+);
 export type ReplayRecord = z.infer<typeof ReplayRecord>;

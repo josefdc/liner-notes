@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # The parent commit holds the base branch's guard baselines.
+          # The parent commit holds the base branch's guard baselines and contract snapshots.
           fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
@@ -47,6 +47,10 @@ jobs:
       - name: Honesty guard
         if: matrix.node == 24
         run: npm run guard:honest -- --base HEAD^1
+      # The contract is additive-only: compare the schemas with the parent commit's snapshots.
+      - name: Contract compatibility
+        if: matrix.node == 24
+        run: npm run contract:check -- --base HEAD^1
       - run: npm run typecheck
       - name: Unit and route tests (Vitest)
         run: npm test

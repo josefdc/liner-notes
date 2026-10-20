@@ -11,10 +11,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./audio-features.schema.json": "./dist/audio-features.schema.json"
+    "./audio-features.schema.json": "./schemas/audio-features.schema.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "schemas"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/export-json-schema.mjs",

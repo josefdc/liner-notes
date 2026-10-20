@@ -45,7 +45,10 @@ RUN npm ci -w apps/api --omit=dev && npm cache clean --force
 # Remove build tools after native addon compilation
 RUN apk del python3 make g++
 
-# Copy built files from builder (the contract's dist/ is what its package.json exports)
+# Copy built files from builder. The API declares @liner-notes/contract as a dependency, so
+# tsup leaves its imports external and `npm ci -w apps/api` above links
+# node_modules/@liner-notes/contract to packages/contract; the link needs the contract's built
+# dist/, which is not in the repository.
 COPY --from=builder /app/packages/contract/dist ./packages/contract/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 

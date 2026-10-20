@@ -1,42 +1,85 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "SearchSuggestResponse.schema.json",
-  "type": "object",
-  "properties": {
-    "success": { "type": "boolean", "const": true },
-    "suggestions": {
-      "type": "array",
-      "items": {
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SearchSuggestResponse.schema.json",
+    "type": "object",
+    "properties": {
+      "success": { "type": "boolean", "const": true },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "artist": { "type": "string" },
+            "album": { "type": "string" },
+            "coverUrl": { "type": "string" },
+            "releaseYear": { "type": "string" },
+            "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
+            "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+          },
+          "required": ["id", "title", "artist", "album", "coverUrl"]
+        }
+      },
+      "meta": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "artist": { "type": "string" },
-          "album": { "type": "string" },
-          "coverUrl": { "type": "string" },
-          "releaseYear": { "type": "string" },
-          "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-          "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+          "query": { "type": "string" },
+          "resultCount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
         },
-        "required": ["id", "title", "artist", "album", "coverUrl"],
+        "required": ["query", "resultCount", "timestamp"]
+      }
+    },
+    "required": ["success", "suggestions"]
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SearchSuggestResponse.schema.json",
+    "type": "object",
+    "properties": {
+      "success": { "type": "boolean", "const": true },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "artist": { "type": "string" },
+            "album": { "type": "string" },
+            "coverUrl": { "type": "string" },
+            "releaseYear": { "type": "string" },
+            "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
+            "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+          },
+          "required": ["id", "title", "artist", "album", "coverUrl"],
+          "additionalProperties": false
+        }
+      },
+      "meta": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "resultCount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": ["query", "resultCount", "timestamp"],
         "additionalProperties": false
       }
     },
-    "meta": {
-      "type": "object",
-      "properties": {
-        "query": { "type": "string" },
-        "resultCount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "timestamp": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-        }
-      },
-      "required": ["query", "resultCount", "timestamp"],
-      "additionalProperties": false
-    }
+    "required": ["success", "suggestions"],
+    "additionalProperties": false
   },
-  "required": ["success", "suggestions"],
-  "additionalProperties": false
+  "unknownKeys": { "$": "strip", "$.suggestions[]": "strip", "$.meta": "strip" },
+  "refinements": []
 }

@@ -1,19 +1,15 @@
-// Writes the JSON Schemas other languages read into dist/ (run by `npm run build` after tsc):
-// dist/audio-features.schema.json, which the audio service's tests validate its output against.
+// Writes dist/audio-features.schema.json (run by `npm run build` after tsc): the JSON Schema the
+// audio service validates its output against. The same file is committed as
+// schemas/audio-features.schema.json, kept up to date by the snapshot test.
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
-const { AudioFeatures, AUDIO_FEATURES_VERSION, toJsonSchema } = await import(
-  join(dist, "index.js")
-);
+const { audioFeaturesJsonSchema } = await import(join(dist, "index.js"));
 
-const schema = {
-  ...toJsonSchema(AudioFeatures),
-  title: "AudioFeatures",
-  description: `AudioFeatures v${AUDIO_FEATURES_VERSION}, generated from @liner-notes/contract`,
-};
-const target = join(dist, "audio-features.schema.json");
-writeFileSync(target, `${JSON.stringify(schema, null, 2)}\n`);
+writeFileSync(
+  join(dist, "audio-features.schema.json"),
+  `${JSON.stringify(audioFeaturesJsonSchema(), null, 2)}\n`,
+);
 console.log("wrote dist/audio-features.schema.json");

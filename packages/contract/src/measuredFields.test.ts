@@ -62,11 +62,38 @@ describe("model-facing schemas", () => {
     });
     expect(measuredIn(leaky)).toEqual(["bpm"]);
   });
+
+  it("the depth check follows union branches (a list of schemas)", () => {
+    const leaky = z.strictObject({
+      note: z.strictObject({ text: z.string(), tonic: z.string() }).nullable(),
+    });
+    expect(JSON.stringify(toJsonSchema(leaky))).toContain('"anyOf":[');
+    expect(measuredIn(leaky)).toEqual(["tonic"]);
+  });
 });
 
 describe("MEASURED_FIELDS", () => {
   it("covers every top-level AudioFeatures field, so a new one is protected too", () => {
     for (const field of Object.keys(AudioFeatures.shape)) expect(MEASURED_FIELDS).toContain(field);
+  });
+
+  it.each([
+    "confidence",
+    "tonic",
+    "mode",
+    "strength",
+    "rmsMean",
+    "styles",
+    "tags",
+    "moods",
+    "arousal",
+    "instrumentalness",
+    "audioSource",
+    "audioConfidence",
+    "audioUnavailableReason",
+    "genreProfile",
+  ])("covers the nested or provenance name %s", (field) => {
+    expect(MEASURED_FIELDS).toContain(field);
   });
 
   it("covers the measured copies in TrackAnalysis", () => {

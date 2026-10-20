@@ -2,9 +2,10 @@
  * Server-sent events of the analysis and factoid streams.
  *
  * Every message is a `data:` line holding one JSON event, discriminated on `type`, with the
- * run's id (`runId`) and the event's position in the stream (`seq`, from 0, one per event sent,
- * heartbeats included), so a client can drop repeats and events of an older run. Clients parse
- * each event with `safeParse` and ignore types they do not know.
+ * run's id (`runId`) and the event's position in the stream (`seq`, from 0, one per event sent),
+ * so a client can drop repeats and events of an older run. Heartbeats carry no `seq`: they are
+ * sent on a timer, and counting them would make the numbering of a run depend on its timing.
+ * Clients parse each event with `safeParse` and ignore types they do not know.
  *
  * The streams always answer HTTP 200 (EventSource cannot read other statuses): failures are an
  * `error` event with a code, followed by `done`.
@@ -53,7 +54,10 @@ export const ErrorCode = z.enum([
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
-/** Codes of the progress log shown in the console. */
+/**
+ * Codes of the progress log shown in the console. Producers use these; `status` events carry
+ * the code as an open string so a reader keeps an event with a code it does not know yet.
+ */
 export const LogCode = z.enum([
   "NET-100",
   "NET-200",
@@ -115,7 +119,7 @@ export const ResumingEvent = event("resuming", {
 /** Progress of the agent. */
 export const StatusEvent = event("status", {
   message: z.string(),
-  code: LogCode.optional(),
+  code: z.string().optional().describe("A LogCode; other values are kept as they are"),
   node: z.string().optional(),
   timestamp: Timestamp.optional(),
 });
@@ -143,8 +147,8 @@ export const AudioEvent = event("audio", {
   unavailableReason: AudioUnavailableReason.nullable(),
 });
 
-/** Sent every HEARTBEAT_INTERVAL_MS while the stream is open; carries nothing else. */
-export const HeartbeatEvent = event("heartbeat", {});
+/** Sent every HEARTBEAT_INTERVAL_MS while the stream is open; no `seq` (see above). */
+export const HeartbeatEvent = z.object({ type: z.literal("heartbeat"), runId: envelope.runId });
 
 /** The result. Sent exactly once per completed run. */
 export const CompleteEvent = event("complete", { data: TrackAnalysis });
@@ -188,7 +192,7 @@ const factoidEvent = <T extends string, S extends z.ZodRawShape>(type: T, shape:
 export const FactoidStreamEvent = z.discriminatedUnion("type", [
   factoidEvent("connected", { timestamp: Timestamp.optional() }),
   factoidEvent("factoid", { data: Factoid, claim: Claim.optional() }),
-  factoidEvent("heartbeat", {}),
+  z.object({ type: z.literal("heartbeat"), runId: factoidEnvelope.runId }),
   factoidEvent("error", {
     code: ErrorCode,
     error: z.string(),
@@ -208,17 +212,25 @@ export function encodeSseEvent(event: AnalyzeStreamEvent | FactoidStreamEvent): 
 }
 
 /**
+ * The data of one SSE message block: its `data:` lines without the field name (and one space
+ * after it), joined with "\n" as the SSE specification says. Other fields are ignored.
+ */
+export function sseData(block: string): string {
+  return block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""))
+    .join("\n");
+}
+
+/**
  * The events of a stream body, parsed with `schema`: unknown types and malformed events are
  * skipped, as clients do. Only `data:` fields are read (a named `event:` line is ignored).
  */
 export function decodeSseStream<S extends z.ZodType>(body: string, schema: S): Array<z.infer<S>> {
   const events: Array<z.infer<S>> = [];
   for (const block of body.split(/\r?\n\r?\n/)) {
-    const data = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).replace(/^ /, ""))
-      .join("\n");
+    const data = sseData(block);
     if (!data) continue;
     let value: unknown;
     try {

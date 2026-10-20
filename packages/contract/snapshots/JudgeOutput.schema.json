@@ -1,29 +1,62 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "JudgeOutput.schema.json",
-  "type": "object",
-  "properties": {
-    "verdicts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "claimId": { "type": "string" },
-          "verdict": {
-            "description": "Whether the cited excerpts support the claim, not whether it is true",
-            "type": "string",
-            "enum": ["supported", "partial", "unsupported", "contradicted"]
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "JudgeOutput.schema.json",
+    "type": "object",
+    "properties": {
+      "verdicts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "claimId": { "type": "string" },
+            "verdict": {
+              "description": "Whether the cited excerpts support the claim, not whether it is true",
+              "type": "string",
+              "enum": ["supported", "partial", "unsupported", "contradicted"]
+            },
+            "reason": {
+              "description": "One sentence naming the excerpt that decides it",
+              "type": "string"
+            }
           },
-          "reason": {
-            "description": "One sentence naming the excerpt that decides it",
-            "type": "string"
-          }
-        },
-        "required": ["claimId", "verdict", "reason"],
-        "additionalProperties": false
+          "required": ["claimId", "verdict", "reason"],
+          "additionalProperties": false
+        }
       }
-    }
+    },
+    "required": ["verdicts"],
+    "additionalProperties": false
   },
-  "required": ["verdicts"],
-  "additionalProperties": false
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "JudgeOutput.schema.json",
+    "type": "object",
+    "properties": {
+      "verdicts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "claimId": { "type": "string" },
+            "verdict": {
+              "description": "Whether the cited excerpts support the claim, not whether it is true",
+              "type": "string",
+              "enum": ["supported", "partial", "unsupported", "contradicted"]
+            },
+            "reason": {
+              "description": "One sentence naming the excerpt that decides it",
+              "type": "string"
+            }
+          },
+          "required": ["claimId", "verdict", "reason"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["verdicts"],
+    "additionalProperties": false
+  },
+  "unknownKeys": { "$": "strict", "$.verdicts[]": "strict" },
+  "refinements": []
 }

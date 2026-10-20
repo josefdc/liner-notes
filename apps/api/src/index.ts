@@ -14,6 +14,7 @@ import { createApp } from "./http/app.js";
 import {
   createShutdown,
   installProcessHandlers,
+  requestGate,
   SHUTDOWN_TIMEOUT_MS,
   STREAM_DRAIN_MS,
 } from "./lifecycle.js";
@@ -64,13 +65,11 @@ async function settleRuns(when: string): Promise<void> {
 const app = createApp({ http: settings.http });
 let stopRetention = () => {};
 
-// Requests wait until startup has settled the runs left open, so a run they start is never
-// mistaken for one a stopped process left behind.
-let started: Promise<void> | null = null;
-const server = createServer((req, res) => {
-  if (started) void started.then(() => app(req, res));
-  else app(req, res);
-});
+// Requests wait while startup settles the runs left open. Settling reads the open runs at once,
+// so a run a request starts meanwhile is not among them; but a resume of a run left open would
+// reopen it while it is being settled, and then be recorded as cancelled while it runs.
+const gate = requestGate(app);
+const server = createServer(gate.handler);
 
 server.on("error", (error) => {
   // Not listening (e.g. the port is taken): the runs belong to whichever process is.
@@ -92,10 +91,11 @@ server.listen(settings.port, settings.host, () => {
   if (settings.replayOnly) console.log("[Server] REPLAY_MODE=only");
 
   // Runs left "running" by a process that stopped are not running any more.
-  started = settleRuns("Startup").then(() => {
-    stopRetention = startRetention(db, getCache());
-    started = null;
-  });
+  void gate.until(
+    settleRuns("Startup").then(() => {
+      stopRetention = startRetention(db, getCache());
+    }),
+  );
 });
 
 // =============================================================================

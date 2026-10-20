@@ -11,8 +11,12 @@ import {
   DEFAULT_SEARCH_RATE_LIMIT,
   type HttpSettings,
 } from "../config/settings.js";
+import { connect } from "node:net";
+import express from "express";
+import { generateStructuredOutput } from "../agent/geminiClient.js";
 import { createApp } from "./app.js";
 import { asyncRoute } from "./middleware/errors.js";
+import { listedOriginsOnly } from "./middleware/origin.js";
 
 vi.mock("../agent/geminiClient.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent/geminiClient.js")>()),
@@ -51,7 +55,24 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.mocked(generateStructuredOutput).mockReset();
+});
+
+/** Makes the stubbed model answer, so paid requests succeed (200). */
+function modelAnswers() {
+  const factoid = (id: string) => ({ id, title: "t", content: "c", type: "production" });
+  vi.mocked(generateStructuredOutput).mockImplementation(async ({ schema }) => ({
+    data: schema.safeParse({ factoids: [factoid("f1"), factoid("f2"), factoid("f3")] }).success
+      ? { factoids: [factoid("f1"), factoid("f2"), factoid("f3")] }
+      : factoid("f1"),
+    model: "stub",
+    groundingUsed: false,
+  }));
+}
+
+const DECRYPT = { trackId: "t1", trackTitle: "Midnight City", trackArtist: "M83" };
 
 /** The `data:` messages of an event-stream response. */
 function messages(res: request.Response): Array<Record<string, unknown>> {
@@ -141,6 +162,46 @@ describe("error handling", () => {
         error: "Something went wrong. Please try again.",
       });
       expect(res.text).not.toContain("secret");
+    }
+  });
+
+  it("ends a response that had already started when the error came", async () => {
+    const router = Router();
+    router.get("/api/partial", (_req, res, next) => {
+      res.write("partial");
+      next(new Error("failed half way"));
+    });
+    const server = createApp({ http: settings(), routers: [router] });
+
+    const res = await request(server).get("/api/partial").timeout(2000);
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("partial");
+  });
+
+  it("logs a request body the client abandoned, and answers nothing", async () => {
+    const server = createApp({ http: settings() }).listen(0, "127.0.0.1");
+    await new Promise((resolve) => server.once("listening", resolve));
+    const { port } = server.address() as { port: number };
+    try {
+      const socket = connect(port, "127.0.0.1");
+      await new Promise((resolve) => socket.once("connect", resolve));
+      socket.write(
+        "POST /api/analyze HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n" +
+          "Content-Length: 100\r\n\r\n{",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      socket.destroy();
+
+      const warned = () =>
+        vi
+          .mocked(console.warn)
+          .mock.calls.some(([line]) => String(line).includes("client aborted the request body"));
+      for (let i = 0; i < 100 && !warned(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(warned()).toBe(true);
+      expect(vi.mocked(console.error)).not.toHaveBeenCalled();
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
     }
   });
 
@@ -284,24 +345,49 @@ describe("rate limits", () => {
     expect(statuses).toEqual([400, 400, 429]);
   });
 
-  it("caps the paid routes across all clients", async () => {
+  it("caps the paid routes across all clients, counting only requests that did not fail", async () => {
+    modelAnswers();
     const server = app({
       trustProxy: 1,
       rateLimit: { windowMs: 60_000, max: 100 },
       globalRateLimit: { windowMs: 60_000, max: 3 },
     });
+    const from = (i: number) => ({ "X-Forwarded-For": `203.0.113.${i + 1}` });
+
+    // Invalid requests (JSON and in-stream) from many addresses use none of the shared budget.
+    for (let i = 0; i < 10; i++) {
+      expect((await request(server).post("/api/analyze").set(from(i)).send({})).status).toBe(400);
+      const stream = await request(server).get("/api/factoids/decrypt/stream").set(from(i));
+      expect(messages(stream)[0]).toMatchObject({ code: "invalid_input" });
+    }
+
     const statuses = [];
     for (let i = 0; i < 5; i++) {
-      const res = await request(server)
-        .post(i % 2 ? "/api/analyze" : "/api/factoids/decrypt")
-        .set("X-Forwarded-For", `203.0.113.${i + 1}`)
-        .send({});
+      const res = await request(server).post("/api/factoids/decrypt").set(from(i)).send(DECRYPT);
       statuses.push(res.status);
     }
-    expect(statuses).toEqual([400, 400, 400, 429, 429]);
+    expect(statuses).toEqual([200, 200, 200, 429, 429]);
     // Health and search are outside the shared cap.
     expect((await request(server).get("/api/health")).status).toBe(200);
     expect((await request(server).get("/api/search/suggest?query=a")).status).toBe(400);
+  });
+
+  it("leaves the shared budget alone for a client past its own limit", async () => {
+    modelAnswers();
+    const server = app({
+      trustProxy: 1,
+      rateLimit: { windowMs: 60_000, max: 2 },
+      globalRateLimit: { windowMs: 60_000, max: 3 },
+    });
+    const send = (ip: string) =>
+      request(server).post("/api/factoids/decrypt").set("X-Forwarded-For", ip).send(DECRYPT);
+
+    const greedy = [];
+    for (let i = 0; i < 6; i++) greedy.push((await send("203.0.113.1")).status);
+    expect(greedy).toEqual([200, 200, 429, 429, 429, 429]);
+
+    expect((await send("203.0.113.2")).status).toBe(200);
+    expect((await send("203.0.113.3")).status).toBe(429);
   });
 
   it("limits search separately and never limits health", async () => {
@@ -380,6 +466,36 @@ describe("requests other sites make a browser send", () => {
         ["done", undefined],
       ]);
     }
+  });
+
+  it("refuses a same-site request with no Origin (another page on localhost, any port)", async () => {
+    const res = await request(app())
+      .get("/api/factoids/decrypt/stream?trackTitle=Midnight+City")
+      .set("Sec-Fetch-Site", "same-site");
+    expect(messages(res)[0]).toMatchObject({ type: "error", code: "forbidden_origin" });
+
+    const typed = await request(app())
+      .get("/api/search/suggest?query=a")
+      .set("Sec-Fetch-Site", "none"); // typed into the address bar
+    expect(typed.status).toBe(400);
+  });
+
+  it("logs a refusal once per origin per minute", async () => {
+    let clock = 0;
+    const guarded = express();
+    guarded.use(listedOriginsOnly([LISTED], () => clock));
+    const warnings = () => vi.mocked(console.warn).mock.calls.length;
+
+    for (let i = 0; i < 5; i++) {
+      await request(guarded).get("/api/search/suggest").set("Origin", "https://evil.example");
+    }
+    expect(warnings()).toBe(1);
+    await request(guarded).get("/api/search/suggest").set("Origin", "https://other.example");
+    expect(warnings()).toBe(2);
+
+    clock = 61_000;
+    await request(guarded).get("/api/search/suggest").set("Origin", "https://evil.example");
+    expect(warnings()).toBe(3);
   });
 
   it("refuses a cross-site request with no Origin (an <img> or a no-cors GET)", async () => {

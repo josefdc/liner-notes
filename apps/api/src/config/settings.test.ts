@@ -114,6 +114,15 @@ describe("readSettings", () => {
     expect(errorsOf({ ...KEYS, CORS_ORIGINS: origin })).toContain("CORS_ORIGINS");
   });
 
+  it("explains that a default port must be left out of a CORS origin", () => {
+    expect(errorsOf({ ...KEYS, CORS_ORIGINS: "http://localhost:80" })).toContain(
+      'default port 80, which browsers leave out of the Origin header; write "http://localhost"',
+    );
+    expect(errorsOf({ ...KEYS, CORS_ORIGINS: "https://app.example:443" })).toContain(
+      'write "https://app.example"',
+    );
+  });
+
   it("trusts no proxy by default and takes a hop count", () => {
     expect(settingsOf(KEYS).http.trustProxy).toBe(0);
     expect(settingsOf({ ...KEYS, TRUST_PROXY: "1" }).http.trustProxy).toBe(1);

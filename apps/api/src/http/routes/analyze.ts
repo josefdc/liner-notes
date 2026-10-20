@@ -5,7 +5,7 @@ import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { getDb } from "../../store/database.js";
 import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
-import { asyncRoute, HTTP_ERRORS } from "../middleware/errors.js";
+import { asyncRoute, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
 
 const router = Router();
 
@@ -605,6 +605,7 @@ router.get(
     const stream = openEventStream(res);
     const query = parseQuery(req.query.query);
     if (!query) {
+      markFailed(res);
       stream.error("invalid_input");
       stream.done();
       return;
@@ -668,6 +669,7 @@ router.get(
     const threadId = parseId(req.query.threadId);
     const selectedTrackId = parseId(req.query.selectedTrackId);
     if (!threadId || !selectedTrackId) {
+      markFailed(res);
       stream.error("invalid_input");
       stream.done();
       return;

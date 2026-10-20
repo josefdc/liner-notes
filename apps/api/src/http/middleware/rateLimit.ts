@@ -1,6 +1,6 @@
 import { type Options, rateLimit } from "express-rate-limit";
 import type { RateLimitSettings } from "../../config/settings.js";
-import { refuse } from "./errors.js";
+import { refuse, requestFailed } from "./errors.js";
 
 const options = ({ windowMs, max }: RateLimitSettings): Partial<Options> => ({
   windowMs,
@@ -21,7 +21,16 @@ export function perIpLimit(limit: RateLimitSettings) {
   return rateLimit(options(limit));
 }
 
-/** One limit shared by every client: caps the total spend however many addresses send requests. */
+/**
+ * One limit shared by every client: caps the total spend however many addresses send requests.
+ * Requests that fail (invalid input, errors) are not counted once they finish, so bad requests
+ * from a few addresses cannot use up everyone's budget; the per-IP limit still counts them.
+ */
 export function globalLimit(limit: RateLimitSettings) {
-  return rateLimit({ ...options(limit), keyGenerator: () => "all-clients" });
+  return rateLimit({
+    ...options(limit),
+    keyGenerator: () => "all-clients",
+    skipFailedRequests: true,
+    requestWasSuccessful: (_req, res) => !requestFailed(res),
+  });
 }

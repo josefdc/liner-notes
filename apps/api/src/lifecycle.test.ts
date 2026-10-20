@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createShutdown, type ShutdownOptions } from "./lifecycle.js";
+import { createShutdown, requestGate, type ShutdownOptions } from "./lifecycle.js";
 import { runMigrations } from "./store/migrations.js";
 import { getRun, settleOpenRuns, startRun } from "./store/runs.js";
 
@@ -181,5 +181,47 @@ describe("createShutdown", () => {
     expect(at - start).toBeGreaterThanOrEqual(280);
     expect(calls).toMatchObject({ closeStore: 1, dbClosed: true });
     expect(runStatus()).toBe("cancelled");
+  });
+});
+
+describe("requestGate", () => {
+  type Req = Parameters<Parameters<typeof requestGate>[0]>[0];
+  type Res = Parameters<Parameters<typeof requestGate>[0]>[1];
+  const req = (id: string) => ({ url: id }) as unknown as Req;
+  const res = {} as Res;
+
+  it("holds requests while the startup work runs, then passes them on in order", async () => {
+    const seen: string[] = [];
+    const gate = requestGate((r) => seen.push(r.url ?? ""));
+    let finish!: () => void;
+    const work = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+
+    gate.handler(req("before"), res);
+    const opened = gate.until(work);
+    gate.handler(req("during-1"), res);
+    gate.handler(req("during-2"), res);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seen).toEqual(["before"]);
+
+    finish();
+    await opened;
+    await new Promise((r) => setImmediate(r));
+    expect(seen).toEqual(["before", "during-1", "during-2"]);
+
+    gate.handler(req("after"), res);
+    expect(seen).toEqual(["before", "during-1", "during-2", "after"]);
+  });
+
+  it("opens even when the startup work fails", async () => {
+    const seen: string[] = [];
+    const gate = requestGate((r) => seen.push(r.url ?? ""));
+    const opened = gate.until(Promise.reject(new Error("settling failed")));
+    gate.handler(req("during"), res);
+
+    await opened;
+    await new Promise((r) => setImmediate(r));
+    expect(seen).toEqual(["during"]);
   });
 });

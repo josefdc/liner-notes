@@ -70,17 +70,13 @@ describe("POST /api/factoids/decrypt", () => {
     ["a JSON array", [1, 2]],
     ["a missing trackId", { ...validBody, trackId: undefined }],
     ["a trackId with other characters", { ...validBody, trackId: "../../etc" }],
-    ["a title of 201 characters", { ...validBody, trackTitle: "a".repeat(201) }],
     ["a blank title", { ...validBody, trackTitle: "   " }],
-    ["an artist of 201 characters", { ...validBody, trackArtist: "a".repeat(201) }],
     ["a title with a control character", { ...validBody, trackTitle: "Mid\u0000night" }],
     ["a title of only format characters", { ...validBody, trackTitle: "\u200B\u202E\u2066" }],
     ["an artist of only format characters", { ...validBody, trackArtist: "\u200D\uFEFF" }],
-    [
-      "51 existing ids",
-      { ...validBody, existingFactoidIds: Array.from({ length: 51 }, (_, i) => `f${i}`) },
-    ],
-    ["an existing id of 65 characters", { ...validBody, existingFactoidIds: ["f".repeat(65)] }],
+    ["an existing id of 65 characters", { ...validBody, existingFactoidIds: ["é".repeat(65)] }],
+    ["an existing id with a control character", { ...validBody, existingFactoidIds: ["f\u0007"] }],
+    ["a blank existing id", { ...validBody, existingFactoidIds: ["\u200B "] }],
     ["a non-string existing id", { ...validBody, existingFactoidIds: [{ id: "f1" }] }],
   ])("answers 400 to %s", async (_label, body) => {
     const res = await request(app()).post("/api/factoids/decrypt").send(body).timeout(2000);
@@ -88,6 +84,48 @@ describe("POST /api/factoids/decrypt", () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("invalid_input");
     expect(model.generate).not.toHaveBeenCalled();
+  });
+
+  it("truncates long metadata to 200 code points instead of refusing it", async () => {
+    model.generate.mockResolvedValue({ data: null, model: "stub", groundingUsed: false });
+    const title = `${"\u{1F3B5}".repeat(199)}ab`; // 201 code points
+    const artist = "x".repeat(300);
+
+    const res = await request(app())
+      .post("/api/factoids/decrypt")
+      .send({ ...validBody, trackTitle: title, trackArtist: artist })
+      .timeout(2000);
+
+    expect(res.status).toBe(500); // reached the model (stubbed to fail)
+    const { prompt } = model.generate.mock.calls[0][0] as { prompt: string };
+    expect(prompt).toContain(`"${"\u{1F3B5}".repeat(199)}a" by ${"x".repeat(200)}.`);
+  });
+
+  it("names only the newest 50 ids in the prompt and numbers new ids after all of them", async () => {
+    model.generate.mockResolvedValue({ data: null, model: "stub", groundingUsed: false });
+    const ids = Array.from({ length: 60 }, (_, i) => `f${i + 1}`);
+
+    await request(app())
+      .post("/api/factoids/decrypt")
+      .send({ ...validBody, existingFactoidIds: ids })
+      .timeout(2000);
+
+    const { prompt } = model.generate.mock.calls[0][0] as { prompt: string };
+    expect(prompt).toContain(`IDs: ${ids.slice(10).join(", ")}\n`);
+    expect(prompt).toContain('starting from "f61"');
+  });
+
+  it("accepts ids the model chose in any printable form", async () => {
+    model.generate.mockResolvedValue({ data: null, model: "stub", groundingUsed: false });
+    const ids = ["prod #2", "fact.3 (sample)", "ü-é", "\u{1F3B5}".repeat(64)];
+
+    const res = await request(app())
+      .post("/api/factoids/decrypt")
+      .send({ ...validBody, existingFactoidIds: ids })
+      .timeout(2000);
+
+    expect(res.status).toBe(500); // reached the model (stubbed to fail), not a 400
+    expect(model.generate).toHaveBeenCalledOnce();
   });
 
   it("accepts the limits: 200 code points (not UTF-16 units) and 50 ids", async () => {
@@ -319,14 +357,9 @@ describe("GET /api/factoids/decrypt/stream", () => {
 
   it.each([
     ["a missing title", "trackArtist=M83"],
-    ["a title of 201 characters", `trackTitle=${"a".repeat(201)}`],
-    ["an artist of 201 characters", `trackTitle=x&trackArtist=${"a".repeat(201)}`],
     ["a repeated title", "trackTitle=a&trackTitle=b"],
-    [
-      "51 existing ids",
-      `trackTitle=x&existingIds=${Array.from({ length: 51 }, (_, i) => `f${i}`).join(",")}`,
-    ],
-    ["an existing id with other characters", "trackTitle=x&existingIds=f1,%3Cscript%3E"],
+    ["an existing id with a control character", "trackTitle=x&existingIds=f1,f%07"],
+    ["an existing id of 65 characters", `trackTitle=x&existingIds=f1,${"f".repeat(65)}`],
   ])(
     "reports %s as invalid input in the stream without calling the model",
     async (_label, query) => {
@@ -349,6 +382,21 @@ describe("GET /api/factoids/decrypt/stream", () => {
     const { schema } = model.generate.mock.calls[0][0] as { schema: z.ZodTypeAny };
     expect(schema.safeParse({ ...factoid("f3"), type: "sample" }).success).toBe(true);
     expect(schema.safeParse({ ...factoid("f3"), type: "lyrics" }).success).toBe(false);
+  });
+
+  it("truncates long metadata and uses the newest 50 ids, numbering after all of them", async () => {
+    model.generate.mockResolvedValue({ data: factoid("x"), model: "stub", groundingUsed: false });
+    const ids = Array.from({ length: 60 }, (_, i) => `f${i + 1}`);
+
+    const stream = await openStream(
+      `trackTitle=${"t".repeat(250)}&trackArtist=${"a".repeat(250)}&existingIds=${ids.join(",")},%3Cfact%3E`,
+    );
+    await stream.waitFor(ofType("done"));
+
+    const { prompt } = model.generate.mock.calls[0][0] as { prompt: string };
+    expect(prompt).toContain(`"${"t".repeat(200)}" by ${"a".repeat(200)}.`);
+    expect(prompt).toContain(`IDs: ${[...ids.slice(11), "<fact>"].join(", ")})`);
+    expect(prompt).toContain('Use ID: "f62"');
   });
 
   it("does not ask the model about lyrics", async () => {

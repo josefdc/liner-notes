@@ -1,14 +1,8 @@
 import { type Response, Router } from "express";
 import { z } from "zod";
 import { type GenerateResult, generateStructuredOutput } from "../../agent/geminiClient.js";
-import { asyncRoute, sendError } from "../middleware/errors.js";
-import {
-  boundedText,
-  describeIssues,
-  factoidId,
-  MAX_EXISTING_IDS,
-  trackId,
-} from "../validation.js";
+import { asyncRoute, markFailed, sendError } from "../middleware/errors.js";
+import { boundedText, describeIssues, factoidId, newestIds, trackId } from "../validation.js";
 
 const router = Router();
 
@@ -19,22 +13,25 @@ export const HEARTBEAT_INTERVAL_MS = 15_000;
 // Input
 // =============================================================================
 
+// Title and artist come from track metadata and the ids from earlier answers, so they are
+// bounded rather than refused: long text is truncated, and the prompt names only the newest ids
+// (new ids are still numbered after all of them). The body and URL size limits bound the lists.
 const DecryptBodySchema = z.object({
   trackId,
-  trackTitle: boundedText(1),
-  trackArtist: boundedText(0).optional(),
-  existingFactoidIds: z.array(factoidId).max(MAX_EXISTING_IDS).default([]),
+  trackTitle: boundedText(1, { truncate: true }),
+  trackArtist: boundedText(0, { truncate: true }).optional(),
+  existingFactoidIds: z.array(factoidId).default([]),
 });
 
 const StreamQuerySchema = z.object({
-  trackTitle: boundedText(1),
-  trackArtist: boundedText(0).optional(),
+  trackTitle: boundedText(1, { truncate: true }),
+  trackArtist: boundedText(0, { truncate: true }).optional(),
   existingIds: z
     .string()
-    .max(MAX_EXISTING_IDS * 65)
+    .max(16_000)
     .optional()
     .transform((value) => (value ? value.split(",").filter(Boolean) : []))
-    .pipe(z.array(factoidId).max(MAX_EXISTING_IDS)),
+    .pipe(z.array(factoidId)),
 });
 
 const DECRYPT_EXAMPLE = {
@@ -120,7 +117,7 @@ router.post(
 Generate 3 NEW, obscure, and fascinating factoids about ${track}.
 
 IMPORTANT:
-- These must be DIFFERENT from any facts with IDs: ${existingFactoidIds.join(", ") || "none yet"}
+- These must be DIFFERENT from any facts with IDs: ${newestIds(existingFactoidIds).join(", ") || "none yet"}
 - Focus on OBSCURE details that most fans don't know
 - Include specific entities (equipment, producers, techniques) that can be searched
 - Each factoid should reveal something surprising or hidden
@@ -268,6 +265,7 @@ router.get(
 
     const parsed = StreamQuerySchema.safeParse(req.query);
     if (!parsed.success) {
+      markFailed(res);
       stream.error("invalid_input", { issues: describeIssues(parsed.error) });
       stream.done();
       return;
@@ -281,7 +279,7 @@ router.get(
     for (let i = 0; i < STREAM_CATEGORIES.length && !stream.closed; i++) {
       const factoidId = `f${existingIds.length + i + 1}`;
       const previousIds = [
-        ...existingIds,
+        ...newestIds(existingIds),
         ...Array.from({ length: i }, (_, j) => `f${existingIds.length + j + 1}`),
       ];
 

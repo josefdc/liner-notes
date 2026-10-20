@@ -67,6 +67,21 @@ function parseOrigins(value: string, errors: string[]): string[] {
     } catch {
       // reported below
     }
+    // Browsers send an origin without its scheme's default port.
+    if (
+      url &&
+      ["http:", "https:"].includes(url.protocol) &&
+      url.port === "" &&
+      url.origin !== origin
+    ) {
+      const explicit = origin.match(/^https?:\/\/[^/]+:(\d+)$/);
+      if (explicit) {
+        errors.push(
+          `CORS_ORIGINS: "${origin}" names the default port ${explicit[1]}, which browsers leave out of the Origin header; write "${url.origin}"`,
+        );
+        continue;
+      }
+    }
     if (!url || !["http:", "https:"].includes(url.protocol) || url.origin !== origin) {
       errors.push(
         `CORS_ORIGINS: "${origin}" is not an origin (expected scheme://host[:port], no path or trailing slash)`,

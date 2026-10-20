@@ -47,6 +47,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - HOST=0.0.0.0
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
       - AUDIO_ANALYSIS_URL=http://sonic-analysis:3002
       - SQLITE_DB_PATH=/app/data/sonic-agent.db

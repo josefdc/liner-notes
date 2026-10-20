@@ -22,6 +22,10 @@ import { getRun, startRun } from "./store/runs.js";
 
 const ENTRY = join(import.meta.dirname, "index.ts");
 const PROCESS_ERRORS_FIXTURE = join(import.meta.dirname, "../test/fixtures/process-errors.ts");
+const CLOSED_LOG_READER_FIXTURE = join(
+  import.meta.dirname,
+  "../test/fixtures/closed-log-reader.mjs",
+);
 const TSX_LOADER = pathToFileURL(
   join(dirname(createRequire(import.meta.url).resolve("tsx/package.json")), "dist/loader.mjs"),
 ).href;
@@ -35,8 +39,13 @@ interface Child {
 const children = new Set<Child>();
 
 /** Starts `entry` in one node process with only the given environment. */
-function start(entry: string, cwd: string, env: Record<string, string>): Child {
-  const child = spawn(process.execPath, ["--import", TSX_LOADER, entry], {
+function start(
+  entry: string,
+  cwd: string,
+  env: Record<string, string>,
+  args: string[] = [],
+): Child {
+  const child = spawn(process.execPath, ["--import", TSX_LOADER, entry, ...args], {
     cwd,
     env: { PATH: process.env.PATH ?? "", ...env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -112,6 +121,25 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   LASTFM_API_KEY: "",
   ...extra,
 });
+
+/** Starts the API on a free port with a scratch database and waits until it answers. */
+async function startApi(): Promise<{ api: Child; port: number; dbPath: string }> {
+  const { dir, dbPath } = scratch();
+  const port = await freePort();
+  const api = start(ENTRY, dir, apiEnv(port, dbPath));
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    if (api.process.exitCode !== null) throw new Error(`exited at startup:\n${api.output()}`);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+      if (res.ok) return { api, port, dbPath };
+    } catch {
+      // not listening yet
+    }
+    if (Date.now() > deadline) throw new Error(`did not start:\n${api.output()}`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
 
 describe("the API process", () => {
   let dbPath: string;
@@ -203,6 +231,39 @@ describe("the API process", () => {
     expect(api.output()).toContain("[Server] Stopped");
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
   }, 15_000);
+});
+
+describe("an API process stopped by SIGINT", () => {
+  it("shuts down cleanly", async () => {
+    const { api } = await startApi();
+    api.process.kill("SIGINT");
+    expect(await api.exit).toBe(0);
+    expect(api.output()).toContain("SIGINT received");
+    expect(api.output()).toContain("[Server] Stopped");
+  }, 40_000);
+});
+
+describe("an API process whose log reader has gone", () => {
+  it("still drains, settles its runs and exits 0 on SIGTERM", async () => {
+    // A launcher process reads the API's log, then stops reading (as the dev launcher does when
+    // it exits first), so the API's next log line fails with EPIPE.
+    const { dir, dbPath } = scratch();
+    withDatabase(dbPath, (db) =>
+      startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }),
+    );
+    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, {}, [
+      TSX_LOADER,
+      ENTRY,
+      String(await freePort()),
+      dbPath,
+    ]);
+    expect(await launcher.exit).toBe(0);
+
+    const result = JSON.parse(launcher.output().trim().split("\n").pop() ?? "{}");
+    expect(result).toMatchObject({ code: 0, signal: null });
+    expect(result.ms).toBeGreaterThanOrEqual(2900); // the open request was given the drain
+    expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
+  }, 60_000);
 });
 
 describe("an API process that cannot listen", () => {

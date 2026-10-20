@@ -3,7 +3,7 @@
  * apart from index.ts so it can be tested with a real server and no process exit.
  */
 
-import type { Server } from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 export interface ShutdownOptions {
   server: Server;
@@ -90,16 +90,58 @@ export function createShutdown({
   };
 }
 
+type Handler = (req: IncomingMessage, res: ServerResponse) => void;
+
+/**
+ * Holds requests while some startup work runs: `handler` passes requests on at once, except
+ * while the promise given to `until` is pending, when they wait for it (whether it resolves or
+ * rejects).
+ */
+export function requestGate(handler: Handler): {
+  handler: Handler;
+  until: (work: Promise<unknown>) => Promise<void>;
+} {
+  let held: Promise<void> | null = null;
+  return {
+    handler: (req, res) => {
+      if (held) void held.then(() => handler(req, res));
+      else handler(req, res);
+    },
+    until: (work) => {
+      const done = work.then(
+        () => {},
+        () => {},
+      );
+      held = done.then(() => {
+        held = null;
+      });
+      return held;
+    },
+  };
+}
+
+/** Errors a standard stream reports when its reader has gone (e.g. the dev launcher exited). */
+const READER_GONE = new Set(["EPIPE", "ERR_STREAM_DESTROYED"]);
+
 /**
  * Logs a rejected promise nobody handled and keeps serving: it is a bug, but not one that should
  * take every other request down with it. After an uncaught exception the process state is
  * unknown, so it is logged, `onFatal` runs (closing the database) and the process exits 1;
  * Docker's restart policy or the dev watcher brings it back.
+ *
+ * A closed stdout or stderr (the process reading the log has exited) is not fatal: the log
+ * lines are lost, but a shutdown in progress still drains and records its runs.
  */
 export function installProcessHandlers(
   onFatal: () => void,
   exit: (code: number) => void = (code) => process.exit(code),
 ): void {
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code && READER_GONE.has(error.code)) return;
+      throw error;
+    });
+  }
   process.on("unhandledRejection", (reason) => {
     console.error("[Process] Unhandled promise rejection:", reason);
   });

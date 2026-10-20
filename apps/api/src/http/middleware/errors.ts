@@ -33,6 +33,19 @@ export function sendError(
   res.status(status).json({ success: false, code, error: message, ...detail });
 }
 
+/**
+ * Marks a request as failed although its status is 200: an event stream that reports invalid
+ * input inside the stream. The limit shared by all clients does not count failed requests.
+ */
+export function markFailed(res: Response): void {
+  res.locals.requestFailed = true;
+}
+
+/** True when the request failed: an error status, or marked with markFailed. */
+export function requestFailed(res: Response): boolean {
+  return res.statusCode >= 400 || res.locals.requestFailed === true;
+}
+
 /** The event-stream routes, which always answer 200 and report errors inside the stream. */
 const EVENT_STREAM_PATHS = new Set([
   "/api/analyze/stream",

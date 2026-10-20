@@ -1,0 +1,97 @@
+{
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FactoidsOutput.schema.json",
+    "type": "object",
+    "properties": {
+      "factoids": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "description": "Short title, no colon at the end", "type": "string" },
+            "text": { "description": "One to three sentences", "type": "string" },
+            "type": {
+              "type": "string",
+              "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+            },
+            "entities": {
+              "description": "Names in the text worth exploring (people, instruments, records, years)",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                  }
+                },
+                "required": ["text", "type"],
+                "additionalProperties": false
+              }
+            },
+            "evidenceIds": {
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["title", "text", "type", "entities", "evidenceIds"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["factoids"],
+    "additionalProperties": false
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FactoidsOutput.schema.json",
+    "type": "object",
+    "properties": {
+      "factoids": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "description": "Short title, no colon at the end", "type": "string" },
+            "text": { "description": "One to three sentences", "type": "string" },
+            "type": {
+              "type": "string",
+              "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+            },
+            "entities": {
+              "description": "Names in the text worth exploring (people, instruments, records, years)",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                  }
+                },
+                "required": ["text", "type"],
+                "additionalProperties": false
+              }
+            },
+            "evidenceIds": {
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["title", "text", "type", "entities", "evidenceIds"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["factoids"],
+    "additionalProperties": false
+  },
+  "unknownKeys": { "$": "strict", "$.factoids[]": "strict", "$.factoids[].entities[]": "strict" },
+  "refinements": [],
+  "tolerant": []
+}

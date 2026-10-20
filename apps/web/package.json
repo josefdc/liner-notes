@@ -4,12 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run build -w @liner-notes/contract",
     "dev": "vite",
+    "prebuild": "npm run build -w @liner-notes/contract",
     "build": "vite build",
+    "prepreview": "npm run build -w @liner-notes/contract",
     "preview": "vite preview",
+    "pretypecheck": "npm run build -w @liner-notes/contract",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
+    "@liner-notes/contract": "0.0.0",
     "d3-drag": "3.0.0",
     "d3-force": "3.0.0",
     "d3-selection": "3.0.0",

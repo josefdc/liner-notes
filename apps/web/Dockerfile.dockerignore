@@ -10,7 +10,7 @@
 !apps/web
 !apps/api/package.json
 !services/audio/package.json
-!packages/contract/package.json
+!packages/contract
 
 # Never send these, even inside allowed directories
 **/node_modules
@@ -24,3 +24,8 @@
 **/__tests__
 **/coverage
 **/*.log
+
+# The contract's tests, fixtures and schema snapshots are not needed to build it
+packages/contract/snapshots
+packages/contract/fixtures
+packages/contract/src/testing

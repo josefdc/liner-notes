@@ -1,0 +1,90 @@
+{
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FactoidsResponse.schema.json",
+    "type": "object",
+    "properties": {
+      "factoids": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "type": {
+              "type": "string",
+              "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                  },
+                  "searchQuery": { "type": "string" }
+                },
+                "required": ["id", "text", "type"]
+              }
+            },
+            "claimId": { "type": "string" }
+          },
+          "required": ["id", "title", "content", "type"]
+        }
+      }
+    },
+    "required": ["factoids"]
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "FactoidsResponse.schema.json",
+    "type": "object",
+    "properties": {
+      "factoids": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "type": {
+              "type": "string",
+              "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["synth", "producer", "sample", "technique", "artist", "album", "year"]
+                  },
+                  "searchQuery": { "type": "string" }
+                },
+                "required": ["id", "text", "type"],
+                "additionalProperties": false
+              }
+            },
+            "claimId": { "type": "string" }
+          },
+          "required": ["id", "title", "content", "type"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["factoids"],
+    "additionalProperties": false
+  },
+  "unknownKeys": { "$": "strip", "$.factoids[]": "strip", "$.factoids[].entities[]": "strip" },
+  "refinements": [],
+  "tolerant": ["$.factoids[].entities: drops unreadable items"]
+}

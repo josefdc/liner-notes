@@ -1,0 +1,26 @@
+{
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ResumeRequest.schema.json",
+    "type": "object",
+    "properties": {
+      "threadId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" },
+      "selectedTrackId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" }
+    },
+    "required": ["threadId", "selectedTrackId"]
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ResumeRequest.schema.json",
+    "type": "object",
+    "properties": {
+      "threadId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" },
+      "selectedTrackId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" }
+    },
+    "required": ["threadId", "selectedTrackId"],
+    "additionalProperties": false
+  },
+  "unknownKeys": { "$": "strip" },
+  "refinements": [],
+  "tolerant": []
+}

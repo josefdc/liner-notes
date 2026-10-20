@@ -5,7 +5,7 @@ import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { getDb } from "../../store/database.js";
 import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
-import { asyncRoute, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
+import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
 
 const router = Router();
 
@@ -550,6 +550,9 @@ function sendJsonOutcome(
 // =============================================================================
 // Routes
 // =============================================================================
+
+// HEAD on a stream gets its headers only; it never starts or resumes a run.
+router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHead);
 
 /**
  * Analyze a song (non-streaming)

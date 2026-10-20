@@ -64,6 +64,19 @@ export function isEventStreamRequest(req: Request): boolean {
   return EVENT_STREAM_PATHS.has(path);
 }
 
+/**
+ * HEAD on an event-stream route: the stream's headers and no body. Express would otherwise
+ * answer HEAD with the GET handler, which starts a run or asks the model for a stream nobody
+ * reads. Mounted before the GET route.
+ */
+export const eventStreamHead: RequestHandler = (_req, res) => {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.end();
+};
+
 /** Answers with a 200 event stream that carries one error message, then `done`. */
 export function sendStreamError(res: Response, code: HttpErrorCode): void {
   if (res.headersSent || res.destroyed) return;

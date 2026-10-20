@@ -6,6 +6,7 @@
 import express, { type Router } from "express";
 import type { HttpSettings } from "../config/settings.js";
 import { cors } from "./middleware/cors.js";
+import { acceptedEncodingsOnly } from "./middleware/encoding.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
 import { listedOriginsOnly } from "./middleware/origin.js";
 import { globalLimit, perIpLimit } from "./middleware/rateLimit.js";
@@ -40,6 +41,7 @@ export function createApp({ http, routers }: AppDeps): express.Express {
   app.use(modelRoutes, perIpLimit(http.rateLimit), globalLimit(http.globalRateLimit));
   app.use("/api/search", perIpLimit(http.searchRateLimit));
 
+  app.use(acceptedEncodingsOnly);
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
   for (const router of routers ?? [healthRouter, searchRouter, analyzeRouter, factoidsRouter]) {

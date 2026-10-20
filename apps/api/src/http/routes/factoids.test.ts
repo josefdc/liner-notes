@@ -280,6 +280,15 @@ const until = async (condition: () => boolean, timeoutMs = 2000) => {
 };
 
 describe("GET /api/factoids/decrypt/stream", () => {
+  it("answers HEAD with the stream headers and does not call the model", async () => {
+    const res = await request(app()).head(`/api/factoids/decrypt/stream?${QUERY}`).timeout(2000);
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(model.generate).not.toHaveBeenCalled();
+  });
+
   it("sends a heartbeat every 15 s while a factoid is pending, and stops it at the end", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const pending = deferred<unknown>();

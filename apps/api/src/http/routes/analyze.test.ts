@@ -895,4 +895,25 @@ describe("analyze routes", () => {
       expect(stub.calls.scout).toBe(0);
     });
   });
+
+  describe("HEAD on the stream routes", () => {
+    it("answers with the stream headers and starts or resumes no run", async () => {
+      const threadId = await pausedThread();
+      const scoutCalls = stub.calls.scout;
+      const runCount = () => getDb().prepare("SELECT COUNT(*) FROM runs").pluck().get();
+      const runsBefore = runCount();
+
+      for (const path of [streamPath("plain head"), resumePath(threadId, "track-a")]) {
+        const res = await request(app).head(path).timeout(2000);
+        expect(res.status, path).toBe(200);
+        expect(res.headers["content-type"]).toContain("text/event-stream");
+      }
+      await settle();
+
+      expect(stub.calls.scout).toBe(scoutCalls);
+      expect(stub.calls.engineer).toBe(0);
+      expect(runCount()).toBe(runsBefore);
+      expect(runStatus(threadId)).toBe("interrupted");
+    });
+  });
 });

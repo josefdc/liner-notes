@@ -12,8 +12,9 @@ WORKDIR /app
 
 # Install scripts: .npmrc sets strict-allow-scripts, which npm enforces from 11.18 on, so only
 # the scripts listed under "allowScripts" in package.json run, as in a local checkout and in CI.
-# An older npm ignores the setting and would run every install script.
-RUN node -e 'const [major, minor] = process.argv[1].split(".").map(Number); if (major < 11 || (major === 11 && minor < 18)) { console.error(`npm ${process.argv[1]}: 11.18 or later is needed to enforce strict-allow-scripts`); process.exit(1); }' "$(npm --version)"
+# An older npm ignores the setting and would run every install script; a version that cannot be
+# read fails the build too.
+RUN node -e 'const version = process.argv[1]; const parts = /^(\d+)\.(\d+)\.\d+$/.exec(version); if (!parts || Number(parts[1]) < 11 || (Number(parts[1]) === 11 && Number(parts[2]) < 18)) { console.error(`npm "${version}": 11.18 or later is needed to enforce strict-allow-scripts`); process.exit(1); }' "$(npm --version)"
 
 # Build context is the repository root (one lockfile for all workspaces).
 # Install dependencies first (for better caching)

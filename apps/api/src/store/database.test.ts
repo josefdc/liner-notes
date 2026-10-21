@@ -119,6 +119,7 @@ async function testSchemaVersioning(): Promise<void> {
     assert(tableNames.includes("research_cache"), "research_cache table exists");
     assert(tableNames.includes("artwork_cache"), "artwork_cache table exists");
     assert(tableNames.includes("runs"), "runs table exists");
+    assert(tableNames.includes("llm_usage"), "llm_usage table exists");
     assert(tableNames.includes("schema_migrations"), "schema_migrations table exists");
   } finally {
     cleanup();

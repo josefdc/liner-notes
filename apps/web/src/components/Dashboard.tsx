@@ -390,37 +390,41 @@ const Dashboard: React.FC<DashboardProps> = ({
                 }}
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
-                className="relative min-w-[280px] bg-void border border-border p-4 rounded-md cursor-pointer group hover:border-cyber/30 hover:bg-surface-hover hover:-translate-y-1 hover:shadow-glow-cyber-subtle focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none transition-[transform,box-shadow,border-color,background-color] duration-(--duration-normal) ease-out-expo animate-fade-in-up opacity-0"
+                className="relative min-w-[280px] rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`,
                   animationFillMode: 'forwards',
                 }}
               >
-                <div className="relative aspect-square rounded-md overflow-hidden mb-4 bg-gray-900">
-                  {rec.img ? (
-                    <img
-                      src={rec.img}
-                      alt={rec.title}
-                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-(--duration-slow)"
-                    />
-                  ) : (
-                    <PlaceholderCover title={rec.title} group={rec.group} />
-                  )}
-                  {/* Target Scan Overlay on hover */}
-                  <TargetScanOverlay isHovered={hoveredCardId === rec.id} />
-                </div>
+                {/* The card lifts inside a box that stays put, so a pointer near its bottom edge
+                    does not drop the hover the lift itself causes. */}
+                <div className="h-full bg-void border border-border p-4 rounded-md group-hover:border-cyber/30 group-hover:bg-surface-hover group-hover:-translate-y-1 group-hover:shadow-glow-cyber-subtle transition-[translate,box-shadow,border-color,background-color] duration-(--duration-normal) ease-out-expo">
+                  <div className="relative aspect-square rounded-md overflow-hidden mb-4 bg-gray-900">
+                    {rec.img ? (
+                      <img
+                        src={rec.img}
+                        alt={rec.title}
+                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-(--duration-slow)"
+                      />
+                    ) : (
+                      <PlaceholderCover title={rec.title} group={rec.group} />
+                    )}
+                    {/* Target Scan Overlay on hover */}
+                    <TargetScanOverlay isHovered={hoveredCardId === rec.id} />
+                  </div>
 
-                <div className="space-y-1">
-                  <h4 className="font-semibold text-white truncate">{rec.title}</h4>
-                  {rec.artist && (
-                    <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
-                  )}
-                </div>
+                  <div className="space-y-1">
+                    <h4 className="font-semibold text-white truncate">{rec.title}</h4>
+                    {rec.artist && (
+                      <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
+                    )}
+                  </div>
 
-                <div className="mt-4 pt-3 border-t border-white/5">
-                  <Badge variant="analog" glow>
-                    <span className="font-bold">LOGIC:</span> {rec.reason}
-                  </Badge>
+                  <div className="mt-4 pt-3 border-t border-white/5">
+                    <Badge variant="analog" glow>
+                      <span className="font-bold">LOGIC:</span> {rec.reason}
+                    </Badge>
+                  </div>
                 </div>
               </div>
             ))}

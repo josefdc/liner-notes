@@ -100,6 +100,9 @@
   --color-text-secondary: rgba(255, 255, 255, 0.7);
   --color-text-tertiary: rgba(255, 255, 255, 0.45);
   --color-text-muted: rgba(255, 255, 255, 0.25);
+  /* Neutral badge text: at least 4.5:1 on the badge's tint over any surface up to surface-active
+     (tertiary is 4.0-4.5:1 there) */
+  --color-text-chip: rgba(255, 255, 255, 0.5);
 
   /* Line heights */
   --leading-tight: 1.15;
@@ -122,8 +125,10 @@
   --space-2xl: 48px;
   --space-3xl: 64px;
 
-  /* Chrome text size (badges, status bars, metadata) */
+  /* Chrome text size (badges, status bars, metadata), with its own line height so a small badge
+     is the same height wherever it sits */
   --text-chrome: 10px;
+  --text-chrome--line-height: 14px;
 
   /* White glow for play button */
   --shadow-glow-white: 0 0 20px rgba(255, 255, 255, 0.15);

@@ -7,13 +7,11 @@ import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
 // hero must keep its full height (it clips what overflows it) and the panels below must not
 // collapse onto the Spotify button. These checks read computed styles and positions, not pixels.
 const fixture = loadFixture("missing-states");
+// Has a connected track, whose card shows the "CLICK TO ANALYZE" overlay on hover.
+const withConnections = loadFixture("full-result");
 
 // Animations end at once, so positions are final when they are read.
 test.use({ reducedMotion: "reduce" });
-
-test.beforeEach(async ({ page }) => {
-  await useMockApi(page, fixture);
-});
 
 const padding = (locator: Locator) =>
   locator.evaluate((element) => {
@@ -34,6 +32,7 @@ for (const { width, height, page: pagePadding, hero } of [
   { width: 390, height: 844, page: ["16px", "16px", "80px", "16px"], hero: "32px" },
 ]) {
   test(`the Dashboard keeps its padding at ${width} px`, async ({ page }) => {
+    await useMockApi(page, fixture);
     await page.setViewportSize({ width, height });
     await analyzeAndOpenDashboard(page, "Quiet Signal");
 
@@ -56,6 +55,7 @@ for (const { width, height, page: pagePadding, hero } of [
   });
 
   test(`the Spotify button is not covered at ${width} px`, async ({ page }) => {
+    await useMockApi(page, fixture);
     await page.setViewportSize({ width, height });
     await analyzeAndOpenDashboard(page, "Quiet Signal");
 
@@ -97,5 +97,22 @@ for (const { width, height, page: pagePadding, hero } of [
       );
       expect(onTop, `the Spotify button is on top at (${x}, ${y})`).toBe(true);
     }
+  });
+
+  test(`the card's CLICK TO ANALYZE label stays on one line at ${width} px`, async ({ page }) => {
+    await useMockApi(page, withConnections);
+    await page.setViewportSize({ width, height });
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+
+    await page.getByRole("button", { name: /Older Record/ }).hover();
+    const label = page.getByText("CLICK TO ANALYZE", { exact: true });
+    await expect(label).toBeVisible();
+    const lines = await label.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      // One rectangle per line box the text occupies.
+      return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+    });
+    expect(lines).toBe(1);
   });
 }

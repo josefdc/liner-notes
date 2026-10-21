@@ -35,19 +35,27 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: sonic-server
+    # Browsers reach the API through the web container's nginx (/api), so the port is published on
+    # the host's loopback only, for local checks such as curl http://127.0.0.1:3001/api/health.
+    # Published on every interface, a client could bypass nginx and choose its own
+    # X-Forwarded-For, which TRUST_PROXY=1 below trusts for the rate-limit key.
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     depends_on:
       sonic-analysis:
         condition: service_healthy
     env_file:
       - ./apps/api/.env
     # Values here override apps/api/.env. CORS_ORIGINS comes from the shell running compose
-    # (default: the web app at http://localhost and http://127.0.0.1), not from apps/api/.env.
+    # (default: http://localhost and http://127.0.0.1), not from apps/api/.env. The web app calls
+    # /api on its own origin and needs no CORS entry; list other origins that call the API.
+    # TRUST_PROXY=1: every request arrives from nginx, which sets X-Forwarded-For, so the per-IP
+    # rate limits key on the browser's address instead of one shared bucket for nginx.
     environment:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
+      - TRUST_PROXY=1
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
       - AUDIO_ANALYSIS_URL=http://sonic-analysis:3002
       - SQLITE_DB_PATH=/app/data/sonic-agent.db

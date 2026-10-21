@@ -97,7 +97,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
               icon={<Zap size={iconSize} className="text-cyber" />}
               title={measuredTitle}
             >
-              <span className="text-text-tertiary">ENERGY</span>{' '}
+              <span className="text-text-chip">ENERGY</span>{' '}
               <span className="text-cyber">{Math.round(energy * 100)}%</span>
             </Badge>
           ) : (
@@ -128,11 +128,11 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
                   }
                   title="Mood score from an audio model: 0 = melancholic, 1 = euphoric"
                 >
-                  <span className="text-text-tertiary">MOOD</span>{' '}
+                  <span className="text-text-chip">MOOD</span>{' '}
                   <span className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}>
                     {moodLabel(valence)}
                   </span>{' '}
-                  <span className="text-text-tertiary">{formatScore(valence)}</span>
+                  <span className="text-text-chip">{formatScore(valence)}</span>
                 </Badge>
               </li>
             )}
@@ -144,7 +144,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
                   icon={<Disc size={iconSize} className="text-analog" />}
                   title="Danceability score from an audio model"
                 >
-                  <span className="text-text-tertiary">DANCE</span>{' '}
+                  <span className="text-text-chip">DANCE</span>{' '}
                   <span className="text-analog">{formatScore(danceability)}</span>
                 </Badge>
               </li>
@@ -152,7 +152,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
             {acousticness !== null && (
               <li>
                 <Badge variant="gray" size={size} title="Acousticness score from an audio model">
-                  <span className="text-text-tertiary">ACOUSTIC</span>{' '}
+                  <span className="text-text-chip">ACOUSTIC</span>{' '}
                   <span className="text-analog">{formatScore(acousticness)}</span>
                 </Badge>
               </li>

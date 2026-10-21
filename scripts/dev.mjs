@@ -4,6 +4,8 @@
 //   npm run dev                          all three on 3000 / 3001 / 3002
 //   WEB_PORT=3110 API_PORT=3111 AUDIO_PORT=3112 npm run dev
 //   DEV_SERVICES=web,api npm run dev     a subset
+//   WEB_HOST=0.0.0.0 npm run dev         serve the web app (and its /api proxy) on the network;
+//                                        the default is loopback only
 //
 // Output lines are prefixed with the service name. If one service exits, the others are
 // stopped and this script exits with the first failing service's exit code. The API runs

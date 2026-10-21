@@ -59,7 +59,7 @@ jobs:
       - run: npm run build
       # vite build exits 0 with invalid or unprocessed CSS; check what it wrote.
       - name: Built CSS
-        run: node scripts/check-built-css.mjs
+        run: npm run check:css
 
   e2e:
     name: browser tests (Playwright, mock API)

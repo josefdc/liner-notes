@@ -21,8 +21,9 @@ import type { Factoid } from './types';
 const shimmerClass =
   'bg-gradient-to-r from-white/[0.03] via-white/[0.07] to-white/[0.03] bg-[length:200%_100%] animate-progress-shimmer';
 
+// Same padding and gaps as the Dashboard (components/Dashboard.tsx), so nothing shifts when it loads.
 const DashboardSkeleton = (
-  <div className="h-full w-full p-4 md:p-10 flex flex-col gap-6 md:gap-8 overflow-hidden bg-void animate-fade-in">
+  <div className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-hidden bg-void animate-fade-in">
     {/* Header skeleton */}
     <div className="flex justify-between items-center">
       <div className="space-y-2">

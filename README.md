@@ -141,6 +141,10 @@ requests to the API on `API_PORT` (default 3001). A build can point the web app 
 `VITE_API_URL`, the API's root URL including `/api` (see `apps/web/.env.example`); the web
 image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API.
 
+The web dev server listens on loopback only. `WEB_HOST=0.0.0.0 npm run dev` serves it on the
+network (to try it from a phone, say); anyone who can reach that port can then also start
+analyses through the `/api` proxy, on your model budget.
+
 The audio service needs [uv](https://docs.astral.sh/uv/); without it, run
 `DEV_SERVICES=web,api npm run dev`.
 
@@ -153,6 +157,7 @@ npm run lint           # Biome (lint + formatting); `npm run format` rewrites fi
 npm run typecheck      # TypeScript in every workspace
 npm run guard:honest   # counts of placeholder-data patterns; lower the baseline with -- --update
 npm test               # Vitest: API, web and script tests
+npm run build && npm run check:css   # the built CSS is Tailwind output with no invalid values
 npm run test:e2e       # Playwright against the web app with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
 cd services/audio && uv run ruff check . && uv run ruff format --check .
 cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
@@ -171,11 +176,16 @@ Run all services with Docker Compose:
 docker-compose up --build
 ```
 
-| Service        | URL                        |
-|----------------|----------------------------|
-| Frontend       | http://localhost (port 80)  |
-| Backend API    | http://localhost:3001       |
-| Audio Analysis | http://localhost:3002       |
+| Service        | URL                                                  |
+|----------------|------------------------------------------------------|
+| Frontend       | http://localhost (port 80)                           |
+| Backend API    | http://localhost/api (direct: http://127.0.0.1:3001) |
+| Audio Analysis | http://localhost:3002                                |
+
+The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
+own port is published on the host's loopback only, and the API runs with `TRUST_PROXY=1` so its
+per-IP rate limits use the client address nginx puts in `X-Forwarded-For`. Behind a second proxy
+(for example a TLS terminator in front of nginx), raise `TRUST_PROXY` to the number of proxies.
 
 ---
 

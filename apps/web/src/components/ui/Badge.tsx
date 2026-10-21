@@ -17,7 +17,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   purple: 'bg-accent-purple/10 border-accent-purple/30 text-accent-purple',
   green: 'bg-accent-green/10 border-accent-green/30 text-accent-green',
   pink: 'bg-accent-pink/10 border-accent-pink/30 text-accent-pink',
-  gray: 'bg-white/5 border-white/15 text-text-tertiary',
+  gray: 'bg-white/5 border-white/15 text-text-chip',
   indigo: 'bg-accent-indigo/10 border-accent-indigo/30 text-accent-indigo',
   amber: 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber',
 };

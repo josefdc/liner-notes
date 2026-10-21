@@ -213,6 +213,36 @@ export const MIGRATIONS: readonly Migration[] = [
       db.prepare("DELETE FROM store_items WHERE namespace = ?").run(JSON.stringify(["tracks"]));
     },
   },
+  {
+    version: 4,
+    name: "llm_usage",
+    up(db) {
+      // One row per model call attempt, a per-database copy of the spend log (llm/spendLog.ts),
+      // which stays the authoritative record across processes. See llm/usage.ts for the columns.
+      db.exec(`
+        CREATE TABLE llm_usage (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          call_site TEXT NOT NULL,
+          tier TEXT NOT NULL,
+          deployment TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          mode TEXT NOT NULL,
+          status TEXT NOT NULL,
+          input_tokens INTEGER,
+          output_tokens INTEGER,
+          reasoning_tokens INTEGER,
+          usd_est REAL NOT NULL,
+          price_multiplier REAL NOT NULL,
+          estimated INTEGER NOT NULL,
+          latency_ms INTEGER NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE INDEX llm_usage_run_id ON llm_usage (run_id);
+        CREATE INDEX llm_usage_created_at ON llm_usage (created_at);
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

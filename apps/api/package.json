@@ -19,7 +19,9 @@
     "pretypecheck": "npm run build -w @liner-notes/contract",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretest": "npm run build -w @liner-notes/contract",
-    "test": "vitest run --root ../.. --project api"
+    "test": "vitest run --root ../.. --project api",
+    "presmoke:llm": "npm run build -w @liner-notes/contract",
+    "smoke:llm": "tsx src/scripts/smokeLlm.ts"
   },
   "dependencies": {
     "@google/genai": "1.34.0",
@@ -27,12 +29,14 @@
     "@langchain/langgraph": "1.4.19",
     "@langchain/langgraph-checkpoint": "1.1.5",
     "@langchain/langgraph-checkpoint-sqlite": "1.0.4",
+    "@langchain/openai": "1.6.2",
     "@langchain/tavily": "1.2.0",
     "@liner-notes/contract": "0.0.0",
     "better-sqlite3": "12.11.1",
     "dotenv": "16.6.1",
     "express": "5.2.1",
     "express-rate-limit": "8.7.0",
+    "openai": "7.30.0",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.0"
   },

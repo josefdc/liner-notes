@@ -117,6 +117,13 @@ Edit `apps/api/.env` with your API keys. The API refuses to start without the Sp
 | `TAVILY_API_KEY`         | [Tavily](https://tavily.com/)                           |
 | `SOURCE_USER_AGENT`      | Optional: `AppName/Version ( contact )` sent to the music and search sources; defaults to this project |
 | `AUDIO_ANALYSIS_URL`     | `http://localhost:3002` (default for local dev)          |
+| `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | Azure OpenAI resource key and root URL (`https://<resource>.cognitiveservices.azure.com/`); calls use its v1 API (`AZURE_OPENAI_BASE_URL` overrides the base URL). Used by the provider layer in `apps/api/src/llm` |
+| `LLM_SPEND_LOG`          | Absolute path of the spend log (JSONL) shared by every process; live model calls are refused while it is unset or missing. Create it once with `npm run smoke:llm -w apps/api -- --init` |
+
+The model tiers, budget caps (`BUDGET_*`), cassettes (`LLM_CASSETTE`) and limits are documented
+in `apps/api/.env.example`. `npm run smoke:llm -w apps/api` makes one small call per tier
+through the provider layer and prints status, latency, tokens and estimated cost; it spends from
+the budget like any other call.
 
 ### 3. Run All Services
 

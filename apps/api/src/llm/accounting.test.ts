@@ -1,0 +1,425 @@
+/**
+ * The accounting invariant of invoke: an unknown outcome keeps the worst case, a known outcome
+ * settles what was reported, and nothing that was never sent is charged. Covers answers with
+ * missing usage, incomplete, refused, failed and malformed answers, the HTTP-status table, and
+ * aborts before the request.
+ */
+
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod/v4";
+import { isLlmError } from "./errors.js";
+import { createLlm, type InvokeOptions } from "./invoke.js";
+import { parseSpendLog, type SpendLine, summarise } from "./spendLog.js";
+import {
+  errorResponse,
+  hang,
+  type ProviderRoute,
+  providerFetch,
+  responseBody,
+  testSettings,
+} from "./testing/providerStub.js";
+import type { LlmUsageRow } from "./usage.js";
+
+const Schema = z.object({ ok: z.boolean() });
+const OPTIONS: InvokeOptions = {
+  purpose: "dev",
+  runId: "run-1",
+  maxOutputTokens: 20_000,
+  schemaName: "Ok",
+};
+
+let dir: string;
+let log: string;
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "llm-accounting-"));
+  log = join(dir, "spend.jsonl");
+  vi.stubGlobal("fetch", () => {
+    throw new Error("network denied");
+  });
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+function setup(route: ProviderRoute, env: Record<string, string> = {}) {
+  const net = providerFetch(route);
+  const rows: LlmUsageRow[] = [];
+  const waits: number[] = [];
+  const llm = createLlm({
+    settings: testSettings({ LLM_SPEND_LOG: log, ...env }),
+    fetch: net.fetch,
+    recordUsage: (row) => rows.push(row),
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  return { llm, net, rows, waits };
+}
+
+const lines = (): SpendLine[] => parseSpendLog(readFileSync(log, "utf8"));
+const settles = () => lines().filter((l) => l.kind === "settle");
+const reserves = () => lines().filter((l) => l.kind === "reserve");
+
+/** Every settle kept its reservation's worst case and says so. */
+function expectWorstCaseKept() {
+  const r = reserves();
+  const s = settles();
+  expect(s).toHaveLength(r.length);
+  s.forEach((settle, i) => {
+    expect(settle.usd_est).toBe(r[i].usd_est);
+    expect(settle.estimated).toBe(true);
+  });
+  expect(summarise(lines()).totalUsd).toBeGreaterThan(0);
+}
+
+function body(over: Record<string, unknown>, usage: { input: number; output: number } | null) {
+  return { ...(responseBody({ ok: true }, usage) as Record<string, unknown>), ...over };
+}
+
+describe("usage the provider did not report", () => {
+  it("keeps the worst case when an answer has no usage", async () => {
+    const { llm, rows } = setup(() => Response.json(responseBody({ ok: true }, null)));
+    const result = await llm.invoke("x", "research", "hi", Schema, OPTIONS);
+    expect(result.output).toEqual({ ok: true });
+    expect(result.usage).toMatchObject({ inputTokens: null, outputTokens: null });
+    expectWorstCaseKept();
+    expect(rows).toMatchObject([{ estimated: true, inputTokens: null, outputTokens: null }]);
+    expect(rows[0].usdEst).toBe(reserves()[0].usd_est);
+  });
+
+  it("keeps the worst case when only part of the usage is reported", async () => {
+    const partial = responseBody({ ok: true }, null) as Record<string, unknown>;
+    partial.usage = { input_tokens: 5000 };
+    const { llm } = setup(() => Response.json(partial));
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS);
+    expectWorstCaseKept();
+  });
+
+  it("settles a reported zero as zero", async () => {
+    const { llm } = setup(() => Response.json(responseBody({ ok: true }, { input: 0, output: 0 })));
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS);
+    expect(settles()).toMatchObject([{ usd_est: 0, estimated: false, in: 0, out: 0 }]);
+  });
+});
+
+describe("answers that are not a usable result", () => {
+  const incomplete = (text: string, reason: string) => {
+    const b = responseBody(text, { input: 100, output: 300, reasoning: 250 }) as Record<
+      string,
+      // biome-ignore lint/suspicious/noExplicitAny: a stub body, edited freely
+      any
+    >;
+    b.status = "incomplete";
+    b.incomplete_details = { reason };
+    b.output[0].status = "incomplete";
+    return b;
+  };
+
+  it("reports an answer cut at max_output_tokens as incomplete, bills it, does not retry", async () => {
+    const { llm, net } = setup(() => Response.json(incomplete('{"ok":tr', "max_output_tokens")));
+    const error = await llm.invoke("x", "main", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "incomplete")).toBe(true);
+    expect(error.incompleteReason).toBe("max_output_tokens");
+    expect(error.usage).toEqual({ inputTokens: 100, outputTokens: 300, reasoningTokens: 250 });
+    expect(error.message).toContain("raise maxOutputTokens");
+    expect(error.message).toContain("250 reasoning");
+    expect(net.calls).toHaveLength(1);
+    expect(settles()).toMatchObject([
+      { in: 100, out: 300, reasoning: 250, status: "error:incomplete", estimated: false },
+    ]);
+  });
+
+  it("does not accept an incomplete answer whose text happens to be valid JSON", async () => {
+    const { llm } = setup(() => Response.json(incomplete('{"ok":true}', "content_filter")));
+    const error = await llm.invoke("x", "main", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "incomplete")).toBe(true);
+    expect(error.incompleteReason).toBe("content_filter");
+  });
+
+  it("reports an answer that spent its whole budget reasoning as incomplete", async () => {
+    const b = incomplete("", "max_output_tokens");
+    b.output = [{ type: "reasoning", id: "rs_1", summary: [] }];
+    const { llm } = setup(() => Response.json(b));
+    const error = await llm.invoke("x", "main", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "incomplete")).toBe(true);
+  });
+
+  it("reports a refusal as refused, billed, not retried", async () => {
+    const b = responseBody("", { input: 100, output: 10 });
+    b.output[0].content = [{ type: "refusal", refusal: "I can't help with that." }] as never;
+    const { llm, net } = setup(() => Response.json(b));
+    const error = await llm.invoke("x", "main", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "refused")).toBe(true);
+    expect(error.message).not.toContain("help with that");
+    expect(net.calls).toHaveLength(1);
+    expect(settles()).toMatchObject([{ in: 100, out: 10, status: "error:refused" }]);
+  });
+
+  it("reports status failed with a server error as transient, billing its usage", async () => {
+    const failed = body(
+      { status: "failed", error: { code: "server_error", message: "boom" }, output: [] },
+      { input: 100, output: 10 },
+    );
+    const { llm, net } = setup((_c, i) =>
+      i === 0 ? Response.json(failed) : Response.json(responseBody({ ok: true }, null)),
+    );
+    const result = await llm.invoke("x", "main", "hi", Schema, OPTIONS);
+    expect(result.usage.attempts).toBe(2);
+    expect(net.calls).toHaveLength(2);
+    expect(settles()[0]).toMatchObject({
+      status: "error:response_failed",
+      in: 100,
+      out: 10,
+      estimated: false,
+    });
+  });
+
+  it("reports a completed answer that is not JSON as invalid_output, billing its usage", async () => {
+    const { llm, net } = setup(() =>
+      Response.json(responseBody('{"ok":', { input: 100, output: 2000 })),
+    );
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "invalid_output")).toBe(true);
+    expect(error.usage).toMatchObject({ inputTokens: 100, outputTokens: 2000 });
+    expect(net.calls).toHaveLength(1);
+    expect(settles()).toMatchObject([{ in: 100, out: 2000, estimated: false }]);
+  });
+
+  it("reports an HTML 200 (a proxy page) as invalid_response at the worst case", async () => {
+    const { llm, net } = setup(
+      () =>
+        new Response("<html>gateway</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+    );
+    const error = await llm.invoke("x", "main", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "invalid_response")).toBe(true);
+    expect(net.calls).toHaveLength(1);
+    expectWorstCaseKept();
+  });
+
+  it("reports a 400 context overflow as context_overflow, unbilled, not retried", async () => {
+    const { llm, net } = setup(() =>
+      Response.json(
+        {
+          error: {
+            message: "Input tokens exceed the configured limit",
+            type: "invalid_request_error",
+            code: "context_length_exceeded",
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    const error = await llm.invoke("x", "main", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "context_overflow")).toBe(true);
+    expect(error.status).toBe(400);
+    expect(net.calls).toHaveLength(1);
+    expect(settles()).toMatchObject([{ usd_est: 0, estimated: false }]);
+  });
+});
+
+describe("HTTP statuses", () => {
+  it.each([400, 401, 403, 404])("settles a %i at zero: rejected before processing", async (s) => {
+    const { llm } = setup(() => errorResponse(s));
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
+    expect(settles()).toMatchObject([{ usd_est: 0, estimated: false }]);
+  });
+
+  it("settles a 429 at zero", async () => {
+    const { llm } = setup(() => errorResponse(429));
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
+    expect(settles().every((l) => l.usd_est === 0 && l.estimated === false)).toBe(true);
+  });
+
+  it.each([408, 409, 500, 502, 503, 504])(
+    "keeps the worst case for a %i: the provider may have processed it",
+    async (status) => {
+      const { llm, net } = setup(() => errorResponse(status));
+      await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
+      expect(net.calls).toHaveLength(2);
+      expectWorstCaseKept();
+    },
+  );
+
+  it("settles at zero when no connection was made", async () => {
+    const { llm } = setup(() => {
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }),
+      });
+    });
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "network")).toBe(true);
+    expect(settles().every((l) => l.usd_est === 0)).toBe(true);
+  });
+
+  it("keeps the worst case for a reset connection", async () => {
+    const { llm } = setup(() => {
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+      });
+    });
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
+    expectWorstCaseKept();
+  });
+});
+
+describe("aborts", () => {
+  it("throws LlmError aborted for a signal that is already aborted, reserving nothing", async () => {
+    const { llm, net } = setup(hang);
+    const controller = new AbortController();
+    controller.abort();
+    const error = await llm
+      .invoke("x", "main", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+      .catch((e) => e);
+    expect(isLlmError(error, "aborted")).toBe(true);
+    expect(net.calls).toHaveLength(0);
+    expect(() => readFileSync(log, "utf8")).toThrow();
+  });
+
+  it("leaves the queue at once when aborted while waiting for a slot, charging nothing", async () => {
+    let first = true;
+    const { llm, net } = setup(
+      (call) => {
+        if (!first) return hang(call);
+        first = false;
+        return new Promise((resolve) =>
+          setTimeout(() => resolve(Response.json(responseBody({ ok: true }, null))), 500),
+        );
+      },
+      { LLM_CONCURRENCY: "1" },
+    );
+    const running = llm.invoke("a", "research", "hi", Schema, { ...OPTIONS, runId: "rA" });
+    const controller = new AbortController();
+    const started = performance.now();
+    const queued = llm
+      .invoke("b", "research", "hi", Schema, {
+        ...OPTIONS,
+        runId: "rB",
+        signal: controller.signal,
+      })
+      .catch((e) => e);
+    setTimeout(() => controller.abort(), 20);
+    const error = await queued;
+    expect(isLlmError(error, "aborted")).toBe(true);
+    expect(performance.now() - started).toBeLessThan(300);
+    await running;
+    expect(net.calls).toHaveLength(1);
+    expect(lines().filter((l) => l.callSite === "b")).toEqual([]);
+    expect(llm.callsForRun("rB")).toBe(0);
+  });
+
+  it("stops during the retry wait, sending and charging no second attempt", async () => {
+    const controller = new AbortController();
+    const net = providerFetch(() => errorResponse(503));
+    const llm = createLlm({
+      settings: testSettings({ LLM_SPEND_LOG: log }),
+      fetch: net.fetch,
+      recordUsage: () => {},
+      sleep: () =>
+        new Promise((resolve) => {
+          controller.abort();
+          setTimeout(resolve, 1000);
+        }),
+    });
+    const started = performance.now();
+    const error = await llm
+      .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+      .catch((e) => e);
+    expect(isLlmError(error, "aborted")).toBe(true);
+    // Without waiting out the 1 s retry wait.
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(net.calls).toHaveLength(1);
+    expect(reserves()).toHaveLength(1);
+    expect(llm.callsForRun("run-1")).toBe(1);
+  });
+
+  it("releases the reservation of an attempt aborted before its request was sent", async () => {
+    const controller = new AbortController();
+    const net = providerFetch(hang);
+    const llm = createLlm({
+      settings: testSettings({ LLM_SPEND_LOG: log }),
+      fetch: net.fetch,
+      recordUsage: () => {},
+    });
+    // Aborts while the attempt waits for the spend log's lock, after it was admitted.
+    const original = Date.prototype.toISOString;
+    let aborted = false;
+    vi.spyOn(Date.prototype, "toISOString").mockImplementation(function (this: Date) {
+      if (!aborted) {
+        aborted = true;
+        controller.abort();
+      }
+      return original.call(this);
+    });
+    const error = await llm
+      .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+      .catch((e) => e);
+    vi.restoreAllMocks();
+    expect(isLlmError(error, "aborted")).toBe(true);
+    expect(net.calls).toHaveLength(0);
+    expect(settles()).toMatchObject([{ usd_est: 0, status: "error:aborted", estimated: false }]);
+    expect(summarise(lines()).totalUsd).toBe(0);
+    expect(llm.callsForRun("run-1")).toBe(0);
+  });
+
+  it("keeps the worst case for an abort after the request was sent", async () => {
+    const controller = new AbortController();
+    const { llm, net } = setup(hang);
+    setTimeout(() => controller.abort(), 50);
+    await llm
+      .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+      .catch(() => {});
+    expect(net.calls).toHaveLength(1);
+    expect(net.calls[0].signal?.aborted).toBe(true);
+    expectWorstCaseKept();
+  });
+});
+
+describe("cost above the reservation", () => {
+  it("is settled as reported and reported in a warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { llm } = setup(() =>
+      Response.json(responseBody({ ok: true }, { input: 10_000_000, output: 10 })),
+    );
+    await llm.invoke("x", "research", "hi", Schema, { ...OPTIONS, maxOutputTokens: 300 });
+    expect(settles()[0].usd_est).toBeGreaterThan(reserves()[0].usd_est);
+    expect(warn.mock.calls.flat().join(" ")).toContain("above the reservation");
+  });
+});
+
+describe("messages", () => {
+  it("accepts LangChain messages", async () => {
+    const { llm, net } = setup(() => Response.json(responseBody({ ok: true }, null)));
+    await llm.invoke(
+      "x",
+      "main",
+      [new SystemMessage("sys"), new HumanMessage("hello")],
+      Schema,
+      OPTIONS,
+    );
+    expect(net.calls[0].body.input).toEqual([
+      { role: "system", content: "sys" },
+      { role: "user", content: "hello" },
+    ]);
+  });
+
+  it("refuses an empty message list or an unknown message before reserving", async () => {
+    const { llm, net } = setup(() => Response.json(responseBody({ ok: true }, null)));
+    const empty = await llm.invoke("x", "main", [], Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(empty, "invalid_input")).toBe(true);
+    const odd = await llm
+      .invoke("x", "main", [{ role: "tool", content: "x" } as never], Schema, OPTIONS)
+      .catch((e) => e);
+    expect(isLlmError(odd, "invalid_input")).toBe(true);
+    expect(net.calls).toHaveLength(0);
+    expect(() => readFileSync(log, "utf8")).toThrow();
+  });
+});

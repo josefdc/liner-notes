@@ -11,7 +11,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
-import { connect, createServer, type Server } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -138,6 +138,35 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   ...extra,
 });
 
+/**
+ * Opens a POST whose body never completes, and resolves once the API has read the request head
+ * (it answers "100 Continue"). Until then the connection counts as idle: server.close() closes
+ * it at once (Node 26), and a shutdown signalled earlier would have nothing to drain.
+ */
+async function openRequest(port: number): Promise<Socket> {
+  const socket = connect(port, "127.0.0.1");
+  socket.on("error", () => {});
+  await new Promise((resolve) => socket.once("connect", resolve));
+  socket.write(
+    "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+      "Content-Type: application/json\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n",
+  );
+  const interim = await new Promise<string>((resolve) => {
+    let received = "";
+    const onData = (chunk: Buffer) => {
+      received += chunk;
+      if (!received.includes("\r\n\r\n")) return;
+      socket.off("data", onData);
+      resolve(received.split("\r\n")[0] ?? "");
+    };
+    socket.on("data", onData);
+    socket.once("close", () => resolve(`connection closed after ${JSON.stringify(received)}`));
+  });
+  expect(interim).toMatch(/^HTTP\/1\.1 100 /);
+  socket.write("{");
+  return socket;
+}
+
 /** Starts the API on a free port with a scratch database and waits until it answers. */
 async function startApi(): Promise<{ api: Child; port: number; dbPath: string }> {
   const { dir, dbPath } = scratch();
@@ -219,13 +248,7 @@ describe("the API process", () => {
 
     // A request still in progress (its body never completes) keeps a connection open, so the
     // shutdown has to drain.
-    const socket = connect(port, "127.0.0.1");
-    await new Promise((resolve) => socket.once("connect", resolve));
-    socket.on("error", () => {});
-    socket.write(
-      "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
-        "Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
-    );
+    const socket = await openRequest(port);
     const socketClosed = new Promise((resolve) => socket.once("close", resolve));
 
     // In development the signal arrives twice within milliseconds: the second one is sent as

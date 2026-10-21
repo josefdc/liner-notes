@@ -56,6 +56,15 @@ jobs:
       - run: npm run typecheck
       - name: Unit and route tests (Vitest)
         run: npm test
+      # The API tests must not depend on a developer's settings: run them again with the example
+      # settings file in place (as after `cp .env.example .env`) and a low, valid rate limit.
+      - name: API tests with apps/api/.env from .env.example
+        if: matrix.node == 24
+        run: |
+          cp apps/api/.env.example apps/api/.env
+          echo "RATE_LIMIT_MAX=1" >> apps/api/.env
+          npx vitest run --project api
+          rm apps/api/.env
       - run: npm run build
       # vite build exits 0 with invalid or unprocessed CSS; check what it wrote.
       - name: Built CSS

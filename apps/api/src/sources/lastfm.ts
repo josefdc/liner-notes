@@ -16,10 +16,7 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import dotenv from "dotenv";
 import { credential, describeError, fetchJson, isSourceError, type Shape } from "./http.js";
-
-dotenv.config();
 
 // =============================================================================
 // Configuration

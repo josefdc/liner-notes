@@ -1,7 +1,7 @@
 /**
- * Web research searches with a stubbed Tavily API: each search returns a string the researcher
- * keeps (title, URL and text per result), lyric sites are excluded, and a failed search is text
- * starting "Error:" that the researcher's filter drops.
+ * Web research searches with a stubbed Tavily API: each search returns the typed JSON the
+ * researcher reads (title, URL and text per result), lyric sites are excluded, an answer with
+ * nothing usable is "nothing found", and a failed search is a failure with its code.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ vi.hoisted(() => {
 
 import * as search from "./search.js";
 import { EXCLUDED_DOMAINS, isLyricPage } from "./search.js";
+import { readToolResult } from "./toolResult.js";
 
 const { searchMusicInfo, searchProductionHistory, searchSamples } = search;
 const TAVILY = "https://api.tavily.com/search";
@@ -43,9 +44,8 @@ const LYRICS_PAGE = {
   raw_content: null,
 };
 
-/** The researcher keeps a search result unless it starts with one of these. */
-const researcherKeeps = (result: string) =>
-  !["Error", "No sample", "No production", "No results"].some((p) => result.startsWith(p));
+/** The researcher keeps a search result only when it reads as found. */
+const researcherKeeps = (result: unknown) => readToolResult("tavily", result).kind === "found";
 
 const searches: Array<[string, () => Promise<unknown>]> = [
   ["samples", () => searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" })],
@@ -66,7 +66,7 @@ describe("web research searches", () => {
     vi.restoreAllMocks();
   });
 
-  it.each(searches)("%s returns a string the researcher keeps", async (_name, run) => {
+  it.each(searches)("%s returns results the researcher keeps", async (_name, run) => {
     stubFetch((call) =>
       call.url === TAVILY ? json(answer([WHOSAMPLED, LYRICS_PAGE])) : undefined,
     );
@@ -74,11 +74,11 @@ describe("web research searches", () => {
     const result = await run();
 
     expect(typeof result).toBe("string");
-    const text = result as string;
-    expect(researcherKeeps(text)).toBe(true);
-    expect(text).toContain(WHOSAMPLED.title);
-    expect(text).toContain(WHOSAMPLED.url);
-    expect(text).toContain("samples Under Pressure");
+    expect(researcherKeeps(result)).toBe(true);
+    expect(JSON.parse(result as string)).toEqual({
+      found: true,
+      results: [{ title: WHOSAMPLED.title, url: WHOSAMPLED.url, content: WHOSAMPLED.content }],
+    });
   });
 
   it.each(searches)("%s excludes lyric sites from the request and the answer", async (_n, run) => {
@@ -120,20 +120,19 @@ describe("web research searches", () => {
       artistName: "Vanilla Ice",
     });
 
-    expect(text).toMatch(/^Error: no web results: no sample information found/);
-    expect(researcherKeeps(text)).toBe(false);
-    // historianNode keeps any search text that does not start with "Error".
-    expect(text.startsWith("Error")).toBe(true);
+    expect(JSON.parse(text)).toEqual({ found: false, reason: "no_results" });
+    expect(readToolResult("tavily", text)).toEqual({ kind: "none", reason: "no_results" });
   });
 
   it.each([
     [
       "an HTTP error",
       () => json({ detail: { error: "Unauthorized: invalid API key" } }, { status: 401 }),
+      "unavailable",
     ],
-    ["an HTML answer", () => html("<html>bad gateway</html>")],
-    ["a body without results", () => json({ detail: "something else" })],
-  ])("%s is text starting Error: that the researcher drops", async (_name, reply) => {
+    ["an HTML answer", () => html("<html>bad gateway</html>"), "invalid_response"],
+    ["a body without results", () => json({ detail: "something else" }), "invalid_response"],
+  ])("%s is a failure with its code that the researcher drops", async (_name, reply, code) => {
     stubFetch((call) => (call.url === TAVILY ? reply() : undefined));
 
     const text = await searchSamples.invoke({
@@ -141,9 +140,12 @@ describe("web research searches", () => {
       artistName: "Vanilla Ice",
     });
 
-    expect(typeof text).toBe("string");
-    expect(text).toMatch(/^Error: /);
+    expect(JSON.parse(text)).toMatchObject({ found: false, code });
     expect(researcherKeeps(text)).toBe(false);
+    expect(readToolResult("tavily", text)).toMatchObject({
+      kind: "failed",
+      error: { source: "tavily", code },
+    });
   });
 
   it("no longer offers a song-meaning search or mentions lyrics", () => {

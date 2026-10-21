@@ -3,11 +3,10 @@
  * background.
  *
  * `webSearch` resolves with normalised results (title, URL, text) or rejects with a
- * SourceError. The tools return strings:
- *   - results: one block per result, "title / URL / text", separated by blank lines;
- *   - nothing found, or search unavailable (no key, timeout, API error): text starting
- *     "Error:". The historian keeps any search text that does not start with "Error", so
- *     "nothing found" uses that prefix too; neither ever becomes research.
+ * SourceError. The tools return the typed JSON of `toolResult.ts`:
+ *   - results: `{ found: true, results: [{ title, url, content }] }`;
+ *   - nothing found: `{ found: false, reason: "no_results" }`;
+ *   - search unavailable (no key, timeout, API error): `{ found: false, code, error }`.
  * Lyric sites are excluded from every search, so no lyric text reaches research.
  */
 
@@ -15,6 +14,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
 import { credential, describeError, fetchJson, type Shape, SourceError } from "./http.js";
+import { toolFailure } from "./toolResult.js";
 
 dotenv.config();
 
@@ -171,25 +171,25 @@ export function formatResults(results: WebResult[]): string {
 }
 
 /**
- * Runs a search for a tool: results text, or text starting "Error:" (nothing found,
- * unavailable). A cancelled run (its `signal` aborted) rejects instead: nothing is reported.
+ * Runs a search for a tool: its results, "nothing found", or the failure with its code. A
+ * cancelled run (its `signal` aborted) rejects instead: nothing is reported.
  */
 async function searchText(
   label: string,
   query: string,
-  none: string,
   signal: AbortSignal | undefined,
 ): Promise<string> {
   signal?.throwIfAborted();
   console.log(`🔍 [Search] ${label}: ${query}`);
   try {
     const results = await webSearch(query, signal);
-    return results.length > 0 ? formatResults(results) : `Error: no web results: ${none}`;
+    return JSON.stringify(
+      results.length > 0 ? { found: true, results } : { found: false, reason: "no_results" },
+    );
   } catch (error) {
     if (signal?.aborted) throw error;
-    const message = describeError(error);
-    console.error(`❌ [Search] ${label} unavailable:`, message);
-    return `Error: web search unavailable: ${message}`;
+    console.error(`❌ [Search] ${label} unavailable:`, describeError(error));
+    return JSON.stringify(toolFailure(error));
   }
 }
 
@@ -205,7 +205,6 @@ export const searchSamples = tool(
     searchText(
       "Samples",
       `"${songTitle}" "${artistName}" sampled by OR samples from whosampled`,
-      `no sample information found for "${songTitle}" by ${artistName}`,
       config?.signal,
     ),
   {
@@ -228,7 +227,6 @@ export const searchProductionHistory = tool(
     searchText(
       "Production history",
       `"${songTitle}" "${artistName}" production history recording studio trivia making of`,
-      `no production history found for "${songTitle}" by ${artistName}`,
       config?.signal,
     ),
   {
@@ -248,7 +246,7 @@ export const searchProductionHistory = tool(
  */
 export const searchMusicInfo = tool(
   async ({ query }, config): Promise<string> =>
-    searchText("General music search", query, `nothing found for "${query}"`, config?.signal),
+    searchText("General music search", query, config?.signal),
   {
     name: "search_music_info",
     description:

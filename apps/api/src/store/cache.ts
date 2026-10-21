@@ -59,21 +59,12 @@ const ResearchSchema = z
     productionTrivia: stringList,
     relatedArtists: stringList,
     collaborators: stringList.optional(),
-    artistTopTracks: z
-      .array(
-        z.object({
-          id: z.string(),
-          title: z.string(),
-          album: z.string(),
-          popularity: z.number(),
-        }),
-      )
-      .optional(),
     lastfmTags: stringList.optional(),
     lastfmSimilarTracks: stringList.optional(),
     lastfmSimilarArtists: stringList.optional(),
     lastfmArtistBio: z.string().optional(),
     listenbrainzSimilarArtists: stringList.optional(),
+    noneFound: stringList.optional(),
   })
   .passthrough();
 

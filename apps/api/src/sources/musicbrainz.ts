@@ -25,6 +25,7 @@ import {
   type Shape,
   SourceError,
 } from "./http.js";
+import { toolFailure } from "./toolResult.js";
 
 dotenv.config();
 
@@ -635,6 +636,17 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
   return genealogy;
 }
 
+/** The credited artists of a recording, each with its MusicBrainz artist MBID. */
+function artistCreditOf(
+  credits: MBArtistCredit[] | undefined,
+): Array<{ name: string; mbid: string }> {
+  return (Array.isArray(credits) ? credits : []).flatMap((c) =>
+    isMbid(c?.artist?.id) && typeof c.artist.name === "string"
+      ? [{ name: c.artist.name, mbid: c.artist.id }]
+      : [],
+  );
+}
+
 // =============================================================================
 // LangGraph Tools
 // =============================================================================
@@ -688,6 +700,8 @@ export const getMusicBrainzRelations = tool(
         mbid: recording.id,
         title: fullRecording.title ?? recording.title,
         artist: fullRecording["artist-credit"]?.[0]?.name,
+        // The credited artists with their own MBIDs (the recording's MBID is not an artist's).
+        artistCredit: artistCreditOf(fullRecording["artist-credit"] ?? recording["artist-credit"]),
         totalRelations: relations.length,
         genealogy: {
           samples,
@@ -702,13 +716,8 @@ export const getMusicBrainzRelations = tool(
     } catch (error) {
       // A cancelled run rejects: nothing is reported for it.
       if (signal?.aborted) throw error;
-      const message = describeError(error);
-      console.error("❌ [MusicBrainz] Error:", message);
-      return JSON.stringify({
-        found: false,
-        error: `MusicBrainz lookup failed: ${message}`,
-        relations: [],
-      });
+      console.error("❌ [MusicBrainz] Error:", describeError(error));
+      return JSON.stringify(toolFailure(error));
     }
   },
   {
@@ -746,6 +755,7 @@ export const getMusicBrainzArtist = tool(
       if (!artist) {
         return JSON.stringify({
           found: false,
+          reason: "not_found",
           message: `Artist "${artistName}" not found`,
         });
       }
@@ -780,9 +790,8 @@ export const getMusicBrainzArtist = tool(
       });
     } catch (error) {
       if (signal?.aborted) throw error;
-      const message = describeError(error);
-      console.error("❌ [MusicBrainz] Artist error:", message);
-      return JSON.stringify({ found: false, error: message });
+      console.error("❌ [MusicBrainz] Artist error:", describeError(error));
+      return JSON.stringify(toolFailure(error));
     }
   },
   {

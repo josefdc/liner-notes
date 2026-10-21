@@ -449,6 +449,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       audio: state.audioFeatures,
       evidence: state.evidence,
       research: state.researchData,
+      sourceErrors: [...state.sourceErrors, ...sourceErrors],
     });
 
     // Only the model call is guarded: any failure of it gives the fallback. A bug in what

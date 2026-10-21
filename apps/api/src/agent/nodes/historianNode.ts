@@ -17,7 +17,16 @@ import {
   getLastfmArtistTags,
   getLastfmSimilarTracks,
 } from "../../sources/lastfm.js";
-import { getCachedResearcherSubgraph, type ResearcherStateType } from "../researcherSubgraph.js";
+import {
+  getCachedResearcherSubgraph,
+  mergeTags,
+  type NoneLabel,
+  type ResearcherStateType,
+  similarTrackLines,
+  StepReader,
+  uniqueErrors,
+  unreadableStatus,
+} from "../researcherSubgraph.js";
 import { researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
@@ -81,74 +90,45 @@ export async function historianNode(
   console.log("📚 [Historian] Deep dive research for:", title, "by", artist);
 
   // Pre-fetch Last.fm tags and similar tracks in parallel (outside the researcher loop)
-  // This ensures genre tags are always available regardless of which actions the LLM picks
+  // This ensures genre tags are always available regardless of which actions the LLM picks.
+  // Each result is read by its type: data, "nothing found" (recorded, never a fact) or the
+  // source's error (a source error, and the prompts say Last.fm was unavailable).
   const prefetchData: Partial<ResearchData> = {};
-  try {
-    console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
-    config.signal?.throwIfAborted();
-    const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
-      getLastfmTrackTags.invoke({ title, artist }, options),
-      getLastfmArtistTags.invoke({ artist }, options),
-      getLastfmSimilarTracks.invoke({ title, artist }, options),
-    ]);
-
-    // Process track tags
-    if (trackTagsResult.status === "fulfilled") {
-      try {
-        const data = JSON.parse(trackTagsResult.value);
-        if (data.found && data.tags?.length > 0) {
-          prefetchData.lastfmTags = data.tags.map(
-            (t: { name: string; count: number }) => `${t.name} (${t.count})`,
-          );
-        }
-      } catch {
-        /* ignore parse errors */
-      }
-    }
-
-    // Process artist tags (merge with track tags, deduplicate)
-    if (artistTagsResult.status === "fulfilled") {
-      try {
-        const data = JSON.parse(artistTagsResult.value);
-        if (data.found && data.tags?.length > 0) {
-          const existingNames = new Set(
-            (prefetchData.lastfmTags || []).map((t: string) =>
-              t.replace(/\s*\(\d+\)$/, "").toLowerCase(),
-            ),
-          );
-          const newTags = data.tags
-            .filter((t: { name: string }) => !existingNames.has(t.name.toLowerCase()))
-            .map((t: { name: string; count: number }) => `${t.name} (${t.count})`);
-          prefetchData.lastfmTags = [...(prefetchData.lastfmTags || []), ...newTags];
-        }
-      } catch {
-        /* ignore parse errors */
-      }
-    }
-
-    // Process similar tracks
-    if (similarTracksResult.status === "fulfilled") {
-      try {
-        const data = JSON.parse(similarTracksResult.value);
-        if (data.found && data.tracks?.length > 0) {
-          prefetchData.lastfmSimilarTracks = data.tracks.map(
-            (t: { name: string; artist: string; match: number }) =>
-              `${t.name} by ${t.artist} (match: ${(t.match * 100).toFixed(0)}%)`,
-          );
-        }
-      } catch {
-        /* ignore parse errors */
-      }
-    }
-
-    const tagCount = prefetchData.lastfmTags?.length || 0;
-    const trackCount = prefetchData.lastfmSimilarTracks?.length || 0;
-    console.log(
-      `✅ [Historian] Pre-fetched ${tagCount} tags, ${trackCount} similar tracks from Last.fm`,
-    );
-  } catch (error) {
-    if (config.signal?.aborted || isAbortError(error)) throw error;
-    console.warn("⚠️ [Historian] Last.fm pre-fetch failed (non-critical):", error);
+  const prefetch = new StepReader();
+  console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
+  config.signal?.throwIfAborted();
+  const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
+    getLastfmTrackTags.invoke({ title, artist }, options),
+    getLastfmArtistTags.invoke({ artist }, options),
+    getLastfmSimilarTracks.invoke({ title, artist }, options),
+  ]);
+  config.signal?.throwIfAborted();
+  const settled = (result: PromiseSettledResult<string>, label: NoneLabel) => {
+    if (result.status === "fulfilled") return prefetch.read("lastfm", result.value, label);
+    if (isAbortError(result.reason)) throw result.reason;
+    prefetch.errors.push(errorRecord("lastfm", result.reason));
+    return null;
+  };
+  const trackTags = settled(trackTagsResult, "trackTags");
+  const artistTags = settled(artistTagsResult, "artistTags");
+  const similarTracks = settled(similarTracksResult, "similarTracks");
+  prefetchData.lastfmTags = mergeTags(mergeTags([], trackTags?.tags), artistTags?.tags);
+  prefetchData.lastfmSimilarTracks = similarTrackLines(similarTracks?.tracks);
+  console.log(
+    `✅ [Historian] Pre-fetched ${prefetchData.lastfmTags.length} tags, ` +
+      `${prefetchData.lastfmSimilarTracks.length} similar tracks from Last.fm ` +
+      `(${prefetch.errors.length} source errors)`,
+  );
+  const prefetchErrors = uniqueErrors(prefetch.errors);
+  const prefetchStatus = unreadableStatus(prefetchErrors);
+  for (const message of prefetchStatus) {
+    writer?.({
+      type: "status",
+      code: "SYS-WARN",
+      message,
+      node: "historian",
+      timestamp: timestampOf(runtime),
+    });
   }
 
   // The research subgraph: its last state is kept whatever happens, so the planner's calls,
@@ -164,6 +144,8 @@ export async function historianNode(
         spotifyData: state.spotifyData,
         ...(state.researchData ? { researchData: state.researchData } : {}),
         runId: runIdFor(state, config, runtime),
+        // The planner reads which sources could not be read, and what found nothing.
+        sourceErrors: prefetchErrors,
       },
       {
         streamMode: ["values", "custom"],
@@ -199,11 +181,14 @@ export async function historianNode(
       ...(prefetchData.lastfmSimilarTracks || []),
       ...(research.lastfmSimilarTracks || []),
     ],
+    noneFound: [...prefetch.none, ...(research.noneFound || [])],
   };
-  const sourceErrors = [
+  // The subgraph's state starts with the pre-fetch errors; each source and code counts once.
+  const sourceErrors = uniqueErrors([
+    ...prefetchErrors,
     ...(finalState.sourceErrors ?? []),
     ...(isSourceError(failure) ? [errorRecord(sourceIdOf(failure.source), failure)] : []),
-  ];
+  ]);
 
   // Nothing is written for a cancelled run. Research is cached only when it is complete: not
   // when it stopped early, a source could not be read, or a planner call failed (the next run
@@ -236,7 +221,11 @@ export async function historianNode(
     researchData: mergedResearch,
     usage: finalState.usage ?? [],
     sourceErrors,
-    statusMessages: [...(finalState.statusMessages ?? []), ...(failure ? [summary] : [])],
+    statusMessages: [
+      ...prefetchStatus,
+      ...(finalState.statusMessages ?? []),
+      ...(failure ? [summary] : []),
+    ],
   };
 }
 

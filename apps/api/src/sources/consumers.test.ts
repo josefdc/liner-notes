@@ -97,7 +97,6 @@ const LISTS: Array<keyof ResearchData> = [
   "productionTrivia",
   "relatedArtists",
   "collaborators",
-  "artistTopTracks",
   "lastfmTags",
   "lastfmSimilarTracks",
   "lastfmSimilarArtists",

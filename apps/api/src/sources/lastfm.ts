@@ -8,8 +8,9 @@
  * - Artist bio and metadata (for factoids)
  *
  * Uses Last.fm API v2. Requires LASTFM_API_KEY in environment. Without it every tool reports
- * the source as unavailable (`unavailable: true`), never as "0 results", and the missing key is
- * logged once.
+ * the source as unavailable (`unavailable: true`, code "not_configured"), never as "0 results",
+ * and the missing key is logged once. Results are the typed JSON of `toolResult.ts`: a track or
+ * artist Last.fm does not know is "nothing found"; any other error is a failure with its code.
  *
  * @see https://www.last.fm/api
  */
@@ -17,7 +18,8 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
-import { credential, describeError, fetchJson, isSourceError, type Shape } from "./http.js";
+import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
+import { failureWith, type ToolFailure, toolFailure } from "./toolResult.js";
 
 dotenv.config();
 
@@ -145,18 +147,40 @@ interface LastfmError {
   message?: string;
 }
 
-type LastfmResult<T> = { ok: true; data: T } | { ok: false; error: string; unavailable?: true };
+/** Last.fm's error 6: the track or artist is not on Last.fm (nothing found, not an outage). */
+const NOT_FOUND = 6;
+/** Last.fm's error 29: rate limit exceeded. */
+const RATE_LIMITED = 29;
+
+/** The tool result for a call Last.fm answered with nothing for the request. */
+interface NothingFound {
+  found: false;
+  reason: "not_found";
+  message: string;
+}
+
+type LastfmResult<T> = { ok: true; data: T } | { ok: false; answer: ToolFailure | NothingFound };
+
+/** Last.fm's own error answer as a tool result: "not found" is nothing found, not a failure. */
+function lastfmError(body: LastfmError): ToolFailure | NothingFound {
+  const message = `Last.fm error ${body.error ?? "?"}: ${body.message ?? "no message"}`;
+  if (body.error === NOT_FOUND) return { found: false, reason: "not_found", message };
+  return failureWith(body.error === RATE_LIMITED ? "rate_limited" : "unavailable", message);
+}
 
 /**
- * Calls a Last.fm method. Resolves with the data, or with the reason it is missing: not
- * configured (no request made), Last.fm's own error message, or the request's typed error.
- * Methods that take names get `autocorrect=1`, so a misspelt name resolves to the canonical one.
+ * Calls a Last.fm method. Resolves with the data, or with the tool result that says why there
+ * is none: not configured (no request made), nothing found, Last.fm's own error, or the
+ * request's typed error. Methods that take names get `autocorrect=1`, so a misspelt name
+ * resolves to the canonical one.
  */
 async function callLastfm<T extends object>(
   params: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<LastfmResult<T>> {
-  if (!lastfmConfigured()) return { ok: false, error: NOT_CONFIGURED, unavailable: true };
+  if (!lastfmConfigured()) {
+    return { ok: false, answer: failureWith("not_configured", NOT_CONFIGURED) };
+  }
 
   const url = new URL(LASTFM_API_BASE);
   url.searchParams.set("api_key", credential("LASTFM_API_KEY") as string);
@@ -177,26 +201,25 @@ async function callLastfm<T extends object>(
   } catch (error) {
     // A cancelled run rejects: nothing is reported for it.
     if (signal?.aborted) throw error;
-    // Last.fm answers errors with HTTP 4xx and a JSON body; keep its message.
+    // Last.fm answers errors with HTTP 4xx and a JSON body; keep its message and code.
     const body = isSourceError(error) ? (error.body as LastfmError | undefined) : undefined;
     if (body && typeof body.message === "string" && body.message) {
-      return { ok: false, error: `Last.fm error ${body.error ?? "?"}: ${body.message}` };
+      return { ok: false, answer: lastfmError(body) };
     }
-    return { ok: false, error: describeError(error) };
+    return { ok: false, answer: toolFailure(error) };
   }
-  if (data.error) {
-    return { ok: false, error: `Last.fm error ${data.error}: ${data.message ?? "no message"}` };
-  }
+  if (data.error) return { ok: false, answer: lastfmError(data) };
   return { ok: true, data };
 }
 
 /** The tool result for a call that returned no data. */
-function failure(result: { error: string; unavailable?: true }): string {
-  return JSON.stringify(
-    result.unavailable
-      ? { found: false, unavailable: true, error: result.error }
-      : { found: false, error: result.error },
-  );
+function failure(result: { answer: ToolFailure | NothingFound }): string {
+  return JSON.stringify(result.answer);
+}
+
+/** A log line for a call that returned no data. */
+function why(result: { answer: ToolFailure | NothingFound }): string {
+  return "error" in result.answer ? result.answer.error : result.answer.message;
 }
 
 /** Last.fm sends a single item as an object instead of a one-item list. */
@@ -248,7 +271,7 @@ export const getLastfmTrackTags = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Track tags error:", result.error);
+      console.error("❌ [Last.fm] Track tags error:", why(result));
       return failure(result);
     }
 
@@ -282,7 +305,7 @@ export const getLastfmArtistTags = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Artist tags error:", result.error);
+      console.error("❌ [Last.fm] Artist tags error:", why(result));
       return failure(result);
     }
 
@@ -319,7 +342,7 @@ export const getLastfmSimilarTracks = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Similar tracks error:", result.error);
+      console.error("❌ [Last.fm] Similar tracks error:", why(result));
       return failure(result);
     }
 
@@ -364,7 +387,7 @@ export const getLastfmSimilarArtists = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Similar artists error:", result.error);
+      console.error("❌ [Last.fm] Similar artists error:", why(result));
       return failure(result);
     }
 
@@ -405,13 +428,13 @@ export const getLastfmArtistInfo = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Artist info error:", result.error);
+      console.error("❌ [Last.fm] Artist info error:", why(result));
       return failure(result);
     }
 
     const info = result.data.artist;
     if (!info || typeof info.name !== "string") {
-      return JSON.stringify({ found: false, error: "Artist not found" });
+      return JSON.stringify({ found: false, reason: "not_found", message: "Artist not found" });
     }
 
     const tags = cleanTags(info.tags?.tag);

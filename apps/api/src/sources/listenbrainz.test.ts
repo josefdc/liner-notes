@@ -56,11 +56,9 @@ describe("ListenBrainz similar artists", () => {
       name: "Nile Rodgers",
       mbid: "c6d571dd-c0ae-4ac8-9500-780b1b9b25e5",
       score: 10016,
-      similarity: 1,
     });
-    // Relative to the most similar artist, so always within 0..1.
-    for (const a of data.artists) expect(a.similarity).toBeGreaterThan(0);
-    for (const a of data.artists) expect(a.similarity).toBeLessThanOrEqual(1);
+    // Only the raw score: a share of the top score made the top artist "100%" every time.
+    for (const a of data.artists) expect(a).not.toHaveProperty("similarity");
 
     const url = new URL(net.calls[0].url);
     expect(url.searchParams.get("artist_mbids")).toBe(DAFT_PUNK);
@@ -79,7 +77,7 @@ describe("ListenBrainz similar artists", () => {
 
     const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistMbid: DAFT_PUNK }));
 
-    expect(data.found).toBe(false);
+    expect(data).toMatchObject({ found: false, code: "invalid_response" });
     expect(data.error).toMatch(/expected JSON, got text\//);
   });
 
@@ -88,7 +86,11 @@ describe("ListenBrainz similar artists", () => {
 
     const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistMbid: DAFT_PUNK }));
 
-    expect(data).toMatchObject({ found: false, error: expect.stringMatching(/not a list/) });
+    expect(data).toMatchObject({
+      found: false,
+      code: "invalid_response",
+      error: expect.stringMatching(/not a list/),
+    });
   });
 
   it("an API error is reported, not counted as a result", async () => {
@@ -96,7 +98,11 @@ describe("ListenBrainz similar artists", () => {
 
     const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistMbid: DAFT_PUNK }));
 
-    expect(data).toMatchObject({ found: false, error: expect.stringMatching(/HTTP 500/) });
+    expect(data).toMatchObject({
+      found: false,
+      code: "unavailable",
+      error: expect.stringMatching(/HTTP 500/),
+    });
   });
 
   it("an MBID that is not a UUID never reaches a URL", async () => {
@@ -146,8 +152,8 @@ describe("ListenBrainz similar artists", () => {
       await getListenBrainzSimilarArtists.invoke({ artistName: "Daft Punks Revenge" }),
     );
 
-    expect(data.found).toBe(false);
-    expect(data.error).toMatch(/Could not resolve/);
+    expect(data).toMatchObject({ found: false, reason: "artist_not_identified" });
+    expect(data).not.toHaveProperty("code");
     expect(net.calls.filter((c) => c.url.includes("listenbrainz.org"))).toHaveLength(0);
   });
 
@@ -165,8 +171,7 @@ describe("ListenBrainz similar artists", () => {
     const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistMbid: DAFT_PUNK }));
 
     expect(data.artists.map((a: { name: string }) => a.name)).toEqual(["High", "Low"]);
-    expect(data.artists[0].similarity).toBe(1);
-    expect(data.artists[1].similarity).toBe(0.02);
+    expect(data.artists.map((a: { score: number }) => a.score)).toEqual([500, 10]);
   });
 
   it("resolves the real Earth, Wind & Fire, not the band Earth", async () => {

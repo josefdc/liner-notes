@@ -8,6 +8,12 @@
  * A failed planner call ends the research (the run continues with what was found) and is
  * recorded in `usage` with its error kind. A cancelled run stops the research: the run's abort
  * signal goes to every planner call and every search.
+ *
+ * Tool results are read by their type (`readToolResult`), never by their text: found data is
+ * research; "nothing found" is recorded in `noneFound`; a source that could not be read is a
+ * `sourceErrors` entry, its status line says so and the planner prompt shows it as unavailable.
+ * Similar artists and tracks are kept by rank with their raw score and its scale. ListenBrainz
+ * is asked about the track's own artist only (its MusicBrainz MBID, or its exact name).
  */
 
 import { StateGraph, END, START, Annotation } from "@langchain/langgraph";
@@ -16,10 +22,21 @@ import { ResearchPlanOutput } from "@liner-notes/contract";
 
 import { answeredCall, failedCall } from "./callRecords.js";
 import { isAbortError, withRetry } from "./errors.js";
-import { plannerMessages } from "./prompts.js";
+import { plannerMessages, SOURCE_NAMES } from "./prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
-import { searchSamples, searchProductionHistory, searchMusicInfo } from "../sources/search.js";
-import { getMusicBrainzRelations, getMusicBrainzArtist } from "../sources/musicbrainz.js";
+import {
+  formatResults,
+  searchSamples,
+  searchProductionHistory,
+  searchMusicInfo,
+  type WebResult,
+} from "../sources/search.js";
+import {
+  getMusicBrainzRelations,
+  getMusicBrainzArtist,
+  isMbid,
+  normalizeName,
+} from "../sources/musicbrainz.js";
 import {
   getLastfmTrackTags,
   getLastfmArtistTags,
@@ -29,6 +46,7 @@ import {
 } from "../sources/lastfm.js";
 import { getListenBrainzSimilarArtists } from "../sources/listenbrainz.js";
 import { errorRecord } from "../sources/records.js";
+import { readToolResult } from "../sources/toolResult.js";
 import type { SourceError, SourceId } from "@liner-notes/contract";
 import type { SpotifyData, ResearchData, ResearchPlan, LlmCallRecord } from "./state.js";
 
@@ -62,7 +80,6 @@ export const ResearcherState = Annotation.Root({
       productionTrivia: [...prev.productionTrivia, ...(next.productionTrivia || [])],
       relatedArtists: [...prev.relatedArtists, ...(next.relatedArtists || [])],
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
-      artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
       lastfmTags: [...(prev.lastfmTags || []), ...(next.lastfmTags || [])],
       lastfmSimilarTracks: [
         ...(prev.lastfmSimilarTracks || []),
@@ -77,19 +94,17 @@ export const ResearcherState = Annotation.Root({
         ...(prev.listenbrainzSimilarArtists || []),
         ...(next.listenbrainzSimilarArtists || []),
       ],
+      noneFound: [...(prev.noneFound || []), ...(next.noneFound || [])],
     }),
-    default: () => ({
-      samples: [],
-      productionTrivia: [],
-      relatedArtists: [],
-      collaborators: [],
-      artistTopTracks: [],
-      lastfmTags: [],
-      lastfmSimilarTracks: [],
-      lastfmSimilarArtists: [],
-      lastfmArtistBio: undefined,
-      listenbrainzSimilarArtists: [],
-    }),
+    default: () => emptyResearch(),
+  }),
+
+  // The track's own artist on MusicBrainz, once a MusicBrainz step identified it (from the
+  // artist search by its exact name, or the recording's artist credit); ListenBrainz asks
+  // about this artist only.
+  artistMbid: Annotation<ArtistRef | null>({
+    reducer: (prev, next) => next ?? prev,
+    default: () => null,
   }),
 
   // Subgraph-specific: iteration counter
@@ -180,6 +195,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
     const messages = plannerMessages({
       track: { title, artist },
       research: state.researchData,
+      sourceErrors: state.sourceErrors,
       step: iteration,
       maxSteps: MAX_PLANNED_STEPS,
     });
@@ -230,27 +246,145 @@ function createResearchManagerNode(runtime: AgentRuntime) {
 }
 
 // =============================================================================
-// Helper: Extract MBID from existing research data
+// Reading the tools' results
 // =============================================================================
 
+/** The track's artist as research asks for it: the first credited artist, and all of them. */
+export function trackArtists(spotify: SpotifyData): { primary: string; names: string[] } {
+  const names = (spotify.artistNames ?? []).filter((n) => n.trim() !== "");
+  return names.length > 0
+    ? { primary: names[0], names }
+    : { primary: spotify.artist, names: [spotify.artist] };
+}
+
+/** The artist's own MusicBrainz identity, as research found it. */
+export interface ArtistRef {
+  mbid: string;
+  name: string;
+}
+
 /**
- * Try to extract a MusicBrainz artist MBID from existing research data.
- * Looks for MBID patterns in collaborator and MusicBrainz result strings.
+ * The track's own artist among a recording's credited artists: the credit named like the
+ * primary artist, else the first credit (the recording search only matches recordings credited
+ * to exactly the track's artists). Never a related or similar artist, never the recording's id.
  */
-function extractMbidFromResearch(researchData: ResearchData): string | null {
-  // Look for MBID in lastfmSimilarArtists (they may have mbid fields)
-  for (const entry of researchData.lastfmSimilarArtists || []) {
-    const match = entry.match(/mbid:\s*([0-9a-f-]{36})/i);
-    if (match) return match[1];
+export function artistFromCredit(credits: unknown, primary: string): ArtistRef | null {
+  const list = (Array.isArray(credits) ? credits : []).filter(
+    (c): c is ArtistRef => isMbid(c?.mbid) && typeof c?.name === "string",
+  );
+  const wanted = normalizeName(primary);
+  return list.find((c) => normalizeName(c.name) === wanted) ?? list[0] ?? null;
+}
+
+/** Tag lines ("name (count)"), each tag once (case-insensitive), `existing` first. */
+export function mergeTags(existing: string[], tags: unknown): string[] {
+  const seen = new Set(existing.map((t) => t.replace(/\s*\(\d+\)$/, "").toLowerCase()));
+  const merged = [...existing];
+  for (const tag of Array.isArray(tags) ? tags : []) {
+    if (typeof tag?.name !== "string" || seen.has(tag.name.toLowerCase())) continue;
+    seen.add(tag.name.toLowerCase());
+    merged.push(`${tag.name} (${Number(tag.count) || 0})`);
+  }
+  return merged;
+}
+
+const score = (value: unknown) => (Number(value) || 0).toFixed(2);
+
+/**
+ * Last.fm similar tracks by rank, with Last.fm's raw match value and its scale (0 to 1). Never a
+ * percentage: the most similar track would always read "100 %".
+ */
+export function similarTrackLines(tracks: unknown): string[] {
+  return (Array.isArray(tracks) ? tracks : [])
+    .filter((t) => typeof t?.name === "string" && typeof t?.artist === "string")
+    .map(
+      (t, i) => `${i + 1}. ${t.name} by ${t.artist} (Last.fm match ${score(t.match)}, scale 0-1)`,
+    );
+}
+
+/** Last.fm similar artists by rank, with Last.fm's raw match value and its scale (0 to 1). */
+export function similarArtistLines(artists: unknown): string[] {
+  return (Array.isArray(artists) ? artists : [])
+    .filter((a) => typeof a?.name === "string")
+    .map((a, i) => `${i + 1}. ${a.name} (Last.fm match ${score(a.match)}, scale 0-1)`);
+}
+
+/**
+ * ListenBrainz similar artists by rank, with the dataset's raw score (shared listening
+ * sessions; higher is more similar; no fixed maximum, so not a percentage).
+ */
+export function listenBrainzLines(artists: unknown, of: string): string[] {
+  return (Array.isArray(artists) ? artists : [])
+    .filter((a) => typeof a?.name === "string")
+    .map(
+      (a, i) =>
+        `${i + 1}. ${a.name} (similar to ${of}; ListenBrainz score ${Number(a.score) || 0}, ` +
+        "a count of shared listening sessions)",
+    );
+}
+
+/** The label of an empty step, for `noneFound`. Written by code: never source text. */
+const NONE_LABEL = {
+  samples: "web search: sample history",
+  production: "web search: production history",
+  general: "web search: the planner's lead",
+  relations: "MusicBrainz relationships of the recording",
+  collaborators: "MusicBrainz collaborators of the artist",
+  trackTags: "Last.fm track tags",
+  artistTags: "Last.fm artist tags",
+  similarTracks: "Last.fm similar tracks",
+  similarArtists: "Last.fm similar artists",
+  artistInfo: "Last.fm artist info",
+  listenbrainz: "ListenBrainz similar artists",
+} as const;
+export type NoneLabel = keyof typeof NONE_LABEL;
+
+/** What a tool's typed `reason` adds to an empty step's label. */
+const REASON_NOTE: Record<string, string> = {
+  ambiguous: "several matching recordings; none picked",
+  artist_not_identified: "skipped: no MusicBrainz artist with exactly this name",
+};
+
+/** What a research step read: its data, the sources it could not read, the empty answers. */
+export class StepReader {
+  readonly errors: SourceError[] = [];
+  readonly none: string[] = [];
+
+  /** The data of a found result; null (recorded as an error or "nothing found") otherwise. */
+  read<T extends object = Record<string, unknown>>(
+    source: SourceId,
+    raw: unknown,
+    label: NoneLabel,
+  ): T | null {
+    const outcome = readToolResult<T>(source, raw);
+    if (outcome.kind === "found") return outcome.data;
+    if (outcome.kind === "failed") this.errors.push(outcome.error);
+    else this.nothing(label, outcome.reason ? REASON_NOTE[outcome.reason] : undefined);
+    return null;
   }
 
-  // Look for MBID in samples data (MusicBrainz results)
-  for (const entry of researchData.samples) {
-    const match = entry.match(/"mbid"\s*:\s*"([0-9a-f-]{36})"/i);
-    if (match) return match[1];
+  /** Records a step whose source answered with nothing for the track. */
+  nothing(label: NoneLabel, note?: string) {
+    this.none.push(note ? `${NONE_LABEL[label]} (${note})` : NONE_LABEL[label]);
   }
+}
 
-  return null;
+/** One status line per source that could not be read: "⚠️ Last.fm could not be read (…)". */
+export function unreadableStatus(errors: readonly SourceError[]): string[] {
+  return uniqueErrors(errors).map(
+    (e) => `⚠️ ${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
+  );
+}
+
+/** Source errors without repeats: one per source and code, the first message kept. */
+export function uniqueErrors(errors: readonly SourceError[]): SourceError[] {
+  const seen = new Set<string>();
+  return errors.filter((e) => {
+    const key = `${e.source}:${e.code}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // =============================================================================
@@ -279,6 +413,42 @@ function createResearchToolNode(runtime: AgentRuntime) {
     researchToolNode(state, config, runtime);
 }
 
+function emptyResearch(): ResearchData {
+  return {
+    samples: [],
+    productionTrivia: [],
+    relatedArtists: [],
+    collaborators: [],
+    lastfmTags: [],
+    lastfmSimilarTracks: [],
+    lastfmSimilarArtists: [],
+    lastfmArtistBio: undefined,
+    listenbrainzSimilarArtists: [],
+    noneFound: [],
+  };
+}
+
+/** True when a step added anything to the research. */
+function holdsData(data: ResearchData): boolean {
+  return (
+    Boolean(data.lastfmArtistBio) ||
+    [
+      data.samples,
+      data.productionTrivia,
+      data.relatedArtists,
+      data.collaborators,
+      data.lastfmTags,
+      data.lastfmSimilarTracks,
+      data.lastfmSimilarArtists,
+      data.listenbrainzSimilarArtists,
+    ].some((list) => (list?.length ?? 0) > 0)
+  );
+}
+
+interface WebResults {
+  results?: WebResult[];
+}
+
 async function researchToolNode(
   state: ResearcherStateType,
   config: LangGraphRunnableConfig,
@@ -291,7 +461,8 @@ async function researchToolNode(
     return { researchComplete: true };
   }
 
-  const { title, artist } = state.spotifyData;
+  const { title, artist, album } = state.spotifyData;
+  const { primary, names: artistNames } = trackArtists(state.spotifyData);
   const label = actionLabel(plan.nextAction);
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
@@ -305,252 +476,232 @@ async function researchToolNode(
     timestamp: timestampOf(runtime),
   });
 
+  interface Step {
+    data: ResearchData;
+    reader: StepReader;
+    artist?: ArtistRef;
+  }
+
   // One search attempt; its result is merged into the research by the appending reducer.
-  const search = async (): Promise<ResearchData> => {
-    const newData: ResearchData = {
-      samples: [],
-      productionTrivia: [],
-      relatedArtists: [],
-      collaborators: [],
-      artistTopTracks: [],
-      lastfmTags: [],
-      lastfmSimilarTracks: [],
-      lastfmSimilarArtists: [],
-      lastfmArtistBio: undefined,
-      listenbrainzSimilarArtists: [],
+  const search = async (): Promise<Step> => {
+    const newData = emptyResearch();
+    const reader = new StepReader();
+    const step: Step = { data: newData, reader };
+    const webText = (raw: unknown, none: NoneLabel): string | null => {
+      const found = reader.read<WebResults>("tavily", raw, none);
+      const results = Array.isArray(found?.results) ? found.results : [];
+      if (found && results.length === 0) reader.nothing(none);
+      return results.length > 0 ? formatResults(results) : null;
     };
-    let result: string;
 
     switch (plan.nextAction) {
-      case "search_samples":
+      case "search_samples": {
         config.signal?.throwIfAborted();
-        result = await searchSamples.invoke({ songTitle: title, artistName: artist }, options);
-        if (!result.startsWith("Error") && !result.startsWith("No sample")) {
-          newData.samples.push(result);
-        }
-        break;
-
-      case "search_production":
-        config.signal?.throwIfAborted();
-        result = await searchProductionHistory.invoke(
-          { songTitle: title, artistName: artist },
-          options,
+        const text = webText(
+          await searchSamples.invoke({ songTitle: title, artistName: artist }, options),
+          "samples",
         );
-        if (!result.startsWith("Error") && !result.startsWith("No production")) {
-          newData.productionTrivia.push(result);
-        }
+        if (text) newData.samples.push(text);
         break;
+      }
+
+      case "search_production": {
+        config.signal?.throwIfAborted();
+        const text = webText(
+          await searchProductionHistory.invoke({ songTitle: title, artistName: artist }, options),
+          "production",
+        );
+        if (text) newData.productionTrivia.push(text);
+        break;
+      }
 
       case "search_general": {
         // Use the custom query from the plan (for following leads)
         const query = plan.query || `${title} ${artist} music history`;
         config.signal?.throwIfAborted();
-        result = await searchMusicInfo.invoke({ query }, options);
-        if (!result.startsWith("Error") && !result.startsWith("No results")) {
-          // Classify general results as production trivia
-          newData.productionTrivia.push(result);
+        // Classify general results as production trivia
+        const text = webText(await searchMusicInfo.invoke({ query }, options), "general");
+        if (text) newData.productionTrivia.push(text);
+        break;
+      }
+
+      case "search_musicbrainz": {
+        // Use MusicBrainz for structured genealogy data
+        config.signal?.throwIfAborted();
+        const mbData = reader.read<{
+          genealogy?: { samples?: unknown[]; covers?: unknown[]; remixes?: unknown[] };
+          artistCredit?: unknown;
+        }>(
+          "musicbrainz",
+          await getMusicBrainzRelations.invoke(
+            { title, artist, artistNames, ...(album ? { album } : {}) },
+            options,
+          ),
+          "relations",
+        );
+        if (!mbData) break;
+        const own = artistFromCredit(mbData.artistCredit, primary);
+        if (own) step.artist = own;
+        const { samples = [], covers = [], remixes = [] } = mbData.genealogy ?? {};
+        if (samples.length > 0) {
+          newData.samples.push(`[MusicBrainz Samples] ${JSON.stringify(samples)}`);
+        }
+        if (covers.length > 0) {
+          newData.productionTrivia.push(`[MusicBrainz Covers] ${JSON.stringify(covers)}`);
+        }
+        if (remixes.length > 0) {
+          newData.productionTrivia.push(`[MusicBrainz Remixes] ${JSON.stringify(remixes)}`);
+        }
+        if (samples.length + covers.length + remixes.length === 0) {
+          reader.nothing("relations", "recording identified; no samples, covers or remixes");
         }
         break;
       }
 
-      case "search_musicbrainz":
-        // Use MusicBrainz for structured genealogy data
-        config.signal?.throwIfAborted();
-        result = await getMusicBrainzRelations.invoke({ title, artist }, options);
-        try {
-          const mbData = JSON.parse(result);
-          if (mbData.found && mbData.genealogy) {
-            const { samples, covers, remixes } = mbData.genealogy;
-            if (samples?.length > 0) {
-              newData.samples.push(`[MusicBrainz Samples] ${JSON.stringify(samples)}`);
-            }
-            if (covers?.length > 0) {
-              newData.productionTrivia.push(`[MusicBrainz Covers] ${JSON.stringify(covers)}`);
-            }
-            if (remixes?.length > 0) {
-              newData.productionTrivia.push(`[MusicBrainz Remixes] ${JSON.stringify(remixes)}`);
-            }
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.samples.push(result);
-          }
-        }
-        break;
-
-      case "search_artist_collaborators":
+      case "search_artist_collaborators": {
         // Use MusicBrainz to get artist collaborators (producers, writers)
         config.signal?.throwIfAborted();
-        result = await getMusicBrainzArtist.invoke({ artistName: artist }, options);
-        try {
-          const artistData = JSON.parse(result);
-          if (artistData.found && artistData.collaborators?.length > 0) {
-            newData.collaborators = artistData.collaborators.map(
-              (c: { name: string; relationship: string }) => `${c.name} (${c.relationship})`,
-            );
-            newData.productionTrivia.push(
-              `[MusicBrainz Artist] ${artist} collaborators: ${JSON.stringify(artistData.collaborators)}`,
-            );
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.productionTrivia.push(result);
-          }
+        const artistData = reader.read<{
+          mbid?: unknown;
+          name?: unknown;
+          collaborators?: Array<{ name?: unknown; relationship?: unknown }>;
+        }>(
+          "musicbrainz",
+          await getMusicBrainzArtist.invoke({ artistName: artist, artistNames }, options),
+          "collaborators",
+        );
+        if (!artistData) break;
+        // findArtist matched this artist by its exact name: the track's own artist.
+        if (isMbid(artistData.mbid) && typeof artistData.name === "string") {
+          step.artist = { mbid: artistData.mbid, name: artistData.name };
         }
+        const collaborators = (artistData.collaborators ?? []).filter(
+          (c): c is { name: string; relationship: string } =>
+            typeof c?.name === "string" && typeof c.relationship === "string",
+        );
+        if (collaborators.length === 0) {
+          reader.nothing("collaborators");
+          break;
+        }
+        newData.collaborators = collaborators.map((c) => `${c.name} (${c.relationship})`);
+        newData.productionTrivia.push(
+          `[MusicBrainz Artist] ${artist} collaborators: ${JSON.stringify(collaborators)}`,
+        );
         break;
+      }
 
-      case "search_lastfm_tags":
+      case "search_lastfm_tags": {
         // Fetch both track and artist tags in parallel
-        {
-          config.signal?.throwIfAborted();
-          const [trackTagsResult, artistTagsResult] = await Promise.allSettled([
-            getLastfmTrackTags.invoke({ title, artist }, options),
-            getLastfmArtistTags.invoke({ artist }, options),
-          ]);
-
-          if (trackTagsResult.status === "fulfilled") {
-            try {
-              const data = JSON.parse(trackTagsResult.value);
-              if (data.found && data.tags?.length > 0) {
-                newData.lastfmTags = data.tags.map(
-                  (t: { name: string; count: number }) => `${t.name} (${t.count})`,
-                );
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-
-          if (artistTagsResult.status === "fulfilled") {
-            try {
-              const data = JSON.parse(artistTagsResult.value);
-              if (data.found && data.tags?.length > 0) {
-                const existingNames = new Set(
-                  (newData.lastfmTags || []).map((t: string) =>
-                    t.replace(/\s*\(\d+\)$/, "").toLowerCase(),
-                  ),
-                );
-                const newTags = data.tags
-                  .filter((t: { name: string }) => !existingNames.has(t.name.toLowerCase()))
-                  .map((t: { name: string; count: number }) => `${t.name} (${t.count})`);
-                newData.lastfmTags = [...(newData.lastfmTags || []), ...newTags];
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-        break;
-
-      case "search_lastfm_similar_tracks":
         config.signal?.throwIfAborted();
-        result = await getLastfmSimilarTracks.invoke({ title, artist }, options);
-        try {
-          const data = JSON.parse(result);
-          if (data.found && data.tracks?.length > 0) {
-            newData.lastfmSimilarTracks = data.tracks.map(
-              (t: { name: string; artist: string; match: number }) =>
-                `${t.name} by ${t.artist} (match: ${(t.match * 100).toFixed(0)}%)`,
-            );
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.relatedArtists.push(result);
-          }
-        }
+        const [trackTags, artistTags] = await Promise.all([
+          getLastfmTrackTags.invoke({ title, artist }, options),
+          getLastfmArtistTags.invoke({ artist }, options),
+        ]);
+        const track = reader.read<{ tags?: unknown }>("lastfm", trackTags, "trackTags");
+        const byArtist = reader.read<{ tags?: unknown }>("lastfm", artistTags, "artistTags");
+        newData.lastfmTags = mergeTags(mergeTags([], track?.tags), byArtist?.tags);
         break;
+      }
 
-      case "search_lastfm_similar_artists":
+      case "search_lastfm_similar_tracks": {
         config.signal?.throwIfAborted();
-        result = await getLastfmSimilarArtists.invoke({ artist }, options);
-        try {
-          const data = JSON.parse(result);
-          if (data.found && data.artists?.length > 0) {
-            newData.lastfmSimilarArtists = data.artists.map(
-              (a: { name: string; match: number; mbid?: string }) =>
-                `${a.name} (match: ${(a.match * 100).toFixed(0)}%${a.mbid ? `, mbid: ${a.mbid}` : ""})`,
-            );
-            newData.relatedArtists.push(
-              `[Last.fm Similar Artists] ${JSON.stringify(data.artists)}`,
-            );
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.relatedArtists.push(result);
-          }
-        }
+        const data = reader.read<{ tracks?: unknown }>(
+          "lastfm",
+          await getLastfmSimilarTracks.invoke({ title, artist }, options),
+          "similarTracks",
+        );
+        newData.lastfmSimilarTracks = similarTrackLines(data?.tracks);
         break;
+      }
 
-      case "search_lastfm_artist_info":
+      case "search_lastfm_similar_artists": {
         config.signal?.throwIfAborted();
-        result = await getLastfmArtistInfo.invoke({ artist }, options);
-        try {
-          const data = JSON.parse(result);
-          if (data.found) {
-            if (data.bio) {
-              newData.lastfmArtistBio = data.bio;
-              newData.productionTrivia.push(`[Last.fm Bio] ${data.bio}`);
-            }
-            if (data.tags?.length > 0) {
-              const tagStr = data.tags.map((t: { name: string }) => t.name).join(", ");
-              newData.lastfmTags = [...(newData.lastfmTags || []), ...[`[Artist Info] ${tagStr}`]];
-            }
-            if (data.similarArtists?.length > 0) {
-              newData.lastfmSimilarArtists = [
-                ...(newData.lastfmSimilarArtists || []),
-                ...data.similarArtists.map((a: { name: string }) => a.name),
-              ];
-            }
-          }
-        } catch {
-          if (!result.includes("error")) {
-            newData.productionTrivia.push(result);
-          }
-        }
+        const data = reader.read<{ artists?: unknown }>(
+          "lastfm",
+          await getLastfmSimilarArtists.invoke({ artist }, options),
+          "similarArtists",
+        );
+        newData.lastfmSimilarArtists = similarArtistLines(data?.artists);
         break;
+      }
 
-      case "search_listenbrainz_similar":
-        {
-          // Extract MBID from existing research data if available
-          const mbid = extractMbidFromResearch(state.researchData);
-          config.signal?.throwIfAborted();
-          result = await getListenBrainzSimilarArtists.invoke(
-            { artistMbid: mbid || undefined, artistName: mbid ? undefined : artist },
+      case "search_lastfm_artist_info": {
+        config.signal?.throwIfAborted();
+        const data = reader.read<{ bio?: unknown; tags?: unknown; similarArtists?: unknown }>(
+          "lastfm",
+          await getLastfmArtistInfo.invoke({ artist }, options),
+          "artistInfo",
+        );
+        if (!data) break;
+        if (typeof data.bio === "string" && data.bio) {
+          newData.lastfmArtistBio = data.bio;
+          newData.productionTrivia.push(`[Last.fm Bio] ${data.bio}`);
+        }
+        const tagNames = (Array.isArray(data.tags) ? data.tags : [])
+          .filter((t) => typeof t?.name === "string")
+          .map((t) => t.name);
+        if (tagNames.length > 0) newData.lastfmTags = [`[Artist Info] ${tagNames.join(", ")}`];
+        // Artist info lists similar artists without a match value: names in Last.fm's order.
+        newData.lastfmSimilarArtists = (
+          Array.isArray(data.similarArtists) ? data.similarArtists : []
+        )
+          .filter((a) => typeof a?.name === "string")
+          .map((a, i) => `${i + 1}. ${a.name} (Last.fm artist info; no match value)`);
+        break;
+      }
+
+      case "search_listenbrainz_similar": {
+        // Only the track's own artist: its MBID from an earlier MusicBrainz step, else its
+        // exact name, which the tool resolves on MusicBrainz (and skips when it cannot).
+        const own = state.artistMbid;
+        config.signal?.throwIfAborted();
+        const data = reader.read<{ artist?: { name?: unknown }; artists?: unknown }>(
+          "listenbrainz",
+          await getListenBrainzSimilarArtists.invoke(
+            own
+              ? { artistMbid: own.mbid, artistName: own.name }
+              : { artistName: artist, artistNames },
             options,
-          );
-          try {
-            const data = JSON.parse(result);
-            if (data.found && data.artists?.length > 0) {
-              newData.listenbrainzSimilarArtists = data.artists.map(
-                (a: { name: string; similarity: number }) =>
-                  `${a.name} (similarity: ${(a.similarity * 100).toFixed(0)}%)`,
-              );
-              newData.relatedArtists.push(
-                `[ListenBrainz Similar Artists] ${JSON.stringify(data.artists)}`,
-              );
-            }
-          } catch {
-            if (!result.includes("error")) {
-              newData.relatedArtists.push(result);
-            }
-          }
-        }
+          ),
+          "listenbrainz",
+        );
+        const of =
+          typeof data?.artist?.name === "string" ? data.artist.name : (own?.name ?? primary);
+        newData.listenbrainzSimilarArtists = listenBrainzLines(data?.artists, of);
         break;
+      }
     }
-    return newData;
+    newData.noneFound = reader.none;
+    return step;
   };
 
   try {
     // At most one more attempt, for a transient failure only; no other retry wraps this one.
-    const newData = await withRetry(search, {
+    const step = await withRetry(search, {
       maxAttempts: 2,
       initialInterval: SEARCH_RETRY_MS,
       signal: config.signal,
     });
-    console.log(`✅ [Research Tool] Found data for ${plan.nextAction}`);
+    const errors = uniqueErrors(step.reader.errors);
+    console.log(`✅ [Research Tool] Read ${plan.nextAction} (${errors.length} source errors)`);
+    // The status says what happened: a source that could not be read is never "found".
+    const warnings = unreadableStatus(errors);
+    for (const message of warnings) {
+      writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
+    }
+    const status = [
+      ...warnings,
+      ...(holdsData(step.data)
+        ? [`Found ${label} information`]
+        : errors.length === 0
+          ? [`Nothing found: ${label}`]
+          : []),
+    ];
     return {
-      researchData: newData,
-      statusMessages: [`Found ${label} information`],
+      researchData: step.data,
+      sourceErrors: errors,
+      ...(step.artist ? { artistMbid: step.artist } : {}),
+      statusMessages: status,
     };
   } catch (error) {
     // A cancelled run stops here; any other failure is recorded as the source's error and the

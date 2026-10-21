@@ -88,6 +88,11 @@ export interface SpotifyData {
   id: string;
   title: string;
   artist: string;
+  /**
+   * The credited artists one by one (`artist` joins them with ", ", which cannot be told apart
+   * from a comma in one name). Missing on data read before it was recorded.
+   */
+  artistNames?: string[];
   artistIds: string[];
   album: string;
   releaseDate: string;
@@ -174,8 +179,6 @@ export interface ResearchData {
   relatedArtists: string[];
   /** Artist collaborators from MusicBrainz */
   collaborators?: string[];
-  /** Top tracks from the same artist (from Spotify) */
-  artistTopTracks?: Array<{ id: string; title: string; album: string; popularity: number }>;
   /** Genre/style tags from Last.fm (track + artist combined) */
   lastfmTags?: string[];
   /** Similar tracks from Last.fm */
@@ -186,6 +189,11 @@ export interface ResearchData {
   lastfmArtistBio?: string;
   /** Similar artists from ListenBrainz (open-source listening data) */
   listenbrainzSimilarArtists?: string[];
+  /**
+   * Research steps whose source answered with nothing for this track (labels written by code,
+   * e.g. "Last.fm similar tracks"). A source that could not be read is a source error instead.
+   */
+  noneFound?: string[];
 }
 
 // =============================================================================
@@ -319,7 +327,6 @@ export const SonicAgentState = Annotation.Root({
       productionTrivia: [...prev.productionTrivia, ...next.productionTrivia],
       relatedArtists: [...prev.relatedArtists, ...next.relatedArtists],
       collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
-      artistTopTracks: [...(prev.artistTopTracks || []), ...(next.artistTopTracks || [])],
       lastfmTags: [...(prev.lastfmTags || []), ...(next.lastfmTags || [])],
       lastfmSimilarTracks: [
         ...(prev.lastfmSimilarTracks || []),
@@ -334,18 +341,19 @@ export const SonicAgentState = Annotation.Root({
         ...(prev.listenbrainzSimilarArtists || []),
         ...(next.listenbrainzSimilarArtists || []),
       ],
+      noneFound: [...(prev.noneFound || []), ...(next.noneFound || [])],
     }),
     default: () => ({
       samples: [],
       productionTrivia: [],
       relatedArtists: [],
       collaborators: [],
-      artistTopTracks: [],
       lastfmTags: [],
       lastfmSimilarTracks: [],
       lastfmSimilarArtists: [],
       lastfmArtistBio: undefined,
       listenbrainzSimilarArtists: [],
+      noneFound: [],
     }),
   }),
 

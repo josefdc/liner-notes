@@ -1,7 +1,7 @@
 /**
- * Web search without TAVILY_API_KEY: every research search returns text starting "Error:"
- * that the researcher and historian filters drop, makes no request, and the missing key is
- * logged once.
+ * Web search without TAVILY_API_KEY: every research search reports the source as not
+ * configured (a typed failure the researcher records as a source error, never research), makes
+ * no request, and the missing key is logged once.
  */
 
 import { tmpdir } from "node:os";
@@ -15,6 +15,7 @@ vi.hoisted(() => {
 });
 
 import { searchMusicInfo, searchProductionHistory, searchSamples } from "./search.js";
+import { readToolResult } from "./toolResult.js";
 
 describe("web search without an API key", () => {
   let net: ReturnType<typeof stubFetch>;
@@ -48,13 +49,19 @@ describe("web search without an API key", () => {
         searchProductionHistory.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" }),
     ],
     ["general", () => searchMusicInfo.invoke({ query: "Ice Ice Baby" })],
-  ])("%s returns a string starting Error: that the consumers drop", async (_name, run) => {
+  ])("%s reports the source as not configured", async (_name, run) => {
     const result = await run();
 
-    expect(typeof result).toBe("string");
-    expect(result).toMatch(/^Error: web search unavailable/);
-    // researcherSubgraph and historianNode keep a result only if it does not start "Error".
-    expect(String(result).startsWith("Error")).toBe(true);
+    expect(JSON.parse(result)).toEqual({
+      found: false,
+      code: "not_configured",
+      error: "tavily: TAVILY_API_KEY is not set",
+      unavailable: true,
+    });
+    expect(readToolResult("tavily", result)).toMatchObject({
+      kind: "failed",
+      error: { source: "tavily", code: "not_configured" },
+    });
   });
 
   it("under replay, a missing key does not block: the cassette answers", async () => {
@@ -62,7 +69,11 @@ describe("web search without an API key", () => {
     process.env.SOURCE_CASSETTE_DIR = join(tmpdir(), "no-such-cassette-dir");
     try {
       const result = await searchSamples.invoke({ songTitle: "Ice", artistName: "Vanilla Ice" });
-      expect(result).toMatch(/^Error: web search unavailable: tavily: no cassette entry/);
+      expect(JSON.parse(result)).toMatchObject({
+        found: false,
+        code: "unavailable",
+        error: expect.stringMatching(/^tavily: no cassette entry/),
+      });
     } finally {
       delete process.env.SOURCE_CASSETTE;
       delete process.env.SOURCE_CASSETTE_DIR;

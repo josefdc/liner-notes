@@ -181,7 +181,7 @@ describe("MusicBrainz client", () => {
       await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
     );
 
-    expect(data.found).toBe(false);
+    expect(data).toMatchObject({ found: false, code: "rate_limited" });
     expect(data.error).toMatch(/rate limited/);
     expect(net.calls).toHaveLength(2);
   });
@@ -245,6 +245,7 @@ describe("MusicBrainz client", () => {
 
     expect(JSON.parse(stuck)).toMatchObject({
       found: false,
+      code: "timeout",
       error: expect.stringMatching(/no answer within 50 ms/),
     });
     expect(JSON.parse(next)).toMatchObject({ found: true });

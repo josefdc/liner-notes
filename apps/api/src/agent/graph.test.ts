@@ -34,6 +34,12 @@ const tools = vi.hoisted(() => {
     previewUrl: null,
   };
   const none = () => JSON.stringify({ found: false });
+  // A web search with one result.
+  const web = (content: string) =>
+    JSON.stringify({
+      found: true,
+      results: [{ title: "Page", url: "https://example.test/", content }],
+    });
   return {
     searchMultipleTracks: tool(() => JSON.stringify([track])),
     analyzeAudioPreview: tool(() =>
@@ -46,9 +52,11 @@ const tools = vi.hoisted(() => {
     getLastfmSimilarTracks: tool(none),
     getLastfmSimilarArtists: tool(none),
     getLastfmArtistInfo: tool(none),
-    searchSamples: tool(() => "The bass line comes from Under Pressure by Queen and David Bowie."),
-    searchProductionHistory: tool(() => "Recorded in Miami."),
-    searchMusicInfo: tool(() => "More history."),
+    searchSamples: tool(() =>
+      web("The bass line comes from Under Pressure by Queen and David Bowie."),
+    ),
+    searchProductionHistory: tool(() => web("Recorded in Miami.")),
+    searchMusicInfo: tool(() => web("More history.")),
     getMusicBrainzRelations: tool(none),
     getMusicBrainzArtist: tool(none),
     getListenBrainzSimilarArtists: tool(none),
@@ -69,7 +77,8 @@ vi.mock("../sources/lastfm.js", () => ({
   getLastfmSimilarArtists: tools.getLastfmSimilarArtists,
   getLastfmArtistInfo: tools.getLastfmArtistInfo,
 }));
-vi.mock("../sources/search.js", () => ({
+vi.mock("../sources/search.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sources/search.js")>()),
   searchSamples: tools.searchSamples,
   searchProductionHistory: tools.searchProductionHistory,
   searchMusicInfo: tools.searchMusicInfo,
@@ -499,7 +508,12 @@ describe("the analysis graph under failure", () => {
     expect(tools.searchSamples.invoke).toHaveBeenCalledTimes(1);
     expect(tools.getMusicBrainzRelations.invoke).not.toHaveBeenCalled();
     tools.searchProductionHistory.invoke.mockReset();
-    tools.searchProductionHistory.invoke.mockImplementation(async () => "Recorded in Miami.");
+    tools.searchProductionHistory.invoke.mockImplementation(async () =>
+      JSON.stringify({
+        found: true,
+        results: [{ title: "Page", url: "https://example.test/", content: "Recorded in Miami." }],
+      }),
+    );
   });
 
   it("fails the run on a planner bug instead of hiding it", async () => {

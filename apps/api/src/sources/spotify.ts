@@ -90,6 +90,8 @@ export interface SpotifyTrackSummary {
   id: string;
   title: string;
   artist: string;
+  /** The credited artists one by one (`artist` joins them with ", "). */
+  artistNames: string[];
   artistIds: string[];
   album: string;
   releaseDate: string;
@@ -278,6 +280,7 @@ function summarize(track: SpotifyTrack): SpotifyTrackSummary {
     id: track.id,
     title: track.name,
     artist: track.artists.map((a) => a.name).join(", "),
+    artistNames: track.artists.map((a) => a.name),
     artistIds: track.artists.map((a) => a.id),
     album: track.album.name,
     releaseDate: track.album.release_date,

@@ -65,6 +65,7 @@ describe("Last.fm tools without an API key", () => {
     expect(data.error).toMatch(/not configured/);
     expect(data.found).not.toBe(true);
     expect(data.unavailable, "marked unavailable, not empty").toBe(true);
+    expect(data.code).toBe("not_configured");
     for (const key of ["tags", "tracks", "artists", "name"]) {
       expect(data, `no "${key}" without a key`).not.toHaveProperty(key);
     }
@@ -136,7 +137,7 @@ describe("Last.fm tools with a key", () => {
     expect(new URL(net.calls[0].url).searchParams.get("autocorrect")).toBe("1");
   });
 
-  it("keeps Last.fm's error message from an HTTP error", async () => {
+  it("reads Last.fm's 'not found' (error 6, sent with HTTP 400) as nothing found", async () => {
     stubFetch((call) =>
       call.url.startsWith(API)
         ? json({ error: 6, message: "Track not found", links: [] }, { status: 400 })
@@ -145,12 +146,14 @@ describe("Last.fm tools with a key", () => {
 
     const data = JSON.parse(await getLastfmTrackTags.invoke({ title: "Nope", artist: "Nobody" }));
 
-    expect(data.found).toBe(false);
-    expect(data.error).toContain("Track not found");
-    expect(data).not.toHaveProperty("tags");
+    expect(data).toEqual({
+      found: false,
+      reason: "not_found",
+      message: "Last.fm error 6: Track not found",
+    });
   });
 
-  it("reads an error sent with HTTP 200", async () => {
+  it("reads Last.fm's 'not found' sent with HTTP 200 as nothing found", async () => {
     stubFetch((call) =>
       call.url.startsWith(API)
         ? json({ error: 6, message: "The artist you supplied could not be found" })
@@ -159,8 +162,22 @@ describe("Last.fm tools with a key", () => {
 
     const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Nobody At All" }));
 
-    expect(data.found).toBe(false);
-    expect(data.error).toContain("could not be found");
+    expect(data).toMatchObject({ found: false, reason: "not_found" });
+    expect(data.message).toContain("could not be found");
     expect(data).not.toHaveProperty("name");
+    expect(data).not.toHaveProperty("code");
+  });
+
+  it.each([
+    [29, "Rate Limit Exceeded", "rate_limited"],
+    [11, "Service Offline", "unavailable"],
+  ])("keeps Last.fm's error %s as a failure with its code", async (error, message, code) => {
+    stubFetch((call) =>
+      call.url.startsWith(API) ? json({ error, message }, { status: 400 }) : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmTrackTags.invoke({ title: "Nope", artist: "Nobody" }));
+
+    expect(data).toEqual({ found: false, code, error: `Last.fm error ${error}: ${message}` });
   });
 });

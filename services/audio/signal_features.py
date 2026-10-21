@@ -43,9 +43,11 @@ SILENCE_RMS = 1e-3
 # less than NOISE_MAX_ARTEFACT_RATIO of its energy in lines and is gated as noise. White noise
 # with a 1 kHz whine 14/10/6 dB under it scores 0.08/0.18/0.36, pink noise with 50 Hz hum 6 dB
 # under it 0.12. A tone or hum on its own (0.99-1.0) is not noise; it passes the gate and gets
-# no key and no fingerprint. One voice whose pitch moves (Voice.moving: speech, an a cappella
-# line) passes whatever its lines: its vibrato and intonation can leave none (the a cappella
-# lines of tests/music.py with +-70 cents of vibrato score 0.00-0.01), or leave one series.
+# no key and no fingerprint. One voice that moves or has no stable notes (Voice.moving or
+# Voice.without_notes: speech, an a cappella line) passes whatever its lines: its vibrato and
+# intonation can leave none (the a cappella lines of tests/music.py with +-70 cents of vibrato
+# score 0.00-0.01), or leave one series; speech pitched up 7 semitones spans under
+# ONE_PITCH_SPAN_CENTS but has no notes.
 # The pitch track is only computed when one of these noise rules would apply.
 NOISE_MAX_PERIODICITY = estimators.MIN_TEMPO_PERIODICITY
 NOISE_MAX_TONAL_RATIO = estimators.MIN_TONAL_RATIO
@@ -135,7 +137,8 @@ def check_gate(signals: Signals, loudness: Levels | None) -> Gate:
         tonal = signals.tonality
         no_pitch = tonal.tonal_ratio < NOISE_MAX_TONAL_RATIO
         one_artefact = tonal.series_f0 is not None and tonal.tonal_ratio < NOISE_MAX_ARTEFACT_RATIO
-        if (no_pitch or one_artefact) and not (signals.voice and signals.voice.moving):
+        voice = signals.voice
+        if (no_pitch or one_artefact) and not (voice and (voice.moving or voice.without_notes)):
             return Gate(False, "noise")
     return Gate(True, None)
 

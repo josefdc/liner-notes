@@ -179,8 +179,9 @@ times are seconds from the start of the preview. Every block is `null` when it w
   loudest frames stay under -60 dBFS (digital silence, a DC offset, dither) is `silence`; input
   with neither a beat nor musical pitch is `noise`: white, pink or brown noise, and noise
   carrying one tonal artefact (a whine, mains hum). Music under a noise bed, a drum take with
-  human timing, a rhythm made of noise bursts, speech and an a cappella line (one moving voice,
-  even when its vibrato leaves few spectral lines) pass. When the channels cancel in the
+  human timing, a rhythm made of noise bursts, speech (also pitched up, when it spans less than
+  a few semitones) and an a cappella line (one voice that moves or has no stable notes, even
+  when it leaves few spectral lines) pass. When the channels cancel in the
   mono downmix (antiphase stereo), the loudest channel is analysed instead. A gate that does
   not pass leaves every measured block `null` and `keyMoments` empty.
 - **Tempo** is withheld when the onsets do not repeat at a beat rate (a steady chord, a pure
@@ -200,14 +201,19 @@ times are seconds from the start of the preview. Every block is `null` when it w
   decides: no key for one held pitch (a note with vibrato, whose sidebands hide the series, or
   a bend: its harmonics explain the lines and nothing else moves in the chromagram) or for a
   voice without stable notes (speech); a voice that moves between notes keeps the key even
-  without lines (an a cappella line with vibrato). With a beat the pitch track is not
-  consulted, since a band's bass line can look like one held pitch. A major triad over its own
-  root in the bass is acoustically one harmonic series (harmonics 4, 5 and 6) and gets no key.
-  Tonics are spelled with sharps (Essentia's Bb is reported as A#).
+  without lines (an a cappella line with vibrato). With a beat, once the lines support a key,
+  the pitch track still withholds it for speech or rap over drums, and for one held pitch (a
+  drone, one bass note, a held note) whose harmonics explain the harmonic part's lines; there
+  the allowance does not widen with the tracked pitch's span, since a band's bass line can look
+  like one held pitch to the tracker while its chords are off that pitch's harmonics. A major
+  triad over its own root in the bass is acoustically one harmonic series (harmonics 4, 5 and
+  6) and gets no key, with or without a beat. A sung line far out of tune, or with very wide
+  vibrato, can read as a voice without stable notes and gets no key: the rule errs toward
+  withholding. Tonics are spelled with sharps (Essentia's Bb is reported as A#).
 - **Fingerprint** is `null` without the models, and for input the service judges not to be
   music: no beat, and a single harmonic series, one held pitch or speech (the style and mood
-  models answer for any input). A pad, a melody over a drone or a band without drums keeps it. `styles.top` holds the 10 highest of the 400 Discogs style
-  activations of EffNet-Discogs, `tags.scores` the 50 MusiCNN tag activations; activations
+  models answer for any input). A pad, a melody over a drone or a band without drums keeps
+  it. `styles.top` holds the 10 highest of the 400 Discogs style activations of EffNet-Discogs, `tags.scores` the 50 MusiCNN tag activations; activations
   are scores, not probabilities. Mood heads give their output with its range: 0-1 for
   danceability, acoustic and instrumental, the DEAM scale 1-9 for valence and arousal; they are
   `null` when the strongest style is a `Non-Music---` one (spoken word, field recording...).

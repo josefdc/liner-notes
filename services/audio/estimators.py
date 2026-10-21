@@ -122,8 +122,10 @@ MIN_TONAL_RATIO = 0.1
 # root of the power, so that a bass 6 dB louder than the chords does not hide them) reaches
 # KEY_PITCH_CLASS_LEVEL of the strongest: a 440 Hz tone has 1, the A major triad 3, the chord
 # progressions 5-7. Third-strongest pitch class: band mixes with a bass 6 dB over the chords
-# 0.26-0.49, a 110 Hz drone (one note) under drums 0.24, an A minor one-chord vamp under a bass
-# 6 dB louder 0.18-0.25 (withheld).
+# 0.26-0.49, an A minor one-chord vamp under a bass 6 dB louder 0.18-0.25 (withheld). The
+# overtones of one note also spell three or more classes at this weighting (a drone with
+# mains-hum-like harmonics under drums 0.24 and above, a held brass note): without a beat the
+# pitch track withholds those, and with a beat Signals.key_withheld does.
 KEY_MIN_PITCH_CLASSES = 3
 KEY_PITCH_CLASS_LEVEL = 0.28
 # A single harmonic series (every line within SERIES_TOLERANCE of a multiple of the lowest
@@ -148,12 +150,15 @@ SERIES_SHARE = 0.9
 # - harmonicity: held notes 0.83-1.0, speech 0.99-1.0, melodies 0.98-1.0, band mixes without
 #   drums 0.89-0.92, the A minor pad 0.87: no evidence of a single source by itself;
 # - share of the held f0 (slope under VOICE_STABLE_SLOPE) within 25 cents of a semitone,
-#   tuning-corrected: speech-like voices 0.55-0.68, melodies 0.81-1.0, band mixes 0.89-0.94.
-#   Between them (withheld): an out-of-tune pop vocal (30 cents per note) about 0.69.
+#   tuning-corrected: synthetic speech 0.55-0.68; the speech-dispatcher recording 0.49-0.73
+#   (as is, pitched -7 to +7 semitones, played at 0.8-1.25 times the speed, under room noise);
+#   melodies 0.81-1.0, band mixes 0.82-0.99 (with drums too). The threshold errs toward
+#   withholding: a sung line with +-120 cents of vibrato (about 0.74), heavy scoops and
+#   portamento or a vocal 30 cents out of tune per note (0.69-0.76) lose their key.
 VOICE_MIN_VOICED = 0.3
 VOICE_MIN_HARMONICITY = 0.5
 VOICE_MIN_LOW_SHARE = 0.15
-VOICE_MIN_ON_GRID = 0.72
+VOICE_MIN_ON_GRID = 0.77
 VOICE_RATE = 11025
 VOICE_RANGE_HZ = (40.0, 4000.0)
 VOICE_FRAME = 1024  # YIN window of 512 samples (46 ms); lags up to 511 samples (21.6 Hz)
@@ -272,8 +277,30 @@ class Voice:
         """
         return 2 * self.vibrato_cents + self.span_cents / 2 + 20.0, 8.0
 
+    @property
+    def held_tolerance(self) -> tuple[float, float]:
+        """The tolerance without the span: how far one fixed pitch's partials stray."""
+        return 2 * self.vibrato_cents + 20.0, 8.0
+
 
 NO_VOICE = Voice(0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class Withheld:
+    """
+    Why no key is measured. `one_source` marks evidence of one pitched source (one harmonic
+    series, one held pitch, one voice without notes): without a beat, such input is not music.
+    """
+
+    reason: str
+    one_source: bool = False
+
+    def __str__(self) -> str:
+        return self.reason
+
+
+SPEECH_LIKE = "one voice without stable notes (speech-like)"
 
 
 @dataclass(frozen=True)
@@ -306,7 +333,7 @@ class Tonality:
             np.flatnonzero(self.pitch_classes >= KEY_PITCH_CLASS_LEVEL * peak).tolist()
         )
 
-    def key_withheld(self, voice: Voice = NO_VOICE, movement: float = 0.0) -> str | None:
+    def key_withheld(self, voice: Voice = NO_VOICE, movement: float = 0.0) -> Withheld | None:
         """
         Why no key can be measured, or None when the evidence supports one. `voice` and
         `movement` (Signals.chroma_movement) are only given for input without a beat.
@@ -315,19 +342,21 @@ class Tonality:
             voice.single and voice.relative_movement < STILL_MAX_MOVEMENT
         )
         if self.tonal_ratio < MIN_TONAL_RATIO and not voice.moving:
-            return "no sustained pitch"
+            if voice.without_notes:  # speech pitched up leaves no lines and spans little
+                return Withheld(SPEECH_LIKE, one_source=True)
+            return Withheld("no sustained pitch")
         if self.series_f0 is not None and still:
-            return f"one harmonic series on {self.series_f0:.1f} Hz"
+            return Withheld(f"one harmonic series on {self.series_f0:.1f} Hz", one_source=True)
         if (
             voice.one_pitch
             and still
             and self.explained_by(voice.f0_hz, *voice.tolerance) >= ONE_PITCH_MIN_EXPLAINED
         ):
-            return "one held pitch (vibrato or a bend)"
+            return Withheld("one held pitch (vibrato or a bend)", one_source=True)
         if voice.without_notes:
-            return "one voice without stable notes (speech-like)"
+            return Withheld(SPEECH_LIKE, one_source=True)
         if len(self.line_classes | voice.note_classes) < KEY_MIN_PITCH_CLASSES:
-            return "fewer than three pitch classes"
+            return Withheld("fewer than three pitch classes")
         return None
 
 
@@ -453,27 +482,44 @@ class Signals:
         """
         if self.has_beat:
             return None
-        reason = self.key_withheld()
-        if reason is None or not reason.startswith("one "):
+        withheld = self.key_withheld()
+        if withheld is None or not withheld.one_source:
             return None
-        return f"{reason}, and no beat"
+        return f"{withheld}, and no beat"
 
     @property
     def has_beat(self) -> bool:
         return self.onset_periodicity >= MIN_TEMPO_PERIODICITY
 
-    def key_withheld(self) -> str | None:
+    @cached_property
+    def harmonic_tonality(self) -> Tonality:
+        """The spectral lines of the harmonic part (drums left out)."""
+        return tonality(self.harmonic, self.sr)
+
+    def key_withheld(self) -> Withheld | None:
         """
-        Why no key can be measured. The pitch track and the chromagram's movement only decide
-        input without a beat: with a beat, the lines and their pitch classes do (a bass line
-        under a band mix can look like one held pitch to a tracker).
+        Why no key can be measured. Without a beat, the pitch track and the chromagram's
+        movement decide with the lines. With a beat, the lines decide first; then a voice
+        without stable notes (speech or rap over drums) or one held pitch whose harmonics
+        explain the harmonic part's lines (a drone or one bass note under drums) still has no
+        key. Over a beat the tolerance does not widen with the span: a band's bass line can
+        look like one held pitch to the tracker, but its chords are off that pitch's harmonics.
         """
         if self.has_beat:
-            return self.tonality.key_withheld()
+            withheld = self.tonality.key_withheld()
+            voice = self.voice
+            if withheld is not None or voice is None:
+                return withheld
+            if voice.without_notes:
+                return Withheld(SPEECH_LIKE, one_source=True)
+            explained = self.harmonic_tonality.explained_by(voice.f0_hz, *voice.held_tolerance)
+            if voice.one_pitch and explained >= ONE_PITCH_MIN_EXPLAINED:
+                return Withheld("one held pitch over the beat (a drone or one bass note)", True)
+            return None
         if self.voice is None:
             # Without a pitch track, one held pitch cannot be told from music: no key.
-            reason = self.tonality.key_withheld(NO_VOICE, self.chroma_movement)
-            return reason or "no pitch track"
+            withheld = self.tonality.key_withheld(NO_VOICE, self.chroma_movement)
+            return withheld or Withheld("no pitch track")
         return self.tonality.key_withheld(self.voice, self.chroma_movement)
 
 

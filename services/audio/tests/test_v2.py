@@ -152,16 +152,20 @@ def test_results_carry_the_estimator_that_measured_them():
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
-    """The preview is decoded once; the STFT, onset envelope and chromagram computed once."""
+    """
+    The preview is decoded once; the STFT, onset envelope and chromagram computed once (and the
+    pitch track's 36-bin chromagram once: with a beat the key is checked against one voice).
+    """
     import librosa
 
-    calls = {"read": 0, "chroma_cqt": 0, "stft": 0, "onset_strength": 0, "hpss": 0}
+    calls = {"read": 0, "chroma_cqt": 0, "chroma_cqt_36": 0, "stft": 0, "onset_strength": 0}
+    calls["hpss"] = 0
 
     def counting(module, name):
         original = getattr(module, name)
 
         def wrapper(*args, **kwargs):
-            calls[name] += 1
+            calls[name if kwargs.get("n_chroma", 12) == 12 else f"{name}_36"] += 1
             return original(*args, **kwargs)
 
         monkeypatch.setattr(module, name, wrapper)
@@ -175,7 +179,14 @@ def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
     sf.write(path, signals.drum_pattern(97), FIXTURE_SR)
     v2 = check_result(main.analyze_audio_file(str(path)))
     assert v2["gate"]["passed"] and v2["key"] is not None
-    assert calls == {"read": 1, "chroma_cqt": 1, "stft": 1, "onset_strength": 1, "hpss": 1}
+    assert calls == {
+        "read": 1,
+        "chroma_cqt": 1,
+        "chroma_cqt_36": 1,
+        "stft": 2,  # the analysis and the pitch track's harmonicity spectrum
+        "onset_strength": 1,
+        "hpss": 1,
+    }
 
 
 def test_non_finite_samples_are_refused_with_422(monkeypatch, tmp_path):
@@ -718,6 +729,11 @@ def test_no_key_for_hum_or_a_single_tone(analyse, probe, fmt, estimator):
     assert v2["key"] is None
 
 
+def why(withheld):
+    """The reason text of a withheld key, or None."""
+    return None if withheld is None else withheld.reason
+
+
 # Tonal evidence at its thresholds (values pinned here, not read from the module).
 @pytest.mark.parametrize(
     ("ratio", "classes", "series", "reason"),
@@ -733,7 +749,7 @@ def test_no_key_for_hum_or_a_single_tone(analyse, probe, fmt, estimator):
 )
 def test_key_evidence_thresholds(ratio, classes, series, reason):
     tonality = estimators.Tonality(ratio, np.array(classes, dtype=float), series)
-    assert tonality.key_withheld() == reason
+    assert why(tonality.key_withheld()) == reason
 
 
 def lines_on_110_hz(off_series: float, ratio: float = 0.9, series=None, classes=(1, 4, 9)):
@@ -788,12 +804,12 @@ SPEECH_LIKE = "one voice without stable notes (speech-like)"
         (a_voice(harmonicity=0.49), 0.059, 0.058, None),
         (a_voice(low_share=0.14), 0.059, 0.058, None),  # a virtual fundamental: a triad
         (a_voice(low_share=0.16), 0.059, 0.058, HELD),
-        (a_voice(span_cents=600.0, on_grid=0.71), 0.4, 0.0, SPEECH_LIKE),
-        (a_voice(span_cents=600.0, on_grid=0.73), 0.4, 0.0, None),
+        (a_voice(span_cents=600.0, on_grid=0.76), 0.4, 0.0, SPEECH_LIKE),
+        (a_voice(span_cents=600.0, on_grid=0.78), 0.4, 0.0, None),
     ],
 )
 def test_one_voice_thresholds(voice, movement, off_series, reason):
-    assert lines_on_110_hz(off_series).key_withheld(voice, movement) == reason
+    assert why(lines_on_110_hz(off_series).key_withheld(voice, movement)) == reason
 
 
 def test_the_vibrato_widens_what_one_voice_explains():
@@ -807,7 +823,7 @@ def test_the_vibrato_widens_what_one_voice_explains():
     )
     wide = a_voice(span_cents=0.0, vibrato_cents=150.0)
     assert tonality.explained_by(110.0, *wide.tolerance) == 1.0
-    assert tonality.key_withheld(wide, 0.0) == HELD
+    assert why(tonality.key_withheld(wide, 0.0)) == HELD
 
 
 def test_a_moving_voice_supplies_its_notes_and_its_own_evidence():
@@ -817,9 +833,9 @@ def test_a_moving_voice_supplies_its_notes_and_its_own_evidence():
     """
     singer = a_voice(span_cents=1200.0, note_classes=frozenset({2, 4, 9}))
     assert lines_on_110_hz(0.0, ratio=0.0).key_withheld(singer, 0.5) is None
-    assert lines_on_110_hz(0.0, ratio=0.0).key_withheld(a_voice(), 0.5) == "no sustained pitch"
+    assert why(lines_on_110_hz(0.0, ratio=0.0).key_withheld(a_voice(), 0.5)) == "no sustained pitch"
     two_lines = lines_on_110_hz(0.0, classes=(4, 9))
-    assert two_lines.key_withheld(a_voice(span_cents=1200.0), 0.5) == (
+    assert why(two_lines.key_withheld(a_voice(span_cents=1200.0), 0.5)) == (
         "fewer than three pitch classes"
     )
     assert two_lines.key_withheld(singer, 0.5) is None
@@ -828,18 +844,32 @@ def test_a_moving_voice_supplies_its_notes_and_its_own_evidence():
 def test_one_harmonic_series_needs_a_still_chromagram_without_a_beat():
     """A drone that leaves one series, under a melody that moves the chromagram, is music."""
     drone = lines_on_110_hz(0.0, series=110.0)
-    assert drone.key_withheld(estimators.NO_VOICE, 0.059) == "one harmonic series on 110.0 Hz"
+    assert why(drone.key_withheld(estimators.NO_VOICE, 0.059)) == "one harmonic series on 110.0 Hz"
     assert drone.key_withheld(estimators.NO_VOICE, 0.061) is None
     # With a beat (no voice, no movement given), the series decides.
-    assert drone.key_withheld() == "one harmonic series on 110.0 Hz"
+    assert why(drone.key_withheld()) == "one harmonic series on 110.0 Hz"
 
 
-def test_the_pitch_track_only_decides_without_a_beat(monkeypatch):
-    """With a beat the voice is not even computed: a band's bass reads as one held pitch."""
+def test_with_a_beat_a_tracker_failure_leaves_the_lines_to_decide(monkeypatch):
     signals_ = estimators.Signals(PROBES["band-97"], FIXTURE_SR)
     assert signals_.has_beat
     monkeypatch.setattr(estimators, "voice", raises)
     assert signals_.key_withheld() is None and signals_.not_music() is None
+
+
+@pytest.mark.parametrize(
+    ("withheld", "not_music"),
+    [
+        (estimators.Withheld("one held pitch (vibrato or a bend)", one_source=True), True),
+        (estimators.Withheld("one-sounding text, other evidence"), False),
+        (estimators.Withheld("no pitch track"), False),
+        (None, False),
+    ],
+)
+def test_not_music_follows_the_evidence_flag_not_the_text(withheld, not_music, monkeypatch):
+    signals_ = estimators.Signals(tones((440.0,), 30.0), FIXTURE_SR)
+    monkeypatch.setattr(estimators.Signals, "key_withheld", lambda self: withheld)
+    assert (signals_.not_music() is not None) == not_music
 
 
 def test_a_pitch_tracker_failure_only_loses_the_key_without_a_beat(monkeypatch, caplog):
@@ -851,7 +881,7 @@ def test_a_pitch_tracker_failure_only_loses_the_key_without_a_beat(monkeypatch, 
     signals_ = estimators.Signals(PROBES["chords-D"], FIXTURE_SR)
     result = check_result(main.analyze_signals(signals_))
     assert signals_.voice is None and "pitch track failed" in caplog.text
-    assert signals_.key_withheld() == "no pitch track"
+    assert why(signals_.key_withheld()) == "no pitch track"
     assert result["gate"]["passed"] and result["key"] is None
     assert result["loudness"] is not None and result["sections"] is not None
     # A test tone still reads as one harmonic series, and is still not music.
@@ -883,7 +913,7 @@ def test_one_held_pitch_with_a_beat_is_still_music():
     y = (tones((440.0,), 30.0) + click_track(120)).astype(np.float32)
     signals_ = estimators.Signals(y, FIXTURE_SR)
     assert signals_.has_beat
-    assert signals_.key_withheld().startswith("one harmonic series")
+    assert why(signals_.key_withheld()).startswith("one harmonic series")
     assert signals_.not_music() is None
 
 
@@ -931,16 +961,22 @@ MUSIC_WITHOUT_A_BEAT = {
     "narrow-trumpet-melody": (music.trumpet_melody, None),
     "a-cappella-vibrato-70c-A": (lambda: music.sung(9, "major", 57, 72, 31, 70.0), ("A", "major")),
     "a-cappella-vibrato-70c-Dm": (lambda: music.sung(2, "minor", 50, 66, 21, 70.0), ("D", "minor")),
-    # +-120 cents at 6 Hz in a high register: the key reads differently, but it is one.
-    "soprano-vibrato-120c": (lambda: music.sung(5, "major", 65, 81, 11, 120.0, rate=6.0), None),
     "pop-vocal-scoops-and-glides": (
         lambda: music.sung(4, "minor", 55, 71, 33, 30.0, 150.0, 0.2),
         ("E", "minor"),
     ),
 }
+# Band mixes with drums, the bass level with the rest and 6 dB louder. A one-chord C major vamp
+# under a bass 6 dB louder is left out: it reads as one held C2 (harmonics 4, 5 and 6 are the
+# triad), and its key is withheld.
 BAND_MIXES = {
-    f"band-{name}": (lambda name=name: music.band_mix(name), key)
+    f"band-{name}-bass{bass_db:+d}": (
+        lambda name=name, db=bass_db: music.band_mix(name, True, db),
+        key,
+    )
     for name, (_, key) in music.PROGRESSIONS.items()
+    for bass_db in (0, 6)
+    if (name, bass_db) != ("C-vamp", 6)
 }
 KEY_ESTIMATORS = ["librosa"] + (["essentia"] if estimators.ESSENTIA_AVAILABLE else [])
 
@@ -988,16 +1024,82 @@ def test_music_without_a_beat_keeps_its_key_and_fingerprint(name):
 
 @pytest.mark.parametrize("name", BAND_MIXES)
 def test_band_mixes_with_a_bass_line_keep_their_key(name):
-    """Drums, a bass at E1-C2, a pad and a sung lead: the pitch track is not consulted."""
+    """
+    Drums, a bass at E1-D2, a pad and a sung lead: the tracker may follow the bass, but the
+    chords are off its harmonics.
+    """
     make, expected = BAND_MIXES[name]
     gate, keys, not_music, beat = gate_key_and_music(make())
     assert gate.passed and beat and not_music is None
     assert None not in keys.values(), keys
-    if name != "band-Em-A":  # E dorian, as above
+    if not name.startswith("band-Em-A"):  # E dorian, as above
         assert set(keys.values()) == {expected}, keys
 
 
+# With a beat: one pitched source over drums has no key. A drone (mains-hum-like harmonics, as
+# the drone-with-drums probe) under drums 2 or 4 times louder, a held brass note with vibrato,
+# speech over drums.
+ONE_SOURCE_OVER_DRUMS = {
+    f"drone-{f0:.0f}Hz-drums-x{k}-s{seed}": (
+        lambda f0=f0, k=k, seed=seed: signals.normalise(
+            signals.hum(f0, gentle=True) + k * signals.drums_only(120, seed=seed)
+        )
+    )
+    for f0 in (98.0, 110.0, 147.0)
+    for k in (2, 4)
+    for seed in (1, 2)
+}
+ONE_SOURCE_OVER_DRUMS["Bb3-brass-vibrato-60c-over-drums"] = lambda: music.mix(
+    (music.held(233.08, 60.0), 0), (music.drums(music.ROCK, 100), 0)
+)
+ONE_SOURCE_OVER_DRUMS["speech-over-trap"] = lambda: music.mix(
+    (music.speech(4), 0), (music.drums(music.TRAP, 90), -6)
+)
+ONE_SOURCE_OVER_DRUMS["speech-over-rock"] = lambda: music.mix(
+    (music.speech(9, 170.0, 260.0), 0), (music.drums(music.ROCK, 96), -3)
+)
+
+
+@pytest.mark.parametrize("name", ONE_SOURCE_OVER_DRUMS)
+def test_no_key_for_one_source_over_drums(name):
+    gate, keys, not_music, beat = gate_key_and_music(ONE_SOURCE_OVER_DRUMS[name]())
+    assert gate.passed and beat and not_music is None  # a beat: music, with a fingerprint
+    assert set(keys.values()) == {None}, keys
+
+
+def speech_variants(y: np.ndarray) -> dict:
+    """Speech pitched 7 semitones down and up, and played at 0.8 and 1.25 times the speed."""
+    out = {
+        f"shift{st:+d}": librosa.effects.pitch_shift(y, sr=FIXTURE_SR, n_steps=st) for st in (-7, 7)
+    }
+    for rate in (0.8, 1.25):
+        out[f"stretch{rate}"] = np.resize(librosa.effects.time_stretch(y, rate=rate), y.size)
+    return out
+
+
+@pytest.mark.parametrize("variant", ["shift-7", "shift+7", "stretch0.8", "stretch1.25"])
+def test_no_key_for_shifted_or_stretched_speech(variant):
+    y = speech_variants(music.speech(4))[variant]
+    gate, keys, not_music, beat = gate_key_and_music(music.normalise(y))
+    assert gate.passed and not beat
+    assert set(keys.values()) == {None}, keys
+    assert not_music is not None
+
+
 SPEECH = "/usr/share/sounds/speech-dispatcher/dummy-message.wav"
+
+
+@pytest.mark.skipif(not os.path.exists(SPEECH), reason="no speech recording on this machine")
+@pytest.mark.parametrize("variant", ["as-is", "shift-7", "shift+7", "stretch0.8", "stretch1.25"])
+def test_no_key_for_recorded_speech_shifted_or_stretched(variant):
+    """The speech-dispatcher recording, looped to 30 s: it passes the gate and gets no key."""
+    y, sr = sf.read(SPEECH, dtype="float32")
+    y = librosa.resample(y if y.ndim == 1 else y.mean(axis=1), orig_sr=sr, target_sr=FIXTURE_SR)
+    y = np.resize(y, 30 * FIXTURE_SR)
+    y = y if variant == "as-is" else speech_variants(y)[variant]
+    gate, keys, not_music, beat = gate_key_and_music(music.normalise(y))
+    assert gate.passed and not beat
+    assert set(keys.values()) == {None}, keys
 
 
 @pytest.mark.skipif(not os.path.exists(SPEECH), reason="no speech recording on this machine")
@@ -1145,8 +1247,13 @@ def test_gate_thresholds(duration, loud, periodicity, tonal, reason):
     if reason == "noise":
         # One moving voice (speech, or an a cappella line whose vibrato leaves few lines or one
         # series) is not noise; one fixed pitch is, and so is a failed pitch track.
-        fake.voice = estimators.Voice(0.9, 0.9, 351, 0.5, 1.0)
-        assert signal_features.check_gate(fake, levels) == signal_features.Gate(True, None)
+        # One voice without stable notes and a narrow span (speech pitched up) is not noise.
+        for voice in (
+            estimators.Voice(0.9, 0.9, 351, 1.0, 1.0),
+            estimators.Voice(0.9, 0.9, 349, 0.5, 1.0),
+        ):
+            fake.voice = voice
+            assert signal_features.check_gate(fake, levels) == signal_features.Gate(True, None)
         for voice in (estimators.Voice(0.9, 0.9, 349, 1.0, 1.0), None):
             fake.voice = voice
             assert signal_features.check_gate(fake, levels) == signal_features.Gate(False, reason)

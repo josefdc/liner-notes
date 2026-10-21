@@ -177,35 +177,49 @@ times are seconds from the start of the preview. Every block is `null` when it w
 
 - **Gate.** Input shorter than 4 s (including a zero-length file) is `too_short`; input whose
   loudest frames stay under -60 dBFS (digital silence, a DC offset, dither) is `silence`; input
-  with neither a beat nor sustained pitch (white, pink or brown noise) is `noise`. Music under a
-  noise bed, a drum take with human timing and a rhythm made of noise bursts pass. A gate that
-  does not pass leaves every measured block `null` and `keyMoments` empty.
+  with neither a beat nor musical pitch is `noise`: white, pink or brown noise, and noise
+  carrying one tonal artefact (a whine, mains hum). Music under a noise bed, a drum take with
+  human timing, a rhythm made of noise bursts and speech pass. When the channels cancel in the
+  mono downmix (antiphase stereo), the loudest channel is analysed instead. A gate that does
+  not pass leaves every measured block `null` and `keyMoments` empty.
 - **Tempo** is withheld when the onsets do not repeat at a beat rate (a steady chord, a pure
   tone, chords changing every 2 s, a rubato melody), when the estimator's confidence is low,
-  or when the tempo does not hold over the window (90 BPM then 130: `beats` is still given).
+  or when the tempo does not hold in every part of the window that has a beat (90 BPM then
+  130, an accelerando). A beatless intro is no evidence either way: a band that starts 10 s in
+  gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
+  whose beats follow the change, and dropped with librosa, whose tracker keeps one period.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
-- **Key** is only estimated from sustained pitch, on the harmonic part of the signal (a
-  harmonic/percussive separation), and withheld when too little of the energy is in spectral
-  lines (drums, click tracks, a metronome, noise with a beat), when the lines spell fewer than
-  three pitch classes, when they form a single harmonic series (a lone tone, or mains hum on
-  50 or 60 Hz, whose harmonics spell a G major triad), or when its strength is low. Tonics are
-  spelled with sharps (Essentia's Bb is reported as A#).
-- **Fingerprint** is `null` without the models. `styles.top` holds the 10 highest of the 400
-  Discogs style activations of EffNet-Discogs, `tags.scores` the 50 MusiCNN tag activations;
-  activations are scores, not probabilities. Mood heads give their output with its range:
-  0-1 for danceability, acoustic and instrumental, the DEAM scale 1-9 for valence and arousal.
+- **Key** is only estimated from musical pitch, on the harmonic part of the signal (a
+  harmonic/percussive separation). It is withheld when too little of the energy is in spectral
+  lines (drums, click tracks, a metronome, noise with a beat); when the lines form a single
+  harmonic series (a lone tone, or mains hum on 50 or 60 Hz, whose harmonics spell a G major
+  triad); when one pitch track explains the sound and it is one pitch that moves (a held note
+  with vibrato, whose sidebands hide the series, or a bend) or a voice without stable notes
+  (speech); when the lines spell fewer than three pitch classes; or when its strength is low.
+  Tonics are spelled with sharps (Essentia's Bb is reported as A#).
+- **Fingerprint** is `null` without the models, and for input the service judges not to be
+  music: no beat, and a single harmonic series, one moving pitch or speech (the style and mood
+  models answer for any input). `styles.top` holds the 10 highest of the 400 Discogs style
+  activations of EffNet-Discogs, `tags.scores` the 50 MusiCNN tag activations; activations
+  are scores, not probabilities. Mood heads give their output with its range: 0-1 for
+  danceability, acoustic and instrumental, the DEAM scale 1-9 for valence and arousal; they are
+  `null` when the strongest style is a `Non-Music---` one (spoken word, field recording...).
   Each block names its model id and the licence of its weights (CC BY-NC-SA 4.0). A part whose
   model fails, or gives values that are not finite, outside that range or of the wrong width,
-  is `null` on its own.
+  is `null` on its own. Every reason for a `null` is written to the service log.
 
 The v1 fields stay until the API reads `v2`, and are derived from it: `bpm` is `v2.tempo.bpm`
 rounded, `key` and `mode` are `v2.key`, `keyMoments` are `v2.keyMoments`, and the perceptual
 fields are the mood heads (valence mapped from DEAM's 1-9 onto 0-1). Each is `null` when `v2`
-has nothing for it, so v1 never says more than v2. `energy` is `v2.loudness.rmsMean` in dBFS
-mapped from [-90, 0] dBFS onto [0, 1] (a loudness, not a perceptual energy; input that passes
-the gate reads above 0.04), and `null` when the gate did not pass. A preview with non-finite
-samples is refused with `422`.
+has nothing for it, so v1 never says more than v2. `energy` keeps the scale it had before v2:
+(`v2.loudness.rmsMean` - 0.02) / 0.25, clipped to 0-1 (a loudness, not a perceptual energy).
+That scale reads 0 below -34 dBFS mean RMS, so quieter input that passes the gate gets a small
+floor instead, from 0.005 at -86 dBFS to 0.02 at -34 dBFS; `energy` is `null` when the gate did
+not pass.
+
+A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
+times full scale, is refused with `422`.
 
 Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
 only written to the service log.
@@ -215,11 +229,11 @@ only written to the service log.
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview has non-finite samples |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview is not analysable audio (not decodable, non-finite or absurd samples) |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
-| `500` | Decoding or analysis failed |
+| `500` | Analysis failed |
 
 ## Which URLs are fetched
 
@@ -245,8 +259,9 @@ must finish within 20 s. The temporary file is removed after the analysis, whate
    models, as `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The
    STFT, the onset envelope, the harmonic part and its chromagram are computed once and shared.
 3. **Gate** (`signal_features.py`): duration, the 95th percentile of the frame RMS, and for
-   noise the onset periodicity (a tempogram peak, tolerant of human timing) and the share of
-   energy in spectral lines. The thresholds and the fixture values behind them are in the code
+   noise the onset periodicity (a tempogram peak, tolerant of human timing), the share of
+   energy in spectral lines and whether they form one harmonic series, and a pYIN pitch track
+   of the harmonic part (one moving voice is not noise). The thresholds and the fixture values behind them are in the code
    (`signal_features.py`, `estimators.py`).
 4. **Tempo and key** (`estimators.py`, `AUDIO_ESTIMATOR`):
    - `essentia`: `RhythmExtractor2013` (multifeature) and `KeyExtractor` (bgate profile, on
@@ -254,10 +269,11 @@ must finish within 20 s. The temporary file is removed after the analysis, whate
    - `librosa`: `librosa.feature.tempo` and `beat_track` on the onset envelope, and
      Krumhansl-Kessler profiles on the chromagram of the harmonic part.
 
-   Both refine the tempo with a least-squares fit of the beat times, so it is not limited to
-   the beat tracker's frame grid, never change its octave, and check that it holds in each
-   third of the window. Whether a key can be measured at all (spectral lines, pitch classes,
-   harmonic series) is decided the same way for both.
+   Both refine the tempo with a least-squares fit of the beats that fall on onsets (the
+   longest regular run of them), so it is not limited to the beat tracker's frame grid and
+   never changes its octave, and check that it holds in each third of the window that has a
+   beat. Whether a key can be measured at all (spectral lines, harmonic series, the pYIN pitch
+   track, pitch classes) is decided the same way for both.
 5. **Loudness and energy contour**: RMS of non-overlapping 2048-sample frames at 22.05 kHz after
    removing DC; `loudness.rmsMean` is their mean.
 6. **Sections**: novelty on beat-synchronous chroma (a fixed 0.5 s grid without a beat grid),

@@ -9,6 +9,7 @@ skipped) without the "models" extra. Tests marked `needs_models` run the real Es
 and are skipped without them; the fingerprint logic is also covered with stand-in models.
 """
 
+import os
 import re
 import threading
 from types import SimpleNamespace
@@ -195,6 +196,39 @@ def test_non_finite_samples_are_refused_with_422(monkeypatch, tmp_path):
     assert "non-finite" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (b"", "the file could not be decoded as audio"),
+        (b"ID3" + b"\x00" * 4093, "the file could not be decoded as audio"),
+        ("huge", "the decoded audio holds samples far beyond full scale"),
+    ],
+    ids=["zero-bytes", "corrupt-mp3", "samples-1e30"],
+)
+def test_undecodable_or_absurd_audio_is_a_422(tmp_path, body, reason):
+    path = tmp_path / "preview.wav"
+    if body == "huge":
+        sf.write(path, np.full(FIXTURE_SR * 5, 1e30, np.float32), FIXTURE_SR, subtype="FLOAT")
+    else:
+        path.write_bytes(body)
+    with pytest.raises(main.InvalidAudioError, match=reason):
+        main.decode(str(path))
+
+
+def test_float_overs_are_still_audio(analyse):
+    """Float samples a few times full scale (clipped masters, overs) are analysed."""
+    _, v2 = analyse(10 * signals.drum_pattern(97), "WAV")
+    assert v2["tempo"]["bpm"] == pytest.approx(97, abs=1)
+
+
+def test_antiphase_stereo_is_analysed_on_one_channel(analyse):
+    """Left and right in antiphase cancel in the mono downmix; one channel is analysed."""
+    band = signals.drum_pattern(97)
+    _, v2 = analyse(np.stack([band, -band], axis=1), "WAV")
+    assert v2["gate"]["passed"]
+    assert v2["tempo"]["bpm"] == pytest.approx(97, abs=1)
+
+
 # --- tempo -------------------------------------------------------------------------------
 
 
@@ -250,11 +284,70 @@ def test_tempo_and_key_of_a_band_with_jitter(estimator):
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
 def test_no_tempo_when_the_tempo_changes(estimator):
-    """90 BPM, then 130: no single tempo (Essentia read 90.09 at 0.55 before), but the beats."""
+    """
+    90 BPM, then 130: no single tempo (Essentia read 90.09 at 0.55 before). Essentia's beats
+    follow the change and are kept, on the true beats in both halves; librosa's tracker keeps
+    one period (half its beats were off in the 130 BPM half), so it gives none.
+    """
     result, v2 = analyse_array(PROBES["tempo-change-90-130"], estimator)
     assert v2["tempo"] is None and result["bpm"] is None
-    assert v2["beats"] is not None and len(v2["beats"]["times"]) > 40
     assert (v2["key"]["tonic"], v2["key"]["mode"]) == ("C", "major")
+    if estimator == "librosa":
+        assert v2["beats"] is None
+        return
+    truth = np.array(signals.grid(90, 15.0) + [15 + b for b in signals.grid(130, 15.0)])
+    beats = np.array(v2["beats"]["times"])
+    for lo, hi in ((1.0, 14.0), (16.0, 29.0)):
+        true, found = truth[(truth >= lo) & (truth < hi)], beats[(beats >= lo) & (beats < hi)]
+        recall = np.mean([np.min(np.abs(found - t)) <= 0.07 for t in true])
+        precision = np.mean([np.min(np.abs(true - b)) <= 0.07 for b in found])
+        assert recall >= 0.9 and precision >= 0.9, (lo, recall, precision)
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_tempo_for_an_accelerando(estimator):
+    _, v2 = analyse_array(PROBES["accelerando-80-140"], estimator)
+    assert v2["tempo"] is None
+    if estimator == "librosa":
+        assert v2["beats"] is None
+
+
+LATE_STARTS = [
+    ("band-97-after-10s-silence", 97),
+    ("band-97-after-10s-pad", 97),
+    ("band-132-after-12s-pad", 132),
+    ("band-85-after-10s-pad", 85),
+]
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize(("probe", "bpm"), LATE_STARTS, ids=[p for p, _ in LATE_STARTS])
+def test_a_tempo_that_starts_late_is_reported(probe, bpm, estimator, request):
+    """
+    A band entering 10-12 s in, after silence or a pad: the beatless intro is no evidence
+    about steadiness, and the beats tracked through it are left out of the tempo fit. (These
+    gave no tempo, or 95.44 and 129.05 BPM with Essentia.)
+    """
+    if estimator == "librosa" and bpm == 85:
+        request.applymarker(
+            pytest.mark.xfail(
+                strict=True, reason="librosa reports the double (170 BPM): an octave error"
+            )
+        )
+    result, v2 = analyse_array(PROBES[probe], estimator)
+    assert v2["tempo"]["bpm"] == pytest.approx(bpm, abs=1.0)
+    assert result["bpm"] == bpm
+
+
+def test_no_steady_tempo_without_a_beat_anywhere():
+    """No third of the window has repeating onsets: nothing says the tempo holds."""
+    flat = SimpleNamespace(
+        onset_envelope=np.zeros(1300),
+        smoothed_onset_envelope=np.zeros(1300),
+        sr=FIXTURE_SR,
+        hop=512,
+    )
+    assert not estimators.steady_tempo(np.arange(60) * 0.5, 120.0, flat)
 
 
 def test_steady_tempo_follows_the_beat_grid():
@@ -310,11 +403,27 @@ def test_refined_tempo_never_changes_octave():
     assert estimators.refine_bpm(skipped, 118.0) == pytest.approx(120.0, abs=1e-6)
 
 
-def test_refined_tempo_needs_whole_beat_intervals():
-    """One interval of 1.4 periods: the grid is not regular, so the estimate is kept."""
-    beats = np.concatenate([np.arange(20) * 0.5, 9.5 + 0.7 + np.arange(20) * 0.5])
-    assert estimators.refine_bpm(beats, 118.0) == 118.0
-    assert estimators.refine_bpm(beats[:3], 118.0) == 118.0  # fewer than MIN_BEATS
+def test_refined_tempo_fits_the_longest_regular_run():
+    """
+    Beats drifting through an intro (82-97 BPM, off a 120 BPM grid by up to 0.4 period) are
+    left out: the fit is on the regular run after them. With no run of MIN_BEATS beats the
+    estimate is kept.
+    """
+    intro = np.cumsum(60 / np.array([82.0, 90.0, 97.0, 85.0, 92.0, 88.0]))
+    run = intro[-1] + 0.7 + np.arange(30) * 0.5
+    assert estimators.refine_bpm(np.concatenate([intro, run]), 118.0) == pytest.approx(120.0)
+    irregular = np.cumsum(np.tile([0.5, 0.7], 20))  # every other interval 1.4 periods
+    assert estimators.refine_bpm(irregular, 118.0) == 118.0
+    assert estimators.refine_bpm(run[:3], 118.0) == 118.0  # fewer than MIN_BEATS
+
+
+def test_beats_off_the_onsets_are_left_out_of_the_fit():
+    """Ticks counted through a beatless intro carry no onset and are dropped (onset_beats)."""
+    y = signals.late_start(signals.drum_pattern(97), 10.0, "pad")
+    s_ = estimators.Signals(y, FIXTURE_SR)
+    ticks = np.concatenate([np.arange(0.3, 10.0, 0.66), 10.0 + np.arange(32) * 60 / 97])
+    kept = estimators.onset_beats(ticks, s_)
+    assert kept.min() >= 9.9 and kept.size >= 25
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -502,6 +611,7 @@ def test_key_of_the_progressions(analyse, chords, expected, fmt, estimator):
         ("rain-piano-0dB", ("C", "major")),
         ("chords-under-loud-drums", ("D", "major")),
         ("piano-under-loud-drums", ("C", "major")),
+        ("sung-melody-vibrato", ("G", "major")),
     ],
 )
 def test_key_of_tonal_music(probe, expected, estimator):
@@ -578,17 +688,93 @@ def test_no_key_for_hum_or_a_single_tone(analyse, probe, fmt, estimator):
 @pytest.mark.parametrize(
     ("ratio", "classes", "series", "reason"),
     [
-        (0.09, [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], None, "no sustained pitch"),
-        (0.11, [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], None, None),
-        (0.5, [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], None, "fewer than three pitch classes"),
-        (0.5, [1, 1, 0.24, 0, 0, 0, 0, 0, 0, 0, 0, 0], None, "fewer than three pitch classes"),
-        (0.5, [1, 1, 0.26, 0, 0, 0, 0, 0, 0, 0, 0, 0], None, None),
-        (0.5, [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 50.0, "one harmonic series on 50.0 Hz"),
+        # C, E and G: a major triad's pitch classes.
+        (0.09, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], None, "no sustained pitch"),
+        (0.11, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], None, None),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], None, "fewer than three pitch classes"),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.24, 0, 0, 0, 0], None, "fewer than three pitch classes"),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.26, 0, 0, 0, 0], None, None),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], 50.0, "one harmonic series on 50.0 Hz"),
     ],
 )
 def test_key_evidence_thresholds(ratio, classes, series, reason):
     tonality = estimators.Tonality(ratio, np.array(classes, dtype=float), series)
     assert tonality.key_withheld() == reason
+
+
+TRIAD = estimators.Tonality(0.9, np.array([1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0.0]), None)
+
+
+# One voice at its thresholds:
+# (voiced, share, span in cents, share on the semitone grid, harmonic 1-2 vs the strongest).
+@pytest.mark.parametrize(
+    ("voice", "reason"),
+    [
+        ((0.9, 0.61, 200, 1.0, 0.5), "one pitch, moving (vibrato or a bend)"),
+        ((0.9, 0.59, 200, 1.0, 0.5), None),  # not one voice: chords
+        ((0.29, 0.9, 200, 1.0, 0.5), None),  # too little voiced
+        ((0.9, 0.9, 200, 1.0, 0.14), None),  # a virtual fundamental: a triad
+        ((0.9, 0.9, 200, 1.0, 0.16), "one pitch, moving (vibrato or a bend)"),
+        ((0.9, 0.9, 249, 1.0, 0.5), "one pitch, moving (vibrato or a bend)"),
+        ((0.9, 0.9, 251, 1.0, 0.5), None),  # a melody
+        ((0.9, 0.9, 600, 0.64, 0.5), "one voice without stable notes (speech-like)"),
+        ((0.9, 0.9, 600, 0.66, 0.5), None),
+    ],
+)
+def test_one_voice_thresholds(voice, reason):
+    assert TRIAD.key_withheld(estimators.Voice(*voice)) == reason
+
+
+def test_spectral_lines_must_stand_12_db_above_the_floor():
+    """A 1 kHz sine 9 dB above white noise in the long-term spectrum is not a line; 18 dB is."""
+    noise = signals.colored_noise(0, seconds=30.0, rms=0.2)
+    t = np.arange(noise.size) / FIXTURE_SR
+    weak, strong = (noise + a * np.sin(2 * np.pi * 1000 * t) for a in (0.01, 0.03))
+    assert estimators.tonality(weak.astype(np.float32), FIXTURE_SR).tonal_ratio == 0.0
+    assert estimators.tonality(strong.astype(np.float32), FIXTURE_SR).tonal_ratio > 0.0
+
+
+ONE_PITCH = [
+    "A4-vibrato-40c",
+    "A4-vibrato-80c",
+    "A4-vibrato-120c",
+    "Bb3-brass-vibrato-40c",
+    "Bb3-brass-vibrato-80c",
+    "Bb3-brass-vibrato-120c",
+    "F4-brass-vibrato-40c",
+    "D4-clarinet-vibrato",
+    "bend-2-semitones",
+    "speech-like-low",
+    "speech-like-high",
+]
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("probe", ONE_PITCH)
+def test_no_key_for_one_pitch_that_moves_or_speech(probe, estimator):
+    """
+    A held note with vibrato (brass-like harmonics spell a major triad, and FM sidebands break
+    the harmonic-series check), a bend, a speech-like voice: one pitch track, no key. (The
+    brass Bb3 with vibrato read A# major 0.84-0.88 before.)
+    """
+    result, v2 = analyse_array(PROBES[probe], estimator)
+    assert v2["gate"]["passed"]
+    assert v2["key"] is None and result["key"] is None
+
+
+SPEECH = "/usr/share/sounds/speech-dispatcher/dummy-message.wav"
+
+
+@pytest.mark.skipif(not os.path.exists(SPEECH), reason="no speech recording on this machine")
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_key_for_speech(estimator, monkeypatch):
+    """A real speech recording passes the gate (it is voiced, not noise) and gets no key."""
+    y, sr = sf.read(SPEECH, dtype="float32")
+    signals_ = estimators.Signals(y if y.ndim == 1 else y.mean(axis=1), sr)
+    assert signals_.voice.without_notes
+    result = check_result(main.analyze_signals(signals_, estimators.select_estimator(estimator)))
+    assert result["gate"] == {"passed": True, "reason": None}
+    assert result["key"] is None and result["tempo"] is None
 
 
 def test_harmonic_series_detection():
@@ -627,6 +813,11 @@ GATED = [
     ("brown-noise", lambda: signals.colored_noise(2), "noise"),
     ("brown-noise-30s", lambda: signals.colored_noise(2, seconds=30.0), "noise"),
     ("pink-noise-other-seed", lambda: signals.colored_noise(1, seed=17), "noise"),
+    ("white-noise-whine-14dB", lambda: PROBES["white-noise-whine-14dB"], "noise"),
+    ("white-noise-whine-10dB", lambda: PROBES["white-noise-whine-10dB"], "noise"),
+    ("white-noise-whine-6dB", lambda: PROBES["white-noise-whine-6dB"], "noise"),
+    ("pink-noise-hum-6dB", lambda: PROBES["pink-noise-hum-6dB"], "noise"),
+    ("pink-noise-hum-10dB", lambda: signals.noise_with_tone(signals.hum(50), 1, -10), "noise"),
     ("1s-click-track", lambda: click_track(120, seconds=1.0), "too_short"),
     ("1s-triad", lambda: a_major_triad(seconds=1.0), "too_short"),
     ("3.9s-band", lambda: signals.drum_pattern(120, seconds=3.9), "too_short"),
@@ -698,18 +889,30 @@ def test_structured_input_passes_the_gate(analyse, make):
         (30, 0.1, 0.19, 0.09, "noise"),
         (30, 0.1, 0.21, 0.09, None),
         (30, 0.1, 0.19, 0.11, None),
+        # One harmonic series (a whine, hum) is not musical pitch unless it is nearly all there is.
+        (30, 0.1, 0.19, (0.89, 1000.0), "noise"),
+        (30, 0.1, 0.19, (0.91, 1000.0), None),
+        (30, 0.1, 0.21, (0.5, 1000.0), None),
     ],
 )
 def test_gate_thresholds(duration, loud, periodicity, tonal, reason):
     """The gate at its thresholds (values pinned here, not read from the module)."""
+    ratio, series = tonal if isinstance(tonal, tuple) else (tonal, None)
     fake = SimpleNamespace(
         duration=duration,
         onset_periodicity=periodicity,
-        tonality=estimators.Tonality(tonal, np.ones(12), None),
+        tonality=estimators.Tonality(ratio, np.ones(12), series),
+        voice=estimators.NO_VOICE,
     )
     levels = signal_features.Levels(frames=np.full(100, loud), hop_seconds=0.1)
     gate = signal_features.check_gate(fake, levels)
     assert gate == signal_features.Gate(reason is None, reason)
+    # One moving voice (speech) without lines or a beat is not noise; one fixed pitch is.
+    fake.voice = estimators.Voice(0.9, 0.9, 600, 0.5, 1.0)
+    if reason == "noise" and series is None:
+        assert signal_features.check_gate(fake, levels) == signal_features.Gate(True, None)
+        fake.voice = estimators.Voice(0.9, 0.9, 0, 1.0, 1.0)
+        assert signal_features.check_gate(fake, levels) == signal_features.Gate(False, "noise")
 
 
 @pytest.mark.parametrize(("periodicity", "kept"), [(0.19, False), (0.21, True)])
@@ -766,11 +969,23 @@ def test_louder_input_measures_louder(analyse):
 
 
 @pytest.mark.parametrize(
-    ("rms", "energy"), [(0.0, 0.0), (10 ** (-86 / 20), 0.044), (0.1, 0.778), (1.0, 1.0)]
+    ("dbfs", "energy"),
+    [
+        # As before v2: (mean RMS - 0.02) / 0.25, clipped.
+        (-10, 1.0),
+        (-14, 0.718),
+        (-20, 0.32),
+        (-24, 0.172),
+        (-30, 0.046),
+        # Below the old scale's zero (-34 dBFS): the floor, from 0.005 at -86 dBFS (the
+        # quietest mean the gate passes) to 0.02 at -34 dBFS.
+        (-42, 0.018),
+        (-48, 0.016),
+        (-86, 0.005),
+    ],
 )
-def test_v1_energy_scale(rms, energy):
-    """-90 dBFS reads 0; the quietest input the gate passes (-86 dBFS mean) is above 0."""
-    assert main.v1_energy(rms) == pytest.approx(energy, abs=0.001)
+def test_v1_energy_scale(dbfs, energy):
+    assert main.v1_energy(10 ** (dbfs / 20)) == pytest.approx(energy, abs=0.001)
 
 
 # --- key moments and sections -------------------------------------------------------------
@@ -804,9 +1019,8 @@ def test_key_moments_cover_the_window_with_intensities_from_the_signal(analyse, 
 
 
 def test_key_moments_after_twenty_seconds(analyse):
-    """A quiet tone, four times louder from 12 s, and a loud noise burst at 25-26 s."""
-    t = np.arange(30 * FIXTURE_SR) / FIXTURE_SR
-    y = 0.05 * np.sin(2 * np.pi * 220 * t)
+    """A quiet chord, four times louder from 12 s, and a loud noise burst at 25-26 s."""
+    y = 0.02 * a_major_triad(seconds=30.0) / 0.25
     y[25 * FIXTURE_SR : 26 * FIXTURE_SR] += 0.8 * np.random.default_rng(1).standard_normal(
         FIXTURE_SR
     )
@@ -1046,6 +1260,50 @@ def test_a_failing_model_part_is_null_on_its_own(monkeypatch, overrides, missing
     assert {name for name, part in parts.items() if part is None} == missing
     if "valence" in missing:
         assert result["valence"] is None
+
+
+@pytest.mark.parametrize(
+    "make",
+    [lambda: tones((440.0,)), lambda: PROBES["hum-50Hz-gentle"], lambda: PROBES["A4-vibrato-80c"]],
+    ids=["test-tone", "hum", "vibrato-note"],
+)
+def test_no_fingerprint_for_input_that_is_not_music(monkeypatch, make):
+    """A tone, hum or one held note with no beat: no styles, tags or moods (and no v1 moods)."""
+    stand_in_models(monkeypatch)
+    result, v2 = analyse_array(make())
+    assert v2["gate"]["passed"]
+    assert v2["fingerprint"] is None
+    assert (result["danceability"], result["valence"]) == (None, None)
+
+
+@pytest.mark.skipif(not os.path.exists(SPEECH), reason="no speech recording on this machine")
+def test_no_fingerprint_for_speech(monkeypatch):
+    stand_in_models(monkeypatch)
+    y, sr = sf.read(SPEECH, dtype="float32")
+    result = main.analyze_signals(estimators.Signals(y if y.ndim == 1 else y.mean(axis=1), sr))
+    assert check_result(result)["fingerprint"] is None and result["danceability"] is None
+
+
+def test_a_drone_with_a_beat_is_music(monkeypatch):
+    """One held pitch over drums: no key (one pitch), but music, so it has a fingerprint."""
+    stand_in_models(monkeypatch)
+    result, v2 = analyse_array(PROBES["drone-with-drums"])
+    assert v2["key"] is None and v2["tempo"]["bpm"] == pytest.approx(120, abs=1)
+    assert v2["fingerprint"] is not None and result["danceability"] == 0.7
+
+
+def test_no_moods_when_the_strongest_style_is_not_music(monkeypatch):
+    spoken = DISCOGS_STYLES.index("Non-Music---Spoken Word")
+    scores = np.zeros(400)
+    scores[spoken] = 0.9
+    stand_in_models(
+        monkeypatch,
+        effnet=lambda p: (np.tile(scores, (len(p), 1)), np.ones((len(p), 1280), np.float32)),
+    )
+    result, fp = stand_in_fingerprint()
+    assert fp["styles"]["top"][0]["label"] == "Non-Music---Spoken Word"
+    assert all(score is None for score in fp["moods"].values())
+    assert result["danceability"] is None and result["valence"] is None
 
 
 def test_no_fingerprint_when_no_model_part_works(monkeypatch):

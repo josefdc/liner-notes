@@ -255,24 +255,23 @@ def test_louder_signal_does_not_measure_lower_energy(analyse, make):
     assert energies == sorted(energies), energies
 
 
-def test_energy_is_the_mean_rms_in_dbfs(analyse):
+def test_energy_keeps_the_scale_it_had(analyse):
     """
-    Pins the definition (README, "How it works"): energy = (20 log10(mean frame RMS) + 90) / 90,
-    clipped to 0..1, with frames of 2048 samples after removing DC. A chord at RMS 0.05 for 5 s
-    then 0.15 for 5 s has a mean frame RMS of 0.1 (-20 dBFS), so energy 0.778; the overall RMS
-    (0.112) would give 0.789 and the peak frame RMS (0.15) 0.817. Changing the definition means
-    bumping ANALYZER_VERSION and this test.
+    Pins the definition (README, "How it works"): energy = (mean frame RMS - 0.02) / 0.25,
+    clipped to 0..1, as before v2 (frames of 2048 samples, DC removed). A chord at RMS 0.05 for
+    5 s then 0.15 for 5 s has a mean frame RMS of 0.1, so energy 0.32 (the scale the API's
+    "above 0.7 is high" and the web's percentage were set on).
     """
     rms = float(np.sqrt(np.mean(a_major_triad() ** 2)))
     y = np.concatenate(
         [a_major_triad(seconds=5.0, gain=0.05 / rms), a_major_triad(seconds=5.0, gain=0.15 / rms)]
     )
-    assert analyse(y, "WAV")["energy"] == pytest.approx(0.778, abs=0.003)
+    assert analyse(y, "WAV")["energy"] == pytest.approx(0.32, abs=0.003)
 
 
 def test_audible_click_track_has_energy(analyse):
-    # Mean frame RMS 0.0112 (-39 dBFS): quiet, but not silence.
-    assert analyse(click_track(120), "WAV")["energy"] == pytest.approx(0.567, abs=0.005)
+    """Mean frame RMS 0.0112 (-39 dBFS): 0 on the old scale, so the floor for gated-in input."""
+    assert analyse(click_track(120), "WAV")["energy"] == pytest.approx(0.019, abs=0.001)
 
 
 def test_quiet_music_has_energy_above_silence(analyse):
@@ -281,7 +280,7 @@ def test_quiet_music_has_energy_above_silence(analyse):
 
     result = analyse(drum_pattern(97) * 10 ** (-48 / 20) / 0.8, "WAV")
     assert result["bpm"] == 97
-    assert result["energy"] == pytest.approx(0.266, abs=0.005)
+    assert result["energy"] == pytest.approx(0.011, abs=0.001)
 
 
 def test_dc_offset_has_no_energy(analyse):

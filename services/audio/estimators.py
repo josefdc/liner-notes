@@ -79,8 +79,12 @@ MIN_TEMPO_PERIODICITY = 0.2
 #   probes with a beat score 0.33-0.95 (brown noise with a kick 0.33, the 25 ms drum take 0.37).
 ESSENTIA_MIN_TEMPO_CONFIDENCE = 1.5 / 5.32
 LIBROSA_MIN_TEMPO_CONFIDENCE = 0.3
-# At least this many tracked beats (three intervals) before a tempo is reported.
+# At least this many tracked beats (three intervals) for the tempo refinement; a reported tempo
+# needs 2 * STEADY_TEMPO_PARTS (6) intervals, see steady_tempo.
 MIN_BEATS = 4
+# A beat counts for the refinement when the onset envelope near it reaches this share of the
+# 90th percentile over the beats (onset_beats).
+BEAT_MIN_ONSET = 0.1
 # One tempo for the window only when it holds in each third of it: the median beat interval of
 # each third of the beats, and librosa's tempo estimate on each third of the onset envelope (at
 # the reported tempo, half or double it), are within STEADY_TEMPO_TOLERANCE of the reported
@@ -125,6 +129,30 @@ KEY_PITCH_CLASS_LEVEL = 0.25
 # share is 0.27; the progressions 0.58, the band 0.17.
 SERIES_TOLERANCE = 0.005
 SERIES_SHARE = 0.9
+# One voice: when pYIN (on the harmonic part, 11.025 kHz, 60-1000 Hz) finds voiced frames in at
+# least VOICE_MIN_VOICED of the window, the harmonics of its f0 hold at least VOICE_MIN_SHARE of
+# a voiced frame's 60 Hz-4 kHz energy (median), and its fundamental or octave is a real partial
+# (at least VOICE_MIN_LOW_SHARE of the strongest harmonic), one pitch track explains the sound.
+# Its f0, median-smoothed over 0.2 s (which averages out vibrato), then says what it is
+# (measured on tests/signals.py and the reviewers' probes):
+# - one pitch that moves: the 5th-95th percentile span is at most ONE_PITCH_SPAN_CENTS. Notes
+#   with +-40 to +-120 cents of vibrato (sine, brass-like and clarinet-like harmonics) span
+#   20-90 cents, a bend of 2 semitones 200; FM sidebands break the series check for these
+#   (the lowest "line" is a sideband), so this check is what withholds their key;
+# - one voice without stable notes (speech): under VOICE_MIN_ON_GRID of the voiced frames lie
+#   within 25 cents of a semitone (tuning-corrected): speech-like glides 0.55-0.60, the
+#   speech-dispatcher recording 0.51; melodies 0.94-0.99, chords and progressions 0.89-1.0, a
+#   band under a drum bus 12 dB louder 0.72.
+# Harmonic shares: vibrato notes 0.68-0.99, speech 0.78-0.90, melodies 0.96-0.99, chords
+# 0.13-0.97. A sustained major triad of pure tones sits on the harmonics 4, 5 and 6 of a
+# virtual fundamental two octaves down (Bb, Db and Eb triads: shares 0.67-0.95), with nothing
+# at its harmonics 1 and 2 (0.00 of the strongest); voices score 0.29-1.0 there.
+VOICE_MIN_VOICED = 0.3
+VOICE_MIN_SHARE = 0.6
+VOICE_MIN_LOW_SHARE = 0.15
+ONE_PITCH_SPAN_CENTS = 250.0
+VOICE_MIN_ON_GRID = 0.65
+VOICE_RATE = 11025
 # Below this strength (0..1) the key is withheld. Tonal fixtures and probes score 0.80-0.97 with
 # Essentia (bgate profile, on the harmonic part) and 0.73-0.97 with librosa (Krumhansl-Kessler
 # correlation); digital silence and dither score 0 with Essentia.
@@ -154,6 +182,9 @@ class TempoEstimate:
     beats: np.ndarray  # beat positions, seconds from the start
     method: str
     steady: bool  # the beat grid and the onsets keep this tempo over the whole window
+    # The tracker follows tempo changes (its beats stay valid when the tempo is not steady).
+    # librosa's beat tracker keeps one period, so its beats are dropped with an unsteady tempo.
+    beats_follow_changes: bool = False
 
 
 @dataclass(frozen=True)
@@ -163,6 +194,36 @@ class KeyEstimate:
     strength: float | None  # 0..1
     profile: str
     method: str
+
+
+@dataclass(frozen=True)
+class Voice:
+    """What a pYIN pitch track says about the harmonic part (see VOICE_MIN_SHARE)."""
+
+    voiced: float  # share of the frames pYIN calls voiced
+    share: float  # median share of a voiced frame's energy on the harmonics of its f0
+    span_cents: float  # 5th-95th percentile span of the smoothed f0
+    on_grid: float  # share of voiced frames within 25 cents of a semitone
+    low_share: float  # median energy of harmonic 1 or 2 against the strongest harmonic
+
+    @property
+    def single(self) -> bool:
+        return (
+            self.voiced >= VOICE_MIN_VOICED
+            and self.share >= VOICE_MIN_SHARE
+            and self.low_share >= VOICE_MIN_LOW_SHARE
+        )
+
+    @property
+    def one_pitch(self) -> bool:
+        return self.single and self.span_cents <= ONE_PITCH_SPAN_CENTS
+
+    @property
+    def without_notes(self) -> bool:
+        return self.single and self.on_grid < VOICE_MIN_ON_GRID
+
+
+NO_VOICE = Voice(0.0, 0.0, 0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -180,12 +241,16 @@ class Tonality:
             return 0
         return int(np.sum(self.pitch_classes >= KEY_PITCH_CLASS_LEVEL * peak))
 
-    def key_withheld(self) -> str | None:
+    def key_withheld(self, voice: Voice = NO_VOICE) -> str | None:
         """Why no key can be measured, or None when the evidence supports one."""
         if self.tonal_ratio < MIN_TONAL_RATIO:
             return "no sustained pitch"
         if self.series_f0 is not None:
             return f"one harmonic series on {self.series_f0:.1f} Hz"
+        if voice.one_pitch:
+            return "one pitch, moving (vibrato or a bend)"
+        if voice.without_notes:
+            return "one voice without stable notes (speech-like)"
         if self.pitch_class_count < KEY_MIN_PITCH_CLASSES:
             return "fewer than three pitch classes"
         return None
@@ -256,16 +321,20 @@ class Signals:
         )
 
     @cached_property
+    def harmonic_stft(self) -> np.ndarray:
+        top = int(np.searchsorted(librosa.fft_frequencies(sr=self.sr, n_fft=2048), HARMONIC_MAX_HZ))
+        harmonic = np.zeros_like(self.stft)
+        harmonic[:top], _ = librosa.decompose.hpss(self.stft[:top])
+        return harmonic
+
+    @cached_property
     def harmonic(self) -> np.ndarray:
         """
         The harmonic part of the signal below HARMONIC_MAX_HZ (librosa's median-filter
         separation), 22.05 kHz. Keys and chroma only use pitches up to C8 (4.2 kHz); leaving
         the rest out halves the cost of the separation.
         """
-        top = int(np.searchsorted(librosa.fft_frequencies(sr=self.sr, n_fft=2048), HARMONIC_MAX_HZ))
-        harmonic = np.zeros_like(self.stft)
-        harmonic[:top], _ = librosa.decompose.hpss(self.stft[:top])
-        y = librosa.istft(harmonic, hop_length=self.hop, length=self.y.size)
+        y = librosa.istft(self.harmonic_stft, hop_length=self.hop, length=self.y.size)
         return np.ascontiguousarray(y, dtype=np.float32)
 
     @cached_property
@@ -280,6 +349,85 @@ class Signals:
     @cached_property
     def tonality(self) -> Tonality:
         return tonality(self.y, self.sr)
+
+    @cached_property
+    def voice(self) -> Voice:
+        return voice(self)
+
+    def not_music(self) -> str | None:
+        """
+        Why the service judges the input not to be music, or None: no beat (onset periodicity
+        under MIN_TEMPO_PERIODICITY) and its pitch is one harmonic series (a tone, hum), one
+        pitch that moves, or one voice without notes (speech). The fingerprint is not computed
+        for it: the style and mood models answer for any input, and a test tone or speech gets
+        danceability 0.996.
+        """
+        if self.onset_periodicity >= MIN_TEMPO_PERIODICITY:
+            return None
+        tonal = self.tonality
+        if tonal.series_f0 is not None:
+            return f"one harmonic series on {tonal.series_f0:.1f} Hz and no beat"
+        if self.voice.one_pitch:
+            return "one pitch, moving, and no beat"
+        if self.voice.without_notes:
+            return "one voice without stable notes (speech-like) and no beat"
+        return None
+
+    def key_withheld(self) -> str | None:
+        """Why no key can be measured (the pitch track is only computed when it matters)."""
+        tonal = self.tonality
+        if tonal.tonal_ratio < MIN_TONAL_RATIO or tonal.series_f0 is not None:
+            return tonal.key_withheld()
+        return tonal.key_withheld(self.voice)
+
+
+def voice(signals: Signals) -> Voice:
+    """The pYIN pitch track of the harmonic part, summarised (see VOICE_MIN_SHARE)."""
+    if signals.duration < 1.0:
+        return NO_VOICE
+    y = librosa.resample(signals.harmonic, orig_sr=signals.sr, target_sr=VOICE_RATE)
+    hop = 256
+    f0, voiced, _ = librosa.pyin(
+        y, fmin=60.0, fmax=1000.0, sr=VOICE_RATE, frame_length=1024, hop_length=hop
+    )
+    voiced = voiced & np.isfinite(f0)
+    if voiced.sum() < 10:
+        return Voice(float(voiced.mean()) if voiced.size else 0.0, 0.0, 0.0, 0.0, 0.0)
+
+    power = np.abs(signals.harmonic_stft) ** 2
+    freqs = librosa.fft_frequencies(sr=signals.sr, n_fft=2048)
+    band = (freqs >= 60.0) & (freqs <= 4000.0)
+    columns = np.minimum(
+        np.round(np.arange(f0.size) * hop / VOICE_RATE * signals.sr / signals.hop).astype(int),
+        power.shape[1] - 1,
+    )
+    shares, low_shares = [], []
+    f = freqs[band]
+    for frame in np.flatnonzero(voiced):
+        column = power[band, columns[frame]]
+        total = float(column.sum())
+        if total > 0:
+            harmonic = np.round(f / f0[frame])
+            near = (harmonic >= 1) & (np.abs(f - harmonic * f0[frame]) <= np.maximum(0.03 * f, 11))
+            shares.append(float(column[near].sum()) / total)
+            # Energy per harmonic; the fundamental or its octave against the strongest one.
+            per_harmonic = np.bincount(harmonic[near].astype(int), weights=column[near])
+            strongest = float(per_harmonic.max()) if per_harmonic.size else 0.0
+            low = float(per_harmonic[1:3].max()) if per_harmonic.size > 1 else 0.0
+            low_shares.append(low / strongest if strongest > 0 else 0.0)
+
+    cents = scipy.ndimage.median_filter(1200 * np.log2(f0[voiced] / 440.0), size=9)
+    span = float(np.percentile(cents, 95) - np.percentile(cents, 5))
+    angle = 2 * np.pi * (cents % 100) / 100
+    tuning = np.angle(np.mean(np.exp(1j * angle))) * 100 / (2 * np.pi)
+    deviation = (cents - tuning + 50) % 100 - 50
+    return Voice(
+        voiced=float(voiced.mean()),
+        share=float(np.median(shares)) if shares else 0.0,
+        span_cents=span,
+        on_grid=float(np.mean(np.abs(deviation) <= 25)),
+        low_share=float(np.median(low_shares)) if low_shares else 0.0,
+    )
 
 
 def tonality(y: np.ndarray, sr: int) -> Tonality:
@@ -344,43 +492,97 @@ def tempogram_contrast(onset_envelope: np.ndarray, sr: int, hop: int) -> float:
     return float(np.clip(contrast, 0.0, 1.0)) if np.isfinite(contrast) else 0.0
 
 
+def onset_beats(beats: np.ndarray, signals: Signals) -> np.ndarray:
+    """
+    The beats that fall on an onset: the onset envelope within 3 frames of the beat reaches
+    BEAT_MIN_ONSET of the 90th percentile over all beats. Trackers keep counting through an
+    intro without drums (Essentia's ticks drift from 82 to 97 BPM under a 10 s pad before a
+    97 BPM band, at 0.00 of the reference); beats on the drums score 0.4-1.6.
+    """
+    beats = np.asarray(beats, dtype=float)
+    envelope = signals.onset_envelope
+    if beats.size == 0 or envelope.size == 0:
+        return beats
+    frames = np.clip(
+        librosa.time_to_frames(beats, sr=signals.sr, hop_length=signals.hop), 0, envelope.size - 1
+    )
+    strength = np.array([envelope[max(0, f - 3) : f + 4].max() for f in frames])
+    reference = float(np.percentile(strength, 90))
+    return beats[strength >= BEAT_MIN_ONSET * reference] if reference > 0 else beats
+
+
 def refine_bpm(beats: np.ndarray, bpm: float) -> float:
     """
-    The tempo from a least-squares fit of beat time against beat number, when the tracked beats
-    follow `bpm`; otherwise `bpm`. Skipped beats are numbered by rounding each interval to whole
-    periods, and the fit is only kept within 4% of `bpm`, so it sharpens the estimate (frame
-    quantisation averages out over the beats) but never changes its octave.
+    The tempo from a least-squares fit of beat time against beat number over the longest run
+    of beats that follows `bpm` (intervals within a quarter period of whole periods, so skipped
+    beats are numbered correctly), when that run has at least MIN_BEATS beats; otherwise
+    `bpm`. The fit is only kept within 4% of `bpm`, so it sharpens the estimate (frame
+    quantisation averages out over the beats) but never changes its octave. The estimators
+    pass only the beats on onsets (onset_beats).
     """
+    beats = np.asarray(beats, dtype=float)
     if len(beats) < MIN_BEATS or not bpm > 0:
         return bpm
-    period = 60.0 / bpm
-    steps = np.diff(beats) / period
+    steps = np.diff(beats) / (60.0 / bpm)
     whole = np.round(steps)
-    if np.any(whole < 1) or np.max(np.abs(steps - whole)) > 0.25:
+    regular = (whole >= 1) & (np.abs(steps - whole) <= 0.25)
+    best, start = (0, 0), None
+    for i, ok in enumerate([*regular, False]):
+        if ok and start is None:
+            start = i
+        elif not ok and start is not None:
+            best = max(best, (i - start, start))
+            start = None
+    length, first = best
+    if length + 1 < MIN_BEATS:
         return bpm
-    numbers = np.concatenate([[0.0], np.cumsum(whole)])
-    slope = np.polyfit(numbers, beats, 1)[0]
+    run = beats[first : first + length + 1]
+    numbers = np.concatenate([[0.0], np.cumsum(whole[first : first + length])])
+    slope = np.polyfit(numbers, run, 1)[0]
     refined = 60.0 / slope if slope > 0 else bpm
     return refined if abs(refined - bpm) <= 0.04 * bpm else bpm
 
 
 def steady_tempo(beats: np.ndarray, bpm: float, signals: Signals | None = None) -> bool:
     """
-    True when every third of the beat grid runs at `bpm`, and (given `signals`) librosa's tempo
-    estimate on every third of the onset envelope agrees, up to an octave.
+    True when the tempo holds in each third of the window that has a beat. Given `signals`, a
+    third counts when its own onsets repeat (onset periodicity at least MIN_TEMPO_PERIODICITY);
+    a beatless intro is no evidence either way. In each counted third, the median interval of
+    the beats in it and librosa's tempo estimate on its onset envelope (up to an octave) must
+    match `bpm`. Without `signals`, the beats are split into thirds by count. Either way it
+    takes at least 2 * STEADY_TEMPO_PARTS beat intervals.
     """
-    intervals = np.diff(np.asarray(beats, dtype=float))
+    beats = np.asarray(beats, dtype=float)
+    intervals = np.diff(beats)
     if intervals.size < 2 * STEADY_TEMPO_PARTS or not bpm > 0:
         return False
-    for part in np.array_split(intervals, STEADY_TEMPO_PARTS):
-        local = 60.0 / float(np.median(part))
-        if abs(local - bpm) > STEADY_TEMPO_TOLERANCE * bpm:
-            return False
+
+    def matches(local: float, octaves=(1,)) -> bool:
+        return any(abs(local * o - bpm) <= STEADY_TEMPO_TOLERANCE * bpm for o in octaves)
+
     if signals is None:
-        return True
+        return all(
+            matches(60.0 / float(np.median(part)))
+            for part in np.array_split(intervals, STEADY_TEMPO_PARTS)
+        )
     frames_per_minute = 60.0 * signals.sr / signals.hop
     period = frames_per_minute / bpm  # in onset frames
-    for part in np.array_split(signals.onset_envelope, STEADY_TEMPO_PARTS):
+    envelope, smoothed = signals.onset_envelope, signals.smoothed_onset_envelope
+    edges = np.linspace(0, envelope.size, STEADY_TEMPO_PARTS + 1).astype(int)
+    counted = 0
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        part = envelope[lo:hi]
+        rhythm = max(
+            tempogram_contrast(part, signals.sr, signals.hop),
+            tempogram_contrast(smoothed[lo:hi], signals.sr, signals.hop),
+        )
+        if rhythm < MIN_TEMPO_PERIODICITY:
+            continue
+        counted += 1
+        start, end = lo * signals.hop / signals.sr, hi * signals.hop / signals.sr
+        inside = beats[(beats >= start) & (beats < end)]
+        if inside.size >= 3 and not matches(60.0 / float(np.median(np.diff(inside)))):
+            return False
         local = librosa.feature.tempo(
             onset_envelope=part, sr=signals.sr, hop_length=signals.hop, max_tempo=MAX_BPM
         )
@@ -391,7 +593,7 @@ def steady_tempo(beats: np.ndarray, bpm: float, signals: Signals | None = None) 
             for octave in (0.5, 1, 2)
         ):
             return False
-    return True
+    return counted > 0
 
 
 def periodicity_at_lag(onset_envelope: np.ndarray, lag_frames: float) -> float:
@@ -454,7 +656,7 @@ class LibrosaEstimator:
         beats = librosa.frames_to_time(frames, sr=signals.sr, hop_length=signals.hop)
         if len(beats) < MIN_BEATS:
             return None
-        bpm = refine_bpm(beats, start_bpm)
+        bpm = refine_bpm(onset_beats(beats, signals), start_bpm)
         lag = 60.0 / bpm * signals.sr / signals.hop
         confidence = periodicity_at_lag(signals.smoothed_onset_envelope, lag)
         if confidence < self.min_tempo_confidence:
@@ -469,7 +671,7 @@ class LibrosaEstimator:
         )
 
     def key(self, signals: Signals) -> KeyEstimate | None:
-        if signals.tonality.key_withheld():
+        if signals.key_withheld():
             return None
         found = krumhansl_key(signals.chroma_mean)
         if found is None:
@@ -520,7 +722,7 @@ class EssentiaEstimator:
         confidence = float(np.clip((raw - low) / (high - low), 0.0, 1.0))
         if confidence < self.min_tempo_confidence:
             return None
-        bpm = refine_bpm(ticks, float(bpm))
+        bpm = refine_bpm(onset_beats(ticks, signals), float(bpm))
         return TempoEstimate(
             bpm=bpm,
             confidence=confidence,
@@ -528,10 +730,11 @@ class EssentiaEstimator:
             beats=ticks,
             method="essentia.RhythmExtractor2013+beat-regression",
             steady=steady_tempo(ticks, bpm, signals),
+            beats_follow_changes=True,
         )
 
     def key(self, signals: Signals) -> KeyEstimate | None:
-        if signals.tonality.key_withheld():
+        if signals.key_withheld():
             return None
         extractor = _essentia_algorithm(
             f"key-{self.key_profile}",

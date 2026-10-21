@@ -69,6 +69,12 @@ AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
 ANALYSIS_TIMEOUT_S = float(os.environ.get("ANALYSIS_TIMEOUT_S") or 60)
 MAX_DECODE_SECONDS = 35.0
+# Decoded samples beyond this magnitude are not audio (a float WAV can hold 1e30); float
+# overs of a few times full scale are fine.
+MAX_SAMPLE_MAGNITUDE = 1000.0
+# When the mono downmix keeps less than this share of the channels' RMS (antiphase stereo:
+# the channels cancel), the loudest channel is analysed instead of the silent downmix.
+DOWNMIX_CANCELLATION = 0.1
 # Analyses run in worker threads, at most this many at once. Further requests wait up to
 # QUEUE_WAIT_S for a slot (at most MAX_QUEUED_ANALYSES of them) before a 503. The wait stays
 # well below the API's 30 s client timeout and does not count against ANALYSIS_TIMEOUT_S.
@@ -164,24 +170,33 @@ class HealthResponse(BaseModel):
 # Audio Analysis Functions
 # =============================================================================
 
-# v1 energy: loudness.rmsMean in dBFS, mapped linearly from [V1_ENERGY_FLOOR_DBFS, 0] dBFS to
-# [0, 1]. Input that passes the gate has its loudest 5% of frames above -60 dBFS, so its mean
-# frame RMS is above -86 dBFS (5% of -60 dBFS) and its energy above 0.04: audible music never
-# reads 0 like silence. The drum pattern peaking at -48 dBFS (mean RMS -66 dBFS) reads 0.27, a
-# click track at 0.8 peak (-39 dBFS) 0.57, full-scale noise near 1.
-V1_ENERGY_FLOOR_DBFS = -90.0
+# v1 energy keeps the scale the service had before v2 (the API calls "energy" above 0.7 high
+# and the web shows it as a percentage): (mean frame RMS - 0.02) / 0.25, clipped to 0-1. That
+# reads 0 for any mean RMS up to 0.02 (-34 dBFS), the same as silence, so input that passes
+# the gate gets at least a small floor instead: V1_ENERGY_FLOOR at -86 dBFS mean RMS (the
+# quietest the gate passes: 5% of frames at -60 dBFS) rising linearly in dB to
+# V1_ENERGY_FLOOR_TOP at -34 dBFS. Where the old scale gives more, it is used unchanged.
+# Gated input has no energy (null).
+V1_ENERGY_OFFSET = 0.02
+V1_ENERGY_SPAN = 0.25
+V1_ENERGY_FLOOR = 0.005
+V1_ENERGY_FLOOR_TOP = 0.02
+V1_ENERGY_FLOOR_DBFS = (-86.0, -34.0)
 
 
 class InvalidAudioError(ValueError):
-    """The decoded audio cannot be analysed (non-finite samples)."""
+    """The preview cannot be analysed: not decodable, or non-finite or absurd samples. The
+    message is one of a fixed set (no paths or decoder output) and is returned with the 422."""
 
 
 def v1_energy(rms_mean: float) -> float:
-    """The v1 `energy` field: loudness on 0-1 (not a perceptual energy)."""
-    if not rms_mean > 0:
-        return 0.0
-    dbfs = 20 * math.log10(rms_mean)
-    return round(float(np.clip((dbfs - V1_ENERGY_FLOOR_DBFS) / -V1_ENERGY_FLOOR_DBFS, 0, 1)), 3)
+    """The v1 `energy` field for input that passed the gate (see V1_ENERGY_OFFSET)."""
+    scaled = float(np.clip((rms_mean - V1_ENERGY_OFFSET) / V1_ENERGY_SPAN, 0, 1))
+    low, high = V1_ENERGY_FLOOR_DBFS
+    dbfs = 20 * math.log10(rms_mean) if rms_mean > 0 else low
+    position = float(np.clip((dbfs - low) / (high - low), 0, 1))
+    floor = V1_ENERGY_FLOOR + (V1_ENERGY_FLOOR_TOP - V1_ENERGY_FLOOR) * position
+    return round(max(scaled, floor), 3)
 
 
 def v1_fields(v2: dict) -> dict:
@@ -248,14 +263,15 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
 
     tempo = _estimate(estimator.tempo, signals, "tempo")
     key = _estimate(estimator.key, signals, "key")
-    if key is None and (reason := signals.tonality.key_withheld()):
+    if key is None and (reason := signals.key_withheld()):
         logger.info("No key: %s", reason)
 
-    if tempo is not None:
+    if tempo is not None and (tempo.steady or tempo.beats_follow_changes):
         times = np.sort(np.clip(np.asarray(tempo.beats, dtype=float), 0.0, duration))
         v2["beats"] = _signal_block(
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]
         )
+    if tempo is not None:
         if tempo.steady:
             raw = tempo.raw_confidence
             v2["tempo"] = _signal_block(
@@ -267,7 +283,11 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
                 method=tempo.method,
             )
         else:
-            logger.info("No tempo: %.2f BPM does not hold over the window", tempo.bpm)
+            logger.info(
+                "No tempo: %.2f BPM does not hold over the window%s",
+                tempo.bpm,
+                "" if tempo.beats_follow_changes else " (and no beats)",
+            )
     if key is not None:
         v2["key"] = _signal_block(
             tonic=key.tonic,
@@ -288,7 +308,12 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     )
     v2["sections"] = _signal_block(segments=harmonic.segments, method=harmonic.method)
     v2["keyMoments"] = signal_features.key_moments(signals, loudness, harmonic)
-    v2["fingerprint"] = fingerprint.fingerprint(signals.native, signals.native_sr, MODELS_LOADED)
+    if MODELS_LOADED and (reason := signals.not_music()):
+        logger.info("No fingerprint: %s", reason)
+    else:
+        v2["fingerprint"] = fingerprint.fingerprint(
+            signals.native, signals.native_sr, MODELS_LOADED
+        )
     return {**v1_fields(v2), "v2": v2}
 
 
@@ -296,16 +321,33 @@ def decode(file_path: str) -> Signals:
     """
     Decode a file once (soundfile, libsndfile 1.1+ reads MP3), downmixed to mono at its own
     rate; the analysis resamples it once per rate it needs. Previews are 30 s; never decode
-    more than MAX_DECODE_SECONDS, whatever the file claims. Non-finite samples (a float WAV can
-    hold them) raise InvalidAudioError.
+    more than MAX_DECODE_SECONDS, whatever the file claims.
+
+    Raises InvalidAudioError (a 422) when the file cannot be decoded, or holds non-finite or
+    absurd sample values (beyond MAX_SAMPLE_MAGNITUDE). When the channels cancel in the
+    downmix (antiphase stereo), the loudest channel is analysed instead.
     """
-    with sf.SoundFile(file_path) as f:
-        frames = min(f.frames, int(MAX_DECODE_SECONDS * f.samplerate)) if f.frames >= 0 else -1
-        data = f.read(frames, dtype="float32", always_2d=True)
-        sr = f.samplerate
-    mono = np.mean(data, axis=1, dtype=np.float32) if data.size else np.zeros(0, np.float32)
-    if not np.all(np.isfinite(mono)):
+    try:
+        with sf.SoundFile(file_path) as f:
+            frames = min(f.frames, int(MAX_DECODE_SECONDS * f.samplerate)) if f.frames >= 0 else -1
+            data = f.read(frames, dtype="float32", always_2d=True)
+            sr = f.samplerate
+    except (sf.LibsndfileError, RuntimeError, EOFError) as e:
+        raise InvalidAudioError("the file could not be decoded as audio") from e
+    if not np.all(np.isfinite(data)):
         raise InvalidAudioError("the decoded audio contains non-finite samples")
+    if data.size and float(np.max(np.abs(data))) > MAX_SAMPLE_MAGNITUDE:
+        raise InvalidAudioError("the decoded audio holds samples far beyond full scale")
+    if not data.size:
+        return Signals(np.zeros(0, np.float32), sr)
+    mono = np.mean(data, axis=1, dtype=np.float32)
+    if data.shape[1] > 1:
+        channel_rms = np.sqrt(np.mean(np.square(data, dtype=np.float64), axis=0))
+        mono_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
+        if mono_rms < DOWNMIX_CANCELLATION * float(np.mean(channel_rms)):
+            channel = int(np.argmax(channel_rms))
+            logger.info("The channels cancel in the downmix; analysing channel %d", channel)
+            mono = np.ascontiguousarray(data[:, channel])
     return Signals(mono, sr)
 
 
@@ -390,7 +432,7 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
     except InvalidAudioError as e:
         logger.warning("Preview not analysable: %s", e)
         raise HTTPException(
-            status_code=422, detail="The preview contains invalid (non-finite) audio samples"
+            status_code=422, detail=f"The preview is not analysable audio: {e}"
         ) from None
     except Exception:
         logger.exception("Audio analysis failed")

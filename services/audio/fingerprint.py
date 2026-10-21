@@ -57,6 +57,8 @@ MUSICNN_PATCH, MUSICNN_PATCH_HOP = 187, 93
 EFFNET_EMBEDDING = 1280
 MUSICNN_EMBEDDING = 200
 
+# Discogs styles of non-music recordings ("Non-Music---Field Recording", "---Speech", ...).
+NON_MUSIC_PREFIX = "Non-Music---"
 # Discogs styles reported, highest activation first.
 STYLE_TOP_K = 10
 # Licence of the MTG model weights (essentia.upf.edu/models: CC BY-NC-SA 4.0, a proprietary
@@ -314,6 +316,13 @@ def fingerprint(native: np.ndarray, native_sr: int, loaded: bool) -> dict | None
 
     style_mean = None if styles is None else styles.mean(axis=0)
     tag_mean = None if tags is None else tags.mean(axis=0)
+    # When the strongest style is a Non-Music one (field recording, speech, comedy...), the
+    # mood heads, trained on music, have nothing to describe.
+    if style_mean is not None:
+        top_style = DISCOGS_STYLES[int(np.argmax(style_mean))]
+        if top_style.startswith(NON_MUSIC_PREFIX):
+            logger.info("No moods: the strongest style is %s", top_style)
+            moods = dict.fromkeys(moods)
     return {
         "styles": None
         if style_mean is None

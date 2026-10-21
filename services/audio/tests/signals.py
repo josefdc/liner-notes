@@ -205,10 +205,97 @@ def under_noise(music: np.ndarray, alpha: float = 1.0, snr_db: float = 0.0, seed
     return normalise(bed + music * 10 ** (snr_db / 20), 0.7)
 
 
+def held_note(
+    f0: float,
+    vibrato_cents: float = 0.0,
+    rate: float = 6.0,
+    weights=None,
+    seconds: float = 30.0,
+    sr: int = SR,
+) -> np.ndarray:
+    """One held note with vibrato; `weights` are the harmonic amplitudes (0.7^k by default)."""
+    t = seconds_of(seconds, sr)
+    f = f0 * 2 ** ((vibrato_cents / 1200) * np.sin(2 * np.pi * rate * t))
+    phase = 2 * np.pi * np.cumsum(f) / sr
+    weights = weights or [0.7**k for k in range(10)]
+    return normalise(sum(a * np.sin((k + 1) * phase) for k, a in enumerate(weights)))
+
+
+# Harmonic amplitudes: brass-like (harmonics 2-5 strong, which spell root, fifth and major
+# third) and clarinet-like (odd harmonics).
+BRASS = [0.5, 1, 1, 0.9, 0.8, 0.4, 0.3, 0.2]
+CLARINET = [1, 0.05, 0.7, 0.05, 0.5, 0.05, 0.35, 0.05, 0.25]
+
+
+def bend(f0: float = 220.0, semitones: float = 2.0, period: float = 2.0, sr: int = SR):
+    """One note bending up `semitones` and back every `period` seconds."""
+    t = seconds_of(30.0, sr)
+    f = f0 * 2 ** ((semitones / 12) * (0.5 - 0.5 * np.cos(2 * np.pi * t / period)))
+    phase = 2 * np.pi * np.cumsum(f) / sr
+    return normalise(sum(0.7**k * np.sin((k + 1) * phase) for k in range(10)))
+
+
+def speech_like(low: float = 95.0, high: float = 150.0, seed: int = 4, sr: int = SR):
+    """A voice gliding between `low` and `high` Hz, in syllables and phrases, with no notes."""
+    rng = np.random.default_rng(seed)
+    t = seconds_of(30.0, sr)
+    walk = np.cumsum(rng.normal(0, 0.002, t.size))
+    walk = (walk - walk.min()) / np.ptp(walk)
+    phase = 2 * np.pi * np.cumsum(low * (high / low) ** walk) / sr
+    voice = sum(0.85**k * np.sin((k + 1) * phase) for k in range(25))
+    syllables = (np.sin(2 * np.pi * 4 * t + 1) > -0.2).astype(float)
+    phrases = (np.sin(2 * np.pi * 0.25 * t) > -0.7).astype(float)
+    return normalise(voice * syllables * phrases)
+
+
+def sung_melody(vibrato_cents: float = 50.0, seed: int = 3, sr: int = SR) -> np.ndarray:
+    """A legato G major melody with wide vibrato, one voice (no accompaniment)."""
+    rng = np.random.default_rng(seed)
+    melody = [67, 69, 71, 72, 74, 72, 71, 69, 67, 66, 67, 71, 74, 79, 78, 74]
+    t = seconds_of(30.0, sr)
+    f = np.zeros(t.size)
+    i = k = 0
+    while i < t.size:
+        n = int(rng.uniform(0.8, 2.2) * sr)
+        f[i : i + n] = hz(melody[k % len(melody)])
+        i, k = i + n, k + 1
+    f *= 2 ** ((vibrato_cents / 1200) * np.sin(2 * np.pi * 5.5 * t))
+    phase = 2 * np.pi * np.cumsum(f) / sr
+    return normalise(sum(0.6**h * np.sin((h + 1) * phase) for h in range(10)))
+
+
+def noise_with_tone(
+    tone: np.ndarray, alpha: float = 0.0, snr_db: float = -10.0, seed: int = 9
+) -> np.ndarray:
+    """A noise bed with one tonal artefact (a whine, hum) `snr_db` under it."""
+    bed = colored_noise(alpha, seconds=len(tone) / SR, rms=1.0, seed=seed)
+    tone = tone / np.sqrt(np.mean(tone**2))
+    return normalise(bed + tone * 10 ** (snr_db / 20), 0.7)
+
+
+def late_start(music: np.ndarray, start: float, intro: str = "silence") -> np.ndarray:
+    """`music` silenced before `start` seconds, then optionally a sustained D major pad there."""
+    y = music.copy()
+    i = int(start * SR)
+    y[:i] = 0
+    if intro == "pad":
+        y[:i] += 0.3 * normalise(pad([hz(62), hz(66), hz(69)], start))
+    return normalise(y)
+
+
 def tempo_change(first: float = 90, second: float = 130) -> np.ndarray:
     """A band at `first` BPM for 15 s, then at `second` BPM."""
     beats = grid(first, 15.0) + [15.0 + b for b in grid(second, 15.0)]
     return band(beats)
+
+
+def accelerando(start: float, end: float, seconds: float = 30.0) -> list[float]:
+    """Beat times of a tempo rising linearly from `start` to `end` BPM."""
+    beats, t = [], 0.0
+    while t < seconds:
+        beats.append(t)
+        t += 60.0 / (start + (end - start) * t / seconds)
+    return beats
 
 
 def drum_pattern(bpm: float, seconds: float = 30.0, seed: int = 7) -> np.ndarray:
@@ -296,8 +383,35 @@ def probes() -> dict[str, np.ndarray]:
         "rain-piano-0dB": under_noise(piano_line()),
         "piano-line": piano_line(),
         "tempo-change-90-130": tempo_change(),
+        "accelerando-80-140": band(accelerando(80, 140)),
         "chords-under-loud-drums": normalise(chord_pad_progression() + 4 * drums_only(120, seed=2)),
         "piano-under-loud-drums": normalise(piano_line() + 4 * drums_only(97, seed=1)),
+        # one pitch, moving: no key
+        "A4-vibrato-40c": held_note(440.0, 40),
+        "A4-vibrato-80c": held_note(440.0, 80),
+        "A4-vibrato-120c": held_note(440.0, 120),
+        "Bb3-brass-vibrato-40c": held_note(233.08, 40, 5.5, BRASS),
+        "Bb3-brass-vibrato-80c": held_note(233.08, 80, 5.5, BRASS),
+        "Bb3-brass-vibrato-120c": held_note(233.08, 120, 5.5, BRASS),
+        "F4-brass-vibrato-40c": held_note(349.23, 40, 5.5, BRASS),
+        "D4-clarinet-vibrato": held_note(293.66, 35, 5.0, CLARINET),
+        "bend-2-semitones": bend(),
+        "speech-like-low": speech_like(),
+        "speech-like-high": speech_like(180.0, 260.0),
+        # one voice with notes: a key
+        "sung-melody-vibrato": sung_melody(),
+        # a drone with a drum beat: music
+        "drone-with-drums": normalise(hum(110, gentle=True) + 2 * drums_only(120, seed=2)),
+        # noise with one tonal artefact: gated
+        "white-noise-whine-14dB": noise_with_tone(held_note(1000.0, weights=[1]), 0, -14),
+        "white-noise-whine-10dB": noise_with_tone(held_note(1000.0, weights=[1]), 0, -10),
+        "white-noise-whine-6dB": noise_with_tone(held_note(1000.0, weights=[1]), 0, -6),
+        "pink-noise-hum-6dB": noise_with_tone(hum(50), 1, -6),
+        # a steady tempo from 10 s on: reported
+        "band-97-after-10s-silence": late_start(drum_pattern(97), 10.0),
+        "band-97-after-10s-pad": late_start(drum_pattern(97), 10.0, "pad"),
+        "band-132-after-12s-pad": late_start(drum_pattern(132), 12.0, "pad"),
+        "band-85-after-10s-pad": late_start(drum_pattern(85), 10.0, "pad"),
         # noise: gated
         "white-noise": colored_noise(0, seconds=30.0),
         "pink-noise": colored_noise(1, seconds=30.0),

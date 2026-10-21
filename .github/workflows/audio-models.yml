@@ -40,12 +40,14 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: services/audio/uv.lock
+          # The ci workflow's python job caches the same lock without the extra.
+          cache-suffix: models
       - run: uv sync --frozen --extra models
       # The model files are pinned by name and SHA-256 in download_models.py, so that file is
       # the cache key. download_models.py checks every file, cached or not, and downloads (and
       # checks) whatever is missing.
       - name: Cache the models
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: services/audio/models
           key: audio-models-${{ hashFiles('services/audio/download_models.py') }}

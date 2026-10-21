@@ -89,8 +89,12 @@ def test_analysis_errors_do_not_leak_details(client, monkeypatch, tmp_path):
 
     monkeypatch.setattr(main, "download_preview", fake_download)
     response = client.post("/analyze", json={"preview_url": DEEZER_URL})
-    assert response.status_code == 500
-    assert response.json() == {"detail": "Audio analysis failed"}
+    # Not audio: a 422 whose detail names no path and no decoder output.
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "The preview is not analysable audio: the file could not be decoded as audio"
+    }
+    assert "secret" not in response.text
     assert not secret_path.exists()
 
 

@@ -38,6 +38,27 @@ type ZodDef = {
 };
 const defOf = (schema: unknown) => (schema as { _zod: { def: ZodDef } })._zod.def;
 
+/**
+ * What a `.catch()` reads an unreadable value as: absent (undefined or null), or the fallback,
+ * so a fallback that invents a value is recorded and changing to one is breaking.
+ */
+function unreadableAs(catchValue: (ctx: unknown) => unknown): string {
+  let fallback: unknown;
+  try {
+    fallback = catchValue(undefined);
+  } catch {
+    return "a computed value when unreadable";
+  }
+  if (fallback === undefined || fallback === null) return "absent when unreadable";
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(fallback);
+  } catch {
+    // No JSON form.
+  }
+  return `reads as ${text ?? `<${typeof fallback} ${String(fallback)}>`} when unreadable`;
+}
+
 /** Unknown-key policies and named refinements of `root`, down to other named schemas. */
 export function readerFacts(
   root: z.ZodType,
@@ -101,7 +122,7 @@ export function readerFacts(
         walk((def.getter as () => unknown)(), path, inner);
         return;
       case "catch":
-        tolerant.push(`${path}: absent when unreadable`);
+        tolerant.push(`${path}: ${unreadableAs(def.catchValue as (ctx: unknown) => unknown)}`);
         walk(def.innerType, path, inner);
         return;
       default:
@@ -113,10 +134,15 @@ export function readerFacts(
   return { unknownKeys, refinements: refinements.sort(), tolerant: tolerant.sort() };
 }
 
-/** The snapshot of every named schema, as the code stands. */
-export function contractSnapshots(): Record<string, ContractSnapshot> {
+/**
+ * The snapshot of every named schema, as the code stands (or of `schemas`, which tests use to
+ * snapshot a changed contract).
+ */
+export function contractSnapshots(
+  schemas: Record<string, z.ZodType> = CONTRACT_SCHEMAS,
+): Record<string, ContractSnapshot> {
   const registry = z.registry<{ id: string }>();
-  for (const [name, schema] of Object.entries(CONTRACT_SCHEMAS)) registry.add(schema, { id: name });
+  for (const [name, schema] of Object.entries(schemas)) registry.add(schema, { id: name });
   const json = (io: "input" | "output") =>
     z.toJSONSchema(registry, { ...jsonSchemaOptions(io), uri: snapshotFileName }).schemas as Record<
       string,
@@ -124,10 +150,11 @@ export function contractSnapshots(): Record<string, ContractSnapshot> {
     >;
   const input = json("input");
   const output = json("output");
+  const named = new Set<unknown>(Object.values(schemas));
   return Object.fromEntries(
-    Object.entries(CONTRACT_SCHEMAS).map(([name, schema]) => [
+    Object.entries(schemas).map(([name, schema]) => [
       name,
-      { input: input[name], output: output[name], ...readerFacts(schema) },
+      { input: input[name], output: output[name], ...readerFacts(schema, named) },
     ]),
   );
 }

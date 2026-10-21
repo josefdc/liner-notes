@@ -191,11 +191,22 @@ describe("migration 3's frozen copy of the audio cache rules", () => {
   // Migration 3 keeps its own copy so that later edits cannot change a shipped migration. If the
   // live rules change on purpose, update this test (not the copy) and say why in the change.
   it("still matches the live rules", () => {
-    // JSON Schema cannot show `z.undefined()`; `unavailableReason` is compared as any value.
-    const jsonSchema = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
+    // JSON Schema has no `undefined`: a `z.undefined()` field is written as `not: {}` (no value
+    // allowed), so loosening it to any other type changes the schema.
+    const jsonSchema = (schema: z.ZodType) =>
+      z.toJSONSchema(schema, {
+        unrepresentable: "any",
+        override: (ctx) => {
+          if (ctx.zodSchema._zod.def.type === "undefined") ctx.jsonSchema.not = {};
+        },
+      });
     expect(jsonSchema(MIGRATION_3_FROZEN.measuredAudioSchema)).toEqual(
       jsonSchema(MeasuredAudioSchema),
     );
+    for (const schema of [MIGRATION_3_FROZEN.measuredAudioSchema, MeasuredAudioSchema]) {
+      expect(schema.safeParse(measured({ unavailableReason: "no_preview" })).success).toBe(false);
+      expect(jsonSchema(schema).properties).toMatchObject({ unavailableReason: { not: {} } });
+    }
     expect(MIGRATION_3_FROZEN.lowConfidenceTtlMs).toBe(LOW_CONFIDENCE_AUDIO_TTL_MS);
   });
 });

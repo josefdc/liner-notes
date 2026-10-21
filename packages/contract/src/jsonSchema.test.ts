@@ -51,13 +51,6 @@ describe("toJsonSchema defaults", () => {
     expect(field(length.catch(5), "input")).not.toHaveProperty("default");
     expect(field(length.catch(5), "output")).toMatchObject({ default: 5 });
   });
-
-  it("records a fallback with no JSON form as a stable marker", () => {
-    const big = z.preprocess((value) => value, z.unknown()).catch(10n);
-    expect(field(big, "input")).toMatchObject({
-      default: { unserializable: "bigint", text: "10" },
-    });
-  });
 });
 
 describe("model-facing schemas", () => {

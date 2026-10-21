@@ -34,18 +34,10 @@ export function toJsonSchema(schema: z.ZodType, io: "input" | "output" = "output
 }
 
 /**
- * A default or `.catch()` fallback as JSON. A value with no JSON form (a bigint, a function, a
- * cycle) becomes a stable marker, so the snapshot still records that there is one and its kind.
+ * A default or `.catch()` fallback as JSON. A value with no JSON form (a bigint, a cycle) throws,
+ * as zod's own export does for such a default.
  */
-function asJson(value: unknown): unknown {
-  try {
-    const text = JSON.stringify(value);
-    if (text !== undefined) return JSON.parse(text);
-  } catch {
-    // No JSON form; the marker below.
-  }
-  return { unserializable: typeof value, text: String(value) };
-}
+const asJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
 /**
  * Options shared by every JSON Schema export: draft 2020-12, nothing unrepresentable, and

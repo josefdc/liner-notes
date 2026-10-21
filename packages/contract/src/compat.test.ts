@@ -8,14 +8,17 @@ import { z } from "zod";
 import { ReadyResponse } from "./api.js";
 import { AudioFeatures, ModelScore } from "./audio.js";
 import { type Compatibility, compareSchemas, type Mode, type Schema } from "./compat.js";
-import { ConnectedEvent, StatusEvent } from "./events.js";
-import { Evidence } from "./evidence.js";
+import { ConnectedEvent, FactoidStreamEvent, StatusEvent } from "./events.js";
+import { Claim, Evidence } from "./evidence.js";
 import { toJsonSchema } from "./jsonSchema.js";
 import { refineNamed } from "./refinements.js";
+import { CONTRACT_SCHEMAS } from "./schemas.js";
+import { sampleClaim } from "./testing/samples.js";
 import { tolerantList } from "./tolerant.js";
 import {
   type ContractSnapshot,
   compareSnapshots,
+  contractSnapshots,
   engineChangeUnacknowledged,
   readerFacts,
   unacknowledgedBreaking,
@@ -103,6 +106,30 @@ describe("compareSchemas rules", () => {
     expect(compareSchemas(nullable({}), nullable({ default: null }))).toEqual({
       breaking: [],
       additive: ["$.a: default added"],
+    });
+  });
+
+  it("reads a default written next to a $ref", () => {
+    const claim: Schema = { type: "object", properties: { verdict: { type: "string" } } };
+    const resolve = () => claim;
+    const field = (extra: Schema) => object({ c: { $ref: "Claim.schema.json", ...extra } }, []);
+    const compare = (before: Schema, after: Schema) =>
+      compareSchemas(before, after, { snapshot: resolve, current: resolve });
+    expect(compare(field({}), field({ default: { verdict: "supported" } })).breaking).toEqual([
+      '$.c: default added {"verdict":"supported"}',
+    ]);
+    expect(
+      compare(field({ default: { verdict: "unknown" } }), field({ default: { verdict: "x" } }))
+        .breaking,
+    ).toEqual(['$.c: default is now {"verdict":"x"}']);
+  });
+
+  it("a required field that gains a default is additive: every old payload carries it", () => {
+    const required = object({ a: str }, ["a"]);
+    const defaulted = object({ a: { ...str, default: "x" } }, []);
+    expect(compareSchemas(required, defaulted)).toEqual({
+      breaking: [],
+      additive: ["$.a: now optional", "$.a: default added"],
     });
   });
 
@@ -369,6 +396,21 @@ describe("snapshot rules", () => {
     expect(breaking(strict, tolerant)).toEqual([]);
   });
 
+  it("a value that reads as its fallback, not as absent, when unreadable is recorded so", () => {
+    const reason = (schema: z.ZodType) => z.object({ reason: schema });
+    const absent = reason(z.enum(["a", "b"]).optional().catch(undefined));
+    const invented = reason(z.enum(["a", "b"]).optional().catch("a"));
+    expect(readerFacts(invented, new Set()).tolerant).toEqual([
+      '$.reason: reads as "a" when unreadable',
+    ]);
+    expect(readerFacts(reason(z.enum(["a"]).nullable().catch(null)), new Set()).tolerant).toEqual([
+      "$.reason: absent when unreadable",
+    ]);
+    expect(breaking(absent, invented)).toContain(
+      "no longer tolerant $.reason: absent when unreadable",
+    );
+  });
+
   it("a removed schema breaks; a new one is additive", () => {
     const s = snapshotOf(z.object({ a: z.string() }));
     expect(compareSnapshots({ A: s }, {})).toEqual({
@@ -452,6 +494,23 @@ describe("changes to the contract that must fail the gate", () => {
   it("a field added with a default to TrackAnalysis passes", () => {
     const after = TrackAnalysis.extend({ tags: z.array(z.string()).default([]) });
     expect(breaking(TrackAnalysis, after)).toEqual([]);
+  });
+
+  it("a factoid's claim (a named schema) read as an invented supported claim when unreadable", () => {
+    // A default next to a $ref: the claim refers to the Claim snapshot.
+    const [connected, factoid, ...rest] = FactoidStreamEvent.options;
+    const invented = z.discriminatedUnion("type", [
+      connected,
+      factoid.extend({ claim: Claim.optional().catch(sampleClaim()) }),
+      ...rest,
+    ]);
+    const changes = compareSnapshots(
+      contractSnapshots(),
+      contractSnapshots({ ...CONTRACT_SCHEMAS, FactoidStreamEvent: invented }),
+    );
+    expect(changes.FactoidStreamEvent.breaking).toEqual([
+      `input $<type=factoid>.claim: default added ${JSON.stringify(sampleClaim())}`,
+    ]);
   });
 });
 

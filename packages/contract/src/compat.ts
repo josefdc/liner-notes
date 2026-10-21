@@ -6,15 +6,16 @@
  *   accepted. Breaking: a removed field, a type or enum value no longer accepted, a tighter
  *   bound, a new pattern, format or multipleOf, a field that became required or lost its
  *   default, a default (or `.catch()` fallback) whose value changed, a default other than null
- *   added to an existing field (a missing value would read as that value instead of as
- *   missing), a new required field, an object that now rejects unknown keys, record keys that
- *   are narrower, a tuple that grows or closes.
+ *   added to an existing optional field (a missing value would read as that value instead of
+ *   as missing), a new required field, an object that now rejects unknown keys, record keys
+ *   that are narrower, a tuple that grows or closes.
  * - `output` (what a parse guarantees): every field a reader could rely on is still there and
  *   still required. Breaking: a removed field, a required field made optional, a type or enum
  *   value removed, a default whose value changed.
  *
  * Additive in both: new optional fields (or new fields with a default), new union variants,
- * new enum values, wider types, looser bounds, a null default added to an existing field.
+ * new enum values, wider types, looser bounds, a default added to a required field (every
+ * payload already carries it), a null default added to an optional one.
  */
 
 export type Schema = { [keyword: string]: unknown };
@@ -141,6 +142,13 @@ export function flattenSchema(
 
   const walk = (node: unknown, path: string, required: boolean, seen: readonly string[]) => {
     if (!isSchema(node)) return;
+    // Read first: a default can sit next to a `$ref` (a `.catch()` on a named schema).
+    if ("default" in node && node.default !== undefined) {
+      const facet = facetAt(path, required);
+      facet.hasDefault = true;
+      const value = defaultText(node.default);
+      if (!facet.defaults.includes(value)) facet.defaults = [...facet.defaults, value].sort();
+    }
     if (typeof node.$ref === "string") {
       // A local definition, or another schema of the contract (an `<id>.schema.json` ref).
       const ref = node.$ref;
@@ -156,11 +164,6 @@ export function flattenSchema(
     }
 
     const facet = facetAt(path, required);
-    if ("default" in node && node.default !== undefined) {
-      facet.hasDefault = true;
-      const value = defaultText(node.default);
-      if (!facet.defaults.includes(value)) facet.defaults = [...facet.defaults, value].sort();
-    }
 
     if (Array.isArray(node.allOf)) {
       for (const branch of node.allOf) walk(branch, path, required, seen);
@@ -282,7 +285,8 @@ export function compareSchemas(
 
     if (mode === "input" && old.hasDefault !== now.hasDefault) {
       if (old.hasDefault) breaking.push(`${path}: default removed`);
-      else if (now.defaults.every((value) => value === "null")) {
+      else if (old.required || now.defaults.every((value) => value === "null")) {
+        // A field every old payload carried, or a missing value that still reads as missing.
         additive.push(`${path}: default added`);
       } else breaking.push(`${path}: default added ${now.defaults.join(" | ")}`);
     }

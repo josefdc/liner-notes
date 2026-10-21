@@ -44,6 +44,7 @@ import {
   type MbRelationship,
   type MbReleaseSummary,
   type MbWork,
+  NOT_ORIGINAL_RELEASE_TYPES,
   normalizeIsrc,
   recordingRelationships,
   workCovers,
@@ -51,6 +52,7 @@ import {
 import {
   type Clock,
   checkIdentity,
+  errorRecord,
   failed,
   found,
   type IdentityCounts,
@@ -62,6 +64,7 @@ import {
   primaryEvidence,
   quoted,
   RELATION_PHRASE,
+  scopedRef,
   type SourceResult,
   systemClock,
   type TrackRef,
@@ -87,10 +90,14 @@ export interface PrimaryIdentity {
   discogsReleaseIds: number[];
   /** Why no Discogs release could be listed, when the releases could not be read. */
   releasesError: string | null;
+  /** The source error behind `releasesError`, for the run's source errors. */
+  releasesFailure: unknown;
   /** Set when not every release of the recording could be read. */
   releasesNote: string | null;
   /** The Genius page linked from the recording's work; null when none or several. */
   geniusUrl: string | null;
+  /** Every Genius page linked from the recording's works. */
+  geniusPages: string[];
   shsLinks: ShsLink[];
 }
 
@@ -116,7 +123,11 @@ const creditedArtists = (r: MbRecordingSummary) =>
     names: [c.name, c.artist?.name ?? ""].filter(Boolean),
   }));
 
-const lengthOf = (r: MbRecordingSummary) => (typeof r.length === "number" ? r.length : null);
+/** A duration that can be compared: a positive, finite number of milliseconds. */
+const knownMs = (ms: unknown): ms is number =>
+  typeof ms === "number" && Number.isFinite(ms) && ms > 0;
+
+const lengthOf = (r: MbRecordingSummary) => (knownMs(r.length) ? r.length : null);
 
 /**
  * The one recording under the ISRC that is the track. Candidates that fail a check are omitted.
@@ -142,12 +153,11 @@ export function pickRecording(
     return { recording: null, omitted, reason: "no recording under the ISRC is the track" };
   }
   let chosen: MbRecordingSummary | null = passing.length === 1 ? passing[0] : null;
-  if (!chosen && track.durationMs !== null) {
+  const wanted = track.durationMs;
+  if (!chosen && knownMs(wanted)) {
     const distance = (r: MbRecordingSummary) => {
       const length = lengthOf(r);
-      return length === null
-        ? Number.POSITIVE_INFINITY
-        : Math.abs(length - (track.durationMs ?? 0));
+      return length === null ? Number.POSITIVE_INFINITY : Math.abs(length - wanted);
     };
     const sorted = [...passing].sort((a, b) => distance(a) - distance(b));
     if (Number.isFinite(distance(sorted[0])) && distance(sorted[0]) < distance(sorted[1])) {
@@ -176,16 +186,6 @@ export function pickRecording(
   return { recording: chosen, omitted, reason: "" };
 }
 
-/** Release-group types whose credits are not the original release's. */
-const NOT_ORIGINAL = new Set([
-  "compilation",
-  "dj-mix",
-  "live",
-  "remix",
-  "mixtape/street",
-  "soundtrack",
-]);
-
 /** A release date as a sort key; a bare year or month sorts after the dated days in it. */
 function dateKey(date: string | undefined): string {
   if (!date) return "9999-99-99";
@@ -195,13 +195,13 @@ function dateKey(date: string | undefined): string {
 
 /**
  * The Discogs release ids linked from the recording's releases: original releases only (not a
- * compilation, soundtrack, live, DJ-mix or remix release), earliest first.
+ * compilation, live, DJ-mix or remix release), earliest first.
  */
 export function discogsCandidates(releases: MbReleaseSummary[]): number[] {
   const originals = releases
     .filter((r) => {
       const secondary = r["release-group"]?.["secondary-types"] ?? [];
-      return !secondary.some((t) => NOT_ORIGINAL.has(String(t).toLowerCase()));
+      return !secondary.some((t) => NOT_ORIGINAL_RELEASE_TYPES.has(String(t).toLowerCase()));
     })
     .sort((a, b) => dateKey(a.date).localeCompare(dateKey(b.date)) || a.id.localeCompare(b.id));
   const ids: number[] = [];
@@ -219,13 +219,13 @@ function linksOf(details: MbRecordingDetails) {
   const works: PrimaryIdentity["works"] = [];
   const genius = new Set<string>();
   const shs: ShsLink[] = [];
-  const addShs = (url: string) => {
-    const link = shsLink(url);
+  const addShs = (url: string, from: ShsLink["from"]) => {
+    const link = shsLink(url, from);
     if (link && !shs.some((l) => l.kind === link.kind && l.id === link.id)) shs.push(link);
   };
   const list = <T>(v: T[] | undefined) => (Array.isArray(v) ? v : []);
   for (const rel of list(details.relations)) {
-    if (rel?.type === "secondhandsongs" && rel.url) addShs(rel.url.resource);
+    if (rel?.type === "secondhandsongs" && rel.url) addShs(rel.url.resource, "recording");
     if (rel?.type !== "performance" || !rel.work || !isMbid(rel.work.id)) continue;
     const attributes = list(rel.attributes).map(String);
     // One work can be performed twice in MusicBrainz's data (two dated performance
@@ -248,36 +248,51 @@ function linksOf(details: MbRecordingDetails) {
         const page = geniusPage(link.url.resource);
         if (page) genius.add(page);
       } else if (link.type === "secondhandsongs") {
-        addShs(link.url.resource);
+        addShs(link.url.resource, "work");
       }
     }
   }
-  return { works, geniusUrl: genius.size === 1 ? [...genius][0] : null, shsLinks: shs };
+  const geniusPages = [...genius];
+  return {
+    works,
+    geniusPages,
+    geniusUrl: geniusPages.length === 1 ? geniusPages[0] : null,
+    shsLinks: shs,
+  };
 }
 
 /** Performance attributes that make a recording something other than the song's original. */
 const DERIVED_ATTRIBUTES = ["cover", "live", "medley", "partial", "instrumental", "karaoke"];
 
-const yearOf = (date: string | undefined) => {
-  const year = Number(date?.slice(0, 4));
-  return Number.isInteger(year) && year > 0 ? year : null;
-};
+/** A release date as its parts, at the precision MusicBrainz has it; null when absent. */
+function dateParts(date: string | undefined): number[] | null {
+  const match = date?.trim().match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
+  if (!match) return null;
+  return match
+    .slice(1)
+    .filter((p) => p !== undefined)
+    .map(Number);
+}
 
 /**
- * Whether the matched recording is the original recording of the song it performs, so that the
- * song's covers, samples and other work-level relationships can be claimed for it. It is when
- * it performs one work, without a cover, live, medley, partial, instrumental or karaoke
- * attribute, without a disambiguation comment ("radio edit", "live, 1995"), under the work's
- * title (not "(Taylor's Version)"), and no recording of the work that is not a cover was first
- * released in an earlier year. Anything unknown answers no: a re-recording, live version or
- * edit never inherits the song's relationships.
+ * -1 when `a` is certainly before `b`, 1 when certainly after, 0 when their order cannot be
+ * told: equal as far as the less precise of the two goes ("1990" and "1990-09-04").
  */
-export function originalPerformance(
+function compareDates(a: number[], b: number[]): -1 | 0 | 1 {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * Why the recording is not the song's original, from the recording alone; null when it may be
+ * and only the work's dated recordings can tell.
+ */
+function ruledOut(
   details: MbRecordingDetails,
   works: PrimaryIdentity["works"],
-  workRecordings: { recordings: MbRecordingSummary[]; total: number } | null,
-  coverIds: ReadonlySet<string> = new Set(),
-): PrimaryIdentity["original"] {
+): PrimaryIdentity["original"] | null {
   if (works.length !== 1) {
     return {
       original: false,
@@ -299,21 +314,67 @@ export function originalPerformance(
   if (!titlesMatch(details.title ?? "", work.title, artists)) {
     return { original: false, reason: `titled "${details.title}", a version of "${work.title}"` };
   }
+  return null;
+}
+
+/**
+ * Whether the matched recording is the original recording of the song it performs, so that the
+ * song's covers, samples and other work-level relationships can be claimed for it. It is when
+ * it performs one work, without a cover, live, medley, partial, instrumental or karaoke
+ * attribute, without a disambiguation comment ("radio edit", "live, 1995"), under the work's
+ * title (not "(Taylor's Version)"), and every other recording of the work that is not a cover
+ * was first released certainly later: dates are compared as far as both are precise, so a
+ * recording dated only "1990", or undated, cannot be shown to come after one from 1990-09-04.
+ * Anything unknown answers no: a re-recording, live version or edit never inherits the song's
+ * relationships.
+ */
+export function originalPerformance(
+  details: MbRecordingDetails,
+  works: PrimaryIdentity["works"],
+  workRecordings: { recordings: MbRecordingSummary[]; total: number } | null,
+  coverIds: ReadonlySet<string> = new Set(),
+): PrimaryIdentity["original"] {
+  const out = ruledOut(details, works);
+  if (out) return out;
+  const [work] = works;
   if (!workRecordings) {
     return { original: false, reason: `the recordings of "${work.title}" could not be dated` };
   }
-  const own = yearOf(details["first-release-date"]);
-  if (own === null) return { original: false, reason: "the recording has no release date" };
-  const earlier = workRecordings.recordings
-    .filter((r) => r.id !== details.id && !coverIds.has(r.id))
-    .map((r) => ({ r, year: yearOf(r["first-release-date"]) }))
-    .filter((x): x is { r: MbRecordingSummary; year: number } => x.year !== null && x.year < own)
-    .sort((a, b) => a.year - b.year);
-  if (earlier.length > 0) {
-    const first = earlier[0];
+  const ownDate = details["first-release-date"]?.trim() ?? "";
+  const own = dateParts(ownDate);
+  if (!own) return { original: false, reason: "the recording has no release date" };
+  let earliest: { r: MbRecordingSummary; parts: number[] } | null = null;
+  let undated = 0;
+  let unordered = 0;
+  for (const r of workRecordings.recordings) {
+    if (r.id === details.id || coverIds.has(r.id)) continue;
+    const parts = dateParts(r["first-release-date"]);
+    if (!parts) {
+      undated++;
+      continue;
+    }
+    const order = compareDates(parts, own);
+    if (order === 0) unordered++;
+    if (order < 0 && (!earliest || compareDates(parts, earliest.parts) < 0)) {
+      earliest = { r, parts };
+    }
+  }
+  if (earliest) {
     return {
       original: false,
-      reason: `${quoted(first.r.title, creditString(first.r["artist-credit"]))} was released in ${first.year}, before this recording (${own})`,
+      reason: `${quoted(earliest.r.title, creditString(earliest.r["artist-credit"]))} was released in ${earliest.r["first-release-date"]}, before this recording (${ownDate})`,
+    };
+  }
+  if (undated > 0) {
+    return {
+      original: false,
+      reason: `${undated} recordings of "${work.title}" have no release date: this one cannot be shown to be the earliest`,
+    };
+  }
+  if (unordered > 0) {
+    return {
+      original: false,
+      reason: `${unordered} recordings of "${work.title}" are dated like this one (${ownDate}) as far as the dates go: the earliest cannot be told`,
     };
   }
   if (workRecordings.total > workRecordings.recordings.length) {
@@ -322,7 +383,7 @@ export function originalPerformance(
       reason: `only ${workRecordings.recordings.length} of the ${workRecordings.total} recordings of "${work.title}" could be compared`,
     };
   }
-  return { original: true, reason: `the earliest release of "${work.title}" (${own})` };
+  return { original: true, reason: `the earliest release of "${work.title}" (${ownDate})` };
 }
 
 /**
@@ -341,9 +402,9 @@ export async function resolveIdentity(
     workError: null,
     result,
   });
-  const isrc = normalizeIsrc(track.isrc);
-  if (!isrc) return none(missing("musicbrainz", "the track has no valid ISRC"));
   try {
+    const isrc = normalizeIsrc(track?.isrc);
+    if (!isrc) return none(missing("musicbrainz", "the track has no valid ISRC"));
     const candidates = await lookupIsrc(isrc, signal);
     if (candidates.length === 0) {
       return none(missing("musicbrainz", `MusicBrainz has no recording with ISRC ${isrc}`));
@@ -372,6 +433,7 @@ export async function resolveIdentity(
 
     let discogsReleaseIds: number[] = [];
     let releasesError: string | null = null;
+    let releasesFailure: unknown = null;
     let releasesNote: string | null = null;
     try {
       const { releases, total } = await browseRecordingReleases(details.id, 2, signal);
@@ -382,12 +444,15 @@ export async function resolveIdentity(
       }
     } catch (error) {
       releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
+      releasesFailure = error;
     }
 
     const links = linksOf(details);
     let work: MbWork | null = null;
     let workError: string | null = null;
-    let original: PrimaryIdentity["original"] = originalPerformance(details, links.works, null);
+    let original =
+      ruledOut(details, links.works) ?? originalPerformance(details, links.works, null);
+    const needsDates = ruledOut(details, links.works) === null;
     // The covers of the work are read only for a recording that is not itself a cover.
     if (links.works.length === 1 && !links.works[0].cover) {
       const [only] = links.works;
@@ -398,9 +463,8 @@ export async function resolveIdentity(
             .filter((r) => (r?.attributes ?? []).includes("cover") && r.recording)
             .map((r) => r.recording?.id as string),
         );
-        // Dating the work's recordings costs requests; only worth it when nothing else ruled
-        // the recording out.
-        if (original.reason.endsWith("could not be dated")) {
+        // Dating the work's recordings costs requests; only when nothing else rules it out.
+        if (needsDates) {
           original = originalPerformance(
             details,
             links.works,
@@ -423,6 +487,7 @@ export async function resolveIdentity(
       },
       discogsReleaseIds,
       releasesError,
+      releasesFailure,
       releasesNote,
       original,
       ...links,
@@ -487,7 +552,7 @@ export async function musicBrainzRelationships(
   const evidence: Evidence[] = [
     primaryEvidence({
       source: "musicbrainz",
-      recordRef: `recording/${recording.mbid}`,
+      recordRef: scopedRef("track", `recording/${recording.mbid}`),
       url: page,
       title: `${recording.title} — MusicBrainz recording`,
       excerpt: `MusicBrainz recording ${own}${minutes(recording.lengthMs)}, ISRC ${identity.isrc}.`,
@@ -500,11 +565,16 @@ export async function musicBrainzRelationships(
       ? quoted(r.recording.title, r.recording.artist)
       : quoted(r.work?.title ?? "");
     if (r.kind === "covered-by" && r.work) {
-      // A cover of the work: stated about the work, on the work's page.
+      // A cover of the work: stated about the work, on the work's page, and scoped to the track
+      // only when the track is the work's original recording.
+      const ref =
+        r.about === "track"
+          ? `recording/${recording.mbid}/covered-by/recording/${r.recording?.mbid}`
+          : `${r.work.mbid}/covered-by/recording/${r.recording?.mbid}`;
       evidence.push(
         primaryEvidence({
           source: "musicbrainz",
-          recordRef: `work/${r.work.mbid}/covered-by/recording/${r.recording?.mbid}`,
+          recordRef: scopedRef(r.about, ref),
           url: `${MB_SITE}/work/${r.work.mbid}`,
           title: `${r.work.title} — MusicBrainz work`,
           excerpt: `MusicBrainz: the work ${quoted(r.work.title)} is covered by ${other}.`,
@@ -517,7 +587,7 @@ export async function musicBrainzRelationships(
     evidence.push(
       primaryEvidence({
         source: "musicbrainz",
-        recordRef: `recording/${recording.mbid}/${r.kind}/${otherRef}`,
+        recordRef: scopedRef("track", `recording/${recording.mbid}/${r.kind}/${otherRef}`),
         url: page,
         title: `${recording.title} — MusicBrainz relationships`,
         excerpt: `MusicBrainz: ${own} ${RELATION_PHRASE[r.kind]} ${other}.`,
@@ -525,6 +595,10 @@ export async function musicBrainzRelationships(
       }),
     );
   }
+  // evidence[0] is the recording itself; each record's item follows in order.
+  kept.forEach((r, i) => {
+    r.evidenceId = evidence[i + 1].id;
+  });
   if (records.length > kept.length) notes.push(`${records.length - kept.length} more not listed`);
   return found("musicbrainz", kept, evidence, {
     omitted: result.omitted,
@@ -538,14 +612,27 @@ export interface PrimarySources {
   discogs: SourceResult<DiscogsCredit>;
   genius: SourceResult<GeniusRelationship>;
   secondhandsongs: SourceResult<ShsRelationship>;
-  /** Every Evidence item the sources produced, each id once. */
+  /**
+   * Every Evidence item the sources produced. Ids are unique: each starts with its source and
+   * each source names every item once. The recordRef's first segment is its scope
+   * (`evidenceScope`): "work" items state facts about the song, never about this recording.
+   */
   evidence: Evidence[];
-  /** Per source: records matched, rejected by a check, or not found. */
+  /** Per source: records matched, rejected by a check, not found, or the source unavailable. */
   accuracy: Partial<Record<SourceId, IdentityCounts>>;
 }
 
-/** The longest a whole run may take, all sources together. */
+/** The longest a whole run may take, all sources together, and the longest it may be set to. */
 export const PRIMARY_SOURCES_DEADLINE_MS = 20_000;
+const MAX_DEADLINE_MS = 120_000;
+
+/** A deadline in ms: the default when not a positive number, and at most two minutes. */
+function deadlineOf(ms: number | undefined): number {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) {
+    return PRIMARY_SOURCES_DEADLINE_MS;
+  }
+  return Math.min(Math.ceil(ms), MAX_DEADLINE_MS);
+}
 
 /** A source's answer, or its failure as "missing": one source never takes the others down. */
 async function settle<T>(source: SourceId, run: () => Promise<SourceResult<T>>) {
@@ -558,15 +645,16 @@ async function settle<T>(source: SourceId, run: () => Promise<SourceResult<T>>) 
 
 /**
  * Runs the identity chain for a track and reads every primary source from it, within
- * `deadlineMs` (default 20 s) or until `signal` aborts; whatever has not answered by then is
- * "missing" (timeout). Never throws; each source answers on its own, "missing" with the reason
- * when it has nothing.
+ * `deadlineMs` (default 20 s, at most 2 min) or until `signal` aborts; whatever has not
+ * answered by the deadline is "missing" (timeout), and what the caller cancelled is "missing"
+ * (unavailable). Never throws; each source answers on its own, "missing" with the reason when it
+ * has nothing.
  */
 export async function collectPrimarySources(
   track: TrackRef,
   options: { now?: Clock; signal?: AbortSignal; deadlineMs?: number } = {},
 ): Promise<PrimarySources> {
-  const deadline = AbortSignal.timeout(options.deadlineMs ?? PRIMARY_SOURCES_DEADLINE_MS);
+  const deadline = AbortSignal.timeout(deadlineOf(options.deadlineMs));
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const run = { now: options.now, signal };
 
@@ -589,50 +677,65 @@ export async function collectPrimarySources(
       : missing<T>(source, "no MusicBrainz recording identified for the track");
   const trackIsOriginal = identity?.original.original ?? false;
 
-  const [musicbrainz, discogs, genius, secondhandsongs] = await Promise.all([
+  const discogs = (): Promise<SourceResult<DiscogsCredit>> | SourceResult<DiscogsCredit> => {
+    if (!identity) return unidentified("discogs", discogsConfigured(), DISCOGS_TOKEN);
+    if (identity.releasesError && discogsConfigured()) {
+      // The releases' failure is this source's error too (a deadline reaches the run's errors).
+      return missing("discogs", identity.releasesError, {
+        error: errorRecord("discogs", identity.releasesFailure),
+      });
+    }
+    return discogsTrackCredits(track, identity.discogsReleaseIds, {
+      ...run,
+      note: identity.releasesNote,
+    });
+  };
+  const genius = ():
+    | Promise<SourceResult<GeniusRelationship>>
+    | SourceResult<GeniusRelationship> => {
+    if (!identity) return unidentified("genius", geniusConfigured(), GENIUS_ACCESS_TOKEN);
+    if (identity.geniusPages.length > 1 && geniusConfigured()) {
+      return missing(
+        "genius",
+        `MusicBrainz links ${identity.geniusPages.length} Genius pages to the recording's works; none is taken`,
+      );
+    }
+    return geniusRelationships(track, identity.geniusUrl, { ...run, trackIsOriginal });
+  };
+
+  const results = await Promise.all([
     settle("musicbrainz", () => musicBrainzRelationships(base, run)),
-    settle("discogs", async () =>
-      !identity
-        ? unidentified<DiscogsCredit>("discogs", discogsConfigured(), DISCOGS_TOKEN)
-        : identity.releasesError && discogsConfigured()
-          ? missing<DiscogsCredit>("discogs", identity.releasesError)
-          : discogsTrackCredits(track, identity.discogsReleaseIds, {
-              ...run,
-              note: identity.releasesNote,
-            }),
-    ),
-    settle("genius", async () =>
-      !identity
-        ? unidentified<GeniusRelationship>("genius", geniusConfigured(), GENIUS_ACCESS_TOKEN)
-        : geniusRelationships(track, identity.geniusUrl, { ...run, trackIsOriginal }),
-    ),
+    settle("discogs", async () => discogs()),
+    settle("genius", async () => genius()),
     settle("secondhandsongs", async () =>
       !identity
         ? unidentified<ShsRelationship>("secondhandsongs", true, null)
         : shsRelationships(track, identity.shsLinks, { ...run, trackIsOriginal }),
     ),
   ]);
-  const results = [musicbrainz, discogs, genius, secondhandsongs];
-  const seen = new Set<string>();
-  const evidence = results
-    .flatMap((r) => (r.status === "found" ? r.evidence : []))
-    .filter((e) => !seen.has(e.id) && Boolean(seen.add(e.id)));
+  const [musicbrainz, discogsResult, geniusResult, secondhandsongs] = results;
   return {
     identity,
     musicbrainz,
-    discogs,
-    genius,
+    discogs: discogsResult,
+    genius: geniusResult,
     secondhandsongs,
-    evidence,
+    evidence: results.flatMap((r) => (r.status === "found" ? r.evidence : [])),
     accuracy: identityAccuracy(results),
   };
 }
 
-/** The identity chain and primary sources as an agent tool; the result is JSON. */
+/**
+ * The identity chain and primary sources as an agent tool; the result is JSON. The run stops
+ * when the agent's call is cancelled (`config.signal`).
+ */
 export const primarySourcesTool = tool(
-  async ({ isrc, title, artists, durationMs }): Promise<string> =>
+  async ({ isrc, title, artists, durationMs }, config): Promise<string> =>
     JSON.stringify(
-      await collectPrimarySources({ isrc, title, artists, durationMs: durationMs ?? null }),
+      await collectPrimarySources(
+        { isrc, title, artists, durationMs: durationMs ?? null },
+        { signal: config?.signal },
+      ),
     ),
   {
     name: "primary_sources",
@@ -645,7 +748,12 @@ export const primarySourcesTool = tool(
       isrc: z.string().describe("The track's ISRC"),
       title: z.string().describe("The track title"),
       artists: z.array(z.string()).min(1).describe("The track's credited artists, one by one"),
-      durationMs: z.number().nullable().optional().describe("The track's duration in ms"),
+      durationMs: z
+        .number()
+        .positive()
+        .nullable()
+        .optional()
+        .describe("The track's duration in ms"),
     }),
   },
 );

@@ -15,6 +15,7 @@
  * @see https://docs.genius.com/
  */
 
+import { SOURCE_CREDENTIALS } from "../config/settings.js";
 import { credential, fetchJson, type Shape } from "./http.js";
 import {
   bareTitle,
@@ -28,6 +29,7 @@ import {
   primaryEvidence,
   quoted,
   RELATION_PHRASE,
+  scopedRef,
   type RelationKind,
   type SourceResult,
   systemClock,
@@ -35,7 +37,7 @@ import {
 } from "./records.js";
 
 const API = "https://api.genius.com";
-export const GENIUS_ACCESS_TOKEN = "GENIUS_ACCESS_TOKEN";
+export const GENIUS_ACCESS_TOKEN = SOURCE_CREDENTIALS.genius;
 
 interface GeniusArtist {
   id?: number;
@@ -66,6 +68,8 @@ export interface GeniusRelationship {
    * samples, who covered it), not claimed for a live version, edit or re-recording.
    */
   about: "track" | "work";
+  /** The Evidence item that states this relationship; its recordRef carries the scope. */
+  evidenceId: string;
   songId: number;
   title: string;
   artist: string;
@@ -224,6 +228,7 @@ export async function geniusRelationships(
         records.push({
           kind,
           about: PERFORMANCE_KINDS.has(kind) || options.trackIsOriginal ? "track" : "work",
+          evidenceId: "",
           songId: other.id,
           title: other.title,
           artist: artistOf(other),
@@ -241,13 +246,16 @@ export async function geniusRelationships(
     const evidence = kept.map((r) =>
       primaryEvidence({
         source: "genius",
-        recordRef: `${ref}/${r.kind}/${r.songId}`,
+        recordRef: scopedRef(r.about, `${ref}/${r.kind}/${r.songId}`),
         url: songUrl,
         title: `${song.title} — Genius song relationships`,
         excerpt: `Genius: the song ${quoted(song.title, artistOf(song))} ${RELATION_PHRASE[r.kind]} ${quoted(r.title, r.artist)}.`,
         retrievedAt: at,
       }),
     );
+    kept.forEach((r, i) => {
+      r.evidenceId = evidence[i].id;
+    });
     const notes = [
       records.length > kept.length ? `${records.length - kept.length} more not listed` : null,
       kept.some((r) => r.about === "work")

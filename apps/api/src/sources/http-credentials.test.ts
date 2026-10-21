@@ -126,3 +126,68 @@ describe("source credentials in recorded and logged text", () => {
     });
   });
 });
+
+describe("redirects of a credentialed POST", () => {
+  let server: ReturnType<typeof createServer>;
+  let base: string;
+  const seen: Array<{ method: string; path: string; body: string; auth?: string; type?: string }> =
+    [];
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        seen.push({
+          method: req.method ?? "",
+          path: req.url ?? "",
+          body,
+          auth: req.headers.authorization,
+          type: req.headers["content-type"],
+        });
+        const status = req.url?.startsWith("/s") ? Number(req.url.slice(2)) : 0;
+        if (status) {
+          res.writeHead(status, { location: "/done", "content-type": "text/plain" });
+          res.end("moved");
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ method: req.method }));
+      });
+    });
+    base = await listen(server);
+  });
+  afterAll(async () => {
+    await new Promise((r) => server.close(r));
+  });
+
+  it.each([
+    [303, "GET"],
+    [302, "GET"],
+    [301, "GET"],
+    [307, "POST"],
+  ])("follows a %i as %s, as fetch does", async (status, method) => {
+    seen.length = 0;
+    const answer = await fetchJson<{ method: string }>({
+      source: "spotify",
+      url: `${base}/s${status}`,
+      method: "POST",
+      headers: {
+        Authorization: "Basic dGVzdDp0ZXN0",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials",
+      cassette: false,
+    });
+    expect(answer.method).toBe(method);
+    const [, followed] = seen;
+    expect(followed).toMatchObject({ method, path: "/done", auth: "Basic dGVzdDp0ZXN0" });
+    if (method === "GET") {
+      expect(followed.body).toBe("");
+      expect(followed.type).toBeUndefined();
+    } else {
+      expect(followed.body).toBe("grant_type=client_credentials");
+    }
+  });
+});

@@ -677,7 +677,7 @@ describe("MusicBrainz client", () => {
     }
 
     it("lists what Ice Ice Baby samples as a source and what samples it as derived", async () => {
-      const { samples, remixes } = await relationsOf(
+      const { samples, remixes, djMixes } = await relationsOf(
         "Ice Ice Baby",
         "Vanilla Ice",
         ICE,
@@ -692,10 +692,15 @@ describe("MusicBrainz client", () => {
         expect.objectContaining({ title: "Ice Ice Bacon", direction: "derived" }),
         expect.objectContaining({ title: "Pushin' Ice", direction: "derived" }),
       ]);
-      // A DJ mix that includes the track is derived from it.
-      expect(remixes).toEqual([
-        expect.objectContaining({ relationshipType: "DJ-mix", direction: "derived" }),
+      // A DJ mix that includes the track is derived from it, and is not a remix.
+      expect(djMixes).toEqual([
+        expect.objectContaining({
+          type: "dj-mix",
+          relationshipType: "DJ-mix",
+          direction: "derived",
+        }),
       ]);
+      expect(remixes).toEqual([]);
     });
 
     it("lists the recordings that sample or remix Under Pressure as derived", async () => {

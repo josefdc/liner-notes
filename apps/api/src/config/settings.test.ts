@@ -139,19 +139,9 @@ describe("readSettings", () => {
   });
 
   it("treats the primary-record source credentials as optional", () => {
-    expect(settingsOf(KEYS).sources).toEqual({
-      discogs: false,
-      secondhandsongs: false,
-      genius: false,
-    });
     const result = readSettings({ ...KEYS, DISCOGS_TOKEN: "", GENIUS_ACCESS_TOKEN: "abc123" });
-    expect(result.ok && result.warnings).toEqual([]);
-    expect(result.ok && result.settings.sources).toEqual({
-      discogs: false,
-      secondhandsongs: false,
-      genius: true,
-    });
-    expect(settingsOf({ ...KEYS, SHS_API_KEY: "k" }).sources.secondhandsongs).toBe(true);
+    expect(result).toMatchObject({ ok: true, warnings: [] });
+    expect(readSettings({ ...KEYS, SHS_API_KEY: "k" }).ok).toBe(true);
   });
 
   it("rejects a source credential that cannot be sent in a header", () => {

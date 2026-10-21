@@ -49,7 +49,7 @@ describe("without DISCOGS_TOKEN", () => {
       status: "missing",
       reason: "DISCOGS_TOKEN is not set",
       error: { source: "discogs", code: "not_configured" },
-      identity: { matched: 0, rejected: 0, missing: 1 },
+      identity: { matched: 0, rejected: 0, missing: 0, unavailable: 1 },
     });
     expect(net.calls).toHaveLength(0);
   });
@@ -83,7 +83,7 @@ describe("with DISCOGS_TOKEN", () => {
         position: "A",
       }),
     ]);
-    expect(result.identity).toEqual({ matched: 1, rejected: 0, missing: 0 });
+    expect(result.identity).toEqual({ matched: 1, rejected: 0, missing: 0, unavailable: 0 });
     for (const item of result.evidence) {
       expect(evidenceIssues(EvidenceSchema.parse(item))).toEqual([]);
       expect(item).toMatchObject({
@@ -259,7 +259,7 @@ describe("credits filtered to the track", () => {
   });
 });
 
-describe("review findings", () => {
+describe("repeated positions, caps, holes, headings and missing releases", () => {
   beforeEach(() => {
     process.env.DISCOGS_TOKEN = TOKEN;
   });
@@ -346,18 +346,22 @@ describe("review findings", () => {
     expect(findTrack(headed, TRACK)).toMatchObject({ ok: false });
   });
 
-  it("omits a release Discogs does not have and goes on to the next", async () => {
+  it("passes over a release Discogs does not have (not an identity rejection)", async () => {
     const net = stubFetch((call) =>
       call.url.endsWith("/404404")
         ? json({ message: "Release not found." }, { status: 404 })
         : json(rickRoll),
     );
     const result = await discogsTrackCredits(TRACK, [404404, 249504], { now });
-    expect(result.status).toBe("found");
-    expect(result.omitted).toEqual([
-      { ref: "release/404404", reason: "Discogs has no such release" },
-    ]);
+    expect(result).toMatchObject({ status: "found", omitted: [], identity: { rejected: 0 } });
     expect(net.calls).toHaveLength(2);
+    stubFetch(() => json({ message: "Release not found." }, { status: 404 }));
+    const none = await discogsTrackCredits(TRACK, [404404]);
+    expect(none).toMatchObject({
+      status: "missing",
+      reason: "Discogs has no release 404404",
+      identity: { matched: 0, rejected: 0, missing: 1, unavailable: 0 },
+    });
   });
 
   it("reads an artist name variation marked with a trailing asterisk", () => {
@@ -378,5 +382,41 @@ describe("review findings", () => {
     );
     expect(denied.live.status).toBe("missing");
     expect(denied.cassettes.discogs).not.toContain(TOKEN);
+  });
+});
+
+describe("releases without credits, and truthful reasons", () => {
+  beforeEach(() => {
+    process.env.DISCOGS_TOKEN = TOKEN;
+  });
+
+  it("moves on when the first release holding the track lists no credits for it", async () => {
+    const bare = { ...rickRoll, id: 1, extraartists: [] };
+    const net = stubFetch((call) => json(call.url.endsWith("/1") ? bare : rickRoll));
+    const result = await discogsTrackCredits(TRACK, [1, 249504], { now });
+    expect(result.status).toBe("found");
+    expect(net.calls).toHaveLength(2);
+
+    // At most three releases are read.
+    const bounded = stubFetch(() => json(bare));
+    const none = await discogsTrackCredits(TRACK, [1, 2, 3, 4], { now });
+    expect(none).toMatchObject({
+      status: "missing",
+      reason:
+        "Discogs release 1 lists no credits for the track; Discogs release 2 lists no credits for the track; Discogs release 3 lists no credits for the track",
+      identity: { matched: 3 },
+    });
+    expect(bounded.calls).toHaveLength(3);
+  });
+
+  it("says when not every release was read, also when no Discogs link was found", async () => {
+    const net = stubFetch(() => undefined);
+    const note = "only 200 of the recording's 350 releases were read for Discogs links";
+    const result = await discogsTrackCredits(TRACK, [], { note });
+    expect(result).toMatchObject({
+      status: "missing",
+      reason: `MusicBrainz links no Discogs release to an original release of the recording; ${note}`,
+    });
+    expect(net.calls).toHaveLength(0);
   });
 });

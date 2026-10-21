@@ -22,6 +22,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SOURCE_CREDENTIALS } from "../config/settings.js";
 
 // =============================================================================
 // Redaction
@@ -34,14 +35,14 @@ const MAX_ERROR_TEXT = 500;
 const MAX_DETAIL = 200;
 
 /** The source credentials, redacted whatever their length: each is sent on every request. */
-const SOURCE_CREDENTIALS = new Set(["DISCOGS_TOKEN", "SHS_API_KEY", "GENIUS_ACCESS_TOKEN"]);
+const SOURCE_CREDENTIAL_NAMES: ReadonlySet<string> = new Set(Object.values(SOURCE_CREDENTIALS));
 
 /** Values of the environment's credentials, so an echoed key is recognised wherever it appears. */
 function knownSecrets(): string[] {
   return (
     Object.entries(process.env)
       .filter(([name, value]) =>
-        SOURCE_CREDENTIALS.has(name)
+        SOURCE_CREDENTIAL_NAMES.has(name)
           ? Boolean(value)
           : /KEY|SECRET|TOKEN|PASSWORD/i.test(name) && (value?.length ?? 0) >= 8,
       )
@@ -604,11 +605,21 @@ function errorDetail(body: unknown): string | undefined {
 /** Headers that carry a credential: such a request never follows a redirect off its origin. */
 const CREDENTIAL_HEADERS = new Set(["authorization", "proxy-authorization", "x-api-key", "cookie"]);
 const MAX_REDIRECTS = 5;
+/** Headers that describe a request body; dropped when a redirect turns the request into a GET. */
+const BODY_HEADERS = new Set([
+  "content-type",
+  "content-length",
+  "content-encoding",
+  "content-language",
+  "content-location",
+]);
 
 /**
  * Fetches `url`. A request that carries a credential follows redirects itself, and only within
  * its own origin: fetch drops Authorization on a cross-origin redirect but forwards other
- * headers (an X-API-Key), and a downgrade to http would send it in clear.
+ * headers (an X-API-Key), and a downgrade to http would send it in clear. As fetch does, a 303,
+ * or a 301/302 answer to a POST, is followed as a GET without the body. The body of every
+ * redirect answer is discarded, so its connection is released.
  */
 async function fetchWithin(req: SourceRequest, url: string, init: RequestInit): Promise<Response> {
   const credentialed = Object.keys(req.headers ?? {}).some((name) =>
@@ -616,10 +627,12 @@ async function fetchWithin(req: SourceRequest, url: string, init: RequestInit): 
   );
   if (!credentialed) return fetch(url, init);
   let current = new URL(url);
+  let request: RequestInit = { ...init, redirect: "manual" };
   for (let hop = 0; ; hop++) {
-    const response = await fetch(current, { ...init, redirect: "manual" });
+    const response = await fetch(current, request);
     const location = response.headers.get("location");
     if (response.status < 300 || response.status > 399 || !location) return response;
+    await response.body?.cancel().catch(() => {});
     const next = new URL(location, current);
     if (next.origin !== current.origin) {
       throw new SourceError(
@@ -632,8 +645,36 @@ async function fetchWithin(req: SourceRequest, url: string, init: RequestInit): 
     if (hop >= MAX_REDIRECTS) {
       throw new SourceError(req.source, "http", "too many redirects", { status: response.status });
     }
+    const method = (request.method ?? "GET").toUpperCase();
+    if (
+      response.status === 303 ||
+      ((response.status === 301 || response.status === 302) && method === "POST")
+    ) {
+      const headers = Object.fromEntries(
+        Object.entries((request.headers ?? {}) as Record<string, string>).filter(
+          ([name]) => !BODY_HEADERS.has(name.toLowerCase()),
+        ),
+      );
+      request = {
+        ...request,
+        method: method === "HEAD" ? "HEAD" : "GET",
+        body: undefined,
+        headers,
+      };
+    }
     current = next;
   }
+}
+
+/**
+ * The error for a request stopped by its signal: "timeout" when the signal was a deadline
+ * (AbortSignal.timeout), "aborted" when the caller cancelled it.
+ */
+export function abortError(source: SourceName, signal: AbortSignal, cause?: unknown): SourceError {
+  const reason = signal.reason as { name?: string } | undefined;
+  return reason?.name === "TimeoutError"
+    ? new SourceError(source, "timeout", "deadline reached", { cause })
+    : new SourceError(source, "aborted", "request aborted", { cause });
 }
 
 async function fetchLive(req: SourceRequest, url: string, method: string): Promise<Recorded> {
@@ -664,9 +705,7 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
     return recorded;
   } catch (error) {
     if (isSourceError(error)) throw error;
-    if (req.signal?.aborted) {
-      throw new SourceError(req.source, "aborted", "request aborted", { cause: error });
-    }
+    if (req.signal?.aborted) throw abortError(req.source, req.signal, error);
     if (timeout.aborted) {
       throw new SourceError(req.source, "timeout", `no answer within ${timeoutMs} ms`, {
         cause: error,

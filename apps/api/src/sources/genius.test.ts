@@ -68,6 +68,7 @@ describe("with GENIUS_ACCESS_TOKEN", () => {
       {
         kind: "samples",
         about: "track",
+        evidenceId: "genius:track/song/9000001/samples/9000003",
         songId: 9000003,
         title: "Under Pressure",
         artist: "Queen & David Bowie",
@@ -76,6 +77,7 @@ describe("with GENIUS_ACCESS_TOKEN", () => {
       {
         kind: "covered-by",
         about: "track",
+        evidenceId: "genius:track/song/9000001/covered-by/9000004",
         songId: 9000004,
         title: "Ice Ice Baby",
         artist: "Glee Cast",
@@ -179,7 +181,7 @@ describe("Genius links", () => {
   });
 });
 
-describe("review findings", () => {
+describe("scope, case, caps and echoed tokens", () => {
   beforeEach(() => {
     process.env.GENIUS_ACCESS_TOKEN = TOKEN;
   });

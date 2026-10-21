@@ -22,6 +22,7 @@
  * @see https://secondhandsongs.com/page/API
  */
 
+import { SOURCE_CREDENTIALS } from "../config/settings.js";
 import { credential, fetchJson, type Shape } from "./http.js";
 import {
   type Clock,
@@ -34,6 +35,7 @@ import {
   primaryEvidence,
   quoted,
   RELATION_PHRASE,
+  scopedRef,
   type SourceResult,
   systemClock,
   type TrackRef,
@@ -42,11 +44,16 @@ import {
 } from "./records.js";
 
 const SITE = "https://secondhandsongs.com";
-export const SHS_API_KEY = "SHS_API_KEY";
+export const SHS_API_KEY = SOURCE_CREDENTIALS.secondhandsongs;
 
 export interface ShsLink {
   kind: "work" | "performance";
   id: number;
+  /**
+   * Where MusicBrainz links it: on the matched recording, or on its work (a link about the
+   * song, read for the track only when it is the song's original recording).
+   */
+  from: "recording" | "work";
 }
 
 interface ShsPerformanceSummary {
@@ -77,6 +84,8 @@ export interface ShsRelationship {
    * a recording that is not the song's original recording.
    */
   about: "track" | "work";
+  /** The Evidence item that states this relationship; its recordRef carries the scope. */
+  evidenceId: string;
   title: string;
   performer: string;
   /** The related performance's page. */
@@ -101,7 +110,7 @@ const PERFORMANCE_SHAPE: Shape = {
 };
 
 /** A secondhandsongs.com work or performance link, or null. */
-export function shsLink(url: string): ShsLink | null {
+export function shsLink(url: string, from: ShsLink["from"] = "work"): ShsLink | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -110,7 +119,7 @@ export function shsLink(url: string): ShsLink | null {
   }
   if (!/(?:^|\.)secondhandsongs\.com$/i.test(parsed.hostname)) return null;
   const match = parsed.pathname.match(/^\/(work|performance)\/(\d+)\/?$/);
-  return match ? { kind: match[1] as ShsLink["kind"], id: Number(match[2]) } : null;
+  return match ? { kind: match[1] as ShsLink["kind"], id: Number(match[2]), from } : null;
 }
 
 const pageOf = (link: ShsLink) => `${SITE}/${link.kind}/${link.id}`;
@@ -141,6 +150,7 @@ function related(
   return {
     kind,
     about,
+    evidenceId: "",
     title: p.title,
     performer: p.performer?.name?.trim() ?? "",
     url: pageOf(url),
@@ -159,6 +169,38 @@ function unique(records: Array<ShsRelationship | null>): ShsRelationship[] {
 }
 
 const list = <T>(v: T[] | undefined) => (Array.isArray(v) ? v : []);
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * Checks a work against the wrapper's shape before anything is read from it: `versions` is a
+ * list of performances, each with a boolean `isOriginal`. Anything else is an invalid answer,
+ * never "lists no covers".
+ */
+function checkWork(work: ShsWork, link: ShsLink): void {
+  const versions: unknown = work.versions;
+  if (
+    !Array.isArray(versions) ||
+    !versions.every((v) => isObject(v) && typeof v.isOriginal === "boolean")
+  ) {
+    throw unexpectedShape(
+      "secondhandsongs",
+      `work ${link.id} has no versions list with isOriginal`,
+    );
+  }
+}
+
+/** As checkWork, for a performance: a boolean `isOriginal`, and relation lists of objects. */
+function checkPerformance(p: ShsPerformance, link: ShsLink): void {
+  const lists = [p.originals, p.covers, p.usesSamplesFrom, p.sampledBy] as unknown[];
+  if (
+    typeof p.isOriginal !== "boolean" ||
+    !lists.every((l) => l === undefined || (Array.isArray(l) && l.every(isObject)))
+  ) {
+    throw unexpectedShape("secondhandsongs", `performance ${link.id} is not a performance`);
+  }
+}
 
 type Read =
   | { ok: true; title: string; performer: string; records: ShsRelationship[] }
@@ -207,15 +249,16 @@ function readWork(work: ShsWork, track: TrackRef, trackIsOriginal: boolean): Rea
  * nothing, and neither the performance itself nor a performance by the same performer is
  * listed as its original or its cover.
  */
-function readPerformance(p: ShsPerformance, track: TrackRef): Read {
+function readPerformance(
+  p: ShsPerformance,
+  track: TrackRef,
+  about: ShsRelationship["about"],
+): Read {
   const check = checkIdentity(track, { title: p?.title ?? "", artists: p?.performer?.name ?? "" });
   if (!check.ok) return { ok: false, reason: check.reason };
-  const self = p.uri ? shsLink(p.uri) : null;
-  const other = (q: ShsPerformanceSummary | undefined) => {
-    const link = q?.uri ? shsLink(q.uri) : null;
-    const same = self && link && link.kind === self.kind && link.id === self.id;
-    return !same && !creditStringMatches(q?.performer?.name ?? "", track.artists);
-  };
+  // The performance itself is by the track's performer, so this also keeps it out.
+  const other = (q: ShsPerformanceSummary | undefined) =>
+    !creditStringMatches(q?.performer?.name ?? "", track.artists);
   const originals =
     p.isOriginal === true
       ? []
@@ -226,9 +269,9 @@ function readPerformance(p: ShsPerformance, track: TrackRef): Read {
     ...originals.map((o) => related("cover-of", "track", o)),
     ...list(p.covers)
       .filter(other)
-      .map((c) => related("covered-by", "track", c)),
-    ...list(p.usesSamplesFrom).map((s) => related("samples", "track", s)),
-    ...list(p.sampledBy).map((s) => related("sampled-by", "track", s)),
+      .map((c) => related("covered-by", about, c)),
+    ...list(p.usesSamplesFrom).map((s) => related("samples", about, s)),
+    ...list(p.sampledBy).map((s) => related("sampled-by", about, s)),
   ];
   return {
     ok: true,
@@ -257,18 +300,21 @@ export async function shsRelationships(
   }
   const now = options.now ?? systemClock;
   const ref = `${link.kind}/${link.id}`;
+  const trackIsOriginal = options.trackIsOriginal ?? false;
   try {
-    const read =
-      link.kind === "work"
-        ? readWork(
-            await shsGet<ShsWork>(link, WORK_SHAPE, options.signal),
-            track,
-            options.trackIsOriginal ?? false,
-          )
-        : readPerformance(
-            await shsGet<ShsPerformance>(link, PERFORMANCE_SHAPE, options.signal),
-            track,
-          );
+    let read: Read;
+    if (link.kind === "work") {
+      const work = await shsGet<ShsWork>(link, WORK_SHAPE, options.signal);
+      checkWork(work, link);
+      read = readWork(work, track, trackIsOriginal);
+    } else {
+      const performance = await shsGet<ShsPerformance>(link, PERFORMANCE_SHAPE, options.signal);
+      checkPerformance(performance, link);
+      // A performance linked from the recording is the track; one linked from the work is the
+      // song's, and its covers and samples hold for the track only when it is the original.
+      const about = link.from === "recording" || trackIsOriginal ? "track" : "work";
+      read = readPerformance(performance, track, about);
+    }
     if (!read.ok) {
       return missing("secondhandsongs", read.reason, { omitted: [{ ref, reason: read.reason }] });
     }
@@ -289,12 +335,15 @@ export async function shsRelationships(
           : quoted(read.title, read.performer);
       return primaryEvidence({
         source: "secondhandsongs",
-        recordRef: `${ref}/${r.kind}/${other}`,
+        recordRef: scopedRef(r.about, `${ref}/${r.kind}/${other}`),
         url: pageOf(link),
         title: `${read.title} — SecondHandSongs`,
         excerpt: `SecondHandSongs: ${subject} ${RELATION_PHRASE[r.kind]} ${quoted(r.title, r.performer)}${when}.`,
         retrievedAt: at,
       });
+    });
+    kept.forEach((r, i) => {
+      r.evidenceId = evidence[i].id;
     });
     const notes = [
       read.records.length > kept.length

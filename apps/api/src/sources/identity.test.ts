@@ -48,12 +48,13 @@ import {
   resolveIdentity,
 } from "./identity.js";
 import {
+  lookupIsrc,
   type MbRecordingDetails,
   type MbRecordingSummary,
   MusicBrainzRateLimiter,
 } from "./musicbrainz.js";
 import { never } from "./testing/fetchStub.js";
-import type { TrackRef } from "./records.js";
+import { evidenceScope, type TrackRef } from "./records.js";
 
 const MB = "https://musicbrainz.org/ws/2";
 const ICE = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
@@ -194,10 +195,11 @@ describe("discogsCandidates on the recording's releases", () => {
     const ids = discogsCandidates(iceReleases.releases);
     // 1990-09-04, then 1990-12-03, then the releases dated only "1990".
     expect(ids.slice(0, 2)).toEqual([599648, 687927]);
-    // The soundtrack and the compilation are not original releases.
-    expect(ids).not.toContain(739983);
+    // The compilation is not an original release; a soundtrack can be, and sorts by its date
+    // (2004, after the 1990 albums).
     expect(ids).not.toContain(759973);
     expect(ids).toContain(711787);
+    expect(ids.indexOf(739983)).toBeGreaterThan(ids.indexOf(711787));
   });
 });
 
@@ -212,11 +214,16 @@ describe("resolveIdentity", () => {
       geniusUrl: "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
       shsLinks: [{ kind: "work", id: 4196 }],
       releasesError: null,
-      // 1990-09-04; no recording of the work that is not a cover came out before 1990.
-      original: { original: true, reason: 'the earliest release of "Ice Ice Baby" (1990)' },
+      // 1990-09-04 is the earliest date MusicBrainz has, but 11 recordings of the work are
+      // undated (and 10 dated only "1990"): it cannot be shown to be the original recording.
+      original: {
+        original: false,
+        reason:
+          '11 recordings of "Ice Ice Baby" have no release date: this one cannot be shown to be the earliest',
+      },
     });
     expect(identity?.discogsReleaseIds[0]).toBe(599648);
-    expect(result.identity).toEqual({ matched: 1, rejected: 4, missing: 0 });
+    expect(result.identity).toEqual({ matched: 1, rejected: 4, missing: 0, unavailable: 0 });
     expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
       "/ws/2/isrc/USCA29001716",
       `/ws/2/recording/${ICE}`,
@@ -276,6 +283,7 @@ describe("musicBrainzRelationships", () => {
     expect(result.records).toContainEqual({
       kind: "samples",
       about: "track",
+      evidenceId: `musicbrainz:track/recording/${ICE}/samples/recording/${UNDER_PRESSURE}`,
       recording: {
         mbid: UNDER_PRESSURE,
         title: "Under Pressure",
@@ -287,9 +295,16 @@ describe("musicBrainzRelationships", () => {
     });
     const covers = result.records.filter((r) => r.kind === "covered-by");
     expect(covers).toHaveLength(6);
-    // The original recording: the covers of its work are claimed for it.
-    expect(covers.every((c) => c.about === "track")).toBe(true);
-    expect(result.incomplete).toBeNull();
+    // Not shown to be the original recording: the covers are the work's, not claimed for it.
+    expect(covers.every((c) => c.about === "work")).toBe(true);
+    expect(result.incomplete).toBe(
+      'covers are of the work "Ice Ice Baby", not this recording: 11 recordings of "Ice Ice Baby" have no release date: this one cannot be shown to be the earliest',
+    );
+    // Each record names its Evidence item, whose recordRef carries the record's scope.
+    for (const record of result.records) {
+      const item = result.evidence.find((e) => e.id === record.evidenceId);
+      expect(item && evidenceScope(item)).toBe(record.about);
+    }
     expectValidEvidence(result.evidence);
     expect(result.evidence).toContainEqual(
       expect.objectContaining({
@@ -299,7 +314,7 @@ describe("musicBrainzRelationships", () => {
       }),
     );
     expect(result.evidence[0]).toMatchObject({
-      id: `musicbrainz:recording/${ICE}`,
+      id: `musicbrainz:track/recording/${ICE}`,
       url: `https://musicbrainz.org/recording/${ICE}`,
       excerpt: 'MusicBrainz recording "Ice Ice Baby" by Vanilla Ice (4:31), ISRC USCA29001716.',
     });
@@ -345,10 +360,11 @@ describe("collectPrimarySources", () => {
       new Set(["musicbrainz", "secondhandsongs"]),
     );
     expect(sources.accuracy).toEqual({
-      musicbrainz: { matched: 1, rejected: 4, missing: 0 },
-      discogs: { matched: 0, rejected: 0, missing: 1 },
-      genius: { matched: 0, rejected: 0, missing: 1 },
-      secondhandsongs: { matched: 1, rejected: 0, missing: 0 },
+      musicbrainz: { matched: 1, rejected: 4, missing: 0, unavailable: 0 },
+      // Not configured: not asked, so not part of identity accuracy.
+      discogs: { matched: 0, rejected: 0, missing: 0, unavailable: 1 },
+      genius: { matched: 0, rejected: 0, missing: 0, unavailable: 1 },
+      secondhandsongs: { matched: 1, rejected: 0, missing: 0, unavailable: 0 },
     });
   });
 
@@ -579,23 +595,57 @@ describe("work-level relationships are claimed only for the work's original reco
     const check = originalPerformance(later.details, later.works, dated);
     expect(check.original).toBe(false);
     expect(check.reason).toMatch(
-      /by Taylor Swift was released in 2008, before this recording \(2009\)$/,
+      /by Taylor Swift was released in 2008(-\d\d-\d\d)?, before this recording \(2009\)$/,
     );
   });
 
-  it("answers no when not every recording of the work could be dated", () => {
-    const early = studio({ "first-release-date": "2008" });
-    const all = dated;
-    expect(originalPerformance(early.details, early.works, all)).toMatchObject({ original: true });
-    const partial = { recordings: all.recordings.slice(0, 10), total: all.total };
-    expect(originalPerformance(early.details, early.works, partial)).toEqual({
-      original: false,
-      reason: 'only 10 of the 96 recordings of "Love Story" could be compared',
+  it("says yes only when every other recording of the work is certainly later", () => {
+    // Synthetic: the recording (2008-11-11), two later ones, and a cover dated 2001 (a cover
+    // never makes a recording less original).
+    const own = studio({ "first-release-date": "2008-11-11" });
+    const recording = (id: string, date: string) => ({
+      id: `00000000-0000-4000-8000-00000000000${id}`,
+      title: "Love Story",
+      "first-release-date": date,
+      "artist-credit": [{ name: "Taylor Swift", artist: { id: "x", name: "Taylor Swift" } }],
     });
-    expect(originalPerformance(early.details, early.works, null).original).toBe(false);
+    const cover = recording("9", "2001");
+    const others = [recording("1", "2008-12"), recording("2", "2010-05-01"), cover];
+    const covers = new Set([cover.id]);
+    const verdict = (recordings: MbRecordingSummary[], total = recordings.length) =>
+      originalPerformance(own.details, own.works, { recordings, total }, covers);
+
+    expect(verdict(others)).toEqual({
+      original: true,
+      reason: 'the earliest release of "Love Story" (2008-11-11)',
+    });
+    // Unknown answers no: an undated recording, one dated only by the same year or month, one
+    // earlier in the same year, and a work with recordings that were not read.
+    expect(verdict([...others, recording("3", "")]).reason).toBe(
+      '1 recordings of "Love Story" have no release date: this one cannot be shown to be the earliest',
+    );
+    expect(verdict([...others, recording("4", "2008")]).reason).toBe(
+      '1 recordings of "Love Story" are dated like this one (2008-11-11) as far as the dates go: the earliest cannot be told',
+    );
+    expect(verdict([...others, recording("5", "2008-11")]).original).toBe(false);
+    expect(verdict([...others, recording("6", "2008-11-11")]).original).toBe(false);
+    expect(verdict([...others, recording("7", "2008-11-01")]).reason).toBe(
+      '"Love Story" by Taylor Swift was released in 2008-11-01, before this recording (2008-11-11)',
+    );
+    expect(verdict(others, 96)).toEqual({
+      original: false,
+      reason: 'only 3 of the 96 recordings of "Love Story" could be compared',
+    });
+    // Without the cover exclusion, the 2001 cover would make it a later recording.
     expect(
-      originalPerformance({ ...early.details, "first-release-date": "" }, early.works, all)
-        .original,
+      originalPerformance(own.details, own.works, { recordings: others, total: 3 }).original,
+    ).toBe(false);
+    expect(originalPerformance(own.details, own.works, null).original).toBe(false);
+    expect(
+      originalPerformance({ ...own.details, "first-release-date": "" }, own.works, {
+        recordings: others,
+        total: 3,
+      }).original,
     ).toBe(false);
   });
 
@@ -705,7 +755,8 @@ describe("robustness", () => {
     const controller = new AbortController();
     const pending = collectPrimarySources(ICE_TRACK, { now, signal: controller.signal });
     controller.abort();
-    expect((await pending).musicbrainz).toMatchObject({ error: { code: "timeout" } });
+    // Cancelled by the caller: unavailable, not a timeout.
+    expect((await pending).musicbrainz).toMatchObject({ error: { code: "unavailable" } });
   });
 
   it("reports the Discogs source missing when the recording's releases cannot be read", async () => {
@@ -743,5 +794,160 @@ describe("robustness", () => {
     expect(sources.discogs.status === "found" && sources.discogs.incomplete).toBe(
       "only 13 of the recording's 250 releases were read for Discogs links",
     );
+  });
+});
+
+describe("deadlines, cancellation and inputs", () => {
+  it("returns at the deadline even behind a full MusicBrainz queue", async () => {
+    const limiter = MusicBrainzRateLimiter.getInstance();
+    const restore = limiter.setIntervalForTests(300);
+    try {
+      stubFetch((call) =>
+        call.url.includes("USUM72401994") ? json({ recordings: [] }) : musicBrainz(call),
+      );
+      // Another run already has eight requests queued: about 2.4 s of waiting.
+      const others = Array.from({ length: 8 }, () => lookupIsrc("USUM72401994").catch(() => null));
+      const started = Date.now();
+      const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 100 });
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(sources.musicbrainz).toMatchObject({ status: "missing", error: { code: "timeout" } });
+      await Promise.all(others);
+    } finally {
+      restore();
+    }
+  });
+
+  it("records a deadline reached while reading releases as the Discogs source's timeout", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
+    stubFetch((call) => (call.url.startsWith(`${MB}/release?`) ? never(call) : musicBrainz(call)));
+    const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 200 });
+    expect(sources.discogs).toMatchObject({
+      status: "missing",
+      error: { source: "discogs", code: "timeout" },
+    });
+  });
+
+  it("stops its requests when the agent's call is cancelled", async () => {
+    const net = stubFetch(never);
+    const controller = new AbortController();
+    const call = primarySourcesTool.invoke(
+      { isrc: ICE_TRACK.isrc, title: ICE_TRACK.title, artists: ICE_TRACK.artists },
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(net.calls).toHaveLength(1));
+    controller.abort();
+    await expect(call).rejects.toThrow();
+    // The cancellation reached the request itself, not only the tool call.
+    await vi.waitFor(() => expect(net.calls[0].signal?.aborted).toBe(true));
+  });
+
+  it("refuses a duration that is not positive, and survives bad inputs", async () => {
+    await expect(
+      primarySourcesTool.invoke({
+        isrc: "USCA29001716",
+        title: "x",
+        artists: ["y"],
+        durationMs: 0,
+      }),
+    ).rejects.toThrow();
+    const net = stubFetch(() => undefined);
+    const noIsrc = await collectPrimarySources({ ...ICE_TRACK, isrc: undefined as never }, { now });
+    expect(noIsrc.musicbrainz).toMatchObject({ reason: "the track has no valid ISRC" });
+    for (const deadlineMs of [Number.NaN, -1, 0, 1e12]) {
+      await expect(
+        collectPrimarySources({ ...ICE_TRACK, isrc: "bad" }, { now, deadlineMs }),
+      ).resolves.toMatchObject({ identity: null });
+    }
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("does not use a duration of 0 to break a tie", () => {
+    const pick = pickRecording({ ...ICE_TRACK, durationMs: 0 }, iceIsrc.recordings as never);
+    // The album version (no disambiguation), not the radio edit 226.7 s nearer to 0.
+    expect(pick.recording?.id).toBe(ICE);
+  });
+});
+
+describe("evidence scope", () => {
+  it("never scopes a fact about the song to a recording that is not its original", async () => {
+    process.env.GENIUS_ACCESS_TOKEN = "genius-test-token-0123456789";
+    stubFetch((call) => {
+      if (call.url.startsWith("https://api.genius.com/search?")) return json(geniusSearch);
+      if (call.url === "https://api.genius.com/songs/9000001") return json(geniusSong);
+      return withShs(call);
+    });
+    const sources = await collectPrimarySources(ICE_TRACK, { now });
+    expect(sources.identity?.original.original).toBe(false);
+    const records = [
+      ...(sources.musicbrainz.status === "found" ? sources.musicbrainz.records : []),
+      ...(sources.genius.status === "found" ? sources.genius.records : []),
+      ...(sources.secondhandsongs.status === "found" ? sources.secondhandsongs.records : []),
+    ];
+    const byId = new Map(sources.evidence.map((e) => [e.id, e]));
+    const songLevel = records.filter((r) => r.about === "work");
+    expect(songLevel.length).toBeGreaterThan(0);
+    for (const record of records) {
+      const item = byId.get(record.evidenceId);
+      expect(item, record.evidenceId).toBeDefined();
+      expect(item && evidenceScope(item)).toBe(record.about);
+    }
+    // The only track-scoped items are the recording itself and its own relationships.
+    const trackScoped = sources.evidence.filter((e) => evidenceScope(e) === "track");
+    expect(trackScoped.map((e) => e.excerpt).join("\n")).not.toMatch(/the song|the work/);
+  });
+});
+
+describe("links MusicBrainz files more than once", () => {
+  it("merges two performances of one work, so a live one rules the recording out", async () => {
+    const performance = iceDetails.relations.find((r) => r.type === "performance");
+    const twice = {
+      ...iceDetails,
+      relations: [...iceDetails.relations, { ...performance, attributes: ["live"] }],
+    };
+    stubFetch((call) =>
+      call.url.startsWith(`${MB}/recording/${ICE}?`) ? json(twice) : musicBrainz(call),
+    );
+    const { identity } = await resolveIdentity(ICE_TRACK);
+    expect(identity?.works).toHaveLength(1);
+    expect(identity?.works[0].attributes).toEqual(["live"]);
+    expect(identity?.original).toEqual({
+      original: false,
+      reason: 'a live performance of "Ice Ice Baby"',
+    });
+  });
+
+  it("takes no Genius page when the works link several", async () => {
+    process.env.GENIUS_ACCESS_TOKEN = "genius-test-token-0123456789";
+    const relations = iceDetails.relations.map((r) =>
+      r.type === "performance" && r.work
+        ? {
+            ...r,
+            work: {
+              ...r.work,
+              relations: [
+                ...r.work.relations,
+                {
+                  type: "lyrics",
+                  direction: "backward",
+                  "target-type": "url",
+                  url: { resource: "https://genius.com/Vanilla-ice-ice-ice-baby-remix-lyrics" },
+                },
+              ],
+            },
+          }
+        : r,
+    );
+    const net = stubFetch((call) =>
+      call.url.startsWith(`${MB}/recording/${ICE}?`)
+        ? json({ ...iceDetails, relations })
+        : withShs(call),
+    );
+    const sources = await collectPrimarySources(ICE_TRACK, { now });
+    expect(sources.identity?.geniusUrl).toBeNull();
+    expect(sources.genius).toMatchObject({
+      status: "missing",
+      reason: "MusicBrainz links 2 Genius pages to the recording's works; none is taken",
+    });
+    expect(net.calls.some((c) => c.url.includes("genius.com"))).toBe(false);
   });
 });

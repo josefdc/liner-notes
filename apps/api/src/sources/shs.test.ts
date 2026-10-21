@@ -15,7 +15,7 @@ import { type FetchRoute, json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
 
 const KEY = "shs-test-key-0123456789";
-const WORK = { kind: "work", id: 4196 } as const;
+const WORK = { kind: "work", id: 4196, from: "work" } as const;
 const now = () => new Date("2026-10-20T12:00:00.000Z");
 
 const TRACK: TrackRef = {
@@ -69,6 +69,7 @@ describe("SecondHandSongs", () => {
       {
         kind: "covered-by",
         about: "track",
+        evidenceId: "secondhandsongs:track/work/4196/covered-by/9200002",
         title: "Ice Ice Baby",
         performer: "Glee Cast",
         url: "https://secondhandsongs.com/performance/9200002",
@@ -77,6 +78,7 @@ describe("SecondHandSongs", () => {
       {
         kind: "covered-by",
         about: "track",
+        evidenceId: "secondhandsongs:track/work/4196/covered-by/9200003",
         title: "Ice Ice Baby",
         performer: "Richard Cheese",
         url: "https://secondhandsongs.com/performance/9200003",
@@ -129,7 +131,7 @@ describe("SecondHandSongs", () => {
   it("reads a performance: its covers and the recordings that sample it", async () => {
     stubFetch(api);
     const track = { ...TRACK, title: "Under Pressure", artists: ["Queen", "David Bowie"] };
-    const links = [WORK, { kind: "performance", id: 9200010 } as const];
+    const links = [WORK, { kind: "performance", id: 9200010, from: "recording" } as const];
     const result = await shsRelationships(track, links, { now });
     if (result.status !== "found") throw new Error(result.reason);
     expect(result.records.map((r) => [r.kind, r.title, r.performer])).toEqual([
@@ -167,16 +169,17 @@ describe("SecondHandSongs", () => {
 
   it("reads work and performance links only", () => {
     expect(shsLink("https://secondhandsongs.com/work/4196")).toEqual(WORK);
-    expect(shsLink("https://secondhandsongs.com/performance/12/")).toEqual({
+    expect(shsLink("https://secondhandsongs.com/performance/12/", "recording")).toEqual({
       kind: "performance",
       id: 12,
+      from: "recording",
     });
     expect(shsLink("https://secondhandsongs.com/artist/12")).toBeNull();
     expect(shsLink("https://example.com/work/4196")).toBeNull();
   });
 });
 
-describe("review findings (synthetic pages in the wrapper's shape)", () => {
+describe("own versions, self-covers, scope and shape (synthetic pages in the wrapper's shape)", () => {
   const perf = (
     id: number,
     title: string,
@@ -209,7 +212,7 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
 
   it("never lists the performer's own versions as covers, whatever their title", async () => {
     stubFetch(() => json(loveStory));
-    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1 }], {
+    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1, from: "work" }], {
       now,
       trackIsOriginal: true,
     });
@@ -219,7 +222,9 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
 
   it("states covers of the song about the work when the track is not its original recording", async () => {
     stubFetch(() => json(loveStory));
-    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1 }], { now });
+    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1, from: "work" }], {
+      now,
+    });
     if (result.status !== "found") throw new Error(result.reason);
     expect(result.records[0].about).toBe("work");
     expect(result.incomplete).toBe(
@@ -248,7 +253,11 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
       sampledBy: [],
     };
     stubFetch(() => json(self));
-    const result = await shsRelationships(LOVE_STORY, [{ kind: "performance", id: 10 }], { now });
+    const result = await shsRelationships(
+      LOVE_STORY,
+      [{ kind: "performance", id: 10, from: "recording" }],
+      { now },
+    );
     if (result.status !== "found") throw new Error(result.reason);
     expect(result.records.map((r) => [r.kind, r.performer])).toEqual([
       ["covered-by", "Forever the Sickest Kids"],
@@ -261,13 +270,21 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
         covers: [],
       }),
     );
-    const marked = await shsRelationships(LOVE_STORY, [{ kind: "performance", id: 10 }], { now });
+    const marked = await shsRelationships(
+      LOVE_STORY,
+      [{ kind: "performance", id: 10, from: "recording" }],
+      { now },
+    );
     expect(marked).toMatchObject({ status: "missing", identity: { matched: 1 } });
     // Not marked original, but its listed original is itself: still no self-cover.
     stubFetch(() => json({ ...self, isOriginal: false, covers: [] }));
-    const unmarked = await shsRelationships(LOVE_STORY, [{ kind: "performance", id: 10 }], {
-      now,
-    });
+    const unmarked = await shsRelationships(
+      LOVE_STORY,
+      [{ kind: "performance", id: 10, from: "recording" }],
+      {
+        now,
+      },
+    );
     expect(unmarked).toMatchObject({ status: "missing", identity: { matched: 1 } });
   });
 
@@ -282,7 +299,7 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
       ],
     };
     stubFetch(() => json(crowded));
-    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1 }], {
+    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1, from: "work" }], {
       now,
       trackIsOriginal: true,
     });
@@ -293,7 +310,7 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
 
   it("reports an answer that is not an object as an invalid response", async () => {
     stubFetch(() => json(["no"]));
-    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1 }]);
+    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1, from: "work" }]);
     expect(result).toMatchObject({ status: "missing", error: { code: "invalid_response" } });
   });
 
@@ -302,9 +319,69 @@ describe("review findings (synthetic pages in the wrapper's shape)", () => {
     const echoed = { ...loveStory, title: "Love Story", "x-api-key": "k3y", note: "key k3y" };
     const run = await recordThenReplay(
       () => json({ ...echoed, versions: echoed.versions.map((v) => ({ ...v, date: "k3y" })) }),
-      () => shsRelationships(LOVE_STORY, [{ kind: "work", id: 1 }], { now }),
+      () => shsRelationships(LOVE_STORY, [{ kind: "work", id: 1, from: "work" }], { now }),
     );
     expect(run.live.status).toBe("found");
     expect(run.cassettes.secondhandsongs).not.toContain("k3y");
+  });
+});
+
+describe("the answer's shape, and where the link came from", () => {
+  const perf = (id: number, name: string, isOriginal: boolean) => ({
+    uri: `https://secondhandsongs.com/performance/${id}`,
+    title: "Love Story",
+    performer: { name },
+    isOriginal,
+    date: null,
+  });
+  const LOVE_STORY: TrackRef = {
+    isrc: "USBCJ0800001",
+    title: "Love Story",
+    artists: ["Taylor Swift"],
+    durationMs: null,
+  };
+  const work = { kind: "work", id: 1, from: "work" } as const;
+
+  it("reports a work whose versions lack isOriginal as an invalid answer, not as no covers", async () => {
+    for (const versions of [
+      [{ ...perf(10, "Taylor Swift", true), isOriginal: undefined }],
+      [perf(10, "Taylor Swift", true), "not a version"],
+      undefined,
+    ]) {
+      stubFetch(() => json({ title: "Love Story", versions }));
+      const result = await shsRelationships(LOVE_STORY, [work]);
+      expect(result).toMatchObject({ status: "missing", error: { code: "invalid_response" } });
+      expect(result.identity.matched).toBe(0);
+    }
+  });
+
+  it("reports a performance without isOriginal, or with a relation that is not a list, as invalid", async () => {
+    const link = { kind: "performance", id: 10, from: "recording" } as const;
+    for (const page of [
+      { ...perf(10, "Taylor Swift", true), isOriginal: undefined, covers: [] },
+      { ...perf(10, "Taylor Swift", true), covers: { not: "a list" } },
+      { ...perf(10, "Taylor Swift", true), sampledBy: [null] },
+    ]) {
+      stubFetch(() => json(page));
+      const result = await shsRelationships(LOVE_STORY, [link]);
+      expect(result).toMatchObject({ status: "missing", error: { code: "invalid_response" } });
+    }
+  });
+
+  it("reads a performance linked from the work as the song's, unless the track is the original", async () => {
+    const page = {
+      ...perf(10, "Taylor Swift", true),
+      covers: [perf(13, "Forever the Sickest Kids", false)],
+    };
+    stubFetch(() => json(page));
+    const fromWork = { kind: "performance", id: 10, from: "work" } as const;
+    const song = await shsRelationships(LOVE_STORY, [fromWork], { now });
+    expect(song.status === "found" && song.records[0].about).toBe("work");
+    expect(song.status === "found" && song.evidence[0].recordRef).toBe(
+      "work/performance/10/covered-by/13",
+    );
+    const fromRecording = { ...fromWork, from: "recording" } as const;
+    const own = await shsRelationships(LOVE_STORY, [fromRecording], { now });
+    expect(own.status === "found" && own.records[0].about).toBe("track");
   });
 });

@@ -116,10 +116,13 @@ describe("results and Evidence", () => {
   it("sums identity counts per source", () => {
     const rejected = missing("discogs", "r", { omitted: [{ ref: "release/1", reason: "x" }] });
     expect(identityAccuracy([missing("discogs", "none"), rejected])).toEqual({
-      discogs: { matched: 0, rejected: 1, missing: 1 },
+      discogs: { matched: 0, rejected: 1, missing: 1, unavailable: 0 },
     });
     const twice = [found("genius", [], []), found("genius", [], []), missing("genius", "none")];
-    expect(identityAccuracy(twice)).toEqual({ genius: { matched: 2, rejected: 0, missing: 1 } });
+    const down = failed("genius", new SourceError("genius", "timeout", "deadline reached"));
+    expect(identityAccuracy([...twice, down])).toEqual({
+      genius: { matched: 2, rejected: 0, missing: 1, unavailable: 1 },
+    });
   });
 
   it("counts a record that was identified but holds nothing as matched, not missing", () => {
@@ -127,6 +130,7 @@ describe("results and Evidence", () => {
       matched: 1,
       rejected: 0,
       missing: 0,
+      unavailable: 0,
     });
   });
 
@@ -134,8 +138,12 @@ describe("results and Evidence", () => {
     expect(failed("discogs", new TypeError("x is not iterable"))).toMatchObject({
       error: { code: "invalid_response" },
     });
-    expect(failed("discogs", new SourceError("discogs", "aborted", "aborted"))).toMatchObject({
+    expect(failed("discogs", new SourceError("discogs", "timeout", "deadline"))).toMatchObject({
       error: { code: "timeout" },
+    });
+    // Cancelled by the caller: not a timeout.
+    expect(failed("discogs", new SourceError("discogs", "aborted", "aborted"))).toMatchObject({
+      error: { code: "unavailable" },
     });
   });
 });

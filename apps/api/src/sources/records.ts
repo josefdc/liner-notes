@@ -80,10 +80,7 @@ export function titlesMatch(a: string, b: string, artists: readonly string[] = [
  * ("Nirvana (2)") is dropped and its inverted article ("Persuader, The") put back in front.
  */
 export function normalizeArtist(name: string): string {
-  const trimmed = name
-    .trim()
-    .replace(/\s+\(\d+\)$/, "")
-    .replace(/\*$/, "");
+  const trimmed = name.trim().replace(/\s+\(\d+\)$/, "");
   const inverted = trimmed.match(/^(.*),\s*(the|a|an)$/i);
   return normalizeName(inverted ? `${inverted[2]} ${inverted[1]}` : trimmed);
 }
@@ -212,11 +209,16 @@ export function checkIdentity(
 // Results
 // =============================================================================
 
-/** How many records a source matched, rejected (failed a check) or could not find. */
+/**
+ * How many records a source matched, rejected (failed a check) or could not find, and how many
+ * times it could not be asked at all (not configured, an error, a timeout). Only the first three
+ * measure identity accuracy.
+ */
 export interface IdentityCounts {
   matched: number;
   rejected: number;
   missing: number;
+  unavailable: number;
 }
 
 /** A record left out, and why. */
@@ -268,14 +270,20 @@ export function found<T>(
     evidence,
     omitted,
     incomplete: options.incomplete ?? null,
-    identity: { matched: options.matched ?? 1, rejected: omitted.length, missing: 0 },
+    identity: {
+      matched: options.matched ?? 1,
+      rejected: omitted.length,
+      missing: 0,
+      unavailable: 0,
+    },
   };
 }
 
 /**
- * Nothing to show from a source. Without omissions the record was not there to check (counted
- * as missing); with them, every candidate failed a check (counted as rejected). `matched` is set
- * when the record was identified but holds nothing for the track.
+ * Nothing to show from a source. With an `error` the source could not be asked (counted as
+ * unavailable); without omissions the record was not there to check (counted as missing); with
+ * them, every candidate failed a check (counted as rejected). `matched` is set when the record
+ * was identified but holds nothing for the track.
  */
 export function missing<T>(
   source: SourceId,
@@ -284,6 +292,7 @@ export function missing<T>(
 ): SourceResult<T> {
   const omitted = options.omitted ?? [];
   const matched = options.matched ?? 0;
+  const unavailable = options.error ? 1 : 0;
   return {
     status: "missing",
     source,
@@ -293,7 +302,8 @@ export function missing<T>(
     identity: {
       matched,
       rejected: omitted.length,
-      missing: omitted.length === 0 && matched === 0 ? 1 : 0,
+      missing: !unavailable && omitted.length === 0 && matched === 0 ? 1 : 0,
+      unavailable,
     },
   };
 }
@@ -306,23 +316,32 @@ export function notConfigured<T>(source: SourceId, variable: string): SourceResu
   });
 }
 
+/**
+ * A failure as the run's source error. A deadline is a timeout; a request the caller cancelled
+ * is "unavailable", not a timeout.
+ */
+export function errorRecord(source: SourceId, error: unknown): SourceErrorRecord {
+  const message = describeError(error);
+  let code: SourceErrorRecord["code"] = "unavailable";
+  // A TypeError here is a payload of an unexpected shape, read past a check.
+  if (error instanceof TypeError) code = "invalid_response";
+  if (isSourceError(error)) {
+    if (error.kind === "timeout") code = "timeout";
+    else if (error.kind === "rate_limited") code = "rate_limited";
+    else if (error.kind === "parse" || error.kind === "content_type") code = "invalid_response";
+    else if (error.kind === "unavailable") code = "not_configured";
+  }
+  return { source, code, message };
+}
+
 /** Any failure while reading a source, as "missing" with a typed error; never a throw. */
 export function failed<T>(
   source: SourceId,
   error: unknown,
   omitted: Omission[] = [],
 ): SourceResult<T> {
-  const message = describeError(error);
-  let code: SourceErrorRecord["code"] = "unavailable";
-  // A TypeError here is a payload of an unexpected shape, read past a check.
-  if (error instanceof TypeError) code = "invalid_response";
-  if (isSourceError(error)) {
-    if (error.kind === "timeout" || error.kind === "aborted") code = "timeout";
-    else if (error.kind === "rate_limited") code = "rate_limited";
-    else if (error.kind === "parse" || error.kind === "content_type") code = "invalid_response";
-    else if (error.kind === "unavailable") code = "not_configured";
-  }
-  return missing(source, message, { omitted, error: { source, code, message } });
+  const record = errorRecord(source, error);
+  return missing(source, record.message ?? "", { omitted, error: record });
 }
 
 /** A payload that is not the shape the source documents; reported as an invalid response. */
@@ -336,11 +355,12 @@ export function identityAccuracy(
 ): Partial<Record<SourceId, IdentityCounts>> {
   const totals: Partial<Record<SourceId, IdentityCounts>> = {};
   for (const { source, identity } of results) {
-    const total = totals[source] ?? { matched: 0, rejected: 0, missing: 0 };
+    const total = totals[source] ?? { matched: 0, rejected: 0, missing: 0, unavailable: 0 };
     totals[source] = total;
     total.matched += identity.matched;
     total.rejected += identity.rejected;
     total.missing += identity.missing;
+    total.unavailable += identity.unavailable;
   }
   return totals;
 }
@@ -358,6 +378,23 @@ export interface EvidenceInput {
   title: string;
   excerpt: string;
   retrievedAt: string;
+}
+
+/**
+ * What an Evidence item states a fact about, read from the first segment of its recordRef:
+ * "track" the matched recording; "work" the song (a fact about the work, such as its covers, not
+ * claimed for this recording); "release" a whole release the track is on. Consumers keep "work"
+ * items out of claims about the recording without matching records to evidence by position.
+ */
+export type EvidenceScope = "track" | "work" | "release";
+
+/** A recordRef that carries its scope: `${scope}/${ref}`. */
+export const scopedRef = (scope: EvidenceScope, ref: string) => `${scope}/${ref}`;
+
+/** The scope an Evidence item's recordRef carries, or null for one without a scope. */
+export function evidenceScope(evidence: Pick<Evidence, "recordRef">): EvidenceScope | null {
+  const scope = evidence.recordRef?.split("/", 1)[0];
+  return scope === "track" || scope === "work" || scope === "release" ? scope : null;
 }
 
 /** An Evidence item for a primary record; the excerpt is cut to the contract's limit. */

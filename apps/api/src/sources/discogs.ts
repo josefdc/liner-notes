@@ -14,6 +14,7 @@
  * @see https://www.discogs.com/developers
  */
 
+import { SOURCE_CREDENTIALS } from "../config/settings.js";
 import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
 import {
   type Clock,
@@ -28,6 +29,7 @@ import {
   PRINTED_DURATION_TOLERANCE_MS,
   parseClockDuration,
   primaryEvidence,
+  scopedRef,
   type SourceResult,
   systemClock,
   type TrackRef,
@@ -35,7 +37,7 @@ import {
 
 const API = "https://api.discogs.com";
 const SITE = "https://www.discogs.com";
-export const DISCOGS_TOKEN = "DISCOGS_TOKEN";
+export const DISCOGS_TOKEN = SOURCE_CREDENTIALS.discogs;
 
 interface DiscogsArtist {
   id?: number;
@@ -73,6 +75,8 @@ export interface DiscogsCredit {
   roles: string[];
   /** "track": credited on this track; "release": credited on the whole release. */
   scope: "track" | "release";
+  /** The Evidence item that states this credit. */
+  evidenceId: string;
 }
 
 const ARTIST_SHAPE: Shape = [{ id: true, name: true, anv: true, join: true }];
@@ -251,6 +255,7 @@ export function trackCredits(
     .filter((t) => t && (t.type_ === undefined || t.type_ === "track"))
     .map((t) => t.position?.trim() ?? "");
   const credit = (a: DiscogsArtist, scope: DiscogsCredit["scope"]): DiscogsCredit => ({
+    evidenceId: "",
     releaseId: release.id,
     position,
     trackTitle: matched.title,
@@ -287,7 +292,10 @@ function creditEvidence(release: DiscogsRelease, credit: DiscogsCredit, index: n
   const year = release.year ? `, ${release.year}` : "";
   return primaryEvidence({
     source: "discogs",
-    recordRef: `release/${release.id}/credit/${index}`,
+    recordRef:
+      credit.scope === "track"
+        ? scopedRef("track", `release/${release.id}/credit/${index}`)
+        : scopedRef("release", `${release.id}/credit/${index}`),
     url: `${SITE}/release/${release.id}`,
     title: `${release.title} — Discogs release ${release.id}`,
     excerpt: `Discogs release ${release.id} ("${release.title}"${year}) credits ${credit.name} as ${credit.roles.join(", ")} on ${where}.`,
@@ -297,8 +305,10 @@ function creditEvidence(release: DiscogsRelease, credit: DiscogsCredit, index: n
 
 /**
  * Credits for the track from the first of `releaseIds` (in the identity chain's order, at most
- * `maxReleases`) on which the track is found. Each release is checked on its own; one that does
- * not hold the track is omitted with the reason. Never throws.
+ * `maxReleases`) on which the track is found with credits. Each release is checked on its own;
+ * one that does not hold the track is omitted with the reason, one Discogs does not have (404)
+ * or that lists no credits for the track is passed over. `note` is added to the result (e.g. not
+ * every release of the recording was read). Never throws.
  */
 export async function discogsTrackCredits(
   track: TrackRef,
@@ -306,12 +316,19 @@ export async function discogsTrackCredits(
   options: { maxReleases?: number; now?: Clock; signal?: AbortSignal; note?: string | null } = {},
 ): Promise<SourceResult<DiscogsCredit>> {
   if (!discogsConfigured()) return notConfigured("discogs", DISCOGS_TOKEN);
+  const note = options.note ?? null;
+  const withNote = (reason: string) => (note ? `${reason}; ${note}` : reason);
   const ids = [...new Set(releaseIds)].slice(0, options.maxReleases ?? 3);
   if (ids.length === 0) {
-    return missing("discogs", "MusicBrainz links no Discogs release of this recording");
+    return missing(
+      "discogs",
+      withNote("MusicBrainz links no Discogs release to an original release of the recording"),
+    );
   }
   const now = options.now ?? systemClock;
   const omitted: Omission[] = [];
+  const passed: string[] = [];
+  let matched = 0;
   try {
     for (const id of ids) {
       let release: DiscogsRelease;
@@ -319,7 +336,7 @@ export async function discogsTrackCredits(
         release = await getDiscogsRelease(id, options.signal);
       } catch (error) {
         if (isSourceError(error, "http") && error.status === 404) {
-          omitted.push({ ref: `release/${id}`, reason: "Discogs has no such release" });
+          passed.push(`Discogs has no release ${id}`);
           continue;
         }
         throw error;
@@ -330,23 +347,28 @@ export async function discogsTrackCredits(
         omitted.push({ ref: `release/${id}`, reason: match.reason });
         continue;
       }
+      matched++;
       const { credits: all, ambiguous } = trackCredits(release, match.track);
       const notes = [
         all.length > MAX_RECORDS ? `${all.length - MAX_RECORDS} more credits not listed` : null,
         ambiguous > 0
           ? `${ambiguous} credits name position ${match.track.position}, which repeats on the release; left out`
           : null,
-        options.note ?? null,
+        note,
       ].filter((n): n is string => n !== null);
       if (all.length === 0) {
-        return missing(
-          "discogs",
-          [`Discogs release ${id} lists no credits for the track`, ...notes].join("; "),
-          { omitted, matched: 1 },
+        passed.push(
+          ambiguous > 0
+            ? `Discogs release ${id}: ${notes[0]}`
+            : `Discogs release ${id} lists no credits for the track`,
         );
+        continue;
       }
       const credits = all.slice(0, MAX_RECORDS);
       const evidence = credits.map((c, i) => creditEvidence(release, c, i, at));
+      credits.forEach((c, i) => {
+        c.evidenceId = evidence[i].id;
+      });
       return found("discogs", credits, evidence, {
         omitted,
         incomplete: notes.length > 0 ? notes.join("; ") : null,
@@ -355,5 +377,9 @@ export async function discogsTrackCredits(
   } catch (error) {
     return failed("discogs", error, omitted);
   }
-  return missing("discogs", "no linked Discogs release holds the track", { omitted });
+  const reason =
+    passed.length > 0
+      ? passed.join("; ")
+      : `none of the ${ids.length} linked Discogs releases holds the track`;
+  return missing("discogs", withNote(reason), { omitted, matched });
 }

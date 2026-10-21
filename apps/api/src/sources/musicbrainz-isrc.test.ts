@@ -213,7 +213,7 @@ describe("workCovers", () => {
   });
 });
 
-describe("review findings", () => {
+describe("work recordings, duplicates and name normalisation", () => {
   it("reads a work's recordings with their first release dates, page by page", async () => {
     const net = stubFetch((call) => {
       const offset = new URL(call.url).searchParams.get("offset");
@@ -263,5 +263,76 @@ describe("review findings", () => {
   it("reads an ISRC written with en dashes or spaces", () => {
     expect(normalizeIsrc("US–UM7–24–01994")).toBe("USUM72401994");
     expect(normalizeIsrc("USUM7 2401994")).toBe("USUM72401994");
+  });
+});
+
+describe("the shared queue and a request's signal", () => {
+  it("lets an aborted request leave the queue at once, without taking a slot", async () => {
+    const limiter = MusicBrainzRateLimiter.getInstance();
+    const restore = limiter.setIntervalForTests(300);
+    try {
+      const net = stubFetch(() => json(birdsIsrc));
+      // Six requests ahead, 300 ms apart: about 1.5 s of waiting.
+      const ahead = Array.from({ length: 6 }, () => lookupIsrc("USUM72401994"));
+      const controller = new AbortController();
+      const started = Date.now();
+      const late = lookupIsrc("USCA29001716", controller.signal);
+      setTimeout(() => controller.abort(), 50);
+      await expect(late).rejects.toMatchObject({ kind: "aborted" });
+      expect(Date.now() - started).toBeLessThan(500);
+      expect(limiter.pending).toBeLessThanOrEqual(6);
+      await Promise.all(ahead);
+      expect(net.calls.some((c) => c.url.includes("USCA29001716"))).toBe(false);
+      // An already aborted request is never queued.
+      await expect(lookupIsrc("USCA29001716", AbortSignal.abort())).rejects.toMatchObject({
+        kind: "aborted",
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("reports a deadline reached in the queue as a timeout", async () => {
+    const limiter = MusicBrainzRateLimiter.getInstance();
+    const restore = limiter.setIntervalForTests(300);
+    try {
+      stubFetch(() => json(birdsIsrc));
+      const ahead = Array.from({ length: 4 }, () => lookupIsrc("USUM72401994"));
+      await expect(lookupIsrc("USCA29001716", AbortSignal.timeout(50))).rejects.toMatchObject({
+        kind: "timeout",
+      });
+      await Promise.all(ahead);
+    } finally {
+      restore();
+    }
+  });
+
+  it("does not retry a shed request once its signal has aborted, nor wait out the delay", async () => {
+    const controller = new AbortController();
+    const net = stubFetch(() => {
+      controller.abort();
+      return json({ error: "slow down" }, { status: 503, headers: { "retry-after": "2" } });
+    });
+    const started = Date.now();
+    await expect(lookupIsrc("USCA29001716", controller.signal)).rejects.toMatchObject({
+      kind: "rate_limited",
+    });
+    expect(net.calls).toHaveLength(1);
+    expect(Date.now() - started).toBeLessThan(1000);
+
+    // Aborted during the delay before the retry: rejects at once.
+    const during = new AbortController();
+    const shed = stubFetch(() => json({ error: "slow down" }, { status: 503 }));
+    const pending = lookupIsrc("USCA29001716", during.signal);
+    setTimeout(() => during.abort(), 50);
+    const began = Date.now();
+    await expect(pending).rejects.toMatchObject({ kind: "aborted" });
+    expect(Date.now() - began).toBeLessThan(1000);
+    expect(shed.calls).toHaveLength(1);
+  });
+
+  it("reads a non-string ISRC as no ISRC", () => {
+    expect(normalizeIsrc(undefined)).toBeNull();
+    expect(normalizeIsrc(12345)).toBeNull();
   });
 });

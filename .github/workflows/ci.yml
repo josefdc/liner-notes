@@ -56,6 +56,22 @@ jobs:
       - run: npm run typecheck
       - name: Unit and route tests (Vitest)
         run: npm test
+      # The API tests must not depend on a developer's settings: run them again with the example
+      # settings file in place (as after `cp .env.example .env`) plus a valid, non-default value
+      # for every setting the tests pin, so a pin that goes missing fails here.
+      - name: API tests with apps/api/.env from .env.example
+        if: matrix.node == 24
+        run: |
+          test ! -e apps/api/.env || { printf 'apps/api/.env already exists\n' >&2; exit 1; }
+          cp apps/api/.env.example apps/api/.env
+          printf '\n' >> apps/api/.env
+          printf '%s\n' \
+            RATE_LIMIT_MAX=1 RATE_LIMIT_GLOBAL_MAX=1 SEARCH_RATE_LIMIT_MAX=1 \
+            HOST=::1 TRUST_PROXY=1 REPLAY_MODE=only SOURCE_CASSETTE=replay \
+            CHECKPOINT_RETENTION_HOURS=1 AZURE_OPENAI_API_KEY=synthetic-ci-key \
+            LLM_CASSETTE=record LLM_SPEND_LOG=/nonexistent/llm-spend.jsonl >> apps/api/.env
+          npx vitest run --project api
+          rm apps/api/.env
       - run: npm run build
       # vite build exits 0 with invalid or unprocessed CSS; check what it wrote.
       - name: Built CSS

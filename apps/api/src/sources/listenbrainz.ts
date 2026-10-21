@@ -12,12 +12,9 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import dotenv from "dotenv";
 import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
 import { ARTIST_REASON, findArtist, isMbid } from "./musicbrainz.js";
 import { notAnswered, toolFailure } from "./toolResult.js";
-
-dotenv.config();
 
 // =============================================================================
 // Configuration

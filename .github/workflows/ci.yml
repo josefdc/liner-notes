@@ -114,4 +114,4 @@ jobs:
       - name: Pytest
         run: |
           uv run --frozen python -VV
-          uv run --frozen pytest -rxX
+          uv run --frozen pytest -rsxX

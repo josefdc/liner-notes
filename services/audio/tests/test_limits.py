@@ -11,6 +11,7 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
+import fingerprint
 import main
 from guards import MAX_BODY_BYTES, RequestGuardMiddleware
 
@@ -22,6 +23,7 @@ RESULT = {
     "energy": 0.5,
     "duration": 30.0,
     "keyMoments": [],
+    "v2": {"analyzerVersion": "2.0.0+test"},
 }
 
 
@@ -191,15 +193,12 @@ def test_health_answers_head_for_wget_spider(monkeypatch):
 
 
 def test_model_input_is_cut_to_the_decode_span(monkeypatch, tmp_path):
-    """The models read the decoded signal (no second decode), so the same 35 s at 16 kHz."""
+    """The models read the decoded signal (no second decode), so the same 35 s."""
     seen = []
 
-    def embed(audio):
-        seen.append(len(audio))
-        return np.full((3, 8), 0.5, dtype=np.float32)
-
-    def head(embeddings):
-        return np.full((len(embeddings), 2), 0.5, dtype=np.float32)
+    def model_input(native, sr):
+        seen.append((len(native), sr))
+        return np.zeros(16000 * 35, dtype=np.float32)
 
     sr = 22050
     t = np.arange(sr * 40) / sr  # 40 s of an A major triad
@@ -208,14 +207,10 @@ def test_model_input_is_cut_to_the_decode_span(monkeypatch, tmp_path):
     sf.write(path, chord.astype(np.float32), sr)
 
     monkeypatch.setattr(main, "MODELS_LOADED", True)
-    monkeypatch.setattr(main, "STYLE_TOP_K", 3)
-    models = {name: embed for name in ("styles", "effnet", "tags", "musicnn")}
-    models |= {name: head for name in ("valence", "danceability", "acousticness")}
-    models["instrumentalness"] = head
-    monkeypatch.setattr(main, "_models", models)
-    monkeypatch.setattr(main, "DISCOGS_STYLES", [f"style {i}" for i in range(8)])
-    monkeypatch.setattr(main, "MSD_TAGS", [f"tag {i}" for i in range(8)])
+    monkeypatch.setattr(fingerprint, "model_input", model_input)
+    monkeypatch.setattr(fingerprint, "mel_frames", lambda audio: np.zeros((2186, 96), np.float32))
+    monkeypatch.setattr(fingerprint, "_models", {})  # every part fails: no fingerprint
 
     result = main.analyze_audio_file(str(path))
-    assert seen == [int(main.MODEL_SAMPLE_RATE * main.MAX_DECODE_SECONDS)] * 4
-    assert result["danceability"] == 0.5
+    assert seen == [(int(sr * main.MAX_DECODE_SECONDS), sr)]
+    assert result["v2"]["fingerprint"] is None

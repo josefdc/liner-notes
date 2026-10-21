@@ -16,6 +16,7 @@ import librosa
 import numpy as np
 from scipy.signal import find_peaks
 
+import estimators
 from estimators import Signals
 
 # --- gate --------------------------------------------------------------------------------
@@ -31,21 +32,15 @@ MIN_DURATION_S = 4.0
 # 6.2e-3-6.5e-3 (-44 dBFS); the click tracks 5.9e-2.
 SILENCE_RMS = 1e-3
 
-# Noise: no rhythmic and no tonal structure, i.e. all three of (fixtures, WAV and MP3):
-# - onset periodicity (Signals.onset_periodicity) below NOISE_MAX_PERIODICITY: white, pink and
-#   brown noise 0.09-0.17; click tracks 0.89-0.95, a drum pattern 0.80-0.86, a click track made
-#   of noise bursts 0.96 (tones, chords and the progressions score 0 but are tonal);
-# - spectral flatness (median over frames, 100 Hz-5 kHz) above NOISE_MIN_FLATNESS: white
-#   noise 0.55-0.57, pink 0.36, brown 0.074; click tracks 0.039, the A major triad under white
-#   noise at -9.5 dB 0.031, tones, chords and the drum pattern at most 0.002;
-# - chroma flatness (geometric over arithmetic mean of the mean chroma) above
-#   NOISE_MIN_CHROMA_FLATNESS: noise 0.986-1.0; the triad under noise 0.62-0.71, the triad,
-#   tones and the progressions 0.04-0.63 (click tracks and the drum pattern 0.94-1.0, but they
-#   are rhythmic).
-NOISE_MAX_PERIODICITY = 0.4
-NOISE_MIN_FLATNESS = 0.05
-NOISE_MIN_CHROMA_FLATNESS = 0.9
-NOISE_BAND_HZ = (100.0, 5000.0)
+# Noise: neither rhythm nor sustained pitch. Rhythm is the onset periodicity (Signals.
+# onset_periodicity, tolerant of human timing), pitch the share of energy in spectral lines
+# (Tonality.tonal_ratio); both thresholds and the values behind them are in estimators.py.
+# White, pink and brown noise score at most 0.13 and 0.000; a drum take with crashes and 25 ms
+# jitter passes on rhythm (0.38), chords or a piano line under rain at 0 dB pass on pitch
+# (0.67-0.73). (Spectral and chroma flatness, used before, called the latter noise: chroma
+# flatness 0.92-0.98 under rain against 0.986 for brown noise.)
+NOISE_MAX_PERIODICITY = estimators.MIN_TEMPO_PERIODICITY
+NOISE_MAX_TONAL_RATIO = estimators.MIN_TONAL_RATIO
 
 # --- loudness and the energy contour -----------------------------------------------------
 
@@ -121,25 +116,6 @@ def levels(signals: Signals) -> Levels:
     return Levels(frames=frames, hop_seconds=RMS_FRAME / signals.sr)
 
 
-def spectral_flatness(signals: Signals) -> float:
-    """Median spectral flatness (100 Hz-5 kHz) over the frames within 20 dB of the loud end."""
-    mag = signals.stft_magnitude
-    freqs = librosa.fft_frequencies(sr=signals.sr, n_fft=2048)
-    band = (freqs >= NOISE_BAND_HZ[0]) & (freqs <= NOISE_BAND_HZ[1])
-    power = mag[band] ** 2 + 1e-20
-    flatness = np.exp(np.mean(np.log(power), axis=0)) / np.mean(power, axis=0)
-    frame_rms = librosa.feature.rms(S=mag, frame_length=2048)[0]
-    loud = frame_rms >= 0.1 * np.percentile(frame_rms, 95)
-    return float(np.median(flatness[loud])) if loud.any() else 1.0
-
-
-def chroma_flatness(chroma_mean: np.ndarray) -> float:
-    total = float(np.mean(chroma_mean))
-    if not total > 0:
-        return 1.0
-    return float(np.exp(np.mean(np.log(chroma_mean + 1e-12))) / total)
-
-
 def check_gate(signals: Signals, loudness: Levels | None) -> Gate:
     """Too short, silent or noise-like input is not measured (in that order)."""
     if signals.duration < MIN_DURATION_S or loudness is None:
@@ -148,8 +124,7 @@ def check_gate(signals: Signals, loudness: Levels | None) -> Gate:
         return Gate(False, "silence")
     if (
         signals.onset_periodicity < NOISE_MAX_PERIODICITY
-        and spectral_flatness(signals) > NOISE_MIN_FLATNESS
-        and chroma_flatness(signals.chroma_mean) > NOISE_MIN_CHROMA_FLATNESS
+        and signals.tonality.tonal_ratio < NOISE_MAX_TONAL_RATIO
     ):
         return Gate(False, "noise")
     return Gate(True, None)
@@ -342,8 +317,8 @@ def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
 def _select(candidates: list[dict], duration: float) -> list[dict]:
     """
     Up to MAX_KEY_MOMENTS moments: the strongest of each of KEY_MOMENT_BINS equal parts of the
-    window first, then the strongest of the rest; two of the same type are never closer than
-    MIN_MOMENT_SPACING_S.
+    window first, then the strongest remaining of each type in turn; two of the same type are
+    never closer than MIN_MOMENT_SPACING_S.
     """
     valid = [c for c in candidates if 0.0 <= c["time"] <= duration]
     ranked = sorted(valid, key=lambda c: (-c["intensity"], c["time"]))
@@ -371,8 +346,15 @@ def _select(candidates: list[dict], duration: float) -> list[dict]:
                 take(moment)
                 if len(chosen) > before:
                     break
+    # Then by rounds, the strongest remaining moment of each type in turn, so that a strong
+    # run of one type (onsets) does not crowd out the rest (a silence, a drop).
+    remaining: dict[str, list[dict]] = {}
     for moment in ranked:
         if moment not in chosen:
+            remaining.setdefault(moment["type"], []).append(moment)
+    while len(chosen) < MAX_KEY_MOMENTS and any(remaining.values()):
+        heads = [queue.pop(0) for queue in remaining.values() if queue]
+        for moment in sorted(heads, key=lambda c: (-c["intensity"], c["time"])):
             take(moment)
     # Rounded down to the centisecond, so a moment never lies past the rounded duration.
     return [

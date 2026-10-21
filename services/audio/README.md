@@ -72,13 +72,15 @@ All settings are optional environment variables.
 
 Always `200` while the service can measure tempo and key. `status` is `ok` when the perceptual
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
-analysis output (`ANALYZER_VERSION` in `main.py`); it changes whenever a measurement can change
-for the same input, and every successful (`200`) `/analyze` response carries it. Error
-responses are only `{"detail": "..."}`.
+analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
+for the same input) with the estimator and, when the models are loaded, a tag for the pinned
+model set as semver build metadata, e.g. `2.0.0+essentia.models-5c5c0c7f`. Every successful
+(`200`) `/analyze` response carries the same string, as `analyzer_version` and
+`v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.0.0","models":false}
+# {"status":"degraded","analyzer_version":"2.0.0+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -91,27 +93,27 @@ curl -X POST http://localhost:3002/analyze \
 
 The request body is limited to 16 KB (`413` beyond that).
 
-Response for the 97 BPM drum pattern of `tests/test_v2.py` (an MP3), with the Essentia
+Response for the 97 BPM drum pattern of `tests/signals.py` (an MP3), with the Essentia
 estimators and the models loaded; lists shortened to their first items. Without the models
 the perceptual fields and `v2.fingerprint` are `null`.
 
 ```json
 {
-  "bpm": 96,
+  "bpm": 97,
   "key": "C",
   "mode": "Major",
-  "energy": 0.666,
+  "energy": 0.778,
   "duration": 30.0,
   "source": "analyzed",
-  "analyzer_version": "2.0.0",
+  "analyzer_version": "2.0.0+essentia.models-5c5c0c7f",
   "keyMoments": [{ "time": 1.88, "type": "onset", "intensity": 0.986, "description": "Onset" }],
   "valence": 0.389,
   "danceability": 1.0,
   "acousticness": 0.006,
-  "instrumentalness": 0.77,
+  "instrumentalness": 0.85,
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.0.0+essentia+msd-musicnn-1+discogs-effnet-bs64-1+deam-msd-musicnn-2+danceability-msd-musicnn-1+mood_acoustic-discogs-effnet-1+voice_instrumental-msd-musicnn-1",
+    "analyzerVersion": "2.0.0+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -122,23 +124,23 @@ the perceptual fields and `v2.fingerprint` are `null`.
       "basis": "signal"
     },
     "key": {
-      "tonic": "C", "mode": "major", "strength": 0.944, "profile": "bgate",
+      "tonic": "C", "mode": "major", "strength": 0.94, "profile": "bgate",
       "method": "essentia.KeyExtractor", "basis": "signal"
     },
     "loudness": {
-      "rmsMean": 0.09977,
+      "rmsMean": 0.099773,
       "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
       "basis": "signal"
     },
     "beats": { "times": [0.615, 1.231, 1.846], "method": "essentia.RhythmExtractor2013", "basis": "signal" },
     "energyContour": {
       "hopSeconds": 0.09288,
-      "values": [0.27065, 0.15017, 0.10335],
+      "values": [0.270653, 0.150171, 0.103349],
       "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
       "basis": "signal"
     },
     "sections": {
-      "segments": [{ "label": "A", "start": 0.0, "end": 30.0 }],
+      "segments": [{ "label": "A", "start": 0.0, "end": 4.923 }, { "label": "B", "start": 4.923, "end": 9.892 }],
       "method": "novelty-on-beat-chroma",
       "basis": "signal"
     },
@@ -149,20 +151,20 @@ the perceptual fields and `v2.fingerprint` are `null`.
     "fingerprint": {
       "styles": {
         "model": { "id": "discogs-effnet-bs64-1", "licence": "CC BY-NC-SA 4.0" },
-        "top": [{ "label": "Electronic---Ambient", "score": 0.3468 }, { "label": "Electronic---Downtempo", "score": 0.2959 }],
+        "top": [{ "label": "Electronic---Ambient", "score": 0.3183 }, { "label": "Electronic---Downtempo", "score": 0.2936 }],
         "basis": "model"
       },
       "tags": {
         "model": { "id": "msd-musicnn-1", "licence": "CC BY-NC-SA 4.0" },
-        "scores": [{ "label": "electronic", "score": 0.4495 }, { "label": "ambient", "score": 0.2302 }],
+        "scores": [{ "label": "electronic", "score": 0.4612 }, { "label": "ambient", "score": 0.2488 }],
         "basis": "model"
       },
       "moods": {
-        "danceability": { "value": 0.9997, "range": [0, 1], "model": { "id": "danceability-msd-musicnn-1", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
-        "acoustic": { "value": 0.0065, "range": [0, 1], "model": { "id": "mood_acoustic-discogs-effnet-1", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
-        "instrumental": { "value": 0.7698, "range": [0, 1], "model": { "id": "voice_instrumental-msd-musicnn-1", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
-        "valence": { "value": 4.1118, "range": [1, 9], "model": { "id": "deam-msd-musicnn-2", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
-        "arousal": { "value": 4.8089, "range": [1, 9], "model": { "id": "deam-msd-musicnn-2", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" }
+        "danceability": { "value": 0.9997, "range": [0.0, 1.0], "model": { "id": "danceability-msd-musicnn-1", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
+        "acoustic": { "value": 0.0056, "range": [0.0, 1.0], "model": { "id": "mood_acoustic-discogs-effnet-1", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
+        "instrumental": { "value": 0.85, "range": [0.0, 1.0], "model": { "id": "voice_instrumental-msd-musicnn-1", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
+        "valence": { "value": 4.1125, "range": [1.0, 9.0], "model": { "id": "deam-msd-musicnn-2", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
+        "arousal": { "value": 4.8876, "range": [1.0, 9.0], "model": { "id": "deam-msd-musicnn-2", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" }
       }
     }
   }
@@ -175,26 +177,35 @@ times are seconds from the start of the preview. Every block is `null` when it w
 
 - **Gate.** Input shorter than 4 s (including a zero-length file) is `too_short`; input whose
   loudest frames stay under -60 dBFS (digital silence, a DC offset, dither) is `silence`; input
-  with neither rhythm nor pitch (white, pink or brown noise) is `noise`. A gate that does not
-  pass leaves every measured block `null` and `keyMoments` empty, and nulls the v1 `bpm`, `key`,
-  `mode`, `keyMoments` and perceptual fields too: silence is never "C Major".
+  with neither a beat nor sustained pitch (white, pink or brown noise) is `noise`. Music under a
+  noise bed, a drum take with human timing and a rhythm made of noise bursts pass. A gate that
+  does not pass leaves every measured block `null` and `keyMoments` empty.
 - **Tempo** is withheld when the onsets do not repeat at a beat rate (a steady chord, a pure
-  tone, chords changing every 2 s) or the estimator's confidence is low. `confidence` is on
-  0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in `rawConfidence`.
-- **Key** is withheld when fewer than three pitch classes sound (a pure tone, mains hum) or its
-  strength is low. Tonics are spelled with sharps (Essentia's Bb is reported as A#).
+  tone, chords changing every 2 s, a rubato melody), when the estimator's confidence is low,
+  or when the tempo does not hold over the window (90 BPM then 130: `beats` is still given).
+  `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
+  `rawConfidence`.
+- **Key** is only estimated from sustained pitch, on the harmonic part of the signal (a
+  harmonic/percussive separation), and withheld when too little of the energy is in spectral
+  lines (drums, click tracks, a metronome, noise with a beat), when the lines spell fewer than
+  three pitch classes, when they form a single harmonic series (a lone tone, or mains hum on
+  50 or 60 Hz, whose harmonics spell a G major triad), or when its strength is low. Tonics are
+  spelled with sharps (Essentia's Bb is reported as A#).
 - **Fingerprint** is `null` without the models. `styles.top` holds the 10 highest of the 400
   Discogs style activations of EffNet-Discogs, `tags.scores` the 50 MusiCNN tag activations;
   activations are scores, not probabilities. Mood heads give their output with its range:
   0-1 for danceability, acoustic and instrumental, the DEAM scale 1-9 for valence and arousal.
-  Each block names its model id and the licence of its weights (CC BY-NC-SA 4.0).
+  Each block names its model id and the licence of its weights (CC BY-NC-SA 4.0). A part whose
+  model fails, or gives values that are not finite, outside that range or of the wrong width,
+  is `null` on its own.
 
-The v1 fields stay until the API reads `v2`. `bpm`, `key` and `mode` are measurements and are
-never filled with a default: `bpm` is the beat tracker's tempo, quantised to its frame grid
-(120 BPM reads 117), and `null` when no tempo is found or the gate did not pass; `key` and
-`mode` are `null` when the chroma profile is flat or the gate did not pass. `energy` is the
-mean frame RMS in dBFS mapped from [-60, 0] dBFS to [0, 1] (a loudness, not a perceptual energy),
-`null` for a zero-length file.
+The v1 fields stay until the API reads `v2`, and are derived from it: `bpm` is `v2.tempo.bpm`
+rounded, `key` and `mode` are `v2.key`, `keyMoments` are `v2.keyMoments`, and the perceptual
+fields are the mood heads (valence mapped from DEAM's 1-9 onto 0-1). Each is `null` when `v2`
+has nothing for it, so v1 never says more than v2. `energy` is `v2.loudness.rmsMean` in dBFS
+mapped from [-90, 0] dBFS onto [0, 1] (a loudness, not a perceptual energy; input that passes
+the gate reads above 0.04), and `null` when the gate did not pass. A preview with non-finite
+samples is refused with `422`.
 
 Errors carry only a generic `detail` (no measurements and no `analyzer_version`); the cause is
 only written to the service log.
@@ -204,7 +215,7 @@ only written to the service log.
 | `400` | `preview_url` is not an allowed preview URL (see below) |
 | `401` | `AUDIO_SERVICE_TOKEN` is set and `X-Audio-Token` is missing or wrong |
 | `413` | Request body larger than 16 KB |
-| `422` | Request body is not `{"preview_url": "<string>"}` |
+| `422` | Request body is not `{"preview_url": "<string>"}`, or the preview has non-finite samples |
 | `502` | The preview could not be downloaded within the limits |
 | `503` | No analysis slot became free within `QUEUE_WAIT_S`, or `MAX_QUEUED_ANALYSES` requests are already waiting; comes with `Retry-After` |
 | `504` | Analysis took longer than `ANALYSIS_TIMEOUT_S` |
@@ -228,29 +239,36 @@ must finish within 20 s. The temporary file is removed after the analysis, whate
 ## How it works
 
 1. **Download** the preview as described above.
-2. **Decode** once with `librosa.load()` (`soundfile`), mono at the file's own rate, at most
-   35 s. Each step that needs another rate gets a resampled copy (`soxr`): 22.05 kHz for the
-   librosa features, 44.1 kHz for Essentia's estimators, 16 kHz for the models. The STFT, the
-   onset envelope and the constant-Q chromagram are computed once and shared.
+2. **Decode** once with `soundfile`, mono at the file's own rate, at most 35 s. Each step that
+   needs another rate gets a resampled copy: 22.05 kHz (`soxr`) for the librosa features, 44.1
+   kHz for RhythmExtractor2013, and 16 kHz through Essentia's `Resample` at quality 4 for the
+   models, as `MonoLoader(sampleRate=16000, resampleQuality=4)` does in the MTG examples. The
+   STFT, the onset envelope, the harmonic part and its chromagram are computed once and shared.
 3. **Gate** (`signal_features.py`): duration, the 95th percentile of the frame RMS, and for
-   noise the onset periodicity, the spectral flatness (100 Hz-5 kHz) and the chroma flatness.
-   The thresholds and the fixture values that justify them are in the code.
+   noise the onset periodicity (a tempogram peak, tolerant of human timing) and the share of
+   energy in spectral lines. The thresholds and the fixture values behind them are in the code
+   (`signal_features.py`, `estimators.py`).
 4. **Tempo and key** (`estimators.py`, `AUDIO_ESTIMATOR`):
-   - `essentia`: `RhythmExtractor2013` (multifeature) and `KeyExtractor` (bgate profile);
+   - `essentia`: `RhythmExtractor2013` (multifeature) and `KeyExtractor` (bgate profile, on
+     the harmonic part);
    - `librosa`: `librosa.feature.tempo` and `beat_track` on the onset envelope, and
-     Krumhansl-Kessler profiles on the chromagram.
+     Krumhansl-Kessler profiles on the chromagram of the harmonic part.
 
    Both refine the tempo with a least-squares fit of the beat times, so it is not limited to
-   the beat tracker's frame grid, and never change its octave.
+   the beat tracker's frame grid, never change its octave, and check that it holds in each
+   third of the window. Whether a key can be measured at all (spectral lines, pitch classes,
+   harmonic series) is decided the same way for both.
 5. **Loudness and energy contour**: RMS of non-overlapping 2048-sample frames at 22.05 kHz after
    removing DC; `loudness.rmsMean` is their mean.
 6. **Sections**: novelty on beat-synchronous chroma (a fixed 0.5 s grid without a beat grid),
    cut at novelty peaks at least 4 s apart; sections with similar chroma share a label.
 7. **Key moments**: energy peaks, level drops, onsets, harmonic changes and silences, with
    intensities from the signal (level, size of the drop, onset strength, novelty, length);
-   the strongest of each sixth of the window first, at most 16.
-8. **Fingerprint** (optional): EffNet-Discogs and MusiCNN from the MTG model zoo, with their
-   classification heads, at 16 kHz.
+   the strongest of each sixth of the window first, then the strongest of each type in turn,
+   at most 16.
+8. **Fingerprint** (`fingerprint.py`, optional): EffNet-Discogs and MusiCNN from the MTG model
+   zoo, each loaded once and run once per analysis for both its predictions and the embeddings
+   its heads read, at 16 kHz.
 
 The accuracy of these measurements against reference data has not been evaluated yet; treat
 them as measurements of the preview, not of the full recording.
@@ -268,19 +286,22 @@ The tests run without network access: a local HTTP server stands in for the CDN.
 `tests/test_fixtures.py` runs the real analysis on audio generated at test time: click tracks at
 85, 120, 140 and 174 BPM, an A major triad, the progressions C–F–G–C and Am–Dm–E–Am, silence,
 1 s clips, white noise and a DC offset, as WAV and MP3, plus 44.1 kHz stereo MP3 variants, and
-pins the v1 fields (the v1 tempo tolerance is the beat tracker's grid, explained in
-`tempo_bounds`). `tests/test_v2.py` checks the `v2` block against the contract's JSON Schema
-after a strict JSON round trip, with every installed estimator: tempo within 1 BPM, keys,
-the gate, loudness, key moments, sections, and the fingerprint when the models are loaded
-(skipped otherwise: run `uv sync --locked --extra models` and `uv run python download_models.py`
-first to include it).
+pins the v1 fields. `tests/test_v2.py` covers the `v2` block with both estimators: tempo within
+1 BPM, tempo changes, keys and when they are withheld (drums, clicks, hum, tones), the gate
+(noise, silence, short input, and music under noise or with human timing, from
+`tests/signals.py`), loudness, key moments, sections and the fingerprint. Every result in both
+files is checked against the contract's JSON Schema after a strict JSON round trip, and for
+v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model tests are reported
+as skipped without the `models` extra and the models; run `uv sync --locked --extra models` and
+`uv run python download_models.py` first to include them. `AUDIO_REQUIRE_MODELS=1` turns those
+skips into an error; CI's `audio models` workflow runs the suite that way.
 
 ## Troubleshooting
 
 - **`LibsndfileError` / "Format not recognised"**: `libsndfile` could not decode the file. MP3
   needs `libsndfile` 1.1 or newer; the `soundfile` wheels bundle one, so this usually means a
   platform without a bundled library and an old system `libsndfile`. AAC and M4A cannot be
-  decoded at all: librosa 1.0 decodes only through `libsndfile`, which does not read them (the
+  decoded at all: the service decodes only through `libsndfile`, which does not read them (the
   preview hosts the service accepts serve MP3).
 - **`/health` says `degraded`**: run `uv run python download_models.py`, or
   `uv run python download_models.py --check` to see which model is missing or fails its checksum.

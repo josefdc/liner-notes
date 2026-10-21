@@ -1,0 +1,61 @@
+name: audio models
+
+# The audio service as it runs in production: with essentia-tensorflow (the "models" extra)
+# and the Essentia models, so the Essentia estimators and the model tests run too. The ci
+# workflow's python job covers the service without them.
+on:
+  pull_request:
+    paths:
+      - "services/audio/**"
+      - "packages/contract/schemas/**"
+      - ".github/workflows/audio-models.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/audio/**"
+      - "packages/contract/schemas/**"
+      - ".github/workflows/audio-models.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-models-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pytest-models:
+    name: audio service with Essentia and the models (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: services/audio
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/audio/uv.lock
+      - run: uv sync --frozen --extra models
+      # The model files are pinned by name and SHA-256 in download_models.py, so that file is
+      # the cache key. download_models.py checks every file, cached or not, and downloads (and
+      # checks) whatever is missing.
+      - name: Cache the models
+        uses: actions/cache@v4
+        with:
+          path: services/audio/models
+          key: audio-models-${{ hashFiles('services/audio/download_models.py') }}
+      - name: Download and verify the models
+        run: uv run --frozen python download_models.py
+      # AUDIO_REQUIRE_MODELS makes the run fail, rather than skip, if Essentia or the models
+      # are not there.
+      - name: Pytest
+        env:
+          AUDIO_REQUIRE_MODELS: "1"
+        run: |
+          uv run --frozen python -VV
+          uv run --frozen pytest -rsxX

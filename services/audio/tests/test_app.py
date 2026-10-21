@@ -7,6 +7,7 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
+import fingerprint
 import main
 from preview import PreviewDownloadError
 
@@ -26,7 +27,7 @@ def test_health_reports_missing_models_as_degraded(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {
         "status": "degraded",
-        "analyzer_version": main.ANALYZER_VERSION,
+        "analyzer_version": f"{main.ANALYZER_VERSION}+{main.ESTIMATOR.name}",
         "models": False,
     }
 
@@ -35,22 +36,26 @@ def test_health_reports_loaded_models(client, monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     assert client.get("/health").json() == {
         "status": "ok",
-        "analyzer_version": main.ANALYZER_VERSION,
+        "analyzer_version": main.analyzer_version(),
         "models": True,
     }
+    assert "+" in main.analyzer_version() and ".models-" in main.analyzer_version()
 
 
 def test_one_analyzer_version_everywhere(client):
     assert re.fullmatch(r"\d+\.\d+\.\d+", main.ANALYZER_VERSION)
-    assert main.app.version == main.ANALYZER_VERSION
-    assert client.get("/").json()["analyzer_version"] == main.ANALYZER_VERSION
+    full = main.analyzer_version()
+    assert re.fullmatch(r"\d+\.\d+\.\d+\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*", full)
+    assert main.app.version == full
+    assert client.get("/").json()["analyzer_version"] == full
+    assert client.get("/health").json()["analyzer_version"] == full
     assert "version" not in client.get("/health").json()
 
 
 def test_models_are_not_loaded_without_verified_files(tmp_path, monkeypatch):
     monkeypatch.setenv("MODELS_DIR", str(tmp_path))
     (tmp_path / "msd-musicnn-1.pb").write_bytes(b"partial download")
-    assert main._init_essentia_models() is False
+    assert fingerprint.load() is False
 
 
 def test_analyze_test_route_is_gone(client):
@@ -107,7 +112,7 @@ def test_analyzes_a_downloaded_preview_and_removes_it(client, monkeypatch, tmp_p
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["source"] == "analyzed"
-    assert body["analyzer_version"] == main.ANALYZER_VERSION
+    assert body["analyzer_version"] == main.analyzer_version()
     assert 5.5 < body["duration"] < 6.5
     assert not path.exists()
 

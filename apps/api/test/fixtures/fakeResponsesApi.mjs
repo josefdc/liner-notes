@@ -2,7 +2,7 @@
 // the network. With FAKE_PROVIDER=answer, requests to the fake endpoint (https://llm.invalid/)
 // get a Responses API answer `{"ok":true}`; every other request, and every request without
 // FAKE_PROVIDER=answer, is refused and reported on stderr as NETWORK-ATTEMPT.
-globalThis.fetch = async (input) => {
+globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   if (process.env.FAKE_PROVIDER === "answer" && url.startsWith("https://llm.invalid/")) {
     return Response.json({
@@ -10,7 +10,8 @@ globalThis.fetch = async (input) => {
       object: "response",
       created_at: 1760000000,
       status: "completed",
-      model: "fake",
+      // The provider names the model that answered: the requested deployment's.
+      model: JSON.parse(typeof init?.body === "string" ? init.body : "{}").model ?? "unknown",
       output: [
         {
           type: "message",

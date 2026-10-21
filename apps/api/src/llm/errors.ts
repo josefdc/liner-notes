@@ -29,6 +29,8 @@ export type LlmErrorKind =
   | "network"
   /** 400 because the input is longer than the model's context window. */
   | "context_overflow"
+  /** 400 because the content filter rejected the prompt. */
+  | "content_filtered"
   /** Any other provider error; `status` holds the HTTP status when there was one. */
   | "provider"
   /** The provider answered `status: "failed"`. */

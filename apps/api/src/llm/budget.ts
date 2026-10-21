@@ -18,8 +18,8 @@
  *                  Plain `eval` may spend the floor too, but has no sub-cap: only the total and
  *                  daily caps limit it. Prefer a sub-purpose.
  *
- * A call is refused (LlmError spend_log_unavailable) when the log is unset, missing (unless
- * `init`), cannot be read or written, or holds a malformed line. The log is named by its real
+ * A call is refused (LlmError spend_log_unavailable) when the log is unset, missing, cannot be
+ * read or written, or holds a malformed line. The log is named by its real
  * path, so a symlink to it shares its lock.
  */
 
@@ -34,13 +34,15 @@ import {
   type LlmTier,
 } from "../config/settings.js";
 import { LlmError } from "./errors.js";
-import { LockTimeoutError, withLock } from "./fileLock.js";
+import { LockAbortedError, LockTimeoutError, withLock } from "./fileLock.js";
 import {
   appendLine,
   checkAccess,
   createSpendLog,
   needsNewLine,
   readSpendLog,
+  repairTornTail,
+  type TailRepair,
   type SpendLine,
   SpendLogError,
   type SpendTotals,
@@ -121,14 +123,14 @@ export interface Settlement {
   status: string;
   /** True when the outcome is unknown and the worst case is kept. */
   estimated: boolean;
+  /** The multiplier applied, when it differs from the reservation's (an unexpected model). */
+  multiplier?: number;
 }
 
 export interface SpendGuardOptions {
   /** The spend log path; null refuses every call. */
   logPath: string | null;
   caps: BudgetSettings;
-  /** Create the log, empty, when it does not exist (LLM_SPEND_LOG_INIT=1). */
-  init?: boolean;
   now?: () => Date;
   lockWaitMs?: number;
   /** Wait before the one retry of a failed settle (default 200 ms). */
@@ -144,6 +146,12 @@ function unavailable(error: unknown): LlmError {
         ? `LLM_SPEND_LOG is locked by another process for too long (${error.lockPath})`
         : `LLM_SPEND_LOG cannot be used (${(error as NodeJS.ErrnoException)?.code ?? "error"})`;
   return new LlmError("spend_log_unavailable", `${detail}; the call was refused`);
+}
+
+function lockError(error: unknown, callSite: string): LlmError {
+  return error instanceof LockAbortedError
+    ? new LlmError("aborted", `${callSite}: aborted by the caller`)
+    : unavailable(error);
 }
 
 /**
@@ -185,20 +193,25 @@ export class SpendGuard {
     return this.options.logPath;
   }
 
-  private async locked<T>(fn: (path: string) => Promise<T>): Promise<T> {
+  private async locked<T>(
+    fn: (path: string) => Promise<T>,
+    signal?: AbortSignal,
+    callSite = "spend log",
+  ): Promise<T> {
     try {
       const path = await resolveSpendLogPath(this.configuredPath());
-      return await withLock(
-        path,
-        async () => {
-          if (this.options.init) await createSpendLog(path);
-          return fn(path);
-        },
-        { waitMs: this.options.lockWaitMs },
-      );
+      return await withLock(path, () => fn(path), { waitMs: this.options.lockWaitMs, signal });
     } catch (error) {
-      throw unavailable(error);
+      throw lockError(error, callSite);
     }
+  }
+
+  /**
+   * Moves the log's last line to `<log>.torn` when it is not a valid record (a write torn by a
+   * power loss). Run by hand only (smoke:llm --repair-tail); never called by invoke.
+   */
+  repairTail(): Promise<TailRepair> {
+    return this.locked((path) => repairTornTail(path));
   }
 
   /** Creates the log, empty, if it does not exist; true when it was created. */
@@ -219,43 +232,34 @@ export class SpendGuard {
     });
   }
 
-  /** Reserves the call's worst case, or throws LlmError budget_exceeded / spend_log_unavailable. */
-  reserve(request: ReservationRequest): Promise<Reservation> {
-    return this.locked(async (path) => {
-      const { lines, unterminated } = await readSpendLog(path);
-      const totals = summarise(lines, this.now());
-      const violation = capViolation(totals, request.purpose, request.usdEst, this.options.caps);
-      if (violation) {
-        throw new LlmError(
-          "budget_exceeded",
-          `${request.callSite}: ${violation}; the call was refused`,
-        );
-      }
-      const reservation: Reservation = { id: randomUUID(), ts: this.now().toISOString(), request };
-      try {
-        await appendLine(path, this.line("reserve", reservation), unterminated);
-      } catch (error) {
-        // The call is refused. If part of the line reached the file, release it explicitly so
-        // a reservation for a call that never ran does not stay counted.
-        if (error instanceof SpendLogError && error.written) {
-          await appendLine(
-            path,
-            this.line("settle", reservation, {
-              inputTokens: 0,
-              outputTokens: 0,
-              reasoningTokens: null,
-              usdEst: 0,
-              latencyMs: 0,
-              status: "error:reserve_not_written",
-              estimated: false,
-            }),
-            true,
-          ).catch(() => {});
+  /**
+   * Reserves the call's worst case, or throws LlmError budget_exceeded / spend_log_unavailable,
+   * or aborted when `signal` aborts while waiting for the lock.
+   */
+  reserve(request: ReservationRequest, signal?: AbortSignal): Promise<Reservation> {
+    return this.locked(
+      async (path) => {
+        const { lines, unterminated } = await readSpendLog(path);
+        const totals = summarise(lines, this.now());
+        const violation = capViolation(totals, request.purpose, request.usdEst, this.options.caps);
+        if (violation) {
+          throw new LlmError(
+            "budget_exceeded",
+            `${request.callSite}: ${violation}; the call was refused`,
+          );
         }
-        throw error;
-      }
-      return reservation;
-    });
+        const reservation: Reservation = {
+          id: randomUUID(),
+          ts: this.now().toISOString(),
+          request,
+        };
+        // A write that fails is undone (appendLine); the call is refused.
+        await appendLine(path, this.line("reserve", reservation), unterminated);
+        return reservation;
+      },
+      signal,
+      request.callSite,
+    );
   }
 
   /**
@@ -300,7 +304,7 @@ export class SpendGuard {
     base.tier = request.tier;
     base.callSite = request.callSite;
     base.runId = request.runId;
-    base.multiplier = request.multiplier;
+    base.multiplier = settlement?.multiplier ?? request.multiplier;
     if (settlement) {
       base.reasoning = settlement.reasoningTokens;
       base.latency_ms = settlement.latencyMs;

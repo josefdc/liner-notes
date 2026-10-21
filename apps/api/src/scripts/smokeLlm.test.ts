@@ -41,16 +41,19 @@ function pinnedEnv(overrides: Record<string, string>): Record<string, string> {
     AZURE_OPENAI_ENDPOINT: "",
     AZURE_OPENAI_API_VERSION: "",
     AZURE_OPENAI_DEPLOYMENT_PRO: "",
-    AZURE_OPENAI_DEPLOYMENT_FAST: "gpt-5.6-terra",
+    AZURE_OPENAI_DEPLOYMENT_FAST: "gpt-6-luna",
     AZURE_OPENAI_DEPLOYMENT_MAIN: "gpt-6-luna",
     AZURE_OPENAI_DEPLOYMENT_RESEARCH: "gpt-6-sol",
     AZURE_OPENAI_DEPLOYMENT_JUDGE: "gpt-6-sol",
     LLM_CASSETTE: "off",
     LLM_CASSETTE_DIR: join(dir, "cassettes"),
     LLM_SPEND_LOG: join(dir, "spend.jsonl"),
-    LLM_SPEND_LOG_INIT: "",
     LANGSMITH_TRACING: "",
     LANGCHAIN_TRACING_V2: "",
+    LANGCHAIN_TRACING: "",
+    LANGSMITH_TRACING_V2: "",
+    OPENAI_LOG: "",
+    OPENAI_CUSTOM_HEADERS: "",
     LLM_ALLOW_TRACING: "",
     BUDGET_TOTAL_USD: "25",
     BUDGET_DAILY_USD: "13.5",
@@ -143,13 +146,36 @@ describe("smoke:llm", () => {
     expect(again.stdout).toContain("spend log already exists");
   }, 60_000);
 
+  it("moves a torn last line aside with --repair-tail, and makes no call", async () => {
+    const torn = '{"ts":"2026-10-21T00:00:00Z","deployment":"x","in":1,"ou';
+    writeFileSync(join(dir, "spend.jsonl"), torn);
+    const refused = await smoke({ FAKE_PROVIDER: "answer" });
+    expect(refused.code).not.toBe(0);
+    expect(refused.stderr).toContain("--repair-tail");
+    const run = await smoke({ FAKE_PROVIDER: "answer" }, ["--repair-tail"]);
+    expect(run.code, run.stderr).toBe(0);
+    expect(run.stdout).toContain(`moved the last line (${Buffer.byteLength(torn)} bytes)`);
+    expect(run.stdout).not.toMatch(/^fast/m);
+    expect(readFileSync(join(dir, "spend.jsonl"), "utf8")).toBe("");
+    expect(readFileSync(join(dir, "spend.jsonl.torn"), "utf8")).toContain(torn);
+  }, 60_000);
+
+  it("refuses live calls while OPENAI_CUSTOM_HEADERS is set", async () => {
+    writeFileSync(join(dir, "spend.jsonl"), "");
+    const run = await smoke({ FAKE_PROVIDER: "answer", OPENAI_CUSTOM_HEADERS: "X-Route: other" });
+    expect(run.code).not.toBe(0);
+    expect(run.stderr).toContain("OPENAI_CUSTOM_HEADERS");
+    expect(run.stderr).not.toContain("X-Route");
+    expect(run.stderr).not.toContain("NETWORK-ATTEMPT");
+  }, 60_000);
+
   it("makes one strict-schema call per tier and records each in the spend log", async () => {
     writeFileSync(join(dir, "spend.jsonl"), "");
     const run = await smoke({ FAKE_PROVIDER: "answer" });
     expect(run.code, run.stderr).toBe(0);
     const tierLines = run.stdout.split("\n").filter((l) => /^(fast|main|research|judge)\s/.test(l));
     expect(tierLines.map((l) => l.split(/\s+/).slice(0, 3))).toEqual([
-      ["fast", "gpt-5.6-terra", "ok"],
+      ["fast", "gpt-6-luna", "ok"],
       ["main", "gpt-6-luna", "ok"],
       ["research", "gpt-6-sol", "ok"],
       ["judge", "gpt-6-sol", "ok"],
@@ -177,7 +203,7 @@ describe("smoke:llm", () => {
     // Without FAKE_PROVIDER every request is refused by the fake network.
     const run = await smoke({ LLM_TIMEOUT_MS: "2000" });
     expect(run.code).toBe(1);
-    expect(run.stdout).toMatch(/^fast\s+gpt-5\.6-terra\s+failed\s+network/m);
+    expect(run.stdout).toMatch(/^fast\s+gpt-6-luna\s+failed\s+network/m);
     expectNothingSecret(run.stdout + run.stderr);
   }, 60_000);
 });

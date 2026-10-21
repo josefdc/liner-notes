@@ -104,5 +104,6 @@ export function costUsd(price: AppliedPrice, inputTokens: number, outputTokens: 
     price.multiplier;
   // Rounded up to a micro-dollar, which keeps lines short; the tolerance stops float noise
   // (0.075 computed as 0.07500000000000001) from adding a micro-dollar.
-  return Math.ceil(usd * 1_000_000 - 1e-6) / 1_000_000;
+  // Math.max also turns a -0 (from a zero cost) into 0.
+  return Math.max(0, Math.ceil(usd * 1_000_000 - 1e-6) / 1_000_000);
 }

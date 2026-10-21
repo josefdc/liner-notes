@@ -7,8 +7,12 @@
  * log (LLM_SPEND_LOG) is unset, missing, unreadable or unwritable. Each call has purpose `dev`,
  * passes the budget guard and is recorded in the spend log like any other.
  *
- * `npm run smoke:llm -w apps/api -- --init` only creates the spend log, empty, when it does not
- * exist (a missing log is otherwise refused), prints its totals and exits without any call.
+ * Spend-log maintenance, no model call (each needs only LLM_SPEND_LOG):
+ *   -- --init         creates the spend log, empty, when it does not exist (a missing log is
+ *                     otherwise refused) and prints its totals.
+ *   -- --repair-tail  when the log's last line is not a valid record (a write torn by a power
+ *                     loss), prints its length in bytes and moves that one line to
+ *                     `<log>.torn`. Never automatic; earlier malformed lines are left alone.
  *
  * Prints per tier only: status, latency, tokens and estimated USD, plus the one schema field.
  * Never the key, the endpoint or any other response text. Exits 1 when any call fails.
@@ -31,33 +35,49 @@ function refuse(reason: string): never {
 }
 
 const config = settings.llm;
+const args = process.argv.slice(2);
+const maintenance = args.includes("--init")
+  ? "init"
+  : args.includes("--repair-tail")
+    ? "repair"
+    : null;
+
+if (config.spendLog === null) {
+  refuse("LLM_SPEND_LOG is not set; live model calls are refused until it names the spend log");
+}
+const guard = new SpendGuard({ logPath: config.spendLog, caps: config.budget });
+
+if (maintenance) {
+  try {
+    if (maintenance === "init") {
+      const created = await guard.init();
+      console.log(
+        `smoke:llm: spend log ${created ? "created" : "already exists"}: ${config.spendLog}`,
+      );
+    } else {
+      const repair = await guard.repairTail();
+      console.log(
+        repair.moved
+          ? `smoke:llm: moved the last line (${repair.bytes} bytes), not a valid record, to ${config.spendLog}.torn`
+          : "smoke:llm: the last line is a valid record (or the log is empty); nothing moved",
+      );
+    }
+  } catch (error) {
+    refuse(error instanceof Error ? error.message : String(error));
+  }
+}
 
 try {
   assertProviderConfigured(config);
 } catch (error) {
-  refuse(error instanceof Error ? error.message : String(error));
+  if (!maintenance) refuse(error instanceof Error ? error.message : String(error));
 }
-if (config.cassette === "replay") {
+if (!maintenance && config.cassette === "replay") {
   refuse("LLM_CASSETTE=replay; smoke:llm checks the live provider, so unset LLM_CASSETTE");
 }
-if (!isLiveProvider(config)) refuse("no live provider is configured");
-if (config.spendLog === null) {
-  refuse("LLM_SPEND_LOG is not set; live model calls are refused until it names the spend log");
-}
+if (!maintenance && !isLiveProvider(config)) refuse("no live provider is configured");
 
-const guard = new SpendGuard({
-  logPath: config.spendLog,
-  caps: config.budget,
-  init: config.spendLogInit,
-});
-const initOnly = process.argv.slice(2).includes("--init");
 try {
-  if (initOnly) {
-    const created = await guard.init();
-    console.log(
-      `smoke:llm: spend log ${created ? "created" : "already exists"}: ${config.spendLog}`,
-    );
-  }
   const totals = await guard.preflight();
   console.log(
     `smoke:llm: spend log ok (${config.spendLog}, ${totals.lines} lines), ` +
@@ -67,7 +87,7 @@ try {
 } catch (error) {
   refuse(error instanceof Error ? error.message : String(error));
 }
-if (initOnly) process.exit(0);
+if (maintenance) process.exit(0);
 
 const llm = createLlm({ settings: config });
 const runId = `smoke-${new Date().toISOString()}`;

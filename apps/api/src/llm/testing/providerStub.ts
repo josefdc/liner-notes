@@ -10,16 +10,12 @@ import { type LlmSettings, readLlmSettings } from "../../config/settings.js";
 export const FAKE_API_KEY = "test-fake-azure-key-not-a-secret-0000";
 export const FAKE_BASE_URL = "https://llm.invalid/openai/v1/";
 
-/**
- * LLM settings from `env`, on top of a fake live Azure configuration. The spend log is created
- * on first use (LLM_SPEND_LOG_INIT=1) unless `env` says otherwise.
- */
+/** LLM settings from `env`, on top of a fake live Azure configuration. */
 export function testSettings(env: NodeJS.ProcessEnv = {}): LlmSettings {
   const { settings, errors } = readLlmSettings({
     AZURE_OPENAI_API_KEY: FAKE_API_KEY,
     AZURE_OPENAI_BASE_URL: FAKE_BASE_URL,
     LLM_CASSETTE: "off",
-    LLM_SPEND_LOG_INIT: "1",
     ...env,
   });
   if (errors.length > 0) throw new Error(errors.join("; "));
@@ -32,8 +28,14 @@ export interface StubUsage {
   reasoning?: number;
 }
 
-/** A Responses API body whose output text is `output` serialised. */
-export function responseBody(output: unknown, usage: StubUsage | null, model = "gpt-6-sol") {
+/** A model name that providerFetch replaces with the requested model, as the provider does. */
+export const REQUESTED_MODEL = "(requested model)";
+
+/**
+ * A Responses API body whose output text is `output` serialised. Its `model` is the requested
+ * one unless `model` names another (to test an answer from an unexpected model).
+ */
+export function responseBody(output: unknown, usage: StubUsage | null, model = REQUESTED_MODEL) {
   const text = typeof output === "string" ? output : JSON.stringify(output);
   return {
     id: "resp_test",
@@ -89,7 +91,17 @@ export function providerFetch(route: ProviderRoute) {
       signal: init?.signal ?? undefined,
     };
     calls.push(call);
-    return route(call, calls.length - 1);
+    const response = await route(call, calls.length - 1);
+    if (!response.headers.get("content-type")?.includes("json")) return response;
+    const body = (await response
+      .clone()
+      .json()
+      .catch(() => null)) as { model?: unknown } | null;
+    if (body?.model !== REQUESTED_MODEL) return response;
+    return Response.json(
+      { ...body, model: call.body.model },
+      { status: response.status, headers: response.headers },
+    );
   }) as typeof fetch;
   return { fetch: fetchImpl, calls };
 }

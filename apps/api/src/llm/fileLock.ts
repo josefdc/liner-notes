@@ -15,10 +15,14 @@
  * before a waiter gives up. The guarded sections are short (read a file, append a line).
  *
  * Breaking: holding the break lock, the breaker renames the stale lock to a unique name and
- * checks that what it renamed is the lock it judged stale (same inode and token). If it is not,
+ * checks that what it renamed is the lock it judged stale (same inode, mtime, size and token).
+ * If it is not,
  * because another process broke it and took a fresh lock meanwhile, it links the file back. A
  * break lock is itself broken only under the same rules. Release removes the lock only while it
  * still holds this holder's token.
+ *
+ * The guarded file must be reached through one inode: symlinks are resolved by the caller, hard
+ * links to the spend log are not supported (each name would get its own lock).
  *
  * Remaining window: a breaker that renames a live lock while yet another process creates a new
  * lock before the rename is undone leaves two holders. That needs a crashed holder plus three
@@ -35,6 +39,15 @@ export interface LockOptions {
   waitMs?: number;
   /** Age after which a lock is broken whoever holds it (default 30 s). */
   staleMs?: number;
+  /** Stops waiting (LockAbortedError) when it aborts. */
+  signal?: AbortSignal;
+}
+
+export class LockAbortedError extends Error {
+  override readonly name = "LockAbortedError";
+  constructor(readonly lockPath: string) {
+    super(`stopped waiting for lock ${lockPath}: aborted`);
+  }
 }
 
 export class LockTimeoutError extends Error {
@@ -44,7 +57,7 @@ export class LockTimeoutError extends Error {
   }
 }
 
-interface LockOwner {
+export interface LockOwner {
   pid: number;
   host: string;
   pidns: string | null;
@@ -109,9 +122,11 @@ async function createExclusive(path: string, content: string): Promise<boolean> 
   return true;
 }
 
-interface Seen {
+export interface Seen {
   owner: LockOwner | null;
   ino: number;
+  mtimeMs: number;
+  size: number;
 }
 
 /** The lock as seen now when it is provably stale; null when it is held (or gone). */
@@ -123,15 +138,20 @@ async function staleLock(path: string, staleMs: number): Promise<Seen | null> {
     return null;
   }
   const owner = await readOwner(path);
-  if (Date.now() - info.mtimeMs > staleMs) return { owner, ino: info.ino };
+  const seen = { owner, ino: info.ino, mtimeMs: info.mtimeMs, size: info.size };
+  if (Date.now() - info.mtimeMs > staleMs) return seen;
   // Being written, or a crash leftover not yet old enough: held.
   if (owner === null) return null;
   const sameNamespace = owner.host === hostname() && (owner.pidns ?? null) === PID_NAMESPACE;
-  return sameNamespace && !processAlive(owner.pid) ? { owner, ino: info.ino } : null;
+  return sameNamespace && !processAlive(owner.pid) ? seen : null;
 }
 
-/** Moves `path` aside if it is still the file judged stale, and puts it back if it is not. */
-async function removeIfSame(path: string, seen: Seen): Promise<void> {
+/**
+ * Moves `path` aside if it is still the file judged stale, and puts it back if it is not.
+ * Inode numbers are reused, and an empty lock has no token, so mtime and size are compared too.
+ * Exported for tests.
+ */
+export async function removeIfSame(path: string, seen: Seen): Promise<void> {
   const aside = `${path}.stale.${randomUUID()}`;
   try {
     await rename(path, aside);
@@ -139,7 +159,11 @@ async function removeIfSame(path: string, seen: Seen): Promise<void> {
     return; // already gone
   }
   const [info, owner] = await Promise.all([stat(aside).catch(() => null), readOwner(aside)]);
-  const same = info?.ino === seen.ino && (owner?.token ?? null) === (seen.owner?.token ?? null);
+  const same =
+    info?.ino === seen.ino &&
+    info.mtimeMs === seen.mtimeMs &&
+    info.size === seen.size &&
+    (owner?.token ?? null) === (seen.owner?.token ?? null);
   if (!same) {
     // A fresh lock was moved: put it back, unless someone has taken the name meanwhile.
     await link(aside, path).catch(() => {});
@@ -174,6 +198,7 @@ export async function acquireLock(
   const token = randomUUID();
   const deadline = Date.now() + waitMs;
   for (;;) {
+    if (options.signal?.aborted) throw new LockAbortedError(lockPath);
     if (await createExclusive(lockPath, JSON.stringify(ownerRecord(token)))) {
       return async () => {
         const current = await readOwner(lockPath);
@@ -185,6 +210,7 @@ export async function acquireLock(
       await breakStale(lockPath, stale, staleMs);
       continue;
     }
+    if (options.signal?.aborted) throw new LockAbortedError(lockPath);
     if (Date.now() > deadline) throw new LockTimeoutError(lockPath);
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }

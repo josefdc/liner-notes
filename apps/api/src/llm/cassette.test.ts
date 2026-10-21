@@ -28,6 +28,7 @@ let dir: string;
 let globalFetch: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "llm-cassette-"));
+  writeFileSync(join(dir, "spend.jsonl"), "");
   globalFetch = vi.fn(() => {
     throw new Error("network denied");
   });
@@ -63,7 +64,9 @@ describe("replay", () => {
     expect(error.message).toContain("LLM_CASSETTE=record");
     expect(net.calls).toHaveLength(0);
     expect(globalFetch).not.toHaveBeenCalled();
-    expect(readdirSync(dir)).toEqual([]);
+    // Nothing recorded, nothing spent.
+    expect(readdirSync(dir)).toEqual(["spend.jsonl"]);
+    expect(readFileSync(join(dir, "spend.jsonl"), "utf8")).toBe("");
   });
 
   it("needs neither credentials nor a spend log", async () => {
@@ -147,6 +150,34 @@ describe("replay", () => {
     const replayer = createLlm({ settings: settings("replay"), recordUsage: () => {} });
     const error = await replayer.invoke("composer", "main", "hi", Schema, OPTIONS).catch((e) => e);
     expect(isLlmError(error, "invalid_output")).toBe(true);
+  });
+});
+
+describe("record and replay with the same deployment map", () => {
+  it("replays, under the default map, answers recorded with the resource's FAST and PRO settings", async () => {
+    const net = answer({ summary: "s", count: 1 });
+    const recorder = createLlm({
+      settings: settings("record", {
+        AZURE_OPENAI_DEPLOYMENT_FAST: "gpt-6-luna",
+        AZURE_OPENAI_DEPLOYMENT_PRO: "gpt-6-sol",
+      }),
+      fetch: net.fetch,
+      recordUsage: () => {},
+    });
+    const replayer = createLlm({ settings: settings("replay"), recordUsage: () => {} });
+    for (const tier of ["fast", "main", "research", "judge"] as const) {
+      await recorder.invoke("scout", tier, "classify", Schema, OPTIONS);
+      const replayed = await replayer.invoke("scout", tier, "classify", Schema, OPTIONS);
+      expect(replayed.mode).toBe("replay");
+    }
+  });
+
+  it("pins the test process to the default deployments", () => {
+    expect(process.env.AZURE_OPENAI_DEPLOYMENT_FAST).toBe("gpt-6-luna");
+    expect(process.env.AZURE_OPENAI_DEPLOYMENT_MAIN).toBe("gpt-6-luna");
+    expect(process.env.AZURE_OPENAI_DEPLOYMENT_RESEARCH).toBe("gpt-6-sol");
+    expect(process.env.AZURE_OPENAI_DEPLOYMENT_JUDGE).toBe("gpt-6-sol");
+    expect(process.env.AZURE_OPENAI_DEPLOYMENT_PRO).toBeUndefined();
   });
 });
 

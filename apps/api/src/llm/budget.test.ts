@@ -5,8 +5,8 @@
  */
 
 import {
-  appendFileSync,
   chmodSync,
+  constants,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -14,6 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -29,7 +30,15 @@ import {
 import { acquireLock, withLock } from "./fileLock.js";
 import { isLlmError } from "./errors.js";
 import { createLlm } from "./invoke.js";
-import { parseSpendLog, readSpendLog, type SpendTotals, summarise } from "./spendLog.js";
+import {
+  type AppendHandle,
+  appendLine,
+  parseSpendLog,
+  readSpendLog,
+  SpendLogError,
+  type SpendTotals,
+  summarise,
+} from "./spendLog.js";
 import { answer, testSettings } from "./testing/providerStub.js";
 import { runWorker } from "./testing/runWorker.js";
 
@@ -173,7 +182,8 @@ describe("refusals before any request", () => {
 describe("SpendGuard", () => {
   it("writes a reserve line and a settle line, base fields first", async () => {
     const log = join(dir, "spend.jsonl");
-    const guard = new SpendGuard({ logPath: log, caps: CAPS, init: true });
+    writeFileSync(log, "");
+    const guard = new SpendGuard({ logPath: log, caps: CAPS });
     const reservation = await guard.reserve({
       purpose: "eval:golden",
       tier: "main",
@@ -275,6 +285,7 @@ describe("two processes, two databases, one spend log", () => {
 
   it("refuses the second process once the shared total passes the cap", async () => {
     const log = join(dir, "spend.jsonl");
+    writeFileSync(log, "");
     const first = await runWorker(callEnv(log, join(dir, "a.db"), 2));
     expect(first.code, first.stderr).toBe(0);
     expect(first.results.map((r) => r.ok)).toEqual([true, true]);
@@ -296,6 +307,7 @@ describe("two processes, two databases, one spend log", () => {
   }, 60_000);
 
   it("lets the same process make all its calls against a spend log of its own", async () => {
+    writeFileSync(join(dir, "own.jsonl"), "");
     const alone = await runWorker(callEnv(join(dir, "own.jsonl"), join(dir, "c.db"), 3));
     expect(alone.code, alone.stderr).toBe(0);
     expect(alone.results.map((r) => r.ok)).toEqual([true, true, true]);
@@ -392,11 +404,9 @@ describe("a spend log that does not exist", () => {
     expect(isLlmError(preflight, "spend_log_unavailable")).toBe(true);
     expect(existsSync(join(dir, "spend.jsonl.bak"))).toBe(false);
 
-    const created = new SpendGuard({
-      logPath: join(dir, "new.jsonl"),
-      caps: SMALL_CAPS,
-      init: true,
-    });
+    const created = new SpendGuard({ logPath: join(dir, "new.jsonl"), caps: SMALL_CAPS });
+    expect(await created.init()).toBe(true);
+    expect(await created.init()).toBe(false);
     await created.reserve(request(0.1));
     expect(parseSpendLog(readFileSync(join(dir, "new.jsonl"), "utf8"))).toHaveLength(1);
   });
@@ -405,10 +415,10 @@ describe("a spend log that does not exist", () => {
 describe("the daily cap across midnight (UTC)", () => {
   it("counts a call on the day it was reserved, even when it settles the next day", async () => {
     let now = new Date("2026-10-21T23:59:59.000Z");
+    writeFileSync(join(dir, "spend.jsonl"), "");
     const guard = new SpendGuard({
       logPath: join(dir, "spend.jsonl"),
       caps: { ...SMALL_CAPS, totalUsd: 100, dailyUsd: 1 },
-      init: true,
       now: () => now,
     });
     const first = await guard.reserve(request(0.9));
@@ -422,27 +432,60 @@ describe("the daily cap across midnight (UTC)", () => {
   });
 });
 
-describe("a torn last line", () => {
-  it("is moved aside, so calls go on and the next settle is not glued to it", async () => {
+describe("a malformed or torn last line", () => {
+  const valid = `${JSON.stringify({ ts: new Date().toISOString(), deployment: "x", in: 0, out: 0, usd_est: 0.4, unit: "dev" })}\n`;
+  const HAND_CAPS: BudgetSettings = { ...CAPS, totalUsd: 3.5, dailyUsd: 100, evalFloorUsd: 0 };
+
+  it.each([
+    [
+      "missing closing brace",
+      '{"ts":"2026-10-21T00:00:00Z","deployment":"azure-portal","in":0,"out":0,"usd_est":3,"unit":"dev"',
+    ],
+    [
+      "amount as a string",
+      '{"ts":"2026-10-21T00:00:00Z","deployment":"azure-portal","in":0,"out":0,"usd_est":"3","unit":"dev"}',
+    ],
+    [
+      "NaN from a script",
+      '{"ts":"2026-10-21T00:00:00Z","deployment":"azure-portal","in":0,"out":0,"usd_est":NaN,"unit":"dev"}',
+    ],
+  ])("refuses (%s) with or without a newline, and never cuts it", async (_name, hand) => {
     const log = join(dir, "spend.jsonl");
-    const guard = new SpendGuard({
-      logPath: log,
-      caps: { ...SMALL_CAPS, totalUsd: 100, dailyUsd: 100 },
-      init: true,
-    });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const reservation = await guard.reserve(request(0.1));
+    for (const text of [valid + hand, `${valid + hand}\n`]) {
+      writeFileSync(log, text);
+      const guard = new SpendGuard({ logPath: log, caps: HAND_CAPS });
+      const error = await guard.reserve(request(0.5)).catch((e) => e);
+      expect(isLlmError(error, "spend_log_unavailable")).toBe(true);
+      expect(error.message).toContain("line 2");
+      expect(error.message).toContain("--repair-tail");
+      expect(readFileSync(log, "utf8")).toBe(text);
+      expect(existsSync(`${log}.torn`)).toBe(false);
+    }
+  });
+
+  it("moves only a last line that is not a record, by hand (repairTail), reporting its bytes", async () => {
+    const log = join(dir, "spend.jsonl");
     const torn = '{"ts":"2026-10-21T00:00:00Z","deployment":"x","in":1,"ou';
-    appendFileSync(log, torn);
-    await guard.settle(reservation, settled(0.01));
-    await guard.reserve(request(0.1));
-    const text = readFileSync(log, "utf8");
-    const lines = parseSpendLog(text);
-    expect(lines.map((l) => l.kind)).toEqual(["reserve", "settle", "reserve"]);
-    expect(text).not.toContain(torn);
+    writeFileSync(log, valid + torn);
+    const guard = new SpendGuard({ logPath: log, caps: CAPS });
+    expect(await guard.repairTail()).toEqual({ moved: true, bytes: Buffer.byteLength(torn) });
+    expect(readFileSync(log, "utf8")).toBe(valid);
     expect(readFileSync(`${log}.torn`, "utf8")).toContain(torn);
-    expect(warn.mock.calls.flat().join(" ")).toContain("torn");
-    warn.mockRestore();
+    await guard.reserve(request(0.1));
+    // A valid last line, or an empty log, is left alone.
+    expect(await guard.repairTail()).toEqual({ moved: false, bytes: 0 });
+  });
+
+  it("leaves a malformed line before a valid last line for a human", async () => {
+    const log = join(dir, "spend.jsonl");
+    const text = `{"ts":"2026-10-2\n${valid}`;
+    writeFileSync(log, text);
+    const guard = new SpendGuard({ logPath: log, caps: CAPS });
+    expect(await guard.repairTail()).toEqual({ moved: false, bytes: 0 });
+    expect(readFileSync(log, "utf8")).toBe(text);
+    const error = await guard.reserve(request(0.01)).catch((e) => e);
+    expect(error.message).toContain("line 1");
+    expect(error.message).toContain("by hand");
   });
 
   it("keeps a valid last line without a newline (written by hand) and starts a new line", async () => {
@@ -452,25 +495,66 @@ describe("a torn last line", () => {
     await new SpendGuard({ logPath: log, caps: CAPS }).reserve(request(0.01));
     expect(parseSpendLog(readFileSync(log, "utf8"))).toHaveLength(2);
   });
+});
 
-  it("still refuses a malformed line inside the log", async () => {
+describe("a write cut short", () => {
+  /** A file handle whose first write lands only half of the line, as on a full disk. */
+  const halfWrite =
+    (onTruncate: "works" | "fails" = "works") =>
+    async (path: string): Promise<AppendHandle> => {
+      const real = await open(path, constants.O_WRONLY | constants.O_APPEND);
+      return {
+        stat: () => real.stat(),
+        write: (buffer, offset, length) => real.write(buffer, offset, Math.floor(length / 2)),
+        sync: () => real.sync(),
+        truncate: (length) =>
+          onTruncate === "works" ? real.truncate(length) : Promise.reject(new Error("EIO")),
+        close: () => real.close(),
+      };
+    };
+
+  it("is undone: the log is as before and later calls go on", async () => {
     const log = join(dir, "spend.jsonl");
-    writeFileSync(log, '{"ts":"2026-10-2\n{"ts":"2026-10-21T00:00:00Z","usd_est":0.1}\n');
-    const error = await new SpendGuard({ logPath: log, caps: CAPS })
-      .reserve(request(0.01))
-      .catch((e) => e);
-    expect(isLlmError(error, "spend_log_unavailable")).toBe(true);
-    expect(error.message).toContain("line 1");
+    writeFileSync(log, valid());
+    const before = readFileSync(log, "utf8");
+    const error = await appendLine(log, line(0.1), false, halfWrite()).catch((e) => e);
+    expect(error).toBeInstanceOf(SpendLogError);
+    expect(error.message).toContain("partial line was removed");
+    expect(readFileSync(log, "utf8")).toBe(before);
+    await new SpendGuard({ logPath: log, caps: CAPS }).reserve(request(0.1));
+    expect(parseSpendLog(readFileSync(log, "utf8"))).toHaveLength(2);
   });
+
+  it("says so when it cannot be undone", async () => {
+    const log = join(dir, "spend.jsonl");
+    writeFileSync(log, valid());
+    const error = await appendLine(log, line(0.1), false, halfWrite("fails")).catch((e) => e);
+    expect(error.message).toContain("may end with a partial line");
+    expect(error.written).toBe(true);
+  });
+
+  function valid(): string {
+    return `${JSON.stringify({ ts: new Date().toISOString(), deployment: "x", in: 0, out: 0, usd_est: 0.4, unit: "dev" })}\n`;
+  }
+  function line(usd: number) {
+    return {
+      ts: new Date().toISOString(),
+      deployment: "x",
+      in: 0,
+      out: 0,
+      usd_est: usd,
+      unit: "dev",
+    };
+  }
 });
 
 describe("a settle that cannot get the lock at once", () => {
   it("is tried again", async () => {
     const log = join(dir, "spend.jsonl");
+    writeFileSync(log, "");
     const guard = new SpendGuard({
       logPath: log,
       caps: CAPS,
-      init: true,
       lockWaitMs: 50,
       settleRetryMs: 150,
     });

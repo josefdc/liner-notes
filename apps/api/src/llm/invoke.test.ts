@@ -3,7 +3,7 @@
  * per-run call cap, settlement and usage rows.
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
@@ -49,6 +49,7 @@ let log: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "llm-invoke-"));
   log = join(dir, "spend.jsonl");
+  writeFileSync(log, "");
   vi.stubGlobal("fetch", () => {
     throw new Error("network denied");
   });
@@ -172,7 +173,7 @@ describe("the request", () => {
     expect(
       net.calls.map((c) => [c.body.model, (c.body.reasoning as { effort: string }).effort]),
     ).toEqual([
-      ["gpt-5.6-terra", "low"],
+      ["gpt-6-luna", "low"],
       ["gpt-6-luna", "low"],
       ["gpt-6-sol", "medium"],
       ["my-judge", "medium"],
@@ -521,6 +522,40 @@ describe("what errors keep", () => {
       const dumped = inspect(error, { depth: 10 });
       expect(dumped).not.toContain(key);
       expect(dumped).not.toContain(host);
+    }
+  });
+});
+
+describe("one way to call a model", () => {
+  it("exports no chat model that would bypass the budget guard", async () => {
+    const factory = await import("./factory.js");
+    expect(Object.keys(factory)).not.toContain("createChatModel");
+    const pkg = JSON.parse(
+      readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+    ) as { dependencies: Record<string, string> };
+    expect(pkg.dependencies).not.toHaveProperty("@langchain/openai");
+  });
+
+  it("refuses live calls while OPENAI_CUSTOM_HEADERS is set", async () => {
+    const { llm, net } = setup(ok, { OPENAI_CUSTOM_HEADERS: "X-Route: other" });
+    const error = await llm.invoke("x", "fast", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "not_configured")).toBe(true);
+    expect(error.message).toContain("OPENAI_CUSTOM_HEADERS");
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("logs nothing from the client even when OPENAI_LOG asks for debug output", async () => {
+    vi.stubEnv("OPENAI_LOG", "debug");
+    const spies = (["log", "info", "debug", "warn", "error"] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    try {
+      const { llm } = setup(ok);
+      await llm.invoke("x", "fast", "hi", Schema, OPTIONS);
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      for (const spy of spies) spy.mockRestore();
     }
   });
 });

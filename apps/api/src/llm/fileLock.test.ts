@@ -1,9 +1,23 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { acquireLock, LockTimeoutError, PID_NAMESPACE, withLock } from "./fileLock.js";
+import {
+  acquireLock,
+  LockTimeoutError,
+  PID_NAMESPACE,
+  removeIfSame,
+  withLock,
+} from "./fileLock.js";
 
 let dir: string;
 let target: string;
@@ -145,5 +159,21 @@ describe("file lock", () => {
       ),
     );
     expect(overlap).toBe(false);
+  });
+
+  it("does not remove a lock that changed since it was judged stale (same inode, new content)", async () => {
+    const lock = `${target}.lock`;
+    writeFileSync(lock, "");
+    const info = statSync(lock);
+    const seen = { owner: null, ino: info.ino, mtimeMs: info.mtimeMs, size: info.size };
+    // The same inode now holds a lock being written (no token yet), as after inode reuse.
+    await new Promise((r) => setTimeout(r, 20));
+    writeFileSync(lock, "{");
+    await removeIfSame(lock, seen);
+    expect(readFileSync(lock, "utf8")).toBe("{");
+    // Unchanged, it is removed.
+    const now = statSync(lock);
+    await removeIfSame(lock, { owner: null, ino: now.ino, mtimeMs: now.mtimeMs, size: now.size });
+    expect(existsSync(lock)).toBe(false);
   });
 });

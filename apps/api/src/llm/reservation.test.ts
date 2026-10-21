@@ -35,6 +35,7 @@ let log: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "llm-reservation-"));
   log = join(dir, "spend.jsonl");
+  writeFileSync(log, "");
   vi.stubGlobal("fetch", () => {
     throw new Error("network denied");
   });
@@ -153,7 +154,7 @@ describe("a call killed mid-call", () => {
     expect(next.results).toMatchObject([{ ok: false, kind: "budget_exceeded" }]);
 
     // Without the dead call's reservation the same call fits.
-    rmSync(log);
+    writeFileSync(log, "");
     const control = await runWorker(env);
     expect(control.results).toMatchObject([{ ok: true }]);
   }, 60_000);

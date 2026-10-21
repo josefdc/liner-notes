@@ -5,13 +5,15 @@
  * aborts before the request.
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
+import { resolveSpendLogPath } from "./budget.js";
 import { isLlmError } from "./errors.js";
+import { acquireLock } from "./fileLock.js";
 import { createLlm, type InvokeOptions } from "./invoke.js";
 import { parseSpendLog, type SpendLine, summarise } from "./spendLog.js";
 import {
@@ -37,6 +39,7 @@ let log: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "llm-accounting-"));
   log = join(dir, "spend.jsonl");
+  writeFileSync(log, "");
   vi.stubGlobal("fetch", () => {
     throw new Error("network denied");
   });
@@ -101,10 +104,56 @@ describe("usage the provider did not report", () => {
     expectWorstCaseKept();
   });
 
-  it("settles a reported zero as zero", async () => {
-    const { llm } = setup(() => Response.json(responseBody({ ok: true }, { input: 0, output: 0 })));
-    await llm.invoke("x", "research", "hi", Schema, OPTIONS);
+  it("settles a consistent reported zero as zero, never -0", async () => {
+    // No text and no tokens: consistent, so it is what was billed.
+    const { llm, rows } = setup(() => Response.json(responseBody("", { input: 0, output: 0 })));
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "invalid_output")).toBe(true);
     expect(settles()).toMatchObject([{ usd_est: 0, estimated: false, in: 0, out: 0 }]);
+    expect(Object.is(settles()[0].usd_est, 0)).toBe(true);
+    expect(Object.is(rows[0].usdEst, 0)).toBe(true);
+  });
+
+  it("keeps the worst case for answer text reported with 0 output tokens", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { llm } = setup(() => Response.json(responseBody({ ok: true }, { input: 0, output: 0 })));
+    const result = await llm.invoke("x", "research", "hi", Schema, OPTIONS);
+    expect(result.usage).toMatchObject({ inputTokens: null, outputTokens: null });
+    expectWorstCaseKept();
+    expect(warn.mock.calls.flat().join(" ")).toContain("inconsistent");
+  });
+
+  it("keeps the worst case when reasoning tokens exceed output tokens", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { llm } = setup(() =>
+      Response.json(responseBody({ ok: true }, { input: 10, output: 5, reasoning: 15_000 })),
+    );
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS);
+    expectWorstCaseKept();
+  });
+
+  it("charges the fallback prices × 1.5 for an answer from a model outside the deployment's family", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { llm, rows } = setup(() =>
+      Response.json(responseBody({ ok: true }, { input: 1000, output: 1000 }, "gpt-6-sol")),
+    );
+    // main = gpt-6-luna (USD 0.11 / 0.55), answered by gpt-6-sol.
+    const result = await llm.invoke("x", "main", "hi", Schema, OPTIONS);
+    expect(result.usage.multiplier).toBe(1.5);
+    expect(result.usage.usdEst).toBe(0.075); // (1000 × 10 + 1000 × 40) / 1e6 × 1.5
+    expect(settles()).toMatchObject([{ usd_est: 0.075, multiplier: 1.5 }]);
+    expect(rows[0].priceMultiplier).toBe(1.5);
+    expect(warn.mock.calls.flat().join(" ")).toContain("outside the priced family");
+  });
+
+  it("accepts a dated model name of the deployment's family at its price", async () => {
+    const { llm } = setup(() =>
+      Response.json(
+        responseBody({ ok: true }, { input: 1000, output: 1000 }, "gpt-6-luna-2026-09-01"),
+      ),
+    );
+    const result = await llm.invoke("x", "main", "hi", Schema, OPTIONS);
+    expect(result.usage).toMatchObject({ multiplier: 1, usdEst: 0.00066 });
   });
 });
 
@@ -226,6 +275,27 @@ describe("answers that are not a usable result", () => {
   });
 });
 
+describe("a prompt the content filter rejects", () => {
+  it("is settled at its input bound only, estimated, and not retried", async () => {
+    const { llm, net } = setup(() =>
+      Response.json(
+        { error: { message: "filtered", type: "invalid_request_error", code: "content_filter" } },
+        { status: 400 },
+      ),
+    );
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error, "content_filtered")).toBe(true);
+    expect(net.calls).toHaveLength(1);
+    const [reserve] = reserves();
+    const [settle] = settles();
+    // gpt-6-sol input price: the reservation's input bound × USD 2.20 per 1M.
+    expect(settle).toMatchObject({ estimated: true, status: "error:content_filtered" });
+    expect(settle.usd_est).toBeCloseTo((reserve.in * 2.2) / 1e6, 6);
+    expect(settle.usd_est).toBeGreaterThan(0);
+    expect(settle.usd_est).toBeLessThan(reserve.usd_est);
+  });
+});
+
 describe("HTTP statuses", () => {
   it.each([400, 401, 403, 404])("settles a %i at zero: rejected before processing", async (s) => {
     const { llm } = setup(() => errorResponse(s));
@@ -281,7 +351,7 @@ describe("aborts", () => {
       .catch((e) => e);
     expect(isLlmError(error, "aborted")).toBe(true);
     expect(net.calls).toHaveLength(0);
-    expect(() => readFileSync(log, "utf8")).toThrow();
+    expect(readFileSync(log, "utf8")).toBe("");
   });
 
   it("leaves the queue at once when aborted while waiting for a slot, charging nothing", async () => {
@@ -383,6 +453,26 @@ describe("aborts", () => {
   });
 });
 
+describe("an abort while waiting for the spend log's lock", () => {
+  it("returns at once, sending and charging nothing", async () => {
+    const release = await acquireLock(await resolveSpendLogPath(log));
+    setTimeout(() => void release(), 1500);
+    const { llm, net } = setup(hang);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 50);
+    const started = performance.now();
+    const error = await llm
+      .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+      .catch((e) => e);
+    expect(isLlmError(error, "aborted")).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(net.calls).toHaveLength(0);
+    expect(llm.callsForRun("run-1")).toBe(0);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(readFileSync(log, "utf8")).toBe("");
+  });
+});
+
 describe("cost above the reservation", () => {
   it("is settled as reported and reported in a warning", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -420,6 +510,6 @@ describe("messages", () => {
       .catch((e) => e);
     expect(isLlmError(odd, "invalid_input")).toBe(true);
     expect(net.calls).toHaveLength(0);
-    expect(() => readFileSync(log, "utf8")).toThrow();
+    expect(readFileSync(log, "utf8")).toBe("");
   });
 });

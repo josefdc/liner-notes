@@ -47,7 +47,7 @@ export type LlmTier = (typeof LLM_TIERS)[number];
 
 /** Azure deployment per tier when AZURE_OPENAI_DEPLOYMENT_<TIER> is not set. */
 export const DEFAULT_DEPLOYMENTS: Readonly<Record<LlmTier, string>> = {
-  fast: "gpt-5.6-terra",
+  fast: "gpt-6-luna",
   main: "gpt-6-luna",
   research: "gpt-6-sol",
   judge: "gpt-6-sol",
@@ -108,15 +108,16 @@ export interface LlmSettings {
   /** The cross-process spend log (JSONL); null when not set. Absolute, `~` expanded. */
   spendLog: string | null;
   /**
-   * LLM_SPEND_LOG_INIT=1: create the spend log, empty, when it does not exist. Otherwise a
-   * missing log is refused, so a mistyped path cannot start a fresh budget at USD 0.
-   */
-  spendLogInit: boolean;
-  /**
-   * LangChain/LangSmith tracing is switched on in the environment (LANGSMITH_TRACING or
-   * LANGCHAIN_TRACING_V2), which would send prompts and answers to a third party.
+   * LangChain/LangSmith tracing is switched on in the environment (LANGSMITH_TRACING,
+   * LANGSMITH_TRACING_V2, LANGCHAIN_TRACING_V2 or LANGCHAIN_TRACING), which would send prompts
+   * and answers to a third party.
    */
   tracingRequested: boolean;
+  /**
+   * OPENAI_CUSTOM_HEADERS is set: the OpenAI client would add its headers to every request (a
+   * place for credentials or routing outside this layer's control). Live calls are refused.
+   */
+  customHeadersSet: boolean;
   /** LLM_ALLOW_TRACING=1: allow model calls while tracing is on. */
   allowTracing: boolean;
   budget: BudgetSettings;
@@ -127,6 +128,14 @@ export interface LlmSettings {
   /** Model calls in flight at once in one process. */
   concurrency: number;
 }
+
+/** Variables that switch LangChain/LangSmith tracing on. */
+export const TRACING_SWITCHES = [
+  "LANGSMITH_TRACING",
+  "LANGSMITH_TRACING_V2",
+  "LANGCHAIN_TRACING_V2",
+  "LANGCHAIN_TRACING",
+] as const;
 
 export const DEFAULT_LLM_TIMEOUT_MS = 90_000;
 export const DEFAULT_MAX_LLM_CALLS_PER_RUN = 12;
@@ -226,7 +235,7 @@ export function readAzureBaseUrl(env: NodeJS.ProcessEnv, errors: string[]): stri
 
 /**
  * Deployment per tier, first match wins:
- *   fast      AZURE_OPENAI_DEPLOYMENT_FAST, else gpt-5.6-terra
+ *   fast      AZURE_OPENAI_DEPLOYMENT_FAST, else gpt-6-luna
  *   main      AZURE_OPENAI_DEPLOYMENT_MAIN, else AZURE_OPENAI_DEPLOYMENT_FAST, else gpt-6-luna
  *   research  AZURE_OPENAI_DEPLOYMENT_RESEARCH, else AZURE_OPENAI_DEPLOYMENT_PRO, else gpt-6-sol
  *   judge     AZURE_OPENAI_DEPLOYMENT_JUDGE, else AZURE_OPENAI_DEPLOYMENT_PRO, else gpt-6-sol
@@ -342,10 +351,10 @@ export function readLlmSettings(env: NodeJS.ProcessEnv): {
     cassette: cassette ?? "off",
     cassetteDir,
     spendLog,
-    spendLogInit: env.LLM_SPEND_LOG_INIT?.trim() === "1",
-    tracingRequested: ["LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGCHAIN_TRACING"].some(
-      (name) => /^(1|true|yes|on)$/i.test(env[name]?.trim() ?? ""),
+    tracingRequested: TRACING_SWITCHES.some((name) =>
+      /^(1|true|yes|on)$/i.test(env[name]?.trim() ?? ""),
     ),
+    customHeadersSet: Boolean(env.OPENAI_CUSTOM_HEADERS?.trim()),
     allowTracing: env.LLM_ALLOW_TRACING?.trim() === "1",
     budget,
     timeoutMs: parseInteger(env, "LLM_TIMEOUT_MS", DEFAULT_LLM_TIMEOUT_MS, 1000, 600_000, errors),

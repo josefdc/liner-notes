@@ -167,7 +167,7 @@ describe("language model settings", () => {
       azureApiKey: null,
       azureBaseUrl: null,
       deployments: {
-        fast: "gpt-5.6-terra",
+        fast: "gpt-6-luna",
         main: "gpt-6-luna",
         research: "gpt-6-sol",
         judge: "gpt-6-sol",
@@ -281,7 +281,7 @@ describe("language model settings", () => {
     [
       "no deployment variables",
       {},
-      { fast: "gpt-5.6-terra", main: "gpt-6-luna", research: "gpt-6-sol", judge: "gpt-6-sol" },
+      { fast: "gpt-6-luna", main: "gpt-6-luna", research: "gpt-6-sol", judge: "gpt-6-sol" },
     ],
     [
       "FAST and PRO only",
@@ -296,7 +296,7 @@ describe("language model settings", () => {
     [
       "PRO only",
       { AZURE_OPENAI_DEPLOYMENT_PRO: "pro-x" },
-      { fast: "gpt-5.6-terra", main: "gpt-6-luna", research: "pro-x", judge: "pro-x" },
+      { fast: "gpt-6-luna", main: "gpt-6-luna", research: "pro-x", judge: "pro-x" },
     ],
     [
       "per-tier variables over FAST and PRO",
@@ -436,20 +436,25 @@ describe("language model settings", () => {
     expect(readSettings(KEYS)).toMatchObject({ warnings: [] });
   });
 
-  it("reads LLM_SPEND_LOG_INIT, the tracing switches and LLM_ALLOW_TRACING", () => {
+  it("reads the tracing switches, LLM_ALLOW_TRACING and OPENAI_CUSTOM_HEADERS", () => {
     expect(settingsOf(KEYS).llm).toMatchObject({
-      spendLogInit: false,
       tracingRequested: false,
       allowTracing: false,
+      customHeadersSet: false,
     });
+    for (const name of [
+      "LANGSMITH_TRACING",
+      "LANGSMITH_TRACING_V2",
+      "LANGCHAIN_TRACING_V2",
+      "LANGCHAIN_TRACING",
+    ]) {
+      expect(settingsOf({ ...KEYS, [name]: "true" }).llm.tracingRequested, name).toBe(true);
+    }
     expect(
-      settingsOf({
-        ...KEYS,
-        LLM_SPEND_LOG_INIT: "1",
-        LANGCHAIN_TRACING_V2: "true",
-        LLM_ALLOW_TRACING: "1",
-      }).llm,
-    ).toMatchObject({ spendLogInit: true, tracingRequested: true, allowTracing: true });
+      settingsOf({ ...KEYS, LLM_ALLOW_TRACING: "1", OPENAI_CUSTOM_HEADERS: "X-Route: a" }).llm,
+    ).toMatchObject({ allowTracing: true, customHeadersSet: true });
+    // LLM_SPEND_LOG_INIT is gone: only smoke:llm --init creates a spend log.
+    expect(settingsOf({ ...KEYS, LLM_SPEND_LOG_INIT: "1" }).llm).not.toHaveProperty("spendLogInit");
     expect(settingsOf({ ...KEYS, LANGSMITH_TRACING: "false" }).llm.tracingRequested).toBe(false);
   });
 });

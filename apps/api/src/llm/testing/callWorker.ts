@@ -4,8 +4,8 @@
  *
  *   node --import tsx callWorker.ts
  *
- * Configured by the environment (settings as the app reads them, with LLM_SPEND_LOG_INIT=1 by
- * default, plus):
+ * Configured by the environment (settings as the app reads them; the spend log must exist,
+ * plus):
  *   SQLITE_DB_PATH        opens this app database, so usage rows are recorded in it
  *   WORKER_CALLS          number of calls (default 1)
  *   WORKER_PARALLEL       "1": start every call at once (default: one after another)
@@ -34,7 +34,6 @@ globalThis.fetch = (async () => {
 const { settings, errors } = readLlmSettings({
   AZURE_OPENAI_API_KEY: FAKE_API_KEY,
   AZURE_OPENAI_BASE_URL: FAKE_BASE_URL,
-  LLM_SPEND_LOG_INIT: "1",
   ...env,
   LLM_CASSETTE: "off",
 });

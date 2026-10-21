@@ -27,13 +27,18 @@
  * What an attempt is settled at (never less than what may have been billed):
  *   answer with usage (input and output tokens both reported)   that usage, whatever the status
  *   answer without usage, or with part of it                     worst case, estimated
+ *   HTTP 400 with code content_filter                            input bound only, estimated
  *   HTTP 400 (incl. context overflow), 401, 403, 404, 429         0: rejected before processing
  *   any other HTTP status (408, 409, 5xx, …)                     worst case, estimated
  *   no connection made (DNS failure, connection refused)          0
  *   timeout, reset connection, abort after sending, a body
  *   that is not a Responses API object                           worst case, estimated
  *   stopped before the request was sent                           0
- * Azure's billing of a 400 for a filtered prompt is not documented; it is counted as unbilled.
+ * Azure's billing of a filtered prompt is not documented: its input is counted, its output not.
+ * Usage that cannot be right (text answered with 0 output tokens, more reasoning than output
+ * tokens) is treated as not reported. When the answer names a model outside the priced family
+ * of the deployment (`response.model`), the call is charged at the fallback prices × 1.5, with
+ * a warning.
  *
  * Retried once: 408, 409, 429 (not insufficient_quota, and only when Retry-After is within
  * MAX_RETRY_WAIT_MS), 5xx, timeouts, connection failures, `status: "failed"` with a server
@@ -74,7 +79,14 @@ import {
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "./factory.js";
-import { type AppliedPrice, costUsd, priceFor, SHORT_CONTEXT_MAX_INPUT_TOKENS } from "./prices.js";
+import {
+  type AppliedPrice,
+  costUsd,
+  FALLBACK_PRICE,
+  priceFor,
+  SHORT_CONTEXT_MAX_INPUT_TOKENS,
+  UNSOURCED_PRICE_MULTIPLIER,
+} from "./prices.js";
 import { type LlmUsageRow, recordToOpenDatabase } from "./usage.js";
 
 export type { LlmMessage } from "./cassette.js";
@@ -415,6 +427,9 @@ export function classifyError(error: unknown, state: ErrorState): LlmError {
     ) {
       return new LlmError("context_overflow", message, { status, cause });
     }
+    if (status === 400 && providerCode === "content_filter") {
+      return new LlmError("content_filtered", message, { status, cause });
+    }
     if (status === 408) return new LlmError("timeout", message, { status, transient: true, cause });
     return new LlmError("provider", message, {
       status,
@@ -476,6 +491,70 @@ function reportedUsage(response: unknown): ReportedUsage | null {
   };
 }
 
+/** The answer's output text and refusal, from its message items. */
+function answerText(response: unknown): { text: string; refusal: string | null } {
+  let text = "";
+  let refusal: string | null = null;
+  const output = (response as { output?: unknown } | null)?.output;
+  for (const item of Array.isArray(output) ? output : []) {
+    const message = item as { type?: unknown; content?: unknown };
+    if (message?.type !== "message" || !Array.isArray(message.content)) continue;
+    for (const part of message.content as Array<{
+      type?: unknown;
+      text?: unknown;
+      refusal?: unknown;
+    }>) {
+      if (part?.type === "output_text" && typeof part.text === "string") text += part.text;
+      if (part?.type === "refusal") refusal = typeof part.refusal === "string" ? part.refusal : "";
+    }
+  }
+  return { text, refusal };
+}
+
+/**
+ * Reported usage that cannot be right is treated as not reported (the worst case is kept):
+ * more reasoning than output tokens, or answer text with 0 output tokens (a gateway that fills
+ * missing counts with zeros).
+ */
+function consistentUsage(
+  usage: ReportedUsage | null,
+  response: unknown,
+  callSite: string,
+): ReportedUsage | null {
+  if (!usage) return null;
+  const tooMuchReasoning = (usage.reasoningTokens ?? 0) > usage.outputTokens;
+  const silentText = usage.outputTokens === 0 && answerText(response).text.length > 0;
+  if (!tooMuchReasoning && !silentText) return usage;
+  console.warn(
+    `[llm] ${callSite}: the reported usage is inconsistent (${usage.outputTokens} output, ` +
+      `${usage.reasoningTokens ?? "no"} reasoning tokens); counting the worst case instead`,
+  );
+  return null;
+}
+
+const modelKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * The price for an answer: the deployment's, unless the answer names a model outside the
+ * priced family of the deployment (`gpt-6-sol` prices `gpt-6-sol`, `gpt-6-sol-2026-08-01`, …),
+ * then the fallback prices × 1.5. A deployment without a public price already has those.
+ */
+function priceForAnswer(
+  price: AppliedPrice,
+  deployment: string,
+  response: unknown,
+  callSite: string,
+): AppliedPrice {
+  const model = (response as { model?: unknown } | null)?.model;
+  if (price.source === null || typeof model !== "string" || model === "") return price;
+  if (modelKey(model).startsWith(modelKey(deployment))) return price;
+  console.warn(
+    `[llm] ${callSite}: the answer came from a model outside the priced family of the ` +
+      "deployment; charging the fallback prices × 1.5",
+  );
+  return { ...FALLBACK_PRICE, deployment, multiplier: UNSOURCED_PRICE_MULTIPLIER };
+}
+
 type Answer = { output: unknown } | { error: LlmError };
 
 /** Reads a Responses API answer: its status first, then its text, then the schema. */
@@ -535,20 +614,7 @@ function readAnswer(
       ),
     };
   }
-  let text = "";
-  let refusal: string | null = null;
-  for (const item of Array.isArray(r.output) ? r.output : []) {
-    const message = item as { type?: unknown; content?: unknown };
-    if (message?.type !== "message" || !Array.isArray(message.content)) continue;
-    for (const part of message.content as Array<{
-      type?: unknown;
-      text?: unknown;
-      refusal?: unknown;
-    }>) {
-      if (part?.type === "output_text" && typeof part.text === "string") text += part.text;
-      if (part?.type === "refusal") refusal = typeof part.refusal === "string" ? part.refusal : "";
-    }
-  }
+  const { text, refusal } = answerText(r);
   if (refusal !== null) {
     return {
       error: new LlmError("refused", `${callSite}: the model refused to answer`, withUsage),
@@ -608,7 +674,6 @@ export function createLlm(deps: LlmDependencies): Llm {
   const guard = new SpendGuard({
     logPath: settings.spendLog,
     caps: settings.budget,
-    init: settings.spendLogInit,
     now,
   });
   const semaphore = new Semaphore(settings.concurrency);
@@ -821,17 +886,20 @@ export function createLlm(deps: LlmDependencies): Llm {
     const worstCase = costUsd(a.price, a.inputEstimate, a.options.maxOutputTokens);
     let reservation: Reservation;
     try {
-      reservation = await guard.reserve({
-        purpose: a.options.purpose,
-        tier: a.tier,
-        deployment: a.deployment,
-        callSite: a.callSite,
-        runId,
-        inputTokensEstimate: a.inputEstimate,
-        maxOutputTokens: a.options.maxOutputTokens,
-        usdEst: worstCase,
-        multiplier: a.price.multiplier,
-      });
+      reservation = await guard.reserve(
+        {
+          purpose: a.options.purpose,
+          tier: a.tier,
+          deployment: a.deployment,
+          callSite: a.callSite,
+          runId,
+          inputTokensEstimate: a.inputEstimate,
+          maxOutputTokens: a.options.maxOutputTokens,
+          usdEst: worstCase,
+          multiplier: a.price.multiplier,
+        },
+        signal,
+      );
     } catch (error) {
       returnCall(runId);
       throw error;
@@ -853,6 +921,7 @@ export function createLlm(deps: LlmDependencies): Llm {
     const requestSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
     const started = performance.now();
     let usage: ReportedUsage | null = null;
+    let price = a.price;
     let answer: Answer;
     let thrown: unknown = null;
     try {
@@ -879,7 +948,8 @@ export function createLlm(deps: LlmDependencies): Llm {
         },
         { signal: requestSignal },
       );
-      usage = reportedUsage(response);
+      usage = consistentUsage(reportedUsage(response), response, a.callSite);
+      price = priceForAnswer(a.price, a.deployment, response, a.callSite);
       answer = readAnswer(response, usage, a.schema, a.schemaName, a.callSite);
     } catch (caught) {
       thrown = caught;
@@ -911,7 +981,10 @@ export function createLlm(deps: LlmDependencies): Llm {
       usdEst = 0;
       returnCall(runId);
     } else if (usage) {
-      usdEst = costUsd(a.price, usage.inputTokens, usage.outputTokens);
+      usdEst = costUsd(price, usage.inputTokens, usage.outputTokens);
+    } else if (error?.kind === "content_filtered") {
+      usdEst = costUsd(price, a.inputEstimate, 0);
+      estimated = true;
     } else if (error?.status !== undefined && UNBILLED_STATUSES.has(error.status)) {
       usdEst = 0;
     } else if (thrown !== null && UNDELIVERED_CODES.has(errorCode(thrown) ?? "")) {
@@ -936,6 +1009,7 @@ export function createLlm(deps: LlmDependencies): Llm {
         latencyMs: Math.round(latencyMs),
         status,
         estimated,
+        ...(price.multiplier !== a.price.multiplier ? { multiplier: price.multiplier } : {}),
       })
       .catch((settleError: unknown) => {
         // The reservation stays in the log and keeps counting at the worst case.
@@ -954,7 +1028,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       outputTokens: usage?.outputTokens ?? null,
       reasoningTokens: usage?.reasoningTokens ?? null,
       usdEst,
-      priceMultiplier: a.price.multiplier,
+      priceMultiplier: price.multiplier,
       estimated,
       latencyMs,
     });
@@ -963,7 +1037,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       output: (answer as { output: unknown }).output,
       callId: reservation.id,
       usage: usage ?? UNKNOWN_USAGE,
-      cost: { usdEst, multiplier: a.price.multiplier, latencyMs },
+      cost: { usdEst, multiplier: price.multiplier, latencyMs },
     };
   }
 

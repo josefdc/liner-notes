@@ -8,11 +8,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tools = vi.hoisted(() => {
+  // A web search finds one result named after the tool; every other source finds nothing.
+  const answer = (name: string) =>
+    JSON.stringify(
+      name.startsWith("search")
+        ? {
+            found: true,
+            results: [{ title: `[${name}]`, url: "https://example.test/", content: "found" }],
+          }
+        : { found: false },
+    );
   const make = (name: string) => ({
     name,
-    invoke: vi.fn(
-      async (_input: unknown, _options?: { signal?: AbortSignal }) => `[${name}] found`,
-    ),
+    invoke: vi.fn(async (_input: unknown, _options?: { signal?: AbortSignal }) => answer(name)),
   });
   return {
     searchSamples: make("searchSamples"),
@@ -28,7 +36,8 @@ const tools = vi.hoisted(() => {
     getListenBrainzSimilarArtists: make("getListenBrainzSimilarArtists"),
   };
 });
-vi.mock("../sources/search.js", () => ({
+vi.mock("../sources/search.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sources/search.js")>()),
   searchSamples: tools.searchSamples,
   searchProductionHistory: tools.searchProductionHistory,
   searchMusicInfo: tools.searchMusicInfo,
@@ -51,7 +60,12 @@ vi.mock("../sources/listenbrainz.js", () => ({
 
 import { LlmError } from "../llm/errors.js";
 import { TransientError } from "./errors.js";
-import { MAX_PLANNED_STEPS, actionLabel, createResearcherSubgraph } from "./researcherSubgraph.js";
+import {
+  MAX_PLANNED_STEPS,
+  StepReader,
+  actionLabel,
+  createResearcherSubgraph,
+} from "./researcherSubgraph.js";
 import type { SpotifyData } from "./state.js";
 import { messagesOf, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
@@ -122,7 +136,9 @@ describe("researcher subgraph", () => {
     const { system, user } = messagesOf(call);
     expect(system).toContain("You plan the research");
     expect(system).not.toContain("search_artist_top_tracks");
-    expect(user).toContain("<<<SOURCE samples>>>\n[searchSamples] found\n<<<END SOURCE>>>");
+    expect(user).toContain(
+      "<<<SOURCE samples>>>\n[searchSamples]\nhttps://example.test/\nfound\n<<<END SOURCE>>>",
+    );
   });
 
   it("passes the run's abort signal to every search, and a cancelled run stops", async () => {
@@ -131,7 +147,7 @@ describe("researcher subgraph", () => {
     tools.getMusicBrainzRelations.invoke.mockImplementationOnce(async (_input, options) => {
       seen = options?.signal;
       controller.abort(); // the client leaves while this search runs
-      return "[getMusicBrainzRelations] found";
+      return JSON.stringify({ found: false });
     });
     const llm = planner(plan("search_musicbrainz"), plan("search_lastfm_artist_info"));
 
@@ -155,7 +171,7 @@ describe("researcher subgraph", () => {
     expect(final.usage).toEqual([
       expect.objectContaining({ callSite: "research_planner", status: "budget_exceeded" }),
     ]);
-    expect(final.researchData.samples).toEqual(["[searchSamples] found"]);
+    expect(final.researchData.samples).toEqual(["[searchSamples]\nhttps://example.test/\nfound"]);
   });
 
   it("throws, without a retry, when the planner fails for another reason (a bug)", async () => {
@@ -191,8 +207,8 @@ describe("researcher subgraph", () => {
     expect(tools.getLastfmArtistInfo.invoke).toHaveBeenCalledTimes(1);
     expect(final.statusMessages).toContain("⚠️ Search failed: production (unavailable)");
     tools.searchProductionHistory.invoke.mockReset();
-    tools.searchProductionHistory.invoke.mockImplementation(
-      async () => "[searchProductionHistory] found",
+    tools.searchProductionHistory.invoke.mockImplementation(async () =>
+      JSON.stringify({ found: false }),
     );
   });
 
@@ -216,5 +232,22 @@ describe("researcher subgraph", () => {
 
   it("names a step with every underscore replaced", () => {
     expect(actionLabel("search_lastfm_similar_tracks")).toBe("lastfm similar tracks");
+  });
+
+  it("reads only its own not-asked reasons as 'not asked', never an inherited name", () => {
+    const reader = new StepReader();
+    for (const reason of ["constructor", "toString", "__proto__"]) {
+      reader.read("lastfm", JSON.stringify({ found: false, reason }), "artistInfo");
+    }
+    reader.read("lastfm", JSON.stringify({ found: false, reason: "shared_page" }), "artistInfo");
+
+    expect(reader.none).toEqual([
+      "Last.fm artist info",
+      "Last.fm artist info",
+      "Last.fm artist info",
+    ]);
+    expect(reader.notAsked).toEqual([
+      "Last.fm artist info (dropped: Last.fm keeps one page for several artists of this name)",
+    ]);
   });
 });

@@ -15,8 +15,9 @@ import {
   type SourceError as SourceErrorRecord,
   type SourceId,
 } from "@liner-notes/contract";
-import { describeError, isSourceError, type SourceName, SourceError } from "./http.js";
+import { describeError, type SourceName, SourceError } from "./http.js";
 import { normalizeName, withoutFeatured } from "./musicbrainz.js";
+import { sourceErrorCode } from "./toolResult.js";
 
 // =============================================================================
 // The track
@@ -327,17 +328,7 @@ export function notConfigured<T>(source: SourceId, variable: string): SourceResu
  * is "unavailable", not a timeout.
  */
 export function errorRecord(source: SourceId, error: unknown): SourceErrorRecord {
-  const message = describeError(error);
-  let code: SourceErrorRecord["code"] = "unavailable";
-  // A TypeError here is a payload of an unexpected shape, read past a check.
-  if (error instanceof TypeError) code = "invalid_response";
-  if (isSourceError(error)) {
-    if (error.kind === "timeout") code = "timeout";
-    else if (error.kind === "rate_limited") code = "rate_limited";
-    else if (error.kind === "parse" || error.kind === "content_type") code = "invalid_response";
-    else if (error.kind === "unavailable") code = "not_configured";
-  }
-  return { source, code, message };
+  return { source, code: sourceErrorCode(error), message: describeError(error) };
 }
 
 /** Any failure while reading a source, as "missing" with a typed error; never a throw. */

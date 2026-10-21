@@ -108,7 +108,10 @@ export async function clarificationNode(
         id: selected.id,
         title: selected.title,
         artist: selected.artist,
-        artistIds: [],
+        // The separate artists when the candidate carried them; else the joined name is
+        // searched as one artist (it cannot be split: names contain commas too).
+        ...(selected.artistNames ? { artistNames: selected.artistNames } : {}),
+        artistIds: selected.artistIds ?? [],
         album: selected.album,
         releaseDate: selected.releaseYear || "",
         coverUrl: selected.coverUrl,

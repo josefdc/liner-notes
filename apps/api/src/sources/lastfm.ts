@@ -8,8 +8,11 @@
  * - Artist bio and metadata (for factoids)
  *
  * Uses Last.fm API v2. Requires LASTFM_API_KEY in environment. Without it every tool reports
- * the source as unavailable (`unavailable: true`), never as "0 results", and the missing key is
- * logged once.
+ * the source as unavailable (`unavailable: true`, code "not_configured"), never as "0 results",
+ * and the missing key is logged once; a key Last.fm rejects (errors 4, 10, 26) is "key
+ * rejected" (code "unavailable": an operator error, not a lasting configuration). Results are the typed JSON of `toolResult.ts`: a track or artist Last.fm does not
+ * know is "nothing found"; an empty name is not sent; an answer Last.fm's autocorrection gave
+ * for another artist is dropped; any other error is a failure with its code.
  *
  * @see https://www.last.fm/api
  */
@@ -17,7 +20,16 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
-import { credential, describeError, fetchJson, isSourceError, type Shape } from "./http.js";
+import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
+import { normalizeName } from "./musicbrainz.js";
+import {
+  failureWith,
+  keyRejected,
+  type NotAnswered,
+  notAnswered,
+  type ToolFailure,
+  toolFailure,
+} from "./toolResult.js";
 
 dotenv.config();
 
@@ -110,12 +122,17 @@ interface LastfmArtistInfo {
 
 // Fields the pipeline reads, kept when a response is recorded to a cassette.
 const TAGS_SHAPE: Shape = { tag: [{ name: true, count: true }] };
+// "@attr" names the artist (and track) Last.fm answered for, after its autocorrection.
+const ATTR_SHAPE: Shape = { artist: true, track: true };
 const RESPONSE_SHAPE: Shape = {
   error: true,
   message: true,
-  toptags: TAGS_SHAPE,
-  similartracks: { track: [{ name: true, match: true, artist: { name: true, mbid: true } }] },
-  similarartists: { artist: [{ name: true, match: true, mbid: true }] },
+  toptags: { tag: [{ name: true, count: true }], "@attr": ATTR_SHAPE },
+  similartracks: {
+    track: [{ name: true, match: true, artist: { name: true, mbid: true } }],
+    "@attr": ATTR_SHAPE,
+  },
+  similarartists: { artist: [{ name: true, match: true, mbid: true }], "@attr": ATTR_SHAPE },
   artist: {
     name: true,
     mbid: true,
@@ -145,18 +162,97 @@ interface LastfmError {
   message?: string;
 }
 
-type LastfmResult<T> = { ok: true; data: T } | { ok: false; error: string; unavailable?: true };
+/**
+ * Last.fm's error 6, "Invalid parameters", is also its answer for a track or artist it does not
+ * know ("Track not found", "The artist you supplied could not be found"). It is read as nothing
+ * found when its message says "not found" or when there is no message (Last.fm sends one in
+ * practice), and as a request Last.fm refused otherwise. Requests with an empty name are never
+ * sent, so a refused request is not our missing input.
+ */
+const INVALID_PARAMETERS = 6;
+/** Last.fm's error 29: rate limit exceeded. */
+const RATE_LIMITED = 29;
+/** Authentication failed, invalid API key, suspended API key: an operator error to fix. */
+const KEY_REJECTED: ReadonlySet<number> = new Set([4, 10, 26]);
 
 /**
- * Calls a Last.fm method. Resolves with the data, or with the reason it is missing: not
- * configured (no request made), Last.fm's own error message, or the request's typed error.
- * Methods that take names get `autocorrect=1`, so a misspelt name resolves to the canonical one.
+ * The tool result for a call that brought nothing for the track: Last.fm does not know it
+ * (`not_found`), or the request was not made or not answered for this artist (`no_input`: an
+ * empty name; `invalid_request`: Last.fm refused the parameters; `other_artist`: Last.fm's
+ * autocorrection answered for another artist).
+ */
+type NothingFound = NotAnswered;
+
+type LastfmResult<T> = { ok: true; data: T } | { ok: false; answer: ToolFailure | NothingFound };
+
+/**
+ * Last.fm's own error answer as a tool result: "not found" is nothing found, not a failure; a
+ * rejected key is "key rejected" (it blocks the research cache until it is fixed); a rate limit
+ * is a rate limit.
+ */
+function lastfmError(body: LastfmError): ToolFailure | NothingFound {
+  const message = `Last.fm error ${body.error ?? "?"}: ${body.message ?? "no message"}`;
+  if (body.error === INVALID_PARAMETERS) {
+    const notFound = !body.message || /\bnot (?:be )?found\b/i.test(body.message);
+    return notAnswered(notFound ? "not_found" : "invalid_request", message);
+  }
+  if (body.error !== undefined && KEY_REJECTED.has(body.error)) {
+    return keyRejected(`Last.fm rejected the API key (${message})`);
+  }
+  return failureWith(body.error === RATE_LIMITED ? "rate_limited" : "unavailable", message);
+}
+
+/** What a call asks for, to check before sending it and to check the answer against. */
+interface LastfmRequest<T> {
+  params: Record<string, string>;
+  /** The artist asked for. */
+  artist: string;
+  /** The artist Last.fm answered for (its "@attr" or the artist object's name). */
+  answeredFor?: (data: T) => unknown;
+}
+
+/**
+ * Calls a Last.fm method after checking the request: an empty name is not sent (`no_input`), and
+ * an answer Last.fm's autocorrection gave for another artist is dropped (`other_artist`).
+ */
+async function askLastfm<T extends object>(
+  request: LastfmRequest<T>,
+  signal?: AbortSignal,
+): Promise<LastfmResult<T>> {
+  const empty = Object.entries(request.params).find(
+    ([key, value]) => (key === "artist" || key === "track") && !value.trim(),
+  );
+  if (empty) {
+    return { ok: false, answer: notAnswered("no_input", `no ${empty[0]} name to ask for`) };
+  }
+  const result = await callLastfm<T>(request.params, signal);
+  if (!result.ok) return result;
+  const answered = request.answeredFor?.(result.data);
+  if (typeof answered === "string" && normalizeName(answered) !== normalizeName(request.artist)) {
+    return {
+      ok: false,
+      answer: notAnswered(
+        "other_artist",
+        `Last.fm answered for "${answered}", not "${request.artist}"`,
+      ),
+    };
+  }
+  return result;
+}
+
+/**
+ * Calls a Last.fm method. Resolves with the data, or with the tool result that says why there
+ * is none: not configured (no request made), nothing found, Last.fm's own error, or the
+ * request's typed error. Methods that take names get `autocorrect=1`, so a misspelt name
+ * resolves to the canonical one.
  */
 async function callLastfm<T extends object>(
   params: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<LastfmResult<T>> {
-  if (!lastfmConfigured()) return { ok: false, error: NOT_CONFIGURED, unavailable: true };
+  if (!lastfmConfigured()) {
+    return { ok: false, answer: failureWith("not_configured", NOT_CONFIGURED) };
+  }
 
   const url = new URL(LASTFM_API_BASE);
   url.searchParams.set("api_key", credential("LASTFM_API_KEY") as string);
@@ -177,27 +273,38 @@ async function callLastfm<T extends object>(
   } catch (error) {
     // A cancelled run rejects: nothing is reported for it.
     if (signal?.aborted) throw error;
-    // Last.fm answers errors with HTTP 4xx and a JSON body; keep its message.
+    // Last.fm answers errors with HTTP 4xx and a JSON body; keep its message and code.
     const body = isSourceError(error) ? (error.body as LastfmError | undefined) : undefined;
     if (body && typeof body.message === "string" && body.message) {
-      return { ok: false, error: `Last.fm error ${body.error ?? "?"}: ${body.message}` };
+      return { ok: false, answer: lastfmError(body) };
     }
-    return { ok: false, error: describeError(error) };
+    return { ok: false, answer: toolFailure(error) };
   }
-  if (data.error) {
-    return { ok: false, error: `Last.fm error ${data.error}: ${data.message ?? "no message"}` };
-  }
+  if (data.error) return { ok: false, answer: lastfmError(data) };
   return { ok: true, data };
 }
 
 /** The tool result for a call that returned no data. */
-function failure(result: { error: string; unavailable?: true }): string {
-  return JSON.stringify(
-    result.unavailable
-      ? { found: false, unavailable: true, error: result.error }
-      : { found: false, error: result.error },
-  );
+function failure(result: { answer: ToolFailure | NothingFound }): string {
+  return JSON.stringify(result.answer);
 }
+
+/** A log line for a call that returned no data. */
+function why(result: { answer: ToolFailure | NothingFound }): string {
+  return "error" in result.answer
+    ? result.answer.error
+    : (result.answer.message ?? result.answer.reason);
+}
+
+/** The artist (and track) Last.fm answered for. */
+interface AnsweredFor {
+  "@attr"?: { artist?: unknown; track?: unknown };
+}
+type TagsAnswer = { tag?: LastfmTag | LastfmTag[] } & AnsweredFor;
+
+/** The start of a bio on a page Last.fm shares between artists of the same name. */
+const SHARED_PAGE =
+  /^there (?:are|is) (?:at least )?(?:multiple|several|many|more than one|two|three|four|five|six|\d+)\b[^.]{0,40}\bartists?\b/i;
 
 /** Last.fm sends a single item as an object instead of a one-item list. */
 function asList<T>(value: T | T[] | undefined | null): T[] {
@@ -239,16 +346,16 @@ function cleanBio(bio: string, maxLength = 300): string {
 export const getLastfmTrackTags = tool(
   async ({ title, artist }, config): Promise<string> => {
     console.log(`🏷️ [Last.fm] Getting track tags: "${title}" by ${artist}`);
-    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>(
+    const result = await askLastfm<{ toptags?: TagsAnswer }>(
       {
-        method: "track.getTopTags",
-        track: title,
-        artist: artist,
+        params: { method: "track.getTopTags", track: title, artist },
+        artist,
+        answeredFor: (data) => data.toptags?.["@attr"]?.artist,
       },
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Track tags error:", result.error);
+      console.error("❌ [Last.fm] Track tags error:", why(result));
       return failure(result);
     }
 
@@ -274,15 +381,16 @@ export const getLastfmTrackTags = tool(
 export const getLastfmArtistTags = tool(
   async ({ artist }, config): Promise<string> => {
     console.log(`🏷️ [Last.fm] Getting artist tags: "${artist}"`);
-    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>(
+    const result = await askLastfm<{ toptags?: TagsAnswer }>(
       {
-        method: "artist.getTopTags",
-        artist: artist,
+        params: { method: "artist.getTopTags", artist },
+        artist,
+        answeredFor: (data) => data.toptags?.["@attr"]?.artist,
       },
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Artist tags error:", result.error);
+      console.error("❌ [Last.fm] Artist tags error:", why(result));
       return failure(result);
     }
 
@@ -307,19 +415,18 @@ export const getLastfmArtistTags = tool(
 export const getLastfmSimilarTracks = tool(
   async ({ title, artist }, config): Promise<string> => {
     console.log(`🔗 [Last.fm] Getting similar tracks: "${title}" by ${artist}`);
-    const result = await callLastfm<{
-      similartracks?: { track?: LastfmSimilarTrack | LastfmSimilarTrack[] };
+    const result = await askLastfm<{
+      similartracks?: { track?: LastfmSimilarTrack | LastfmSimilarTrack[] } & AnsweredFor;
     }>(
       {
-        method: "track.getSimilar",
-        track: title,
-        artist: artist,
-        limit: "5",
+        params: { method: "track.getSimilar", track: title, artist, limit: "5" },
+        artist,
+        answeredFor: (data) => data.similartracks?.["@attr"]?.artist,
       },
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Similar tracks error:", result.error);
+      console.error("❌ [Last.fm] Similar tracks error:", why(result));
       return failure(result);
     }
 
@@ -353,18 +460,18 @@ export const getLastfmSimilarTracks = tool(
 export const getLastfmSimilarArtists = tool(
   async ({ artist }, config): Promise<string> => {
     console.log(`🔗 [Last.fm] Getting similar artists: "${artist}"`);
-    const result = await callLastfm<{
-      similarartists?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] };
+    const result = await askLastfm<{
+      similarartists?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] } & AnsweredFor;
     }>(
       {
-        method: "artist.getSimilar",
-        artist: artist,
-        limit: "5",
+        params: { method: "artist.getSimilar", artist, limit: "5" },
+        artist,
+        answeredFor: (data) => data.similarartists?.["@attr"]?.artist,
       },
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Similar artists error:", result.error);
+      console.error("❌ [Last.fm] Similar artists error:", why(result));
       return failure(result);
     }
 
@@ -384,7 +491,7 @@ export const getLastfmSimilarArtists = tool(
     name: "lastfm_similar_artists",
     description:
       "Get similar artists from Last.fm. Returns up to 5 artists with match scores and MBIDs. " +
-      "Use for genealogy edges and relatedArtists.",
+      "Use for genealogy edges.",
     schema: z.object({
       artist: z.string().describe("The artist name"),
     }),
@@ -397,21 +504,22 @@ export const getLastfmSimilarArtists = tool(
 export const getLastfmArtistInfo = tool(
   async ({ artist }, config): Promise<string> => {
     console.log(`📋 [Last.fm] Getting artist info: "${artist}"`);
-    const result = await callLastfm<{ artist?: LastfmArtistInfo }>(
+    const result = await askLastfm<{ artist?: LastfmArtistInfo }>(
       {
-        method: "artist.getInfo",
-        artist: artist,
+        params: { method: "artist.getInfo", artist },
+        artist,
+        answeredFor: (data) => data.artist?.name,
       },
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Artist info error:", result.error);
+      console.error("❌ [Last.fm] Artist info error:", why(result));
       return failure(result);
     }
 
     const info = result.data.artist;
     if (!info || typeof info.name !== "string") {
-      return JSON.stringify({ found: false, error: "Artist not found" });
+      return JSON.stringify(notAnswered("not_found", "Artist not found"));
     }
 
     const tags = cleanTags(info.tags?.tag);
@@ -422,7 +530,20 @@ export const getLastfmArtistInfo = tool(
         name: a.name,
         mbid: a.mbid || undefined,
       }));
+    // Last.fm keeps one page for artists of the same name: its bio then describes several of
+    // them, and its tags and similar artists mix them. None of it is this artist's.
     const bio = info.bio?.summary ? cleanBio(info.bio.summary) : undefined;
+    if (bio && SHARED_PAGE.test(bio)) {
+      return JSON.stringify(
+        notAnswered("shared_page", `Last.fm's page for "${info.name}" covers several artists`),
+      );
+    }
+
+    if (!bio && tags.length === 0 && similarArtists.length === 0) {
+      return JSON.stringify(
+        notAnswered("not_found", `Last.fm has no bio, tags or similar artists for "${info.name}"`),
+      );
+    }
 
     console.log(`✅ [Last.fm] Got artist info: ${info.name}`);
     return JSON.stringify({

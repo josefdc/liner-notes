@@ -34,6 +34,12 @@ const tools = vi.hoisted(() => {
     previewUrl: null,
   };
   const none = () => JSON.stringify({ found: false });
+  // A web search with one result.
+  const web = (content: string) =>
+    JSON.stringify({
+      found: true,
+      results: [{ title: "Page", url: "https://example.test/", content }],
+    });
   return {
     searchMultipleTracks: tool(() => JSON.stringify([track])),
     analyzeAudioPreview: tool(() =>
@@ -46,9 +52,11 @@ const tools = vi.hoisted(() => {
     getLastfmSimilarTracks: tool(none),
     getLastfmSimilarArtists: tool(none),
     getLastfmArtistInfo: tool(none),
-    searchSamples: tool(() => "The bass line comes from Under Pressure by Queen and David Bowie."),
-    searchProductionHistory: tool(() => "Recorded in Miami."),
-    searchMusicInfo: tool(() => "More history."),
+    searchSamples: tool(() =>
+      web("The bass line comes from Under Pressure by Queen and David Bowie."),
+    ),
+    searchProductionHistory: tool(() => web("Recorded in Miami.")),
+    searchMusicInfo: tool(() => web("More history.")),
     getMusicBrainzRelations: tool(none),
     getMusicBrainzArtist: tool(none),
     getListenBrainzSimilarArtists: tool(none),
@@ -63,13 +71,15 @@ vi.mock("../sources/audio.js", async (importOriginal) => ({
   analyzeAudioPreview: tools.analyzeAudioPreview,
 }));
 vi.mock("../sources/lastfm.js", () => ({
+  lastfmConfigured: () => true,
   getLastfmTrackTags: tools.getLastfmTrackTags,
   getLastfmArtistTags: tools.getLastfmArtistTags,
   getLastfmSimilarTracks: tools.getLastfmSimilarTracks,
   getLastfmSimilarArtists: tools.getLastfmSimilarArtists,
   getLastfmArtistInfo: tools.getLastfmArtistInfo,
 }));
-vi.mock("../sources/search.js", () => ({
+vi.mock("../sources/search.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sources/search.js")>()),
   searchSamples: tools.searchSamples,
   searchProductionHistory: tools.searchProductionHistory,
   searchMusicInfo: tools.searchMusicInfo,
@@ -119,6 +129,8 @@ import { engineerNode } from "./nodes/engineerNode.js";
 import type { SonicAgentStateType } from "./state.js";
 import type { TrackData } from "./schema.js";
 import { TransientError } from "./errors.js";
+import { SourceError } from "../sources/http.js";
+import { failureWith, toolFailure } from "../sources/toolResult.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
 const QUERY = "ice ice baby";
@@ -477,6 +489,47 @@ async function drive(
 }
 
 describe("the analysis graph under failure", () => {
+  it("caches research when a source is only not configured, and stores that with it", async () => {
+    const missing = async () =>
+      JSON.stringify(failureWith("not_configured", "Last.fm is not configured"));
+    for (const tool of [
+      tools.getLastfmTrackTags,
+      tools.getLastfmArtistTags,
+      tools.getLastfmSimilarTracks,
+    ]) {
+      tool.invoke.mockImplementationOnce(missing);
+    }
+
+    const { threw, state } = await drive(stubModel(["done"]), { threadId: "t-no-key" });
+
+    expect(threw).toBeNull();
+    expect(state.trackData?.run?.sourceErrors).toEqual([
+      expect.objectContaining({ source: "lastfm", code: "not_configured" }),
+    ]);
+    expect(hooks.putResearch).toHaveBeenCalledTimes(1);
+    const [key, research] = hooks.putResearch.mock.calls[0] as [string, Record<string, unknown>];
+    expect(key).toMatch(/^v3:3Fcfwhm8oRrBvBZ8KGhtea:lastfm=1:tavily=[01]$/);
+    expect(research.notConfigured).toEqual([
+      expect.objectContaining({ source: "lastfm", code: "not_configured" }),
+    ]);
+  });
+
+  it("does not cache research when a source failed for a passing reason", async () => {
+    tools.getMusicBrainzRelations.invoke.mockImplementationOnce(async () =>
+      JSON.stringify(toolFailure(new SourceError("musicbrainz", "timeout", "no answer"))),
+    );
+
+    const { threw, state } = await drive(stubModel(["search_musicbrainz", "done"]), {
+      threadId: "t-timeout",
+    });
+
+    expect(threw).toBeNull();
+    expect(state.trackData?.run?.sourceErrors).toEqual([
+      expect.objectContaining({ source: "musicbrainz", code: "timeout" }),
+    ]);
+    expect(hooks.putResearch).not.toHaveBeenCalled();
+  });
+
   it("keeps the planner's calls and reports the source when a search keeps failing", async () => {
     tools.searchProductionHistory.invoke.mockImplementation(async () => {
       throw new TransientError("search 503", 503);
@@ -499,7 +552,12 @@ describe("the analysis graph under failure", () => {
     expect(tools.searchSamples.invoke).toHaveBeenCalledTimes(1);
     expect(tools.getMusicBrainzRelations.invoke).not.toHaveBeenCalled();
     tools.searchProductionHistory.invoke.mockReset();
-    tools.searchProductionHistory.invoke.mockImplementation(async () => "Recorded in Miami.");
+    tools.searchProductionHistory.invoke.mockImplementation(async () =>
+      JSON.stringify({
+        found: true,
+        results: [{ title: "Page", url: "https://example.test/", content: "Recorded in Miami." }],
+      }),
+    );
   });
 
   it("fails the run on a planner bug instead of hiding it", async () => {

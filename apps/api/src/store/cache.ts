@@ -13,6 +13,7 @@
  */
 
 import type Database from "better-sqlite3";
+import { SourceError } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
 import {
@@ -57,25 +58,20 @@ const ResearchSchema = z
   .object({
     samples: stringList,
     productionTrivia: stringList,
-    relatedArtists: stringList,
     collaborators: stringList.optional(),
-    artistTopTracks: z
-      .array(
-        z.object({
-          id: z.string(),
-          title: z.string(),
-          album: z.string(),
-          popularity: z.number(),
-        }),
-      )
-      .optional(),
     lastfmTags: stringList.optional(),
+    lastfmArtistTags: stringList.optional(),
     lastfmSimilarTracks: stringList.optional(),
     lastfmSimilarArtists: stringList.optional(),
     lastfmArtistBio: z.string().optional(),
     listenbrainzSimilarArtists: stringList.optional(),
+    noneFound: stringList.optional(),
+    notAsked: stringList.optional(),
+    collaboratorsOf: z.string().optional(),
+    notConfigured: z.array(SourceError).optional(),
   })
-  .passthrough();
+  // Fields the reader does not know (from older code) are dropped, never passed on.
+  .strip();
 
 function parseJson(text: string): unknown {
   try {

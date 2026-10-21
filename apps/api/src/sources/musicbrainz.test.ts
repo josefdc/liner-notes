@@ -45,6 +45,7 @@ import {
   getMusicBrainzRelations,
   MusicBrainzRateLimiter,
 } from "./musicbrainz.js";
+import { getListenBrainzSimilarArtists } from "./listenbrainz.js";
 
 const MB = "https://musicbrainz.org/ws/2";
 const RECORDING_ID = "5b11f4ce-a62d-471e-81fc-a69a8278c7da";
@@ -181,7 +182,7 @@ describe("MusicBrainz client", () => {
       await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
     );
 
-    expect(data.found).toBe(false);
+    expect(data).toMatchObject({ found: false, code: "rate_limited" });
     expect(data.error).toMatch(/rate limited/);
     expect(net.calls).toHaveLength(2);
   });
@@ -245,6 +246,7 @@ describe("MusicBrainz client", () => {
 
     expect(JSON.parse(stuck)).toMatchObject({
       found: false,
+      code: "timeout",
       error: expect.stringMatching(/no answer within 50 ms/),
     });
     expect(JSON.parse(next)).toMatchObject({ found: true });
@@ -455,6 +457,216 @@ describe("MusicBrainz client", () => {
       );
 
       expect(data).toMatchObject({ found: true, mbid: SAMPLED_ID });
+    });
+
+    it("with the artists listed, never searches the joined string as one artist", async () => {
+      const net = artistSearch({
+        'artist:"Daft Punk, Pharrell Williams"': {
+          count: 1,
+          artists: [
+            {
+              id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              name: "Daft Punk, Pharrell Williams",
+              score: 100,
+            },
+          ],
+        },
+        'artist:"Daft Punk"': {
+          count: 1,
+          artists: [{ id: SAMPLED_ID, name: "Daft Punk", score: 100 }],
+        },
+      });
+
+      const data = JSON.parse(
+        await getMusicBrainzArtist.invoke({
+          artistName: "Daft Punk, Pharrell Williams",
+          artistNames: ["Daft Punk", "Pharrell Williams"],
+        }),
+      );
+
+      expect(data).toMatchObject({ found: true, mbid: SAMPLED_ID });
+      expect(net.calls.filter((c) => c.url.startsWith(`${MB}/artist?`)).map(searchQuery)).toEqual([
+        'artist:"Daft Punk"',
+      ]);
+    });
+
+    describe("artists of the same name", () => {
+      const UK = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      const US = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+      const SPOTIFY = "6olE6TJLqED3rqDCT0FyPh";
+      const homonyms = (linked: string | null) =>
+        stubFetch((call) => {
+          if (call.url.startsWith(`${MB}/artist?`)) {
+            return json({
+              count: 2,
+              artists: [
+                { id: UK, name: "Nirvana", score: 100, disambiguation: "60s band from the UK" },
+                { id: US, name: "Nirvana", score: 100, disambiguation: "90s US grunge band" },
+              ],
+            });
+          }
+          if (call.url.startsWith(`${MB}/url?`)) {
+            return linked
+              ? json({ id: "u", relations: [{ type: "free streaming", artist: { id: linked } }] })
+              : json({ error: "Not Found" }, { status: 404 });
+          }
+          if (call.url.startsWith(`${MB}/artist/`)) {
+            const id = new URL(call.url).pathname.split("/").pop();
+            return json({ id, name: "Nirvana", relations: [] });
+          }
+          return undefined;
+        });
+
+      it("takes the one MusicBrainz links to the Spotify artist", async () => {
+        const net = homonyms(US);
+
+        const match = await findArtist("Nirvana", { spotifyArtistId: SPOTIFY });
+
+        expect(match).toMatchObject({ artist: { id: US }, via: "spotify" });
+        const [lookup] = net.calls.filter((c) => c.url.startsWith(`${MB}/url?`));
+        expect(new URL(lookup.url).searchParams.get("resource")).toBe(
+          `https://open.spotify.com/artist/${SPOTIFY}`,
+        );
+      });
+
+      it.each([
+        ["no Spotify link on MusicBrainz", null, SPOTIFY],
+        ["no Spotify id", US, undefined],
+      ])("is ambiguous with %s, never the first match", async (_name, linked, id) => {
+        homonyms(linked);
+
+        const match = await findArtist("Nirvana", { spotifyArtistId: id });
+
+        expect(match).toMatchObject({ artist: null, reason: "ambiguous" });
+      });
+
+      it("the collaborators tool asks nothing more and says why", async () => {
+        const net = homonyms(null);
+
+        const data = JSON.parse(
+          await getMusicBrainzArtist.invoke({ artistName: "Nirvana", spotifyArtistId: SPOTIFY }),
+        );
+
+        expect(data).toMatchObject({ found: false, reason: "ambiguous_artist" });
+        expect(net.calls.filter((c) => c.url.startsWith(`${MB}/artist/`))).toHaveLength(0);
+      });
+    });
+
+    describe("one artist of the name, checked against the track's Spotify artist", () => {
+      const NOVA = "77777777-7777-4777-8777-777777777777";
+      const OURS = "0123456789abcdefABCDEF";
+      const THEIRS = "ZYXWVUTSRQPONMLKJIHGFE";
+      const spotifyPage = (id: string) => ({
+        type: "free streaming",
+        url: { resource: `https://open.spotify.com/artist/${id}` },
+      });
+      const single = (urlRels: unknown[], link: "404" | "503" | "never" | string = "404") =>
+        stubFetch((call) => {
+          if (call.url.startsWith(`${MB}/url?`)) {
+            if (link === "404") return json({ error: "Not Found" }, { status: 404 });
+            if (link === "503") {
+              return json({ error: "busy" }, { status: 503, headers: { "Retry-After": "0" } });
+            }
+            if (link === "never") return never(call);
+            return json({ relations: [{ artist: { id: link, name: "Nova" } }] });
+          }
+          if (call.url.startsWith(`${MB}/artist?`)) {
+            return json({ count: 1, artists: [{ id: NOVA, name: "Nova", score: 100 }] });
+          }
+          if (call.url.startsWith(`${MB}/artist/`)) {
+            return json({
+              id: NOVA,
+              name: "Nova",
+              relations: [
+                ...urlRels,
+                { type: "collaboration", artist: { id: SAMPLED_ID, name: "Corrado Rustici" } },
+                { type: "supporting musician", artist: { id: SAMPLED_ID, name: "Session Player" } },
+                { type: "member of band", artist: { id: SAMPLED_ID, name: "A Member" } },
+                { type: "is person", artist: { id: SAMPLED_ID, name: "Legal Name" } },
+                { type: "tribute", artist: { id: SAMPLED_ID, name: "Tribute Act" } },
+              ],
+            });
+          }
+          return undefined;
+        });
+      const collaborators = () =>
+        getMusicBrainzArtist
+          .invoke({ artistName: "Nova", spotifyArtistId: OURS })
+          .then((raw) => JSON.parse(raw));
+
+      it("MusicBrainz's link to the Spotify artist decides, without a name search", async () => {
+        const net = single([], NOVA);
+
+        expect(await findArtist("Nova", { spotifyArtistId: OURS })).toMatchObject({
+          artist: { id: NOVA },
+          via: "spotify",
+        });
+        expect(net.calls.filter((c) => c.url.startsWith(`${MB}/artist?`))).toHaveLength(0);
+      });
+
+      it("a name match whose own Spotify link names another artist is not used", async () => {
+        single([spotifyPage(THEIRS)]);
+
+        expect(await collaborators()).toMatchObject({
+          found: false,
+          reason: "other_spotify_artist",
+        });
+      });
+
+      it("a name match that links to the track's Spotify artist is verified", async () => {
+        single([spotifyPage(OURS)]);
+
+        expect(await collaborators()).toMatchObject({ found: true, mbid: NOVA, verified: true });
+      });
+
+      it("a name match without any Spotify link is kept, marked unverified", async () => {
+        single([]);
+
+        expect(await collaborators()).toMatchObject({ found: true, mbid: NOVA, verified: false });
+      });
+
+      it("keeps only collaborations and supporting musicians as collaborators", async () => {
+        single([spotifyPage(OURS)]);
+
+        expect((await collaborators()).collaborators).toEqual([
+          { name: "Corrado Rustici", relationship: "collaboration" },
+          { name: "Session Player", relationship: "supporting musician" },
+        ]);
+      });
+
+      it.each([
+        ["a rate limit", "503", "rate_limited"],
+        ["no answer", "never", "timeout"],
+      ])(
+        "%s on the Spotify link lookup is MusicBrainz's failure, not 'ambiguous'",
+        async (_n, link, code) => {
+          process.env.SOURCE_TIMEOUT_MS = "50";
+          single([], link);
+
+          expect(await collaborators()).toMatchObject({
+            found: false,
+            code,
+            source: "musicbrainz",
+          });
+          expect(
+            JSON.parse(
+              await getListenBrainzSimilarArtists.invoke({
+                artistName: "Nova",
+                spotifyArtistId: OURS,
+              }),
+            ),
+          ).toMatchObject({ found: false, code, source: "musicbrainz" });
+        },
+      );
+    });
+
+    it("an empty name is not looked up and is not the source's failure", async () => {
+      const net = stubFetch(() => undefined);
+
+      const data = JSON.parse(await getMusicBrainzArtist.invoke({ artistName: " " }));
+
+      expect(data).toMatchObject({ found: false, reason: "no_input" });
+      expect(net.calls).toHaveLength(0);
     });
   });
 

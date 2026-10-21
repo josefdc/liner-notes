@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toJsonSchema } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { isLlmError } from "./errors.js";
 import { createLlm, estimateInputTokens } from "./invoke.js";
 import { costUsd, priceFor } from "./prices.js";

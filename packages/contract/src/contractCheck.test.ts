@@ -163,6 +163,32 @@ describe("contract-check", { timeout: 30_000 }, () => {
     expect(check(base).status).toBe(0);
   });
 
+  it("needs an engine-change line when the zod the contract resolves changed", () => {
+    const lock = join(repo, "package-lock.json");
+    const lockWith = (packages: Record<string, { version: string }>) =>
+      writeFileSync(lock, JSON.stringify({ lockfileVersion: 3, packages }));
+    lockWith({ "node_modules/zod": { version: "4.6.5" } });
+    const base = commit("zod 4.6.5 at the base");
+    expect(check(base).status).toBe(0);
+
+    lockWith({ "node_modules/zod": { version: "4.6.7" } });
+    const bumped = check(base);
+    expect(bumped.status).toBe(1);
+    expect(bumped.out).toContain("zod 4.6.5 -> 4.6.7 (package-lock.json)");
+    // The contract's own copy wins over the hoisted one.
+    lockWith({
+      "node_modules/zod": { version: "4.6.5" },
+      "packages/contract/node_modules/zod": { version: "4.7.0" },
+    });
+    expect(check(base).out).toContain("zod 4.6.5 -> 4.7.0 (package-lock.json)");
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\nengine changed: zod 4.7.0\n");
+    expect(check(base).status).toBe(0);
+
+    lockWith({ "node_modules/zod": { version: "4.6.5" } });
+    writeFileSync(ackFile(), "# Acknowledged breaking changes\n");
+    expect(check(base).status).toBe(0);
+  });
+
   it("exits 2 when git cannot read the base, instead of reporting no snapshots", () => {
     // A commit whose tree object does not exist: git resolves the base but cannot read its
     // files. Writing the commit directly keeps this independent of how git stores objects

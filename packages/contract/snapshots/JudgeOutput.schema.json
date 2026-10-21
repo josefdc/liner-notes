@@ -11,13 +11,13 @@
           "properties": {
             "claimId": { "type": "string" },
             "verdict": {
-              "description": "Whether the cited excerpts support the claim, not whether it is true",
               "type": "string",
-              "enum": ["supported", "partial", "unsupported", "contradicted"]
+              "enum": ["supported", "partial", "unsupported", "contradicted"],
+              "description": "Whether the cited excerpts support the claim, not whether it is true"
             },
             "reason": {
-              "description": "One sentence naming the excerpt that decides it",
-              "type": "string"
+              "type": "string",
+              "description": "One sentence naming the excerpt that decides it"
             }
           },
           "required": ["claimId", "verdict", "reason"],
@@ -40,13 +40,13 @@
           "properties": {
             "claimId": { "type": "string" },
             "verdict": {
-              "description": "Whether the cited excerpts support the claim, not whether it is true",
               "type": "string",
-              "enum": ["supported", "partial", "unsupported", "contradicted"]
+              "enum": ["supported", "partial", "unsupported", "contradicted"],
+              "description": "Whether the cited excerpts support the claim, not whether it is true"
             },
             "reason": {
-              "description": "One sentence naming the excerpt that decides it",
-              "type": "string"
+              "type": "string",
+              "description": "One sentence naming the excerpt that decides it"
             }
           },
           "required": ["claimId", "verdict", "reason"],

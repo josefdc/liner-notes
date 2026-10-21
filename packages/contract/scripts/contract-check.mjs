@@ -8,9 +8,11 @@
 // packages/contract/BREAKING-CHANGES in the same change; lines already at the base excuse
 // nothing new (lines are counted, so the same line can be acknowledged again later).
 //
-// The comparison itself is code in this change. When that code (ENGINE_FILES) or the CI step
-// that runs it differs from the base, the change must also add a line
-// `engine changed: <reason>`, so loosening the check is never silent.
+// The comparison itself is code in this change. When that code (ENGINE_FILES), the CI step
+// that runs it or the zod version the contract resolves (package-lock.json) differs from the
+// base, the change must also add a line `engine changed: <reason>`, so loosening the check is
+// never silent. zod builds the JSON Schemas and holds the internals readerFacts reads: a zod
+// release that hid a refinement or an unknown-key policy would otherwise pass as additive.
 //
 // Exit codes: 0 compatible, 1 breaking or unacknowledged, 2 the base cannot be read.
 //
@@ -137,6 +139,22 @@ const ciLines = (text) => (text ?? "").split("\n").filter((line) => /contract/i.
 if (ciLines(showAtBase(CI_FILE)).join("\n") !== ciLines(readNow(CI_FILE)).join("\n")) {
   changedEngine.push(`${CI_FILE} (the contract step)`);
 }
+// The zod the contract package resolves: its own copy if it has one, else the hoisted one.
+const LOCK_FILE = "package-lock.json";
+const zodVersion = (lockText) => {
+  if (lockText === null) return "none";
+  try {
+    const packages = JSON.parse(lockText).packages ?? {};
+    return (
+      (packages[`${path}/node_modules/zod`] ?? packages["node_modules/zod"])?.version ?? "none"
+    );
+  } catch {
+    return "unreadable";
+  }
+};
+const zodAtBase = zodVersion(showAtBase(LOCK_FILE));
+const zodNow = zodVersion(readNow(LOCK_FILE));
+if (zodAtBase !== zodNow) changedEngine.push(`zod ${zodAtBase} -> ${zodNow} (${LOCK_FILE})`);
 const engineUnacknowledged = engineChangeUnacknowledged(changedEngine, ackNow, ackBase);
 
 const after = contractSnapshots();

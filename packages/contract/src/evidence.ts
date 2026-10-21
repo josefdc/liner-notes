@@ -9,7 +9,7 @@
  * - `Measured` is one value measured from the audio, ready to display with its method and basis.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { SourceId, Timestamp, UnitInterval } from "./common.js";
 import { tolerantList } from "./tolerant.js";
 

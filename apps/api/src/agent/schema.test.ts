@@ -12,7 +12,7 @@ import {
 } from "./schema.js";
 import { SonicAgentState, generateId } from "./state.js";
 
-const flat = FlatTrackDataSchema.parse({
+const flatInput = {
   id: "x",
   title: "T",
   artist: "A",
@@ -32,7 +32,8 @@ const flat = FlatTrackDataSchema.parse({
   factoids: [1, 2, 3].map((i) => ({ id: `f${i}`, title: "T", content: "C", type: "trivia" })),
   genealogyNodes: [],
   genealogyLinks: [],
-});
+};
+const flat = FlatTrackDataSchema.parse(flatInput);
 
 describe("model output schema", () => {
   it("has no measured audio fields", () => {
@@ -49,6 +50,19 @@ describe("model output schema", () => {
       expect(FlatTrackDataSchema.shape).not.toHaveProperty(field);
       expect(flat).not.toHaveProperty(field);
     }
+  });
+
+  it("trims the cover and Spotify URLs the model copies, and refuses ones that are not URLs", () => {
+    const parsed = FlatTrackDataSchema.parse({
+      ...flatInput,
+      coverUrl: "  https://i.scdn.co/image/x\n",
+      spotifyUrl: "\thttps://open.spotify.com/track/x ",
+    });
+    expect(parsed.coverUrl).toBe("https://i.scdn.co/image/x");
+    expect(parsed.spotifyUrl).toBe("https://open.spotify.com/track/x");
+    expect(FlatTrackDataSchema.safeParse({ ...flatInput, coverUrl: "not a url" }).success).toBe(
+      false,
+    );
   });
 
   it("takes measured values from the measurement only", () => {

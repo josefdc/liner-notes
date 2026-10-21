@@ -3,7 +3,7 @@
  * are in events.ts.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { Timestamp } from "./common.js";
 import { AnalyzeStreamEvent, OpenErrorCode } from "./events.js";
 import { refineNamed } from "./refinements.js";

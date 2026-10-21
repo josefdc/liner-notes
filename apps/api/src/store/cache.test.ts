@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import { MIGRATION_3_FROZEN, runMigrations } from "./migrations.js";
 import { LOW_CONFIDENCE_AUDIO_TTL_MS, MeasuredAudioSchema } from "./measuredAudio.js";
 import { SonicCache, isMeasuredAudio } from "./cache.js";
@@ -191,9 +191,22 @@ describe("migration 3's frozen copy of the audio cache rules", () => {
   // Migration 3 keeps its own copy so that later edits cannot change a shipped migration. If the
   // live rules change on purpose, update this test (not the copy) and say why in the change.
   it("still matches the live rules", () => {
-    expect(zodToJsonSchema(MIGRATION_3_FROZEN.measuredAudioSchema)).toEqual(
-      zodToJsonSchema(MeasuredAudioSchema),
+    // JSON Schema has no `undefined`: a `z.undefined()` field is written as `not: {}` (no value
+    // allowed), so loosening it to any other type changes the schema.
+    const jsonSchema = (schema: z.ZodType) =>
+      z.toJSONSchema(schema, {
+        unrepresentable: "any",
+        override: (ctx) => {
+          if (ctx.zodSchema._zod.def.type === "undefined") ctx.jsonSchema.not = {};
+        },
+      });
+    expect(jsonSchema(MIGRATION_3_FROZEN.measuredAudioSchema)).toEqual(
+      jsonSchema(MeasuredAudioSchema),
     );
+    for (const schema of [MIGRATION_3_FROZEN.measuredAudioSchema, MeasuredAudioSchema]) {
+      expect(schema.safeParse(measured({ unavailableReason: "no_preview" })).success).toBe(false);
+      expect(jsonSchema(schema).properties).toMatchObject({ unavailableReason: { not: {} } });
+    }
     expect(MIGRATION_3_FROZEN.lowConfidenceTtlMs).toBe(LOW_CONFIDENCE_AUDIO_TTL_MS);
   });
 });

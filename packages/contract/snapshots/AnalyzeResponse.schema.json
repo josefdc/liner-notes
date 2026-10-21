@@ -2,7 +2,7 @@
   "input": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "AnalyzeResponse.schema.json",
-    "anyOf": [
+    "oneOf": [
       {
         "type": "object",
         "properties": {
@@ -47,7 +47,7 @@
                     "coverUrl": { "type": "string" },
                     "releaseYear": { "type": "string" },
                     "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                    "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                    "isrc": { "type": ["string", "null"] }
                   },
                   "required": ["id", "title", "artist", "album", "coverUrl"]
                 }
@@ -64,7 +64,7 @@
   "output": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "AnalyzeResponse.schema.json",
-    "anyOf": [
+    "oneOf": [
       {
         "type": "object",
         "properties": {
@@ -110,7 +110,7 @@
                     "coverUrl": { "type": "string" },
                     "releaseYear": { "type": "string" },
                     "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                    "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                    "isrc": { "type": ["string", "null"] }
                   },
                   "required": ["id", "title", "artist", "album", "coverUrl"],
                   "additionalProperties": false

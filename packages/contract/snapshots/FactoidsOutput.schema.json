@@ -9,14 +9,13 @@
         "items": {
           "type": "object",
           "properties": {
-            "title": { "description": "Short title, no colon at the end", "type": "string" },
-            "text": { "description": "One to three sentences", "type": "string" },
+            "title": { "type": "string", "description": "Short title, no colon at the end" },
+            "text": { "type": "string", "description": "One to three sentences" },
             "type": {
               "type": "string",
               "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
             },
             "entities": {
-              "description": "Names in the text worth exploring (people, instruments, records, years)",
               "type": "array",
               "items": {
                 "type": "object",
@@ -29,12 +28,13 @@
                 },
                 "required": ["text", "type"],
                 "additionalProperties": false
-              }
+              },
+              "description": "Names in the text worth exploring (people, instruments, records, years)"
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             }
           },
           "required": ["title", "text", "type", "entities", "evidenceIds"],
@@ -55,14 +55,13 @@
         "items": {
           "type": "object",
           "properties": {
-            "title": { "description": "Short title, no colon at the end", "type": "string" },
-            "text": { "description": "One to three sentences", "type": "string" },
+            "title": { "type": "string", "description": "Short title, no colon at the end" },
+            "text": { "type": "string", "description": "One to three sentences" },
             "type": {
               "type": "string",
               "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
             },
             "entities": {
-              "description": "Names in the text worth exploring (people, instruments, records, years)",
               "type": "array",
               "items": {
                 "type": "object",
@@ -75,12 +74,13 @@
                 },
                 "required": ["text", "type"],
                 "additionalProperties": false
-              }
+              },
+              "description": "Names in the text worth exploring (people, instruments, records, years)"
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             }
           },
           "required": ["title", "text", "type", "entities", "evidenceIds"],

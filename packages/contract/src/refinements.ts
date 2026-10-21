@@ -5,7 +5,7 @@
  * as `unnamed` and is caught the same way.
  */
 
-import type { z } from "zod/v4";
+import type { z } from "zod";
 
 const ids = new WeakMap<object, string>();
 

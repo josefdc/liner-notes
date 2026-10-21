@@ -11,8 +11,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-import { zodToJsonSchema } from "zod-to-json-schema";
-import type { z } from "zod";
+import { z } from "zod";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -133,7 +132,8 @@ export async function generateStructuredOutput<T extends z.ZodTypeAny>(
   } = options;
 
   const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-  const jsonSchema = zodToJsonSchema(schema);
+  // Draft-07, as the schema was sent before (zod-to-json-schema): the same keywords.
+  const jsonSchema = z.toJSONSchema(schema, { target: "draft-07" });
   const models = buildModelChain(tier, useFallbackOnQuota);
 
   for (const currentModel of models) {

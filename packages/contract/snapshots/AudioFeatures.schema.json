@@ -6,18 +6,18 @@
     "properties": {
       "version": { "type": "number", "const": 2 },
       "analyzerVersion": {
-        "description": "Semver of the feature contract plus model ids; part of the cache key",
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "description": "Semver of the feature contract plus model ids; part of the cache key"
       },
       "window": {
         "type": "object",
         "properties": {
           "kind": { "type": "string", "const": "preview-30s" },
           "durationSeconds": {
-            "description": "Length of the decoded preview",
             "type": "number",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Length of the decoded preview"
           }
         },
         "required": ["kind", "durationSeconds"]
@@ -27,11 +27,11 @@
         "properties": {
           "passed": { "type": "boolean" },
           "reason": {
-            "description": "Set exactly when the gate did not pass",
             "anyOf": [
               { "type": "string", "enum": ["silence", "noise", "too_short"] },
               { "type": "null" }
-            ]
+            ],
+            "description": "Set exactly when the gate did not pass"
           }
         },
         "required": ["passed", "reason"]
@@ -43,8 +43,8 @@
             "properties": {
               "bpm": { "type": "number", "exclusiveMinimum": 0 },
               "confidence": {
-                "description": "Estimator confidence normalised to 0..1 by the audio service; null when the estimator gives none. Essentia's RhythmExtractor2013 reports 0 to 5.32: the service divides by 5.32 and clips to 0..1, and keeps the reported value in rawConfidence.",
-                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
+                "description": "Estimator confidence normalised to 0..1 by the audio service; null when the estimator gives none. Essentia's RhythmExtractor2013 reports 0 to 5.32: the service divides by 5.32 and clips to 0..1, and keeps the reported value in rawConfidence."
               },
               "rawConfidence": {
                 "description": "The confidence as the estimator reported it, with its scale",
@@ -54,12 +54,12 @@
                     "properties": {
                       "value": { "type": "number" },
                       "range": {
-                        "description": "The estimator's scale, e.g. [0, 5.32]",
                         "type": "array",
                         "prefixItems": [{ "type": "number" }, { "type": "number" }],
                         "items": false,
                         "minItems": 2,
-                        "maxItems": 2
+                        "maxItems": 2,
+                        "description": "The estimator's scale, e.g. [0, 5.32]"
                       }
                     },
                     "required": ["value", "range"]
@@ -68,9 +68,9 @@
                 ]
               },
               "method": {
-                "description": "Estimator, e.g. 'essentia.RhythmExtractor2013'",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Estimator, e.g. 'essentia.RhythmExtractor2013'"
               },
               "basis": { "type": "string", "const": "signal" }
             },
@@ -85,24 +85,24 @@
             "type": "object",
             "properties": {
               "tonic": {
-                "description": "Spelled with sharps; the service maps flat names (Bb -> A#)",
                 "type": "string",
-                "enum": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+                "enum": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
+                "description": "Spelled with sharps; the service maps flat names (Bb -> A#)"
               },
               "mode": { "type": "string", "enum": ["major", "minor"] },
               "strength": {
-                "description": "Key strength from the estimator; null when none",
-                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
+                "description": "Key strength from the estimator; null when none"
               },
               "profile": {
-                "description": "Key profile used, e.g. 'edma' or 'krumhansl'",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Key profile used, e.g. 'edma' or 'krumhansl'"
               },
               "method": {
-                "description": "Estimator, e.g. 'essentia.KeyExtractor'",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Estimator, e.g. 'essentia.KeyExtractor'"
               },
               "basis": { "type": "string", "const": "signal" }
             },
@@ -117,9 +117,9 @@
             "type": "object",
             "properties": {
               "rmsMean": {
-                "description": "Mean RMS amplitude, linear, full scale = 1",
                 "type": "number",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Mean RMS amplitude, linear, full scale = 1"
               },
               "method": { "type": "string", "minLength": 1 },
               "basis": { "type": "string", "const": "signal" }
@@ -135,9 +135,9 @@
             "type": "object",
             "properties": {
               "times": {
-                "description": "Beat positions in seconds, ascending",
                 "type": "array",
-                "items": { "type": "number", "minimum": 0 }
+                "items": { "type": "number", "minimum": 0 },
+                "description": "Beat positions in seconds, ascending"
               },
               "method": { "type": "string", "minLength": 1 },
               "basis": { "type": "string", "const": "signal" }
@@ -154,9 +154,9 @@
             "properties": {
               "hopSeconds": { "type": "number", "exclusiveMinimum": 0 },
               "values": {
-                "description": "RMS per hop, from the start of the preview",
                 "type": "array",
-                "items": { "type": "number", "minimum": 0 }
+                "items": { "type": "number", "minimum": 0 },
+                "description": "RMS per hop, from the start of the preview"
               },
               "method": { "type": "string", "minLength": 1 },
               "basis": { "type": "string", "const": "signal" }
@@ -177,9 +177,9 @@
                   "type": "object",
                   "properties": {
                     "label": {
-                      "description": "Neutral label: 'A', 'B', ...",
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "Neutral label: 'A', 'B', ..."
                     },
                     "start": { "type": "number", "minimum": 0 },
                     "end": { "type": "number", "minimum": 0 }
@@ -201,9 +201,9 @@
           "type": "object",
           "properties": {
             "time": {
-              "description": "Seconds from the start of the preview",
               "type": "number",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Seconds from the start of the preview"
             },
             "type": {
               "type": "string",
@@ -216,7 +216,6 @@
         }
       },
       "fingerprint": {
-        "description": "null when the models are not loaded",
         "anyOf": [
           {
             "type": "object",
@@ -230,14 +229,14 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                           },
                           "licence": {
-                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                           }
                         },
                         "required": ["id", "licence"]
@@ -249,8 +248,8 @@
                           "properties": {
                             "label": { "type": "string", "minLength": 1 },
                             "score": {
-                              "description": "Model activation; a score, not a probability",
-                              "type": "number"
+                              "type": "number",
+                              "description": "Model activation; a score, not a probability"
                             }
                           },
                           "required": ["label", "score"]
@@ -272,14 +271,14 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                           },
                           "licence": {
-                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                           }
                         },
                         "required": ["id", "licence"]
@@ -291,8 +290,8 @@
                           "properties": {
                             "label": { "type": "string", "minLength": 1 },
                             "score": {
-                              "description": "Model activation; a score, not a probability",
-                              "type": "number"
+                              "type": "number",
+                              "description": "Model activation; a score, not a probability"
                             }
                           },
                           "required": ["label", "score"]
@@ -317,25 +316,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"]
@@ -354,25 +353,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"]
@@ -385,32 +384,31 @@
                         ]
                       },
                       "instrumental": {
-                        "description": "Voice/instrumental head: the instrumental output",
                         "anyOf": [
                           {
                             "type": "object",
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"]
@@ -420,7 +418,8 @@
                             "required": ["value", "range", "model", "basis"]
                           },
                           { "type": "null" }
-                        ]
+                        ],
+                        "description": "Voice/instrumental head: the instrumental output"
                       },
                       "valence": {
                         "anyOf": [
@@ -429,25 +428,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"]
@@ -466,25 +465,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"]
@@ -506,7 +505,8 @@
             "required": ["styles", "tags", "moods"]
           },
           { "type": "null" }
-        ]
+        ],
+        "description": "null when the models are not loaded"
       }
     },
     "required": [
@@ -531,18 +531,18 @@
     "properties": {
       "version": { "type": "number", "const": 2 },
       "analyzerVersion": {
-        "description": "Semver of the feature contract plus model ids; part of the cache key",
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "description": "Semver of the feature contract plus model ids; part of the cache key"
       },
       "window": {
         "type": "object",
         "properties": {
           "kind": { "type": "string", "const": "preview-30s" },
           "durationSeconds": {
-            "description": "Length of the decoded preview",
             "type": "number",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Length of the decoded preview"
           }
         },
         "required": ["kind", "durationSeconds"],
@@ -553,11 +553,11 @@
         "properties": {
           "passed": { "type": "boolean" },
           "reason": {
-            "description": "Set exactly when the gate did not pass",
             "anyOf": [
               { "type": "string", "enum": ["silence", "noise", "too_short"] },
               { "type": "null" }
-            ]
+            ],
+            "description": "Set exactly when the gate did not pass"
           }
         },
         "required": ["passed", "reason"],
@@ -570,8 +570,8 @@
             "properties": {
               "bpm": { "type": "number", "exclusiveMinimum": 0 },
               "confidence": {
-                "description": "Estimator confidence normalised to 0..1 by the audio service; null when the estimator gives none. Essentia's RhythmExtractor2013 reports 0 to 5.32: the service divides by 5.32 and clips to 0..1, and keeps the reported value in rawConfidence.",
-                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
+                "description": "Estimator confidence normalised to 0..1 by the audio service; null when the estimator gives none. Essentia's RhythmExtractor2013 reports 0 to 5.32: the service divides by 5.32 and clips to 0..1, and keeps the reported value in rawConfidence."
               },
               "rawConfidence": {
                 "description": "The confidence as the estimator reported it, with its scale",
@@ -581,12 +581,12 @@
                     "properties": {
                       "value": { "type": "number" },
                       "range": {
-                        "description": "The estimator's scale, e.g. [0, 5.32]",
                         "type": "array",
                         "prefixItems": [{ "type": "number" }, { "type": "number" }],
                         "items": false,
                         "minItems": 2,
-                        "maxItems": 2
+                        "maxItems": 2,
+                        "description": "The estimator's scale, e.g. [0, 5.32]"
                       }
                     },
                     "required": ["value", "range"],
@@ -596,9 +596,9 @@
                 ]
               },
               "method": {
-                "description": "Estimator, e.g. 'essentia.RhythmExtractor2013'",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Estimator, e.g. 'essentia.RhythmExtractor2013'"
               },
               "basis": { "type": "string", "const": "signal" }
             },
@@ -614,24 +614,24 @@
             "type": "object",
             "properties": {
               "tonic": {
-                "description": "Spelled with sharps; the service maps flat names (Bb -> A#)",
                 "type": "string",
-                "enum": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+                "enum": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
+                "description": "Spelled with sharps; the service maps flat names (Bb -> A#)"
               },
               "mode": { "type": "string", "enum": ["major", "minor"] },
               "strength": {
-                "description": "Key strength from the estimator; null when none",
-                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+                "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
+                "description": "Key strength from the estimator; null when none"
               },
               "profile": {
-                "description": "Key profile used, e.g. 'edma' or 'krumhansl'",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Key profile used, e.g. 'edma' or 'krumhansl'"
               },
               "method": {
-                "description": "Estimator, e.g. 'essentia.KeyExtractor'",
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Estimator, e.g. 'essentia.KeyExtractor'"
               },
               "basis": { "type": "string", "const": "signal" }
             },
@@ -647,9 +647,9 @@
             "type": "object",
             "properties": {
               "rmsMean": {
-                "description": "Mean RMS amplitude, linear, full scale = 1",
                 "type": "number",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Mean RMS amplitude, linear, full scale = 1"
               },
               "method": { "type": "string", "minLength": 1 },
               "basis": { "type": "string", "const": "signal" }
@@ -666,9 +666,9 @@
             "type": "object",
             "properties": {
               "times": {
-                "description": "Beat positions in seconds, ascending",
                 "type": "array",
-                "items": { "type": "number", "minimum": 0 }
+                "items": { "type": "number", "minimum": 0 },
+                "description": "Beat positions in seconds, ascending"
               },
               "method": { "type": "string", "minLength": 1 },
               "basis": { "type": "string", "const": "signal" }
@@ -686,9 +686,9 @@
             "properties": {
               "hopSeconds": { "type": "number", "exclusiveMinimum": 0 },
               "values": {
-                "description": "RMS per hop, from the start of the preview",
                 "type": "array",
-                "items": { "type": "number", "minimum": 0 }
+                "items": { "type": "number", "minimum": 0 },
+                "description": "RMS per hop, from the start of the preview"
               },
               "method": { "type": "string", "minLength": 1 },
               "basis": { "type": "string", "const": "signal" }
@@ -710,9 +710,9 @@
                   "type": "object",
                   "properties": {
                     "label": {
-                      "description": "Neutral label: 'A', 'B', ...",
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "Neutral label: 'A', 'B', ..."
                     },
                     "start": { "type": "number", "minimum": 0 },
                     "end": { "type": "number", "minimum": 0 }
@@ -736,9 +736,9 @@
           "type": "object",
           "properties": {
             "time": {
-              "description": "Seconds from the start of the preview",
               "type": "number",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Seconds from the start of the preview"
             },
             "type": {
               "type": "string",
@@ -752,7 +752,6 @@
         }
       },
       "fingerprint": {
-        "description": "null when the models are not loaded",
         "anyOf": [
           {
             "type": "object",
@@ -766,14 +765,14 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                           },
                           "licence": {
-                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                           }
                         },
                         "required": ["id", "licence"],
@@ -786,8 +785,8 @@
                           "properties": {
                             "label": { "type": "string", "minLength": 1 },
                             "score": {
-                              "description": "Model activation; a score, not a probability",
-                              "type": "number"
+                              "type": "number",
+                              "description": "Model activation; a score, not a probability"
                             }
                           },
                           "required": ["label", "score"],
@@ -811,14 +810,14 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                           },
                           "licence": {
-                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                           }
                         },
                         "required": ["id", "licence"],
@@ -831,8 +830,8 @@
                           "properties": {
                             "label": { "type": "string", "minLength": 1 },
                             "score": {
-                              "description": "Model activation; a score, not a probability",
-                              "type": "number"
+                              "type": "number",
+                              "description": "Model activation; a score, not a probability"
                             }
                           },
                           "required": ["label", "score"],
@@ -859,25 +858,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"],
@@ -898,25 +897,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"],
@@ -931,32 +930,31 @@
                         ]
                       },
                       "instrumental": {
-                        "description": "Voice/instrumental head: the instrumental output",
                         "anyOf": [
                           {
                             "type": "object",
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"],
@@ -968,7 +966,8 @@
                             "additionalProperties": false
                           },
                           { "type": "null" }
-                        ]
+                        ],
+                        "description": "Voice/instrumental head: the instrumental output"
                       },
                       "valence": {
                         "anyOf": [
@@ -977,25 +976,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"],
@@ -1016,25 +1015,25 @@
                             "properties": {
                               "value": { "type": "number" },
                               "range": {
-                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal",
                                 "type": "array",
                                 "prefixItems": [{ "type": "number" }, { "type": "number" }],
                                 "items": false,
                                 "minItems": 2,
-                                "maxItems": 2
+                                "maxItems": 2,
+                                "description": "Output range of the head, e.g. [0, 1], or [1, 9] for DEAM valence and arousal"
                               },
                               "model": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Model id, e.g. 'discogs-effnet-bs64-1'"
                                   },
                                   "licence": {
-                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'",
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "description": "Licence of the model weights, e.g. 'CC BY-NC-SA 4.0'"
                                   }
                                 },
                                 "required": ["id", "licence"],
@@ -1060,7 +1059,8 @@
             "additionalProperties": false
           },
           { "type": "null" }
-        ]
+        ],
+        "description": "null when the models are not loaded"
       }
     },
     "required": [

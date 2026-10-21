@@ -85,6 +85,20 @@ describe.each(Object.keys(CONTRACT_SCHEMAS))("%s", (name) => {
   });
 });
 
+it("reader facts are still found (a zod release that hid them would read as additive)", () => {
+  // Known facts of the contract as it stands; each comes from zod internals readerFacts reads.
+  expect(current.ReplayRecord.refinements).toContain("$: replay.event-order");
+  expect(current.ComposerOutput.unknownKeys.$).toBe("strict");
+  expect(current.TrackAnalysis.unknownKeys.$).toBe("strip");
+  expect(current.ApiError.unknownKeys.$).toBe("passthrough");
+  expect(current.TrackAnalysis.tolerant).toEqual(
+    expect.arrayContaining([
+      "$.segments: drops unreadable items",
+      "$.audio: absent when unreadable",
+    ]),
+  );
+});
+
 it("every snapshot belongs to a schema of the contract (a removed schema is breaking)", () => {
   const orphans = Object.keys(snapshots).filter((name) => !(name in CONTRACT_SCHEMAS));
   expect(orphans).toEqual([]);

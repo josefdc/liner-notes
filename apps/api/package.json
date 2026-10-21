@@ -36,8 +36,7 @@
     "express": "5.2.1",
     "express-rate-limit": "8.7.0",
     "openai": "7.30.0",
-    "zod": "3.25.76",
-    "zod-to-json-schema": "3.25.0"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

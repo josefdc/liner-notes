@@ -417,6 +417,7 @@ export const FlatTrackDataSchema = z.object({
   title: z.string().describe("Song title — COPY EXACTLY from input metadata"),
   artist: z.string().describe("Primary artist name — COPY EXACTLY from input metadata"),
   album: z.string().describe("Album name — COPY EXACTLY from input metadata"),
+  // `.url()` returns the URL without surrounding whitespace (zod 4 trims it).
   coverUrl: z.string().url().describe("Album cover URL — COPY EXACTLY from input metadata"),
   spotifyUrl: z.string().url().optional().describe("Direct Spotify URL"),
   releaseYear: z.string().optional().describe("Year of release (e.g. '2022')"),
@@ -744,7 +745,7 @@ export const StreamEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("partial"),
-    data: z.record(z.unknown()),
+    data: z.record(z.string(), z.unknown()),
     node: z.string(),
   }),
   z.object({

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { AudioFeatures } from "./audio.js";
 import {
   AZURE_FORBIDDEN_KEYWORDS,
@@ -31,6 +31,27 @@ const objectWithProperties = (count: number) =>
   z.strictObject(
     Object.fromEntries(Array.from({ length: count }, (_, i) => [`p${i}`, z.string()])),
   );
+
+describe("toJsonSchema defaults", () => {
+  const field = (schema: z.ZodType, io: "input" | "output") =>
+    (toJsonSchema(z.object({ a: schema }), io).properties as Record<string, JsonSchema>).a;
+
+  it("keeps a .catch() fallback zod drops from the input, when it is a valid input", () => {
+    // zod drops these from input schemas because the caught schema holds a transform.
+    const counted = z.preprocess((value) => value, z.number());
+    expect(field(counted.nullable().catch(null), "input")).toMatchObject({ default: null });
+    expect(field(counted.catch(5), "input")).toMatchObject({ default: 5 });
+  });
+
+  it("does not advertise a fallback that the caught schema would refuse as input", () => {
+    const length = z
+      .string()
+      .transform((text) => text.length)
+      .pipe(z.number());
+    expect(field(length.catch(5), "input")).not.toHaveProperty("default");
+    expect(field(length.catch(5), "output")).toMatchObject({ default: 5 });
+  });
+});
 
 describe("model-facing schemas", () => {
   it.each(Object.entries(LLM_SCHEMAS))("%s passes", (_name, schema) => {

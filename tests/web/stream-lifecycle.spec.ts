@@ -24,8 +24,13 @@ const result = fullResultData();
 const pickerEvents = [
   { type: "connected", threadId: "thread-hitl" },
   { type: "status", node: "scout", message: "Searching for the track", code: "SPOTIFY-SEARCH" },
-  { type: "candidates", candidates },
-  { type: "interrupt", reason: "disambiguation", threadId: "thread-hitl", candidates },
+  {
+    type: "interrupt",
+    reason: "disambiguation",
+    threadId: "thread-hitl",
+    candidates,
+    message: "Multiple songs found. Please select the correct one.",
+  },
 ];
 
 const posts = (log: string[]) => log.filter((entry) => entry.startsWith("fetch /api/analyze"));
@@ -46,7 +51,7 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
   await useMockApi(page, {
     suggestions: [],
     streams: {
-      // The picker appears on "candidates"; "done" is held back until after the pick.
+      // The picker appears on "interrupt"; "done" is held back until after the pick.
       [ANALYZE]: [...pickerEvents, { $wait: "analysis-done" }, { type: "done" }],
       [RESUME]: [
         { type: "resuming", threadId: "thread-hitl" },
@@ -127,7 +132,8 @@ test("a complete event without a result shows an error with a retry", async ({ p
       [ANALYZE]: [
         { type: "connected", threadId: "thread-empty" },
         { type: "status", node: "composer", message: "Composing", code: "GEMINI-CONNECT" },
-        { type: "complete" },
+        // Not an event the API sends: the app skips it, so the run ends without a result.
+        { $unchecked: { type: "complete" } },
         { type: "done" },
       ],
     },
@@ -148,7 +154,7 @@ test("a duplicate complete for the thread is ignored when the picker times out",
     suggestions: [],
     streams: {
       [ANALYZE]: [...pickerEvents, { type: "done" }],
-      // The server sends the result twice (graph writer and state update) before "done".
+      // A second result for the run (the API sends one; a repeat must not count twice).
       [RESUME]: [
         { type: "resuming", threadId: "thread-hitl" },
         { type: "complete", data: result },

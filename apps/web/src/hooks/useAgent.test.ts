@@ -1,10 +1,16 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetSkippedReports } from './agent/events';
 import { STREAM_INACTIVITY_TIMEOUT_MS, useAgent } from './useAgent';
 
-/** An EventSource the test drives by hand. */
+/**
+ * An EventSource the test drives by hand. `send` adds what the API's stream adds to each event:
+ * the run id (`t1`; null on a factoid stream) and `seq` (0, 1, 2… per stream; none on a
+ * heartbeat), unless the event names its own.
+ */
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
+  private seq = 0;
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
@@ -30,10 +36,17 @@ class FakeEventSource {
     this.closed = true;
   }
 
-  /** A `data:` event. `late` delivers it even after close (it was already queued). */
-  send(data: object, { late = false } = {}) {
+  /**
+   * A `data:` event. `late` delivers it even after close (it was already queued); `raw` sends
+   * it without the run id and `seq`.
+   */
+  send(data: { type: string; [field: string]: unknown }, { late = false, raw = false } = {}) {
     if (this.closed && !late) return;
-    act(() => this.onmessage?.(new MessageEvent('message', { data: JSON.stringify(data) })));
+    const runId = this.url.includes('/factoids/') ? null : 't1';
+    const event = raw
+      ? data
+      : { runId, ...(data.type === 'heartbeat' ? {} : { seq: this.seq++ }), ...data };
+    act(() => this.onmessage?.(new MessageEvent('message', { data: JSON.stringify(event) })));
   }
 
   /** A named event (`event: <type>`). */
@@ -57,7 +70,24 @@ const candidates = [
   { id: 'c1', title: 'Hurt', artist: 'Johnny Cash', album: 'A', coverUrl: '', popularity: 0 },
   { id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails', album: 'B', coverUrl: '', popularity: 0 },
 ];
-const track = { id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails' };
+/** A result as the API sends it (a TrackAnalysis). */
+const track = {
+  id: 'c2',
+  title: 'Hurt',
+  artist: 'Nine Inch Nails',
+  album: 'B',
+  coverUrl: '',
+  bpm: null,
+  genealogy: { nodes: [], links: [] },
+};
+const interrupt = (list: typeof candidates = candidates) => ({
+  type: 'interrupt',
+  reason: 'disambiguation',
+  threadId: 't1',
+  candidates: list,
+  message: 'Multiple songs found. Please select the correct one.',
+});
+const factoid = (id: string) => ({ id, title: `Fact ${id}`, content: 'Content.', type: 'trivia' });
 const completeLogs = (logs: Array<{ message: string }>) =>
   logs.filter((log) => log.message.startsWith('Analysis complete')).length;
 
@@ -65,6 +95,7 @@ let fetchSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   FakeEventSource.instances = [];
+  resetSkippedReports();
   vi.stubGlobal('EventSource', FakeEventSource);
   fetchSpy = vi.fn(async () => new Response('{}', { status: 503 }));
   vi.stubGlobal('fetch', fetchSpy);
@@ -87,8 +118,7 @@ function openPicker() {
   const hook = startAnalysis();
   const analysis = lastStream();
   analysis.send({ type: 'connected', threadId: 't1' });
-  analysis.send({ type: 'candidates', candidates });
-  analysis.send({ type: 'interrupt', threadId: 't1', candidates });
+  analysis.send(interrupt());
   return { hook, analysis };
 }
 
@@ -117,12 +147,15 @@ describe('useAgent stream errors', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('treats a complete event without data as an error', () => {
+  it('skips a complete event without data, so the run ends without a result', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result } = startAnalysis();
     lastStream().send({ type: 'complete' });
 
-    expect(result.current.status).toBe('error');
+    expect(result.current.status).not.toBe('complete');
     expect(result.current.trackData).toBeNull();
+    lastStream().send({ type: 'done' });
+    expect(result.current.status).toBe('error');
     expect(lastStream().closed).toBe(true);
   });
 
@@ -143,7 +176,7 @@ describe('useAgent results', () => {
     analysis.send({ type: 'complete', data: track });
     analysis.send({ type: 'complete', data: { ...track, title: 'Changed' } });
     analysis.send({ type: 'status', node: 'composer', message: 'late status' });
-    analysis.send({ type: 'error', error: 'late failure' });
+    analysis.send({ type: 'error', code: 'failed', error: 'late failure' });
     analysis.send({ type: 'done' });
 
     expect(result.current.status).toBe('complete');
@@ -178,15 +211,18 @@ describe('useAgent track picker', () => {
     expect(analysis.closed).toBe(true);
   });
 
-  it('keeps the same candidate list when candidates and interrupt repeat it', () => {
+  it('opens the picker on the interrupt only: a candidates event is not part of the protocol', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const hook = startAnalysis();
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'candidates', candidates });
-    const shown = hook.result.current.candidates;
-    analysis.send({ type: 'interrupt', threadId: 't1', candidates: [...candidates] });
+    expect(hook.result.current.candidates).toBeNull();
+    expect(hook.result.current.status).not.toBe('disambiguation');
 
-    expect(hook.result.current.candidates).toBe(shown);
+    analysis.send(interrupt([...candidates]));
+    expect(hook.result.current.status).toBe('disambiguation');
+    expect(hook.result.current.candidates?.map((c) => c.id)).toEqual(['c1', 'c2']);
   });
 
   it('opens one resume per picker and closes the analysis stream', async () => {
@@ -301,12 +337,12 @@ describe('useAgent factoid stream', () => {
     const onFactoid = vi.fn();
     const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], onFactoid);
     const decrypt = lastStream();
-    decrypt.send({ type: 'factoid', data: { id: 'f1' } });
+    decrypt.send({ type: 'factoid', data: factoid('f1') });
 
     act(() => result.current.reset());
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     expect(decrypt.closed).toBe(true);
-    decrypt.send({ type: 'factoid', data: { id: 'f2' } }, { late: true });
+    decrypt.send({ type: 'factoid', data: factoid('f2') }, { late: true });
     expect(onFactoid).toHaveBeenCalledTimes(1);
   });
 
@@ -343,7 +379,7 @@ describe('useAgent factoid stream', () => {
     decrypt.send({ type: 'error', code: 'rate_limited', error: 'busy', index: 0 });
     decrypt.send({ type: 'error', code: 'budget_exhausted', error: 'paused', index: 1 });
     decrypt.send({ type: 'error', code: 'failed', error: 'x', index: 2 });
-    decrypt.send({ type: 'factoid', data: { id: 'f1' } });
+    decrypt.send({ type: 'factoid', data: factoid('f1') });
     decrypt.send({ type: 'done' });
 
     await pending;
@@ -400,7 +436,7 @@ describe('useAgent with the interrupt-only protocol', () => {
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ type: 'status', node: 'scout', message: 'Searching' });
-    analysis.send({ type: 'interrupt', reason: 'disambiguation', threadId: 't1', candidates });
+    analysis.send(interrupt());
     analysis.send({ type: 'done' });
     expect(result.current.status).toBe('disambiguation');
     expect(result.current.candidates).toHaveLength(2);
@@ -425,7 +461,7 @@ describe('useAgent with the interrupt-only protocol', () => {
     const { result } = startAnalysis('Hurt');
     const analysis = lastStream();
     analysis.send({ type: 'connected', threadId: 't1' });
-    analysis.send({ type: 'interrupt', threadId: 't1', candidates });
+    analysis.send(interrupt());
     analysis.send({ type: 'done' });
     await act(async () => {
       await result.current.selectCandidate('c1');
@@ -447,5 +483,94 @@ describe('useAgent with the interrupt-only protocol', () => {
     act(() => result.current.retry());
     expect(lastStream().url).toContain('/api/analyze/stream?query=Hurt');
     expect(result.current.errorCode).toBeNull();
+  });
+});
+
+// Every message is parsed with the contract's schema; repeats, events of another run and a
+// second result of the run are dropped (agent/events.ts).
+describe('useAgent typed events', () => {
+  it('skips unknown types and events that do not fit the contract, logging each kind once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'mystery', detail: 'from a newer server' });
+    analysis.send({ type: 'mystery', detail: 'again' });
+    analysis.send({ type: 'status', node: 'engineer' });
+    analysis.send({ type: 'status', node: 'engineer', message: 'Analyzing' }, { raw: true });
+    analysis.send({ type: 'complete', data: { title: 'Not a result' } });
+
+    expect(result.current.status).not.toBe('error');
+    expect(result.current.logs.map((log) => log.message)).toEqual([
+      '🔍 Searching for "Hurt"...',
+      'Connected to agent',
+    ]);
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      expect.stringContaining('(mystery): unknown type'),
+      expect.stringContaining('(status): does not fit the contract'),
+      expect.stringContaining('(complete): does not fit the contract'),
+    ]);
+
+    analysis.send({ type: 'complete', data: track });
+    expect(result.current.status).toBe('complete');
+  });
+
+  it('drops an event repeated with the same seq, and one that arrives out of order', () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'engineer', message: 'Analyzing', seq: 5 });
+    analysis.send({ type: 'status', node: 'engineer', message: 'Analyzing', seq: 5 });
+    analysis.send({ type: 'status', node: 'engineer', message: 'Earlier', seq: 3 });
+
+    const messages = result.current.logs.map((log) => log.message);
+    expect(messages.filter((message) => message === 'Analyzing')).toHaveLength(1);
+    expect(messages).not.toContain('Earlier');
+  });
+
+  it("ignores events of another run on the run's stream", () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'complete', data: { ...track, title: 'Older run' }, runId: 't0' });
+    analysis.send({ type: 'error', code: 'failed', error: 'Older run failed', runId: 't0' });
+
+    expect(result.current.status).not.toBe('complete');
+    expect(result.current.status).not.toBe('error');
+    analysis.send({ type: 'complete', data: track });
+    expect(result.current.trackData?.title).toBe('Hurt');
+  });
+
+  it('takes one complete per run, across its analysis and resume streams', async () => {
+    const { hook, analysis } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    const resume = lastStream();
+    // The resume stream numbers its events from 0 again: they are not repeats.
+    resume.send({ type: 'resuming', threadId: 't1' });
+    resume.send({ type: 'complete', data: track });
+    resume.send({ type: 'complete', data: { ...track, title: 'Second result' } });
+
+    expect(analysis.closed).toBe(true);
+    expect(hook.result.current.trackData?.title).toBe('Hurt');
+    expect(completeLogs(hook.result.current.logs)).toBe(1);
+  });
+
+  it('skips a factoid that does not fit the contract and goes on', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = renderHook(() => useAgent());
+    const onFactoid = vi.fn();
+    const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], onFactoid);
+    const decrypt = lastStream();
+    decrypt.send({ type: 'connected' });
+    decrypt.send({ type: 'factoid', data: { ...factoid('f1'), type: 'lyrics' } });
+    decrypt.send({ type: 'factoid', data: factoid('f2') });
+    decrypt.send({ type: 'factoid', data: factoid('f2'), seq: 2 });
+    decrypt.send({ type: 'done' });
+
+    await pending;
+    expect(onFactoid.mock.calls.map(([data]) => data.id)).toEqual(['f2']);
   });
 });

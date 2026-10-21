@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AnalyzeStreamEvent, FactoidStreamEvent } from "@liner-notes/contract";
 import { expect, type Page } from "@playwright/test";
+import { contractMisfits, type MockConfig, withEnvelope } from "../mock-sse/envelope";
 
 const mockDir = join(dirname(fileURLToPath(import.meta.url)), "..", "mock-sse");
 
@@ -10,13 +12,32 @@ export function loadFixture(name: string) {
   return JSON.parse(readFileSync(join(mockDir, "fixtures", `${name}.json`), "utf8"));
 }
 
+/**
+ * The configuration the mocked API replays: every stream event with the run id and `seq` the
+ * API adds (../mock-sse/envelope.ts), checked against the contract's event unions. A stream
+ * event the API could not send fails the test here, so the mock cannot drift from the server;
+ * one sent on purpose goes in `{ "$unchecked": event }`.
+ */
+export function mockConfig(fixture: unknown): MockConfig {
+  const config = withEnvelope(fixture as MockConfig);
+  const misfits = contractMisfits(config, {
+    analysis: AnalyzeStreamEvent,
+    factoids: FactoidStreamEvent,
+  });
+  if (misfits.length > 0) {
+    throw new Error(`Mock stream events the API cannot send:\n${misfits.join("\n")}`);
+  }
+  return config;
+}
+
 /** Installs the mocked API (tests/mock-sse/mock-api.js) configured with a fixture. */
 export async function useMockApi(page: Page, fixture: unknown) {
+  const config = mockConfig(fixture);
   // Keep the tests off the network: web fonts are not needed to check behaviour.
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
-  await page.addInitScript((config) => {
-    (window as unknown as { __mockApi: unknown }).__mockApi = config;
-  }, fixture);
+  await page.addInitScript((value) => {
+    (window as unknown as { __mockApi: unknown }).__mockApi = value;
+  }, config);
   await page.addInitScript({ path: join(mockDir, "mock-api.js") });
 }
 

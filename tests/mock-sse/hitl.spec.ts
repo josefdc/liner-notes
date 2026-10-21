@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import { mockConfig } from "../web/mock";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(join(here, "fixtures/hitl.json"), "utf8"));
@@ -18,7 +19,7 @@ test.beforeEach(async ({ page }) => {
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await page.addInitScript((config) => {
     (window as unknown as { __mockApi: unknown }).__mockApi = config;
-  }, fixture);
+  }, mockConfig(fixture));
   await page.addInitScript({ path: join(here, "mock-api.js") });
 });
 

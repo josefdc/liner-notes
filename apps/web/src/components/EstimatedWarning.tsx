@@ -1,5 +1,5 @@
 import type React from 'react';
-import { AlertTriangle, Disc, Heart, Sparkles, Zap } from 'lucide-react';
+import { TriangleAlert, Disc, Heart, Sparkles, Zap } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
@@ -180,7 +180,7 @@ function audioNotice(track: TrackData) {
 
 const Notice: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="flex gap-3 items-start px-4 py-3 border border-analog/30 bg-analog/5 rounded-md">
-    <AlertTriangle size={16} className="text-analog flex-shrink-0 mt-0.5" aria-hidden="true" />
+    <TriangleAlert size={16} className="text-analog flex-shrink-0 mt-0.5" aria-hidden="true" />
     <div className="text-xs font-mono text-text-secondary space-y-1">
       <p className="text-analog uppercase tracking-widest">{title}</p>
       {children}

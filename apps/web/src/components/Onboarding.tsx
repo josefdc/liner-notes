@@ -7,7 +7,7 @@ import {
   Search,
   Music,
   Check,
-  AlertCircle,
+  CircleAlert,
   RotateCcw,
   ArrowRight,
   ArrowLeft,
@@ -632,7 +632,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {status === 'error' && (
             <div className="bg-status-error/5 border border-status-error/20 rounded-[--radius-md] p-6 space-y-4">
               <div className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
-                <AlertCircle size={16} />
+                <CircleAlert size={16} />
                 SIGNAL LOST
               </div>
               {error && (

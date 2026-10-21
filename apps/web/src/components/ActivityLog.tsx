@@ -5,7 +5,7 @@ import {
   Search,
   Activity,
   Zap,
-  CheckCircle2,
+  CircleCheck,
   Cpu,
   Wifi,
   Music,
@@ -133,7 +133,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           )}
           {isComplete && (
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 size={10} className="text-status-success" />
+              <CircleCheck size={10} className="text-status-success" />
               <span className="text-[10px] text-status-success font-mono tracking-wider">DONE</span>
             </span>
           )}

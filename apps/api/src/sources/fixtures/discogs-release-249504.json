@@ -1,0 +1,30 @@
+{
+  "id": 249504,
+  "title": "Never Gonna Give You Up",
+  "year": 1987,
+  "artists": [{ "id": 72872, "name": "Rick Astley", "anv": "", "join": "" }],
+  "extraartists": [
+    { "id": 279522, "name": "Me Company", "anv": "", "role": "Design", "tracks": "" },
+    {
+      "id": 20942,
+      "name": "Stock / Aitken / Waterman",
+      "anv": "",
+      "role": "Producer, Written-By",
+      "tracks": ""
+    }
+  ],
+  "tracklist": [
+    {
+      "position": "A",
+      "type_": "track",
+      "title": "Never Gonna Give You Up",
+      "duration": "3:32"
+    },
+    {
+      "position": "B",
+      "type_": "track",
+      "title": "Never Gonna Give You Up (Instrumental)",
+      "duration": "3:30"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "isrc": "GBUM71106916",
+  "recordings": [
+    {
+      "id": "6f903161-8757-4363-a6ab-54bfe1149bb8",
+      "title": "Under Pressure",
+      "length": 235400,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Queen",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+            "name": "Queen"
+          }
+        },
+        {
+          "name": "David Bowie",
+          "joinphrase": "",
+          "artist": {
+            "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+            "name": "David Bowie"
+          }
+        }
+      ]
+    },
+    {
+      "id": "32c7e292-14f1-4080-bddf-ef852e0a4c59",
+      "title": "Under Pressure",
+      "length": 243000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Queen",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+            "name": "Queen"
+          }
+        },
+        {
+          "name": "David Bowie",
+          "joinphrase": "",
+          "artist": {
+            "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+            "name": "David Bowie"
+          }
+        }
+      ]
+    }
+  ]
+}

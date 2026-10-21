@@ -1,0 +1,33 @@
+{
+  "uri": "https://secondhandsongs.com/performance/9200010",
+  "title": "Under Pressure",
+  "performer": {
+    "uri": "https://secondhandsongs.com/artist/9300010",
+    "name": "Queen & David Bowie"
+  },
+  "isOriginal": true,
+  "date": "1981",
+  "originals": [],
+  "covers": [
+    {
+      "uri": "https://secondhandsongs.com/performance/9200011",
+      "title": "Under Pressure",
+      "performer": {
+        "uri": "https://secondhandsongs.com/artist/9300011",
+        "name": "My Chemical Romance & The Used"
+      },
+      "isOriginal": false,
+      "date": "2005"
+    }
+  ],
+  "usesSamplesFrom": [],
+  "sampledBy": [
+    {
+      "uri": "https://secondhandsongs.com/performance/9200001",
+      "title": "Ice Ice Baby",
+      "performer": { "uri": "https://secondhandsongs.com/artist/9300001", "name": "Vanilla Ice" },
+      "isOriginal": true,
+      "date": "1989"
+    }
+  ]
+}

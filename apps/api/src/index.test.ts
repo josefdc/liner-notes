@@ -1,6 +1,6 @@
 /**
- * Starts the real entry point in a child process (dummy keys, a scratch database, no .env in its
- * working directory): malformed requests do not take it down, it binds 127.0.0.1 by default, it
+ * Starts the real entry point in a child process (dummy keys, a scratch database, and every
+ * setting the tests rely on pinned, because the entry point also reads apps/api/.env): malformed requests do not take it down, it binds 127.0.0.1 by default, it
  * settles runs left open only once it listens, it refuses invalid configuration, and it shuts
  * down cleanly on SIGTERM. Also checks the process-level error handlers with a small fixture.
  *
@@ -119,6 +119,22 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   GEMINI_API_KEY: "",
   TAVILY_API_KEY: "",
   LASTFM_API_KEY: "",
+  DISCOGS_TOKEN: "",
+  SHS_API_KEY: "",
+  GENIUS_ACCESS_TOKEN: "",
+  // Set and empty (the defaults), so a local .env cannot change what the tests check.
+  HOST: "",
+  TRUST_PROXY: "",
+  RATE_LIMIT_WINDOW_MS: "",
+  RATE_LIMIT_MAX: "",
+  RATE_LIMIT_GLOBAL_MAX: "",
+  SEARCH_RATE_LIMIT_WINDOW_MS: "",
+  SEARCH_RATE_LIMIT_MAX: "",
+  REPLAY_MODE: "",
+  CHECKPOINT_RETENTION_HOURS: "",
+  STORE_RETENTION_DAYS: "",
+  RUN_RETENTION_DAYS: "",
+  SOURCE_CASSETTE: "",
   ...extra,
 });
 
@@ -251,10 +267,12 @@ describe("an API process whose log reader has gone", () => {
     withDatabase(dbPath, (db) =>
       startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }),
     );
-    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, {}, [
+    // The launcher passes its environment (the same pinned settings) on to the API.
+    const port = await freePort();
+    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, apiEnv(port, dbPath), [
       TSX_LOADER,
       ENTRY,
-      String(await freePort()),
+      String(port),
       dbPath,
     ]);
     expect(await launcher.exit).toBe(0);

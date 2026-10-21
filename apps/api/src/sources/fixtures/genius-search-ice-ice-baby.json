@@ -1,0 +1,27 @@
+{
+  "meta": { "status": 200 },
+  "response": {
+    "hits": [
+      {
+        "type": "song",
+        "result": {
+          "id": 9000002,
+          "title": "Ice Ice Baby (Remix)",
+          "url": "https://genius.com/Vanilla-ice-ice-ice-baby-remix-lyrics",
+          "artist_names": "Vanilla Ice",
+          "primary_artist": { "id": 9100001, "name": "Vanilla Ice" }
+        }
+      },
+      {
+        "type": "song",
+        "result": {
+          "id": 9000001,
+          "title": "Ice Ice Baby",
+          "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+          "artist_names": "Vanilla Ice",
+          "primary_artist": { "id": 9100001, "name": "Vanilla Ice" }
+        }
+      }
+    ]
+  }
+}

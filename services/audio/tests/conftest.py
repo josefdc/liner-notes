@@ -85,6 +85,19 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(404, {"Content-Length": "0"})
 
 
+def pytest_configure(config):
+    """AUDIO_REQUIRE_MODELS=1 (CI's models job): fail instead of skipping without the models."""
+    if os.environ.get("AUDIO_REQUIRE_MODELS") == "1":
+        import estimators
+        import main
+
+        if not (estimators.ESSENTIA_AVAILABLE and main.MODELS_LOADED):
+            raise pytest.UsageError(
+                "AUDIO_REQUIRE_MODELS=1 but essentia or the models are not available "
+                "(uv sync --extra models; uv run python download_models.py)"
+            )
+
+
 @pytest.fixture
 def cdn():
     """

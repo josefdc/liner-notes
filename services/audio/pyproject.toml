@@ -11,6 +11,7 @@ dependencies = [
     "librosa==1.0.0",
     "numpy>=2.3.5",
     "pydantic>=2.12.5",
+    "scipy>=1.16.3",
     "soundfile>=0.13.1",
     "uvicorn>=0.38.0",
 ]
@@ -31,6 +32,7 @@ exclude-newer-package = { ruff = "2026-10-16T00:00:00Z" }
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.26.0",
     "pytest>=9.1.1",
     "ruff==0.17.1",
 ]

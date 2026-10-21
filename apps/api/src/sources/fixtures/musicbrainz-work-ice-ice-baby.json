@@ -1,0 +1,160 @@
+{
+  "id": "e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+  "title": "Ice Ice Baby",
+  "relations": [
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+        "title": "Ice Ice Baby",
+        "length": 271000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Vanilla Ice",
+            "joinphrase": "",
+            "artist": {
+              "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+              "name": "Vanilla Ice"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": ["cover", "live"],
+      "recording": {
+        "id": "a91d02d8-d5b0-42ec-ae95-678ec39bd373",
+        "title": "Ice Ice Baby",
+        "length": 132000,
+        "disambiguation": "live, 1998-04-07: Coliseu dos Recreios, Lisbon, Portugal",
+        "artist-credit": [
+          {
+            "name": "Faith No More",
+            "joinphrase": "",
+            "artist": {
+              "id": "b15ebd71-a252-417d-9e1c-3e6863da68f8",
+              "name": "Faith No More"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": ["cover", "live", "medley", "partial"],
+      "recording": {
+        "id": "d03e2f99-0248-4cc2-ace4-3e0abbcbf386",
+        "title": "Anniversary Medley Part 1",
+        "length": 216093,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "FORK",
+            "joinphrase": "",
+            "artist": {
+              "id": "634ef7d1-3034-4f70-86c1-04fc6f8f53cd",
+              "name": "FORK"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": ["cover"],
+      "recording": {
+        "id": "f812384f-e505-45dd-8d18-0ff0e34ed670",
+        "title": "Ice Ice Alvin",
+        "length": 198000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "The Chipmunks",
+            "joinphrase": "",
+            "artist": {
+              "id": "14553432-e492-420d-99ed-6e2fd6b4543f",
+              "name": "The Chipmunks"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": ["cover"],
+      "recording": {
+        "id": "9e6e6546-b65c-4681-aa04-61f3630f5f11",
+        "title": "Ice Ice Baby",
+        "length": 139173,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Big Daddy",
+            "joinphrase": "",
+            "artist": {
+              "id": "09aee210-8761-4b66-84fa-1a5a835636c6",
+              "name": "Big Daddy"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": ["cover"],
+      "recording": {
+        "id": "1e0ece79-a156-4042-b254-20ec6ddb7638",
+        "title": "Ice Ice Baby",
+        "length": 234200,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "The WFG All-Stars",
+            "joinphrase": "",
+            "artist": {
+              "id": "7f86c2fa-ac24-443a-bbcf-1b96387a5b16",
+              "name": "The WFG All-Stars"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": ["cover"],
+      "recording": {
+        "id": "dfaf98d8-8685-42ff-be33-d5ab861e9f57",
+        "title": "Ice Ice Baby",
+        "length": 241360,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Crazy Frog",
+            "joinphrase": "",
+            "artist": {
+              "id": "3df914b9-e0bc-493c-875a-c412f84ecdad",
+              "name": "Crazy Frog"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

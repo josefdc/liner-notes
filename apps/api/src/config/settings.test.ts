@@ -137,4 +137,18 @@ describe("readSettings", () => {
     expect(errorsOf({ ...KEYS, RATE_LIMIT_MAX: "0" })).toContain("RATE_LIMIT_MAX");
     expect(errorsOf({ ...KEYS, SEARCH_RATE_LIMIT_MAX: "-1" })).toContain("SEARCH_RATE_LIMIT_MAX");
   });
+
+  it("treats the primary-record source credentials as optional", () => {
+    const result = readSettings({ ...KEYS, DISCOGS_TOKEN: "", GENIUS_ACCESS_TOKEN: "abc123" });
+    expect(result).toMatchObject({ ok: true, warnings: [] });
+    expect(readSettings({ ...KEYS, SHS_API_KEY: "k" }).ok).toBe(true);
+  });
+
+  it("rejects a source credential that cannot be sent in a header", () => {
+    expect(errorsOf({ ...KEYS, DISCOGS_TOKEN: "abc def" })).toContain("DISCOGS_TOKEN");
+    expect(errorsOf({ ...KEYS, GENIUS_ACCESS_TOKEN: "abc\n" })).toContain("GENIUS_ACCESS_TOKEN");
+    expect(errorsOf({ ...KEYS, SHS_API_KEY: " abc" })).toContain("SHS_API_KEY");
+    // The message names the variable, never its value.
+    expect(errorsOf({ ...KEYS, DISCOGS_TOKEN: "secret value" })).not.toContain("secret");
+  });
 });

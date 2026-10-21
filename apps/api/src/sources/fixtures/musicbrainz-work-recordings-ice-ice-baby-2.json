@@ -1,0 +1,351 @@
+{
+  "recording-count": 117,
+  "recording-offset": 100,
+  "recordings": [
+    {
+      "id": "031c4ec8-f24e-45a6-90ca-b434cbaad414",
+      "title": "Ice Ice Baby Under Pressure (Two Tracker): Ice Ice Baby / Under Pressure",
+      "first-release-date": "2018-04-05",
+      "length": 417000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Queen",
+          "joinphrase": " vs ",
+          "artist": {
+            "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+            "name": "Queen"
+          }
+        },
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0d572ec1-fcab-478d-8644-35e36685e7a7",
+      "title": "Ice Ice Baby (revised edition)",
+      "first-release-date": "1991",
+      "length": 269826,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0ebc8200-af48-43da-b2be-9966fba3e314",
+      "title": "Ice Ice Baby (The Miami Drop mix)",
+      "first-release-date": "1991-03",
+      "length": 560760,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "215b33db-85a2-429e-84a5-74e4279f380b",
+      "title": "Too Cold",
+      "first-release-date": "1998-10-20",
+      "length": 204200,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "52099392-0c69-41f5-8c46-71ef0c0ad168",
+      "title": "Ice Ice Baby (remix)",
+      "first-release-date": "",
+      "length": 205986,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": " feat. ",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        },
+        {
+          "name": "Korn",
+          "joinphrase": "",
+          "artist": {
+            "id": "ac865b2e-bba8-4f5a-8756-dd40d5e39f46",
+            "name": "Korn"
+          }
+        }
+      ]
+    },
+    {
+      "id": "574f2e80-f92b-4942-b018-84cb30831860",
+      "title": "Ice Ice Baby (Revised version)",
+      "first-release-date": "1993",
+      "length": 269000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6c2d7047-1950-420b-8e80-2e2dcea8e823",
+      "title": "Ice Ice Baby (re-recorded)",
+      "first-release-date": "2009-04-01",
+      "length": 255000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6e51f710-36cd-49cb-8b92-0c6c9077ec98",
+      "title": "Ice Ice Baby 2008 (radio & video edit)",
+      "first-release-date": "2008",
+      "length": 210306,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "ReAnimator",
+          "joinphrase": " feat. ",
+          "artist": {
+            "id": "6b7b9522-97ed-4731-aab9-36b0972d416c",
+            "name": "Reanimator"
+          }
+        },
+        {
+          "name": "Big Daddi",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "8c85b83e-94ec-4474-8269-c685a5fe8b45",
+            "name": "Big Daddi"
+          }
+        },
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "84ab3e6b-7308-4376-9c4c-9f1e25bd6506",
+      "title": "Ice Ice Baby (Wunderbros dubstep remix)",
+      "first-release-date": "2011",
+      "length": 246986,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9bc4d177-0663-40c8-a76b-f00e24c9aee9",
+      "title": "Ice Ice Baby (Salsa) (Mendezz & Andrew remix)",
+      "first-release-date": "2007-05-14",
+      "length": 177613,
+      "disambiguation": "part of “Dancemix Summer Anthems” DJ-mix",
+      "artist-credit": [
+        {
+          "name": "Reanimator & Big Daddi",
+          "joinphrase": " / ",
+          "artist": {
+            "id": "6b7b9522-97ed-4731-aab9-36b0972d416c",
+            "name": "Reanimator"
+          }
+        },
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a872b382-cf59-43d6-8ae4-820b540236a1",
+      "title": "Queen Medley",
+      "first-release-date": "2005-10-11",
+      "length": 517813,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Butch Walker",
+          "joinphrase": "",
+          "artist": {
+            "id": "30e8e6e2-7b79-4eef-ba91-8435d4ba0fac",
+            "name": "Butch Walker"
+          }
+        }
+      ]
+    },
+    {
+      "id": "af59bf46-963b-4f02-bbe4-d1ef4cb8b1a9",
+      "title": "Ice Ice Baby (Rock Hero mix)",
+      "first-release-date": "2008-11-11",
+      "length": 250000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bf5c80e0-34b3-434b-925e-1ed0a9801090",
+      "title": "Ice Ice Baby (radio mix)",
+      "first-release-date": "1990",
+      "length": 281800,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ddf4f977-12f0-4b34-a662-7cd3c0f08f9d",
+      "title": "Ice, Ice Baby",
+      "first-release-date": "",
+      "length": 271066,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e40d894c-84af-4b0d-84be-f726d902897d",
+      "title": "Ice Ice Baby (Salsa)",
+      "first-release-date": "2007-07",
+      "length": 248000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Reanimator",
+          "joinphrase": " feat. ",
+          "artist": {
+            "id": "6b7b9522-97ed-4731-aab9-36b0972d416c",
+            "name": "Reanimator"
+          }
+        },
+        {
+          "name": "Big Daddi",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "8c85b83e-94ec-4474-8269-c685a5fe8b45",
+            "name": "Big Daddi"
+          }
+        },
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "efcf2117-50e5-4470-9a92-062b329ea907",
+      "title": "Ice Ice Baby (Reanimator Deejay Bass Up! electro mix)",
+      "first-release-date": "2008-11-14",
+      "length": 180000,
+      "disambiguation": "part of “Clubbers Guide Poland” DJ-mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fbaadfc9-29d3-483b-b49d-79d1197ff84f",
+      "title": "Ice Ice Baby (Zumba remix)",
+      "first-release-date": "2012",
+      "length": 222000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    }
+  ]
+}

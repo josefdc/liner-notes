@@ -1,0 +1,1746 @@
+{
+  "recording-count": 117,
+  "recording-offset": 0,
+  "recordings": [
+    {
+      "id": "0004c7a0-66d6-4288-ac72-c38a01c60394",
+      "title": "Ice Ice Baby (country style)",
+      "first-release-date": "2000",
+      "length": 880026,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Herringbone Brick",
+          "joinphrase": "",
+          "artist": {
+            "id": "5134f551-8041-4088-809b-371e37fe4b61",
+            "name": "Herringbone Brick"
+          }
+        }
+      ]
+    },
+    {
+      "id": "035fbf39-1922-4f05-81d4-8d53bf2460c0",
+      "title": "Ice Ice Baby (Hip Hop remix – 12″ version)",
+      "first-release-date": "1991",
+      "length": 393000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Key Biscayne",
+          "joinphrase": "",
+          "artist": {
+            "id": "9a2fd781-e9dc-4bab-8660-8809c27d651f",
+            "name": "Key Biscayne"
+          }
+        }
+      ]
+    },
+    {
+      "id": "03e81bf8-8e25-44e8-b9bf-a40d71e69c9f",
+      "title": "Ice Ice Baby (a cappella mix)",
+      "first-release-date": "1990",
+      "length": 230906,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0902f0db-4567-4bd3-8051-f7f73d167346",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2018-10-05",
+      "length": 272306,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "10138de9-5a68-49cf-84a2-8bea114c2acc",
+      "title": "Ice Ice Baby (club mix)",
+      "first-release-date": "2012-01-27",
+      "length": 302000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "161c467d-024d-4654-8afc-9dc71946e03a",
+      "title": "Ice Ice Baby (Pressure mix)",
+      "first-release-date": "1991",
+      "length": 337200,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1cd7d430-7daf-4758-bad1-1c34f71d42ca",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1990",
+      "length": 226666,
+      "disambiguation": "radio edit",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1d2082c6-5b7a-4cf6-b51c-d31e1ed1de56",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2015-10-02",
+      "length": 250774,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Marty Ray Project",
+          "joinphrase": "",
+          "artist": {
+            "id": "6f39b18e-d8f0-4b4f-a6e8-331eb3506447",
+            "name": "Marty Ray Project"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1dbf0314-484a-42d5-98ea-0cfe4037e122",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006",
+      "length": 199000,
+      "disambiguation": "part of “Jimmy Z prestens… 4PLAY: Anthems, Vol. 1” DJ‐mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1e0ece79-a156-4042-b254-20ec6ddb7638",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999-04-20",
+      "length": 234200,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "The WFG All-Stars",
+          "joinphrase": "",
+          "artist": {
+            "id": "7f86c2fa-ac24-443a-bbcf-1b96387a5b16",
+            "name": "The WFG All-Stars"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1fa2b536-9fd1-4ecd-a5c9-3183c3e7352f",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2010-05-14",
+      "length": 205000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Glee Cast",
+          "joinphrase": "",
+          "artist": {
+            "id": "29542149-a818-4167-aa91-439adc9d61f5",
+            "name": "Glee Cast"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2142d1b2-3252-46af-880b-c30cbda575bf",
+      "title": "Ice Ice Baby (radio mix edit)",
+      "first-release-date": "1990",
+      "length": 226626,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "239f1190-e8e9-41e1-a19c-60b7695990a7",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2003",
+      "length": 193373,
+      "disambiguation": "part of “Much Dance 90s” DJ-mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "25a99383-1fc3-4345-be7a-52e6b8f7d3f0",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2018-04-05",
+      "length": 244812,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "The Moon Loungers",
+          "joinphrase": "",
+          "artist": {
+            "id": "931af0f5-d14f-4d67-981d-f72e04f733e4",
+            "name": "The Moon Loungers"
+          }
+        }
+      ]
+    },
+    {
+      "id": "261dfaab-8836-493e-bbba-37e65cafaeb0",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2005-08-02",
+      "length": 250413,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2654915f-a933-4a3f-aa26-6313e8ecf3d5",
+      "title": "Ice Ice Baby (radio mix)",
+      "first-release-date": "1990",
+      "length": 272040,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2de23277-948f-4d05-a3fa-690c0c0c6b64",
+      "title": "Ice Ice Baby (dance remix)",
+      "first-release-date": "",
+      "length": 221000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2eeb3da8-f363-4458-980f-88fc846beeee",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1990",
+      "length": 302826,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "30c8656b-f072-4e4f-b986-44f09d26db36",
+      "title": "Ice Ice Baby (MadHatter's Dorky European Dancehall mix)",
+      "first-release-date": "2004",
+      "length": 224000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "36fdc30f-f8c1-4d71-b0e4-4cc767a409da",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999",
+      "length": 270048,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "39fe20b5-5a7d-4715-b612-24fdc0dc8082",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "3cd1c97d-032b-44e4-8dc8-d1b4e72d4258",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2011-03-24",
+      "length": 224000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "3df4f360-2740-4efd-9365-34e6e738b9b2",
+      "title": "Ice Ice Baby (clubmix)",
+      "first-release-date": "1991",
+      "length": 286000,
+      "disambiguation": "part of “Dance Mix ’91” DJ‐mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "3eda519e-3427-49c8-9df2-ef7e0fef4675",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 148000,
+      "disambiguation": "2014 Sera Ryu partial cover",
+      "artist-credit": [
+        {
+          "name": "Sera Ryu",
+          "joinphrase": "",
+          "artist": {
+            "id": "271c1826-e8c2-404a-8217-7ce3fb292735",
+            "name": "Sera Ryu"
+          }
+        }
+      ]
+    },
+    {
+      "id": "452bc590-2163-44c7-8d79-c342e6325826",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2009-02-20",
+      "length": 222000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "467f3ad1-1f6a-4dae-a821-54e7eb8e978d",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2017",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "470286c3-119b-4fa3-9ea7-fbc0021a60a2",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999",
+      "length": 98000,
+      "disambiguation": "part of “The Mix of the Century” DJ‐mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "4fe305c6-4e8a-4829-8d69-95a404ffb14d",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2008-11-11",
+      "length": 254466,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "50a4da2f-6574-4421-938a-355ff524bf81",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2000",
+      "length": 332506,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Herringbone Brick",
+          "joinphrase": "",
+          "artist": {
+            "id": "5134f551-8041-4088-809b-371e37fe4b61",
+            "name": "Herringbone Brick"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5685bce6-22b7-4daf-b791-431f046c0c7b",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2000",
+      "length": 270000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5803db39-bf4f-4d9d-8b8d-206014f8404a",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2014-10-31",
+      "length": 231000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Leo Moracchioli",
+          "joinphrase": "",
+          "artist": {
+            "id": "81dfcb61-7284-4f33-9578-e869a846089c",
+            "name": "Leo Moracchioli"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5d80a0ec-6db3-4f21-9674-03367e39159b",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 232000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Scream Machine",
+          "joinphrase": "",
+          "artist": {
+            "id": "895229f6-0d35-47f4-b6dc-b53ebb4f9aec",
+            "name": "Scream Machine"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5efa2fe7-11ca-445c-8d11-129aa1fa7860",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "60a3be71-e6e5-4859-a761-be20c3665fec",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006",
+      "length": 222000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "625ad3c1-cadd-4b6f-b33f-1cee5278f067",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2010",
+      "length": 268000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "62ddc4c7-b23a-4c36-9988-e8b536ee3546",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006",
+      "length": 304000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "66ba7a5e-a32d-47c4-a2aa-066fe7890994",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2025-09-05",
+      "length": 153911,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        },
+        {
+          "name": "Kep1er",
+          "joinphrase": "",
+          "artist": {
+            "id": "187da628-d21a-4e0f-a93c-456c97a2c032",
+            "name": "Kep1er"
+          }
+        }
+      ]
+    },
+    {
+      "id": "66ba7a5e-a32d-47c4-a2aa-066fe7890994",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2025-09-05",
+      "length": 153911,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        },
+        {
+          "name": "Kep1er",
+          "joinphrase": "",
+          "artist": {
+            "id": "187da628-d21a-4e0f-a93c-456c97a2c032",
+            "name": "Kep1er"
+          }
+        }
+      ]
+    },
+    {
+      "id": "67cfce64-be51-46dd-bc23-aa55b7b20dd5",
+      "title": "Ice Ice Baby (Miami Drop mix)",
+      "first-release-date": "1990",
+      "length": 300000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6da7f2b4-f5c9-4514-8442-f0fb0d3982a3",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 237400,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "72d78596-7a1d-4b15-9b7b-58a907b50aa6",
+      "title": "Ice Ice Baby (club mix)",
+      "first-release-date": "1990",
+      "length": 303733,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "76a81208-9efa-42dd-a8bf-09b3f2bc610c",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2002",
+      "length": 125226,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7724c787-cae5-415a-ac3b-e131a35c9803",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2022",
+      "length": 229000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7db60b1d-73c1-456b-adfa-0d39abc1626b",
+      "title": "Ice Ice Baby (Club Crasher mix)",
+      "first-release-date": "2008-11-11",
+      "length": 266000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7f0f9c02-ea57-4824-8c11-b7b80cda3dbb",
+      "title": "Ice Ice Baby (Benny Benassi remix)",
+      "first-release-date": "2010",
+      "length": 361277,
+      "disambiguation": "part of “The King of Electro” DJ‐mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8370f332-aa7b-4446-bd5f-6d859c36518d",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2010",
+      "length": 271000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "83810d21-933d-4279-89ce-e4cfe4e46262",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2023-11-24",
+      "length": 232173,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1990-09-04",
+      "length": 271000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8880555b-bc27-4312-a4ed-1b8716680c80",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2010-08",
+      "length": 233000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Mambo Kurt",
+          "joinphrase": "",
+          "artist": {
+            "id": "ed91f11b-4341-46a0-84f6-8fb3c7f3adfe",
+            "name": "Mambo Kurt"
+          }
+        }
+      ]
+    },
+    {
+      "id": "898f0517-7918-4038-8faf-f977016a2bfc",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999",
+      "length": 269666,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8a288de6-08c3-472c-b121-a6b95bee356a",
+      "title": "Ice Ice Baby (Miami Drop mix)",
+      "first-release-date": "1990",
+      "length": 302760,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8f2af7c1-d50d-499c-a71b-68bf19fb3853",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1997",
+      "length": 271266,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8f43358f-781e-4bf7-8068-f78536b34466",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 257000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "My Gay Uncle",
+          "joinphrase": "",
+          "artist": {
+            "id": "39eb421a-c4d4-49b5-aa0d-bbe294584994",
+            "name": "My Gay Uncle"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8ffb2179-9f07-4c28-ba2a-4199c13f48ba",
+      "title": "Ice Ice Baby (Miami Drop mix instrumental)",
+      "first-release-date": "1990",
+      "length": 301000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "902698d4-cd4b-4968-a8c8-f050546516ef",
+      "title": "Ice Ice Baby (Gigi D’Aostino remix-edit)",
+      "first-release-date": "2001",
+      "length": 263880,
+      "disambiguation": "part of a “Bump 8” DJ‐mix",
+      "artist-credit": [
+        {
+          "name": "Reanimator",
+          "joinphrase": " feat. ",
+          "artist": {
+            "id": "6b7b9522-97ed-4731-aab9-36b0972d416c",
+            "name": "Reanimator"
+          }
+        },
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "93c37a50-5548-417b-b3a4-c1973f868cfb",
+      "title": "ICE ICE BABY",
+      "first-release-date": "2011-02-23",
+      "length": 110000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "VANILLA ICE",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9434fba5-efdb-45a4-92bd-51f4005ab7ea",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2023-07-05",
+      "length": 270586,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "955cf77e-b47e-42e7-89cd-7d2a57b615b6",
+      "title": "Ice Ice Baby (Ghislain Poirier remix)",
+      "first-release-date": "2006",
+      "length": 230186,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9ad9447b-b9e3-475f-b38d-d0664c26fa11",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2021-08-20",
+      "length": 227253,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9cbb25e9-f2ef-448f-949b-7dbb2f3f420b",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1995",
+      "length": 302000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9d910337-3575-4a58-a3ec-f03d98189b17",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2011",
+      "length": 268000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9e0b61d0-e0e0-4534-84f1-cfa860f535a9",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2000",
+      "length": 271960,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9e2a1eab-5e9b-4326-a2e0-f8816fd3ae5c",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 272000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9e6e6546-b65c-4681-aa04-61f3630f5f11",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1991",
+      "length": 139173,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Big Daddy",
+          "joinphrase": "",
+          "artist": {
+            "id": "09aee210-8761-4b66-84fa-1a5a835636c6",
+            "name": "Big Daddy"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9ebb40d5-2d45-4acb-821b-5c31eaade2eb",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2002",
+      "length": 259653,
+      "disambiguation": "part of “Jimmy Z: 4Play, Volume 1” DJ-mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a3b066dd-308e-4065-93ac-682236ad08d4",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999",
+      "length": 230000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a91d02d8-d5b0-42ec-ae95-678ec39bd373",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 132000,
+      "disambiguation": "live, 1998-04-07: Coliseu dos Recreios, Lisbon, Portugal",
+      "artist-credit": [
+        {
+          "name": "Faith No More",
+          "joinphrase": "",
+          "artist": {
+            "id": "b15ebd71-a252-417d-9e1c-3e6863da68f8",
+            "name": "Faith No More"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ad3e376f-3aa8-4392-8f2d-3e26a8283474",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999",
+      "length": 271373,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ae618a88-7929-47ce-b43f-3abda51bb46d",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2005",
+      "length": null,
+      "disambiguation": "SingStar karaoke version",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b21d7d5b-0b22-4195-a6bb-940a47abc393",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2008",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b6fcfbfa-7b64-4b15-a866-56870a53bdb7",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1992",
+      "length": 261333,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bae29280-7b49-4908-856a-b983bd3536ca",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 229006,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bba8f89d-cb72-4e0a-bf1e-71310bfbfac0",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1999",
+      "length": 301013,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bbba526f-d184-4242-a531-05c131a216ca",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1991",
+      "length": 232360,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bd5e85df-32b2-4fd0-879d-21fd994a2e7a",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2013-10-21",
+      "length": 219253,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c46a01e5-ce5c-42c7-afeb-6bf1215d5363",
+      "title": "Ice Ice Baby (radio edit)",
+      "first-release-date": "2024-02-02",
+      "length": 229000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c60f2cd3-f939-4a13-8d41-8c1deecdfed9",
+      "title": "Ice Ice Baby",
+      "first-release-date": "1998",
+      "length": 270000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c62ad78d-665a-4bf8-93fe-5e8c0143a33b",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2019",
+      "length": 269293,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c6f937d6-9c68-4be0-8aa8-3548a9bc39d7",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2017-01-05",
+      "length": 167000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Postmodern Jukebox",
+          "joinphrase": " feat. ",
+          "artist": {
+            "id": "5f5d68dd-285a-4f06-9099-84eb3f85c65f",
+            "name": "Postmodern Jukebox"
+          }
+        },
+        {
+          "name": "Aubrey Logan",
+          "joinphrase": "",
+          "artist": {
+            "id": "25ddc785-1c3b-4b5d-8826-2063abd589e1",
+            "name": "Aubrey Logan"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ca504aaa-45d8-4340-94e1-66540aaab14d",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006-09-26",
+      "length": 157000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Richard Cheese",
+          "joinphrase": "",
+          "artist": {
+            "id": "858db18f-1e09-4f0d-96d3-c15d28762c15",
+            "name": "Richard Cheese"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cd97734e-fa44-49f1-ba29-ca30d8d8276f",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2019-04-20",
+      "length": 231915,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Scream Machine",
+          "joinphrase": "",
+          "artist": {
+            "id": "895229f6-0d35-47f4-b6dc-b53ebb4f9aec",
+            "name": "Scream Machine"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ce312333-8183-46d4-814a-e7e4bfc94d91",
+      "title": "Ice Cube",
+      "first-release-date": "2004-04-13",
+      "length": 364000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Big T",
+          "joinphrase": "",
+          "artist": {
+            "id": "c446de28-61c9-4f58-85e6-da5be68a8e03",
+            "name": "Big T"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d03e2f99-0248-4cc2-ace4-3e0abbcbf386",
+      "title": "Anniversary Medley Part 1",
+      "first-release-date": "2015-10-01",
+      "length": 216093,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "FORK",
+          "joinphrase": "",
+          "artist": {
+            "id": "634ef7d1-3034-4f70-86c1-04fc6f8f53cd",
+            "name": "FORK"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d0c844a8-8ec0-445c-9961-59facecbf4fa",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2017-09-22",
+      "length": 270586,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d2054f3f-1c26-44d4-b9fd-de2dee757b11",
+      "title": "Ice Ice Baby (radio edit);",
+      "first-release-date": "2009-06-08",
+      "length": 227013,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d5c21ae7-89c5-4e57-beaf-6add60f75197",
+      "title": "Ice Ice Baby (edit)",
+      "first-release-date": "2010-05-31",
+      "length": 222000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d87116a4-8972-4fea-94b9-8ba175227393",
+      "title": "Can't a Loop",
+      "first-release-date": "2005-09-07",
+      "length": 321840,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "FORK",
+          "joinphrase": "",
+          "artist": {
+            "id": "634ef7d1-3034-4f70-86c1-04fc6f8f53cd",
+            "name": "FORK"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d8fb55b8-2aa2-4c77-9df9-1e402bf878fb",
+      "title": "Ice Ice Baby (radio edit)",
+      "first-release-date": "2003",
+      "length": 252120,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dd461ccd-8949-4d12-9d98-6cf74f610486",
+      "title": "Ice Ice Baby (radio edit)",
+      "first-release-date": "2008",
+      "length": 224000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "de8e0625-0591-4e4e-98be-48ca0fb15a03",
+      "title": "Ice Ice Baby (New Romantic mix)",
+      "first-release-date": "2008-11-01",
+      "length": 293906,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "df79a63e-6a22-4728-bc4b-b1be65af15eb",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2005",
+      "length": 224000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dfaf98d8-8685-42ff-be33-d5ab861e9f57",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006-06-12",
+      "length": 241360,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Crazy Frog",
+          "joinphrase": "",
+          "artist": {
+            "id": "3df914b9-e0bc-493c-875a-c412f84ecdad",
+            "name": "Crazy Frog"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e6bd91f2-4214-4adb-a54d-8800f2711a0d",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2010",
+      "length": 272184,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e6e22f64-b9f8-4193-a0e9-bd9a4ca90c0e",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006-02-13",
+      "length": 206186,
+      "disambiguation": "part of “Skitzmetal” DJ‐mix",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e904199f-565f-4a93-adad-4ce940cf405f",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2006",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ee0e7f57-f4be-4633-ba42-8506b35a7584",
+      "title": "Ice Ice Baby",
+      "first-release-date": "",
+      "length": 319626,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "efac5845-a752-4638-bcfe-effab12ebb08",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2004",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Kacey Baker",
+          "joinphrase": " feat. ",
+          "artist": {
+            "id": "4bc5255e-27c6-4edd-8221-cdf5deb96dda",
+            "name": "Kacey Baker"
+          }
+        },
+        {
+          "name": "Tamarra Jabor",
+          "joinphrase": "",
+          "artist": {
+            "id": "772d733c-525e-4abf-895f-3cd1e5e90f63",
+            "name": "Tamarra Jabor"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f62ac43d-e486-43a4-8a48-c459f3680426",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2005-10-28",
+      "length": 271640,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f812384f-e505-45dd-8d18-0ff0e34ed670",
+      "title": "Ice Ice Alvin",
+      "first-release-date": "1991",
+      "length": 198000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "The Chipmunks",
+          "joinphrase": "",
+          "artist": {
+            "id": "14553432-e492-420d-99ed-6e2fd6b4543f",
+            "name": "The Chipmunks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ff86c5b1-9e89-4244-8f30-6d1327924338",
+      "title": "Ice Ice Baby",
+      "first-release-date": "2002",
+      "length": 269373,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    }
+  ]
+}

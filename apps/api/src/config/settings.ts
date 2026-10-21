@@ -40,6 +40,17 @@ export type SettingsResult =
 /** Keys the API cannot start without, outside REPLAY_MODE=only. */
 export const REQUIRED_KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"] as const;
 
+/**
+ * Optional credentials of the primary-record sources, each sent in a request header: Discogs
+ * (`Authorization: Discogs token=…`), SecondHandSongs (`X-API-Key`; without it requests are
+ * anonymous) and Genius (`Authorization: Bearer …`).
+ */
+export const SOURCE_CREDENTIALS = {
+  discogs: "DISCOGS_TOKEN",
+  secondhandsongs: "SHS_API_KEY",
+  genius: "GENIUS_ACCESS_TOKEN",
+} as const;
+
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 3001;
 export const DEFAULT_RATE_LIMIT: RateLimitSettings = { windowMs: 10 * 60_000, max: 30 };
@@ -187,6 +198,15 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
       errors,
     ),
   };
+
+  // Each source reads its credential when it runs; here they are only checked.
+  for (const key of Object.values(SOURCE_CREDENTIALS)) {
+    const value = env[key] ?? "";
+    // Sent in a header: a token is printable ASCII, with no space or line break.
+    if (!/^[!-~]*$/.test(value)) {
+      errors.push(`${key}: expected printable ASCII with no spaces`);
+    }
+  }
 
   if (errors.length > 0) return { ok: false, errors };
   return {

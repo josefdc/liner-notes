@@ -1,0 +1,74 @@
+{
+  "id": "f3abe296-2541-4d42-a3ad-cb8615cbc886",
+  "title": "Hallelujah",
+  "length": 455506,
+  "disambiguation": "",
+  "artist-credit": [
+    {
+      "name": "Jeff Buckley",
+      "joinphrase": "",
+      "artist": {
+        "id": "e6e879c0-3d56-4f12-b3c5-3ce459661a8e",
+        "name": "Jeff Buckley"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "performance",
+      "direction": "forward",
+      "target-type": "work",
+      "attributes": ["cover", "live"],
+      "work": {
+        "id": "9d0296b2-e2d6-3aaa-8e38-7f15d38ed906",
+        "title": "Hallelujah",
+        "relations": [
+          {
+            "type": "lyrics",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://genius.com/Leonard-cohen-hallelujah-lyrics"
+            }
+          },
+          {
+            "type": "secondhandsongs",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://secondhandsongs.com/work/1108"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "forward",
+      "target-type": "work",
+      "attributes": ["cover", "live"],
+      "work": {
+        "id": "9d0296b2-e2d6-3aaa-8e38-7f15d38ed906",
+        "title": "Hallelujah",
+        "relations": [
+          {
+            "type": "lyrics",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://genius.com/Leonard-cohen-hallelujah-lyrics"
+            }
+          },
+          {
+            "type": "secondhandsongs",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://secondhandsongs.com/work/1108"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

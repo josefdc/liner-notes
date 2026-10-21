@@ -1,0 +1,85 @@
+{
+  "isrc": "USCA29001716",
+  "recordings": [
+    {
+      "id": "b45f216e-1582-4c8d-9db2-4f48564ee699",
+      "title": "Ice Ice Baby (radio edit)",
+      "length": 231773,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1acfe446-cad3-4b7e-91d5-69424e270087",
+      "title": "Ice Ice Baby (radio mix)",
+      "length": 268280,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "de1bf56a-ce3d-4b8f-9fcc-7119ccc8df9d",
+      "title": "Ice Ice Baby (radio edit)",
+      "length": 232000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      "title": "Ice Ice Baby",
+      "length": 271000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1cd7d430-7daf-4758-bad1-1c34f71d42ca",
+      "title": "Ice Ice Baby",
+      "length": 226666,
+      "disambiguation": "radio edit",
+      "artist-credit": [
+        {
+          "name": "Vanilla Ice",
+          "joinphrase": "",
+          "artist": {
+            "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+            "name": "Vanilla Ice"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "meta": { "status": 200 },
+  "response": {
+    "song": {
+      "id": 9000001,
+      "title": "Ice Ice Baby",
+      "url": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+      "artist_names": "Vanilla Ice",
+      "primary_artist": { "id": 9100001, "name": "Vanilla Ice" },
+      "song_relationships": [
+        {
+          "relationship_type": "samples",
+          "songs": [
+            {
+              "id": 9000003,
+              "title": "Under Pressure",
+              "url": "https://genius.com/Queen-and-david-bowie-under-pressure-lyrics",
+              "artist_names": "Queen & David Bowie",
+              "primary_artist": { "id": 9100002, "name": "Queen & David Bowie" }
+            }
+          ]
+        },
+        { "relationship_type": "interpolates", "songs": [] },
+        {
+          "relationship_type": "covered_by",
+          "songs": [
+            {
+              "id": 9000004,
+              "title": "Ice Ice Baby",
+              "url": "https://genius.com/Glee-cast-ice-ice-baby-lyrics",
+              "artist_names": "Glee Cast",
+              "primary_artist": { "id": 9100003, "name": "Glee Cast" }
+            }
+          ]
+        },
+        {
+          "relationship_type": "translations",
+          "songs": [
+            {
+              "id": 9000005,
+              "title": "Ice Ice Baby (Traducción al Español)",
+              "url": "https://genius.com/Genius-traducciones-al-espanol-vanilla-ice-ice-ice-baby-traduccion-al-espanol-lyrics",
+              "artist_names": "Genius Traducciones al Español",
+              "primary_artist": { "id": 9100004, "name": "Genius Traducciones al Español" }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

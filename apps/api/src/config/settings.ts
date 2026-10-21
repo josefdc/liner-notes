@@ -24,6 +24,13 @@ export interface HttpSettings {
   searchRateLimit: RateLimitSettings;
 }
 
+/** Which optional primary-record sources have a credential; the others report "missing". */
+export interface SourceSettings {
+  discogs: boolean;
+  secondhandsongs: boolean;
+  genius: boolean;
+}
+
 export interface Settings {
   production: boolean;
   /** REPLAY_MODE=only (replaying recorded runs): no Spotify or model keys are required. */
@@ -31,6 +38,7 @@ export interface Settings {
   host: string;
   port: number;
   http: HttpSettings;
+  sources: SourceSettings;
 }
 
 export type SettingsResult =
@@ -39,6 +47,17 @@ export type SettingsResult =
 
 /** Keys the API cannot start without, outside REPLAY_MODE=only. */
 export const REQUIRED_KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"] as const;
+
+/**
+ * Optional credentials of the primary-record sources, each sent in a request header: Discogs
+ * (`Authorization: Discogs token=…`), SecondHandSongs (`X-API-Key`; without it requests are
+ * anonymous) and Genius (`Authorization: Bearer …`).
+ */
+export const SOURCE_CREDENTIALS = {
+  discogs: "DISCOGS_TOKEN",
+  secondhandsongs: "SHS_API_KEY",
+  genius: "GENIUS_ACCESS_TOKEN",
+} as const satisfies Record<keyof SourceSettings, string>;
 
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 3001;
@@ -188,6 +207,16 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
     ),
   };
 
+  const sources = {} as SourceSettings;
+  for (const [source, key] of Object.entries(SOURCE_CREDENTIALS)) {
+    const value = env[key] ?? "";
+    // Sent in a header: a token is printable ASCII, with no space or line break.
+    if (!/^[!-~]*$/.test(value)) {
+      errors.push(`${key}: expected printable ASCII with no spaces`);
+    }
+    sources[source as keyof SourceSettings] = value !== "";
+  }
+
   if (errors.length > 0) return { ok: false, errors };
   return {
     ok: true,
@@ -198,6 +227,7 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
       host,
       port,
       http: { corsOrigins, trustProxy, rateLimit, globalRateLimit, searchRateLimit },
+      sources,
     },
   };
 }

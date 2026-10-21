@@ -140,6 +140,9 @@ export type SourceName =
   | "listenbrainz"
   | "lastfm"
   | "deezer"
+  | "discogs"
+  | "secondhandsongs"
+  | "genius"
   | "tavily"
   | "audio";
 

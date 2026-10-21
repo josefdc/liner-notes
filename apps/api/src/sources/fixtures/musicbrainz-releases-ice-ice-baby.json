@@ -1,0 +1,237 @@
+{
+  "release-count": 13,
+  "release-offset": 0,
+  "releases": [
+    {
+      "id": "01f036c8-0190-4641-9b01-0b9cb18989eb",
+      "title": "13 Going on 30",
+      "date": "2004-04-20",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": ["Soundtrack"]
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/739983"
+          }
+        }
+      ]
+    },
+    {
+      "id": "142c4d6c-231e-49cd-b47e-508f13651a1e",
+      "title": "Greatest Hits of the 90’s",
+      "date": "2004",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": ["Compilation"]
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/759973"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1ee4e020-0a64-4df6-8703-5b0644963e7e",
+      "title": "Hooked",
+      "date": "1990",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/4828233"
+          }
+        }
+      ]
+    },
+    {
+      "id": "218fc465-cfe8-47cc-bb31-1cd740982afc",
+      "title": "Ice Ice Baby",
+      "date": "2006-06-05",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Single",
+        "secondary-types": []
+      },
+      "relations": []
+    },
+    {
+      "id": "424c4142-7144-49be-899b-355e11215bdd",
+      "title": "To the Extreme",
+      "date": "1990",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/17011527"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5a260489-c99d-485b-902e-24751e5b1c69",
+      "title": "To the Extreme",
+      "date": "1990-12-03",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/687927"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7ba7abe8-819c-4d71-a3aa-14b93620f37c",
+      "title": "I Love You",
+      "date": "1991",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Single",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/711787"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ae103b0a-b932-4009-acb6-388db1cf890b",
+      "title": "To the Extreme",
+      "date": "1990-09-04",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/599648"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b04ac886-e142-4170-aa4c-41a90cc46921",
+      "title": "To the Extreme",
+      "date": "1990",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/1634072"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b4314c6e-4f28-4a18-8eaa-6e02a90c6d89",
+      "title": "To the Extreme",
+      "date": "1990",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/6575448"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d02aeed5-99bb-4cd4-afa5-1cee117a6061",
+      "title": "To the Extreme",
+      "date": "1990",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/3059101"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d3efc23e-743d-4666-9ca4-c32aa17e8d6a",
+      "title": "To the Extreme",
+      "date": "1990",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Album",
+        "secondary-types": []
+      },
+      "relations": [
+        {
+          "type": "discogs",
+          "target-type": "url",
+          "url": {
+            "resource": "https://www.discogs.com/release/407494"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ed0d8d29-2643-4693-969d-ea41d36c6d0e",
+      "title": "Ice Ice Baby",
+      "date": "2006-06-05",
+      "status": "Official",
+      "release-group": {
+        "primary-type": "Single",
+        "secondary-types": []
+      },
+      "relations": []
+    }
+  ]
+}

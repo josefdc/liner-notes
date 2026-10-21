@@ -22,6 +22,12 @@ import tylerTheCreator from "./fixtures/musicbrainz-artist-search-tyler-the-crea
 import mcgee from "./fixtures/musicbrainz-recording-search-me-and-bobby-mcgee.json" with {
   type: "json",
 };
+import iceDetails from "./fixtures/musicbrainz-recording-details-ice-ice-baby.json" with {
+  type: "json",
+};
+import underPressureDetails from "./fixtures/musicbrainz-recording-details-under-pressure.json" with {
+  type: "json",
+};
 import iceLookup from "./fixtures/musicbrainz-recording-ice-ice-baby.json" with { type: "json" };
 import iceSearch from "./fixtures/musicbrainz-recording-search-ice-ice-baby.json" with {
   type: "json",
@@ -119,7 +125,7 @@ describe("MusicBrainz client", () => {
 
     expect(data).toMatchObject({ found: true, mbid: RECORDING_ID });
     expect(data.genealogy.samples).toEqual([
-      expect.objectContaining({ title: "Under Pressure", mbid: SAMPLED_ID, direction: "derived" }),
+      expect.objectContaining({ title: "Under Pressure", mbid: SAMPLED_ID, direction: "source" }),
     ]);
   });
 
@@ -650,6 +656,86 @@ describe("MusicBrainz client", () => {
 
       expect(data).toMatchObject({ found: false, reason: "ambiguous" });
       expect(lookups(net.calls)).toHaveLength(0);
+    });
+  });
+  describe("relation direction, on relations captured from MusicBrainz", () => {
+    const ICE = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
+    const UNDER_PRESSURE = "32c7e292-14f1-4080-bddf-ef852e0a4c59";
+
+    /** Runs the tool for a track whose search finds `id` and whose lookup answers `details`. */
+    async function relationsOf(title: string, artist: string, id: string, details: unknown) {
+      stubFetch((call) => {
+        if (call.url.startsWith(`${MB}/recording?`)) {
+          return json({ count: 1, recordings: [recording(title, artist, id)] });
+        }
+        if (call.url.startsWith(`${MB}/recording/${id}?`)) return json(details);
+        return undefined;
+      });
+      const data = JSON.parse(await getMusicBrainzRelations.invoke({ title, artist }));
+      expect(data).toMatchObject({ found: true, mbid: id });
+      return data.genealogy;
+    }
+
+    it("lists what Ice Ice Baby samples as a source and what samples it as derived", async () => {
+      const { samples, remixes } = await relationsOf(
+        "Ice Ice Baby",
+        "Vanilla Ice",
+        ICE,
+        iceDetails,
+      );
+      expect(samples).toEqual([
+        expect.objectContaining({
+          title: "Under Pressure",
+          mbid: UNDER_PRESSURE,
+          direction: "source",
+        }),
+        expect.objectContaining({ title: "Ice Ice Bacon", direction: "derived" }),
+        expect.objectContaining({ title: "Pushin' Ice", direction: "derived" }),
+      ]);
+      // A DJ mix that includes the track is derived from it.
+      expect(remixes).toEqual([
+        expect.objectContaining({ relationshipType: "DJ-mix", direction: "derived" }),
+      ]);
+    });
+
+    it("lists the recordings that sample or remix Under Pressure as derived", async () => {
+      const { samples, remixes } = await relationsOf(
+        "Under Pressure",
+        "Queen & David Bowie",
+        UNDER_PRESSURE,
+        underPressureDetails,
+      );
+      expect(samples.map((s: { title: string }) => s.title)).toEqual([
+        "Come Again",
+        "Ice Ice Baby",
+      ]);
+      expect(samples.every((s: { direction: string }) => s.direction === "derived")).toBe(true);
+      expect(samples.find((s: { mbid: string }) => s.mbid === ICE)).toBeDefined();
+      expect(remixes).toHaveLength(3);
+      expect(remixes.every((r: { direction: string }) => r.direction === "derived")).toBe(true);
+    });
+
+    it("reads a performance of a work with the cover attribute as a cover of that work", async () => {
+      const cover = {
+        ...iceDetails,
+        relations: [
+          {
+            type: "performance",
+            direction: "forward",
+            "target-type": "work",
+            attributes: ["cover"],
+            work: { id: "e0ebb61d-7f69-3667-a2b1-dcd447d80f3d", title: "Ice Ice Baby" },
+          },
+          ...iceDetails.relations.filter((r) => r.type !== "performance"),
+        ],
+      };
+      const { covers } = await relationsOf("Ice Ice Baby", "Vanilla Ice", ICE, cover);
+      expect(covers).toEqual([
+        expect.objectContaining({ title: "Ice Ice Baby", type: "cover", direction: "source" }),
+      ]);
+      // The original performance (no cover attribute) is not a cover.
+      const { covers: none } = await relationsOf("Ice Ice Baby", "Vanilla Ice", ICE, iceDetails);
+      expect(none).toEqual([]);
     });
   });
 });

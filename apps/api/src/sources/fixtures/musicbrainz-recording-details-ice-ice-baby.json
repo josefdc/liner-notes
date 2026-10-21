@@ -1,0 +1,142 @@
+{
+  "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+  "title": "Ice Ice Baby",
+  "length": 271000,
+  "disambiguation": "",
+  "artist-credit": [
+    {
+      "name": "Vanilla Ice",
+      "joinphrase": "",
+      "artist": {
+        "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+        "name": "Vanilla Ice"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DJ-mix",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "d3c062c0-35dc-4ef7-a97f-95eed20c9bd3",
+        "title": "DJ IKU日本代表で参加したチャリティーイベント ミックス",
+        "length": 3652000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "DJ IKU",
+            "joinphrase": "",
+            "artist": {
+              "id": "de09089d-85ea-4b78-ad6e-2098e036932a",
+              "name": "DJ IKU"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "samples material",
+      "direction": "forward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "32c7e292-14f1-4080-bddf-ef852e0a4c59",
+        "title": "Under Pressure",
+        "length": 243000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Queen",
+            "joinphrase": " & ",
+            "artist": {
+              "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+              "name": "Queen"
+            }
+          },
+          {
+            "name": "David Bowie",
+            "joinphrase": "",
+            "artist": {
+              "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+              "name": "David Bowie"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "samples material",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "6507f9c2-48c9-4648-9daa-4c9271e0f983",
+        "title": "Ice Ice Bacon",
+        "length": 157000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Trotters",
+            "joinphrase": "",
+            "artist": {
+              "id": "76301e4a-6bff-4672-a6b2-fb938ef3ed70",
+              "name": "Trotters"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "samples material",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "51a54bec-25d2-49de-bb9f-bfff669367cc",
+        "title": "Pushin' Ice",
+        "length": 206000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Malice",
+            "joinphrase": "",
+            "artist": {
+              "id": "b8f4e732-09a3-41de-a8f2-936b5c4e364d",
+              "name": "Malice"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "forward",
+      "target-type": "work",
+      "attributes": [],
+      "work": {
+        "id": "e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+        "title": "Ice Ice Baby",
+        "relations": [
+          {
+            "type": "lyrics",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics"
+            }
+          },
+          {
+            "type": "secondhandsongs",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://secondhandsongs.com/work/4196"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

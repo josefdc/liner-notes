@@ -1,0 +1,30 @@
+{
+  "uri": "https://secondhandsongs.com/work/4196",
+  "title": "Ice Ice Baby",
+  "versions": [
+    {
+      "uri": "https://secondhandsongs.com/performance/9200001",
+      "title": "Ice Ice Baby",
+      "performer": { "uri": "https://secondhandsongs.com/artist/9300001", "name": "Vanilla Ice" },
+      "isOriginal": true,
+      "date": "1989"
+    },
+    {
+      "uri": "https://secondhandsongs.com/performance/9200002",
+      "title": "Ice Ice Baby",
+      "performer": { "uri": "https://secondhandsongs.com/artist/9300002", "name": "Glee Cast" },
+      "isOriginal": false,
+      "date": "2010"
+    },
+    {
+      "uri": "https://secondhandsongs.com/performance/9200003",
+      "title": "Ice Ice Baby",
+      "performer": {
+        "uri": "https://secondhandsongs.com/artist/9300003",
+        "name": "Richard Cheese"
+      },
+      "isOriginal": false,
+      "date": null
+    }
+  ]
+}

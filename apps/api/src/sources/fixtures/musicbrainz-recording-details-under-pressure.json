@@ -1,0 +1,202 @@
+{
+  "id": "32c7e292-14f1-4080-bddf-ef852e0a4c59",
+  "title": "Under Pressure",
+  "length": 243000,
+  "disambiguation": "",
+  "artist-credit": [
+    {
+      "name": "Queen",
+      "joinphrase": " & ",
+      "artist": {
+        "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+        "name": "Queen"
+      }
+    },
+    {
+      "name": "David Bowie",
+      "joinphrase": "",
+      "artist": {
+        "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+        "name": "David Bowie"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "mashes up",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "8c4f7cc0-f035-4c03-bebc-45a6f76ec2a1",
+        "title": "Jingle Pressure (Queen & Bowie vs. Smokey Robinson)",
+        "length": 231000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "dj BC",
+            "joinphrase": "",
+            "artist": {
+              "id": "1c3a3cb2-4827-4f15-8337-70bbf1afdf05",
+              "name": "dj BC"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "remix",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "202e803d-156c-45ab-b148-8c92f0138990",
+        "title": "Under Pressure (Knebworth mix)",
+        "length": 258707,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Queen",
+            "joinphrase": " & ",
+            "artist": {
+              "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+              "name": "Queen"
+            }
+          },
+          {
+            "name": "David Bowie",
+            "joinphrase": "",
+            "artist": {
+              "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+              "name": "David Bowie"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "remix",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "5e4795a9-8810-497f-a17b-d07b48ccc488",
+        "title": "Under Pressure (Mike Spencer mix)",
+        "length": 233000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Queen",
+            "joinphrase": " & ",
+            "artist": {
+              "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+              "name": "Queen"
+            }
+          },
+          {
+            "name": "David Bowie",
+            "joinphrase": "",
+            "artist": {
+              "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+              "name": "David Bowie"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "remix",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "e87e51c3-2123-448b-8644-885756cfa28f",
+        "title": "Under Pressure (Rah mix)",
+        "length": 248666,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Queen",
+            "joinphrase": " & ",
+            "artist": {
+              "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+              "name": "Queen"
+            }
+          },
+          {
+            "name": "David Bowie",
+            "joinphrase": "",
+            "artist": {
+              "id": "5441c29d-3602-4898-b1a1-b77fa23b8e50",
+              "name": "David Bowie"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "samples material",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "60d7b78b-7376-40be-b1b1-e51f57f1d8e7",
+        "title": "Come Again",
+        "length": 493000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "The Kleptones",
+            "joinphrase": "",
+            "artist": {
+              "id": "f73b2b70-33d5-4118-923b-05ba8ad7e702",
+              "name": "The Kleptones"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "samples material",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+        "title": "Ice Ice Baby",
+        "length": 271000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Vanilla Ice",
+            "joinphrase": "",
+            "artist": {
+              "id": "2d5583be-aafd-41ec-addd-df85913855ef",
+              "name": "Vanilla Ice"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "forward",
+      "target-type": "work",
+      "attributes": [],
+      "work": {
+        "id": "4e6a04c3-6897-391d-8e8c-1da7a6dce1ca",
+        "title": "Under Pressure",
+        "relations": [
+          {
+            "type": "secondhandsongs",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://secondhandsongs.com/work/4195"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

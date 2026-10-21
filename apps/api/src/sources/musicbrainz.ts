@@ -74,6 +74,11 @@ interface MBArtist {
 
 interface GenealogyRelation {
   type: "sample" | "cover" | "remix" | "influence";
+  /**
+   * Where the related recording or work stands: "source" when this recording uses it (samples,
+   * remixes or covers it), "derived" when it uses this recording (samples it, remixes it, mixes
+   * it into a DJ mix).
+   */
   direction: "source" | "derived";
   title: string;
   artist?: string;
@@ -495,18 +500,25 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
   const genealogy: GenealogyRelation[] = [];
 
   for (const rel of relations) {
-    // Only process genealogy-relevant relationship types
+    // Only process genealogy-relevant relationship types. MusicBrainz has no recording-to-
+    // recording cover relationship: a cover is a performance of a work with the "cover" attribute.
     const relType = rel.type.toLowerCase();
-    if (!GENEALOGY_RELATION_TYPES.some((t) => relType.includes(t))) {
+    const coverOf =
+      relType === "performance" && Boolean(rel.work) && (rel.attributes ?? []).includes("cover");
+    if (!coverOf && !GENEALOGY_RELATION_TYPES.some((t) => relType.includes(t.toLowerCase()))) {
       continue;
     }
 
     let type: GenealogyRelation["type"] = "influence";
     if (relType.includes("sample")) type = "sample";
-    else if (relType.includes("cover")) type = "cover";
+    else if (coverOf || relType.includes("cover")) type = "cover";
     else if (relType.includes("remix") || relType.includes("dj-mix")) type = "remix";
 
-    const direction: "source" | "derived" = rel.direction === "backward" ? "source" : "derived";
+    // A relationship reads from its first entity: "forward" here means this recording samples,
+    // remixes or performs the target, so the target is a source; "backward" means the target
+    // samples, remixes or DJ-mixes this recording, so it is derived from it.
+    const direction: GenealogyRelation["direction"] =
+      rel.direction === "backward" ? "derived" : "source";
 
     const target = rel.recording || rel.work;
     if (target) {
@@ -678,6 +690,283 @@ export const getMusicBrainzArtist = tool(
     }),
   },
 );
+
+// =============================================================================
+// ISRC lookup and recording relationships
+// =============================================================================
+
+const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
+
+/** An ISRC in its canonical form (upper case, no hyphens or spaces), or null. */
+export function normalizeIsrc(value: string): string | null {
+  const isrc = value.replace(/[\s-]/g, "").toUpperCase();
+  return ISRC.test(isrc) ? isrc : null;
+}
+
+export interface MbCredit {
+  name: string;
+  joinphrase?: string;
+  artist?: { id: string; name: string };
+}
+
+export interface MbRecordingSummary {
+  id: string;
+  title: string;
+  /** Milliseconds; null when MusicBrainz does not know it. */
+  length?: number | null;
+  disambiguation?: string;
+  "artist-credit"?: MbCredit[];
+}
+
+export interface MbDetailRelation {
+  type: string;
+  /** "forward": this entity acts on the other ("samples"); "backward": the other acts on it. */
+  direction?: string;
+  "target-type"?: string;
+  attributes?: string[];
+  recording?: MbRecordingSummary;
+  work?: { id: string; title: string; relations?: MbDetailRelation[] };
+  url?: { resource: string };
+}
+
+export interface MbRecordingDetails extends MbRecordingSummary {
+  relations?: MbDetailRelation[];
+}
+
+export interface MbReleaseSummary {
+  id: string;
+  title: string;
+  date?: string;
+  status?: string | null;
+  "release-group"?: { "primary-type"?: string | null; "secondary-types"?: string[] };
+  relations?: MbDetailRelation[];
+}
+
+export interface MbWork {
+  id: string;
+  title: string;
+  relations?: MbDetailRelation[];
+}
+
+const CREDIT_SHAPE: Shape = [{ name: true, joinphrase: true, artist: { id: true, name: true } }];
+const RECORDING_SUMMARY_SHAPE: Shape = {
+  id: true,
+  title: true,
+  length: true,
+  disambiguation: true,
+  "artist-credit": CREDIT_SHAPE,
+};
+const URL_RELATION_SHAPE: Shape = [
+  { type: true, direction: true, "target-type": true, url: { resource: true } },
+];
+const ISRC_SHAPE: Shape = { isrc: true, recordings: [RECORDING_SUMMARY_SHAPE] };
+const RECORDING_DETAILS_SHAPE: Shape = {
+  ...RECORDING_SUMMARY_SHAPE,
+  relations: [
+    {
+      type: true,
+      direction: true,
+      "target-type": true,
+      attributes: true,
+      recording: RECORDING_SUMMARY_SHAPE,
+      work: { id: true, title: true, relations: URL_RELATION_SHAPE },
+      url: { resource: true },
+    },
+  ],
+};
+const RELEASE_BROWSE_SHAPE: Shape = {
+  "release-count": true,
+  "release-offset": true,
+  releases: [
+    {
+      id: true,
+      title: true,
+      date: true,
+      status: true,
+      "release-group": { "primary-type": true, "secondary-types": true },
+      relations: URL_RELATION_SHAPE,
+    },
+  ],
+};
+const WORK_SHAPE: Shape = {
+  id: true,
+  title: true,
+  relations: [
+    {
+      type: true,
+      direction: true,
+      "target-type": true,
+      attributes: true,
+      recording: RECORDING_SUMMARY_SHAPE,
+    },
+  ],
+};
+
+/**
+ * The recordings MusicBrainz files under an ISRC; empty when it knows none (it answers 404).
+ * Several recordings can share one ISRC (an edit filed with the album version's code), so the
+ * caller still checks title, artist and duration.
+ */
+export async function lookupIsrc(isrc: string): Promise<MbRecordingSummary[]> {
+  const code = normalizeIsrc(isrc);
+  if (!code) throw new SourceError("musicbrainz", "invalid_input", "not an ISRC");
+  try {
+    const data = await mbFetch<{ recordings?: MbRecordingSummary[] }>(
+      `isrc/${code}`,
+      { inc: "artist-credits" },
+      ISRC_SHAPE,
+    );
+    return (Array.isArray(data?.recordings) ? data.recordings : []).filter(
+      (r) => isMbid(r?.id) && typeof r.title === "string",
+    );
+  } catch (error) {
+    if (isSourceError(error, "http") && error.status === 404) return [];
+    throw error;
+  }
+}
+
+/** A recording with its recording and work relationships, and the URLs linked to its works. */
+export async function getRecordingDetails(mbid: string): Promise<MbRecordingDetails> {
+  if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
+  return mbFetch<MbRecordingDetails>(
+    `recording/${mbid}`,
+    { inc: "artist-credits recording-rels work-rels work-level-rels url-rels" },
+    RECORDING_DETAILS_SHAPE,
+  );
+}
+
+const RELEASE_PAGE = 100;
+
+/**
+ * The official album, single and EP releases a recording is on, with their URL relationships
+ * (Discogs links) and release-group types. Reads at most `maxPages` pages of 100.
+ */
+export async function browseRecordingReleases(
+  mbid: string,
+  maxPages = 2,
+): Promise<{ releases: MbReleaseSummary[]; total: number }> {
+  if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
+  const releases: MbReleaseSummary[] = [];
+  let total = 0;
+  for (let page = 0; page < maxPages; page++) {
+    const data = await mbFetch<{ "release-count"?: number; releases?: MbReleaseSummary[] }>(
+      "release",
+      {
+        recording: mbid,
+        status: "official",
+        type: "album|single|ep",
+        inc: "url-rels release-groups",
+        limit: String(RELEASE_PAGE),
+        offset: String(page * RELEASE_PAGE),
+      },
+      RELEASE_BROWSE_SHAPE,
+    );
+    const batch = (Array.isArray(data?.releases) ? data.releases : []).filter((r) => isMbid(r?.id));
+    releases.push(...batch);
+    total = typeof data?.["release-count"] === "number" ? data["release-count"] : releases.length;
+    if (batch.length < RELEASE_PAGE || releases.length >= total) break;
+  }
+  return { releases, total };
+}
+
+/** A work with the recordings that perform it (each with its credit and attributes). */
+export async function getWorkRecordings(workMbid: string): Promise<MbWork> {
+  if (!isMbid(workMbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
+  return mbFetch<MbWork>(`work/${workMbid}`, { inc: "recording-rels artist-credits" }, WORK_SHAPE);
+}
+
+/** The credit as MusicBrainz prints it: "Queen & David Bowie". */
+export function creditString(credits: MbCredit[] | undefined): string {
+  return (credits ?? [])
+    .filter((c) => typeof c?.name === "string")
+    .map((c) => `${c.name}${c.joinphrase ?? ""}`)
+    .join("")
+    .trim();
+}
+
+export type MbRelationshipKind =
+  | "samples"
+  | "sampled-by"
+  | "remix-of"
+  | "remixed-by"
+  | "cover-of"
+  | "covered-by";
+
+export interface MbRelationship {
+  kind: MbRelationshipKind;
+  /** The related recording; null when the relationship is to a work. */
+  recording: { mbid: string; title: string; artist: string; lengthMs: number | null } | null;
+  work: { mbid: string; title: string } | null;
+  attributes: string[];
+}
+
+const relatedRecording = (r: MbRecordingSummary): MbRelationship["recording"] => ({
+  mbid: r.id,
+  title: r.title,
+  artist: creditString(r["artist-credit"]),
+  lengthMs: typeof r.length === "number" ? r.length : null,
+});
+
+/**
+ * Samples, remixes and covers from a recording's own relationships. A relationship's direction
+ * says which end acts: "samples material" forward means this recording samples the other one,
+ * backward that the other one samples this. A performance of a work with the "cover" attribute
+ * makes this recording a cover of that work.
+ */
+export function recordingRelationships(details: MbRecordingDetails): MbRelationship[] {
+  const out: MbRelationship[] = [];
+  for (const rel of Array.isArray(details?.relations) ? details.relations : []) {
+    const attributes = Array.isArray(rel.attributes) ? rel.attributes.map(String) : [];
+    const forward = rel.direction !== "backward";
+    if (rel.recording && isMbid(rel.recording.id) && typeof rel.recording.title === "string") {
+      let kind: MbRelationshipKind | null = null;
+      if (rel.type === "samples material") kind = forward ? "samples" : "sampled-by";
+      else if (rel.type === "remix") kind = forward ? "remix-of" : "remixed-by";
+      if (kind) {
+        out.push({ kind, recording: relatedRecording(rel.recording), work: null, attributes });
+      }
+    } else if (
+      rel.type === "performance" &&
+      rel.work &&
+      isMbid(rel.work.id) &&
+      attributes.includes("cover")
+    ) {
+      out.push({
+        kind: "cover-of",
+        recording: null,
+        work: { mbid: rel.work.id, title: rel.work.title },
+        attributes,
+      });
+    }
+  }
+  return out;
+}
+
+/** The recordings filed as covers of a work, other than `ownRecording`. */
+export function workCovers(work: MbWork, ownRecording: string): MbRelationship[] {
+  const out: MbRelationship[] = [];
+  for (const rel of Array.isArray(work?.relations) ? work.relations : []) {
+    const attributes = Array.isArray(rel.attributes) ? rel.attributes.map(String) : [];
+    const recording = rel.recording;
+    if (
+      rel.type !== "performance" ||
+      !attributes.includes("cover") ||
+      !recording ||
+      !isMbid(recording.id) ||
+      recording.id === ownRecording ||
+      typeof recording.title !== "string"
+    ) {
+      continue;
+    }
+    out.push({
+      kind: "covered-by",
+      recording: relatedRecording(recording),
+      work: { mbid: work.id, title: work.title },
+      attributes,
+    });
+  }
+  return out;
+}
 
 // =============================================================================
 // Exports

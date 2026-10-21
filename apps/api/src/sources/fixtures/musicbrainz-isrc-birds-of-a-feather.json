@@ -1,0 +1,21 @@
+{
+  "isrc": "USUM72401994",
+  "recordings": [
+    {
+      "id": "3a7e1970-069c-4761-a6b2-9046e54406bc",
+      "title": "BIRDS OF A FEATHER",
+      "length": 210266,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Billie Eilish",
+          "joinphrase": "",
+          "artist": {
+            "id": "f4abc0b5-3f7a-4eff-8f78-ac078dbce533",
+            "name": "Billie Eilish"
+          }
+        }
+      ]
+    }
+  ]
+}

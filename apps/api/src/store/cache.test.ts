@@ -152,9 +152,9 @@ describe("SonicCache write errors", () => {
 
   it("putResearch rethrows", () => {
     failInserts("research_cache");
-    expect(() =>
-      cache.putResearch("r", { samples: [], productionTrivia: [], relatedArtists: [] }),
-    ).toThrow("write failed");
+    expect(() => cache.putResearch("r", { samples: [], productionTrivia: [] })).toThrow(
+      "write failed",
+    );
   });
 
   it("putArtwork rethrows", () => {
@@ -179,10 +179,28 @@ describe("SonicCache research", () => {
     const cache = new SonicCache(db);
     db.prepare(
       "INSERT INTO research_cache (spotify_id, samples_count, trivia_count, full_data, expires_at) VALUES ('bad', 0, 0, ?, unixepoch() + 60)",
-    ).run(JSON.stringify({ samples: "not a list", productionTrivia: [], relatedArtists: [] }));
+    ).run(JSON.stringify({ samples: "not a list", productionTrivia: [] }));
     expect(cache.getResearch("bad")).toBeNull();
-    cache.putResearch("good", { samples: ["a"], productionTrivia: [], relatedArtists: [] });
+    cache.putResearch("good", { samples: ["a"], productionTrivia: [] });
     expect(cache.getResearch("good")?.samples).toEqual(["a"]);
+    db.close();
+  });
+
+  it("drops fields older code stored (song-meaning text, the old related-artists list)", () => {
+    const db = new Database(":memory:");
+    runMigrations(db);
+    const cache = new SonicCache(db);
+    db.prepare(
+      "INSERT INTO research_cache (spotify_id, samples_count, trivia_count, full_data, expires_at) VALUES ('old', 0, 0, ?, unixepoch() + 60)",
+    ).run(
+      JSON.stringify({
+        samples: [],
+        productionTrivia: [],
+        songMeaning: ["Song meaning page: LINE_OF_SONG_TEXT"],
+        relatedArtists: ["[ListenBrainz Similar Artists] x"],
+      }),
+    );
+    expect(cache.getResearch("old")).toEqual({ samples: [], productionTrivia: [] });
     db.close();
   });
 });

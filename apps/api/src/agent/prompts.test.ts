@@ -24,7 +24,6 @@ import type { ResearchData } from "./state.js";
 const research: ResearchData = {
   samples: ["The drums come from a break."],
   productionTrivia: [],
-  relatedArtists: [],
   lastfmTags: ["hip hop (100)"],
 };
 

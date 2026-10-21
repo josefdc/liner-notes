@@ -1,6 +1,6 @@
 /**
- * Historian node: song-meaning page text (which can carry lyrics) from research cached
- * before that step was removed never reaches the graph state.
+ * Historian node: the research cache (its key, what blocks it, what a hit reports), and what it
+ * keeps when the research stops early.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ const subgraph = vi.hoisted(() => ({
   during: null as null | (() => void),
 }));
 const STOPPED_STATE = {
-  researchData: { samples: ["Sample A"], productionTrivia: [], relatedArtists: [] },
+  researchData: { samples: ["Sample A"], productionTrivia: [] },
   usage: [{ callSite: "research_planner", tier: "fast", status: "ok" }],
   sourceErrors: [{ source: "lastfm", code: "unavailable" }],
   statusMessages: ["Found samples information"],
@@ -41,8 +41,17 @@ vi.mock("../researcherSubgraph.js", async (importOriginal) => {
 });
 vi.mock("../../sources/lastfm.js", () => {
   const none = { invoke: async () => JSON.stringify({ found: false }) };
-  return { getLastfmTrackTags: none, getLastfmArtistTags: none, getLastfmSimilarTracks: none };
+  return {
+    getLastfmTrackTags: none,
+    getLastfmArtistTags: none,
+    getLastfmSimilarTracks: none,
+    lastfmConfigured: () => true,
+  };
 });
+vi.mock("../../sources/search.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../sources/search.js")>()),
+  tavilyConfigured: () => true,
+}));
 
 import { SourceError } from "../../sources/http.js";
 import { historianNode } from "./historianNode.js";
@@ -57,15 +66,11 @@ describe("historianNode", () => {
     vi.restoreAllMocks();
   });
 
-  it("drops song-meaning text from cached research", async () => {
+  it("reports the sources stored as not configured on a cache hit", async () => {
     cache.getResearch.mockReturnValue({
       samples: ["Sample A"],
-      productionTrivia: ["Trivia"],
-      songMeaning: [
-        "[Genius Lyrics]\nLINE_ONE_OF_SONG_TEXT",
-        "Song meaning page: LINE_TWO_OF_SONG_TEXT",
-      ],
-      relatedArtists: [],
+      productionTrivia: [],
+      notConfigured: [{ source: "lastfm", code: "not_configured" }],
     });
 
     const out = await historianNode(
@@ -73,12 +78,8 @@ describe("historianNode", () => {
       { writer: () => {} } as never,
     );
 
-    expect(out.researchData).toEqual({
-      samples: ["Sample A"],
-      productionTrivia: ["Trivia"],
-      relatedArtists: [],
-    });
-    expect(JSON.stringify(out)).not.toContain("SONG_TEXT");
+    expect(out.researchData).toEqual({ samples: ["Sample A"], productionTrivia: [] });
+    expect(out.sourceErrors).toEqual([{ source: "lastfm", code: "not_configured" }]);
   });
 
   describe("when the research stops early", () => {
@@ -142,8 +143,8 @@ describe("historianNode", () => {
 
       await historianNode(state, { writer: () => {} } as never);
 
-      expect(cache.getResearch).toHaveBeenCalledWith("v2:x");
-      expect(cache.putResearch).toHaveBeenCalledWith("v2:x", expect.anything());
+      expect(cache.getResearch).toHaveBeenCalledWith("v3:x:lastfm=1:tavily=1");
+      expect(cache.putResearch).toHaveBeenCalledWith("v3:x:lastfm=1:tavily=1", expect.anything());
     });
 
     it("does not store research when a planner call failed", async () => {

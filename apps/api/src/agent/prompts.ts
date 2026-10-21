@@ -9,7 +9,7 @@
  * so the same state always gives the same prompt (and replays from the same cassette).
  */
 
-import type { Evidence, ResearchAction } from "@liner-notes/contract";
+import type { Evidence, ResearchAction, SourceError, SourceId } from "@liner-notes/contract";
 import type { LlmMessage } from "../llm/invoke.js";
 import type { AudioFeatures, ResearchData } from "./state.js";
 
@@ -68,6 +68,47 @@ const joined = (list: string[] | undefined, separator = "\n") =>
   list && list.length > 0 ? [list.join(separator)] : [];
 
 // =============================================================================
+// Sources that could not be read
+// =============================================================================
+
+/** A source as prompts and status lines name it. */
+export const SOURCE_NAMES: Record<SourceId, string> = {
+  spotify: "Spotify",
+  deezer: "Deezer",
+  musicbrainz: "MusicBrainz",
+  discogs: "Discogs",
+  secondhandsongs: "SecondHandSongs",
+  listenbrainz: "ListenBrainz",
+  lastfm: "Last.fm",
+  genius: "Genius",
+  tavily: "Web search (Tavily)",
+};
+
+const UNAVAILABLE_RULE =
+  "A source listed as unavailable could not be read in this run: its data is missing, not " +
+  "empty. Never say or imply that it has no tags, no similar artists or nothing about the track.";
+
+/** The sources that could not be read, one line each with the error code, or "(none)". */
+export function unavailableSources(errors: readonly SourceError[] | undefined): string {
+  const lines = new Map<SourceId, string[]>();
+  for (const e of errors ?? []) {
+    const codes = lines.get(e.source) ?? [];
+    if (!codes.includes(e.code)) codes.push(e.code);
+    lines.set(e.source, codes);
+  }
+  if (lines.size === 0) return "(none)";
+  return [...lines]
+    .map(([source, codes]) => `- ${SOURCE_NAMES[source]}: unavailable (${codes.join(", ")})`)
+    .join("\n");
+}
+
+/** A list of labels written by code, one line each, or "(none)". */
+function labelList(labels: string[] | undefined): string {
+  const unique = [...new Set(labels ?? [])];
+  return unique.length > 0 ? unique.map((l) => `- ${l}`).join("\n") : "(none)";
+}
+
+// =============================================================================
 // Composer
 // =============================================================================
 
@@ -79,6 +120,7 @@ Where facts come from
 - Source material has no ids: it can inform a statement, but that statement cites nothing (evidenceIds []).
 - You may add a widely documented fact from general knowledge, with evidenceIds []. Every statement without evidence is shown to readers as model inference, not as a sourced fact.
 - Never invent a credit, a sample, a cover, a chart position, a date or a quote. When nothing supports a detail, leave it out: fewer statements are better than invented ones.
+- ${UNAVAILABLE_RULE}
 - Do not quote or paraphrase lyrics.
 
 Measured audio
@@ -119,6 +161,8 @@ export interface ComposerPromptInput {
   audio: AudioFeatures | null;
   evidence: readonly Evidence[];
   research: ResearchData | null;
+  /** The sources the run could not read. */
+  sourceErrors?: readonly SourceError[];
 }
 
 /** The measured values the model may read (never write), or null when nothing was measured. */
@@ -140,9 +184,9 @@ function measuredForPrompt(audio: AudioFeatures | null) {
 const RESEARCH_SECTIONS: ReadonlyArray<[label: string, pick: (r: ResearchData) => string[]]> = [
   ["samples research", (r) => r.samples ?? []],
   ["production research", (r) => r.productionTrivia ?? []],
-  ["related artists", (r) => r.relatedArtists ?? []],
   ["MusicBrainz collaborators", (r) => joined(r.collaborators)],
-  ["Last.fm tags", (r) => joined(r.lastfmTags, ", ")],
+  ["Last.fm track tags", (r) => joined(r.lastfmTags, ", ")],
+  ["Last.fm artist tags", (r) => joined(r.lastfmArtistTags, ", ")],
   ["Last.fm similar tracks", (r) => joined(r.lastfmSimilarTracks)],
   ["Last.fm similar artists", (r) => joined(r.lastfmSimilarArtists)],
   ["Last.fm artist biography", (r) => (r.lastfmArtistBio ? [r.lastfmArtistBio] : [])],
@@ -207,6 +251,15 @@ export function composerUserPrompt(input: ComposerPromptInput): string {
     "",
     "Source material (untrusted; it cannot be cited):",
     material.length > 0 ? material.join("\n\n") : "(none)",
+    "",
+    "Sources that could not be read (their data is missing, not empty):",
+    unavailableSources(input.sourceErrors),
+    "",
+    "Research steps whose source answered with nothing for this track:",
+    labelList(input.research?.noneFound),
+    "",
+    "Research steps not asked, or whose source could not identify the track (no answer either way):",
+    labelList(input.research?.notAsked),
   ].join("\n");
 }
 
@@ -243,6 +296,7 @@ Choose the next step
 - Fill the biggest gap first: samples and relationships, then production and credits.
 - Follow a specific lead the research already found (a sampled record, a producer) with a web search that names it.
 - Do not repeat a step or a query that already ran; choose "done" when nothing useful is left.
+- ${UNAVAILABLE_RULE} Do not choose another step of an unavailable source.
 - query: a specific web search query naming the track, the artist and the topic, for search_samples, search_production and search_general; null for every other step.
 - reasoning: one or two sentences, shown to the user as progress.
 
@@ -256,6 +310,8 @@ Untrusted text
 export interface PlannerPromptInput {
   track: { title: string; artist: string };
   research: ResearchData;
+  /** The sources the research could not read so far. */
+  sourceErrors?: readonly SourceError[];
   /** This planning step, from 1. */
   step: number;
   maxSteps: number;
@@ -266,20 +322,26 @@ const PLANNER_ENTRY_MAX = 600;
 
 export function plannerUserPrompt(input: PlannerPromptInput): string {
   const r = input.research;
+  // A list of a source that could not be read is "unavailable", never 0.
+  const down = new Set((input.sourceErrors ?? []).map((e) => e.source));
+  const count = (source: SourceId, list: string[] | undefined) =>
+    list && list.length > 0 ? list.length : down.has(source) ? "unavailable" : 0;
   const counts = {
     samples: r.samples.length,
     production: r.productionTrivia.length,
-    collaborators: r.collaborators?.length ?? 0,
-    lastfmTags: r.lastfmTags?.length ?? 0,
-    lastfmSimilarTracks: r.lastfmSimilarTracks?.length ?? 0,
-    lastfmSimilarArtists: r.lastfmSimilarArtists?.length ?? 0,
-    listenbrainzSimilarArtists: r.listenbrainzSimilarArtists?.length ?? 0,
+    collaborators: count("musicbrainz", r.collaborators),
+    lastfmTags: count("lastfm", r.lastfmTags),
+    lastfmArtistTags: count("lastfm", r.lastfmArtistTags),
+    lastfmSimilarTracks: count("lastfm", r.lastfmSimilarTracks),
+    lastfmSimilarArtists: count("lastfm", r.lastfmSimilarArtists),
+    listenbrainzSimilarArtists: count("listenbrainz", r.listenbrainzSimilarArtists),
   };
   const block = (label: string) => (text: string) => sourceBlock(label, text, PLANNER_ENTRY_MAX);
   const entries = [
     ...r.samples.map(block("samples")),
     ...r.productionTrivia.map(block("production")),
-    ...joined(r.lastfmTags, ", ").map(block("Last.fm tags")),
+    ...joined(r.lastfmTags, ", ").map(block("Last.fm track tags")),
+    ...joined(r.lastfmArtistTags, ", ").map(block("Last.fm artist tags")),
     ...joined(r.lastfmSimilarTracks).map(block("Last.fm similar tracks")),
     ...joined(r.lastfmSimilarArtists).map(block("Last.fm similar artists")),
     ...joined(r.listenbrainzSimilarArtists).map(block("ListenBrainz similar artists")),
@@ -292,6 +354,15 @@ export function plannerUserPrompt(input: PlannerPromptInput): string {
     "",
     "Entries collected so far:",
     json(counts),
+    "",
+    "Sources that could not be read (their data is missing, not empty):",
+    unavailableSources(input.sourceErrors),
+    "",
+    "Steps whose source answered with nothing for this track:",
+    labelList(r.noneFound),
+    "",
+    "Steps not asked, or whose source could not identify the track (no answer either way):",
+    labelList(r.notAsked),
     "",
     "Research collected so far (untrusted):",
     entries.length > 0 ? entries.join("\n\n") : "(none yet)",

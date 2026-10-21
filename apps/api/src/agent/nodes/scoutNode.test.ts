@@ -1,6 +1,7 @@
 /**
  * Scout: a cancelled run sends no further Spotify search, cuts its retry wait short and
- * rejects (never reports the cancel as a Spotify error). Spotify is a real LangChain tool over a
+ * rejects (never reports the cancel as a Spotify error). A stored result is served only under
+ * the key of the sources configured now. Spotify is a real LangChain tool over a
  * stub, so the tool's own handling of the signal is part of the test.
  */
 
@@ -35,6 +36,7 @@ import {
   START,
   StateGraph,
 } from "@langchain/langgraph";
+import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { SonicAgentState, type SonicAgentStateType } from "../state.js";
 import { scoutNode } from "./scoutNode.js";
 
@@ -55,7 +57,7 @@ const track = {
 };
 
 /** The scout alone in a graph; reports how the node itself settled. */
-function scoutGraph() {
+function scoutGraph(store = new InMemoryStore()) {
   const node = { settled: "pending" };
   const graph = new StateGraph(SonicAgentState)
     .addNode("scout", async (state: SonicAgentStateType, config: LangGraphRunnableConfig) => {
@@ -70,7 +72,7 @@ function scoutGraph() {
     })
     .addEdge(START, "scout")
     .addEdge("scout", END)
-    .compile({ store: new InMemoryStore() });
+    .compile({ store });
   return { graph, node };
 }
 
@@ -117,5 +119,38 @@ describe("scoutNode when the run is cancelled", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(node.settled).toMatch(/^rejected/);
+  });
+});
+
+describe("scoutNode's stored results", () => {
+  const stored = { trackData: { title: "Stored" }, timestamp: Date.now() };
+
+  it("serves a result stored for the sources configured now", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, resultCacheKey("song", configuredSources()), stored);
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song" });
+
+    expect(out.trackData).toEqual({ title: "Stored" });
+    expect(spotify.calls).toBe(0);
+  });
+
+  it("does not serve a result stored when another set of sources was configured", async () => {
+    const store = new InMemoryStore();
+    const now = configuredSources();
+    await store.put(
+      TRACKS_NAMESPACE,
+      resultCacheKey("song", { ...now, lastfm: !now.lastfm }),
+      stored,
+    );
+    await store.put(TRACKS_NAMESPACE, "song", stored);
+    spotify.answer = async () => "[]";
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song" });
+
+    expect(out.trackData ?? null).toBeNull();
+    expect(spotify.calls).toBeGreaterThan(0);
   });
 });

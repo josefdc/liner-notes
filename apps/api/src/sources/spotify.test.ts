@@ -88,6 +88,28 @@ describe("Spotify client", () => {
     });
   });
 
+  it("keeps a multi-artist track's artists one by one beside the joined name", async () => {
+    spotify((call) =>
+      call.url === `${API}/tracks/${TRACK_ID}`
+        ? json({
+            ...track(),
+            artists: [
+              { id: "a1", name: "Ramsey Lewis" },
+              { id: "a2", name: "Earth, Wind & Fire" },
+            ],
+          })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getTrackDetails.invoke({ trackId: TRACK_ID }));
+
+    expect(data).toMatchObject({
+      artist: "Ramsey Lewis, Earth, Wind & Fire",
+      artistNames: ["Ramsey Lewis", "Earth, Wind & Fire"],
+      artistIds: ["a1", "a2"],
+    });
+  });
+
   it("an empty search returns [] as JSON", async () => {
     spotify((call) => (call.url.startsWith(`${API}/search?`) ? json(searchAnswer([])) : undefined));
 

@@ -445,6 +445,11 @@ export const SearchCandidateSchema = z.object({
   id: z.string().describe("Spotify track ID"),
   title: z.string().describe("Song title"),
   artist: z.string().describe("Artist name"),
+  artistNames: z
+    .array(z.string())
+    .optional()
+    .describe("The credited artists one by one (artist joins them with ', ')"),
+  artistIds: z.array(z.string()).optional().describe("Spotify ids of the credited artists"),
   album: z.string().describe("Album name"),
   coverUrl: z.string().url().describe("Album cover URL"),
   releaseYear: z.string().optional().describe("Year of release"),

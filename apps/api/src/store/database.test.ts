@@ -284,7 +284,6 @@ async function testSonicCacheResearchArtwork(): Promise<void> {
     const researchData = {
       samples: ["Sample A"],
       productionTrivia: ["Trivia 1", "Trivia 2"],
-      relatedArtists: ["Artist X"],
     };
     cache.putResearch("spotify-789", researchData);
     const research = cache.getResearch("spotify-789");
@@ -349,7 +348,6 @@ async function testSonicCacheTTL(): Promise<void> {
       {
         samples: [],
         productionTrivia: [],
-        relatedArtists: [],
       },
       0,
     );
@@ -437,7 +435,6 @@ async function testConcurrentWrites(): Promise<void> {
       cache.putResearch("concurrent-1", {
         samples: ["Sample 1"],
         productionTrivia: ["Trivia 1"],
-        relatedArtists: ["Artist A"],
       });
     });
 
@@ -875,7 +872,7 @@ describe("migrations", () => {
       .prepare(
         "INSERT INTO research_cache (spotify_id, samples_count, trivia_count, full_data, expires_at) VALUES ('r1', 0, 0, ?, unixepoch() + 86400)",
       )
-      .run(JSON.stringify({ samples: [], productionTrivia: [], relatedArtists: [] }));
+      .run(JSON.stringify({ samples: [], productionTrivia: [] }));
     raw.close();
 
     const db = initializeDatabase(dbPath);

@@ -39,8 +39,6 @@ const spotify: SpotifyData = {
 const emptyResearch: ResearchData = {
   samples: [],
   productionTrivia: [],
-  songMeaning: [],
-  relatedArtists: [],
 };
 
 function build(
@@ -131,12 +129,39 @@ describe("createFallbackTrackData", () => {
       {
         spotifyData: spotify,
         audioFeatures: null,
-        researchData: { ...emptyResearch, collaborators: ["Queen (producer)"] },
+        researchData: {
+          ...emptyResearch,
+          collaborators: ["Queen (producer)"],
+          collaboratorsOf: "David Bowie",
+        },
       } as unknown as SonicAgentStateType,
       { newId: () => `fixed-${++n}` },
     );
     expect(td.factoids.map((f) => f.id)).toEqual(["fixed-1", "fixed-3"]);
     expect(td.factoids[0].entities?.[0].id).toBe("fixed-2");
+  });
+
+  it("names the artist the collaborators belong to, never the joined artists of the track", async () => {
+    const td = await createFallbackTrackData({
+      spotifyData: { ...spotify, artist: "Ramsey Lewis, Earth, Wind & Fire" },
+      audioFeatures: null,
+      researchData: {
+        ...emptyResearch,
+        collaborators: ["Maurice White (producer)"],
+        collaboratorsOf: "Ramsey Lewis",
+      },
+    } as unknown as SonicAgentStateType);
+    const card = td.factoids.find((f) => f.title === "Collaboration Network");
+    expect(card?.content).toBe("Ramsey Lewis has worked with: Maurice White (producer).");
+  });
+
+  it("shows no collaborators card when it is not known whose they are", async () => {
+    const td = await createFallbackTrackData({
+      spotifyData: spotify,
+      audioFeatures: null,
+      researchData: { ...emptyResearch, collaborators: ["Queen (producer)"] },
+    } as unknown as SonicAgentStateType);
+    expect(td.factoids.map((f) => f.title)).not.toContain("Collaboration Network");
   });
 
   it("returns a schema-valid payload with no factoids when nothing is known", async () => {
@@ -196,7 +221,6 @@ describe("createFallbackTrackData", () => {
     const td = await build(null, {
       samples: [`[MusicBrainz Samples] ${JSON.stringify(relations)}`],
       productionTrivia: [],
-      relatedArtists: [],
     });
 
     const card = (title: string) => td.factoids.find((f) => f.title === title)?.content;
@@ -211,7 +235,6 @@ describe("createFallbackTrackData", () => {
     const td = await build(null, {
       samples: [web],
       productionTrivia: [web, "[Last.fm Bio] A long biography of the artist from the web."],
-      relatedArtists: [],
     });
 
     const text = allText(td.factoids);
@@ -227,13 +250,12 @@ describe("createFallbackTrackData", () => {
         "Error searching for production history: upstream request timed out after 30s",
         'No production history found for "Ice Ice Baby" by Vanilla Ice.',
       ],
-      relatedArtists: [],
     });
     const text = allText(td.factoids);
     expect(text).not.toMatch(/TAVILY|Web search|Error searching|No production history/);
   });
 
-  it("parses MusicBrainz tags and leaves out structured data and song-meaning text", async () => {
+  it("parses MusicBrainz tags and leaves out structured data", async () => {
     const td = await build(null, {
       samples: [
         '[MusicBrainz Samples] [{"title":"Under Pressure","artist":"Queen","direction":"source"}]',
@@ -241,17 +263,10 @@ describe("createFallbackTrackData", () => {
       productionTrivia: [
         '[MusicBrainz Covers] [{"title":"Ice Ice Baby","artist":"Cover Band X","year":"[2001]"}]',
       ],
-      songMeaning: [
-        "[Genius Lyrics]\nLINE_ONE_OF_SONG_TEXT line two line three line four line five",
-        '[Genius Annotations] [{"fragment":"LINE_TWO_OF_SONG_TEXT","annotation":"x"}]',
-        "The song is about LINE_THREE_OF_SONG_TEXT and more words to pass any length filter",
-      ],
-      relatedArtists: [],
     });
 
     const text = allText(td.factoids);
     expect(text).toContain('This track samples: "Under Pressure" by Queen.');
-    expect(text).not.toContain("SONG_TEXT");
     expect(text).not.toContain("Cover Band X");
     expect(text).not.toMatch(/[[{]"/);
   });

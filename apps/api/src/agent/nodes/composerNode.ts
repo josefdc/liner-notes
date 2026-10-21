@@ -31,7 +31,7 @@ import type { InvokeResult } from "../../llm/invoke.js";
 import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
 import { pickRecording } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
-import { TRACKS_NAMESPACE } from "../cacheKeys.js";
+import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { answeredCall, failedCall, refusedAnswer, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
@@ -449,6 +449,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       audio: state.audioFeatures,
       evidence: state.evidence,
       research: state.researchData,
+      sourceErrors: [...state.sourceErrors, ...sourceErrors],
     });
 
     // Only the model call is guarded: any failure of it gives the fallback. A bug in what
@@ -495,16 +496,23 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     signal?.throwIfAborted();
     writer?.({ type: "complete", data: trackData });
 
-    // Cache the result in long-term memory (unless the audio may be measurable later). The
-    // run information belongs to this run, not to a later one served from the cache.
+    // Cache the result in long-term memory, unless a later run may do better: the audio may be
+    // measurable later, a source failed for a passing reason (an outage, a timeout, a rate
+    // limit, a rejected key), or a research planner call failed. A source that is only not
+    // configured does not block it: the key names the configured sources. The run information
+    // belongs to this run, not to a later one served from the cache.
     const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
-    if (store && !transientAudio) {
+    const transientSources = [...state.sourceErrors, ...sourceErrors].some(
+      (e) => e.code !== "not_configured",
+    );
+    const plannerFailed = state.usage.some((u) => u.status !== "ok");
+    if (store && !transientAudio && !transientSources && !plannerFailed) {
       const normalizedQuery = state.songQuery.toLowerCase().trim();
       const { run: _run, ...cached } = trackData;
       try {
         signal?.throwIfAborted();
-        await store.put(TRACKS_NAMESPACE, normalizedQuery, {
+        await store.put(TRACKS_NAMESPACE, resultCacheKey(normalizedQuery, configuredSources()), {
           trackData: cached,
           timestamp: runtime.now().getTime(),
         });

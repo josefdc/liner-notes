@@ -179,7 +179,8 @@ times are seconds from the start of the preview. Every block is `null` when it w
   loudest frames stay under -60 dBFS (digital silence, a DC offset, dither) is `silence`; input
   with neither a beat nor musical pitch is `noise`: white, pink or brown noise, and noise
   carrying one tonal artefact (a whine, mains hum). Music under a noise bed, a drum take with
-  human timing, a rhythm made of noise bursts and speech pass. When the channels cancel in the
+  human timing, a rhythm made of noise bursts, speech and an a cappella line (one moving voice,
+  even when its vibrato leaves few spectral lines) pass. When the channels cancel in the
   mono downmix (antiphase stereo), the loudest channel is analysed instead. A gate that does
   not pass leaves every measured block `null` and `keyMoments` empty.
 - **Tempo** is withheld when the onsets do not repeat at a beat rate (a steady chord, a pure
@@ -194,13 +195,18 @@ times are seconds from the start of the preview. Every block is `null` when it w
   harmonic/percussive separation). It is withheld when too little of the energy is in spectral
   lines (drums, click tracks, a metronome, noise with a beat); when the lines form a single
   harmonic series (a lone tone, or mains hum on 50 or 60 Hz, whose harmonics spell a G major
-  triad); when one pitch track explains the sound and it is one pitch that moves (a held note
-  with vibrato, whose sidebands hide the series, or a bend) or a voice without stable notes
-  (speech); when the lines spell fewer than three pitch classes; or when its strength is low.
+  triad); when the lines and the notes of a single voice spell fewer than three pitch classes;
+  or when its strength is low. Without a beat, a pitch track of the harmonic part also
+  decides: no key for one held pitch (a note with vibrato, whose sidebands hide the series, or
+  a bend: its harmonics explain the lines and nothing else moves in the chromagram) or for a
+  voice without stable notes (speech); a voice that moves between notes keeps the key even
+  without lines (an a cappella line with vibrato). With a beat the pitch track is not
+  consulted, since a band's bass line can look like one held pitch. A major triad over its own
+  root in the bass is acoustically one harmonic series (harmonics 4, 5 and 6) and gets no key.
   Tonics are spelled with sharps (Essentia's Bb is reported as A#).
 - **Fingerprint** is `null` without the models, and for input the service judges not to be
-  music: no beat, and a single harmonic series, one moving pitch or speech (the style and mood
-  models answer for any input). `styles.top` holds the 10 highest of the 400 Discogs style
+  music: no beat, and a single harmonic series, one held pitch or speech (the style and mood
+  models answer for any input). A pad, a melody over a drone or a band without drums keeps it. `styles.top` holds the 10 highest of the 400 Discogs style
   activations of EffNet-Discogs, `tags.scores` the 50 MusiCNN tag activations; activations
   are scores, not probabilities. Mood heads give their output with its range: 0-1 for
   danceability, acoustic and instrumental, the DEAM scale 1-9 for valence and arousal; they are
@@ -276,7 +282,7 @@ must finish within 20 s. The temporary file is removed after the analysis, whate
    track, pitch classes) is decided the same way for both.
 5. **Loudness and energy contour**: RMS of non-overlapping 2048-sample frames at 22.05 kHz after
    removing DC; `loudness.rmsMean` is their mean.
-6. **Sections**: novelty on beat-synchronous chroma (a fixed 0.5 s grid without a beat grid),
+6. **Sections**: novelty on beat-synchronous chroma (a fixed 0.5 s grid without a trusted beat grid),
    cut at novelty peaks at least 4 s apart; sections with similar chroma share a label.
 7. **Key moments**: energy peaks, level drops, onsets, harmonic changes and silences, with
    intensities from the signal (level, size of the drop, onset strength, novelty, length);
@@ -305,12 +311,15 @@ The tests run without network access: a local HTTP server stands in for the CDN.
 pins the v1 fields. `tests/test_v2.py` covers the `v2` block with both estimators: tempo within
 1 BPM, tempo changes, keys and when they are withheld (drums, clicks, hum, tones), the gate
 (noise, silence, short input, and music under noise or with human timing, from
-`tests/signals.py`), loudness, key moments, sections and the fingerprint. Every result in both
-files is checked against the contract's JSON Schema after a strict JSON round trip, and for
-v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model tests are reported
-as skipped without the `models` extra and the models; run `uv sync --locked --extra models` and
-`uv run python download_models.py` first to include them. `AUDIO_REQUIRE_MODELS=1` turns those
-skips into an error; CI's `audio models` workflow runs the suite that way.
+`tests/signals.py`), music without a beat and single held pitches or speech (sung and played
+lines with vibrato, band mixes with and without drums, a pad, a drone, speech with irregular
+syllables, from `tests/music.py`), loudness, key moments, sections and the fingerprint. Every
+result in both files is checked against the contract's JSON Schema after a strict JSON round
+trip, and for v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model
+tests are reported as skipped without the `models` extra and the models; run
+`uv sync --locked --extra models` and `uv run python download_models.py` first to include them.
+`AUDIO_REQUIRE_MODELS=1` turns those skips into an error; CI's `audio models` workflow runs the
+suite that way.
 
 ## Troubleshooting
 

@@ -39,13 +39,14 @@ SILENCE_RMS = 1e-3
 # jitter passes on rhythm (0.38), chords or a piano line under rain at 0 dB pass on pitch
 # (0.67-0.73). (Spectral and chroma flatness, used before, called the latter noise: chroma
 # flatness 0.92-0.98 under rain against 0.986 for brown noise.)
-# Speech and other single voices pass, whatever their lines (Signals.voice, see
-# estimators.VOICE_MIN_SHARE): the speech-dispatcher recording has no beat, and a gliding
-# voice leaves few lines. A single harmonic series (a whine, mains hum) is not musical pitch: noise carrying one
-# holds less than NOISE_MAX_ARTEFACT_RATIO of its energy in lines and is gated as noise. White
-# noise with a 1 kHz whine 14/10/6 dB under it scores 0.08/0.18/0.36, pink noise with 50 Hz hum
-# 6 dB under it 0.12. A tone or hum on its own (0.99-1.0) is not noise; it passes the gate
-# and gets no key and no fingerprint.
+# A single harmonic series (a whine, mains hum) is not musical pitch: noise carrying one holds
+# less than NOISE_MAX_ARTEFACT_RATIO of its energy in lines and is gated as noise. White noise
+# with a 1 kHz whine 14/10/6 dB under it scores 0.08/0.18/0.36, pink noise with 50 Hz hum 6 dB
+# under it 0.12. A tone or hum on its own (0.99-1.0) is not noise; it passes the gate and gets
+# no key and no fingerprint. One voice whose pitch moves (Voice.moving: speech, an a cappella
+# line) passes whatever its lines: its vibrato and intonation can leave none (the a cappella
+# lines of tests/music.py with +-70 cents of vibrato score 0.00-0.01), or leave one series.
+# The pitch track is only computed when one of these noise rules would apply.
 NOISE_MAX_PERIODICITY = estimators.MIN_TEMPO_PERIODICITY
 NOISE_MAX_TONAL_RATIO = estimators.MIN_TONAL_RATIO
 NOISE_MAX_ARTEFACT_RATIO = 0.9
@@ -132,13 +133,9 @@ def check_gate(signals: Signals, loudness: Levels | None) -> Gate:
         return Gate(False, "silence")
     if signals.onset_periodicity < NOISE_MAX_PERIODICITY:
         tonal = signals.tonality
-        # One moving voice (speech, a sweep: one pitch track explains it) is not noise, even
-        # when it moves too much to leave spectral lines. One fixed pitch in noise (hum) is.
-        voice = signals.voice
-        moving_voice = voice.single and not voice.one_pitch
-        if tonal.tonal_ratio < NOISE_MAX_TONAL_RATIO and not moving_voice:
-            return Gate(False, "noise")
-        if tonal.series_f0 is not None and tonal.tonal_ratio < NOISE_MAX_ARTEFACT_RATIO:
+        no_pitch = tonal.tonal_ratio < NOISE_MAX_TONAL_RATIO
+        one_artefact = tonal.series_f0 is not None and tonal.tonal_ratio < NOISE_MAX_ARTEFACT_RATIO
+        if (no_pitch or one_artefact) and not (signals.voice and signals.voice.moving):
             return Gate(False, "noise")
     return Gate(True, None)
 

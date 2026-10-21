@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 
 import librosa
@@ -117,11 +117,15 @@ LINE_FLOOR_BINS = 101
 # separation does not separate them: the square wave has 0.96 and brown noise with a kick
 # 0.99, against 0.41 for the band.
 MIN_TONAL_RATIO = 0.1
-# The lines must spell at least KEY_MIN_PITCH_CLASSES pitch classes (a pitch class counts when
-# its line energy reaches KEY_PITCH_CLASS_LEVEL of the strongest one): a 440 Hz tone has 1, the
-# A major triad 3, the chord progressions 5-7.
+# The lines must spell at least KEY_MIN_PITCH_CLASSES pitch classes, together with the notes of
+# a single voice (Voice.note_classes). A pitch class counts when its line amplitude (the square
+# root of the power, so that a bass 6 dB louder than the chords does not hide them) reaches
+# KEY_PITCH_CLASS_LEVEL of the strongest: a 440 Hz tone has 1, the A major triad 3, the chord
+# progressions 5-7. Third-strongest pitch class: band mixes with a bass 6 dB over the chords
+# 0.26-0.49, a 110 Hz drone (one note) under drums 0.24, an A minor one-chord vamp under a bass
+# 6 dB louder 0.18-0.25 (withheld).
 KEY_MIN_PITCH_CLASSES = 3
-KEY_PITCH_CLASS_LEVEL = 0.25
+KEY_PITCH_CLASS_LEVEL = 0.28
 # A single harmonic series (every line within SERIES_TOLERANCE of a multiple of the lowest
 # line, for at least SERIES_SHARE of the line energy) is one sustained pitch, not a key: mains
 # hum (50 Hz harmonics 1-6 or 1-10 spell G, B and D) or a lone tone. A tolerance of 0.5% (or two
@@ -129,30 +133,55 @@ KEY_PITCH_CLASS_LEVEL = 0.25
 # share is 0.27; the progressions 0.58, the band 0.17.
 SERIES_TOLERANCE = 0.005
 SERIES_SHARE = 0.9
-# One voice: when pYIN (on the harmonic part, 11.025 kHz, 60-1000 Hz) finds voiced frames in at
-# least VOICE_MIN_VOICED of the window, the harmonics of its f0 hold at least VOICE_MIN_SHARE of
-# a voiced frame's 60 Hz-4 kHz energy (median), and its fundamental or octave is a real partial
-# (at least VOICE_MIN_LOW_SHARE of the strongest harmonic), one pitch track explains the sound.
-# Its f0, median-smoothed over 0.2 s (which averages out vibrato), then says what it is
-# (measured on tests/signals.py and the reviewers' probes):
-# - one pitch that moves: the 5th-95th percentile span is at most ONE_PITCH_SPAN_CENTS. Notes
-#   with +-40 to +-120 cents of vibrato (sine, brass-like and clarinet-like harmonics) span
-#   20-90 cents, a bend of 2 semitones 200; FM sidebands break the series check for these
-#   (the lowest "line" is a sideband), so this check is what withholds their key;
-# - one voice without stable notes (speech): under VOICE_MIN_ON_GRID of the voiced frames lie
-#   within 25 cents of a semitone (tuning-corrected): speech-like glides 0.55-0.60, the
-#   speech-dispatcher recording 0.51; melodies 0.94-0.99, chords and progressions 0.89-1.0, a
-#   band under a drum bus 12 dB louder 0.72.
-# Harmonic shares: vibrato notes 0.68-0.99, speech 0.78-0.90, melodies 0.96-0.99, chords
-# 0.13-0.97. A sustained major triad of pure tones sits on the harmonics 4, 5 and 6 of a
-# virtual fundamental two octaves down (Bb, Db and Eb triads: shares 0.67-0.95), with nothing
-# at its harmonics 1 and 2 (0.00 of the strongest); voices score 0.29-1.0 there.
+# One voice (Voice): pYIN on the harmonic part (11.025 kHz, 40 Hz-4 kHz, a 46 ms YIN window so
+# that it follows vibrato), refined by YIN, frames pinned at the edges of the range dropped. It
+# is one voice when the tracker calls at least VOICE_MIN_VOICED of the window voiced, the
+# harmonics 1-10 of its f0 explain the voiced frames' spectrum (median harmonicity: the share of
+# the energy within VOICE_TOLERANCE x f0 of a harmonic, corrected for what a flat spectrum
+# scores at that f0, at least VOICE_MIN_HARMONICITY), and its fundamental or octave is a real
+# partial (VOICE_MIN_LOW_SHARE of the strongest harmonic; the virtual fundamental of a triad of
+# pure tones has nothing there). The f0 is averaged over one vibrato cycle, then median-smoothed.
+# Measured on tests/signals.py and tests/music.py (no beat):
+# - smoothed 5th-95th percentile span: held notes with +-35 to +-120 cents of vibrato (G1 to E6,
+#   sine, brass- and clarinet-like) 0-4 cents, a 0.5 Hz +-80 cent swing 152, bends of one to
+#   three semitones 95-284; melodies 524-3392 (over a drone 132-159), speech 585-1058;
+# - harmonicity: held notes 0.83-1.0, speech 0.99-1.0, melodies 0.98-1.0, band mixes without
+#   drums 0.89-0.92, the A minor pad 0.87: no evidence of a single source by itself;
+# - share of the held f0 (slope under VOICE_STABLE_SLOPE) within 25 cents of a semitone,
+#   tuning-corrected: speech-like voices 0.55-0.68, melodies 0.81-1.0, band mixes 0.89-0.94.
+#   Between them (withheld): an out-of-tune pop vocal (30 cents per note) about 0.69.
 VOICE_MIN_VOICED = 0.3
-VOICE_MIN_SHARE = 0.6
+VOICE_MIN_HARMONICITY = 0.5
 VOICE_MIN_LOW_SHARE = 0.15
-ONE_PITCH_SPAN_CENTS = 250.0
-VOICE_MIN_ON_GRID = 0.65
+VOICE_MIN_ON_GRID = 0.72
 VOICE_RATE = 11025
+VOICE_RANGE_HZ = (40.0, 4000.0)
+VOICE_FRAME = 1024  # YIN window of 512 samples (46 ms); lags up to 511 samples (21.6 Hz)
+VOICE_HOP = 256  # 23 ms, the hop of the 22.05 kHz chromagram
+VOICE_RESOLUTION = 0.25  # pYIN's pitch bins, in semitones (0.1 by default); YIN refines them
+VOICE_SPECTRUM_FRAME = 2048  # harmonicity: 5.4 Hz bins resolve the harmonics of 40 Hz
+VOICE_HARMONICS = 10
+VOICE_TOLERANCE = 0.2  # of f0, around each harmonic
+VOICE_VIBRATO_FRAMES = 8  # 0.19 s: one cycle of a 5.3 Hz vibrato, averaged out
+VOICE_SMOOTHING_FRAMES = 15  # 0.35 s, a median (keeps note changes)
+VOICE_STABLE_SLOPE = 100.0  # cents per second
+VOICE_NOTE_SHARE = 0.05  # a note's pitch class counts with this share of the held frames
+# Without a beat, one held pitch (a note with vibrato, a bend, a test tone) is no key. It needs
+# (1) a smoothed span of at most ONE_PITCH_SPAN_CENTS; (2) at least ONE_PITCH_MIN_EXPLAINED of
+# the line energy near the harmonics of the median f0, as far as the voice moves (Voice.
+# tolerance): held notes, bends and tones 1.0, the C vamp with its bass on C2 0.943, the A
+# minor pad (C is off the A1 series) 0.855; (3) a still chromagram: movement under
+# STILL_MAX_MOVEMENT, either plain (Signals.chroma_movement) or relative to the voice
+# (Voice.relative_movement, which a bend does not move). Held notes 0.004-0.022 plain and
+# 0.008-0.029 relative, tones and hum 0.007-0.015, bends 0.024-0.049 relative; a melody over a
+# D2 drone 6 dB louder 0.091 plain and 0.272 relative (without (3) it reads as one pitch: the
+# tracker stays on the drone and the melody leaves weaker lines than the drone's harmonics),
+# the C vamp 0.057 and 0.089. One harmonic series is only withheld without a beat when the
+# chromagram is still, for the same reason.
+ONE_PITCH_SPAN_CENTS = 350.0
+ONE_PITCH_MIN_EXPLAINED = 0.98
+STILL_MAX_MOVEMENT = 0.06
+MOVEMENT_WINDOW_S = 0.5  # the chromagram is averaged over this before it is compared
 # Below this strength (0..1) the key is withheld. Tonal fixtures and probes score 0.80-0.97 with
 # Essentia (bgate profile, on the harmonic part) and 0.73-0.97 with librosa (Krumhansl-Kessler
 # correlation); digital silence and dither score 0 with Essentia.
@@ -198,19 +227,25 @@ class KeyEstimate:
 
 @dataclass(frozen=True)
 class Voice:
-    """What a pYIN pitch track says about the harmonic part (see VOICE_MIN_SHARE)."""
+    """What a pitch track of the harmonic part says (see VOICE_MIN_HARMONICITY)."""
 
-    voiced: float  # share of the frames pYIN calls voiced
-    share: float  # median share of a voiced frame's energy on the harmonics of its f0
+    voiced: float  # share of the frames the tracker calls voiced (off the range edges)
+    harmonicity: float  # median baseline-corrected share on harmonics 1-10 of the f0
     span_cents: float  # 5th-95th percentile span of the smoothed f0
-    on_grid: float  # share of voiced frames within 25 cents of a semitone
+    on_grid: float  # share of the held f0 (VOICE_STABLE_SLOPE) within 25 cents of a semitone
     low_share: float  # median energy of harmonic 1 or 2 against the strongest harmonic
+    f0_hz: float = 0.0  # median f0 of the voiced frames
+    vibrato_cents: float = 0.0  # 90th percentile of the f0's distance from its smoothed track
+    note_classes: frozenset[int] = frozenset()  # pitch classes (C = 0) of the smoothed f0
+    # Chromagram movement with each voiced frame transposed to the voice's pitch: what moves
+    # besides the voice (1.0 when unknown).
+    relative_movement: float = 1.0
 
     @property
     def single(self) -> bool:
         return (
             self.voiced >= VOICE_MIN_VOICED
-            and self.share >= VOICE_MIN_SHARE
+            and self.harmonicity >= VOICE_MIN_HARMONICITY
             and self.low_share >= VOICE_MIN_LOW_SHARE
         )
 
@@ -222,6 +257,21 @@ class Voice:
     def without_notes(self) -> bool:
         return self.single and self.on_grid < VOICE_MIN_ON_GRID
 
+    @property
+    def moving(self) -> bool:
+        """One voice whose pitch moves: speech, a melody, a sweep (not one held pitch)."""
+        return self.single and not self.one_pitch
+
+    @property
+    def tolerance(self) -> tuple[float, float]:
+        """
+        How far (cents, Hz) its partials stray from the harmonics of the median f0: twice the
+        measured vibrato (the 46 ms window reads 0.6-0.85 of a 5.5 Hz vibrato's extent), half
+        the span, 20 cents, and 8 Hz for the FM sidebands, which reach about one vibrato rate
+        beyond the extent.
+        """
+        return 2 * self.vibrato_cents + self.span_cents / 2 + 20.0, 8.0
+
 
 NO_VOICE = Voice(0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -231,27 +281,52 @@ class Tonality:
     """What the long-term spectrum says about pitch, shared by the gate and both estimators."""
 
     tonal_ratio: float  # share of the 60 Hz-5 kHz energy in spectral lines
-    pitch_classes: np.ndarray  # line energy per pitch class, C first
+    pitch_classes: np.ndarray  # line amplitude per pitch class, C first
     series_f0: float | None  # lowest line when the lines form one harmonic series
+    line_hz: np.ndarray = field(default_factory=lambda: np.zeros(0))  # line bins (Hz)
+    line_power: np.ndarray = field(default_factory=lambda: np.zeros(0))  # their power
+
+    def explained_by(self, f0: float, cents: float, hz: float = 0.0) -> float:
+        """Share of the line energy within `cents` + `hz` of a harmonic of `f0`."""
+        total = float(np.sum(self.line_power))
+        if not total > 0 or not f0 > 0:
+            return 0.0
+        harmonic = np.maximum(1, np.round(self.line_hz / f0))
+        tolerance = harmonic * f0 * (2 ** (cents / 1200) - 1) + hz
+        near = np.abs(self.line_hz - harmonic * f0) <= tolerance
+        return float(np.sum(self.line_power[near]) / total)
 
     @property
-    def pitch_class_count(self) -> int:
+    def line_classes(self) -> frozenset[int]:
+        """Pitch classes whose line amplitude reaches KEY_PITCH_CLASS_LEVEL of the strongest."""
         peak = float(np.max(self.pitch_classes)) if self.pitch_classes.size else 0.0
         if not peak > 0:
-            return 0
-        return int(np.sum(self.pitch_classes >= KEY_PITCH_CLASS_LEVEL * peak))
+            return frozenset()
+        return frozenset(
+            np.flatnonzero(self.pitch_classes >= KEY_PITCH_CLASS_LEVEL * peak).tolist()
+        )
 
-    def key_withheld(self, voice: Voice = NO_VOICE) -> str | None:
-        """Why no key can be measured, or None when the evidence supports one."""
-        if self.tonal_ratio < MIN_TONAL_RATIO:
+    def key_withheld(self, voice: Voice = NO_VOICE, movement: float = 0.0) -> str | None:
+        """
+        Why no key can be measured, or None when the evidence supports one. `voice` and
+        `movement` (Signals.chroma_movement) are only given for input without a beat.
+        """
+        still = movement < STILL_MAX_MOVEMENT or (
+            voice.single and voice.relative_movement < STILL_MAX_MOVEMENT
+        )
+        if self.tonal_ratio < MIN_TONAL_RATIO and not voice.moving:
             return "no sustained pitch"
-        if self.series_f0 is not None:
+        if self.series_f0 is not None and still:
             return f"one harmonic series on {self.series_f0:.1f} Hz"
-        if voice.one_pitch:
-            return "one pitch, moving (vibrato or a bend)"
+        if (
+            voice.one_pitch
+            and still
+            and self.explained_by(voice.f0_hz, *voice.tolerance) >= ONE_PITCH_MIN_EXPLAINED
+        ):
+            return "one held pitch (vibrato or a bend)"
         if voice.without_notes:
             return "one voice without stable notes (speech-like)"
-        if self.pitch_class_count < KEY_MIN_PITCH_CLASSES:
+        if len(self.line_classes | voice.note_classes) < KEY_MIN_PITCH_CLASSES:
             return "fewer than three pitch classes"
         return None
 
@@ -351,83 +426,186 @@ class Signals:
         return tonality(self.y, self.sr)
 
     @cached_property
-    def voice(self) -> Voice:
-        return voice(self)
+    def voice(self) -> Voice | None:
+        """The pitch track's summary, or None when the tracker failed (logged)."""
+        try:
+            return voice(self)
+        except Exception:
+            logger.warning("The pitch track failed", exc_info=True)
+            return None
+
+    @cached_property
+    def chroma_movement(self) -> float:
+        """
+        How much the pitch content changes, 0..1: the chromagram averaged over
+        MOVEMENT_WINDOW_S and normalised per frame, its mean total-variation distance from the
+        mean. Vibrato (4-8 Hz) averages out; a melody or chord changes it.
+        """
+        return chroma_movement(self.chroma, self.sr, self.hop)
 
     def not_music(self) -> str | None:
         """
         Why the service judges the input not to be music, or None: no beat (onset periodicity
         under MIN_TEMPO_PERIODICITY) and its pitch is one harmonic series (a tone, hum), one
-        pitch that moves, or one voice without notes (speech). The fingerprint is not computed
-        for it: the style and mood models answer for any input, and a test tone or speech gets
+        held pitch, or one voice without notes (speech). The fingerprint is not computed for
+        it: the style and mood models answer for any input, and a test tone or speech gets
         danceability 0.996.
         """
-        if self.onset_periodicity >= MIN_TEMPO_PERIODICITY:
+        if self.has_beat:
             return None
-        tonal = self.tonality
-        if tonal.series_f0 is not None:
-            return f"one harmonic series on {tonal.series_f0:.1f} Hz and no beat"
-        if self.voice.one_pitch:
-            return "one pitch, moving, and no beat"
-        if self.voice.without_notes:
-            return "one voice without stable notes (speech-like) and no beat"
-        return None
+        reason = self.key_withheld()
+        if reason is None or not reason.startswith("one "):
+            return None
+        return f"{reason}, and no beat"
+
+    @property
+    def has_beat(self) -> bool:
+        return self.onset_periodicity >= MIN_TEMPO_PERIODICITY
 
     def key_withheld(self) -> str | None:
-        """Why no key can be measured (the pitch track is only computed when it matters)."""
-        tonal = self.tonality
-        if tonal.tonal_ratio < MIN_TONAL_RATIO or tonal.series_f0 is not None:
-            return tonal.key_withheld()
-        return tonal.key_withheld(self.voice)
+        """
+        Why no key can be measured. The pitch track and the chromagram's movement only decide
+        input without a beat: with a beat, the lines and their pitch classes do (a bass line
+        under a band mix can look like one held pitch to a tracker).
+        """
+        if self.has_beat:
+            return self.tonality.key_withheld()
+        if self.voice is None:
+            # Without a pitch track, one held pitch cannot be told from music: no key.
+            reason = self.tonality.key_withheld(NO_VOICE, self.chroma_movement)
+            return reason or "no pitch track"
+        return self.tonality.key_withheld(self.voice, self.chroma_movement)
+
+
+def chroma_movement(chroma: np.ndarray, sr: int, hop: int) -> float:
+    """Mean total-variation distance of the window-averaged, normalised chromagram from its mean."""
+    if chroma.size == 0:
+        return 0.0
+    width = max(1, int(round(MOVEMENT_WINDOW_S * sr / hop)))
+    chroma = scipy.ndimage.uniform_filter1d(chroma, width, axis=1, mode="nearest")
+    chroma = chroma / np.maximum(chroma.sum(axis=0, keepdims=True), 1e-12)
+    mean = chroma.mean(axis=1, keepdims=True)
+    return float(np.mean(0.5 * np.abs(chroma - mean).sum(axis=0)))
 
 
 def voice(signals: Signals) -> Voice:
-    """The pYIN pitch track of the harmonic part, summarised (see VOICE_MIN_SHARE)."""
+    """The pitch track of the harmonic part, summarised (see VOICE_MIN_HARMONICITY)."""
     if signals.duration < 1.0:
         return NO_VOICE
     y = librosa.resample(signals.harmonic, orig_sr=signals.sr, target_sr=VOICE_RATE)
-    hop = 256
-    f0, voiced, _ = librosa.pyin(
-        y, fmin=60.0, fmax=1000.0, sr=VOICE_RATE, frame_length=1024, hop_length=hop
+    track = dict(
+        fmin=VOICE_RANGE_HZ[0],
+        fmax=VOICE_RANGE_HZ[1],
+        sr=VOICE_RATE,
+        frame_length=VOICE_FRAME,
+        hop_length=VOICE_HOP,
     )
-    voiced = voiced & np.isfinite(f0)
-    if voiced.sum() < 10:
+    f0, voiced, _ = librosa.pyin(y, resolution=VOICE_RESOLUTION, **track)
+    # pYIN's f0 sits on its pitch bins (25 cents apart); YIN's interpolated f0 refines it where
+    # the two agree within half a bin's distance to the next semitone.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        fine = librosa.yin(y, **track)[: f0.size]
+        agree = np.abs(1200 * np.log2(fine / f0)) <= 50
+    f0 = np.where(agree, fine, f0)
+    # Frames pinned at the edges of the range are the tracker giving up (a bass under 40 Hz
+    # reads 40 Hz), not a pitch.
+    edge = 2 ** (50 / 1200)
+    voiced &= np.isfinite(f0)
+    voiced &= (f0 > VOICE_RANGE_HZ[0] * edge) & (f0 < VOICE_RANGE_HZ[1] / edge)
+    if voiced.sum() < 2 * VOICE_SMOOTHING_FRAMES:
         return Voice(float(voiced.mean()) if voiced.size else 0.0, 0.0, 0.0, 0.0, 0.0)
 
-    power = np.abs(signals.harmonic_stft) ** 2
-    freqs = librosa.fft_frequencies(sr=signals.sr, n_fft=2048)
-    band = (freqs >= 60.0) & (freqs <= 4000.0)
-    columns = np.minimum(
-        np.round(np.arange(f0.size) * hop / VOICE_RATE * signals.sr / signals.hop).astype(int),
-        power.shape[1] - 1,
-    )
-    shares, low_shares = [], []
-    f = freqs[band]
+    power = np.abs(librosa.stft(y, n_fft=VOICE_SPECTRUM_FRAME, hop_length=VOICE_HOP)) ** 2
+    freqs = librosa.fft_frequencies(sr=VOICE_RATE, n_fft=VOICE_SPECTRUM_FRAME)
+    harmonicities, low_shares = [], []
     for frame in np.flatnonzero(voiced):
-        column = power[band, columns[frame]]
-        total = float(column.sum())
-        if total > 0:
-            harmonic = np.round(f / f0[frame])
-            near = (harmonic >= 1) & (np.abs(f - harmonic * f0[frame]) <= np.maximum(0.03 * f, 11))
-            shares.append(float(column[near].sum()) / total)
-            # Energy per harmonic; the fundamental or its octave against the strongest one.
-            per_harmonic = np.bincount(harmonic[near].astype(int), weights=column[near])
-            strongest = float(per_harmonic.max()) if per_harmonic.size else 0.0
-            low = float(per_harmonic[1:3].max()) if per_harmonic.size > 1 else 0.0
-            low_shares.append(low / strongest if strongest > 0 else 0.0)
+        if frame < power.shape[1]:
+            measured = harmonicity(power[:, frame], freqs, f0[frame])
+            if measured is not None:
+                harmonicities.append(measured[0])
+                low_shares.append(measured[1])
 
-    cents = scipy.ndimage.median_filter(1200 * np.log2(f0[voiced] / 440.0), size=9)
-    span = float(np.percentile(cents, 95) - np.percentile(cents, 5))
-    angle = 2 * np.pi * (cents % 100) / 100
-    tuning = np.angle(np.mean(np.exp(1j * angle))) * 100 / (2 * np.pi)
-    deviation = (cents - tuning + 50) % 100 - 50
+    raw = 1200 * np.log2(f0[voiced] / 440.0)
+    cents = scipy.ndimage.median_filter(
+        scipy.ndimage.uniform_filter1d(raw, VOICE_VIBRATO_FRAMES), size=VOICE_SMOOTHING_FRAMES
+    )
+    # Notes are where the smoothed f0 holds still (under VOICE_STABLE_SLOPE): scoops, glides and
+    # portamento between notes are left out, and so is a glide that never settles.
+    slope = np.abs(np.gradient(scipy.ndimage.uniform_filter1d(cents, 5))) * VOICE_RATE / VOICE_HOP
+    held = cents[slope < VOICE_STABLE_SLOPE]
+    if held.size >= 2 * VOICE_SMOOTHING_FRAMES:
+        angle = 2 * np.pi * (held % 100) / 100
+        tuning = np.angle(np.mean(np.exp(1j * angle))) * 100 / (2 * np.pi)
+        on_grid = float(np.mean(np.abs((held - tuning + 50) % 100 - 50) <= 25))
+        classes = (np.round((held - tuning) / 100).astype(int) + 9) % 12  # A4 = 0 cents -> 9
+        counts = np.bincount(classes, minlength=12) / held.size
+    else:
+        on_grid, counts = 0.0, np.zeros(12)
     return Voice(
         voiced=float(voiced.mean()),
-        share=float(np.median(shares)) if shares else 0.0,
-        span_cents=span,
-        on_grid=float(np.mean(np.abs(deviation) <= 25)),
+        harmonicity=float(np.median(harmonicities)) if harmonicities else 0.0,
+        span_cents=float(np.percentile(cents, 95) - np.percentile(cents, 5)),
+        on_grid=on_grid,
         low_share=float(np.median(low_shares)) if low_shares else 0.0,
+        f0_hz=float(np.median(f0[voiced])),
+        vibrato_cents=float(np.percentile(np.abs(raw - cents), 90)),
+        note_classes=frozenset(np.flatnonzero(counts >= VOICE_NOTE_SHARE).tolist()),
+        relative_movement=relative_movement(signals, np.flatnonzero(voiced), cents),
     )
+
+
+def harmonicity(
+    column: np.ndarray, freqs: np.ndarray, fundamental: float
+) -> tuple[float, float] | None:
+    """
+    (harmonicity, low share) of one power spectrum for an f0: the share of the energy between
+    0.5 and VOICE_HARMONICS + 0.5 times f0 lying within VOICE_TOLERANCE x f0 of a harmonic,
+    rescaled so that a flat spectrum scores 0 and a pure harmonic one 1; and the energy of
+    harmonic 1 or 2 against the strongest harmonic. None for a silent band.
+    """
+    band = (freqs >= 0.5 * fundamental) & (freqs <= (VOICE_HARMONICS + 0.5) * fundamental)
+    column, f = column[band], freqs[band]
+    total = float(column.sum())
+    if not total > 0:
+        return None
+    harmonic = np.round(f / fundamental)
+    tolerance = max(VOICE_TOLERANCE * fundamental, freqs[1] - freqs[0])
+    near = (harmonic >= 1) & (np.abs(f - harmonic * fundamental) <= tolerance)
+    share = float(column[near].sum()) / total
+    flat = float(near.mean())  # what a flat spectrum scores at this f0
+    corrected = (share - flat) / (1 - flat) if flat < 1 else 0.0
+    per_harmonic = np.bincount(harmonic[near].astype(int), weights=column[near])
+    strongest = float(per_harmonic.max()) if per_harmonic.size else 0.0
+    low = float(per_harmonic[1:3].max()) if per_harmonic.size > 1 else 0.0
+    return corrected, (low / strongest if strongest > 0 else 0.0)
+
+
+def relative_movement(signals: Signals, frames: np.ndarray, cents: np.ndarray) -> float:
+    """
+    Chromagram movement (as Signals.chroma_movement) with each voiced frame transposed by the
+    voice's smoothed pitch, on a 36-bin chromagram (a third of a semitone): a bend or a slow
+    vibrato moves the plain chromagram, not this one; a melody over a drone moves both.
+    """
+    chroma = librosa.feature.chroma_cqt(
+        y=signals.harmonic,
+        sr=signals.sr,
+        hop_length=signals.hop,
+        tuning=0.0,  # the frames are transposed by the f0 in absolute cents
+        n_chroma=36,
+        bins_per_octave=36,
+    )
+    keep = frames < chroma.shape[1]  # the pitch track's hop is the chromagram's (23 ms)
+    frames, cents = frames[keep], cents[keep]
+    if frames.size == 0:
+        return 1.0
+    shift = 3 * cents / 100.0  # in bins
+    source = (np.arange(36)[:, None] + shift[None, :]) % 36
+    low = np.floor(source).astype(int)
+    weight = source - low
+    columns = chroma[:, frames]
+    index = np.arange(frames.size)[None, :]
+    moved = (1 - weight) * columns[low, index] + weight * columns[(low + 1) % 36, index]
+    return chroma_movement(moved, signals.sr, signals.hop)
 
 
 def tonality(y: np.ndarray, sr: int) -> Tonality:
@@ -445,7 +623,7 @@ def tonality(y: np.ndarray, sr: int) -> Tonality:
 
     pitch_classes = np.zeros(12)
     midi = np.round(librosa.hz_to_midi(freqs[lines])).astype(int)
-    np.add.at(pitch_classes, midi % 12, power[lines])
+    np.add.at(pitch_classes, midi % 12, np.sqrt(power[lines]))
 
     # Peaks of the lines (one per partial) from SERIES_LOW_HZ, for the harmonic-series check.
     candidates = (
@@ -456,6 +634,8 @@ def tonality(y: np.ndarray, sr: int) -> Tonality:
         float(np.sum(power[lines]) / total),
         pitch_classes,
         harmonic_series(freqs[peaks], power[peaks], freqs[1] - freqs[0]),
+        freqs[lines],
+        power[lines],
     )
 
 

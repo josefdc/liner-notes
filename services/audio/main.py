@@ -266,7 +266,10 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     if key is None and (reason := signals.key_withheld()):
         logger.info("No key: %s", reason)
 
-    if tempo is not None and (tempo.steady or tempo.beats_follow_changes):
+    # A beat grid is trusted when the tempo holds, or when the tracker follows tempo changes;
+    # librosa's tracker keeps one period, so after a change its grid drifts off the music.
+    trusted_beats = tempo is not None and (tempo.steady or tempo.beats_follow_changes)
+    if trusted_beats:
         times = np.sort(np.clip(np.asarray(tempo.beats, dtype=float), 0.0, duration))
         v2["beats"] = _signal_block(
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]
@@ -296,7 +299,9 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
             profile=key.profile,
             method=key.method,
         )
-    harmonic = signal_features.harmony(signals, tempo.beats if tempo else None)
+    # Sections and harmonic changes use the beat grid only when it is trusted; otherwise a
+    # fixed 0.5 s grid.
+    harmonic = signal_features.harmony(signals, tempo.beats if trusted_beats else None)
     level_method = (
         f"frame RMS, {signal_features.RMS_FRAME}-sample frames at {signals.sr} Hz, DC removed"
     )

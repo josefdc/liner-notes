@@ -98,6 +98,25 @@ def test_analysis_errors_do_not_leak_details(client, monkeypatch, tmp_path):
     assert not secret_path.exists()
 
 
+def test_unexpected_analysis_errors_are_a_500_without_details(client, monkeypatch, tmp_path):
+    path = tmp_path / "preview-secret.wav"
+    path.write_bytes(b"")
+
+    async def fake_download(url):
+        return str(path)
+
+    def failing_analysis(file_path):
+        raise RuntimeError(f"internal state of {file_path} at 0x7f3a")
+
+    monkeypatch.setattr(main, "download_preview", fake_download)
+    monkeypatch.setattr(main, "analyze_audio_file", failing_analysis)
+    response = client.post("/analyze", json={"preview_url": DEEZER_URL})
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Audio analysis failed"}
+    assert "secret" not in response.text and "0x7f3a" not in response.text
+    assert not path.exists()
+
+
 def test_analyzes_a_downloaded_preview_and_removes_it(client, monkeypatch, tmp_path):
     sr = 22050
     t = np.arange(sr * 6) / sr

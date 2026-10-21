@@ -235,19 +235,6 @@ def bend(f0: float = 220.0, semitones: float = 2.0, period: float = 2.0, sr: int
     return normalise(sum(0.7**k * np.sin((k + 1) * phase) for k in range(10)))
 
 
-def speech_like(low: float = 95.0, high: float = 150.0, seed: int = 4, sr: int = SR):
-    """A voice gliding between `low` and `high` Hz, in syllables and phrases, with no notes."""
-    rng = np.random.default_rng(seed)
-    t = seconds_of(30.0, sr)
-    walk = np.cumsum(rng.normal(0, 0.002, t.size))
-    walk = (walk - walk.min()) / np.ptp(walk)
-    phase = 2 * np.pi * np.cumsum(low * (high / low) ** walk) / sr
-    voice = sum(0.85**k * np.sin((k + 1) * phase) for k in range(25))
-    syllables = (np.sin(2 * np.pi * 4 * t + 1) > -0.2).astype(float)
-    phrases = (np.sin(2 * np.pi * 0.25 * t) > -0.7).astype(float)
-    return normalise(voice * syllables * phrases)
-
-
 def sung_melody(vibrato_cents: float = 50.0, seed: int = 3, sr: int = SR) -> np.ndarray:
     """A legato G major melody with wide vibrato, one voice (no accompaniment)."""
     rng = np.random.default_rng(seed)
@@ -386,7 +373,7 @@ def probes() -> dict[str, np.ndarray]:
         "accelerando-80-140": band(accelerando(80, 140)),
         "chords-under-loud-drums": normalise(chord_pad_progression() + 4 * drums_only(120, seed=2)),
         "piano-under-loud-drums": normalise(piano_line() + 4 * drums_only(97, seed=1)),
-        # one pitch, moving: no key
+        # one held pitch (vibrato, a bend) without a beat: no key
         "A4-vibrato-40c": held_note(440.0, 40),
         "A4-vibrato-80c": held_note(440.0, 80),
         "A4-vibrato-120c": held_note(440.0, 120),
@@ -396,8 +383,6 @@ def probes() -> dict[str, np.ndarray]:
         "F4-brass-vibrato-40c": held_note(349.23, 40, 5.5, BRASS),
         "D4-clarinet-vibrato": held_note(293.66, 35, 5.0, CLARINET),
         "bend-2-semitones": bend(),
-        "speech-like-low": speech_like(),
-        "speech-like-high": speech_like(180.0, 260.0),
         # one voice with notes: a key
         "sung-melody-vibrato": sung_melody(),
         # a drone with a drum beat: music

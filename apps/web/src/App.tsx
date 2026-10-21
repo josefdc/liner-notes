@@ -15,7 +15,7 @@ const Player = lazy(() => import('./components/Player'));
 import { AppPhase, type TrackData, type AgentLog } from './types';
 import { useAgent } from './hooks/useAgent';
 import type { AgentStatus, SearchCandidate } from './hooks/agent/types';
-import type { Factoid } from './types';
+import type { Factoid, FactoidUnavailableCode } from './types';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
 const shimmerClass =
@@ -92,6 +92,7 @@ interface PhaseViewProps {
     existingIds: string[],
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
+    onUnavailable?: (code: FactoidUnavailableCode) => void,
   ) => Promise<void>;
   // Navigation
   onAnalysisComplete: (trackData: TrackData) => void;

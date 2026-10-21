@@ -84,11 +84,14 @@ export const LogCodeSchema = z.enum([
   "AUDIO-PARSING",
   "AUDIO-COMPLETE",
   "AUDIO-ERROR",
-  // Model operations (the codes keep their names: the web console reads them)
+  // Model operations (LLM-*); the GEMINI-* codes are kept for logs recorded before them
   "GEMINI-CONNECT",
   "GEMINI-THOUGHT",
   "GEMINI-RESPONSE",
   "GEMINI-ERROR",
+  "LLM-CONNECT",
+  "LLM-RESPONSE",
+  "LLM-ERROR",
   // Spotify API
   "SPOTIFY-SEARCH",
   "SPOTIFY-FOUND",

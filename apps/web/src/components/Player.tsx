@@ -11,13 +11,24 @@ import {
   Lock,
   LockOpen,
 } from 'lucide-react';
-import { audioValues, displayableFactoids, normalizeTrack } from '../constants';
+import {
+  audioValues,
+  displayableFactoids,
+  MODEL_UNAVAILABLE_TEXT,
+  normalizeTrack,
+} from '../constants';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
-import type { TrackData, FactoidEntity, Factoid, GenealogyNode } from '../types';
+import type {
+  TrackData,
+  FactoidEntity,
+  Factoid,
+  FactoidUnavailableCode,
+  GenealogyNode,
+} from '../types';
 
 interface PlayerProps {
   trackData: TrackData | null;
@@ -32,6 +43,7 @@ interface PlayerProps {
     existingIds: string[],
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
+    onUnavailable?: (code: FactoidUnavailableCode) => void,
   ) => Promise<void>;
   // Callback for navigating to a new track from genealogy graph
   onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
@@ -94,6 +106,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'context' | 'player' | 'genealogy'>('player');
   const [isDecrypting, setIsDecrypting] = useState(false);
+  // Why DECRYPT MORE could not add facts (rate limit, budget), shown under the button
+  const [decryptUnavailable, setDecryptUnavailable] = useState<FactoidUnavailableCode | null>(null);
   const [additionalFactoids, setAdditionalFactoids] = useState<Factoid[]>([]);
   // P3:25 — Decrypt complete toast
   const [showDecryptToast, setShowDecryptToast] = useState(false);
@@ -198,6 +212,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
     isDecryptingRef.current = true;
     setIsDecrypting(true);
+    setDecryptUnavailable(null);
     const controller = new AbortController();
     decryptControllerRef.current = controller;
     let newCount = 0;
@@ -217,6 +232,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           newCount++;
         },
         controller.signal,
+        (code) => setDecryptUnavailable(code),
       );
 
       // P3:25 — Show completion toast
@@ -371,6 +387,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     </>
                   )}
                 </button>
+              )}
+              {decryptUnavailable && (
+                <p role="status" className="text-xs font-mono text-text-tertiary">
+                  More facts unavailable: {MODEL_UNAVAILABLE_TEXT[decryptUnavailable]}
+                </p>
               )}
 
               {/* Show more / collapse toggle */}

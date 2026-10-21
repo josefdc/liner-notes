@@ -15,7 +15,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { LogCode, Factoid } from '../types';
+import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
 import type { AgentState, AgentStreamEvent, UseAgentReturn, SearchCandidate } from './agent/types';
 import { API_BASE_URL } from './agent/types';
@@ -403,6 +403,7 @@ export function useAgent(): UseAgentReturn {
       existingIds: string[],
       onFactoid: (factoid: Factoid) => void,
       signal?: AbortSignal,
+      onUnavailable?: (code: FactoidUnavailableCode) => void,
     ): Promise<void> => {
       return new Promise((resolve, reject) => {
         // A new analysis or a reset ends the stream, as does the caller's signal.
@@ -465,7 +466,11 @@ export function useAgent(): UseAgentReturn {
 
               case 'error':
                 console.warn('[useAgent] Factoid stream error:', data.error);
-                // Continue - don't fail the whole stream for one error
+                // The rate limit and a paused budget are reported to the caller; the stream
+                // goes on (one failed fact does not fail the others).
+                if (data.code === 'rate_limited' || data.code === 'budget_exhausted') {
+                  onUnavailable?.(data.code);
+                }
                 break;
             }
           } catch (e) {

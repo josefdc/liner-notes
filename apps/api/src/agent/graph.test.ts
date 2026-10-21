@@ -115,6 +115,8 @@ import {
   testSettings,
 } from "../llm/testing/providerStub.js";
 import { buildSonicAgentGraph } from "./graph.js";
+import { engineerNode } from "./nodes/engineerNode.js";
+import type { SonicAgentStateType } from "./state.js";
 import type { TrackData } from "./schema.js";
 import { TransientError } from "./errors.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
@@ -292,8 +294,9 @@ describe("the analysis graph", () => {
     const { run: recordedRun, ...recordedData } = recorded.trackData!;
     const { run: replayedRun, ...replayedData } = replayed.trackData!;
     expect(replayedData).toEqual(recordedData);
-    expect(replayedRun).toMatchObject({ id: "thread-b", fallback: false });
-    expect(recordedRun).toMatchObject({ id: "thread-a", fallback: false });
+    // Answers from cassettes make a replayed run; the recording run called the provider.
+    expect(replayedRun).toMatchObject({ id: "thread-b", fallback: false, mode: "replay" });
+    expect(recordedRun).toMatchObject({ id: "thread-a", fallback: false, mode: "live" });
     expect(replayedData.factoids[0]).toMatchObject({ title: "Borrowed bass" });
     // The research the planner chose ran: Last.fm tags reached the composer.
     expect(tools.getLastfmTrackTags.invoke).toHaveBeenCalled();
@@ -554,6 +557,26 @@ describe("the analysis graph under failure", () => {
     expect(hooks.putResearch).not.toHaveBeenCalled();
     const scoutOptions = tools.searchMultipleTracks.invoke.mock.calls[0] as unknown[];
     expect((scoutOptions[1] as { signal?: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("starts no audio analysis once the run is cancelled", async () => {
+    const controller = new AbortController();
+    // The clock is read for the engineer's first status event: the client leaves then.
+    const runtime = {
+      ...testRuntime(stubModel(["done"])),
+      now: () => {
+        controller.abort();
+        return new Date("2026-01-01T00:00:00.000Z");
+      },
+    };
+    const state = {
+      spotifyData: { id: "x", title: "T", artist: "A", previewUrl: null },
+    } as unknown as SonicAgentStateType;
+
+    await expect(
+      engineerNode(state, { writer: () => {}, signal: controller.signal } as never, runtime),
+    ).rejects.toThrow();
+    expect(tools.analyzeAudioPreview.invoke).not.toHaveBeenCalled();
   });
 
   it("stamps every status event with the runtime's clock", async () => {

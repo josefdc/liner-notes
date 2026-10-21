@@ -479,6 +479,7 @@ async function searchRecording(
   artist: string,
   artistNames?: string[],
   album?: string,
+  signal?: AbortSignal,
 ): Promise<RecordingSearch> {
   const parts = (artistNames?.length ? artistNames : artist.split(","))
     .map((p) => p.trim())
@@ -498,6 +499,7 @@ async function searchRecording(
     "recording",
     { query, limit: "25" },
     RECORDING_SEARCH_SHAPE,
+    signal,
   );
 
   const exact = (Array.isArray(data?.recordings) ? data.recordings : []).filter(
@@ -537,24 +539,26 @@ async function searchRecording(
 /**
  * Get full recording details with relationships
  */
-async function getRecordingWithRelations(mbid: string): Promise<MBRecording> {
+async function getRecordingWithRelations(mbid: string, signal?: AbortSignal): Promise<MBRecording> {
   if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
   return mbFetch<MBRecording>(
     `recording/${mbid}`,
     // Spaces are sent as "+", the separator MusicBrainz expects.
     { inc: "recording-rels work-rels artist-rels" },
     RECORDING_SHAPE,
+    signal,
   );
 }
 
 /** The artist named exactly `name` (after normalising) among MusicBrainz's matches, or null. */
-async function searchArtistExact(name: string): Promise<MBArtist | null> {
+async function searchArtistExact(name: string, signal?: AbortSignal): Promise<MBArtist | null> {
   const wanted = normalizeName(name);
   if (!wanted) return null;
   const data = await mbFetch<{ artists?: MBArtist[] }>(
     "artist",
     { query: `artist:"${escapeLucene(name.trim())}"`, limit: "10" },
     ARTIST_SEARCH_SHAPE,
+    signal,
   );
   return (
     (Array.isArray(data?.artists) ? data.artists : []).find(
@@ -573,11 +577,17 @@ async function searchArtistExact(name: string): Promise<MBArtist | null> {
  * caller passes the separate `artistNames`, the first one is tried if the whole name has no
  * match. Goes through the rate-limited queue; ListenBrainz resolves artists here too.
  */
-export async function findArtist(name: string, artistNames?: string[]): Promise<MBArtist | null> {
-  const whole = await searchArtistExact(name);
+export async function findArtist(
+  name: string,
+  artistNames?: string[],
+  signal?: AbortSignal,
+): Promise<MBArtist | null> {
+  const whole = await searchArtistExact(name, signal);
   if (whole) return whole;
   const first = artistNames?.find((n) => normalizeName(n));
-  if (first && normalizeName(first) !== normalizeName(name)) return searchArtistExact(first);
+  if (first && normalizeName(first) !== normalizeName(name)) {
+    return searchArtistExact(first, signal);
+  }
   return null;
 }
 
@@ -633,12 +643,13 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
  * Get structured sample and genealogy data from MusicBrainz
  */
 export const getMusicBrainzRelations = tool(
-  async ({ title, artist, artistNames, album }): Promise<string> => {
+  async ({ title, artist, artistNames, album }, config): Promise<string> => {
+    const signal = config?.signal;
     try {
       console.log(`🧠 [MusicBrainz] Searching: "${title}" by ${artist}`);
 
       // Step 1: Search for recording
-      const search = await searchRecording(title, artist, artistNames, album);
+      const search = await searchRecording(title, artist, artistNames, album, signal);
 
       if (!search.recording) {
         return JSON.stringify({
@@ -653,7 +664,7 @@ export const getMusicBrainzRelations = tool(
       console.log(`🧠 [MusicBrainz] Found MBID: ${recording.id}`);
 
       // Step 2: Get full recording with relationships
-      const fullRecording = await getRecordingWithRelations(recording.id);
+      const fullRecording = await getRecordingWithRelations(recording.id, signal);
 
       // Step 3: Parse relationships
       const relations = Array.isArray(fullRecording?.relations) ? fullRecording.relations : [];
@@ -689,6 +700,8 @@ export const getMusicBrainzRelations = tool(
         relationTypes: [...new Set(relations.map((r) => r.type))],
       });
     } catch (error) {
+      // A cancelled run rejects: nothing is reported for it.
+      if (signal?.aborted) throw error;
       const message = describeError(error);
       console.error("❌ [MusicBrainz] Error:", message);
       return JSON.stringify({
@@ -724,11 +737,12 @@ export const getMusicBrainzRelations = tool(
  * Get artist discography and related artists
  */
 export const getMusicBrainzArtist = tool(
-  async ({ artistName, artistNames }): Promise<string> => {
+  async ({ artistName, artistNames }, config): Promise<string> => {
+    const signal = config?.signal;
     try {
       console.log(`🧠 [MusicBrainz] Searching artist: "${artistName}"`);
 
-      const artist = await findArtist(artistName, artistNames);
+      const artist = await findArtist(artistName, artistNames, signal);
       if (!artist) {
         return JSON.stringify({
           found: false,
@@ -743,7 +757,7 @@ export const getMusicBrainzArtist = tool(
         type?: string;
         country?: string;
         relations?: MBRelation[];
-      }>(`artist/${artist.id}`, { inc: "artist-rels recording-rels" }, ARTIST_SHAPE);
+      }>(`artist/${artist.id}`, { inc: "artist-rels recording-rels" }, ARTIST_SHAPE, signal);
 
       // Extract collaborators and influences
       const relations = Array.isArray(artistData.relations) ? artistData.relations : [];
@@ -765,6 +779,7 @@ export const getMusicBrainzArtist = tool(
         totalRelations: relations.length,
       });
     } catch (error) {
+      if (signal?.aborted) throw error;
       const message = describeError(error);
       console.error("❌ [MusicBrainz] Artist error:", message);
       return JSON.stringify({ found: false, error: message });

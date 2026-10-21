@@ -94,8 +94,10 @@ describe('factoids that repeat estimated audio values', () => {
 describe('modelUnavailableText', () => {
   it('says live model calls are paused when the budget is exhausted', () => {
     expect(modelUnavailableText('budget_exhausted')).toBe(
-      'live model calls are paused (budget reached)',
+      'live model calls are paused, budget reached',
     );
     expect(modelUnavailableText('budget_exhausted')).not.toMatch(/did not respond/);
+    // It is shown inside parentheses in the fallback notice: no parentheses of its own.
+    expect(modelUnavailableText('budget_exhausted')).not.toMatch(/[()]/);
   });
 });

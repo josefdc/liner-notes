@@ -83,6 +83,7 @@ export async function clarificationNode(
 
   // Fetch full Spotify data for selected track
   try {
+    config.signal?.throwIfAborted();
     const detailsResult = await getTrackDetails.invoke(
       { trackId: selectedId },
       { signal: config.signal },

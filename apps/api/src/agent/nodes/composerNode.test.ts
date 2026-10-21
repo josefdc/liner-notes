@@ -416,6 +416,46 @@ describe("composerNode", () => {
 
       expect(out.trackData?.run?.fallback).toBe(true);
       expect(out.usage?.[0].status).toBe("invalid_output");
+      // The refused answer was billed: its tokens count in the run.
+      expect(out.usage?.[0]).toMatchObject({ deployment: "stub-main", inputTokens: 100 });
+      expect(out.trackData?.run?.usage).toMatchObject({ inputTokens: 100, outputTokens: 20 });
+    });
+
+    it("records the cost of a failed call that reported its tokens", async () => {
+      const llm = stubLlm(() => {
+        const error = new LlmError("incomplete", "composer: incomplete", {
+          usage: { inputTokens: 900, outputTokens: 6000, reasoningTokens: 5800 },
+        });
+        error.cost = { deployment: "gpt-6-luna", usdEst: 0.012 };
+        throw error;
+      });
+      const out = await createComposerNode(testRuntime(llm))(stateWith(null), config());
+
+      expect(out.usage?.[0]).toMatchObject({
+        status: "incomplete",
+        deployment: "gpt-6-luna",
+        inputTokens: 900,
+        usdEst: 0.012,
+      });
+      expect(out.trackData?.run?.usage?.usd).toBe(0.012);
+    });
+
+    it("reports and stores nothing when the run is cancelled while the fallback is built", async () => {
+      const controller = new AbortController();
+      enrich.during = () => controller.abort();
+      const writer = vi.fn();
+      try {
+        await expect(
+          createComposerNode(testRuntime(failing("rate_limited")))(stateWith(measured), {
+            writer,
+            signal: controller.signal,
+            configurable: { thread_id: "run-1" },
+          } as never),
+        ).rejects.toThrow();
+      } finally {
+        enrich.during = null;
+      }
+      expect(writer.mock.calls.map(([event]) => event.type)).not.toContain("complete");
     });
 
     it("does not store the fallback in long-term memory", async () => {
@@ -537,10 +577,38 @@ describe("composerNode", () => {
     it("stores a result with measured audio, without this run's information", async () => {
       await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
       expect(store.put).toHaveBeenCalledTimes(1);
-      const [, , value] = store.put.mock.calls[0];
+      const [namespace, , value] = store.put.mock.calls[0];
+      // Versioned: results cached by older code are not served.
+      expect(namespace).toEqual(["tracks", "v2"]);
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });
+  });
+
+  it("emits the LLM-* status codes", async () => {
+    const writer = vi.fn();
+    await createComposerNode(testRuntime(failing("rate_limited")))(stateWith(null), {
+      writer,
+      configurable: { thread_id: "run-1" },
+    } as never);
+    const codes = writer.mock.calls.map(([event]) => event.code).filter(Boolean);
+    expect(codes).toEqual(["LLM-CONNECT", "LLM-ERROR"]);
+  });
+
+  it("marks a run whose model answer came from a cassette as a replay", async () => {
+    const stub = succeeding();
+    const replaying = {
+      ...stub,
+      invoke: (async (...args: Parameters<typeof stub.invoke>) => ({
+        ...(await stub.invoke(...args)),
+        mode: "replay" as const,
+      })) as typeof stub.invoke,
+    };
+    const live = await createComposerNode(testRuntime(stub))(stateWith(null), config());
+    const replay = await createComposerNode(testRuntime(replaying))(stateWith(null), config());
+
+    expect(live.trackData?.run?.mode).toBe("live");
+    expect(replay.trackData?.run?.mode).toBe("replay");
   });
 
   it("sends only a category for an error, by its kind", () => {

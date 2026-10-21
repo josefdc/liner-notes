@@ -327,6 +327,30 @@ describe('useAgent factoid stream', () => {
     expect(decrypt.closed).toBe(true);
   });
 
+  it('reports the rate limit and a paused budget to the caller, and goes on', async () => {
+    const { result } = renderHook(() => useAgent());
+    const onUnavailable = vi.fn();
+    const onFactoid = vi.fn();
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      [],
+      onFactoid,
+      undefined,
+      onUnavailable,
+    );
+    const decrypt = lastStream();
+    decrypt.send({ type: 'error', code: 'rate_limited', error: 'busy', index: 0 });
+    decrypt.send({ type: 'error', code: 'budget_exhausted', error: 'paused', index: 1 });
+    decrypt.send({ type: 'error', code: 'failed', error: 'x', index: 2 });
+    decrypt.send({ type: 'factoid', data: { id: 'f1' } });
+    decrypt.send({ type: 'done' });
+
+    await pending;
+    expect(onUnavailable.mock.calls).toEqual([['rate_limited'], ['budget_exhausted']]);
+    expect(onFactoid).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves on done', async () => {
     const { result } = renderHook(() => useAgent());
     const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], () => {});

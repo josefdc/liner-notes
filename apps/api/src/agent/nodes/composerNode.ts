@@ -27,10 +27,12 @@ import {
   type SourceError,
 } from "@liner-notes/contract";
 import { isLlmError, LlmError } from "../../llm/errors.js";
+import type { InvokeResult } from "../../llm/invoke.js";
 import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
 import { pickRecording } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
-import { answeredCall, failedCall, runUsage } from "../callRecords.js";
+import { TRACKS_NAMESPACE } from "../cacheKeys.js";
+import { answeredCall, failedCall, refusedAnswer, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
@@ -421,7 +423,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       errors: SourceError[],
     ): RunInfo => ({
       id: runId,
-      mode: "live",
+      // A run whose model answers came from cassettes is a replay, not a live run. Cassettes
+      // carry no recording time or commit, so those stay null (see the review notes).
+      mode: [...state.usage, ...calls].some((call) => call.mode === "replay") ? "replay" : "live",
       recordedAt: null,
       commit: null,
       analyzerVersion: null,
@@ -430,7 +434,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       sourceErrors: [...state.sourceErrors, ...errors],
     });
 
-    status("GEMINI-CONNECT", "Composing the liner notes...");
+    status("LLM-CONNECT", "Composing the liner notes...");
     console.log("🎼 [Composer] Synthesizing data for:", spotify.title);
 
     // state.isrc is null until the scout records the ISRC (#24): no lookup is made then.
@@ -449,34 +453,29 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     // Only the model call is guarded: any failure of it gives the fallback. A bug in what
     // follows is not a model failure and fails the run.
-    let output: ComposerOutputType;
-    let call: LlmCallRecord;
+    let result: InvokeResult<ComposerOutputType>;
     try {
-      const result = await runtime.llm.invoke(
-        COMPOSER_CALL_SITE,
-        "main",
-        messages,
-        ComposerOutput,
-        {
-          purpose: runtime.purpose,
-          runId,
-          maxOutputTokens: COMPOSER_MAX_OUTPUT_TOKENS,
-          signal,
-        },
-      );
-      const issues = composerOutputIssues(result.output);
-      if (issues.length > 0) {
-        throw new LlmError(
-          "invalid_output",
-          `${COMPOSER_CALL_SITE}: the answer breaks the ComposerOutput rules (${issues.slice(0, 3).join("; ")})`,
-        );
-      }
-      call = answeredCall(COMPOSER_CALL_SITE, result);
-      output = result.output;
+      result = await runtime.llm.invoke(COMPOSER_CALL_SITE, "main", messages, ComposerOutput, {
+        purpose: runtime.purpose,
+        runId,
+        maxOutputTokens: COMPOSER_MAX_OUTPUT_TOKENS,
+        signal,
+      });
     } catch (error) {
       if (signal?.aborted || isAbortError(error)) throw error;
-      return composeFallback(error);
+      return composeFallback(error, failedCall(COMPOSER_CALL_SITE, "main", error));
     }
+    // An answer that breaks the rules the schema cannot carry is refused; it was still billed.
+    const issues = composerOutputIssues(result.output);
+    if (issues.length > 0) {
+      const refused = new LlmError(
+        "invalid_output",
+        `${COMPOSER_CALL_SITE}: the answer breaks the ComposerOutput rules (${issues.slice(0, 3).join("; ")})`,
+      );
+      return composeFallback(refused, refusedAnswer(COMPOSER_CALL_SITE, result, "invalid_output"));
+    }
+    const call = answeredCall(COMPOSER_CALL_SITE, result);
+    const output = result.output;
     const composed = composeFromOutput(output, spotify, state.evidence, runtime.newId);
 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
@@ -505,7 +504,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       const { run: _run, ...cached } = trackData;
       try {
         signal?.throwIfAborted();
-        await store.put(["tracks"], normalizedQuery, {
+        await store.put(TRACKS_NAMESPACE, normalizedQuery, {
           trackData: cached,
           timestamp: runtime.now().getTime(),
         });
@@ -524,15 +523,17 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     };
 
     /** The honest fallback: measured and sourced data only, no model text. */
-    async function composeFallback(error: unknown): Promise<Partial<SonicAgentStateType>> {
+    async function composeFallback(
+      error: unknown,
+      failed: LlmCallRecord,
+    ): Promise<Partial<SonicAgentStateType>> {
       const reason = modelErrorCategory(error);
-      const failed = failedCall(COMPOSER_CALL_SITE, "main", error);
       console.warn(
         `⚠️ [Composer] Model unavailable (${failed.status}); building the result from source data:`,
         error instanceof Error ? error.message : String(error),
       );
       status(
-        "GEMINI-ERROR",
+        "LLM-ERROR",
         `Model unavailable (${MODEL_REASON_TEXT[reason]}); building the result from source data only`,
       );
 

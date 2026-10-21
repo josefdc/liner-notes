@@ -68,6 +68,11 @@ export class LlmError extends Error {
   readonly incompleteReason?: string;
   readonly usage?: LlmErrorDetails["usage"];
   readonly transient: boolean;
+  /**
+   * What the failed attempt was settled at, when the provider reported its tokens (set by the
+   * layer after settling): the deployment that answered and the estimated cost in USD.
+   */
+  cost?: { deployment: string; usdEst: number };
 
   constructor(
     readonly kind: LlmErrorKind,

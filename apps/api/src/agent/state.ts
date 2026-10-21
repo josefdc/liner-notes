@@ -238,10 +238,15 @@ export interface LlmCallRecord {
   deployment: string | null;
   /** Attempts the call took; null when it failed. */
   attempts: number | null;
+  /** live or record: the provider answered; replay: a cassette did. null when it failed. */
+  mode: "live" | "record" | "replay" | null;
   inputTokens: number | null;
   outputTokens: number | null;
   reasoningTokens: number | null;
-  /** 0 for a failed call: what it may have cost is settled in the spend log. */
+  /**
+   * The estimated cost; for a failed call, only when the provider reported its tokens
+   * (otherwise 0: what it may have cost is settled in the spend log).
+   */
   usdEst: number;
 }
 

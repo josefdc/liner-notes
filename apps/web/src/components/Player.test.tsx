@@ -121,4 +121,29 @@ describe('Player', () => {
     expect(screen.queryByText('Lyric Meaning')).toBeNull();
     expect(await screen.findByText('1 NEW INTEL DECODED')).toBeTruthy();
   });
+
+  it.each([
+    ['rate_limited', 'quota or rate limit reached'],
+    ['budget_exhausted', 'live model calls are paused, budget reached'],
+  ] as const)('says why DECRYPT MORE added nothing: %s', async (code, text) => {
+    const decrypt = async (
+      _title: string,
+      _artist: string,
+      _ids: string[],
+      _onFactoid: (f: Factoid) => void,
+      _signal?: AbortSignal,
+      onUnavailable?: (code: 'rate_limited' | 'budget_exhausted') => void,
+    ) => {
+      onUnavailable?.(code);
+    };
+    const track = {
+      ...missingTrack,
+      factoids: [{ id: 's1', title: 'Release Info', content: 'Released in 2001.', type: 'trivia' }],
+    } as unknown as TrackData;
+    render(<Player trackData={track} onBack={() => {}} onDecryptMoreStream={decrypt} />);
+    fireEvent.click(screen.getByRole('button', { name: /DECRYPT MORE/ }));
+
+    const notice = await screen.findByText(`More facts unavailable: ${text}`);
+    expect(notice.getAttribute('role')).toBe('status');
+  });
 });

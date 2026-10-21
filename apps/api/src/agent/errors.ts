@@ -72,26 +72,45 @@ export function isTransient(error: unknown): boolean {
   return code !== undefined && NETWORK_CODES.has(code);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits `ms`, or rejects with the signal's reason as soon as `signal` aborts. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 /**
  * Retries `fn` on transient errors, with exponential backoff; any other error is thrown at
- * once. After maxAttempts the last error is thrown, for the caller to handle.
+ * once. After maxAttempts the last error is thrown, for the caller to handle. A cancelled run
+ * (`signal` aborted) starts no attempt and cuts the wait short.
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  opts: { maxAttempts?: number; initialInterval?: number; backoffFactor?: number } = {},
+  opts: {
+    maxAttempts?: number;
+    initialInterval?: number;
+    backoffFactor?: number;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<T> {
-  const { maxAttempts = 3, initialInterval = 1000, backoffFactor = 2 } = opts;
+  const { maxAttempts = 3, initialInterval = 1000, backoffFactor = 2, signal } = opts;
   for (let attempt = 1; ; attempt++) {
+    signal?.throwIfAborted();
     try {
       return await fn();
     } catch (error) {
-      if (!isTransient(error) || attempt >= maxAttempts) throw error;
+      if (signal?.aborted || !isTransient(error) || attempt >= maxAttempts) throw error;
       const delay = initialInterval * backoffFactor ** (attempt - 1);
-      await sleep(delay + Math.random() * delay * 0.1); // guard-allow: random-values-api — retry backoff jitter
+      await sleep(delay + Math.random() * delay * 0.1, signal); // guard-allow: random-values-api — retry backoff jitter
     }
   }
 }

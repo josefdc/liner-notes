@@ -18,6 +18,7 @@ import {
   getLastfmSimilarTracks,
 } from "../../sources/lastfm.js";
 import { getCachedResearcherSubgraph, type ResearcherStateType } from "../researcherSubgraph.js";
+import { researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
@@ -46,7 +47,7 @@ export async function historianNode(
   // Check persistent research cache first
   try {
     const cache = getCache();
-    const cached = cache.getResearch(state.spotifyData.id);
+    const cached = cache.getResearch(researchCacheKey(state.spotifyData.id));
     if (cached) {
       const cachedResearch = withoutSongMeaning(cached);
       console.log("📚 [Historian] Cache hit for:", state.spotifyData.title);
@@ -84,6 +85,7 @@ export async function historianNode(
   const prefetchData: Partial<ResearchData> = {};
   try {
     console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
+    config.signal?.throwIfAborted();
     const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
       getLastfmTrackTags.invoke({ title, artist }, options),
       getLastfmArtistTags.invoke({ artist }, options),
@@ -145,6 +147,7 @@ export async function historianNode(
       `✅ [Historian] Pre-fetched ${tagCount} tags, ${trackCount} similar tracks from Last.fm`,
     );
   } catch (error) {
+    if (config.signal?.aborted || isAbortError(error)) throw error;
     console.warn("⚠️ [Historian] Last.fm pre-fetch failed (non-critical):", error);
   }
 
@@ -202,11 +205,17 @@ export async function historianNode(
     ...(isSourceError(failure) ? [errorRecord(sourceIdOf(failure.source), failure)] : []),
   ];
 
-  // Nothing is written for a cancelled run, and research that stopped early is not cached.
+  // Nothing is written for a cancelled run. Research is cached only when it is complete: not
+  // when it stopped early, a source could not be read, or a planner call failed (the next run
+  // may find more, as with audio that failed transiently).
   config.signal?.throwIfAborted();
-  if (!failure) {
+  const complete =
+    !failure &&
+    sourceErrors.length === 0 &&
+    (finalState.usage ?? []).every((call) => call.status === "ok");
+  if (complete) {
     try {
-      getCache().putResearch(state.spotifyData.id, mergedResearch);
+      getCache().putResearch(researchCacheKey(state.spotifyData.id), mergedResearch);
     } catch {
       // Non-critical
     }

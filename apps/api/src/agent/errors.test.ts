@@ -3,7 +3,7 @@
  * and a cancelled call or run is never retried.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LlmError } from "../llm/errors.js";
 import { SourceError } from "../sources/http.js";
 import { isAbortError, isTransient, TransientError, withRetry } from "./errors.js";
@@ -77,5 +77,32 @@ describe("withRetry", () => {
       ),
     ).rejects.toThrow("busy");
     expect(calls).toBe(2);
+  });
+
+  it("starts no attempt for a cancelled run", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fn = vi.fn(async () => "x");
+
+    await expect(withRetry(fn, { signal: controller.signal })).rejects.toThrow();
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("cuts the wait before a retry short when the run is cancelled", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const started = Date.now();
+    const pending = withRetry(
+      async () => {
+        calls++;
+        throw new TransientError("busy", 503);
+      },
+      { maxAttempts: 2, initialInterval: 5000, signal: controller.signal },
+    );
+    setTimeout(() => controller.abort(), 20);
+
+    await expect(pending).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(calls).toBe(1);
   });
 });

@@ -34,7 +34,7 @@ export const MODEL_UNAVAILABLE_TEXT: Record<ModelUnavailableReason, string> = {
   timeout: 'the model timed out',
   auth: 'authentication or configuration problem',
   error: 'the model returned an error',
-  budget_exhausted: 'live model calls are paused (budget reached)',
+  budget_exhausted: 'live model calls are paused, budget reached',
 };
 
 /**

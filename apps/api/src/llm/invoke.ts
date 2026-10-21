@@ -1032,7 +1032,11 @@ export function createLlm(deps: LlmDependencies): Llm {
       estimated,
       latencyMs,
     });
-    if (error) return { error };
+    if (error) {
+      // A failed answer that reported its tokens was billed: say what it cost.
+      if (usage) error.cost = { deployment: a.deployment, usdEst };
+      return { error };
+    }
     return {
       output: (answer as { output: unknown }).output,
       callId: reservation.id,

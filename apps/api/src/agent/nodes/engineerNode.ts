@@ -139,6 +139,7 @@ export async function engineerNode(
   try {
     // analyzeAudioPreview reports failures in its result (source "unavailable") instead of throwing.
     // The run's abort signal stops the analysis when the client leaves.
+    config.signal?.throwIfAborted();
     const analysisResult = await analyzeAudioPreview.invoke(
       {
         previewUrl: state.spotifyData.previewUrl,

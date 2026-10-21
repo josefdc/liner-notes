@@ -323,6 +323,7 @@ async function researchToolNode(
 
     switch (plan.nextAction) {
       case "search_samples":
+        config.signal?.throwIfAborted();
         result = await searchSamples.invoke({ songTitle: title, artistName: artist }, options);
         if (!result.startsWith("Error") && !result.startsWith("No sample")) {
           newData.samples.push(result);
@@ -330,6 +331,7 @@ async function researchToolNode(
         break;
 
       case "search_production":
+        config.signal?.throwIfAborted();
         result = await searchProductionHistory.invoke(
           { songTitle: title, artistName: artist },
           options,
@@ -342,6 +344,7 @@ async function researchToolNode(
       case "search_general": {
         // Use the custom query from the plan (for following leads)
         const query = plan.query || `${title} ${artist} music history`;
+        config.signal?.throwIfAborted();
         result = await searchMusicInfo.invoke({ query }, options);
         if (!result.startsWith("Error") && !result.startsWith("No results")) {
           // Classify general results as production trivia
@@ -352,6 +355,7 @@ async function researchToolNode(
 
       case "search_musicbrainz":
         // Use MusicBrainz for structured genealogy data
+        config.signal?.throwIfAborted();
         result = await getMusicBrainzRelations.invoke({ title, artist }, options);
         try {
           const mbData = JSON.parse(result);
@@ -376,6 +380,7 @@ async function researchToolNode(
 
       case "search_artist_collaborators":
         // Use MusicBrainz to get artist collaborators (producers, writers)
+        config.signal?.throwIfAborted();
         result = await getMusicBrainzArtist.invoke({ artistName: artist }, options);
         try {
           const artistData = JSON.parse(result);
@@ -397,6 +402,7 @@ async function researchToolNode(
       case "search_lastfm_tags":
         // Fetch both track and artist tags in parallel
         {
+          config.signal?.throwIfAborted();
           const [trackTagsResult, artistTagsResult] = await Promise.allSettled([
             getLastfmTrackTags.invoke({ title, artist }, options),
             getLastfmArtistTags.invoke({ artist }, options),
@@ -437,6 +443,7 @@ async function researchToolNode(
         break;
 
       case "search_lastfm_similar_tracks":
+        config.signal?.throwIfAborted();
         result = await getLastfmSimilarTracks.invoke({ title, artist }, options);
         try {
           const data = JSON.parse(result);
@@ -454,6 +461,7 @@ async function researchToolNode(
         break;
 
       case "search_lastfm_similar_artists":
+        config.signal?.throwIfAborted();
         result = await getLastfmSimilarArtists.invoke({ artist }, options);
         try {
           const data = JSON.parse(result);
@@ -474,6 +482,7 @@ async function researchToolNode(
         break;
 
       case "search_lastfm_artist_info":
+        config.signal?.throwIfAborted();
         result = await getLastfmArtistInfo.invoke({ artist }, options);
         try {
           const data = JSON.parse(result);
@@ -504,6 +513,7 @@ async function researchToolNode(
         {
           // Extract MBID from existing research data if available
           const mbid = extractMbidFromResearch(state.researchData);
+          config.signal?.throwIfAborted();
           result = await getListenBrainzSimilarArtists.invoke(
             { artistMbid: mbid || undefined, artistName: mbid ? undefined : artist },
             options,
@@ -532,7 +542,11 @@ async function researchToolNode(
 
   try {
     // At most one more attempt, for a transient failure only; no other retry wraps this one.
-    const newData = await withRetry(search, { maxAttempts: 2, initialInterval: SEARCH_RETRY_MS });
+    const newData = await withRetry(search, {
+      maxAttempts: 2,
+      initialInterval: SEARCH_RETRY_MS,
+      signal: config.signal,
+    });
     console.log(`✅ [Research Tool] Found data for ${plan.nextAction}`);
     return {
       researchData: newData,

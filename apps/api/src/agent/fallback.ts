@@ -24,8 +24,19 @@ function splitTag(entry: string): { tag: string | null; body: string } {
   return match ? { tag: match[1], body: match[2] } : { tag: null, body: entry };
 }
 
-/** Parses the sample list from a MusicBrainz samples entry; [] if it is not one. */
-function parseMusicBrainzSamples(entry: string): Array<{ title: string; artist: string }> {
+interface SampleRelation {
+  title: string;
+  artist: string;
+  /** "source": this track samples it; "derived": it samples this track. */
+  direction: "source" | "derived";
+}
+
+/**
+ * Parses the sample relations from a MusicBrainz samples entry; [] if it is not one. A relation
+ * without a direction (research cached before it was recorded) cannot be told apart and is left
+ * out.
+ */
+function parseMusicBrainzSamples(entry: string): SampleRelation[] {
   const { tag, body } = splitTag(entry);
   if (!tag?.startsWith("MusicBrainz")) return [];
   const json = body.slice(body.indexOf("["));
@@ -33,8 +44,11 @@ function parseMusicBrainzSamples(entry: string): Array<{ title: string; artist: 
     const parsed = JSON.parse(json);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
-      (s): s is { title: string; artist: string } =>
-        typeof s?.title === "string" && s.title !== "" && typeof s?.artist === "string",
+      (s): s is SampleRelation =>
+        typeof s?.title === "string" &&
+        s.title !== "" &&
+        typeof s?.artist === "string" &&
+        (s.direction === "source" || s.direction === "derived"),
     );
   } catch {
     return [];
@@ -121,30 +135,32 @@ export async function createFallbackTrackData(
   //    snippet as a fact "from source data" would be dishonest. Only primary records follow.
 
   // 2. Samples: MusicBrainz sample relations only
-  if (research.samples && research.samples.length > 0) {
-    const parsedSamples = research.samples.flatMap(parseMusicBrainzSamples);
-
-    if (parsedSamples.length > 0) {
-      const shown = parsedSamples.slice(0, 3);
-      const samplesList = shown
-        .map((s) => (s.artist ? `"${s.title}" by ${s.artist}` : `"${s.title}"`))
-        .join(", ");
-      const more =
-        parsedSamples.length > 3 ? ` Plus ${parsedSamples.length - 3} more in MusicBrainz.` : "";
-      factoids.push({
+  // A relation reads from this track: it samples the "source" recordings, and the "derived"
+  // ones sample it. Each direction gets its own card.
+  const relations = (research.samples ?? []).flatMap(parseMusicBrainzSamples);
+  const sampleCard = (direction: SampleRelation["direction"], title: string, lead: string) => {
+    const list = relations.filter((r) => r.direction === direction);
+    if (list.length === 0) return;
+    const shown = list.slice(0, 3);
+    const names = shown
+      .map((s) => (s.artist ? `"${s.title}" by ${s.artist}` : `"${s.title}"`))
+      .join(", ");
+    const more = list.length > 3 ? ` Plus ${list.length - 3} more in MusicBrainz.` : "";
+    factoids.push({
+      id: generateId(),
+      title,
+      content: `${lead}: ${names}.${more}`,
+      type: "sample",
+      entities: shown.map((s) => ({
         id: generateId(),
-        title: "Sample DNA",
-        content: `This track samples: ${samplesList}.${more}`,
-        type: "sample",
-        entities: shown.map((s) => ({
-          id: generateId(),
-          text: s.artist ? `${s.title} - ${s.artist}` : s.title,
-          type: "sample" as const,
-          searchQuery: `${s.title} ${s.artist}`.trim(),
-        })),
-      });
-    }
-  }
+        text: s.artist ? `${s.title} - ${s.artist}` : s.title,
+        type: "sample" as const,
+        searchQuery: `${s.title} ${s.artist}`.trim(),
+      })),
+    });
+  };
+  sampleCard("source", "Sample DNA", "This track samples");
+  sampleCard("derived", "Sampled By", "Sampled by");
 
   // 3. Song-meaning research is not used (its page text can quote the song).
 

@@ -36,11 +36,16 @@ const CLOSERS = /[>\u203A\u00BB\u232A\u3009\u27E9](?:\s*[>\u203A\u00BB\u232A\u30
 
 /**
  * Removes what could close or open a source block from third-party text: the text is
- * NFKC-normalised, then every run of two or more angle brackets (or look-alikes) becomes one
- * neutral bracket pair, so no spelling of the delimiter survives inside a block.
+ * NFKC-normalised and stripped of invisible format characters (zero-width spaces and joiners,
+ * soft hyphens, word joiners, byte-order marks), then every run of two or more angle brackets
+ * (or look-alikes) becomes one neutral bracket, so no spelling of the delimiter survives.
  */
 export function neutralise(text: string): string {
-  return text.normalize("NFKC").replace(OPENERS, "(").replace(CLOSERS, ")");
+  return text
+    .normalize("NFKC")
+    .replace(/\p{Cf}/gu, "")
+    .replace(OPENERS, "(")
+    .replace(CLOSERS, ")");
 }
 
 function clip(text: string, max: number): string {

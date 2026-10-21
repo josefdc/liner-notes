@@ -196,6 +196,24 @@ describe("researcher subgraph", () => {
     );
   });
 
+  it("starts no search once the run is cancelled", async () => {
+    const controller = new AbortController();
+    let reads = 0;
+    // The clock is read for each status event; the second one announces the first search.
+    const runtime = {
+      ...testRuntime(planner(plan("search_musicbrainz"))),
+      now: () => {
+        if (++reads === 2) controller.abort();
+        return new Date("2026-01-01T00:00:00.000Z");
+      },
+    };
+
+    await expect(
+      createResearcherSubgraph(runtime).invoke({ spotifyData }, { signal: controller.signal }),
+    ).rejects.toThrow();
+    expect(tools.searchSamples.invoke).not.toHaveBeenCalled();
+  });
+
   it("names a step with every underscore replaced", () => {
     expect(actionLabel("search_lastfm_similar_tracks")).toBe("lastfm similar tracks");
   });

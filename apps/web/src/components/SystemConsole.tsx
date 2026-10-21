@@ -12,6 +12,7 @@ const LOG_CODE_COLORS: Record<string, string> = {
   NET: 'text-cyber',
   AUDIO: 'text-analog',
   GEMINI: 'text-accent-purple',
+  LLM: 'text-accent-purple',
   SPOTIFY: 'text-accent-green',
   RESEARCH: 'text-cyber',
   GRAPH: 'text-analog',

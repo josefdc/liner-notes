@@ -16,6 +16,7 @@ export function answeredCall(callSite: string, result: InvokeResult<unknown>): L
     status: "ok",
     deployment: result.deployment,
     attempts: result.usage.attempts,
+    mode: result.mode,
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     reasoningTokens: result.usage.reasoningTokens,
@@ -26,17 +27,32 @@ export function answeredCall(callSite: string, result: InvokeResult<unknown>): L
 /** The record of a call that failed: its error kind, and the tokens it reported, if any. */
 export function failedCall(callSite: string, tier: LlmTier, error: unknown): LlmCallRecord {
   const usage = isLlmError(error) ? error.usage : undefined;
+  const cost = isLlmError(error) ? error.cost : undefined;
   return {
     callSite,
     tier,
     status: isLlmError(error) ? error.kind : "unexpected",
-    deployment: null,
+    deployment: cost?.deployment ?? null,
     attempts: null,
+    mode: null,
     inputTokens: usage?.inputTokens ?? null,
     outputTokens: usage?.outputTokens ?? null,
     reasoningTokens: usage?.reasoningTokens ?? null,
-    usdEst: 0,
+    // Billed when the provider reported tokens; otherwise counted in the spend log only.
+    usdEst: cost?.usdEst ?? 0,
   };
+}
+
+/**
+ * The record of a call that answered but whose answer was refused afterwards (e.g. it breaks
+ * the schema's cross-field rules): its tokens and cost count, with the refusal as its status.
+ */
+export function refusedAnswer(
+  callSite: string,
+  result: InvokeResult<unknown>,
+  status: LlmCallRecord["status"],
+): LlmCallRecord {
+  return { ...answeredCall(callSite, result), status };
 }
 
 /**

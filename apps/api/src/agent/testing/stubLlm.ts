@@ -42,7 +42,7 @@ export function stubLlm(answer: (call: StubCall) => unknown): StubLlm {
       return {
         output,
         callId: `call-${calls.length}`,
-        mode: "replay",
+        mode: "live",
         tier,
         deployment: `stub-${tier}`,
         usage: {

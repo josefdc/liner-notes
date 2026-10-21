@@ -5,6 +5,7 @@
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { searchMultipleTracks } from "../../sources/spotify.js";
+import { TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { isAbortError, withRetry, TransientError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
@@ -24,7 +25,7 @@ export async function scoutNode(
   // Check long-term memory for cached result
   if (store) {
     try {
-      const cached = await store.get(["tracks"], normalizedQuery);
+      const cached = await store.get(TRACKS_NAMESPACE, normalizedQuery);
       if (
         cached?.value?.trackData &&
         runtime.now().getTime() - cached.value.timestamp < CACHE_TTL_MS
@@ -57,17 +58,23 @@ export async function scoutNode(
 
   try {
     // Search for multiple tracks to detect ambiguity (with retry on transient failures)
-    const searchResult = await withRetry(async () => {
-      const result = await searchMultipleTracks.invoke(
-        { query: state.songQuery, limit: 5 },
-        { signal: config.signal },
-      );
-      // Spotify tools return error strings, not thrown exceptions
-      if (result.startsWith("Error") && (result.includes("Rate limit") || result.includes("429"))) {
-        throw new TransientError(result);
-      }
-      return result;
-    });
+    const searchResult = await withRetry(
+      async () => {
+        const result = await searchMultipleTracks.invoke(
+          { query: state.songQuery, limit: 5 },
+          { signal: config.signal },
+        );
+        // Spotify tools return error strings, not thrown exceptions
+        if (
+          result.startsWith("Error") &&
+          (result.includes("Rate limit") || result.includes("429"))
+        ) {
+          throw new TransientError(result);
+        }
+        return result;
+      },
+      { signal: config.signal },
+    );
 
     if (searchResult.startsWith("Error") || searchResult.startsWith("No track")) {
       return {

@@ -180,8 +180,10 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
  */
 function checkWork(work: ShsWork, link: ShsLink): void {
   const versions: unknown = work.versions;
+  // A work has at least its original version: an empty list is not an answer about it.
   if (
     !Array.isArray(versions) ||
+    versions.length === 0 ||
     !versions.every((v) => isObject(v) && typeof v.isOriginal === "boolean")
   ) {
     throw unexpectedShape(
@@ -191,11 +193,15 @@ function checkWork(work: ShsWork, link: ShsLink): void {
   }
 }
 
-/** As checkWork, for a performance: a boolean `isOriginal`, and relation lists of objects. */
+/**
+ * As checkWork, for a performance: a boolean `isOriginal`, relation lists of objects, and for a
+ * performance that is not the original, the list of its originals.
+ */
 function checkPerformance(p: ShsPerformance, link: ShsLink): void {
   const lists = [p.originals, p.covers, p.usesSamplesFrom, p.sampledBy] as unknown[];
   if (
     typeof p.isOriginal !== "boolean" ||
+    (p.isOriginal === false && !Array.isArray(p.originals)) ||
     !lists.every((l) => l === undefined || (Array.isArray(l) && l.every(isObject)))
   ) {
     throw unexpectedShape("secondhandsongs", `performance ${link.id} is not a performance`);

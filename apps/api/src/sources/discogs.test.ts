@@ -16,7 +16,7 @@ import {
   splitRoles,
   trackCredits,
 } from "./discogs.js";
-import type { TrackRef } from "./records.js";
+import { evidenceScope, type TrackRef } from "./records.js";
 import { json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
 
@@ -418,5 +418,55 @@ describe("releases without credits, and truthful reasons", () => {
       reason: `MusicBrainz links no Discogs release to an original release of the recording; ${note}`,
     });
     expect(net.calls).toHaveLength(0);
+  });
+});
+
+describe("matched counts and evidence scope", () => {
+  beforeEach(() => {
+    process.env.DISCOGS_TOKEN = TOKEN;
+  });
+
+  it("counts every release that held the track, found or failed", async () => {
+    const bare = { ...rickRoll, id: 1, extraartists: [] };
+    stubFetch((call) => json(call.url.endsWith("/1") ? bare : rickRoll));
+    const result = await discogsTrackCredits(TRACK, [1, 249504], { now });
+    expect(result).toMatchObject({ status: "found", identity: { matched: 2 } });
+
+    stubFetch((call) =>
+      call.url.endsWith("/1") ? json(bare) : json({ message: "boom" }, { status: 500 }),
+    );
+    const broken = await discogsTrackCredits(TRACK, [1, 2], { now });
+    expect(broken).toMatchObject({
+      status: "missing",
+      error: { code: "unavailable" },
+      identity: { matched: 1, unavailable: 1 },
+    });
+  });
+
+  it("scopes a whole-release credit to the release and a track credit to the track", async () => {
+    const mixed = {
+      ...rickRoll,
+      extraartists: [
+        ...rickRoll.extraartists,
+        { id: 9, name: "Side A Engineer", anv: "", role: "Engineer", tracks: "A" },
+      ],
+    };
+    stubFetch(() => json(mixed));
+    const result = await discogsTrackCredits(TRACK, [249504], { now });
+    if (result.status !== "found") throw new Error(result.reason);
+    const scopeOf = (name: string) => {
+      const credit = result.records.find((c) => c.name === name);
+      const item = result.evidence.find((e) => e.id === credit?.evidenceId);
+      return item && evidenceScope(item);
+    };
+    expect(scopeOf("Me Company")).toBe("release");
+    expect(scopeOf("Side A Engineer")).toBe("track");
+  });
+
+  it("reads Discogs' variation mark with an inverted article or a number", () => {
+    const named = (name: string) => ({ ...rickRoll, artists: [{ name }] });
+    const persuader = { ...TRACK, artists: ["The Persuader"] };
+    expect(findTrack(named("Persuader, The*"), persuader).ok).toBe(true);
+    expect(findTrack(named("Rick Astley (2)*"), TRACK).ok).toBe(true);
   });
 });

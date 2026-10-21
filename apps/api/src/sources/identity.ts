@@ -10,11 +10,12 @@
  * Every step checks the record it reaches; a record that fails is omitted with the reason, never
  * replaced by the next best one. Each source returns typed records with Evidence items
  * (`sourceTier: "primary-record"`) or "missing" with the reason, and counts how many records it
- * matched, rejected or could not find (`accuracy`).
+ * matched, rejected or could not find, and how often it could not be asked at all (not
+ * configured, failed, timed out: "unavailable") (`accuracy`).
  */
 
 import { tool } from "@langchain/core/tools";
-import type { Evidence, SourceId } from "@liner-notes/contract";
+import type { Evidence, SourceError as SourceErrorRecord, SourceId } from "@liner-notes/contract";
 import { z } from "zod";
 import {
   DISCOGS_TOKEN,
@@ -90,8 +91,8 @@ export interface PrimaryIdentity {
   discogsReleaseIds: number[];
   /** Why no Discogs release could be listed, when the releases could not be read. */
   releasesError: string | null;
-  /** The source error behind `releasesError`, for the run's source errors. */
-  releasesFailure: unknown;
+  /** The Discogs source's error when the releases could not be read (short and scrubbed). */
+  releasesFailure: SourceErrorRecord | null;
   /** Set when not every release of the recording could be read. */
   releasesNote: string | null;
   /** The Genius page linked from the recording's work; null when none or several. */
@@ -322,11 +323,13 @@ function ruledOut(
  * song's covers, samples and other work-level relationships can be claimed for it. It is when
  * it performs one work, without a cover, live, medley, partial, instrumental or karaoke
  * attribute, without a disambiguation comment ("radio edit", "live, 1995"), under the work's
- * title (not "(Taylor's Version)"), and every other recording of the work that is not a cover
- * was first released certainly later: dates are compared as far as both are precise, so a
- * recording dated only "1990", or undated, cannot be shown to come after one from 1990-09-04.
- * Anything unknown answers no: a re-recording, live version or edit never inherits the song's
- * relationships.
+ * title (not "(Taylor's Version)"), the work's recordings as read include it, and every other
+ * recording of the work was first released certainly later: dates are compared as far as both
+ * are precise, so a recording dated only "1990", or an undated one under the work's title,
+ * cannot be shown to come after one from 1990-09-04. A cover certainly released earlier also
+ * answers no (the song existed before this recording); undated covers and recordings titled
+ * otherwise (remixes, edits) are not candidates. Anything unknown answers no: a re-recording,
+ * live version or edit never inherits the song's relationships.
  */
 export function originalPerformance(
   details: MbRecordingDetails,
@@ -343,14 +346,36 @@ export function originalPerformance(
   const ownDate = details["first-release-date"]?.trim() ?? "";
   const own = dateParts(ownDate);
   if (!own) return { original: false, reason: "the recording has no release date" };
+  // An answer that does not list the recording itself is not the work's list (an empty or
+  // inconsistent answer): nothing can be compared.
+  if (!workRecordings.recordings.some((r) => r?.id === details.id)) {
+    return {
+      original: false,
+      reason: `the recordings read for "${work.title}" do not include this one`,
+    };
+  }
   let earliest: { r: MbRecordingSummary; parts: number[] } | null = null;
+  let earlierCover: { r: MbRecordingSummary; parts: number[] } | null = null;
   let undated = 0;
   let unordered = 0;
   for (const r of workRecordings.recordings) {
-    if (r.id === details.id || coverIds.has(r.id)) continue;
+    if (!r || r.id === details.id) continue;
     const parts = dateParts(r["first-release-date"]);
+    if (coverIds.has(r.id)) {
+      // A cover certainly released before this recording means the song existed before it.
+      // An undated cover, or one dated like this recording, says nothing.
+      if (parts && compareDates(parts, own) < 0) {
+        if (!earlierCover || compareDates(parts, earlierCover.parts) < 0) {
+          earlierCover = { r, parts };
+        }
+      }
+      continue;
+    }
     if (!parts) {
-      undated++;
+      // An undated recording titled otherwise ("Remix", "Edit") is a version made from the
+      // song, not a candidate for its first recording.
+      const credited = creditedArtists(r).map((a) => a.names[0]);
+      if (titlesMatch(r.title ?? "", work.title, credited)) undated++;
       continue;
     }
     const order = compareDates(parts, own);
@@ -363,6 +388,12 @@ export function originalPerformance(
     return {
       original: false,
       reason: `${quoted(earliest.r.title, creditString(earliest.r["artist-credit"]))} was released in ${earliest.r["first-release-date"]}, before this recording (${ownDate})`,
+    };
+  }
+  if (earlierCover) {
+    return {
+      original: false,
+      reason: `a cover of "${work.title}" (${quoted(earlierCover.r.title, creditString(earlierCover.r["artist-credit"]))}) was released in ${earlierCover.r["first-release-date"]}, before this recording (${ownDate})`,
     };
   }
   if (undated > 0) {
@@ -433,7 +464,7 @@ export async function resolveIdentity(
 
     let discogsReleaseIds: number[] = [];
     let releasesError: string | null = null;
-    let releasesFailure: unknown = null;
+    let releasesFailure: SourceErrorRecord | null = null;
     let releasesNote: string | null = null;
     try {
       const { releases, total } = await browseRecordingReleases(details.id, 2, signal);
@@ -444,7 +475,7 @@ export async function resolveIdentity(
       }
     } catch (error) {
       releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
-      releasesFailure = error;
+      releasesFailure = errorRecord("discogs", error);
     }
 
     const links = linksOf(details);
@@ -671,10 +702,17 @@ export async function collectPrimarySources(
     result: resolution,
   };
   const { identity } = base;
+  // When MusicBrainz itself could not be read, the others could not be asked either: unavailable,
+  // not an identity miss.
+  const upstream = base.result.status === "missing" ? base.result.error : null;
   const unidentified = <T>(source: SourceId, configured: boolean, variable: string | null) =>
     !configured && variable
       ? notConfigured<T>(source, variable)
-      : missing<T>(source, "no MusicBrainz recording identified for the track");
+      : upstream
+        ? missing<T>(source, "MusicBrainz could not be read, so the track has no identity", {
+            error: { source, code: "unavailable", message: upstream.message },
+          })
+        : missing<T>(source, "no MusicBrainz recording identified for the track");
   const trackIsOriginal = identity?.original.original ?? false;
 
   const discogs = (): Promise<SourceResult<DiscogsCredit>> | SourceResult<DiscogsCredit> => {
@@ -682,7 +720,7 @@ export async function collectPrimarySources(
     if (identity.releasesError && discogsConfigured()) {
       // The releases' failure is this source's error too (a deadline reaches the run's errors).
       return missing("discogs", identity.releasesError, {
-        error: errorRecord("discogs", identity.releasesFailure),
+        error: identity.releasesFailure,
       });
     }
     return discogsTrackCredits(track, identity.discogsReleaseIds, {

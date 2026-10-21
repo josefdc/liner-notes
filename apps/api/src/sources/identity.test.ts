@@ -214,12 +214,13 @@ describe("resolveIdentity", () => {
       geniusUrl: "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
       shsLinks: [{ kind: "work", id: 4196 }],
       releasesError: null,
-      // 1990-09-04 is the earliest date MusicBrainz has, but 11 recordings of the work are
-      // undated (and 10 dated only "1990"): it cannot be shown to be the original recording.
+      // 1990-09-04 is the earliest date MusicBrainz has, but 9 recordings of the work under its
+      // title are undated (and 10 are dated only "1990"): it cannot be shown to be the original
+      // recording. Undated remix and edit titles do not count.
       original: {
         original: false,
         reason:
-          '11 recordings of "Ice Ice Baby" have no release date: this one cannot be shown to be the earliest',
+          '9 recordings of "Ice Ice Baby" have no release date: this one cannot be shown to be the earliest',
       },
     });
     expect(identity?.discogsReleaseIds[0]).toBe(599648);
@@ -298,7 +299,7 @@ describe("musicBrainzRelationships", () => {
     // Not shown to be the original recording: the covers are the work's, not claimed for it.
     expect(covers.every((c) => c.about === "work")).toBe(true);
     expect(result.incomplete).toBe(
-      'covers are of the work "Ice Ice Baby", not this recording: 11 recordings of "Ice Ice Baby" have no release date: this one cannot be shown to be the earliest',
+      'covers are of the work "Ice Ice Baby", not this recording: 9 recordings of "Ice Ice Baby" have no release date: this one cannot be shown to be the earliest',
     );
     // Each record names its Evidence item, whose recordRef carries the record's scope.
     for (const record of result.records) {
@@ -431,9 +432,12 @@ describe("collectPrimarySources", () => {
       status: "missing",
       reason: "DISCOGS_TOKEN is not set",
     });
+    // MusicBrainz failed: the others could not be asked, which is not an identity miss.
     expect(sources.secondhandsongs).toMatchObject({
       status: "missing",
-      reason: "no MusicBrainz recording identified for the track",
+      reason: "MusicBrainz could not be read, so the track has no identity",
+      error: { source: "secondhandsongs", code: "unavailable" },
+      identity: { missing: 0, unavailable: 1 },
     });
     expect(sources.evidence).toEqual([]);
   });
@@ -600,18 +604,21 @@ describe("work-level relationships are claimed only for the work's original reco
   });
 
   it("says yes only when every other recording of the work is certainly later", () => {
-    // Synthetic: the recording (2008-11-11), two later ones, and a cover dated 2001 (a cover
-    // never makes a recording less original).
+    // Synthetic: the recording (2008-11-11) among the work's recordings, two later ones and a
+    // later cover.
     const own = studio({ "first-release-date": "2008-11-11" });
-    const recording = (id: string, date: string) => ({
+    const recording = (id: string, date: string, title = "Love Story") => ({
       id: `00000000-0000-4000-8000-00000000000${id}`,
-      title: "Love Story",
+      title,
       "first-release-date": date,
       "artist-credit": [{ name: "Taylor Swift", artist: { id: "x", name: "Taylor Swift" } }],
     });
-    const cover = recording("9", "2001");
-    const others = [recording("1", "2008-12"), recording("2", "2010-05-01"), cover];
-    const covers = new Set([cover.id]);
+    const self = { ...recording("0", "2008-11-11"), id: own.details.id };
+    const laterCover = recording("8", "2012");
+    const earlierCover = recording("9", "2001");
+    const undatedCover = recording("a", "");
+    const covers = new Set([laterCover.id, earlierCover.id, undatedCover.id]);
+    const others = [self, recording("1", "2008-12"), recording("2", "2010-05-01"), laterCover];
     const verdict = (recordings: MbRecordingSummary[], total = recordings.length) =>
       originalPerformance(own.details, own.works, { recordings, total }, covers);
 
@@ -619,8 +626,18 @@ describe("work-level relationships are claimed only for the work's original reco
       original: true,
       reason: 'the earliest release of "Love Story" (2008-11-11)',
     });
-    // Unknown answers no: an undated recording, one dated only by the same year or month, one
-    // earlier in the same year, and a work with recordings that were not read.
+    // Not candidates: an undated cover, and an undated version titled otherwise.
+    expect(
+      verdict([...others, undatedCover, recording("b", "", "Love Story (Remix)")]),
+    ).toMatchObject({ original: true });
+    // A cover certainly released earlier: the song existed before this recording.
+    expect(verdict([...others, earlierCover])).toEqual({
+      original: false,
+      reason:
+        'a cover of "Love Story" ("Love Story" by Taylor Swift) was released in 2001, before this recording (2008-11-11)',
+    });
+    // Unknown answers no: an undated recording under the work's title, one dated only by the
+    // same year or month, one earlier in the same year, and a work not fully read.
     expect(verdict([...others, recording("3", "")]).reason).toBe(
       '1 recordings of "Love Story" have no release date: this one cannot be shown to be the earliest',
     );
@@ -634,17 +651,23 @@ describe("work-level relationships are claimed only for the work's original reco
     );
     expect(verdict(others, 96)).toEqual({
       original: false,
-      reason: 'only 3 of the 96 recordings of "Love Story" could be compared',
+      reason: 'only 4 of the 96 recordings of "Love Story" could be compared',
     });
-    // Without the cover exclusion, the 2001 cover would make it a later recording.
+    // An answer that does not list the recording itself (empty or inconsistent) answers no.
+    expect(verdict([])).toEqual({
+      original: false,
+      reason: 'the recordings read for "Love Story" do not include this one',
+    });
+    expect(verdict(others.slice(1)).original).toBe(false);
+    // Without the cover set, the 2012 cover is just a later recording: still yes.
     expect(
-      originalPerformance(own.details, own.works, { recordings: others, total: 3 }).original,
-    ).toBe(false);
+      originalPerformance(own.details, own.works, { recordings: others, total: 4 }).original,
+    ).toBe(true);
     expect(originalPerformance(own.details, own.works, null).original).toBe(false);
     expect(
       originalPerformance({ ...own.details, "first-release-date": "" }, own.works, {
         recordings: others,
-        total: 3,
+        total: 4,
       }).original,
     ).toBe(false);
   });
@@ -949,5 +972,60 @@ describe("links MusicBrainz files more than once", () => {
       reason: "MusicBrainz links 2 Genius pages to the recording's works; none is taken",
     });
     expect(net.calls.some((c) => c.url.includes("genius.com"))).toBe(false);
+  });
+});
+
+describe("what the tool output carries", () => {
+  it("keeps a failed release browse as a short error record, never the raw answer", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
+    const page = `<html><body>${"502 Bad Gateway upstream nginx ".repeat(300)}</body></html>`;
+    stubFetch((call) =>
+      call.url.startsWith(`${MB}/release?`)
+        ? new Response(page, { status: 502, headers: { "content-type": "text/html" } })
+        : musicBrainz(call),
+    );
+    const out = await primarySourcesTool.invoke({
+      isrc: ICE_TRACK.isrc,
+      title: ICE_TRACK.title,
+      artists: ICE_TRACK.artists,
+      durationMs: ICE_TRACK.durationMs,
+    });
+    const parsed = JSON.parse(out);
+    expect(Object.keys(parsed.identity.releasesFailure).sort()).toEqual([
+      "code",
+      "message",
+      "source",
+    ]);
+    expect(parsed.identity.releasesFailure.message.length).toBeLessThan(300);
+    // The 9 KB page is not carried: only the short error detail is.
+    expect(out).not.toContain('"body"');
+    expect(out.split("Bad Gateway").length - 1).toBeLessThan(40);
+    expect(parsed.discogs).toMatchObject({ error: { source: "discogs", code: "unavailable" } });
+  });
+
+  it("says where each SecondHandSongs link came from", async () => {
+    const withRecordingLink = {
+      ...iceDetails,
+      relations: [
+        ...iceDetails.relations,
+        {
+          type: "secondhandsongs",
+          direction: "forward",
+          "target-type": "url",
+          url: { resource: "https://secondhandsongs.com/performance/9200001" },
+        },
+      ],
+    };
+    stubFetch((call) =>
+      call.url.startsWith(`${MB}/recording/${ICE}?`) ? json(withRecordingLink) : musicBrainz(call),
+    );
+    const { identity } = await resolveIdentity(ICE_TRACK);
+    expect(identity?.shsLinks).toHaveLength(2);
+    expect(identity?.shsLinks).toEqual(
+      expect.arrayContaining([
+        { kind: "performance", id: 9200001, from: "recording" },
+        { kind: "work", id: 4196, from: "work" },
+      ]),
+    );
   });
 });

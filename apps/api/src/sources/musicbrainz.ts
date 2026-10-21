@@ -668,7 +668,8 @@ export const getMusicBrainzRelations = tool(
 
       console.log(
         `✅ [MusicBrainz] Found ${genealogy.length} genealogy relations: ` +
-          `${samples.length} samples, ${covers.length} covers, ${remixes.length} remixes`,
+          `${samples.length} samples, ${covers.length} covers, ${remixes.length} remixes ` +
+          `(${djMixes.length} DJ-mix inclusions kept apart, not genealogy)`,
       );
 
       return JSON.stringify({
@@ -701,7 +702,9 @@ export const getMusicBrainzRelations = tool(
     name: "musicbrainz_relations",
     description:
       "Get VERIFIED sample/cover relationships from MusicBrainz. Returns: structured JSON " +
-      "with samples, covers, remixes. HIGHEST PRIORITY for genealogy accuracy.",
+      "with samples, covers, remixes. HIGHEST PRIORITY for genealogy accuracy. DJ mixes that " +
+      "include the track (or that it includes) are listed apart as djMixes: they are not " +
+      "samples, remixes or influences, and are not genealogy.",
     schema: z.object({
       title: z.string().describe("The exact song title"),
       artist: z.string().describe("The artist name, or Spotify's artist string (joined by ', ')"),

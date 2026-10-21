@@ -371,11 +371,12 @@ export async function discogsTrackCredits(
       });
       return found("discogs", credits, evidence, {
         omitted,
+        matched,
         incomplete: notes.length > 0 ? notes.join("; ") : null,
       });
     }
   } catch (error) {
-    return failed("discogs", error, omitted);
+    return failed("discogs", error, omitted, matched);
   }
   const reason =
     passed.length > 0

@@ -7,7 +7,7 @@
 
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { describeError, fetchJson, scrubPayload } from "./http.js";
 
 interface Seen {
@@ -189,5 +189,58 @@ describe("redirects of a credentialed POST", () => {
     } else {
       expect(followed.body).toBe("grant_type=client_credentials");
     }
+  });
+});
+
+describe("redirect answers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("cancels the body of every redirect answer, followed or refused", async () => {
+    const cancelled: string[] = [];
+    const stream = (tag: string) =>
+      new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode("x"));
+        },
+        cancel() {
+          cancelled.push(tag);
+        },
+      });
+    let n = 0;
+    vi.stubGlobal("fetch", async () => {
+      n++;
+      if (n === 1)
+        return new Response(stream("followed"), { status: 302, headers: { location: "/two" } });
+      return new Response(stream("refused"), {
+        status: 301,
+        headers: { location: "https://elsewhere.invalid/x" },
+      });
+    });
+    await expect(
+      fetchJson({
+        source: "genius",
+        url: "https://api.genius.test/one",
+        headers: { Authorization: "Bearer t0123456789" },
+        cassette: false,
+      }),
+    ).rejects.toMatchObject({ kind: "http" });
+    expect(cancelled).toEqual(["followed", "refused"]);
+  });
+
+  it("reports a Location that is not a URL as an unreadable answer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response("", { status: 302, headers: { location: "http://[bad" } }),
+    );
+    await expect(
+      fetchJson({
+        source: "genius",
+        url: "https://api.genius.test/one",
+        headers: { Authorization: "Bearer t0123456789" },
+        cassette: false,
+      }),
+    ).rejects.toMatchObject({ kind: "parse", status: 302 });
   });
 });

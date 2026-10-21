@@ -385,3 +385,44 @@ describe("the answer's shape, and where the link came from", () => {
     expect(own.status === "found" && own.records[0].about).toBe("track");
   });
 });
+
+describe("answers that say nothing", () => {
+  const LOVE_STORY: TrackRef = {
+    isrc: "USBCJ0800001",
+    title: "Love Story",
+    artists: ["Taylor Swift"],
+    durationMs: null,
+  };
+
+  it("reports a cover performance without its originals as invalid, not as no originals", async () => {
+    stubFetch(() =>
+      json({
+        uri: "https://secondhandsongs.com/performance/10",
+        title: "Love Story",
+        performer: { name: "Taylor Swift" },
+        isOriginal: false,
+        covers: [],
+      }),
+    );
+    const result = await shsRelationships(LOVE_STORY, [
+      { kind: "performance", id: 10, from: "recording" },
+    ]);
+    expect(result).toMatchObject({
+      status: "missing",
+      error: { code: "invalid_response" },
+      identity: { matched: 0, rejected: 0 },
+    });
+  });
+
+  it("reports a work with no versions as invalid, not as an identity rejection", async () => {
+    stubFetch(() =>
+      json({ uri: "https://secondhandsongs.com/work/1", title: "Love Story", versions: [] }),
+    );
+    const result = await shsRelationships(LOVE_STORY, [{ kind: "work", id: 1, from: "work" }]);
+    expect(result).toMatchObject({
+      status: "missing",
+      error: { code: "invalid_response" },
+      identity: { rejected: 0 },
+    });
+  });
+});

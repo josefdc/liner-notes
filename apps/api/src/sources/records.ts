@@ -77,10 +77,16 @@ export function titlesMatch(a: string, b: string, artists: readonly string[] = [
 
 /**
  * An artist name for comparison. Besides `normalizeName`, Discogs' disambiguation number
- * ("Nirvana (2)") is dropped and its inverted article ("Persuader, The") put back in front.
+ * ("Nirvana (2)") and variation mark ("*") are dropped and its inverted article ("Persuader,
+ * The") put back in front.
  */
 export function normalizeArtist(name: string): string {
-  const trimmed = name.trim().replace(/\s+\(\d+\)$/, "");
+  // Discogs marks a name variation with a trailing "*" ("Persuader, The*", "Nirvana (2)*").
+  const trimmed = name
+    .trim()
+    .replace(/\*+$/, "")
+    .trim()
+    .replace(/\s+\(\d+\)$/, "");
   const inverted = trimmed.match(/^(.*),\s*(the|a|an)$/i);
   return normalizeName(inverted ? `${inverted[2]} ${inverted[1]}` : trimmed);
 }
@@ -339,9 +345,10 @@ export function failed<T>(
   source: SourceId,
   error: unknown,
   omitted: Omission[] = [],
+  matched = 0,
 ): SourceResult<T> {
   const record = errorRecord(source, error);
-  return missing(source, record.message ?? "", { omitted, error: record });
+  return missing(source, record.message ?? "", { omitted, error: record, matched });
 }
 
 /** A payload that is not the shape the source documents; reported as an invalid response. */

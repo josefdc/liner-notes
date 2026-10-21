@@ -633,7 +633,17 @@ async function fetchWithin(req: SourceRequest, url: string, init: RequestInit): 
     const location = response.headers.get("location");
     if (response.status < 300 || response.status > 399 || !location) return response;
     await response.body?.cancel().catch(() => {});
-    const next = new URL(location, current);
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      throw new SourceError(
+        req.source,
+        "parse",
+        `HTTP ${response.status} redirect to a Location that is not a URL`,
+        { status: response.status },
+      );
+    }
     if (next.origin !== current.origin) {
       throw new SourceError(
         req.source,

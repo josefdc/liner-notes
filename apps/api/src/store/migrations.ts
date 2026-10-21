@@ -35,7 +35,8 @@ const MEASURED_AUDIO_V3 = z
     instrumentalness: unitScoreV3,
     confidence: z.enum(["low", "high"]),
     keyMoments: z.array(z.unknown()).optional(),
-    unavailableReason: z.undefined(),
+    // Absent or undefined; zod 4 needs `.optional()` to accept an absent key here.
+    unavailableReason: z.undefined().optional(),
     measured: z.literal(true),
     analyzer: z.literal("audio-service"),
   })

@@ -20,7 +20,7 @@
         ]
       },
       "sourceTier": { "type": "string", "enum": ["primary-record", "editorial", "web"] },
-      "url": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "url": { "type": ["string", "null"] },
       "title": { "type": "string" },
       "retrievedAt": {
         "type": "string",
@@ -30,7 +30,7 @@
       "excerpt": { "type": "string" },
       "recordRef": {
         "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       }
     },
     "required": [
@@ -65,7 +65,7 @@
         ]
       },
       "sourceTier": { "type": "string", "enum": ["primary-record", "editorial", "web"] },
-      "url": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "url": { "type": ["string", "null"] },
       "title": { "type": "string" },
       "retrievedAt": {
         "type": "string",
@@ -75,7 +75,7 @@
       "excerpt": { "type": "string" },
       "recordRef": {
         "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       }
     },
     "required": [

@@ -14,7 +14,7 @@
             "enum": ["running", "interrupted", "completed", "failed", "cancelled"]
           },
           "mode": { "type": "string", "enum": ["live", "replay"] },
-          "spotifyId": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "spotifyId": { "type": ["string", "null"] },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -52,7 +52,7 @@
             "enum": ["running", "interrupted", "completed", "failed", "cancelled"]
           },
           "mode": { "type": "string", "enum": ["live", "replay"] },
-          "spotifyId": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "spotifyId": { "type": ["string", "null"] },
           "createdAt": {
             "type": "string",
             "format": "date-time",

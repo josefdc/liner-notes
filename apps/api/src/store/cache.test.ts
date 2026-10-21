@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import { MIGRATION_3_FROZEN, runMigrations } from "./migrations.js";
 import { LOW_CONFIDENCE_AUDIO_TTL_MS, MeasuredAudioSchema } from "./measuredAudio.js";
 import { SonicCache, isMeasuredAudio } from "./cache.js";
@@ -191,8 +191,10 @@ describe("migration 3's frozen copy of the audio cache rules", () => {
   // Migration 3 keeps its own copy so that later edits cannot change a shipped migration. If the
   // live rules change on purpose, update this test (not the copy) and say why in the change.
   it("still matches the live rules", () => {
-    expect(zodToJsonSchema(MIGRATION_3_FROZEN.measuredAudioSchema)).toEqual(
-      zodToJsonSchema(MeasuredAudioSchema),
+    // JSON Schema cannot show `z.undefined()`; `unavailableReason` is compared as any value.
+    const jsonSchema = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
+    expect(jsonSchema(MIGRATION_3_FROZEN.measuredAudioSchema)).toEqual(
+      jsonSchema(MeasuredAudioSchema),
     );
     expect(MIGRATION_3_FROZEN.lowConfidenceTtlMs).toBe(LOW_CONFIDENCE_AUDIO_TTL_MS);
   });

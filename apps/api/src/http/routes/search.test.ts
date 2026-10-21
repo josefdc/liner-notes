@@ -47,7 +47,7 @@ describe("GET /api/search/suggest", () => {
     const res = await request(app()).get("/api/search/suggest?query[a]=midnight&limit[b]=3");
 
     expect(res.status).toBe(400);
-    expect(res.body.issues).toEqual(["query: Required"]);
+    expect(res.body.issues).toEqual(["query: Invalid input: expected string, received undefined"]);
     expect(spotify.invoke).not.toHaveBeenCalled();
   });
 

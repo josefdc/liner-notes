@@ -17,7 +17,7 @@
             "coverUrl": { "type": "string" },
             "releaseYear": { "type": "string" },
             "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-            "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+            "isrc": { "type": ["string", "null"] }
           },
           "required": ["id", "title", "artist", "album", "coverUrl"]
         }
@@ -56,7 +56,7 @@
             "coverUrl": { "type": "string" },
             "releaseYear": { "type": "string" },
             "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-            "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+            "isrc": { "type": ["string", "null"] }
           },
           "required": ["id", "title", "artist", "album", "coverUrl"],
           "additionalProperties": false

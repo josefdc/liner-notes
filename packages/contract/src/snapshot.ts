@@ -12,7 +12,7 @@
  * starts.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { type Compatibility, compareSchemas, type Schema } from "./compat.js";
 import { jsonSchemaOptions } from "./jsonSchema.js";
 import { refinementId } from "./refinements.js";

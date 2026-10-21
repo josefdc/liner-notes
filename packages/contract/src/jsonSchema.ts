@@ -21,7 +21,7 @@
  * list it), no untyped schemas, no `$ref` recursion and no tuples.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 
 export type JsonSchema = { [keyword: string]: unknown };
 
@@ -31,6 +31,20 @@ export type JsonSchema = { [keyword: string]: unknown };
  */
 export function toJsonSchema(schema: z.ZodType, io: "input" | "output" = "output"): JsonSchema {
   return z.toJSONSchema(schema, jsonSchemaOptions(io)) as JsonSchema;
+}
+
+/**
+ * A default or `.catch()` fallback as JSON. A value with no JSON form (a bigint, a function, a
+ * cycle) becomes a stable marker, so the snapshot still records that there is one and its kind.
+ */
+function asJson(value: unknown): unknown {
+  try {
+    const text = JSON.stringify(value);
+    if (text !== undefined) return JSON.parse(text);
+  } catch {
+    // No JSON form; the marker below.
+  }
+  return { unserializable: typeof value, text: String(value) };
 }
 
 /**
@@ -45,12 +59,35 @@ export function jsonSchemaOptions(io: "input" | "output") {
     override(ctx: { zodSchema: unknown; jsonSchema: JsonSchema }) {
       const def = (
         ctx.zodSchema as {
-          _zod: { def: { type: string; rest?: unknown; items?: []; defaultValue?: unknown } };
+          _zod: {
+            def: {
+              type: string;
+              rest?: unknown;
+              items?: [];
+              defaultValue?: unknown;
+              catchValue?: (ctx: unknown) => unknown;
+              innerType?: z.core.$ZodType;
+            };
+          };
         }
       )._zod.def;
       // zod leaves out the default of a defaulted pipe (a tolerant list); keep it visible.
       if (def.type === "default" && !("default" in ctx.jsonSchema)) {
-        ctx.jsonSchema.default = JSON.parse(JSON.stringify(def.defaultValue));
+        ctx.jsonSchema.default = asJson(def.defaultValue);
+      }
+      // In input schemas zod also drops the fallback of a `.catch()` around anything holding a
+      // transform, since a default there would be an output value. Keep it visible when it is
+      // also a valid input of the caught schema (null for an unreadable optional value).
+      if (
+        def.type === "catch" &&
+        def.catchValue &&
+        def.innerType &&
+        !("default" in ctx.jsonSchema)
+      ) {
+        const fallback = def.catchValue(undefined);
+        if (fallback !== undefined && z.safeParse(def.innerType, fallback).success) {
+          ctx.jsonSchema.default = asJson(fallback);
+        }
       }
       if (def.type === "tuple" && !def.rest && def.items) {
         ctx.jsonSchema.items = false;

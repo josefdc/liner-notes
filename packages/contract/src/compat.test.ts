@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { ReadyResponse } from "./api.js";
 import { AudioFeatures, ModelScore } from "./audio.js";
 import { type Compatibility, compareSchemas, type Mode, type Schema } from "./compat.js";
@@ -93,11 +93,34 @@ describe("compareSchemas rules", () => {
     ).toEqual(["$.b: added"]);
   });
 
-  it("input: a removed default breaks, an added one is additive", () => {
+  it("input: a removed default breaks; an added one is additive only when it is null", () => {
     const withDefault = object({ a: { type: "array", items: str, default: [] } }, []);
     const without = object({ a: { type: "array", items: str } }, []);
+    const nullable = (extra: Schema) => object({ a: { type: ["string", "null"], ...extra } }, []);
     expect(compareSchemas(withDefault, without).breaking).toEqual(["$.a: default removed"]);
-    expect(compareSchemas(without, withDefault).additive).toEqual(["$.a: default added"]);
+    // A missing value would read as [] instead of as missing.
+    expect(compareSchemas(without, withDefault).breaking).toEqual(["$.a: default added []"]);
+    expect(compareSchemas(nullable({}), nullable({ default: null }))).toEqual({
+      breaking: [],
+      additive: ["$.a: default added"],
+    });
+  });
+
+  it("a default whose value changed breaks, on both sides of a parse", () => {
+    const before = object({ a: { type: "string", default: "unavailable" } }, []);
+    const after = object({ a: { type: "string", default: "analyzed" } }, []);
+    for (const mode of ["input", "output"] as const) {
+      expect(compareSchemas(before, after, { mode }).breaking).toEqual([
+        '$.a: default is now "analyzed"',
+      ]);
+    }
+    expect(compareSchemas(before, before).breaking).toEqual([]);
+    // A default with no JSON form is compared by a stable marker.
+    const big = (value: bigint) => object({ a: { type: "integer", default: value } }, []);
+    expect(compareSchemas(big(10n), big(10n)).breaking).toEqual([]);
+    expect(compareSchemas(big(10n), big(11n)).breaking).toEqual([
+      "$.a: default is now <bigint 11>",
+    ]);
   });
 
   it("an enum that drops a value breaks; one that adds a value is additive", () => {
@@ -378,6 +401,22 @@ describe("changes to the contract that must fail the gate", () => {
       ".default([]) removed from TrackAnalysis.segments",
       TrackAnalysis,
       TrackAnalysis.extend({ segments: TrackAnalysis.shape.segments.removeDefault() }),
+    ],
+    [
+      "TrackAnalysis.audioSource reads an unreadable value as 'analyzed'",
+      TrackAnalysis,
+      TrackAnalysis.extend({
+        audioSource: z.enum(["analyzed", "unavailable"]).optional().catch("analyzed"),
+      }),
+    ],
+    [
+      "TrackAnalysis.segments defaults to a made-up segment",
+      TrackAnalysis,
+      TrackAnalysis.extend({
+        segments: TrackAnalysis.shape.segments
+          .removeDefault()
+          .default([{ label: "Verse", start: 0, end: 100, color: "#000000" }]),
+      }),
     ],
     [
       "multipleOf on Sample.time",

@@ -23,7 +23,7 @@ import { initializeDatabase } from "../../store/database.js";
 import { isLlmError } from "../errors.js";
 import { createLlm } from "../invoke.js";
 import { FAKE_API_KEY, FAKE_BASE_URL, providerFetch, responseBody } from "./providerStub.js";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const env = process.env;
 // Anything that reaches the real network is a test failure.

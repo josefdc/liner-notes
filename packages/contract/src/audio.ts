@@ -19,7 +19,7 @@
  * service's own tests; the service emits these field names as they are (camelCase).
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { ModelRef, UnitInterval } from "./common.js";
 import { tolerantList } from "./tolerant.js";
 

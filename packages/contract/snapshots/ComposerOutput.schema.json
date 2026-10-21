@@ -9,7 +9,7 @@
         "items": {
           "type": "object",
           "properties": {
-            "text": { "description": "One factual statement about the track", "type": "string" },
+            "text": { "type": "string", "description": "One factual statement about the track" },
             "about": {
               "type": "string",
               "enum": [
@@ -25,13 +25,13 @@
               ]
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             },
             "field": {
-              "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null",
-              "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }]
+              "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }],
+              "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null"
             }
           },
           "required": ["text", "about", "evidenceIds", "field"],
@@ -39,19 +39,17 @@
         }
       },
       "factoids": {
-        "description": "At most 8",
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "title": { "description": "Short title, no colon at the end", "type": "string" },
-            "text": { "description": "One to three sentences", "type": "string" },
+            "title": { "type": "string", "description": "Short title, no colon at the end" },
+            "text": { "type": "string", "description": "One to three sentences" },
             "type": {
               "type": "string",
               "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
             },
             "entities": {
-              "description": "Names in the text worth exploring (people, instruments, records, years)",
               "type": "array",
               "items": {
                 "type": "object",
@@ -64,17 +62,19 @@
                 },
                 "required": ["text", "type"],
                 "additionalProperties": false
-              }
+              },
+              "description": "Names in the text worth exploring (people, instruments, records, years)"
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             }
           },
           "required": ["title", "text", "type", "entities", "evidenceIds"],
           "additionalProperties": false
-        }
+        },
+        "description": "At most 8"
       },
       "genealogyNodes": {
         "type": "array",
@@ -82,14 +82,14 @@
           "type": "object",
           "properties": {
             "id": {
-              "description": "Short unique id; 'current' for the analysed track",
-              "type": "string"
+              "type": "string",
+              "description": "Short unique id; 'current' for the analysed track"
             },
             "role": { "type": "string", "enum": ["current", "source", "derived", "influence"] },
-            "label": { "description": "'Title - Artist (Year)'", "type": "string" },
-            "trackTitle": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
-            "trackArtist": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
-            "year": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+            "label": { "type": "string", "description": "'Title - Artist (Year)'" },
+            "trackTitle": { "type": ["string", "null"] },
+            "trackArtist": { "type": ["string", "null"] },
+            "year": { "type": ["string", "null"] }
           },
           "required": ["id", "role", "label", "trackTitle", "trackArtist", "year"],
           "additionalProperties": false
@@ -100,16 +100,16 @@
         "items": {
           "type": "object",
           "properties": {
-            "source": { "description": "Node id", "type": "string" },
-            "target": { "description": "Node id", "type": "string" },
+            "source": { "type": "string", "description": "Node id" },
+            "target": { "type": "string", "description": "Node id" },
             "type": {
               "type": "string",
               "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             }
           },
           "required": ["source", "target", "type", "evidenceIds"],
@@ -130,7 +130,7 @@
         "items": {
           "type": "object",
           "properties": {
-            "text": { "description": "One factual statement about the track", "type": "string" },
+            "text": { "type": "string", "description": "One factual statement about the track" },
             "about": {
               "type": "string",
               "enum": [
@@ -146,13 +146,13 @@
               ]
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             },
             "field": {
-              "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null",
-              "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }]
+              "anyOf": [{ "type": "string", "enum": ["tempo", "key"] }, { "type": "null" }],
+              "description": "'tempo' or 'key' when the statement gives the track's tempo or key; otherwise null"
             }
           },
           "required": ["text", "about", "evidenceIds", "field"],
@@ -160,19 +160,17 @@
         }
       },
       "factoids": {
-        "description": "At most 8",
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "title": { "description": "Short title, no colon at the end", "type": "string" },
-            "text": { "description": "One to three sentences", "type": "string" },
+            "title": { "type": "string", "description": "Short title, no colon at the end" },
+            "text": { "type": "string", "description": "One to three sentences" },
             "type": {
               "type": "string",
               "enum": ["production", "trivia", "credits", "sample", "curiosity", "connection"]
             },
             "entities": {
-              "description": "Names in the text worth exploring (people, instruments, records, years)",
               "type": "array",
               "items": {
                 "type": "object",
@@ -185,17 +183,19 @@
                 },
                 "required": ["text", "type"],
                 "additionalProperties": false
-              }
+              },
+              "description": "Names in the text worth exploring (people, instruments, records, years)"
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             }
           },
           "required": ["title", "text", "type", "entities", "evidenceIds"],
           "additionalProperties": false
-        }
+        },
+        "description": "At most 8"
       },
       "genealogyNodes": {
         "type": "array",
@@ -203,14 +203,14 @@
           "type": "object",
           "properties": {
             "id": {
-              "description": "Short unique id; 'current' for the analysed track",
-              "type": "string"
+              "type": "string",
+              "description": "Short unique id; 'current' for the analysed track"
             },
             "role": { "type": "string", "enum": ["current", "source", "derived", "influence"] },
-            "label": { "description": "'Title - Artist (Year)'", "type": "string" },
-            "trackTitle": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
-            "trackArtist": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
-            "year": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+            "label": { "type": "string", "description": "'Title - Artist (Year)'" },
+            "trackTitle": { "type": ["string", "null"] },
+            "trackArtist": { "type": ["string", "null"] },
+            "year": { "type": ["string", "null"] }
           },
           "required": ["id", "role", "label", "trackTitle", "trackArtist", "year"],
           "additionalProperties": false
@@ -221,16 +221,16 @@
         "items": {
           "type": "object",
           "properties": {
-            "source": { "description": "Node id", "type": "string" },
-            "target": { "description": "Node id", "type": "string" },
+            "source": { "type": "string", "description": "Node id" },
+            "target": { "type": "string", "description": "Node id" },
             "type": {
               "type": "string",
               "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
             },
             "evidenceIds": {
-              "description": "Ids of evidence items from the evidence pack that support this; [] when none",
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Ids of evidence items from the evidence pack that support this; [] when none"
             }
           },
           "required": ["source", "target", "type", "evidenceIds"],

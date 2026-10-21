@@ -24,15 +24,15 @@
       "origin": { "type": "string", "enum": ["code", "model"] },
       "evidenceIds": { "type": "array", "items": { "type": "string" } },
       "verdict": {
-        "description": "null: not judged (e.g. beyond the 20-claim judge batch)",
         "anyOf": [
           { "type": "string", "enum": ["supported", "partial", "unsupported", "contradicted"] },
           { "type": "null" }
-        ]
+        ],
+        "description": "null: not judged (e.g. beyond the 20-claim judge batch)"
       },
       "verdictReason": {
         "description": "Why the judge gave its verdict",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       },
       "numericCheck": {
         "type": "string",
@@ -40,7 +40,7 @@
       },
       "numericReason": {
         "description": "Why the numeric check gave its result; separate from the judge's reason",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       },
       "numericComparison": {
         "anyOf": [
@@ -49,15 +49,12 @@
             "properties": {
               "claimed": {
                 "description": "The value the claim states",
-                "anyOf": [{ "type": "number" }, { "type": "string" }]
+                "type": ["number", "string"]
               },
-              "measured": {
-                "description": "The measured value",
-                "anyOf": [{ "type": "number" }, { "type": "string" }]
-              },
+              "measured": { "description": "The measured value", "type": ["number", "string"] },
               "method": {
-                "description": "How it was measured, e.g. 'essentia.RhythmExtractor2013'",
-                "type": "string"
+                "type": "string",
+                "description": "How it was measured, e.g. 'essentia.RhythmExtractor2013'"
               }
             },
             "required": ["claimed", "measured", "method"]
@@ -129,15 +126,15 @@
       "origin": { "type": "string", "enum": ["code", "model"] },
       "evidenceIds": { "type": "array", "items": { "type": "string" } },
       "verdict": {
-        "description": "null: not judged (e.g. beyond the 20-claim judge batch)",
         "anyOf": [
           { "type": "string", "enum": ["supported", "partial", "unsupported", "contradicted"] },
           { "type": "null" }
-        ]
+        ],
+        "description": "null: not judged (e.g. beyond the 20-claim judge batch)"
       },
       "verdictReason": {
         "description": "Why the judge gave its verdict",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       },
       "numericCheck": {
         "type": "string",
@@ -145,7 +142,7 @@
       },
       "numericReason": {
         "description": "Why the numeric check gave its result; separate from the judge's reason",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       },
       "numericComparison": {
         "anyOf": [
@@ -154,15 +151,12 @@
             "properties": {
               "claimed": {
                 "description": "The value the claim states",
-                "anyOf": [{ "type": "number" }, { "type": "string" }]
+                "type": ["number", "string"]
               },
-              "measured": {
-                "description": "The measured value",
-                "anyOf": [{ "type": "number" }, { "type": "string" }]
-              },
+              "measured": { "description": "The measured value", "type": ["number", "string"] },
               "method": {
-                "description": "How it was measured, e.g. 'essentia.RhythmExtractor2013'",
-                "type": "string"
+                "type": "string",
+                "description": "How it was measured, e.g. 'essentia.RhythmExtractor2013'"
               }
             },
             "required": ["claimed", "measured", "method"],

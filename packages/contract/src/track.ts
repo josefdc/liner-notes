@@ -19,7 +19,7 @@
  * are checked by producers with `analysisIssues()` before a result is sent or stored.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { AudioFeatures, KeyMoment } from "./audio.js";
 import { tolerantList } from "./tolerant.js";
 import { Timestamp, UnitInterval } from "./common.js";

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { AudioFeatures } from "./audio.js";
 import { type JsonSchema, toJsonSchema } from "./jsonSchema.js";
 import { ComposerOutput, LLM_SCHEMAS, MEASURED_FIELDS } from "./llm.js";

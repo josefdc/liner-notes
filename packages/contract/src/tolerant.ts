@@ -9,7 +9,7 @@
  * again is a breaking change.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const tolerantFilters = new WeakSet<object>();
 

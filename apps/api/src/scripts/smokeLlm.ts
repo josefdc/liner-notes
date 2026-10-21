@@ -24,7 +24,7 @@ import { SpendGuard } from "../llm/budget.js";
 import { isLlmError } from "../llm/errors.js";
 import { assertProviderConfigured } from "../llm/factory.js";
 import { createLlm } from "../llm/invoke.js";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const SmokeCheck = z.object({ ok: z.boolean() });
 const MAX_OUTPUT_TOKENS = 2000;

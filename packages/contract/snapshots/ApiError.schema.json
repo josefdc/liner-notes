@@ -5,7 +5,7 @@
     "type": "object",
     "properties": {
       "success": { "type": "boolean", "const": false },
-      "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
+      "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
       "error": { "type": "string" }
     },
     "required": ["success", "code", "error"],
@@ -17,7 +17,7 @@
     "type": "object",
     "properties": {
       "success": { "type": "boolean", "const": false },
-      "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
+      "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
       "error": { "type": "string" }
     },
     "required": ["success", "code", "error"],

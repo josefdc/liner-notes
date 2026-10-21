@@ -1,4 +1,5 @@
 import { expect, type Locator, test } from "@playwright/test";
+import { hoverCard } from "./hover";
 import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
 
 // The Dashboard's spacing comes from token classes such as `p-(--space-md)`. Written in the
@@ -104,8 +105,9 @@ for (const { width, height, page: pagePadding, hero } of [
     await page.setViewportSize({ width, height });
     await analyzeAndOpenDashboard(page, "Bright Lines");
 
-    await page.getByRole("button", { name: /Older Record/ }).hover();
-    const label = page.getByText("CLICK TO ANALYZE", { exact: true });
+    const card = page.getByRole("button", { name: /Older Record/ });
+    await hoverCard(page, card);
+    const label = card.getByText("CLICK TO ANALYZE", { exact: true });
     await expect(label).toBeVisible();
     const lines = await label.evaluate((element) => {
       const range = document.createRange();

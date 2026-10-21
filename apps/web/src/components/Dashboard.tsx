@@ -390,6 +390,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 }}
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
+                data-hovered={hoveredCardId === rec.id || undefined}
                 className="relative min-w-[280px] rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`,

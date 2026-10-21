@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { hoverCard } from "./hover";
 import { analyzeAndOpenDashboard, loadFixture, openPlayer, useMockApi } from "./mock";
 
 // Computed-style checks for the shared components: transitions, the connected-track card's hover,
@@ -33,6 +34,7 @@ test("buttons transition colour, glow, lift and press, the focus ring fastest", 
 test.describe("the connected-track card", () => {
   test.beforeEach(async ({ page }) => {
     await useMockApi(page, loadFixture("full-result"));
+    await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Bright Lines");
   });
 
@@ -45,28 +47,19 @@ test.describe("the connected-track card", () => {
 
   test("stays hovered with the pointer just above its bottom edge", async ({ page }) => {
     const card = page.getByRole("button", { name: /Older Record/ });
-    // Measure the card at rest: away from the pointer (left over from the last click) and from
-    // the window's edges.
-    await page.mouse.move(0, 0);
-    await card.evaluate((element) => {
-      const page = element.closest(".overflow-y-auto");
-      if (page) page.scrollTop += element.getBoundingClientRect().top - page.clientHeight / 4;
-    });
-    await page.waitForTimeout(800); // the card's fade-in has ended
-    const box = await card.boundingBox();
-    if (!box) throw new Error("no connected-track card");
-    const x = box.x + box.width / 2;
-    const y = box.y + box.height - 2;
-    await page.mouse.move(x, y);
-    const label = page.getByText("CLICK TO ANALYZE", { exact: true });
-    await expect(label).toBeVisible();
+    // Rest the pointer 2 px above the bottom edge of the card as it sits before the lift.
+    const { point } = await hoverCard(page, card, (box) => ({
+      x: box.x + box.width / 2,
+      y: box.y + box.height - 2,
+    }));
+    await expect(card.getByText("CLICK TO ANALYZE", { exact: true })).toBeVisible();
     // The lift (4 px) must not move the card out from under the pointer: nudge the pointer
     // sideways, as a resting hand does, and check the hover each time.
     const samples: boolean[] = [];
     for (let i = 0; i < 12; i += 1) {
-      await page.mouse.move(x + (i % 2), y);
+      await page.mouse.move(point.x + (i % 2), point.y);
       await page.waitForTimeout(50);
-      samples.push(await label.isVisible());
+      samples.push((await card.getAttribute("data-hovered")) === "true");
     }
     expect(samples).toEqual(Array(12).fill(true));
   });

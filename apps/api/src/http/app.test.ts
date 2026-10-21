@@ -15,17 +15,23 @@ import { request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import { brotliCompressSync, deflateSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import express from "express";
-import { generateStructuredOutput } from "../agent/geminiClient.js";
+import { llm } from "../llm/invoke.js";
 import { createApp } from "./app.js";
 import { asyncRoute } from "./middleware/errors.js";
 import { listedOriginsOnly } from "./middleware/origin.js";
 
-vi.mock("../agent/geminiClient.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../agent/geminiClient.js")>()),
-  generateStructuredOutput: vi.fn(async () => {
-    throw new Error("the model must not be called in these tests");
-  }),
-}));
+vi.mock("../llm/invoke.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../llm/invoke.js")>();
+  return {
+    ...actual,
+    llm: {
+      ...actual.llm,
+      invoke: vi.fn(async () => {
+        throw new Error("the model must not be called in these tests");
+      }),
+    },
+  };
+});
 
 vi.mock("../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/spotify.js")>()),
@@ -59,18 +65,27 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.mocked(generateStructuredOutput).mockReset();
+  vi.mocked(llm.invoke).mockReset();
 });
 
 /** Makes the stubbed model answer, so paid requests succeed (200). */
 function modelAnswers() {
-  const factoid = (id: string) => ({ id, title: "t", content: "c", type: "production" });
-  vi.mocked(generateStructuredOutput).mockImplementation(async ({ schema }) => ({
-    data: schema.safeParse({ factoids: [factoid("f1"), factoid("f2"), factoid("f3")] }).success
-      ? { factoids: [factoid("f1"), factoid("f2"), factoid("f3")] }
-      : factoid("f1"),
-    model: "stub",
-    groundingUsed: false,
+  const factoid = { title: "t", text: "c", type: "production", entities: [], evidenceIds: [] };
+  vi.mocked(llm.invoke).mockImplementation(async (_site, tier, _input, schema) => ({
+    output: schema.parse({ factoids: [factoid, factoid, factoid] }),
+    callId: "stub",
+    mode: "replay",
+    tier,
+    deployment: "stub",
+    usage: {
+      inputTokens: 1,
+      outputTokens: 1,
+      reasoningTokens: 0,
+      usdEst: 0,
+      multiplier: 1,
+      latencyMs: 1,
+      attempts: 1,
+    },
   }));
 }
 

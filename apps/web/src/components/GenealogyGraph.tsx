@@ -508,7 +508,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         <div className="absolute top-4 right-4 pointer-events-none">
           <div className="flex items-center gap-2 text-cyber text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-cyber/30 animate-pulse">
             <Volume2 size={12} className="animate-bounce" />
-            <span>PREVIEWING SAMPLE...</span>
+            <span>PREVIEWING TRACK...</span>
           </div>
         </div>
       )}

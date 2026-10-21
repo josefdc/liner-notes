@@ -1,17 +1,12 @@
 /**
- * Zod Schema Contract for The Sonic Agent
+ * The result the analysis sends (TrackData) and its parts.
  *
- * This file defines the structured output schema that the LLM must produce.
- * It maps directly to the frontend TrackData interface and uses z.describe()
- * to guide the LLM's generation.
- *
- * Used by:
- * - Composer node for structured output
- * - API response validation
- * - Frontend type alignment
+ * No language model fills these schemas: the composer's model writes `ComposerOutput` from
+ * @liner-notes/contract, and code builds TrackData from it, from the Spotify metadata and from
+ * the audio measurement. Measured values come from the measurement only.
  */
 
-import { randomUUID } from "node:crypto";
+import { Claim, Evidence, PreviewMatch, RunInfo } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures } from "./state.js";
 
@@ -89,11 +84,14 @@ export const LogCodeSchema = z.enum([
   "AUDIO-PARSING",
   "AUDIO-COMPLETE",
   "AUDIO-ERROR",
-  // Gemini/LLM operations
+  // Model operations (LLM-*); the GEMINI-* codes are kept for logs recorded before them
   "GEMINI-CONNECT",
   "GEMINI-THOUGHT",
   "GEMINI-RESPONSE",
   "GEMINI-ERROR",
+  "LLM-CONNECT",
+  "LLM-RESPONSE",
+  "LLM-ERROR",
   // Spotify API
   "SPOTIFY-SEARCH",
   "SPOTIFY-FOUND",
@@ -149,34 +147,10 @@ export const FactoidSchema = z.object({
     .array(FactoidEntitySchema)
     .optional()
     .describe("Clickable entities within the content (synths, producers, techniques, etc.)"),
+  claimId: z.string().optional().describe("The claim this factoid states"),
 });
 
 export type Factoid = z.infer<typeof FactoidSchema>;
-
-// =============================================================================
-// Flat Factoid Schema (for LLM - avoids nested entities)
-// =============================================================================
-
-export const FlatFactoidSchema = z.object({
-  id: z.string().describe("Unique identifier, e.g. 'f1', 'f2'"),
-  title: z.string().describe("Catchy title summarizing the factoid, max 50 chars, no colon at end"),
-  content: z
-    .string()
-    .describe("Detailed explanation 1-3 sentences. MUST cite research data when available."),
-  type: z
-    .enum(["production", "trivia", "credits", "sample", "curiosity", "connection"])
-    .describe("Category"),
-  entityNames: z
-    .string()
-    .optional()
-    .describe("Comma-separated entity names to highlight (e.g. 'Roland Juno-106, Dr. Dre, 1995')"),
-  entityTypes: z
-    .string()
-    .optional()
-    .describe("Comma-separated entity types matching entityNames (e.g. 'synth, producer, year')"),
-});
-
-export type FlatFactoid = z.infer<typeof FlatFactoidSchema>;
 
 // =============================================================================
 // Production Credits Schema
@@ -231,11 +205,18 @@ export const GenealogyLinkSchema = z.object({
     .describe("Connection strength (1-3): 1=weak influence, 2=moderate, 3=direct sample"),
   // Semantic relationship type for visual differentiation
   type: z
-    .enum(["sample", "cover", "remix", "producer", "influence"])
+    .enum(["sample", "interpolation", "cover", "remix", "producer", "influence"])
     .optional()
     .describe(
-      "Nature of connection: sample=direct sample, cover=cover version, remix=remix, producer=same producer, influence=stylistic influence",
+      "Nature of connection: sample=direct sample, interpolation=re-played melody or lyric, cover=cover version, remix=remix, producer=same producer, influence=stylistic influence",
     ),
+  kind: z
+    .enum(["sourced", "inferred"])
+    .optional()
+    .describe("sourced only when it cites evidence in the pack; otherwise a model inference"),
+  origin: z.enum(["code", "model"]).optional(),
+  claimId: z.string().optional(),
+  evidenceIds: z.array(z.string()).optional(),
 });
 
 export const GenealogySchema = z.object({
@@ -388,113 +369,25 @@ export const TrackDataSchema = z.object({
     .optional()
     .describe("True when the language model call failed and the result was built from source data"),
   modelUnavailableReason: z
-    .enum(["no_output", "rate_limited", "timeout", "auth", "error"])
+    .enum(["no_output", "rate_limited", "timeout", "auth", "error", "budget_exhausted"])
     .optional()
     .describe(
       "Why the model call failed, as a category; the provider's text stays in the server log",
     ),
+
+  // The evidence model (see @liner-notes/contract TrackAnalysis)
+  isrc: z.string().nullable().optional(),
+  preview: PreviewMatch.nullable().optional(),
+  evidence: z.array(Evidence).optional(),
+  claims: z.array(Claim).optional(),
+  run: RunInfo.optional().describe("The run that produced the result; `fallback` says how"),
 });
 
 export type TrackData = z.infer<typeof TrackDataSchema>;
 
 // =============================================================================
-// LLM-Optimized Flat Schema (avoids Gemini nesting depth limits)
+// Measured audio copies
 // =============================================================================
-
-/**
- * Flattened TrackData schema for LLM generation.
- *
- * Gemini has a maximum nesting depth limit for JSON schemas (~5-6 levels).
- * This schema flattens deeply nested structures like:
- * - factoids.entities -> entityNames + entityTypes as comma-separated strings
- * - genealogy.nodes/links -> separate flat arrays
- *
- * After LLM generation, use `transformFlatToTrackData()` to reconstruct.
- */
-export const FlatTrackDataSchema = z.object({
-  // Core metadata - COPY EXACTLY from input
-  id: z.string().describe("Spotify track ID — COPY EXACTLY from input metadata"),
-  title: z.string().describe("Song title — COPY EXACTLY from input metadata"),
-  artist: z.string().describe("Primary artist name — COPY EXACTLY from input metadata"),
-  album: z.string().describe("Album name — COPY EXACTLY from input metadata"),
-  // `.url()` returns the URL without surrounding whitespace (zod 4 trims it).
-  coverUrl: z.string().url().describe("Album cover URL — COPY EXACTLY from input metadata"),
-  spotifyUrl: z.string().url().optional().describe("Direct Spotify URL"),
-  releaseYear: z.string().optional().describe("Year of release (e.g. '2022')"),
-  explicit: z.boolean().optional().describe("Whether track has explicit content"),
-
-  // Measured audio values (bpm, key, energy, valence, danceability, acousticness) are not part
-  // of this schema: they are copied from the audio measurement by transformFlatToTrackData.
-  durationSeconds: z.number().optional().describe("Song duration in seconds"),
-
-  // Genre Profile for Sonic Fingerprint Radar Chart
-  genreProfile: z
-    .array(
-      z.object({
-        genre: z
-          .string()
-          .describe(
-            "Genre name: Electronic, Rock, Hip Hop, Jazz, Pop, R&B, Classical, Ambient, Synthwave, etc.",
-          ),
-        value: z.number().min(0).max(100).describe("Affinity percentage 0-100"),
-      }),
-    )
-    .min(5)
-    .max(8)
-    .describe(
-      "Genre profile for radar chart. 5-8 genres with affinity percentages representing the song's musical DNA.",
-    ),
-
-  // Song structure - flat array still works
-  segments: z.array(SongSegmentSchema).min(3).describe("Song structure segments covering 0-100%"),
-
-  // Samples - flat array still works
-  samples: z.array(SampleSchema).describe("Samples used in song"),
-
-  // Credits - flat object still works
-  producers: z.array(z.string()).optional().describe("List of producers"),
-  writers: z.array(z.string()).optional().describe("List of songwriters"),
-  engineers: z.array(z.string()).optional().describe("Recording/mixing engineers"),
-  label: z.string().optional().describe("Record label"),
-
-  // Factoids - FLATTENED (no nested entities array)
-  factoids: z.array(FlatFactoidSchema).min(3).max(8).describe("Interesting facts about the song"),
-
-  // Genealogy - FLATTENED into separate arrays
-  genealogyNodes: z
-    .array(
-      z.object({
-        id: z.string().describe("Node ID: 'current' for main song, 'origin1', 'derived1', etc."),
-        group: z.number().describe("1=current, 2=samples from, 3=sampled by, 4=influences"),
-        label: z.string().describe("'Song Title - Artist (Year)'. REAL songs only."),
-        size: z.number().describe("40 for current, 28-30 for direct, 20-25 for influences"),
-      }),
-    )
-    .describe("Genealogy nodes. Always include 'current' node with group=1."),
-
-  genealogyLinks: z
-    .array(
-      z.object({
-        source: z.string().describe("Source node ID"),
-        target: z.string().describe("Target node ID"),
-        value: z.number().describe("Strength 1-3: 1=weak, 2=moderate, 3=direct sample"),
-      }),
-    )
-    .describe("Genealogy connections. source→target direction."),
-});
-
-export type FlatTrackData = z.infer<typeof FlatTrackDataSchema>;
-
-// =============================================================================
-// Transform Functions
-// =============================================================================
-
-/**
- * Generate a unique ID for entities
- */
-function generateEntityId(): string {
-  return `e${randomUUID()}`;
-}
 
 type MeasuredAudioFields = Pick<
   TrackData,
@@ -544,101 +437,6 @@ export function measuredAudioFields(audio: AudioFeatures | null | undefined): Me
   };
 }
 
-/**
- * Transform flat LLM output to full TrackData structure. Measured audio fields come from
- * `audio` only; the model output cannot set them.
- */
-export function transformFlatToTrackData(
-  flat: FlatTrackData,
-  audio: AudioFeatures | null | undefined,
-): TrackData {
-  // Reconstruct factoids with nested entities
-  const factoids: Factoid[] = flat.factoids.map((f) => {
-    let entities: FactoidEntity[] | undefined;
-
-    if (f.entityNames && f.entityTypes) {
-      const names = f.entityNames
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const types = f.entityTypes
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      const validTypes = [
-        "synth",
-        "producer",
-        "sample",
-        "technique",
-        "artist",
-        "album",
-        "year",
-      ] as const;
-
-      entities = names.map((name, i) => ({
-        id: generateEntityId(),
-        text: name,
-        type: (validTypes.includes(types[i] as (typeof validTypes)[number])
-          ? types[i]
-          : "sample") as FactoidEntity["type"],
-        searchQuery: name,
-      }));
-    }
-
-    return {
-      id: f.id,
-      title: f.title,
-      content: f.content,
-      type: f.type,
-      entities: entities?.length ? entities : undefined,
-    };
-  });
-
-  // Reconstruct genealogy
-  const genealogy: Genealogy = {
-    nodes: flat.genealogyNodes.map((n) => ({
-      id: n.id,
-      group: n.group,
-      label: n.label,
-      size: n.size,
-      img: undefined, // Will be enriched later
-    })),
-    links: flat.genealogyLinks,
-  };
-
-  // Reconstruct credits
-  const credits: ProductionCredits | undefined =
-    flat.producers?.length || flat.writers?.length || flat.engineers?.length || flat.label
-      ? {
-          producers: flat.producers || [],
-          writers: flat.writers || [],
-          engineers: flat.engineers,
-          label: flat.label,
-        }
-      : undefined;
-
-  return {
-    id: flat.id,
-    title: flat.title,
-    artist: flat.artist,
-    album: flat.album,
-    coverUrl: flat.coverUrl,
-    spotifyUrl: flat.spotifyUrl,
-    releaseYear: flat.releaseYear,
-    explicit: flat.explicit,
-    durationSeconds: flat.durationSeconds,
-    genreProfile: flat.genreProfile,
-    segments: flat.segments,
-    segmentsSource: "inferred",
-    samples: flat.samples,
-    credits,
-    factoids,
-    genealogy,
-    ...measuredAudioFields(audio),
-  };
-}
-
 // =============================================================================
 // Search Candidates Schema (for Human-in-the-loop)
 // =============================================================================
@@ -654,64 +452,6 @@ export const SearchCandidateSchema = z.object({
 });
 
 export type SearchCandidate = z.infer<typeof SearchCandidateSchema>;
-
-// =============================================================================
-// Research Plan Schema (for Deep Dive Researcher ReAct pattern)
-// =============================================================================
-
-export const ResearchPlanSchema = z.object({
-  nextAction: z
-    .enum([
-      "search_samples",
-      "search_production",
-      "search_general",
-      "search_musicbrainz",
-      "search_artist_collaborators",
-      "search_artist_top_tracks",
-      "search_lastfm_tags",
-      "search_lastfm_similar_tracks",
-      "search_lastfm_similar_artists",
-      "search_lastfm_artist_info",
-      "search_listenbrainz_similar",
-      "done",
-    ])
-    .describe(
-      "Next action. START with 'search_musicbrainz' for verified samples. Use 'search_lastfm_tags' for genre profile. Use 'search_lastfm_similar_tracks' for discovery. Use 'search_listenbrainz_similar' for open-source similarity. 'done' only when coverage is sufficient.",
-    ),
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Search query — REQUIRED for all actions except 'done', 'search_musicbrainz', 'search_artist_collaborators', 'search_artist_top_tracks', 'search_lastfm_tags', 'search_lastfm_similar_tracks', 'search_lastfm_similar_artists', 'search_lastfm_artist_info', 'search_listenbrainz_similar'. Be specific.",
-    ),
-  reasoning: z
-    .string()
-    .describe("1-2 sentence explanation. Reference what's missing OR what lead you're following."),
-});
-
-export type ResearchPlanType = z.infer<typeof ResearchPlanSchema>;
-
-// =============================================================================
-// HITL Configuration Schema (for API validation)
-// =============================================================================
-
-export const HITLConfigSchema = z.object({
-  disambiguationThreshold: z
-    .number()
-    .min(0)
-    .max(100)
-    .default(85)
-    .describe("Popularity threshold for auto-selection (0-100)"),
-  popularityGap: z
-    .number()
-    .min(0)
-    .max(1)
-    .default(0.3)
-    .describe("Minimum popularity gap ratio to skip disambiguation"),
-  maxCandidates: z.number().min(1).max(10).default(5).describe("Maximum candidates to show user"),
-});
-
-export type HITLConfigType = z.infer<typeof HITLConfigSchema>;
 
 // =============================================================================
 // API Response Schemas

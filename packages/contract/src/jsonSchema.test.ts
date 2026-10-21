@@ -58,11 +58,12 @@ describe("model-facing schemas", () => {
     expect(() => assertAzureStrict(toJsonSchema(schema))).not.toThrow();
   });
 
-  it("include the composer, factoid and judge schemas", () => {
+  it("include the composer, factoid, judge and research planner schemas", () => {
     expect(Object.keys(LLM_SCHEMAS).sort()).toEqual([
       "ComposerOutput",
       "FactoidsOutput",
       "JudgeOutput",
+      "ResearchPlanOutput",
     ]);
   });
 });

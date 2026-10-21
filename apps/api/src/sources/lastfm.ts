@@ -154,6 +154,7 @@ type LastfmResult<T> = { ok: true; data: T } | { ok: false; error: string; unava
  */
 async function callLastfm<T extends object>(
   params: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<LastfmResult<T>> {
   if (!lastfmConfigured()) return { ok: false, error: NOT_CONFIGURED, unavailable: true };
 
@@ -167,8 +168,15 @@ async function callLastfm<T extends object>(
 
   let data: T & LastfmError;
   try {
-    data = await fetchJson<T & LastfmError>({ source: "lastfm", url, scrub: RESPONSE_SHAPE });
+    data = await fetchJson<T & LastfmError>({
+      source: "lastfm",
+      url,
+      scrub: RESPONSE_SHAPE,
+      signal,
+    });
   } catch (error) {
+    // A cancelled run rejects: nothing is reported for it.
+    if (signal?.aborted) throw error;
     // Last.fm answers errors with HTTP 4xx and a JSON body; keep its message.
     const body = isSourceError(error) ? (error.body as LastfmError | undefined) : undefined;
     if (body && typeof body.message === "string" && body.message) {
@@ -229,13 +237,16 @@ function cleanBio(bio: string, maxLength = 300): string {
  * Get top tags for a track from Last.fm
  */
 export const getLastfmTrackTags = tool(
-  async ({ title, artist }): Promise<string> => {
+  async ({ title, artist }, config): Promise<string> => {
     console.log(`🏷️ [Last.fm] Getting track tags: "${title}" by ${artist}`);
-    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>({
-      method: "track.getTopTags",
-      track: title,
-      artist: artist,
-    });
+    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>(
+      {
+        method: "track.getTopTags",
+        track: title,
+        artist: artist,
+      },
+      config?.signal,
+    );
     if (!result.ok) {
       console.error("❌ [Last.fm] Track tags error:", result.error);
       return failure(result);
@@ -261,12 +272,15 @@ export const getLastfmTrackTags = tool(
  * Get top tags for an artist from Last.fm
  */
 export const getLastfmArtistTags = tool(
-  async ({ artist }): Promise<string> => {
+  async ({ artist }, config): Promise<string> => {
     console.log(`🏷️ [Last.fm] Getting artist tags: "${artist}"`);
-    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>({
-      method: "artist.getTopTags",
-      artist: artist,
-    });
+    const result = await callLastfm<{ toptags?: { tag?: LastfmTag | LastfmTag[] } }>(
+      {
+        method: "artist.getTopTags",
+        artist: artist,
+      },
+      config?.signal,
+    );
     if (!result.ok) {
       console.error("❌ [Last.fm] Artist tags error:", result.error);
       return failure(result);
@@ -291,16 +305,19 @@ export const getLastfmArtistTags = tool(
  * Get similar tracks from Last.fm
  */
 export const getLastfmSimilarTracks = tool(
-  async ({ title, artist }): Promise<string> => {
+  async ({ title, artist }, config): Promise<string> => {
     console.log(`🔗 [Last.fm] Getting similar tracks: "${title}" by ${artist}`);
     const result = await callLastfm<{
       similartracks?: { track?: LastfmSimilarTrack | LastfmSimilarTrack[] };
-    }>({
-      method: "track.getSimilar",
-      track: title,
-      artist: artist,
-      limit: "5",
-    });
+    }>(
+      {
+        method: "track.getSimilar",
+        track: title,
+        artist: artist,
+        limit: "5",
+      },
+      config?.signal,
+    );
     if (!result.ok) {
       console.error("❌ [Last.fm] Similar tracks error:", result.error);
       return failure(result);
@@ -334,15 +351,18 @@ export const getLastfmSimilarTracks = tool(
  * Get similar artists from Last.fm
  */
 export const getLastfmSimilarArtists = tool(
-  async ({ artist }): Promise<string> => {
+  async ({ artist }, config): Promise<string> => {
     console.log(`🔗 [Last.fm] Getting similar artists: "${artist}"`);
     const result = await callLastfm<{
       similarartists?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] };
-    }>({
-      method: "artist.getSimilar",
-      artist: artist,
-      limit: "5",
-    });
+    }>(
+      {
+        method: "artist.getSimilar",
+        artist: artist,
+        limit: "5",
+      },
+      config?.signal,
+    );
     if (!result.ok) {
       console.error("❌ [Last.fm] Similar artists error:", result.error);
       return failure(result);
@@ -375,12 +395,15 @@ export const getLastfmSimilarArtists = tool(
  * Get artist info from Last.fm (bio, stats, tags, similar)
  */
 export const getLastfmArtistInfo = tool(
-  async ({ artist }): Promise<string> => {
+  async ({ artist }, config): Promise<string> => {
     console.log(`📋 [Last.fm] Getting artist info: "${artist}"`);
-    const result = await callLastfm<{ artist?: LastfmArtistInfo }>({
-      method: "artist.getInfo",
-      artist: artist,
-    });
+    const result = await callLastfm<{ artist?: LastfmArtistInfo }>(
+      {
+        method: "artist.getInfo",
+        artist: artist,
+      },
+      config?.signal,
+    );
     if (!result.ok) {
       console.error("❌ [Last.fm] Artist info error:", result.error);
       return failure(result);

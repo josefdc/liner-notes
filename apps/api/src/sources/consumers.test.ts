@@ -10,20 +10,13 @@ import { html, json, stubFetch } from "./testing/fetchStub.js";
 
 const planner = vi.hoisted(() => ({ plans: [] as Array<string> }));
 
-vi.mock("../agent/geminiClient.js", () => ({
-  GEMINI_MODEL_PRO: "stub-model",
-  generateStructuredOutput: async () => {
-    const next = planner.plans.shift() ?? "done";
-    if (next === "throw") throw new Error("planner unavailable");
-    return { data: { nextAction: next, query: "Ice Ice Baby Vanilla Ice", reasoning: next } };
-  },
-}));
 vi.mock("../store/cache.js", () => ({
   getCache: () => ({ getResearch: () => null, putResearch: () => {} }),
 }));
 
 import { historianNode } from "../agent/nodes/historianNode.js";
 import { createResearcherSubgraph } from "../agent/researcherSubgraph.js";
+import { stubLlm, testRuntime } from "../agent/testing/stubLlm.js";
 import type { ResearchData, SonicAgentStateType, SpotifyData } from "../agent/state.js";
 import { MusicBrainzRateLimiter } from "./musicbrainz.js";
 import { SpotifyAuthManager } from "./spotify.js";
@@ -41,7 +34,6 @@ const ACTIONS = [
   "search_general",
   "search_musicbrainz",
   "search_artist_collaborators",
-  "search_artist_top_tracks",
   "search_lastfm_tags",
   "search_lastfm_similar_tracks",
   "search_lastfm_similar_artists",
@@ -122,6 +114,15 @@ function expectNothingKept(research: Partial<ResearchData> | undefined) {
   );
 }
 
+// The research planner: answers the next queued step; "throw" fails as a bug would.
+const runtime = testRuntime(
+  stubLlm(() => {
+    const next = planner.plans.shift() ?? "done";
+    if (next === "throw") throw new Error("planner unavailable");
+    return { nextAction: next, query: "Ice Ice Baby Vanilla Ice", reasoning: next };
+  }),
+);
+
 describe("tool output that consumers must drop", () => {
   beforeAll(() => {
     MusicBrainzRateLimiter.getInstance().setIntervalForTests(0);
@@ -143,7 +144,7 @@ describe("tool output that consumers must drop", () => {
       network(scenario);
       planner.plans = [action, "done"];
 
-      const final = await createResearcherSubgraph().invoke({ spotifyData: SPOTIFY_DATA });
+      const final = await createResearcherSubgraph(runtime).invoke({ spotifyData: SPOTIFY_DATA });
 
       expectNothingKept(final.researchData);
     });
@@ -155,23 +156,23 @@ describe("tool output that consumers must drop", () => {
       const out = await historianNode(
         { spotifyData: SPOTIFY_DATA } as unknown as SonicAgentStateType,
         { writer: () => {} } as never,
+        runtime,
       );
 
       expectNothingKept(out.researchData);
     });
 
-    it("the historian's fallback research keeps nothing", { timeout: 15_000 }, async () => {
+    it("a planner bug fails the research instead of being hidden", async () => {
       network(scenario);
-      // The planner fails on every attempt, so the historian falls back to direct searches.
-      planner.plans = ["throw", "throw", "throw", "throw"];
+      planner.plans = ["throw"];
 
-      const out = await historianNode(
-        { spotifyData: SPOTIFY_DATA } as unknown as SonicAgentStateType,
-        { writer: () => {} } as never,
-      );
-
-      expect(out.statusMessages?.join(" ")).toMatch(/Enhanced research complete/);
-      expectNothingKept(out.researchData);
+      await expect(
+        historianNode(
+          { spotifyData: SPOTIFY_DATA } as unknown as SonicAgentStateType,
+          { writer: () => {} } as never,
+          runtime,
+        ),
+      ).rejects.toThrow("planner unavailable");
     });
   });
 });

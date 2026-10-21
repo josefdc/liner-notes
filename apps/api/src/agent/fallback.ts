@@ -2,15 +2,15 @@
  * Fallback Track Data Generator
  *
  * Single responsibility: graceful degradation when the LLM composer fails.
- * Builds TrackData from raw state (Spotify metadata + research data + audio features)
- * without requiring a successful LLM call. Values that are not known are left out or null;
- * nothing is filled in with defaults.
+ * Builds TrackData from measured values and primary records only (Spotify metadata, MusicBrainz
+ * relations and collaborators, the audio measurement), without a model call. Web search hits
+ * are not shown. Values that are not known are left out or null; nothing is filled in.
  */
 
 import { measuredAudioFields, type TrackData } from "./schema.js";
 import {
   createDefaultSegments,
-  generateId,
+  generateId as newRandomId,
   type AudioFeatures,
   type SonicAgentStateType,
   type Factoid,
@@ -24,30 +24,19 @@ function splitTag(entry: string): { tag: string | null; body: string } {
   return match ? { tag: match[1], body: match[2] } : { tag: null, body: entry };
 }
 
-// Status text the search tools return instead of results (no API key, no results, errors).
-// It is not research and never becomes a factoid.
-const TOOL_STATUS_PREFIXES = [
-  "Web search is not available",
-  "Error searching",
-  "No sample information found",
-  "No production history found",
-  "No song meaning analysis found",
-  "No results found",
-];
-
-function isToolStatusText(entry: string): boolean {
-  const text = splitTag(entry).body.trim();
-  return TOOL_STATUS_PREFIXES.some((prefix) => text.startsWith(prefix));
+interface SampleRelation {
+  title: string;
+  artist: string;
+  /** "source": this track samples it; "derived": it samples this track. */
+  direction: "source" | "derived";
 }
 
-/** True for entries that hold structured data (JSON) rather than prose. */
-function isStructured(entry: string): boolean {
-  const { tag, body } = splitTag(entry);
-  return (tag?.startsWith("MusicBrainz") ?? false) || /^[[{]/.test(body.trim());
-}
-
-/** Parses the sample list from a MusicBrainz samples entry; [] if it is not one. */
-function parseMusicBrainzSamples(entry: string): Array<{ title: string; artist: string }> {
+/**
+ * Parses the sample relations from a MusicBrainz samples entry; [] if it is not one. A relation
+ * without a direction (research cached before it was recorded) cannot be told apart and is left
+ * out.
+ */
+function parseMusicBrainzSamples(entry: string): SampleRelation[] {
   const { tag, body } = splitTag(entry);
   if (!tag?.startsWith("MusicBrainz")) return [];
   const json = body.slice(body.indexOf("["));
@@ -55,16 +44,15 @@ function parseMusicBrainzSamples(entry: string): Array<{ title: string; artist: 
     const parsed = JSON.parse(json);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
-      (s): s is { title: string; artist: string } =>
-        typeof s?.title === "string" && s.title !== "" && typeof s?.artist === "string",
+      (s): s is SampleRelation =>
+        typeof s?.title === "string" &&
+        s.title !== "" &&
+        typeof s?.artist === "string" &&
+        (s.direction === "source" || s.direction === "derived"),
     );
   } catch {
     return [];
   }
-}
-
-function truncate(text: string, max = 300): string {
-  return text.length > max ? `${text.substring(0, max - 3)}...` : text;
 }
 
 /** A sentence describing the measured audio values, or null when nothing was measured. */
@@ -108,11 +96,20 @@ function describeRelease(spotify: SpotifyData): string | null {
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
+export interface FallbackOptions {
+  /** Ids for factoids and entities (default: random UUIDs). */
+  newId?: () => string;
+}
+
 /**
  * Build TrackData from state when the main composer LLM call fails.
  * Extracts factoids from research data; adds metadata factoids only for known values.
  */
-export async function createFallbackTrackData(state: SonicAgentStateType): Promise<TrackData> {
+export async function createFallbackTrackData(
+  state: SonicAgentStateType,
+  options: FallbackOptions = {},
+): Promise<TrackData> {
+  const generateId = options.newId ?? newRandomId;
   const spotify = state.spotifyData!;
   const audio = state.audioFeatures ?? null;
 
@@ -133,59 +130,37 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     collaborators: research.collaborators?.length || 0,
   });
 
-  // 1. Production trivia from research (prose only; structured MusicBrainz data is skipped)
-  (research.productionTrivia || [])
-    .filter((t) => !isStructured(t) && !isToolStatusText(t))
-    .map((t) => splitTag(t).body.trim())
-    .filter((t) => t.length > 20)
-    .slice(0, 2)
-    .forEach((trivia, idx) => {
-      factoids.push({
+  // 1. Web search hits (production, samples, leads the planner followed) are never shown: a
+  //    hit is whatever page ranked first, possibly about another song, so presenting its
+  //    snippet as a fact "from source data" would be dishonest. Only primary records follow.
+
+  // 2. Samples: MusicBrainz sample relations only
+  // A relation reads from this track: it samples the "source" recordings, and the "derived"
+  // ones sample it. Each direction gets its own card.
+  const relations = (research.samples ?? []).flatMap(parseMusicBrainzSamples);
+  const sampleCard = (direction: SampleRelation["direction"], title: string, lead: string) => {
+    const list = relations.filter((r) => r.direction === direction);
+    if (list.length === 0) return;
+    const shown = list.slice(0, 3);
+    const names = shown
+      .map((s) => (s.artist ? `"${s.title}" by ${s.artist}` : `"${s.title}"`))
+      .join(", ");
+    const more = list.length > 3 ? ` Plus ${list.length - 3} more in MusicBrainz.` : "";
+    factoids.push({
+      id: generateId(),
+      title,
+      content: `${lead}: ${names}.${more}`,
+      type: "sample",
+      entities: shown.map((s) => ({
         id: generateId(),
-        title: idx === 0 ? "Studio Intel" : "Behind the Boards",
-        content: truncate(trivia),
-        type: "production",
-      });
+        text: s.artist ? `${s.title} - ${s.artist}` : s.title,
+        type: "sample" as const,
+        searchQuery: `${s.title} ${s.artist}`.trim(),
+      })),
     });
-
-  // 2. Samples: structured MusicBrainz relations first, else a prose description
-  if (research.samples && research.samples.length > 0) {
-    const parsedSamples = research.samples.flatMap(parseMusicBrainzSamples);
-
-    if (parsedSamples.length > 0) {
-      const shown = parsedSamples.slice(0, 3);
-      const samplesList = shown
-        .map((s) => (s.artist ? `"${s.title}" by ${s.artist}` : `"${s.title}"`))
-        .join(", ");
-      const more =
-        parsedSamples.length > 3 ? ` Plus ${parsedSamples.length - 3} more in MusicBrainz.` : "";
-      factoids.push({
-        id: generateId(),
-        title: "Sample DNA",
-        content: `This track samples: ${samplesList}.${more}`,
-        type: "sample",
-        entities: shown.map((s) => ({
-          id: generateId(),
-          text: s.artist ? `${s.title} - ${s.artist}` : s.title,
-          type: "sample" as const,
-          searchQuery: `${s.title} ${s.artist}`.trim(),
-        })),
-      });
-    } else {
-      const prose = research.samples
-        .filter((s) => !isStructured(s) && !isToolStatusText(s))
-        .map((s) => splitTag(s).body.trim())
-        .find((s) => s.length > 20);
-      if (prose) {
-        factoids.push({
-          id: generateId(),
-          title: "Sample Detective",
-          content: truncate(prose),
-          type: "sample",
-        });
-      }
-    }
-  }
+  };
+  sampleCard("source", "Sample DNA", "This track samples");
+  sampleCard("derived", "Sampled By", "Sampled by");
 
   // 3. Song-meaning research is not used (its page text can quote the song).
 
@@ -264,10 +239,12 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     coverUrl: spotify.coverUrl,
     spotifyUrl: spotify.spotifyUrl,
     releaseYear,
-    explicit: spotify.explicit,
+    // Unknown (null) is left out rather than shown as "not explicit"
+    ...(typeof spotify.explicit === "boolean" ? { explicit: spotify.explicit } : {}),
     // Measured audio values or null, with the reason when missing
     ...measuredAudioFields(audio),
-    durationSeconds: spotify.durationMs ? Math.round(spotify.durationMs / 1000) : undefined,
+    // From Spotify only; missing when Spotify gave none
+    ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     // A generic structure, not an analysis of this track
     segments: createDefaultSegments(spotify.durationMs),
     segmentsSource: "template",

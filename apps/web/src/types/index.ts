@@ -25,6 +25,11 @@ export type LogCode =
   | 'GEMINI-THOUGHT'
   | 'GEMINI-RESPONSE'
   | 'GEMINI-ERROR'
+  // The model codes the API sends since the provider layer; the GEMINI-* ones above are kept for
+  // logs and runs recorded before it.
+  | 'LLM-CONNECT'
+  | 'LLM-RESPONSE'
+  | 'LLM-ERROR'
   | 'SPOTIFY-SEARCH'
   | 'SPOTIFY-FOUND'
   | 'SPOTIFY-NONE'
@@ -109,7 +114,19 @@ export type AudioUnavailableReason =
   | 'not_run';
 
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
-export type ModelUnavailableReason = 'no_output' | 'rate_limited' | 'timeout' | 'auth' | 'error';
+/**
+ * Why the "more facts" stream could not write a fact, when the user should know: the model's
+ * rate limit, or live model calls paused by the budget.
+ */
+export type FactoidUnavailableCode = 'rate_limited' | 'budget_exhausted';
+
+export type ModelUnavailableReason =
+  | 'no_output'
+  | 'rate_limited'
+  | 'timeout'
+  | 'auth'
+  | 'error'
+  | 'budget_exhausted';
 
 export interface TrackData {
   id: string;

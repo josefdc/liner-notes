@@ -86,7 +86,6 @@
     {
       "includes": [
         "apps/api/src/agent/enricher.ts",
-        "apps/api/src/agent/errors.ts",
         "apps/api/src/agent/nodes/historianNode.ts",
         "apps/web/src/components/GenealogyGraph.tsx"
       ],

@@ -222,11 +222,22 @@ class SpotifyAuthManager {
   }
 }
 
-/** GET from the Web API; a 401 (token revoked or expired early) refreshes the token once. */
-async function spotifyGet<T>(url: URL, scrub: Shape): Promise<T> {
+/**
+ * GET from the Web API; a 401 (token revoked or expired early) refreshes the token once.
+ * `signal` stops the request (the shared token request is not stopped: other callers wait on it).
+ */
+async function spotifyGet<T>(url: URL, scrub: Shape, signal?: AbortSignal): Promise<T> {
   const auth = SpotifyAuthManager.getInstance();
-  const request = (token: string) =>
-    fetchJson<T>({ source: "spotify", url, headers: { Authorization: `Bearer ${token}` }, scrub });
+  const request = (token: string) => {
+    signal?.throwIfAborted();
+    return fetchJson<T>({
+      source: "spotify",
+      url,
+      headers: { Authorization: `Bearer ${token}` },
+      scrub,
+      signal,
+    });
+  };
   const token = await auth.getToken();
   try {
     return await request(token);
@@ -298,14 +309,18 @@ function errorText(action: string, error: unknown): string {
 // =============================================================================
 
 /** Up to `limit` (1-10) tracks for a query; [] when nothing matches. */
-export async function searchTracks(query: string, limit = 5): Promise<SpotifyTrackSummary[]> {
+export async function searchTracks(
+  query: string,
+  limit = 5,
+  signal?: AbortSignal,
+): Promise<SpotifyTrackSummary[]> {
   if (!query.trim()) throw new SourceError("spotify", "invalid_input", "empty search query");
   const url = new URL("https://api.spotify.com/v1/search");
   url.searchParams.set("q", query);
   url.searchParams.set("type", "track");
   url.searchParams.set("limit", String(Math.min(Math.max(Math.trunc(limit) || 1, 1), 10)));
 
-  const data = await spotifyGet<SpotifySearchResponse>(url, SEARCH_SHAPE);
+  const data = await spotifyGet<SpotifySearchResponse>(url, SEARCH_SHAPE, signal);
   const items = data?.tracks?.items;
   if (!Array.isArray(items)) {
     throw new SourceError("spotify", "parse", "search response has no tracks.items");
@@ -314,11 +329,15 @@ export async function searchTracks(query: string, limit = 5): Promise<SpotifyTra
 }
 
 /** One track by id; rejects (invalid_input) before any request when the id is malformed. */
-export async function fetchTrack(trackId: string): Promise<SpotifyTrackSummary> {
+export async function fetchTrack(
+  trackId: string,
+  signal?: AbortSignal,
+): Promise<SpotifyTrackSummary> {
   const id = requireSpotifyId(trackId, "track");
   const track = await spotifyGet<SpotifyTrack>(
     new URL(`https://api.spotify.com/v1/tracks/${id}`),
     TRACK_SHAPE,
+    signal,
   );
   if (!track?.id) throw new SourceError("spotify", "parse", "track response has no id");
   return summarize(track);
@@ -383,10 +402,12 @@ export const searchTrack = tool(
  * We use the /tracks endpoint which provides useful metadata.
  */
 export const getTrackDetails = tool(
-  async ({ trackId }): Promise<string> => {
+  async ({ trackId }, config): Promise<string> => {
     try {
-      return JSON.stringify(await fetchTrack(trackId));
+      return JSON.stringify(await fetchTrack(trackId, config?.signal));
     } catch (error) {
+      // A cancelled run rejects: nothing is reported for it.
+      if (config?.signal?.aborted) throw error;
       console.error("❌ [Spotify] Track details error:", describeError(error));
       return errorText("getting track details", error);
     }
@@ -442,12 +463,13 @@ export const getAudioFeatures = getTrackDetails;
  * Returns a JSON array of up to `limit` candidates; `[]` when nothing matches.
  */
 export const searchMultipleTracks = tool(
-  async ({ query, limit = 5 }): Promise<string> => {
+  async ({ query, limit = 5 }, config): Promise<string> => {
     try {
-      const tracks = await searchTracks(query, limit);
+      const tracks = await searchTracks(query, limit, config?.signal);
       // Search results carry no preview; the engineer looks one up separately.
       return JSON.stringify(tracks.map((track) => ({ ...track, previewUrl: null })));
     } catch (error) {
+      if (config?.signal?.aborted) throw error;
       console.error("❌ [Spotify] Multi-search error:", describeError(error));
       return errorText("searching for tracks", error);
     }

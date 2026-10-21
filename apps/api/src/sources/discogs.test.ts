@@ -6,6 +6,13 @@
 
 import { Evidence as EvidenceSchema, evidenceIssues } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.hoisted(() => {
+  // So a local .env cannot set the User-Agent under test.
+  process.env.MUSICBRAINZ_USER_AGENT = "";
+  process.env.SOURCE_USER_AGENT = "";
+});
+
 import rickRoll from "./fixtures/discogs-release-249504.json" with { type: "json" };
 import {
   creditCovers,

@@ -1,5 +1,5 @@
-// Spawned by src/index.test.ts. Starts the API (argv: loader URL, entry, port, database path)
-// with its stdout and stderr in a pipe whose only reader is this process, keeps one request
+// Spawned by src/index.test.ts with the API's settings in its environment. Starts the API
+// (argv: loader URL, entry, port, database path) with that environment, its stdout and stderr in a pipe whose only reader is this process, keeps one request
 // open, stops reading (closes the pipe) and sends SIGTERM. Prints one JSON line:
 // { code, signal, ms } of the API's exit, or { error }.
 
@@ -9,17 +9,7 @@ import { connect } from "node:net";
 const [loader, entry, port, dbPath] = process.argv.slice(2);
 const api = spawn(process.execPath, ["--import", loader, entry], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: {
-    PATH: process.env.PATH,
-    NODE_ENV: "development",
-    PORT: port,
-    SQLITE_DB_PATH: dbPath,
-    SPOTIFY_CLIENT_ID: "x",
-    SPOTIFY_CLIENT_SECRET: "x",
-    GEMINI_API_KEY: "",
-    TAVILY_API_KEY: "",
-    LASTFM_API_KEY: "",
-  },
+  env: { ...process.env, PORT: port, SQLITE_DB_PATH: dbPath },
 });
 api.stdout.resume();
 api.stderr.resume();

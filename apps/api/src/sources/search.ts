@@ -6,15 +6,23 @@
  * SourceError. The tools return the typed JSON of `toolResult.ts`:
  *   - results: `{ found: true, results: [{ title, url, content }] }`;
  *   - nothing found: `{ found: false, reason: "no_results" }`;
- *   - search unavailable (no key, timeout, API error): `{ found: false, code, error }`.
+ *   - search unavailable (no key, timeout, API error): `{ found: false, code, error }`; a key
+ *     Tavily refuses (HTTP 401, 403) also carries `keyRejected: true`.
  * Lyric sites are excluded from every search, so no lyric text reaches research.
  */
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
-import { credential, describeError, fetchJson, type Shape, SourceError } from "./http.js";
-import { toolFailure } from "./toolResult.js";
+import {
+  credential,
+  describeError,
+  fetchJson,
+  isSourceError,
+  type Shape,
+  SourceError,
+} from "./http.js";
+import { keyRejected, notAnswered, toolFailure } from "./toolResult.js";
 
 dotenv.config();
 
@@ -189,11 +197,18 @@ async function searchText(
   try {
     const results = await webSearch(query, signal);
     return JSON.stringify(
-      results.length > 0 ? { found: true, results } : { found: false, reason: "no_results" },
+      results.length > 0 ? { found: true, results } : notAnswered("no_results"),
     );
   } catch (error) {
     if (signal?.aborted) throw error;
     console.error(`❌ [Search] ${label} unavailable:`, describeError(error));
+    // 401 and 403 mean Tavily refused the key: an operator error, reported as such.
+    if (isSourceError(error, "http") && (error.status === 401 || error.status === 403)) {
+      return JSON.stringify({
+        ...keyRejected(`Tavily rejected the API key (${describeError(error)})`),
+        source: "tavily",
+      });
+    }
     return JSON.stringify(toolFailure(error));
   }
 }

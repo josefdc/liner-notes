@@ -39,8 +39,6 @@ const spotify: SpotifyData = {
 const emptyResearch: ResearchData = {
   samples: [],
   productionTrivia: [],
-  songMeaning: [],
-  relatedArtists: [],
 };
 
 function build(
@@ -223,7 +221,6 @@ describe("createFallbackTrackData", () => {
     const td = await build(null, {
       samples: [`[MusicBrainz Samples] ${JSON.stringify(relations)}`],
       productionTrivia: [],
-      relatedArtists: [],
     });
 
     const card = (title: string) => td.factoids.find((f) => f.title === title)?.content;
@@ -238,7 +235,6 @@ describe("createFallbackTrackData", () => {
     const td = await build(null, {
       samples: [web],
       productionTrivia: [web, "[Last.fm Bio] A long biography of the artist from the web."],
-      relatedArtists: [],
     });
 
     const text = allText(td.factoids);
@@ -254,13 +250,12 @@ describe("createFallbackTrackData", () => {
         "Error searching for production history: upstream request timed out after 30s",
         'No production history found for "Ice Ice Baby" by Vanilla Ice.',
       ],
-      relatedArtists: [],
     });
     const text = allText(td.factoids);
     expect(text).not.toMatch(/TAVILY|Web search|Error searching|No production history/);
   });
 
-  it("parses MusicBrainz tags and leaves out structured data and song-meaning text", async () => {
+  it("parses MusicBrainz tags and leaves out structured data", async () => {
     const td = await build(null, {
       samples: [
         '[MusicBrainz Samples] [{"title":"Under Pressure","artist":"Queen","direction":"source"}]',
@@ -268,17 +263,10 @@ describe("createFallbackTrackData", () => {
       productionTrivia: [
         '[MusicBrainz Covers] [{"title":"Ice Ice Baby","artist":"Cover Band X","year":"[2001]"}]',
       ],
-      songMeaning: [
-        "[Genius Lyrics]\nLINE_ONE_OF_SONG_TEXT line two line three line four line five",
-        '[Genius Annotations] [{"fragment":"LINE_TWO_OF_SONG_TEXT","annotation":"x"}]',
-        "The song is about LINE_THREE_OF_SONG_TEXT and more words to pass any length filter",
-      ],
-      relatedArtists: [],
     });
 
     const text = allText(td.factoids);
     expect(text).toContain('This track samples: "Under Pressure" by Queen.');
-    expect(text).not.toContain("SONG_TEXT");
     expect(text).not.toContain("Cover Band X");
     expect(text).not.toMatch(/[[{]"/);
   });

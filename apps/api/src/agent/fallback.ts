@@ -13,6 +13,7 @@ import {
   generateId as newRandomId,
   type AudioFeatures,
   type SonicAgentStateType,
+  emptyResearch,
   type Factoid,
   type ResearchData,
   type SpotifyData,
@@ -117,11 +118,7 @@ export async function createFallbackTrackData(
   const releaseYear = spotify.releaseDate?.split("-")[0] || undefined;
 
   const factoids: Factoid[] = [];
-  const research: ResearchData = state.researchData || {
-    samples: [],
-    productionTrivia: [],
-    relatedArtists: [],
-  };
+  const research: ResearchData = state.researchData || emptyResearch();
 
   console.log("📊 [Fallback] Building factoids from research data:", {
     samples: research.samples?.length || 0,

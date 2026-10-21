@@ -9,8 +9,8 @@
  *
  * Uses Last.fm API v2. Requires LASTFM_API_KEY in environment. Without it every tool reports
  * the source as unavailable (`unavailable: true`, code "not_configured"), never as "0 results",
- * and the missing key is logged once; a key Last.fm rejects (errors 4, 10, 26) is reported the
- * same way. Results are the typed JSON of `toolResult.ts`: a track or artist Last.fm does not
+ * and the missing key is logged once; a key Last.fm rejects (errors 4, 10, 26) is "key
+ * rejected" (code "unavailable": an operator error, not a lasting configuration). Results are the typed JSON of `toolResult.ts`: a track or artist Last.fm does not
  * know is "nothing found"; an empty name is not sent; an answer Last.fm's autocorrection gave
  * for another artist is dropped; any other error is a failure with its code.
  *
@@ -22,7 +22,14 @@ import { z } from "zod";
 import dotenv from "dotenv";
 import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
 import { normalizeName } from "./musicbrainz.js";
-import { failureWith, type ToolFailure, toolFailure } from "./toolResult.js";
+import {
+  failureWith,
+  keyRejected,
+  type NotAnswered,
+  notAnswered,
+  type ToolFailure,
+  toolFailure,
+} from "./toolResult.js";
 
 dotenv.config();
 
@@ -165,7 +172,7 @@ interface LastfmError {
 const INVALID_PARAMETERS = 6;
 /** Last.fm's error 29: rate limit exceeded. */
 const RATE_LIMITED = 29;
-/** Authentication failed, invalid API key, suspended API key: permanent until the key changes. */
+/** Authentication failed, invalid API key, suspended API key: an operator error to fix. */
 const KEY_REJECTED: ReadonlySet<number> = new Set([4, 10, 26]);
 
 /**
@@ -174,26 +181,23 @@ const KEY_REJECTED: ReadonlySet<number> = new Set([4, 10, 26]);
  * empty name; `invalid_request`: Last.fm refused the parameters; `other_artist`: Last.fm's
  * autocorrection answered for another artist).
  */
-interface NothingFound {
-  found: false;
-  reason: "not_found" | "no_input" | "invalid_request" | "other_artist";
-  message: string;
-}
+type NothingFound = NotAnswered;
 
 type LastfmResult<T> = { ok: true; data: T } | { ok: false; answer: ToolFailure | NothingFound };
 
 /**
  * Last.fm's own error answer as a tool result: "not found" is nothing found, not a failure; a
- * rejected key is a permanent state reported like a missing key; a rate limit is a rate limit.
+ * rejected key is "key rejected" (it blocks the research cache until it is fixed); a rate limit
+ * is a rate limit.
  */
 function lastfmError(body: LastfmError): ToolFailure | NothingFound {
   const message = `Last.fm error ${body.error ?? "?"}: ${body.message ?? "no message"}`;
   if (body.error === INVALID_PARAMETERS) {
     const notFound = !body.message || /\bnot (?:be )?found\b/i.test(body.message);
-    return { found: false, reason: notFound ? "not_found" : "invalid_request", message };
+    return notAnswered(notFound ? "not_found" : "invalid_request", message);
   }
   if (body.error !== undefined && KEY_REJECTED.has(body.error)) {
-    return failureWith("not_configured", `Last.fm rejected the API key (${message})`);
+    return keyRejected(`Last.fm rejected the API key (${message})`);
   }
   return failureWith(body.error === RATE_LIMITED ? "rate_limited" : "unavailable", message);
 }
@@ -219,10 +223,7 @@ async function askLastfm<T extends object>(
     ([key, value]) => (key === "artist" || key === "track") && !value.trim(),
   );
   if (empty) {
-    return {
-      ok: false,
-      answer: { found: false, reason: "no_input", message: `no ${empty[0]} name to ask for` },
-    };
+    return { ok: false, answer: notAnswered("no_input", `no ${empty[0]} name to ask for`) };
   }
   const result = await callLastfm<T>(request.params, signal);
   if (!result.ok) return result;
@@ -230,11 +231,10 @@ async function askLastfm<T extends object>(
   if (typeof answered === "string" && normalizeName(answered) !== normalizeName(request.artist)) {
     return {
       ok: false,
-      answer: {
-        found: false,
-        reason: "other_artist",
-        message: `Last.fm answered for "${answered}", not "${request.artist}"`,
-      },
+      answer: notAnswered(
+        "other_artist",
+        `Last.fm answered for "${answered}", not "${request.artist}"`,
+      ),
     };
   }
   return result;
@@ -291,7 +291,9 @@ function failure(result: { answer: ToolFailure | NothingFound }): string {
 
 /** A log line for a call that returned no data. */
 function why(result: { answer: ToolFailure | NothingFound }): string {
-  return "error" in result.answer ? result.answer.error : result.answer.message;
+  return "error" in result.answer
+    ? result.answer.error
+    : (result.answer.message ?? result.answer.reason);
 }
 
 /** The artist (and track) Last.fm answered for. */
@@ -489,7 +491,7 @@ export const getLastfmSimilarArtists = tool(
     name: "lastfm_similar_artists",
     description:
       "Get similar artists from Last.fm. Returns up to 5 artists with match scores and MBIDs. " +
-      "Use for genealogy edges and relatedArtists.",
+      "Use for genealogy edges.",
     schema: z.object({
       artist: z.string().describe("The artist name"),
     }),
@@ -517,7 +519,7 @@ export const getLastfmArtistInfo = tool(
 
     const info = result.data.artist;
     if (!info || typeof info.name !== "string") {
-      return JSON.stringify({ found: false, reason: "not_found", message: "Artist not found" });
+      return JSON.stringify(notAnswered("not_found", "Artist not found"));
     }
 
     const tags = cleanTags(info.tags?.tag);
@@ -528,17 +530,19 @@ export const getLastfmArtistInfo = tool(
         name: a.name,
         mbid: a.mbid || undefined,
       }));
-    // Last.fm keeps one page for artists of the same name; its bio then describes several of
-    // them and cannot be attributed to this one.
-    const summary = info.bio?.summary ? cleanBio(info.bio.summary) : undefined;
-    const bio = summary && !SHARED_PAGE.test(summary) ? summary : undefined;
+    // Last.fm keeps one page for artists of the same name: its bio then describes several of
+    // them, and its tags and similar artists mix them. None of it is this artist's.
+    const bio = info.bio?.summary ? cleanBio(info.bio.summary) : undefined;
+    if (bio && SHARED_PAGE.test(bio)) {
+      return JSON.stringify(
+        notAnswered("shared_page", `Last.fm's page for "${info.name}" covers several artists`),
+      );
+    }
 
     if (!bio && tags.length === 0 && similarArtists.length === 0) {
-      return JSON.stringify({
-        found: false,
-        reason: "not_found",
-        message: `Last.fm has no bio, tags or similar artists for "${info.name}"`,
-      });
+      return JSON.stringify(
+        notAnswered("not_found", `Last.fm has no bio, tags or similar artists for "${info.name}"`),
+      );
     }
 
     console.log(`✅ [Last.fm] Got artist info: ${info.name}`);

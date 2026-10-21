@@ -1,6 +1,6 @@
 /**
- * Historian node: song-meaning page text (which can carry lyrics) from research cached
- * before that step was removed never reaches the graph state.
+ * Historian node: the research cache (its key, what blocks it, what a hit reports), and what it
+ * keeps when the research stops early.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ const subgraph = vi.hoisted(() => ({
   during: null as null | (() => void),
 }));
 const STOPPED_STATE = {
-  researchData: { samples: ["Sample A"], productionTrivia: [], relatedArtists: [] },
+  researchData: { samples: ["Sample A"], productionTrivia: [] },
   usage: [{ callSite: "research_planner", tier: "fast", status: "ok" }],
   sourceErrors: [{ source: "lastfm", code: "unavailable" }],
   statusMessages: ["Found samples information"],
@@ -66,15 +66,11 @@ describe("historianNode", () => {
     vi.restoreAllMocks();
   });
 
-  it("drops song-meaning text from cached research", async () => {
+  it("reports the sources stored as not configured on a cache hit", async () => {
     cache.getResearch.mockReturnValue({
       samples: ["Sample A"],
-      productionTrivia: ["Trivia"],
-      songMeaning: [
-        "[Genius Lyrics]\nLINE_ONE_OF_SONG_TEXT",
-        "Song meaning page: LINE_TWO_OF_SONG_TEXT",
-      ],
-      relatedArtists: [],
+      productionTrivia: [],
+      notConfigured: [{ source: "lastfm", code: "not_configured" }],
     });
 
     const out = await historianNode(
@@ -82,12 +78,8 @@ describe("historianNode", () => {
       { writer: () => {} } as never,
     );
 
-    expect(out.researchData).toEqual({
-      samples: ["Sample A"],
-      productionTrivia: ["Trivia"],
-      relatedArtists: [],
-    });
-    expect(JSON.stringify(out)).not.toContain("SONG_TEXT");
+    expect(out.researchData).toEqual({ samples: ["Sample A"], productionTrivia: [] });
+    expect(out.sourceErrors).toEqual([{ source: "lastfm", code: "not_configured" }]);
   });
 
   describe("when the research stops early", () => {

@@ -47,9 +47,16 @@ import {
 } from "../sources/lastfm.js";
 import { getListenBrainzSimilarArtists } from "../sources/listenbrainz.js";
 import { errorRecord } from "../sources/records.js";
-import { readToolResult } from "../sources/toolResult.js";
+import { type NotAskedReason, readToolResult } from "../sources/toolResult.js";
 import type { SourceError, SourceId } from "@liner-notes/contract";
-import type { SpotifyData, ResearchData, ResearchPlan, LlmCallRecord } from "./state.js";
+import {
+  emptyResearch,
+  type LlmCallRecord,
+  mergeResearch,
+  type ResearchData,
+  type ResearchPlan,
+  type SpotifyData,
+} from "./state.js";
 
 export const PLANNER_CALL_SITE = "research_planner";
 /** Output budget of a planner call, reasoning included (fast tier: low effort). */
@@ -76,36 +83,21 @@ export const ResearcherState = Annotation.Root({
 
   // Research data - uses APPENDING reducer for accumulation across iterations
   researchData: Annotation<ResearchData>({
-    reducer: (prev, next) => ({
-      samples: [...prev.samples, ...(next.samples || [])],
-      productionTrivia: [...prev.productionTrivia, ...(next.productionTrivia || [])],
-      relatedArtists: [...prev.relatedArtists, ...(next.relatedArtists || [])],
-      collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
-      lastfmTags: [...(prev.lastfmTags || []), ...(next.lastfmTags || [])],
-      lastfmSimilarTracks: [
-        ...(prev.lastfmSimilarTracks || []),
-        ...(next.lastfmSimilarTracks || []),
-      ],
-      lastfmSimilarArtists: [
-        ...(prev.lastfmSimilarArtists || []),
-        ...(next.lastfmSimilarArtists || []),
-      ],
-      lastfmArtistBio: next.lastfmArtistBio || prev.lastfmArtistBio,
-      listenbrainzSimilarArtists: [
-        ...(prev.listenbrainzSimilarArtists || []),
-        ...(next.listenbrainzSimilarArtists || []),
-      ],
-      noneFound: [...(prev.noneFound || []), ...(next.noneFound || [])],
-      notAsked: [...(prev.notAsked || []), ...(next.notAsked || [])],
-      collaboratorsOf: next.collaboratorsOf || prev.collaboratorsOf,
-    }),
-    default: () => emptyResearch(),
+    reducer: mergeResearch,
+    default: emptyResearch,
   }),
 
-  // The track's own artist on MusicBrainz, once a MusicBrainz step identified it (from the
-  // artist search by its exact name, or the recording's artist credit); ListenBrainz asks
-  // about this artist only.
-  artistMbid: Annotation<ArtistRef | null>({
+  // The track's own artist, resolved at most once per run: identified (by MusicBrainz's link to
+  // the Spotify artist, the recording's credit, or a single exact-name match, which is
+  // unverified), or not identified and why. Every artist-level step reads it.
+  artistResolution: Annotation<ArtistResolution | null>({
+    reducer: (prev, next) => next ?? prev,
+    default: () => null,
+  }),
+
+  // Set when Last.fm's artist-level data cannot be this artist's (several artists share the
+  // name, or Last.fm keeps one page for them): the reason, as a label.
+  lastfmArtistUncertain: Annotation<string | null>({
     reducer: (prev, next) => next ?? prev,
     default: () => null,
   }),
@@ -288,6 +280,32 @@ export interface ArtistRef {
 }
 
 /**
+ * The track's artist as this run resolved it, at most once: identified (`verified` when
+ * MusicBrainz links it to the track's Spotify artist, or it is the identified recording's
+ * credit; else a single exact-name match), or not identified and why.
+ */
+export type ArtistResolution =
+  | ({ status: "identified"; verified: boolean } & ArtistRef)
+  | { status: "not_identified"; reason: NotAskedReason };
+
+/** How a research line says its artist was matched by name only. */
+const UNVERIFIED = "artist matched by name only, not linked to the Spotify artist";
+
+/** Why Last.fm's artist-level data may not be this artist's. */
+const UNCERTAIN = {
+  ambiguous: "several MusicBrainz artists have this name and none is linked to the Spotify artist",
+  shared: "Last.fm keeps one page for several artists of this name",
+} as const;
+
+/** The artist reasons that end the resolution for the run. */
+const UNRESOLVED: ReadonlySet<NotAskedReason> = new Set([
+  "ambiguous_artist",
+  "artist_not_identified",
+  "other_spotify_artist",
+  "no_input",
+]);
+
+/**
  * The track's own artist among a recording's credited artists: the credit whose name (as
  * credited, or the artist's MusicBrainz name) is the track's first artist, else the first credit
  * (the recording search only matches recordings credited to exactly the track's artists). Never
@@ -377,21 +395,31 @@ export type NoneLabel = keyof typeof STEP_LABEL;
  * Tool reasons that mean the source was not asked, or could not identify the track or artist:
  * no answer either way, so never "nothing found". Any other reason is the source's empty answer.
  */
-const NOT_ASKED: Record<string, string> = {
+const NOT_ASKED: Record<NotAskedReason, string> = {
   no_input: "not asked: no name to ask for",
   ambiguous: "not identified: several matching recordings, none picked",
   ambiguous_artist:
     "not asked: several MusicBrainz artists have this name and none is linked to the Spotify artist",
   artist_not_identified: "not asked: no MusicBrainz artist with exactly this name",
+  other_spotify_artist:
+    "not asked: the MusicBrainz artist of this name links to another Spotify artist",
   invalid_request: "not answered: Last.fm refused the request",
   other_artist: "dropped: Last.fm answered for another artist",
+  shared_page: "dropped: Last.fm keeps one page for several artists of this name",
 };
+
+const isNotAsked = (reason: string | null): reason is NotAskedReason =>
+  reason !== null && Object.hasOwn(NOT_ASKED, reason);
 
 /** What a research step read: its data, the sources it could not read, the empty answers. */
 export class StepReader {
   readonly errors: SourceError[] = [];
   readonly none: string[] = [];
   readonly notAsked: string[] = [];
+  /** The sources that refused their key. */
+  readonly rejected = new Set<SourceId>();
+  /** The not-asked reasons of this step's results. */
+  readonly reasons: NotAskedReason[] = [];
 
   /** The data of a found result; null (recorded as an error, empty or not asked) otherwise. */
   read<T extends object = Record<string, unknown>>(
@@ -401,11 +429,25 @@ export class StepReader {
   ): T | null {
     const outcome = readToolResult<T>(source, raw);
     if (outcome.kind === "found") return outcome.data;
-    if (outcome.kind === "failed") this.errors.push(outcome.error);
-    else if (outcome.reason && outcome.reason in NOT_ASKED) {
-      this.notAsked.push(`${STEP_LABEL[label]} (${NOT_ASKED[outcome.reason]})`);
-    } else this.nothing(label);
+    if (outcome.kind === "failed") {
+      this.errors.push(outcome.error);
+      if (outcome.keyRejected) this.rejected.add(outcome.error.source);
+      // Another source failing (MusicBrainz, while ListenBrainz resolves a name) means this
+      // step's own source was never asked.
+      if (outcome.error.source !== source) {
+        this.notAsked.push(
+          `${STEP_LABEL[label]} (not asked: ${SOURCE_NAMES[outcome.error.source]} could not be read)`,
+        );
+      }
+    } else if (isNotAsked(outcome.reason)) this.skip(label, outcome.reason);
+    else this.nothing(label);
     return null;
+  }
+
+  /** Records a step that was not asked, or whose source could not identify the track. */
+  skip(label: NoneLabel, reason: NotAskedReason) {
+    this.reasons.push(reason);
+    this.notAsked.push(`${STEP_LABEL[label]} (${NOT_ASKED[reason]})`);
   }
 
   /** Records a step whose source answered with nothing for the track. */
@@ -414,10 +456,18 @@ export class StepReader {
   }
 }
 
-/** One status line per source that could not be read: "⚠️ Last.fm could not be read (…)". */
-export function unreadableStatus(errors: readonly SourceError[]): string[] {
-  return uniqueErrors(errors).map(
-    (e) => `⚠️ ${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
+/**
+ * One status line per source that could not be read: "⚠️ Last.fm could not be read (…)", or
+ * "⚠️ Last.fm key rejected (…)" for a key the source refused.
+ */
+export function unreadableStatus(
+  errors: readonly SourceError[],
+  rejected: ReadonlySet<SourceId> = new Set(),
+): string[] {
+  return uniqueErrors(errors).map((e) =>
+    rejected.has(e.source)
+      ? `⚠️ ${SOURCE_NAMES[e.source]} key rejected: fix the key (${e.code})`
+      : `⚠️ ${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
   );
 }
 
@@ -458,22 +508,6 @@ function createResearchToolNode(runtime: AgentRuntime) {
     researchToolNode(state, config, runtime);
 }
 
-function emptyResearch(): ResearchData {
-  return {
-    samples: [],
-    productionTrivia: [],
-    relatedArtists: [],
-    collaborators: [],
-    lastfmTags: [],
-    lastfmSimilarTracks: [],
-    lastfmSimilarArtists: [],
-    lastfmArtistBio: undefined,
-    listenbrainzSimilarArtists: [],
-    noneFound: [],
-    notAsked: [],
-  };
-}
-
 /** True when a step added anything to the research. */
 function holdsData(data: ResearchData): boolean {
   return (
@@ -481,9 +515,9 @@ function holdsData(data: ResearchData): boolean {
     [
       data.samples,
       data.productionTrivia,
-      data.relatedArtists,
       data.collaborators,
       data.lastfmTags,
+      data.lastfmArtistTags,
       data.lastfmSimilarTracks,
       data.lastfmSimilarArtists,
       data.listenbrainzSimilarArtists,
@@ -507,12 +541,15 @@ async function researchToolNode(
     return { researchComplete: true };
   }
 
-  const { title, artist, album } = state.spotifyData;
-  // Artist-level questions are about the first credited artist; Last.fm's track questions use
-  // it with the title without a featured-artist note (the joined string is no artist).
+  // The recording search strips a featured-artist note itself, against the credited artists.
+  const { album, title: fullTitle } = state.spotifyData;
+  // Every question is about the first credited artist and the title without a featured-artist
+  // note: the joined Spotify string is no artist, and a quoted search for it finds nothing.
   const query = trackQuery(state.spotifyData);
-  const { primary, names: artistNames, spotifyArtistId } = query;
-  const known = state.artistMbid;
+  const { primary, names: artistNames, spotifyArtistId, title } = query;
+  const resolution = state.artistResolution;
+  const known = resolution?.status === "identified" ? resolution : null;
+  const uncertain = state.lastfmArtistUncertain;
   const label = actionLabel(plan.nextAction);
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
@@ -529,7 +566,8 @@ async function researchToolNode(
   interface Step {
     data: ResearchData;
     reader: StepReader;
-    artist?: ArtistRef;
+    resolution?: ArtistResolution;
+    lastfmUncertain?: string;
   }
 
   // One search attempt; its result is merged into the research by the appending reducer.
@@ -543,12 +581,30 @@ async function researchToolNode(
       if (found && results.length === 0) reader.nothing(none);
       return results.length > 0 ? formatResults(results) : null;
     };
+    /** The artist did not resolve: the run asks no artist-level question about it again. */
+    const unresolved = (label: NoneLabel): boolean => {
+      if (resolution?.status !== "not_identified") return false;
+      reader.skip(label, resolution.reason);
+      return true;
+    };
+    /** Records how the artist resolved, from a tool's not-asked reasons. */
+    const resolvedFrom = () => {
+      const reason = reader.reasons.find((r) => UNRESOLVED.has(r));
+      if (reason) step.resolution = { status: "not_identified", reason };
+      if (reason === "ambiguous_artist") step.lastfmUncertain = UNCERTAIN.ambiguous;
+    };
+    /** Last.fm's artist-level data cannot be this artist's: not asked. */
+    const lastfmUnsure = (label: NoneLabel): boolean => {
+      if (!uncertain) return false;
+      reader.notAsked.push(`${STEP_LABEL[label]} (not asked: ${uncertain})`);
+      return true;
+    };
 
     switch (plan.nextAction) {
       case "search_samples": {
         config.signal?.throwIfAborted();
         const text = webText(
-          await searchSamples.invoke({ songTitle: title, artistName: artist }, options),
+          await searchSamples.invoke({ songTitle: title, artistName: primary }, options),
           "samples",
         );
         if (text) newData.samples.push(text);
@@ -558,7 +614,7 @@ async function researchToolNode(
       case "search_production": {
         config.signal?.throwIfAborted();
         const text = webText(
-          await searchProductionHistory.invoke({ songTitle: title, artistName: artist }, options),
+          await searchProductionHistory.invoke({ songTitle: title, artistName: primary }, options),
           "production",
         );
         if (text) newData.productionTrivia.push(text);
@@ -567,7 +623,7 @@ async function researchToolNode(
 
       case "search_general": {
         // Use the custom query from the plan (for following leads)
-        const lead = plan.query || `${title} ${artist} music history`;
+        const lead = plan.query || `${title} ${primary} music history`;
         config.signal?.throwIfAborted();
         // Classify general results as production trivia
         const text = webText(await searchMusicInfo.invoke({ query: lead }, options), "general");
@@ -584,14 +640,22 @@ async function researchToolNode(
         }>(
           "musicbrainz",
           await getMusicBrainzRelations.invoke(
-            { title, artist, artistNames, ...(album ? { album } : {}) },
+            {
+              title: fullTitle,
+              artist: primary,
+              artistNames,
+              ...(album ? { album } : {}),
+            },
             options,
           ),
           "relations",
         );
         if (!mbData) break;
+        // The identified recording's credit names the artist: verified, and it settles an
+        // earlier name-only match.
         const own = artistFromCredit(mbData.artistCredit, primary);
-        if (own) step.artist = own;
+        if (own && !known?.verified)
+          step.resolution = { status: "identified", verified: true, ...own };
         const { samples = [], covers = [], remixes = [] } = mbData.genealogy ?? {};
         if (samples.length > 0) {
           newData.samples.push(`[MusicBrainz Samples] ${JSON.stringify(samples)}`);
@@ -610,10 +674,12 @@ async function researchToolNode(
 
       case "search_artist_collaborators": {
         // Use MusicBrainz to get artist collaborators (producers, writers)
+        if (unresolved("collaborators")) break;
         config.signal?.throwIfAborted();
         const artistData = reader.read<{
           mbid?: unknown;
           name?: unknown;
+          verified?: unknown;
           collaborators?: Array<{ name?: unknown; relationship?: unknown }>;
         }>(
           "musicbrainz",
@@ -628,11 +694,13 @@ async function researchToolNode(
           ),
           "collaborators",
         );
+        resolvedFrom();
         if (!artistData) break;
-        // The artist an earlier step identified, or the one MusicBrainz names exactly so (told
-        // apart from artists of the same name by its Spotify link): the track's own artist.
         const of = typeof artistData.name === "string" ? artistData.name : primary;
-        if (isMbid(artistData.mbid)) step.artist = { mbid: artistData.mbid, name: of };
+        const verified = artistData.verified === true || known?.verified === true;
+        if (isMbid(artistData.mbid)) {
+          step.resolution = { status: "identified", mbid: artistData.mbid, name: of, verified };
+        }
         const collaborators = (artistData.collaborators ?? []).filter(
           (c): c is { name: string; relationship: string } =>
             typeof c?.name === "string" && typeof c.relationship === "string",
@@ -641,24 +709,33 @@ async function researchToolNode(
           reader.nothing("collaborators");
           break;
         }
+        const list = JSON.stringify(collaborators);
+        if (!verified) {
+          // A single exact-name match: kept as source material that says so, never as the
+          // artist's collaborators (no card is built from it).
+          newData.productionTrivia.push(
+            `[MusicBrainz Artist] ${of} (${UNVERIFIED}) collaborators: ${list}`,
+          );
+          break;
+        }
         newData.collaborators = collaborators.map((c) => `${c.name} (${c.relationship})`);
         newData.collaboratorsOf = of;
-        newData.productionTrivia.push(
-          `[MusicBrainz Artist] ${of} collaborators: ${JSON.stringify(collaborators)}`,
-        );
+        newData.productionTrivia.push(`[MusicBrainz Artist] ${of} collaborators: ${list}`);
         break;
       }
 
       case "search_lastfm_tags": {
-        // Fetch both track and artist tags in parallel
+        // Track tags, and the artist's unless Last.fm's artist page cannot be this artist's.
         config.signal?.throwIfAborted();
         const [trackTags, artistTags] = await Promise.all([
-          getLastfmTrackTags.invoke({ title: query.title, artist: primary }, options),
-          getLastfmArtistTags.invoke({ artist: primary }, options),
+          getLastfmTrackTags.invoke({ title, artist: primary }, options),
+          uncertain ? null : getLastfmArtistTags.invoke({ artist: primary }, options),
         ]);
         const track = reader.read<{ tags?: unknown }>("lastfm", trackTags, "trackTags");
+        newData.lastfmTags = mergeTags([], track?.tags);
+        if (lastfmUnsure("artistTags")) break;
         const byArtist = reader.read<{ tags?: unknown }>("lastfm", artistTags, "artistTags");
-        newData.lastfmTags = mergeTags(mergeTags([], track?.tags), byArtist?.tags);
+        newData.lastfmArtistTags = mergeTags([], byArtist?.tags);
         break;
       }
 
@@ -666,7 +743,7 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const data = reader.read<{ tracks?: unknown }>(
           "lastfm",
-          await getLastfmSimilarTracks.invoke({ title: query.title, artist: primary }, options),
+          await getLastfmSimilarTracks.invoke({ title, artist: primary }, options),
           "similarTracks",
         );
         newData.lastfmSimilarTracks = similarTrackLines(data?.tracks);
@@ -674,6 +751,7 @@ async function researchToolNode(
       }
 
       case "search_lastfm_similar_artists": {
+        if (lastfmUnsure("similarArtists")) break;
         config.signal?.throwIfAborted();
         const data = reader.read<{ artists?: unknown }>(
           "lastfm",
@@ -685,21 +763,17 @@ async function researchToolNode(
       }
 
       case "search_lastfm_artist_info": {
+        if (lastfmUnsure("artistInfo")) break;
         config.signal?.throwIfAborted();
         const data = reader.read<{ bio?: unknown; tags?: unknown; similarArtists?: unknown }>(
           "lastfm",
           await getLastfmArtistInfo.invoke({ artist: primary }, options),
           "artistInfo",
         );
+        if (reader.reasons.includes("shared_page")) step.lastfmUncertain = UNCERTAIN.shared;
         if (!data) break;
-        if (typeof data.bio === "string" && data.bio) {
-          newData.lastfmArtistBio = data.bio;
-          newData.productionTrivia.push(`[Last.fm Bio] ${data.bio}`);
-        }
-        const tagNames = (Array.isArray(data.tags) ? data.tags : [])
-          .filter((t) => typeof t?.name === "string")
-          .map((t) => t.name);
-        if (tagNames.length > 0) newData.lastfmTags = [`[Artist Info] ${tagNames.join(", ")}`];
+        if (typeof data.bio === "string" && data.bio) newData.lastfmArtistBio = data.bio;
+        newData.lastfmArtistTags = mergeTags([], data.tags);
         // Artist info lists similar artists without a match value: names in Last.fm's order.
         newData.lastfmSimilarArtists = (
           Array.isArray(data.similarArtists) ? data.similarArtists : []
@@ -710,10 +784,14 @@ async function researchToolNode(
       }
 
       case "search_listenbrainz_similar": {
-        // Only the track's own artist: its MBID from an earlier MusicBrainz step, else its
-        // exact name, which the tool resolves on MusicBrainz (and skips when it cannot).
+        // Only the track's own artist, resolved once per run: its MBID when known, else its
+        // name, which the tool resolves on MusicBrainz (through the Spotify link first).
+        if (unresolved("listenbrainz")) break;
         config.signal?.throwIfAborted();
-        const data = reader.read<{ artist?: { name?: unknown }; artists?: unknown }>(
+        const data = reader.read<{
+          artist?: { mbid?: unknown; name?: unknown; verified?: unknown };
+          artists?: unknown;
+        }>(
           "listenbrainz",
           await getListenBrainzSimilarArtists.invoke(
             known
@@ -727,9 +805,17 @@ async function researchToolNode(
           ),
           "listenbrainz",
         );
+        resolvedFrom();
         const of =
           typeof data?.artist?.name === "string" ? data.artist.name : (known?.name ?? primary);
-        newData.listenbrainzSimilarArtists = listenBrainzLines(data?.artists, of);
+        const verified = known ? known.verified : data?.artist?.verified === true;
+        if (!known && isMbid(data?.artist?.mbid)) {
+          step.resolution = { status: "identified", mbid: data.artist.mbid, name: of, verified };
+        }
+        newData.listenbrainzSimilarArtists = listenBrainzLines(
+          data?.artists,
+          verified ? of : `${of} (${UNVERIFIED})`,
+        );
         break;
       }
     }
@@ -748,7 +834,7 @@ async function researchToolNode(
     const errors = uniqueErrors(step.reader.errors);
     console.log(`✅ [Research Tool] Read ${plan.nextAction} (${errors.length} source errors)`);
     // The status says what happened: a source that could not be read is never "found".
-    const warnings = unreadableStatus(errors);
+    const warnings = unreadableStatus(errors, step.reader.rejected);
     for (const message of warnings) {
       writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
     }
@@ -769,7 +855,8 @@ async function researchToolNode(
     return {
       researchData: step.data,
       sourceErrors: errors,
-      ...(step.artist ? { artistMbid: step.artist } : {}),
+      ...(step.resolution ? { artistResolution: step.resolution } : {}),
+      ...(step.lastfmUncertain ? { lastfmArtistUncertain: step.lastfmUncertain } : {}),
       statusMessages: status,
     };
   } catch (error) {

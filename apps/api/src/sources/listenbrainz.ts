@@ -15,7 +15,7 @@ import { z } from "zod";
 import dotenv from "dotenv";
 import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
 import { ARTIST_REASON, findArtist, isMbid } from "./musicbrainz.js";
-import { toolFailure } from "./toolResult.js";
+import { notAnswered, toolFailure } from "./toolResult.js";
 
 dotenv.config();
 
@@ -103,20 +103,26 @@ export const getListenBrainzSimilarArtists = tool(
     const signal = config?.signal;
     try {
       // The artist's own MBID: given, or resolved from its exact name on MusicBrainz.
-      let artist = isMbid(artistMbid) ? { mbid: artistMbid, name: artistName ?? null } : null;
+      // `verified`: linked to the track's Spotify artist on MusicBrainz (an MBID given by the
+      // caller is the caller's to vouch for); false: a single exact-name match.
+      let artist: { mbid: string; name: string | null; verified: boolean } | null = isMbid(
+        artistMbid,
+      )
+        ? { mbid: artistMbid, name: artistName ?? null, verified: false }
+        : null;
       if (!artist) {
         console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName ?? ""}"...`);
         const match = await findArtist(artistName ?? "", { artistNames, spotifyArtistId, signal });
         if (!match.artist) {
           // Nothing is asked of ListenBrainz for an artist MusicBrainz cannot identify, nor for a
           // request without a name (our input, not the source, is missing).
-          return JSON.stringify({
-            found: false,
-            reason: ARTIST_REASON[match.reason],
-            message: match.detail,
-          });
+          return JSON.stringify(notAnswered(ARTIST_REASON[match.reason], match.detail));
         }
-        artist = { mbid: match.artist.id, name: match.artist.name };
+        artist = {
+          mbid: match.artist.id,
+          name: match.artist.name,
+          verified: match.via === "spotify",
+        };
         console.log(`✅ [ListenBrainz] Resolved MBID: ${match.artist.id}`);
       }
 
@@ -126,7 +132,7 @@ export const getListenBrainzSimilarArtists = tool(
       return JSON.stringify(
         artists.length > 0
           ? { found: true, artist, artists }
-          : { found: false, reason: "no_similar_artists", artist },
+          : { ...notAnswered("no_similar_artists"), artist },
       );
     } catch (error) {
       // A cancelled run rejects: nothing is reported for it.
@@ -141,7 +147,7 @@ export const getListenBrainzSimilarArtists = tool(
     description:
       "Get similar artists from ListenBrainz (open-source, based on listening patterns). " +
       "Accepts artist MBID directly or artist name (auto-resolves via MusicBrainz). " +
-      "No API key required. Use for genealogy and relatedArtists supplementation.",
+      "No API key required. Use for genealogy connections.",
     schema: z.object({
       artistMbid: z
         .string()
@@ -158,7 +164,7 @@ export const getListenBrainzSimilarArtists = tool(
       spotifyArtistId: z
         .string()
         .optional()
-        .describe("The artist's Spotify id, to tell artists with the same name apart"),
+        .describe("The artist's Spotify id: MusicBrainz's link to it identifies the artist"),
     }),
   },
 );

@@ -101,15 +101,23 @@ const MB_ARTISTS: Record<string, Array<{ id: string; name: string; disambiguatio
     { id: NIRVANA_US, name: "Nirvana", disambiguation: "90s US grunge band" },
   ],
 };
-const MB_RELATIONS: Record<
-  string,
-  Array<{ type: string; artist: { id: string; name: string } }>
-> = {
+/** A MusicBrainz URL relationship to a Spotify artist page. */
+const spotifyPage = (id: string) => ({
+  type: "free streaming",
+  url: { resource: `https://open.spotify.com/artist/${id}` },
+});
+const MB_RELATIONS: Record<string, unknown[]> = {
   [NIRVANA_UK]: [
     { type: "collaboration", artist: { id: MC_HAMMER, name: "Patrick Campbell-Lyons" } },
   ],
-  [NIRVANA_US]: [{ type: "producer", artist: { id: MC_HAMMER, name: "Butch Vig" } }],
-  [RAMSEY_LEWIS]: [{ type: "producer", artist: { id: EWF, name: "Maurice White" } }],
+  [NIRVANA_US]: [
+    spotifyPage(NIRVANA_SPOTIFY),
+    { type: "collaboration", artist: { id: MC_HAMMER, name: "Butch Vig" } },
+  ],
+  [RAMSEY_LEWIS]: [
+    spotifyPage("4lIzVkCnD6VzWRmV2Rgt7v"),
+    { type: "collaboration", artist: { id: EWF, name: "Maurice White" } },
+  ],
 };
 
 interface Network {
@@ -154,8 +162,17 @@ function network(options: Network = {}) {
       const attr = { "@attr": { artist } };
       switch (param(call, "method")) {
         case "track.getTopTags":
-        case "artist.getTopTags":
           return json({ toptags: { tag: [{ name: "hip hop", count: 100 }], ...attr } });
+        case "artist.getTopTags":
+          return json({
+            toptags: {
+              tag: [
+                { name: "hip hop", count: 100 },
+                { name: "old school", count: 80 },
+              ],
+              ...attr,
+            },
+          });
         case "track.getSimilar":
           return json({
             similartracks: {
@@ -167,7 +184,7 @@ function network(options: Network = {}) {
             },
           });
         case "artist.getSimilar":
-          // Probe R1: the first similar artist carries its own MBID.
+          // The first similar artist carries its own MBID (never to be taken for the track's).
           return json({
             similarartists: {
               artist: [
@@ -351,7 +368,9 @@ describe("research inputs", () => {
       network();
       const { prompts } = await historian(ICE);
 
-      expect(prompts[0].user).toContain('"lastfmTags":1,"lastfmSimilarTracks":2');
+      expect(prompts[0].user).toContain(
+        '"lastfmTags":1,"lastfmArtistTags":1,"lastfmSimilarTracks":2',
+      );
     });
   });
 
@@ -416,8 +435,9 @@ describe("research inputs", () => {
       "1. MC Hammer (Last.fm match 1.00, relative to its closest match = 1)",
     );
     expect(data.listenbrainzSimilarArtists?.[0]).toBe(
-      "1. Hammer fan (similar to Vanilla Ice; ListenBrainz co-listening score 900, higher is " +
-        "more similar, no fixed maximum)",
+      "1. Hammer fan (similar to Vanilla Ice (artist matched by name only, not linked to the " +
+        "Spotify artist); ListenBrainz co-listening score 900, higher is more similar, no fixed " +
+        "maximum)",
     );
     expect(textOf(data)).not.toContain("%");
     expect(textOf(data)).not.toContain("scale 0-1");
@@ -428,7 +448,7 @@ describe("research inputs", () => {
   });
 
   describe("ListenBrainz is asked about the track's own artist", () => {
-    it("never with a similar artist's MBID (probe R1)", async () => {
+    it("never with a similar artist's MBID", async () => {
       const net = network();
       const final = await research(
         ICE,
@@ -469,7 +489,7 @@ describe("research inputs", () => {
     });
   });
 
-  describe("artists of the same name (A-H1)", () => {
+  describe("artists of the same name", () => {
     it("takes the homonym MusicBrainz links to the Spotify artist, for ListenBrainz and collaborators", async () => {
       const net = network({ spotifyLinks: { [NIRVANA_SPOTIFY]: NIRVANA_US } });
       const final = await research(
@@ -485,7 +505,7 @@ describe("research inputs", () => {
         `/ws/2/artist/${NIRVANA_US}`,
       ]);
       expect(to(net.calls, LABS).map(labsMbid)).toEqual([NIRVANA_US]);
-      expect(final.researchData.collaborators).toEqual(["Butch Vig (producer)"]);
+      expect(final.researchData.collaborators).toEqual(["Butch Vig (collaboration)"]);
       expect(textOf(final.researchData)).not.toContain("Patrick Campbell-Lyons");
     });
 
@@ -514,7 +534,7 @@ describe("research inputs", () => {
     });
   });
 
-  describe("a multi-artist track (A-M1, A-M3)", () => {
+  describe("a multi-artist track", () => {
     it("asks Last.fm about the first artist and the title without a featured-artist note", async () => {
       const net = network();
       const track = { ...SUN_GODDESS, title: "Sun Goddess (feat. Earth, Wind & Fire)" };
@@ -569,7 +589,7 @@ describe("research inputs", () => {
         researchData: final.researchData,
       } as unknown as SonicAgentStateType);
       expect(fallback.factoids.map((f) => f.content)).toContain(
-        "Ramsey Lewis has worked with: Maurice White (producer).",
+        "Ramsey Lewis has worked with: Maurice White (collaboration).",
       );
     });
 
@@ -632,26 +652,40 @@ describe("research inputs", () => {
       ]);
     });
 
-    it("a rejected Last.fm key is reported as such and does not block the cache", async () => {
+    it("a rejected Last.fm key says so and blocks the cache until it is fixed", async () => {
       network({
-        lastfmAnswer: () =>
-          json(
-            { error: 10, message: "Invalid API key - You must be granted a valid key" },
-            {
-              status: 403,
-            },
-          ),
+        lastfmAnswer: () => json({ error: 10, message: "Invalid API key" }, { status: 403 }),
       });
       const { out } = await historian(ICE);
 
       expect(out.sourceErrors).toEqual([
         expect.objectContaining({
           source: "lastfm",
-          code: "not_configured",
+          code: "unavailable",
           message: expect.stringContaining("Last.fm rejected the API key"),
         }),
       ]);
-      expect(store.puts).toHaveLength(1);
+      expect(out.statusMessages).toContain("⚠️ Last.fm key rejected: fix the key (unavailable)");
+      expect(store.puts).toEqual([]);
+    });
+
+    it("a rejected Tavily key says so and blocks the cache until it is fixed", async () => {
+      const net = network();
+      const route = globalThis.fetch;
+      vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) =>
+        String(input instanceof Request ? input.url : input) === TAVILY
+          ? Promise.resolve(json({ detail: { error: "Unauthorized" } }, { status: 401 }))
+          : route(input, init),
+      );
+      const first = await historian(ICE);
+      const second = await historian(ICE);
+
+      expect(first.out.statusMessages).toContain(
+        "⚠️ Web search (Tavily) key rejected: fix the key (unavailable)",
+      );
+      expect(store.puts).toEqual([]);
+      expect(second.plannerCalls).toBe(1);
+      expect(net.calls).not.toHaveLength(0);
     });
 
     it("a passing failure still blocks the cache", async () => {
@@ -693,6 +727,199 @@ describe("research inputs", () => {
       expect(artistFromCredit([{ name: "X", mbid: "not-an-mbid" }], "X")).toBeNull();
       expect(artistFromCredit(undefined, "X")).toBeNull();
     });
+  });
+
+  describe("the track's artist is resolved once per run", () => {
+    const NOVA = "77777777-7777-4777-8777-777777777777";
+    const NOVA_SPOTIFY = "0123456789abcdefABCDEF";
+    const NOVA_TRACK = {
+      id: "nova-track",
+      title: "Some Song",
+      artist: "Nova",
+      artistNames: ["Nova"],
+      artistIds: [NOVA_SPOTIFY],
+      album: "Some Album",
+    } as SpotifyData;
+    const counts = (calls: FetchCall[]) => ({
+      search: to(calls, `${MB}artist?`).length,
+      link: to(calls, `${MB}url?`).length,
+      lookup: to(calls, `${MB}artist/`).length,
+      labs: to(calls, LABS).length,
+    });
+    beforeEach(() => {
+      MB_ARTISTS.Nova = [{ id: NOVA, name: "Nova" }];
+    });
+    afterEach(() => {
+      delete MB_ARTISTS.Nova;
+      delete MB_RELATIONS[NOVA];
+    });
+
+    it("a single name match whose Spotify link names another artist is not used", async () => {
+      MB_RELATIONS[NOVA] = [
+        spotifyPage("ZYXWVUTSRQPONMLKJIHGFE"),
+        { type: "collaboration", artist: { id: MC_HAMMER, name: "Corrado Rustici" } },
+      ];
+      const net = network({ tavily: false });
+      const final = await research(
+        NOVA_TRACK,
+        "search_artist_collaborators",
+        "search_listenbrainz_similar",
+      ).run();
+
+      expect(final.researchData.collaborators).toEqual([]);
+      expect(textOf(final.researchData)).not.toContain("Corrado Rustici");
+      expect(to(net.calls, LABS)).toHaveLength(0);
+      expect(final.researchData.notAsked).toEqual([
+        "MusicBrainz collaborators of the artist (not asked: the MusicBrainz artist of this " +
+          "name links to another Spotify artist)",
+        "ListenBrainz similar artists (not asked: the MusicBrainz artist of this name links to " +
+          "another Spotify artist)",
+      ]);
+    });
+
+    it("a single name match without a Spotify link is marked unverified, never a card", async () => {
+      MB_RELATIONS[NOVA] = [
+        { type: "collaboration", artist: { id: MC_HAMMER, name: "Corrado Rustici" } },
+      ];
+      network({ tavily: false });
+      const final = await research(
+        NOVA_TRACK,
+        "search_artist_collaborators",
+        "search_listenbrainz_similar",
+      ).run();
+
+      expect(final.researchData.collaborators).toEqual([]);
+      expect(final.researchData.productionTrivia.join("\n")).toContain(
+        "[MusicBrainz Artist] Nova (artist matched by name only, not linked to the Spotify " +
+          "artist) collaborators:",
+      );
+      expect(final.researchData.listenbrainzSimilarArtists?.[0]).toContain(
+        "similar to Nova (artist matched by name only, not linked to the Spotify artist)",
+      );
+      const fallback = await createFallbackTrackData({
+        spotifyData: NOVA_TRACK,
+        researchData: final.researchData,
+      } as unknown as SonicAgentStateType);
+      expect(fallback.factoids.map((f) => f.title)).not.toContain("Collaboration Network");
+    });
+
+    it("artists of the same name: asked once, then both artist steps are skipped", async () => {
+      const net = network({ tavily: false });
+      await research(LITHIUM, "search_artist_collaborators", "search_listenbrainz_similar").run();
+
+      expect(counts(net.calls)).toEqual({ search: 1, link: 1, lookup: 0, labs: 0 });
+    });
+
+    it("ListenBrainz's resolved artist serves the collaborators step, without another search", async () => {
+      const net = network({ tavily: false, spotifyLinks: { [NIRVANA_SPOTIFY]: NIRVANA_US } });
+      const final = await research(
+        LITHIUM,
+        "search_listenbrainz_similar",
+        "search_artist_collaborators",
+      ).run();
+
+      expect(counts(net.calls)).toEqual({ search: 0, link: 1, lookup: 1, labs: 1 });
+      expect(to(net.calls, `${MB}artist/`)[0].url).toContain(NIRVANA_US);
+      expect(final.researchData.collaborators).toEqual(["Butch Vig (collaboration)"]);
+    });
+
+    it("the same for an artist found by name", async () => {
+      const net = network({ tavily: false });
+      await research(
+        SUN_GODDESS,
+        "search_listenbrainz_similar",
+        "search_artist_collaborators",
+      ).run();
+
+      expect(counts(net.calls)).toEqual({ search: 1, link: 1, lookup: 1, labs: 1 });
+    });
+
+    it("a MusicBrainz failure while ListenBrainz resolves the name is recorded as not asked", async () => {
+      network({ musicbrainzBusy: true, tavily: false });
+      const final = await research(ICE, "search_listenbrainz_similar").run();
+
+      expect(final.researchData.notAsked).toContain(
+        "ListenBrainz similar artists (not asked: MusicBrainz could not be read)",
+      );
+    });
+  });
+
+  describe("Last.fm's artist-level data when the artist is uncertain", () => {
+    it("is dropped when several artists share the name", async () => {
+      network({ tavily: false });
+      const { out } = await historian(
+        LITHIUM,
+        "search_artist_collaborators",
+        "search_lastfm_similar_artists",
+      );
+
+      expect(out.researchData?.lastfmArtistTags).toEqual([]);
+      expect(textOf(out.researchData)).not.toContain("old school");
+      expect(out.researchData?.lastfmSimilarArtists).toEqual([]);
+      expect(out.researchData?.lastfmTags).toEqual(["hip hop (100)"]);
+      expect(out.researchData?.notAsked).toEqual(
+        expect.arrayContaining([
+          "Last.fm similar artists (not asked: several MusicBrainz artists have this name and " +
+            "none is linked to the Spotify artist)",
+          "Last.fm artist tags, similar artists and bio (dropped: several MusicBrainz artists " +
+            "have this name and none is linked to the Spotify artist)",
+        ]),
+      );
+    });
+
+    it("is dropped when Last.fm keeps one page for several artists of the name", async () => {
+      const net = network({ tavily: false });
+      const route = globalThis.fetch;
+      vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (
+          url.startsWith(LASTFM) &&
+          new URL(url).searchParams.get("method") === "artist.getTopTags"
+        ) {
+          return Promise.resolve(
+            json({
+              toptags: {
+                tag: [{ name: "grunge", count: 100 }],
+                "@attr": { artist: "Vanilla Ice" },
+              },
+            }),
+          );
+        }
+        if (
+          url.startsWith(LASTFM) &&
+          new URL(url).searchParams.get("method") === "artist.getInfo"
+        ) {
+          return Promise.resolve(
+            json({
+              artist: {
+                name: "Vanilla Ice",
+                bio: { summary: "There are multiple artists with this name: 1) a rapper…" },
+              },
+            }),
+          );
+        }
+        return route(input, init);
+      });
+      const { out } = await historian(ICE, "search_lastfm_artist_info");
+
+      expect(out.researchData?.lastfmArtistTags).toEqual([]);
+      expect(textOf(out.researchData)).not.toContain("grunge");
+      expect(out.researchData?.notAsked).toContain(
+        "Last.fm artist tags, similar artists and bio (dropped: Last.fm keeps one page for " +
+          "several artists of this name)",
+      );
+      expect(net.calls).not.toHaveLength(0);
+    });
+  });
+
+  it("web searches name the first artist and the title without a featured-artist note", async () => {
+    const net = network();
+    await research({ ...SUN_GODDESS, title: "Sun Goddess (feat. Earth, Wind & Fire)" }).run();
+
+    const [search] = to(net.calls, TAVILY);
+    expect(JSON.parse(search.body ?? "{}").query).toBe(
+      '"Sun Goddess" "Ramsey Lewis" sampled by OR samples from whosampled',
+    );
   });
 
   it("no longer offers the removed Spotify top-tracks step", () => {

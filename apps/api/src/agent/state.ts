@@ -171,25 +171,17 @@ export interface AudioFeatures {
 export interface ResearchData {
   samples: string[];
   productionTrivia: string[];
-  /**
-   * No longer collected: song-meaning web pages can quote the song. Optional only so research
-   * cached before its removal still type-checks; it is dropped when that research is read.
-   */
-  songMeaning?: string[];
-  /**
-   * No longer written: similar artists are kept in `lastfmSimilarArtists` and
-   * `listenbrainzSimilarArtists`, by rank. Required only so research cached before still parses.
-   */
-  relatedArtists: string[];
-  /** Artist collaborators from MusicBrainz */
+  /** Artist collaborators from MusicBrainz (only for an artist linked to the track's Spotify artist) */
   collaborators?: string[];
-  /** Genre/style tags from Last.fm (track + artist combined) */
+  /** Genre/style tags of the track from Last.fm */
   lastfmTags?: string[];
+  /** Genre/style tags of the track's artist from Last.fm (dropped when the artist is uncertain) */
+  lastfmArtistTags?: string[];
   /** Similar tracks from Last.fm */
   lastfmSimilarTracks?: string[];
-  /** Similar artists from Last.fm */
+  /** Similar artists from Last.fm (dropped when the artist is uncertain) */
   lastfmSimilarArtists?: string[];
-  /** Artist biography snippet from Last.fm */
+  /** Artist biography snippet from Last.fm (dropped when the artist is uncertain) */
   lastfmArtistBio?: string;
   /** Similar artists from ListenBrainz (open-source listening data) */
   listenbrainzSimilarArtists?: string[];
@@ -200,16 +192,56 @@ export interface ResearchData {
   noneFound?: string[];
   /**
    * Research steps not asked, or whose source could not identify the track or artist (labels
-   * written by code, e.g. "ListenBrainz similar artists (skipped: …)"): no answer either way.
+   * written by code, e.g. "ListenBrainz similar artists (not asked: …)"): no answer either way.
    */
   notAsked?: string[];
   /** The artist `collaborators` belong to, as MusicBrainz names it (one artist of the track). */
   collaboratorsOf?: string;
   /**
-   * Only in the research cache: the sources that were not configured (or whose key was rejected)
-   * when this research was made, restored as the run's source errors on a cache hit.
+   * Only in the research cache: the sources that were not configured when this research was
+   * made, restored as the run's source errors on a cache hit.
    */
   notConfigured?: SourceError[];
+}
+
+/** Research with nothing in it. */
+export function emptyResearch(): ResearchData {
+  return {
+    samples: [],
+    productionTrivia: [],
+    collaborators: [],
+    lastfmTags: [],
+    lastfmArtistTags: [],
+    lastfmSimilarTracks: [],
+    lastfmSimilarArtists: [],
+    lastfmArtistBio: undefined,
+    listenbrainzSimilarArtists: [],
+    noneFound: [],
+    notAsked: [],
+  };
+}
+
+const appended = (a: string[] | undefined, b: string[] | undefined) => [...(a ?? []), ...(b ?? [])];
+
+/** `next` appended to `prev`, list by list (the reducer of research in the graph and the subgraph). */
+export function mergeResearch(prev: ResearchData, next: Partial<ResearchData>): ResearchData {
+  return {
+    samples: appended(prev.samples, next.samples),
+    productionTrivia: appended(prev.productionTrivia, next.productionTrivia),
+    collaborators: appended(prev.collaborators, next.collaborators),
+    lastfmTags: appended(prev.lastfmTags, next.lastfmTags),
+    lastfmArtistTags: appended(prev.lastfmArtistTags, next.lastfmArtistTags),
+    lastfmSimilarTracks: appended(prev.lastfmSimilarTracks, next.lastfmSimilarTracks),
+    lastfmSimilarArtists: appended(prev.lastfmSimilarArtists, next.lastfmSimilarArtists),
+    lastfmArtistBio: next.lastfmArtistBio || prev.lastfmArtistBio,
+    listenbrainzSimilarArtists: appended(
+      prev.listenbrainzSimilarArtists,
+      next.listenbrainzSimilarArtists,
+    ),
+    noneFound: appended(prev.noneFound, next.noneFound),
+    notAsked: appended(prev.notAsked, next.notAsked),
+    collaboratorsOf: next.collaboratorsOf || prev.collaboratorsOf,
+  };
 }
 
 // =============================================================================
@@ -338,42 +370,8 @@ export const SonicAgentState = Annotation.Root({
   // Uses accumulation reducer: [...prev.X, ...next.X] (not replace) because
   // engineerNode and historianNode run in parallel and both contribute research data.
   researchData: Annotation<ResearchData>({
-    reducer: (prev, next) => ({
-      samples: [...prev.samples, ...next.samples],
-      productionTrivia: [...prev.productionTrivia, ...next.productionTrivia],
-      relatedArtists: [...prev.relatedArtists, ...next.relatedArtists],
-      collaborators: [...(prev.collaborators || []), ...(next.collaborators || [])],
-      lastfmTags: [...(prev.lastfmTags || []), ...(next.lastfmTags || [])],
-      lastfmSimilarTracks: [
-        ...(prev.lastfmSimilarTracks || []),
-        ...(next.lastfmSimilarTracks || []),
-      ],
-      lastfmSimilarArtists: [
-        ...(prev.lastfmSimilarArtists || []),
-        ...(next.lastfmSimilarArtists || []),
-      ],
-      lastfmArtistBio: next.lastfmArtistBio || prev.lastfmArtistBio,
-      listenbrainzSimilarArtists: [
-        ...(prev.listenbrainzSimilarArtists || []),
-        ...(next.listenbrainzSimilarArtists || []),
-      ],
-      noneFound: [...(prev.noneFound || []), ...(next.noneFound || [])],
-      notAsked: [...(prev.notAsked || []), ...(next.notAsked || [])],
-      collaboratorsOf: next.collaboratorsOf || prev.collaboratorsOf,
-    }),
-    default: () => ({
-      samples: [],
-      productionTrivia: [],
-      relatedArtists: [],
-      collaborators: [],
-      lastfmTags: [],
-      lastfmSimilarTracks: [],
-      lastfmSimilarArtists: [],
-      lastfmArtistBio: undefined,
-      listenbrainzSimilarArtists: [],
-      noneFound: [],
-      notAsked: [],
-    }),
+    reducer: mergeResearch,
+    default: emptyResearch,
   }),
 
   // Final output

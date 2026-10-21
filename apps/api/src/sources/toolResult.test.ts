@@ -6,7 +6,15 @@
 import { SourceError as SourceErrorSchema } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import { SourceError } from "./http.js";
-import { failureWith, readToolResult, sourceErrorCode, toolFailure } from "./toolResult.js";
+import {
+  failureWith,
+  keyRejected,
+  NOT_ASKED_REASONS,
+  notAnswered,
+  readToolResult,
+  sourceErrorCode,
+  toolFailure,
+} from "./toolResult.js";
 
 describe("readToolResult", () => {
   it("reads found data", () => {
@@ -29,6 +37,7 @@ describe("readToolResult", () => {
     const raw = JSON.stringify(failureWith("rate_limited", "Last.fm error 29: slow down"));
     expect(readToolResult("lastfm", raw)).toEqual({
       kind: "failed",
+      keyRejected: false,
       error: { source: "lastfm", code: "rate_limited", message: "Last.fm error 29: slow down" },
     });
   });
@@ -36,6 +45,7 @@ describe("readToolResult", () => {
   it.each(SourceErrorSchema.shape.code.options)("reads every contract code, here %s", (code) => {
     expect(readToolResult("lastfm", JSON.stringify({ found: false, code, error: "x" }))).toEqual({
       kind: "failed",
+      keyRejected: false,
       error: { source: "lastfm", code, message: "x" },
     });
   });
@@ -44,6 +54,7 @@ describe("readToolResult", () => {
     const raw = JSON.stringify(toolFailure(new SourceError("musicbrainz", "rate_limited", "503")));
     expect(readToolResult("listenbrainz", raw)).toMatchObject({
       kind: "failed",
+      keyRejected: false,
       error: { source: "musicbrainz", code: "rate_limited" },
     });
     // A source outside the contract (the audio service) is not a research source.
@@ -53,10 +64,27 @@ describe("readToolResult", () => {
     });
   });
 
+  it("reads a rejected key as a failure the consumers can tell apart", () => {
+    const raw = JSON.stringify(keyRejected("Last.fm rejected the API key"));
+    expect(readToolResult("lastfm", raw)).toEqual({
+      kind: "failed",
+      keyRejected: true,
+      error: { source: "lastfm", code: "unavailable", message: "Last.fm rejected the API key" },
+    });
+  });
+
+  it.each(NOT_ASKED_REASONS)("passes the typed reason %s on", (reason) => {
+    expect(readToolResult("lastfm", JSON.stringify(notAnswered(reason)))).toEqual({
+      kind: "none",
+      reason,
+    });
+  });
+
   it("reads #11's unavailable marker without a code as not configured", () => {
     const raw = JSON.stringify({ found: false, unavailable: true, error: "no key" });
     expect(readToolResult("lastfm", raw)).toEqual({
       kind: "failed",
+      keyRejected: false,
       error: { source: "lastfm", code: "not_configured", message: "no key" },
     });
   });
@@ -65,6 +93,7 @@ describe("readToolResult", () => {
     const raw = JSON.stringify({ found: false, error: "boom" });
     expect(readToolResult("listenbrainz", raw)).toMatchObject({
       kind: "failed",
+      keyRejected: false,
       error: { source: "listenbrainz", code: "unavailable" },
     });
   });
@@ -77,6 +106,7 @@ describe("readToolResult", () => {
   ])("reads %s as an invalid response", (_name, raw) => {
     expect(readToolResult("musicbrainz", raw)).toEqual({
       kind: "failed",
+      keyRejected: false,
       error: {
         source: "musicbrainz",
         code: "invalid_response",

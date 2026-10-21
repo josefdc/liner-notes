@@ -95,7 +95,6 @@ function network(scenario: Scenario) {
 const LISTS: Array<keyof ResearchData> = [
   "samples",
   "productionTrivia",
-  "relatedArtists",
   "collaborators",
   "lastfmTags",
   "lastfmSimilarTracks",

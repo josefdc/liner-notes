@@ -5,7 +5,7 @@
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { searchMultipleTracks } from "../../sources/spotify.js";
-import { TRACKS_NAMESPACE } from "../cacheKeys.js";
+import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { isAbortError, withRetry, TransientError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
@@ -25,7 +25,11 @@ export async function scoutNode(
   // Check long-term memory for cached result
   if (store) {
     try {
-      const cached = await store.get(TRACKS_NAMESPACE, normalizedQuery);
+      // The key names the configured sources: adding a key later composes the result again.
+      const cached = await store.get(
+        TRACKS_NAMESPACE,
+        resultCacheKey(normalizedQuery, configuredSources()),
+      );
       if (
         cached?.value?.trackData &&
         runtime.now().getTime() - cached.value.timestamp < CACHE_TTL_MS

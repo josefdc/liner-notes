@@ -60,7 +60,12 @@ vi.mock("../sources/listenbrainz.js", () => ({
 
 import { LlmError } from "../llm/errors.js";
 import { TransientError } from "./errors.js";
-import { MAX_PLANNED_STEPS, actionLabel, createResearcherSubgraph } from "./researcherSubgraph.js";
+import {
+  MAX_PLANNED_STEPS,
+  StepReader,
+  actionLabel,
+  createResearcherSubgraph,
+} from "./researcherSubgraph.js";
 import type { SpotifyData } from "./state.js";
 import { messagesOf, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
@@ -227,5 +232,22 @@ describe("researcher subgraph", () => {
 
   it("names a step with every underscore replaced", () => {
     expect(actionLabel("search_lastfm_similar_tracks")).toBe("lastfm similar tracks");
+  });
+
+  it("reads only its own not-asked reasons as 'not asked', never an inherited name", () => {
+    const reader = new StepReader();
+    for (const reason of ["constructor", "toString", "__proto__"]) {
+      reader.read("lastfm", JSON.stringify({ found: false, reason }), "artistInfo");
+    }
+    reader.read("lastfm", JSON.stringify({ found: false, reason: "shared_page" }), "artistInfo");
+
+    expect(reader.none).toEqual([
+      "Last.fm artist info",
+      "Last.fm artist info",
+      "Last.fm artist info",
+    ]);
+    expect(reader.notAsked).toEqual([
+      "Last.fm artist info (dropped: Last.fm keeps one page for several artists of this name)",
+    ]);
   });
 });

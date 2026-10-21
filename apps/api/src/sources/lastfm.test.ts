@@ -185,7 +185,7 @@ describe("Last.fm tools with a key", () => {
     [26, "Suspended API key - Access for your account has been suspended"],
     [4, "Authentication Failed"],
   ])(
-    "reads Last.fm's error %s as a rejected key (lasting, like a missing key)",
+    "reads Last.fm's error %s as a rejected key (an operator error, not 'not configured')",
     async (error, message) => {
       stubFetch((call) =>
         call.url.startsWith(API) ? json({ error, message }, { status: 403 }) : undefined,
@@ -195,9 +195,9 @@ describe("Last.fm tools with a key", () => {
 
       expect(data).toEqual({
         found: false,
-        code: "not_configured",
+        code: "unavailable",
         error: `Last.fm rejected the API key (Last.fm error ${error}: ${message})`,
-        unavailable: true,
+        keyRejected: true,
       });
     },
   );
@@ -264,7 +264,7 @@ describe("Last.fm tools with a key", () => {
     expect(data).toEqual({ found: true, tags: [{ name: "funk", count: 90 }] });
   });
 
-  it("leaves out the bio of a page Last.fm shares between artists of the same name", async () => {
+  it("uses nothing of a page Last.fm shares between artists of the same name", async () => {
     stubFetch((call) =>
       call.url.startsWith(API)
         ? json({
@@ -279,8 +279,9 @@ describe("Last.fm tools with a key", () => {
 
     const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Nirvana" }));
 
-    expect(data).toMatchObject({ found: true, name: "Nirvana" });
-    expect(data.bio).toBeUndefined();
+    // Its tags and similar artists mix the artists too: nothing of the page is used.
+    expect(data).toMatchObject({ found: false, reason: "shared_page" });
+    expect(data).not.toHaveProperty("tags");
   });
 
   it("reads artist info with no bio, tags or similar artists as nothing found", async () => {

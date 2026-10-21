@@ -58,9 +58,9 @@ const ResearchSchema = z
   .object({
     samples: stringList,
     productionTrivia: stringList,
-    relatedArtists: stringList,
     collaborators: stringList.optional(),
     lastfmTags: stringList.optional(),
+    lastfmArtistTags: stringList.optional(),
     lastfmSimilarTracks: stringList.optional(),
     lastfmSimilarArtists: stringList.optional(),
     lastfmArtistBio: z.string().optional(),
@@ -70,7 +70,8 @@ const ResearchSchema = z
     collaboratorsOf: z.string().optional(),
     notConfigured: z.array(SourceError).optional(),
   })
-  .passthrough();
+  // Fields the reader does not know (from older code) are dropped, never passed on.
+  .strip();
 
 function parseJson(text: string): unknown {
   try {

@@ -16,9 +16,7 @@ import {
   getLastfmTrackTags,
   getLastfmArtistTags,
   getLastfmSimilarTracks,
-  lastfmConfigured,
 } from "../../sources/lastfm.js";
-import { tavilyConfigured } from "../../sources/search.js";
 import {
   getCachedResearcherSubgraph,
   mergeTags,
@@ -30,20 +28,16 @@ import {
   uniqueErrors,
   unreadableStatus,
 } from "../researcherSubgraph.js";
-import { researchCacheKey } from "../cacheKeys.js";
+import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
-import type { SonicAgentStateType, ResearchData } from "../state.js";
-
-/**
- * Research cached before song-meaning research was removed may hold page text from that
- * search (which can quote the song) or from an earlier song-text source; it is dropped.
- */
-export function withoutSongMeaning(research: ResearchData): ResearchData {
-  const { songMeaning: _dropped, ...rest } = research;
-  return rest;
-}
+import {
+  emptyResearch,
+  mergeResearch,
+  type ResearchData,
+  type SonicAgentStateType,
+} from "../state.js";
 
 export async function historianNode(
   state: SonicAgentStateType,
@@ -56,10 +50,7 @@ export async function historianNode(
 
   const writer = config.writer;
   // Research depends on which optional sources have a key: adding one later runs it again.
-  const cacheKey = researchCacheKey(state.spotifyData.id, {
-    lastfm: lastfmConfigured(),
-    tavily: tavilyConfigured(),
-  });
+  const cacheKey = researchCacheKey(state.spotifyData.id, configuredSources());
 
   // Check persistent research cache first
   try {
@@ -68,7 +59,7 @@ export async function historianNode(
     if (cached) {
       // The sources that were not configured when it was made are reported again: a cached
       // answer without them would read as "read, nothing there".
-      const { notConfigured = [], ...cachedResearch } = withoutSongMeaning(cached);
+      const { notConfigured = [], ...cachedResearch } = cached;
       console.log("📚 [Historian] Cache hit for:", state.spotifyData.title);
       writer?.({
         type: "status",
@@ -128,8 +119,11 @@ export async function historianNode(
   const trackTags = settled(trackTagsResult, "trackTags");
   const artistTags = settled(artistTagsResult, "artistTags");
   const similarTracks = settled(similarTracksResult, "similarTracks");
+  const trackTagLines = mergeTags([], trackTags?.tags);
   const prefetchData = {
-    lastfmTags: mergeTags(mergeTags([], trackTags?.tags), artistTags?.tags),
+    lastfmTags: trackTagLines,
+    // The artist's tags apart from the track's: they are dropped if the artist is uncertain.
+    lastfmArtistTags: mergeTags(trackTagLines, artistTags?.tags).slice(trackTagLines.length),
     lastfmSimilarTracks: similarTrackLines(similarTracks?.tracks),
   };
   console.log(
@@ -138,7 +132,7 @@ export async function historianNode(
       `(${prefetch.errors.length} source errors)`,
   );
   const prefetchErrors = uniqueErrors(prefetch.errors);
-  const prefetchStatus = unreadableStatus(prefetchErrors);
+  const prefetchStatus = unreadableStatus(prefetchErrors, prefetch.rejected);
   for (const message of prefetchStatus) {
     writer?.({
       type: "status",
@@ -151,17 +145,14 @@ export async function historianNode(
 
   // The research starts from what the pre-fetch read: the planner sees its tags, similar tracks,
   // empty answers and unreadable sources, and does not spend a step asking again.
-  const before = state.researchData ?? EMPTY_RESEARCH;
-  const seeded: ResearchData = {
-    ...before,
-    lastfmTags: [...prefetchData.lastfmTags, ...(before.lastfmTags ?? [])],
-    lastfmSimilarTracks: [
-      ...prefetchData.lastfmSimilarTracks,
-      ...(before.lastfmSimilarTracks ?? []),
-    ],
-    noneFound: [...prefetch.none, ...(before.noneFound ?? [])],
-    notAsked: [...prefetch.notAsked, ...(before.notAsked ?? [])],
-  };
+  const seeded = mergeResearch(
+    mergeResearch(emptyResearch(), {
+      ...prefetchData,
+      noneFound: prefetch.none,
+      notAsked: prefetch.notAsked,
+    }),
+    state.researchData ?? {},
+  );
 
   // The research subgraph: its last state is kept whatever happens, so the planner's calls,
   // the source errors and the steps that finished reach the run even when it stops early.
@@ -204,8 +195,13 @@ export async function historianNode(
     console.error("❌ [Historian] Research stopped early:", (error as Error).message);
   }
 
-  // The subgraph's research starts with the pre-fetched data.
-  const mergedResearch: ResearchData = finalState.researchData ?? seeded;
+  // The subgraph's research starts with the pre-fetched data. Last.fm's artist-level data is
+  // dropped when it cannot be this artist's (several artists share the name, or Last.fm keeps
+  // one page for them), whichever step found that out.
+  const mergedResearch = withoutUncertainArtistData(
+    finalState.researchData ?? seeded,
+    finalState.lastfmArtistUncertain ?? null,
+  );
   // The subgraph's state starts with the pre-fetch errors; each source and code counts once.
   const sourceErrors = uniqueErrors([
     ...prefetchErrors,
@@ -259,7 +255,27 @@ export async function historianNode(
   };
 }
 
-const EMPTY_RESEARCH: ResearchData = { samples: [], productionTrivia: [], relatedArtists: [] };
+/** Research without Last.fm's artist-level data, when `uncertain` says it is not this artist's. */
+function withoutUncertainArtistData(
+  research: ResearchData,
+  uncertain: string | null,
+): ResearchData {
+  if (!uncertain) return research;
+  const held =
+    (research.lastfmArtistTags?.length ?? 0) > 0 ||
+    (research.lastfmSimilarArtists?.length ?? 0) > 0 ||
+    Boolean(research.lastfmArtistBio);
+  return {
+    ...research,
+    lastfmArtistTags: [],
+    lastfmSimilarArtists: [],
+    lastfmArtistBio: undefined,
+    notAsked: [
+      ...(research.notAsked ?? []),
+      ...(held ? [`Last.fm artist tags, similar artists and bio (dropped: ${uncertain})`] : []),
+    ],
+  };
+}
 
 /** The contract's id for a source; the audio service is not a research source. */
 function sourceIdOf(source: SourceName): SourceId {

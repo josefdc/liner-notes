@@ -148,6 +148,26 @@ describe("web research searches", () => {
     });
   });
 
+  it.each([401, 403])("HTTP %s is a rejected key, reported as such", async (status) => {
+    stubFetch((call) =>
+      call.url === TAVILY ? json({ detail: { error: "Unauthorized" } }, { status }) : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text)).toMatchObject({
+      found: false,
+      code: "unavailable",
+      keyRejected: true,
+      source: "tavily",
+      error: expect.stringMatching(/^Tavily rejected the API key/),
+    });
+    expect(readToolResult("tavily", text)).toMatchObject({ kind: "failed", keyRejected: true });
+  });
+
   it("no longer offers a song-meaning search or mentions lyrics", () => {
     expect(search).not.toHaveProperty("searchSongMeaning");
     for (const t of search.searchTools) {

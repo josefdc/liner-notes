@@ -10,7 +10,7 @@
         "type": "object",
         "properties": {
           "query": { "type": "string" },
-          "selectedTrackId": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+          "selectedTrackId": { "type": ["string", "null"] }
         },
         "required": ["query", "selectedTrackId"]
       },
@@ -20,17 +20,17 @@
         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
       },
       "commit": { "type": "string", "minLength": 1 },
-      "analyzerVersion": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "analyzerVersion": { "type": ["string", "null"] },
       "events": {
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
             "atMs": {
-              "description": "Milliseconds since the stream opened",
               "type": "integer",
               "minimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the stream opened"
             },
             "event": { "$ref": "AnalyzeStreamEvent.schema.json" }
           },
@@ -48,9 +48,9 @@
               "outputTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
               "reasoningTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
               "usd": {
-                "description": "Cost at the configured price table",
                 "type": "number",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Cost at the configured price table"
               }
             },
             "required": ["llmCalls", "inputTokens", "outputTokens", "reasoningTokens", "usd"]
@@ -82,7 +82,7 @@
         "type": "object",
         "properties": {
           "query": { "type": "string" },
-          "selectedTrackId": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+          "selectedTrackId": { "type": ["string", "null"] }
         },
         "required": ["query", "selectedTrackId"],
         "additionalProperties": false
@@ -93,17 +93,17 @@
         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
       },
       "commit": { "type": "string", "minLength": 1 },
-      "analyzerVersion": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+      "analyzerVersion": { "type": ["string", "null"] },
       "events": {
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
             "atMs": {
-              "description": "Milliseconds since the stream opened",
               "type": "integer",
               "minimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the stream opened"
             },
             "event": { "$ref": "AnalyzeStreamEvent.schema.json" }
           },
@@ -122,9 +122,9 @@
               "outputTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
               "reasoningTokens": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
               "usd": {
-                "description": "Cost at the configured price table",
                 "type": "number",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Cost at the configured price table"
               }
             },
             "required": ["llmCalls", "inputTokens", "outputTokens", "reasoningTokens", "usd"],

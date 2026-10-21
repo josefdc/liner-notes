@@ -50,7 +50,7 @@ import { randomUUID } from "node:crypto";
 import { assertAzureStrict, LLM_SCHEMAS, toJsonSchema } from "@liner-notes/contract";
 import type { BaseMessage } from "@langchain/core/messages";
 import type OpenAI from "openai";
-import type { z } from "zod/v4";
+import type { z } from "zod";
 import {
   LLM_PURPOSES,
   type LlmPurpose,

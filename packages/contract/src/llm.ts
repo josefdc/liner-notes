@@ -11,7 +11,7 @@
  * service; `MEASURED_FIELDS` lists the names no model-facing schema may use.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { AudioFeatures } from "./audio.js";
 import { ClaimAbout, ClaimField, FactoidEntityType, FactoidType, Verdict } from "./evidence.js";
 import { FACTOID_LIMITS, LinkType } from "./track.js";

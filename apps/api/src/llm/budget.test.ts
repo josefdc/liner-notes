@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import type { BudgetSettings } from "../config/settings.js";
 import {
   capViolation,

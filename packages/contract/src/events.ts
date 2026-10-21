@@ -11,7 +11,7 @@
  * `error` event with a code, followed by `done`.
  */
 
-import { z } from "zod/v4";
+import { z } from "zod";
 import { AudioFeatures } from "./audio.js";
 import { Timestamp } from "./common.js";
 import { Claim, Evidence } from "./evidence.js";

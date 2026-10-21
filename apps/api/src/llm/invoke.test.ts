@@ -14,7 +14,7 @@ import {
   toJsonSchema,
 } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { closeDatabase, initializeDatabase } from "../store/database.js";
 import { isLlmError, type LlmError } from "./errors.js";
 import {

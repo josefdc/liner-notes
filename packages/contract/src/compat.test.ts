@@ -4,18 +4,21 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { ReadyResponse } from "./api.js";
 import { AudioFeatures, ModelScore } from "./audio.js";
 import { type Compatibility, compareSchemas, type Mode, type Schema } from "./compat.js";
-import { ConnectedEvent, StatusEvent } from "./events.js";
-import { Evidence } from "./evidence.js";
+import { ConnectedEvent, FactoidStreamEvent, StatusEvent } from "./events.js";
+import { Claim, Evidence } from "./evidence.js";
 import { toJsonSchema } from "./jsonSchema.js";
 import { refineNamed } from "./refinements.js";
+import { CONTRACT_SCHEMAS } from "./schemas.js";
+import { sampleClaim } from "./testing/samples.js";
 import { tolerantList } from "./tolerant.js";
 import {
   type ContractSnapshot,
   compareSnapshots,
+  contractSnapshots,
   engineChangeUnacknowledged,
   readerFacts,
   unacknowledgedBreaking,
@@ -93,11 +96,58 @@ describe("compareSchemas rules", () => {
     ).toEqual(["$.b: added"]);
   });
 
-  it("input: a removed default breaks, an added one is additive", () => {
+  it("input: a removed default breaks; an added one is additive only when it is null", () => {
     const withDefault = object({ a: { type: "array", items: str, default: [] } }, []);
     const without = object({ a: { type: "array", items: str } }, []);
+    const nullable = (extra: Schema) => object({ a: { type: ["string", "null"], ...extra } }, []);
     expect(compareSchemas(withDefault, without).breaking).toEqual(["$.a: default removed"]);
-    expect(compareSchemas(without, withDefault).additive).toEqual(["$.a: default added"]);
+    // A missing value would read as [] instead of as missing.
+    expect(compareSchemas(without, withDefault).breaking).toEqual(["$.a: default added []"]);
+    expect(compareSchemas(nullable({}), nullable({ default: null }))).toEqual({
+      breaking: [],
+      additive: ["$.a: default added"],
+    });
+  });
+
+  it("reads a default written next to a $ref", () => {
+    const claim: Schema = { type: "object", properties: { verdict: { type: "string" } } };
+    const resolve = () => claim;
+    const field = (extra: Schema) => object({ c: { $ref: "Claim.schema.json", ...extra } }, []);
+    const compare = (before: Schema, after: Schema) =>
+      compareSchemas(before, after, { snapshot: resolve, current: resolve });
+    expect(compare(field({}), field({ default: { verdict: "supported" } })).breaking).toEqual([
+      '$.c: default added {"verdict":"supported"}',
+    ]);
+    expect(
+      compare(field({ default: { verdict: "unknown" } }), field({ default: { verdict: "x" } }))
+        .breaking,
+    ).toEqual(['$.c: default is now {"verdict":"x"}']);
+  });
+
+  it("a required field that gains a default is additive: every old payload carries it", () => {
+    const required = object({ a: str }, ["a"]);
+    const defaulted = object({ a: { ...str, default: "x" } }, []);
+    expect(compareSchemas(required, defaulted)).toEqual({
+      breaking: [],
+      additive: ["$.a: now optional", "$.a: default added"],
+    });
+  });
+
+  it("a default whose value changed breaks, on both sides of a parse", () => {
+    const before = object({ a: { type: "string", default: "unavailable" } }, []);
+    const after = object({ a: { type: "string", default: "analyzed" } }, []);
+    for (const mode of ["input", "output"] as const) {
+      expect(compareSchemas(before, after, { mode }).breaking).toEqual([
+        '$.a: default is now "analyzed"',
+      ]);
+    }
+    expect(compareSchemas(before, before).breaking).toEqual([]);
+    // A default with no JSON form is compared by a stable marker.
+    const big = (value: bigint) => object({ a: { type: "integer", default: value } }, []);
+    expect(compareSchemas(big(10n), big(10n)).breaking).toEqual([]);
+    expect(compareSchemas(big(10n), big(11n)).breaking).toEqual([
+      "$.a: default is now <bigint 11>",
+    ]);
   });
 
   it("an enum that drops a value breaks; one that adds a value is additive", () => {
@@ -346,6 +396,21 @@ describe("snapshot rules", () => {
     expect(breaking(strict, tolerant)).toEqual([]);
   });
 
+  it("a value that reads as its fallback, not as absent, when unreadable is recorded so", () => {
+    const reason = (schema: z.ZodType) => z.object({ reason: schema });
+    const absent = reason(z.enum(["a", "b"]).optional().catch(undefined));
+    const invented = reason(z.enum(["a", "b"]).optional().catch("a"));
+    expect(readerFacts(invented, new Set()).tolerant).toEqual([
+      '$.reason: reads as "a" when unreadable',
+    ]);
+    expect(readerFacts(reason(z.enum(["a"]).nullable().catch(null)), new Set()).tolerant).toEqual([
+      "$.reason: absent when unreadable",
+    ]);
+    expect(breaking(absent, invented)).toContain(
+      "no longer tolerant $.reason: absent when unreadable",
+    );
+  });
+
   it("a removed schema breaks; a new one is additive", () => {
     const s = snapshotOf(z.object({ a: z.string() }));
     expect(compareSnapshots({ A: s }, {})).toEqual({
@@ -378,6 +443,22 @@ describe("changes to the contract that must fail the gate", () => {
       ".default([]) removed from TrackAnalysis.segments",
       TrackAnalysis,
       TrackAnalysis.extend({ segments: TrackAnalysis.shape.segments.removeDefault() }),
+    ],
+    [
+      "TrackAnalysis.audioSource reads an unreadable value as 'analyzed'",
+      TrackAnalysis,
+      TrackAnalysis.extend({
+        audioSource: z.enum(["analyzed", "unavailable"]).optional().catch("analyzed"),
+      }),
+    ],
+    [
+      "TrackAnalysis.segments defaults to a made-up segment",
+      TrackAnalysis,
+      TrackAnalysis.extend({
+        segments: TrackAnalysis.shape.segments
+          .removeDefault()
+          .default([{ label: "Verse", start: 0, end: 100, color: "#000000" }]),
+      }),
     ],
     [
       "multipleOf on Sample.time",
@@ -413,6 +494,23 @@ describe("changes to the contract that must fail the gate", () => {
   it("a field added with a default to TrackAnalysis passes", () => {
     const after = TrackAnalysis.extend({ tags: z.array(z.string()).default([]) });
     expect(breaking(TrackAnalysis, after)).toEqual([]);
+  });
+
+  it("a factoid's claim (a named schema) read as an invented supported claim when unreadable", () => {
+    // A default next to a $ref: the claim refers to the Claim snapshot.
+    const [connected, factoid, ...rest] = FactoidStreamEvent.options;
+    const invented = z.discriminatedUnion("type", [
+      connected,
+      factoid.extend({ claim: Claim.optional().catch(sampleClaim()) }),
+      ...rest,
+    ]);
+    const changes = compareSnapshots(
+      contractSnapshots(),
+      contractSnapshots({ ...CONTRACT_SCHEMAS, FactoidStreamEvent: invented }),
+    );
+    expect(changes.FactoidStreamEvent.breaking).toEqual([
+      `input $<type=factoid>.claim: default added ${JSON.stringify(sampleClaim())}`,
+    ]);
   });
 });
 

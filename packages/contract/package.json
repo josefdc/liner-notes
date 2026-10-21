@@ -24,7 +24,7 @@
     "snapshot:update": "UPDATE_CONTRACT_SNAPSHOT=1 vitest run --root ../.. --project contract snapshot"
   },
   "dependencies": {
-    "zod": "3.25.76"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

@@ -5,14 +5,14 @@
     "type": "object",
     "properties": {
       "field": {
-        "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'",
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'"
       },
-      "value": { "anyOf": [{ "type": "number" }, { "type": "string" }] },
+      "value": { "type": ["number", "string"] },
       "unit": {
         "description": "e.g. 'bpm'; null for unitless values such as a key",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       },
       "confidence": {
         "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
@@ -21,9 +21,9 @@
         "type": "object",
         "properties": {
           "algorithm": {
-            "description": "Estimator, or the model id when basis is 'model'",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Estimator, or the model id when basis is 'model'"
           },
           "analyzerVersion": { "type": "string", "minLength": 1 }
         },
@@ -40,14 +40,14 @@
     "type": "object",
     "properties": {
       "field": {
-        "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'",
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "description": "e.g. 'tempo', 'key', 'loudness', 'style:Synth-pop'"
       },
-      "value": { "anyOf": [{ "type": "number" }, { "type": "string" }] },
+      "value": { "type": ["number", "string"] },
       "unit": {
         "description": "e.g. 'bpm'; null for unitless values such as a key",
-        "anyOf": [{ "type": "string" }, { "type": "null" }]
+        "type": ["string", "null"]
       },
       "confidence": {
         "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
@@ -56,9 +56,9 @@
         "type": "object",
         "properties": {
           "algorithm": {
-            "description": "Estimator, or the model id when basis is 'model'",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Estimator, or the model id when basis is 'model'"
           },
           "analyzerVersion": { "type": "string", "minLength": 1 }
         },

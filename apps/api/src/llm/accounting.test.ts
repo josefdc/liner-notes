@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { resolveSpendLogPath } from "./budget.js";
 import { isLlmError } from "./errors.js";
 import { acquireLock } from "./fileLock.js";

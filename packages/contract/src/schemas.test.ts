@@ -5,8 +5,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { ReplayRecord, RunResponse } from "./api.js";
 import { AudioFeatures } from "./audio.js";
+import { Timestamp } from "./common.js";
 import { AnalyzeStreamEvent, decodeSseStream, encodeSseEvent } from "./events.js";
 import { Claim, Evidence, Measured } from "./evidence.js";
 import {
@@ -27,6 +29,47 @@ import { RunInfo, TrackAnalysis, type TrackAnalysisInput } from "./track.js";
 
 const ok = (schema: { safeParse(value: unknown): { success: boolean } }, value: unknown) =>
   schema.safeParse(value).success;
+
+describe("Timestamp", () => {
+  it("accepts UTC date-times with or without seconds, as it always has", () => {
+    for (const value of [
+      "2026-10-20T12:00:00.000Z",
+      "2026-10-20T12:00:00Z",
+      "2026-10-20T12:00Z",
+      "2024-02-29T23:59:59.123456Z",
+    ]) {
+      expect(ok(Timestamp, value), value).toBe(true);
+    }
+  });
+
+  it("is z.iso.datetime() with only its pattern replaced", () => {
+    // Timestamp is built from its def; a zod release that changes that def or its JSON Schema
+    // must fail here rather than leave Timestamp behind.
+    const { pattern, ...def } = Timestamp._zod.def;
+    const { pattern: zodPattern, ...zodDef } = z.iso.datetime()._zod.def;
+    expect(def).toEqual(zodDef);
+    expect(pattern).toBeInstanceOf(RegExp);
+    expect(pattern?.source).not.toBe(zodPattern?.source);
+    const { pattern: jsonPattern, ...json } = z.toJSONSchema(Timestamp);
+    const { pattern: zodJsonPattern, ...zodJson } = z.toJSONSchema(z.iso.datetime());
+    expect(json).toEqual(zodJson);
+    expect(jsonPattern).toBe(pattern?.source);
+    expect(zodJsonPattern).toBe(zodPattern?.source);
+  });
+
+  it("refuses offsets, local times and impossible dates", () => {
+    for (const value of [
+      "2026-10-20T12:00:00+00:00",
+      "2026-10-20T12:00:00",
+      "2026-10-20t12:00:00z",
+      "2026-02-29T12:00:00Z",
+      "2026-10-20T24:00:00Z",
+      "2026-10-20",
+    ]) {
+      expect(ok(Timestamp, value), value).toBe(false);
+    }
+  });
+});
 
 describe("AudioFeatures (reader)", () => {
   it("accepts a full measurement, a gated one and one without models", () => {

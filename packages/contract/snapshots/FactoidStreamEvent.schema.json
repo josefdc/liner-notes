@@ -2,14 +2,14 @@
   "input": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "FactoidStreamEvent.schema.json",
-    "anyOf": [
+    "oneOf": [
       {
         "type": "object",
         "properties": {
           "type": { "type": "string", "const": "connected" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
           "timestamp": {
@@ -25,8 +25,8 @@
         "properties": {
           "type": { "type": "string", "const": "factoid" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
           "data": {
@@ -76,8 +76,8 @@
         "properties": {
           "type": { "type": "string", "const": "heartbeat" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           }
         },
         "required": ["type", "runId"]
@@ -87,11 +87,11 @@
         "properties": {
           "type": { "type": "string", "const": "error" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
+          "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
           "error": { "type": "string" },
           "index": {
             "description": "Which factoid failed; absent for the stream",
@@ -107,8 +107,8 @@
         "properties": {
           "type": { "type": "string", "const": "done" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
           "timestamp": {
@@ -124,14 +124,14 @@
   "output": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "FactoidStreamEvent.schema.json",
-    "anyOf": [
+    "oneOf": [
       {
         "type": "object",
         "properties": {
           "type": { "type": "string", "const": "connected" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
           "timestamp": {
@@ -148,8 +148,8 @@
         "properties": {
           "type": { "type": "string", "const": "factoid" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
           "data": {
@@ -202,8 +202,8 @@
         "properties": {
           "type": { "type": "string", "const": "heartbeat" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           }
         },
         "required": ["type", "runId"],
@@ -214,11 +214,11 @@
         "properties": {
           "type": { "type": "string", "const": "error" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
+          "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
           "error": { "type": "string" },
           "index": {
             "description": "Which factoid failed; absent for the stream",
@@ -235,8 +235,8 @@
         "properties": {
           "type": { "type": "string", "const": "done" },
           "runId": {
-            "description": "The analysis run the factoids are for, if known",
-            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "description": "The analysis run the factoids are for, if known"
           },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
           "timestamp": {

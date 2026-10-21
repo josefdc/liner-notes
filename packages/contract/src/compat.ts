@@ -5,14 +5,17 @@
  * - `input` (what a reader accepts): every payload the old schema accepted must still be
  *   accepted. Breaking: a removed field, a type or enum value no longer accepted, a tighter
  *   bound, a new pattern, format or multipleOf, a field that became required or lost its
- *   default, a new required field, an object that now rejects unknown keys, record keys that
- *   are narrower, a tuple that grows or closes.
+ *   default, a default (or `.catch()` fallback) whose value changed, a default other than null
+ *   added to an existing optional field (a missing value would read as that value instead of
+ *   as missing), a new required field, an object that now rejects unknown keys, record keys
+ *   that are narrower, a tuple that grows or closes.
  * - `output` (what a parse guarantees): every field a reader could rely on is still there and
  *   still required. Breaking: a removed field, a required field made optional, a type or enum
- *   value removed.
+ *   value removed, a default whose value changed.
  *
  * Additive in both: new optional fields (or new fields with a default), new union variants,
- * new enum values, wider types, looser bounds.
+ * new enum values, wider types, looser bounds, a default added to a required field (every
+ * payload already carries it), a null default added to an optional one.
  */
 
 export type Schema = { [keyword: string]: unknown };
@@ -32,6 +35,8 @@ interface Facet {
   bounds: Map<string, unknown>;
   visits: number;
   hasDefault: boolean;
+  /** The default values seen at this path, as sorted JSON (a JSON Schema default is JSON). */
+  defaults: string[];
   /** For objects: true when unknown keys are rejected (`additionalProperties: false`). */
   closed: boolean | null;
   /** For arrays: true when no items beyond the tuple positions are allowed (`items: false`). */
@@ -58,6 +63,17 @@ const isSchema = (value: unknown): value is Schema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** A default as JSON text; a value with no JSON form (a bigint, a cycle) as a stable marker. */
+function defaultText(value: unknown): string {
+  try {
+    const text = JSON.stringify(value);
+    if (text !== undefined) return text;
+  } catch {
+    // No JSON form; the marker below.
+  }
+  return `<${typeof value} ${String(value)}>`;
+}
 
 /** The looser of two values of the same bound, or undefined when they cannot be compared. */
 function looser(keyword: string, a: unknown, b: unknown): unknown {
@@ -114,6 +130,7 @@ export function flattenSchema(
         bounds: new Map(),
         visits: 0,
         hasDefault: false,
+        defaults: [],
         closed: null,
         itemsClosed: false,
       };
@@ -125,6 +142,13 @@ export function flattenSchema(
 
   const walk = (node: unknown, path: string, required: boolean, seen: readonly string[]) => {
     if (!isSchema(node)) return;
+    // Read first: a default can sit next to a `$ref` (a `.catch()` on a named schema).
+    if ("default" in node && node.default !== undefined) {
+      const facet = facetAt(path, required);
+      facet.hasDefault = true;
+      const value = defaultText(node.default);
+      if (!facet.defaults.includes(value)) facet.defaults = [...facet.defaults, value].sort();
+    }
     if (typeof node.$ref === "string") {
       // A local definition, or another schema of the contract (an `<id>.schema.json` ref).
       const ref = node.$ref;
@@ -140,7 +164,6 @@ export function flattenSchema(
     }
 
     const facet = facetAt(path, required);
-    if ("default" in node) facet.hasDefault = true;
 
     if (Array.isArray(node.allOf)) {
       for (const branch of node.allOf) walk(branch, path, required, seen);
@@ -261,9 +284,14 @@ export function compareSchemas(
     }
 
     if (mode === "input" && old.hasDefault !== now.hasDefault) {
-      (old.hasDefault ? breaking : additive).push(
-        `${path}: ${old.hasDefault ? "default removed" : "default added"}`,
-      );
+      if (old.hasDefault) breaking.push(`${path}: default removed`);
+      else if (old.required || now.defaults.every((value) => value === "null")) {
+        // A field every old payload carried, or a missing value that still reads as missing.
+        additive.push(`${path}: default added`);
+      } else breaking.push(`${path}: default added ${now.defaults.join(" | ")}`);
+    }
+    if (old.hasDefault && now.hasDefault && !same(old.defaults, now.defaults)) {
+      breaking.push(`${path}: default is now ${now.defaults.join(" | ")}`);
     }
 
     const oldValues = restriction(old);

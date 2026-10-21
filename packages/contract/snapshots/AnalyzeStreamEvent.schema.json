@@ -2,7 +2,7 @@
   "input": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "AnalyzeStreamEvent.schema.json",
-    "anyOf": [
+    "oneOf": [
       {
         "type": "object",
         "properties": {
@@ -73,7 +73,7 @@
                 "coverUrl": { "type": "string" },
                 "releaseYear": { "type": "string" },
                 "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                "isrc": { "type": ["string", "null"] }
               },
               "required": ["id", "title", "artist", "album", "coverUrl"]
             }
@@ -153,8 +153,8 @@
           "type": { "type": "string", "const": "error" },
           "runId": { "type": "string", "minLength": 1 },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
-          "error": { "description": "Short message for the user", "type": "string" }
+          "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
+          "error": { "type": "string", "description": "Short message for the user" }
         },
         "required": ["type", "runId", "seq", "code", "error"]
       },
@@ -177,7 +177,7 @@
   "output": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "AnalyzeStreamEvent.schema.json",
-    "anyOf": [
+    "oneOf": [
       {
         "type": "object",
         "properties": {
@@ -251,7 +251,7 @@
                 "coverUrl": { "type": "string" },
                 "releaseYear": { "type": "string" },
                 "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                "isrc": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                "isrc": { "type": ["string", "null"] }
               },
               "required": ["id", "title", "artist", "album", "coverUrl"],
               "additionalProperties": false
@@ -338,8 +338,8 @@
           "type": { "type": "string", "const": "error" },
           "runId": { "type": "string", "minLength": 1 },
           "seq": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "code": { "description": "An ErrorCode; other values are kept", "type": "string" },
-          "error": { "description": "Short message for the user", "type": "string" }
+          "code": { "type": "string", "description": "An ErrorCode; other values are kept" },
+          "error": { "type": "string", "description": "Short message for the user" }
         },
         "required": ["type", "runId", "seq", "code", "error"],
         "additionalProperties": false

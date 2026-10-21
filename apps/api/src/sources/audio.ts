@@ -154,7 +154,11 @@ function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnaly
  * Try to get a preview URL from Deezer (primary audio source).
  * Deezer provides more reliable preview availability than Spotify.
  */
-async function tryDeezerFallback(title: string, artist: string): Promise<string | null> {
+async function tryDeezerFallback(
+  title: string,
+  artist: string,
+  signal: AbortSignal | undefined,
+): Promise<string | null> {
   if (!title && !artist) {
     return null;
   }
@@ -162,7 +166,8 @@ async function tryDeezerFallback(title: string, artist: string): Promise<string 
   try {
     console.log("🔄 [Audio] Trying Deezer preview...");
 
-    const result = await searchDeezerPreview.invoke({ title, artist });
+    signal?.throwIfAborted();
+    const result = await searchDeezerPreview.invoke({ title, artist }, { signal });
     const data = JSON.parse(result) as DeezerSearchResult;
 
     if (data.found && data.previewUrl) {
@@ -173,6 +178,7 @@ async function tryDeezerFallback(title: string, artist: string): Promise<string 
     console.log("⚠️ [Audio] Deezer: no preview found");
     return null;
   } catch (error) {
+    if (signal?.aborted) throw error;
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("❌ [Audio] Deezer preview error:", message);
     return null;
@@ -186,16 +192,18 @@ async function tryDeezerFallback(title: string, artist: string): Promise<string 
 /**
  * Check if the audio analysis service is available
  */
-async function isServiceAvailable(): Promise<boolean> {
+async function isServiceAvailable(signal: AbortSignal | undefined): Promise<boolean> {
   try {
     await fetchJson({
       source: "audio",
       url: `${audioServiceUrl()}/health`,
       timeoutMs: 5000,
       cassette: false,
+      signal,
     });
     return true;
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return false;
   }
 }
@@ -203,7 +211,10 @@ async function isServiceAvailable(): Promise<boolean> {
 /**
  * Call the audio analysis service
  */
-async function analyzeWithService(previewUrl: string): Promise<AudioServiceResponse> {
+async function analyzeWithService(
+  previewUrl: string,
+  signal: AbortSignal | undefined,
+): Promise<AudioServiceResponse> {
   try {
     return await fetchJson<AudioServiceResponse>({
       source: "audio",
@@ -216,6 +227,7 @@ async function analyzeWithService(previewUrl: string): Promise<AudioServiceRespo
       body: JSON.stringify({ preview_url: previewUrl }),
       timeoutMs: SERVICE_TIMEOUT,
       cassette: false,
+      signal,
     });
   } catch (error) {
     // The service explains a failed analysis in `detail` (FastAPI).
@@ -235,11 +247,13 @@ async function analyzeWithService(previewUrl: string): Promise<AudioServiceRespo
  * Analyze audio from Deezer (primary) or Spotify (fallback) preview URL
  */
 export const analyzeAudioPreview = tool(
-  async ({ previewUrl, title, artist }): Promise<string> => {
+  async ({ previewUrl, title, artist }, config): Promise<string> => {
+    // The run's signal stops every request below (Deezer, the service's health and analysis).
+    const signal = config?.signal;
     console.log(`🎧 [Audio] Analyzing: "${title}" by ${artist}`);
 
     // Deezer-first: always try Deezer regardless of Spotify preview availability
-    let effectivePreviewUrl = await tryDeezerFallback(title || "", artist || "");
+    let effectivePreviewUrl = await tryDeezerFallback(title || "", artist || "", signal);
 
     if (effectivePreviewUrl) {
       console.log("🎵 [Audio] Using Deezer preview (primary source)");
@@ -263,7 +277,7 @@ export const analyzeAudioPreview = tool(
 
     // Try the audio analysis service with the resolved preview URL
     try {
-      const serviceAvailable = await isServiceAvailable();
+      const serviceAvailable = await isServiceAvailable(signal);
 
       if (!serviceAvailable) {
         console.log("⚠️ [Audio] Analysis service unavailable; audio not measured");
@@ -273,7 +287,8 @@ export const analyzeAudioPreview = tool(
       }
 
       console.log("🎧 [Audio] Calling analysis service...");
-      const result = await analyzeWithService(effectivePreviewUrl);
+      signal?.throwIfAborted();
+      const result = await analyzeWithService(effectivePreviewUrl, signal);
 
       console.log(
         `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
@@ -322,6 +337,8 @@ export const analyzeAudioPreview = tool(
       if (outOfRange.length > 0) measured.outOfRange = outOfRange;
       return JSON.stringify(measured);
     } catch (error) {
+      // A cancelled run rejects: no "analysis failed" is reported for it.
+      if (signal?.aborted) throw error;
       const message = error instanceof Error ? error.message : String(error);
       console.error("❌ [Audio] Analysis failed:", message);
       return JSON.stringify(unavailable("analysis_failed", message));

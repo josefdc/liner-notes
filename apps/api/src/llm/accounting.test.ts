@@ -182,6 +182,12 @@ describe("answers that are not a usable result", () => {
     expect(settles()).toMatchObject([
       { in: 100, out: 300, reasoning: 250, status: "error:incomplete", estimated: false },
     ]);
+    // The error says what the billed attempt cost, as it was settled.
+    expect(error.cost).toEqual({
+      deployment: settles()[0].deployment,
+      usdEst: settles()[0].usd_est,
+    });
+    expect(error.cost.usdEst).toBeGreaterThan(0);
   });
 
   it("does not accept an incomplete answer whose text happens to be valid JSON", async () => {
@@ -208,6 +214,7 @@ describe("answers that are not a usable result", () => {
     expect(error.message).not.toContain("help with that");
     expect(net.calls).toHaveLength(1);
     expect(settles()).toMatchObject([{ in: 100, out: 10, status: "error:refused" }]);
+    expect(error.cost?.usdEst).toBe(settles()[0].usd_est);
   });
 
   it("reports status failed with a server error as transient, billing its usage", async () => {

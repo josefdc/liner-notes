@@ -110,7 +110,11 @@ function fuzzyMatch(a: string, b: string): boolean {
  * Search Deezer for a track by title and artist
  * Returns the best matching track with preview URL
  */
-async function searchDeezerTrack(title: string, artist: string): Promise<DeezerTrack | null> {
+async function searchDeezerTrack(
+  title: string,
+  artist: string,
+  signal?: AbortSignal,
+): Promise<DeezerTrack | null> {
   // Build search query: "artist track" format works best for Deezer
   const url = new URL(`${DEEZER_API_BASE}/search/track`);
   url.searchParams.set("q", `${artist} ${title}`);
@@ -123,6 +127,7 @@ async function searchDeezerTrack(title: string, artist: string): Promise<DeezerT
     url,
     headers: { Accept: "application/json" },
     scrub: SEARCH_SHAPE,
+    signal,
   });
 
   // Deezer reports errors (including its quota) in a 200 answer.
@@ -186,11 +191,11 @@ async function searchDeezerTrack(title: string, artist: string): Promise<DeezerT
  * Search Deezer for a track preview URL
  */
 export const searchDeezerPreview = tool(
-  async ({ title, artist }): Promise<string> => {
+  async ({ title, artist }, config): Promise<string> => {
     console.log(`🎵 [Deezer] Searching for: "${title}" by ${artist}`);
 
     try {
-      const track = await searchDeezerTrack(title, artist);
+      const track = await searchDeezerTrack(title, artist, config?.signal);
 
       if (!track) {
         console.log("❌ [Deezer] No track found");
@@ -225,6 +230,8 @@ export const searchDeezerPreview = tool(
         deezerId: track.id,
       } satisfies DeezerSearchResult);
     } catch (error) {
+      // A cancelled run rejects: nothing is reported for it.
+      if (config?.signal?.aborted) throw error;
       const message = error instanceof Error ? error.message : "Unknown error";
       console.error("❌ [Deezer] Error:", message);
       return JSON.stringify({

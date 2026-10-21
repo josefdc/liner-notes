@@ -155,6 +155,44 @@ export const FactoidsOutput = z.strictObject({
 export type FactoidsOutput = z.infer<typeof FactoidsOutput>;
 
 // =============================================================================
+// Research planner
+// =============================================================================
+
+/**
+ * The research steps the planner can choose, `done` included. Spotify's artist top tracks are
+ * not offered: the endpoint is gone and the step can find nothing.
+ */
+export const ResearchAction = z.enum([
+  "search_samples",
+  "search_production",
+  "search_general",
+  "search_musicbrainz",
+  "search_artist_collaborators",
+  "search_lastfm_tags",
+  "search_lastfm_similar_tracks",
+  "search_lastfm_similar_artists",
+  "search_lastfm_artist_info",
+  "search_listenbrainz_similar",
+  "done",
+]);
+export type ResearchAction = z.infer<typeof ResearchAction>;
+
+/** The research planner's next step. */
+export const ResearchPlanOutput = z.strictObject({
+  nextAction: ResearchAction,
+  query: z
+    .string()
+    .nullable()
+    .describe(
+      "A specific web search query for search_samples, search_production and search_general; null for the other steps",
+    ),
+  reasoning: z
+    .string()
+    .describe("One or two sentences: what is missing, or which lead this follows"),
+});
+export type ResearchPlanOutput = z.infer<typeof ResearchPlanOutput>;
+
+// =============================================================================
 // Verifier judge
 // =============================================================================
 
@@ -195,4 +233,5 @@ export const LLM_SCHEMAS = {
   ComposerOutput,
   FactoidsOutput,
   JudgeOutput,
+  ResearchPlanOutput,
 } as const;

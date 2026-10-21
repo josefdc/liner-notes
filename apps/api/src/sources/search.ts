@@ -123,7 +123,7 @@ let warnedNoKey = false;
  * Searches the web. Rejects with SourceError "unavailable" when TAVILY_API_KEY is not set (no
  * request is made), and with the request's typed error when Tavily cannot answer.
  */
-export async function webSearch(query: string): Promise<WebResult[]> {
+export async function webSearch(query: string, signal?: AbortSignal): Promise<WebResult[]> {
   const apiKey = credential("TAVILY_API_KEY");
   if (!apiKey) {
     if (!warnedNoKey) {
@@ -148,6 +148,7 @@ export async function webSearch(query: string): Promise<WebResult[]> {
       exclude_domains: EXCLUDED_DOMAINS,
     }),
     scrub: RESPONSE_SHAPE,
+    signal,
   });
 
   if (!data || !Array.isArray(data.results)) {
@@ -169,13 +170,23 @@ export function formatResults(results: WebResult[]): string {
   return results.map((r) => `${r.title}\n${r.url}\n${r.content}`).join("\n\n");
 }
 
-/** Runs a search for a tool: results text, or text starting "Error:" (nothing found, unavailable). */
-async function searchText(label: string, query: string, none: string): Promise<string> {
+/**
+ * Runs a search for a tool: results text, or text starting "Error:" (nothing found,
+ * unavailable). A cancelled run (its `signal` aborted) rejects instead: nothing is reported.
+ */
+async function searchText(
+  label: string,
+  query: string,
+  none: string,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  signal?.throwIfAborted();
   console.log(`🔍 [Search] ${label}: ${query}`);
   try {
-    const results = await webSearch(query);
+    const results = await webSearch(query, signal);
     return results.length > 0 ? formatResults(results) : `Error: no web results: ${none}`;
   } catch (error) {
+    if (signal?.aborted) throw error;
     const message = describeError(error);
     console.error(`❌ [Search] ${label} unavailable:`, message);
     return `Error: web search unavailable: ${message}`;
@@ -190,11 +201,12 @@ async function searchText(label: string, query: string, none: string): Promise<s
  * Search for sample history and interpolations
  */
 export const searchSamples = tool(
-  async ({ songTitle, artistName }): Promise<string> =>
+  async ({ songTitle, artistName }, config): Promise<string> =>
     searchText(
       "Samples",
       `"${songTitle}" "${artistName}" sampled by OR samples from whosampled`,
       `no sample information found for "${songTitle}" by ${artistName}`,
+      config?.signal,
     ),
   {
     name: "search_samples",
@@ -212,11 +224,12 @@ export const searchSamples = tool(
  * Search for production history and trivia
  */
 export const searchProductionHistory = tool(
-  async ({ songTitle, artistName }): Promise<string> =>
+  async ({ songTitle, artistName }, config): Promise<string> =>
     searchText(
       "Production history",
       `"${songTitle}" "${artistName}" production history recording studio trivia making of`,
       `no production history found for "${songTitle}" by ${artistName}`,
+      config?.signal,
     ),
   {
     name: "search_production_history",
@@ -234,8 +247,8 @@ export const searchProductionHistory = tool(
  * General music research search
  */
 export const searchMusicInfo = tool(
-  async ({ query }): Promise<string> =>
-    searchText("General music search", query, `nothing found for "${query}"`),
+  async ({ query }, config): Promise<string> =>
+    searchText("General music search", query, `nothing found for "${query}"`, config?.signal),
   {
     name: "search_music_info",
     description:

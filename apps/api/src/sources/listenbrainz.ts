@@ -52,7 +52,7 @@ interface LabsSimilarArtist {
  * Artists similar to `mbid`, most similar first; [] when the dataset has none. An answer that
  * is not a JSON list (e.g. an HTML page) rejects with a SourceError.
  */
-export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS) {
+export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS, signal?: AbortSignal) {
   if (!isMbid(mbid)) throw new SourceError("listenbrainz", "invalid_input", "not an MBID");
   const url = new URL(LABS_SIMILAR_ARTISTS);
   url.searchParams.set("artist_mbids", mbid);
@@ -63,6 +63,7 @@ export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS) {
     url,
     headers: { Accept: "application/json" },
     scrub: SIMILAR_SHAPE,
+    signal,
   });
   if (!Array.isArray(data)) {
     throw new SourceError("listenbrainz", "parse", "similar-artists answer is not a list");
@@ -98,13 +99,14 @@ export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS) {
  * Get similar artists from ListenBrainz based on listening patterns
  */
 export const getListenBrainzSimilarArtists = tool(
-  async ({ artistMbid, artistName, artistNames }): Promise<string> => {
+  async ({ artistMbid, artistName, artistNames }, config): Promise<string> => {
+    const signal = config?.signal;
     try {
       // Resolve MBID from name if not directly provided
       let mbid = artistMbid;
       if (!mbid && artistName) {
         console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName}"...`);
-        mbid = (await findArtist(artistName, artistNames))?.id;
+        mbid = (await findArtist(artistName, artistNames, signal))?.id;
         if (!mbid) {
           return JSON.stringify({
             found: false,
@@ -122,10 +124,12 @@ export const getListenBrainzSimilarArtists = tool(
       }
 
       console.log(`🔗 [ListenBrainz] Getting similar artists for MBID: ${mbid}`);
-      const artists = await fetchSimilarArtists(mbid);
+      const artists = await fetchSimilarArtists(mbid, MAX_ARTISTS, signal);
       console.log(`✅ [ListenBrainz] Found ${artists.length} similar artists`);
       return JSON.stringify({ found: artists.length > 0, artists });
     } catch (error) {
+      // A cancelled run rejects: nothing is reported for it.
+      if (signal?.aborted) throw error;
       const message = describeError(error);
       console.error("❌ [ListenBrainz] Similar artists error:", message);
       return JSON.stringify({ found: false, error: message });

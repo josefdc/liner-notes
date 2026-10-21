@@ -1,4 +1,4 @@
-import type { TrackData, AgentLog, Factoid } from '../../types';
+import type { TrackData, AgentLog, Factoid, FactoidUnavailableCode } from '../../types';
 
 export interface SearchCandidate {
   id: string;
@@ -53,6 +53,7 @@ export interface UseAgentReturn extends AgentState {
     existingIds: string[],
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
+    onUnavailable?: (code: FactoidUnavailableCode) => void,
   ) => Promise<void>;
   /** Rejects when the request fails. */
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;

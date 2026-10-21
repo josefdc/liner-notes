@@ -73,7 +73,7 @@ Built for performance and complex data visualization:
 | **Frontend**       | React 19, TypeScript, Vite, Tailwind CSS v4                  |
 | **Visualization**  | D3.js (force-directed graphs), Recharts (radar/stats)        |
 | **Icons**          | Lucide React                                                 |
-| **Agent Backend**  | Node.js, Express, LangGraph (AI orchestration), Gemini Flash |
+| **Agent Backend**  | Node.js, Express, LangGraph (AI orchestration), Azure OpenAI |
 | **External APIs**  | Spotify, MusicBrainz, Last.fm, Tavily (web search), Deezer   |
 | **Audio Analysis** | Python 3.12+, FastAPI, librosa (BPM/Key extraction)          |
 | **Package Mgmt**   | npm (JS), uv (Python)                                        |
@@ -113,7 +113,6 @@ Edit `apps/api/.env` with your API keys. The API refuses to start without the Sp
 |--------------------------|---------------------------------------------------------|
 | `SPOTIFY_CLIENT_ID`      | [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) |
 | `SPOTIFY_CLIENT_SECRET`  | [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) |
-| `GEMINI_API_KEY`         | [Google AI Studio](https://aistudio.google.com/)        |
 | `TAVILY_API_KEY`         | [Tavily](https://tavily.com/)                           |
 | `SOURCE_USER_AGENT`      | Optional: `AppName/Version ( contact )` sent to the music and search sources; defaults to this project |
 | `AUDIO_ANALYSIS_URL`     | `http://localhost:3002` (default for local dev)          |
@@ -204,7 +203,7 @@ Frontend (React/SSE) ──► Express API ──► LangGraph Agent
                               │               │               │
                               └───────────────┼───────────────┘
                                               ▼
-                                    Gemini Composer (structured output)
+                                    Composer (structured output)
                                               │
                                               ▼
                                     Streamed back to UI

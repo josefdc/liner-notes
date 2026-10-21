@@ -29,6 +29,7 @@ function getIconForCode(code?: LogCode): React.FC<{ size: number; className?: st
     NET: Wifi,
     AUDIO: Music,
     GEMINI: Brain,
+    LLM: Brain,
     SPOTIFY: Search,
     RESEARCH: Globe,
     GRAPH: Database,
@@ -47,6 +48,11 @@ function getColorForCode(code?: LogCode): { text: string; border: string; bg: st
     NET: { text: 'text-cyber', border: 'border-cyber/20', bg: 'bg-cyber/5' },
     AUDIO: { text: 'text-analog', border: 'border-analog/20', bg: 'bg-analog/5' },
     GEMINI: {
+      text: 'text-accent-purple',
+      border: 'border-accent-purple/20',
+      bg: 'bg-accent-purple/5',
+    },
+    LLM: {
       text: 'text-accent-purple',
       border: 'border-accent-purple/20',
       bg: 'bg-accent-purple/5',

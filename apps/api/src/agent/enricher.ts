@@ -70,7 +70,7 @@ function setCachedArtwork(label: string, result: SpotifySearchResultWithArtist):
 /**
  * Get Spotify access token using Client Credentials flow
  */
-async function getSpotifyToken(): Promise<string> {
+async function getSpotifyToken(signal?: AbortSignal): Promise<string> {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
@@ -88,6 +88,7 @@ async function getSpotifyToken(): Promise<string> {
       Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
     },
     body: params,
+    signal,
   });
 
   if (!response.ok) {
@@ -104,6 +105,7 @@ async function getSpotifyToken(): Promise<string> {
 async function searchSpotifyForArtwork(
   query: string,
   token: string,
+  signal?: AbortSignal,
 ): Promise<SpotifySearchResultWithArtist> {
   // Check cache first
   const cached = getCachedArtwork(query);
@@ -119,6 +121,7 @@ async function searchSpotifyForArtwork(
 
     const response = await fetch(searchUrl.toString(), {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
 
     if (!response.ok) {
@@ -161,6 +164,7 @@ async function searchSpotifyForArtwork(
         trackTitle: null,
         trackArtist: null,
       };
+      signal?.throwIfAborted();
       setCachedArtwork(query, result);
       return result;
     }
@@ -175,6 +179,7 @@ async function searchSpotifyForArtwork(
       trackArtist: track.artists?.[0]?.name || null,
     };
 
+    signal?.throwIfAborted();
     setCachedArtwork(query, result);
     return result;
   } catch (error) {
@@ -200,11 +205,13 @@ async function searchSpotifyForArtwork(
  *
  * @param genealogy - The genealogy object from the Composer (may have optional fields)
  * @param currentTrackCoverUrl - The cover URL of the main track (already known)
+ * @param signal - The run's abort signal: a cancelled run stops the Spotify requests
  * @returns Enriched genealogy with real artwork URLs
  */
 export async function enrichGenealogyWithArtwork(
   genealogy: Partial<Genealogy> | undefined,
   currentTrackCoverUrl: string,
+  signal?: AbortSignal,
 ): Promise<Genealogy> {
   // Handle undefined or malformed genealogy
   if (!genealogy?.nodes || !Array.isArray(genealogy.nodes) || genealogy.nodes.length === 0) {
@@ -225,7 +232,7 @@ export async function enrichGenealogyWithArtwork(
   console.log(`🎨 [Enricher] Enriching ${genealogy.nodes.length} genealogy nodes with artwork...`);
 
   try {
-    const token = await getSpotifyToken();
+    const token = await getSpotifyToken(signal);
 
     // Process nodes in parallel (with concurrency limit to avoid rate limits)
     const BATCH_SIZE = 5;
@@ -259,7 +266,7 @@ export async function enrichGenealogyWithArtwork(
           }
 
           // Search Spotify for this song
-          const result = await searchSpotifyForArtwork(safeNode.label, token);
+          const result = await searchSpotifyForArtwork(safeNode.label, token, signal);
 
           return {
             ...safeNode,

@@ -12,6 +12,8 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { analyzeAudioPreview, type AudioAnalysisResult } from "../../sources/audio.js";
 import { getCache } from "../../store/cache.js";
 import type { SonicAgentStateType, AudioFeatures, AudioUnavailableReason } from "../state.js";
+import { isAbortError } from "../errors.js";
+import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 
 function unavailableFeatures(reason: AudioUnavailableReason, detail?: string): AudioFeatures {
   return {
@@ -90,6 +92,7 @@ function isTrustedCacheRow(row: AudioFeatures | null | undefined): row is AudioF
 export async function engineerNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
+  runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
     return { statusMessages: ["⚠️ Skipping audio analysis - no track data"] };
@@ -111,7 +114,7 @@ export async function engineerNode(
         code: "AUDIO-COMPLETE",
         message: `Audio cache hit: ${cachedAudio.bpm} BPM // ${cachedAudio.key}`,
         node: "engineer",
-        timestamp: new Date().toISOString(),
+        timestamp: timestampOf(runtime),
       });
       return {
         audioFeatures: cachedAudio,
@@ -127,7 +130,7 @@ export async function engineerNode(
     code: "AUDIO-INIT",
     message: "Initializing audio waveform parser...",
     node: "engineer",
-    timestamp: new Date().toISOString(),
+    timestamp: timestampOf(runtime),
   });
 
   console.log("🎧 [Engineer] Analyzing:", state.spotifyData.title);
@@ -135,13 +138,19 @@ export async function engineerNode(
   let audioFeatures: AudioFeatures;
   try {
     // analyzeAudioPreview reports failures in its result (source "unavailable") instead of throwing.
-    const analysisResult = await analyzeAudioPreview.invoke({
-      previewUrl: state.spotifyData.previewUrl,
-      title: state.spotifyData.title,
-      artist: state.spotifyData.artist,
-    });
+    // The run's abort signal stops the analysis when the client leaves.
+    config.signal?.throwIfAborted();
+    const analysisResult = await analyzeAudioPreview.invoke(
+      {
+        previewUrl: state.spotifyData.previewUrl,
+        title: state.spotifyData.title,
+        artist: state.spotifyData.artist,
+      },
+      { signal: config.signal },
+    );
     audioFeatures = toAudioFeatures(JSON.parse(analysisResult) as AudioAnalysisResult);
   } catch (error) {
+    if (config.signal?.aborted || isAbortError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     console.error("❌ [Engineer] Error:", message);
     audioFeatures = unavailableFeatures("analysis_failed", message);
@@ -160,7 +169,7 @@ export async function engineerNode(
       code: "AUDIO-ERROR",
       message: summary,
       node: "engineer",
-      timestamp: new Date().toISOString(),
+      timestamp: timestampOf(runtime),
     });
     console.log(`⚠️ [Engineer] ${summary}`);
     return {
@@ -171,6 +180,8 @@ export async function engineerNode(
 
   // Only measurements are cached. A failed write (e.g. a column that does not accept null
   // energy yet) is logged and the run continues; nothing reports the result as cached.
+  // Nothing is cached for a cancelled run.
+  config.signal?.throwIfAborted();
   try {
     getCache().putAudio(state.spotifyData.id, audioFeatures);
   } catch (error) {
@@ -184,7 +195,7 @@ export async function engineerNode(
     code: "AUDIO-COMPLETE",
     message: `Frequency analysis: ${audioFeatures.bpm} BPM // ${audioFeatures.key}${partial}`,
     node: "engineer",
-    timestamp: new Date().toISOString(),
+    timestamp: timestampOf(runtime),
   });
   console.log("✅ [Engineer] Analysis complete:", audioFeatures.bpm, "BPM,", audioFeatures.key);
 

@@ -1,27 +1,25 @@
 /**
  * Deep Dive Researcher Subgraph
  *
- * Implements a ReAct (Reasoning + Acting) pattern for iterative music research.
- * Instead of running 3 parallel searches once, this subgraph:
- * 1. Analyzes current research findings
- * 2. Decides what to search next (or if done)
- * 3. Executes the search
- * 4. Loops back (max 3 iterations)
+ * Iterative research: a fixed first step (sample history), then up to MAX_PLANNED_STEPS steps
+ * chosen by the research planner, a model call on the `fast` tier through the provider layer
+ * (schema `ResearchPlanOutput`). Each step runs one search; the planner sees what was found.
  *
- * This allows the agent to "follow leads" - if it discovers a sample,
- * it can research that sampled song to build a richer genealogy.
+ * A failed planner call ends the research (the run continues with what was found) and is
+ * recorded in `usage` with its error kind. A cancelled run stops the research: the run's abort
+ * signal goes to every planner call and every search.
  */
 
 import { StateGraph, END, START, Annotation } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import dotenv from "dotenv";
+import { ResearchPlanOutput } from "@liner-notes/contract";
 
-import { generateStructuredOutput, GEMINI_MODEL_PRO } from "./geminiClient.js";
-import { ResearchPlanSchema } from "./schema.js";
-import { formatResearchManagerPrompt } from "./prompts.js";
+import { answeredCall, failedCall } from "./callRecords.js";
+import { isAbortError, withRetry } from "./errors.js";
+import { plannerMessages } from "./prompts.js";
+import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
 import { searchSamples, searchProductionHistory, searchMusicInfo } from "../sources/search.js";
 import { getMusicBrainzRelations, getMusicBrainzArtist } from "../sources/musicbrainz.js";
-import { getArtistTopTracks } from "../sources/spotify.js";
 import {
   getLastfmTrackTags,
   getLastfmArtistTags,
@@ -30,9 +28,17 @@ import {
   getLastfmArtistInfo,
 } from "../sources/lastfm.js";
 import { getListenBrainzSimilarArtists } from "../sources/listenbrainz.js";
-import type { SpotifyData, ResearchData, ResearchPlan } from "./state.js";
+import { errorRecord } from "../sources/records.js";
+import type { SourceError, SourceId } from "@liner-notes/contract";
+import type { SpotifyData, ResearchData, ResearchPlan, LlmCallRecord } from "./state.js";
 
-dotenv.config();
+export const PLANNER_CALL_SITE = "research_planner";
+/** Output budget of a planner call, reasoning included (fast tier: low effort). */
+export const PLANNER_MAX_OUTPUT_TOKENS = 1500;
+/** Research steps chosen by the planner, after the fixed first step. */
+export const MAX_PLANNED_STEPS = 2;
+/** Wait before a search's one retry after a transient failure. */
+export const SEARCH_RETRY_MS = 500;
 
 // =============================================================================
 // Researcher Subgraph State
@@ -109,110 +115,117 @@ export const ResearcherState = Annotation.Root({
     reducer: (prev, next) => [...prev, ...next],
     default: () => [],
   }),
+
+  // The run the research belongs to (its model calls count against the run's call cap)
+  runId: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // The planner's model calls (shared with parent)
+  usage: Annotation<LlmCallRecord[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+
+  // Sources a step could not read (shared with parent)
+  sourceErrors: Annotation<SourceError[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
 });
 
 export type ResearcherStateType = typeof ResearcherState.State;
 
 // =============================================================================
-// Node: Research Manager (LLM-based decision maker)
-// Uses unified geminiClient for Gemini 3 structured output
+// Node: Research Manager (the planner)
 // =============================================================================
 
-async function researchManagerNode(
-  state: ResearcherStateType,
-  config: LangGraphRunnableConfig,
-): Promise<Partial<ResearcherStateType>> {
-  const writer = config.writer;
-  const iteration = state.researchIteration;
+function createResearchManagerNode(runtime: AgentRuntime) {
+  return async function researchManagerNode(
+    state: ResearcherStateType,
+    config: LangGraphRunnableConfig,
+  ): Promise<Partial<ResearcherStateType>> {
+    const writer = config.writer;
+    const iteration = state.researchIteration;
+    const status = (message: string) =>
+      writer?.({
+        type: "status",
+        message,
+        node: "research_manager",
+        timestamp: timestampOf(runtime),
+      });
 
-  console.log(`🧠 [Research Manager] Iteration ${iteration + 1}/3`);
+    // First step: sample history, without a model call
+    if (iteration === 0) {
+      status("🔬 Starting deep dive research...");
+      return {
+        researchPlan: {
+          nextAction: "search_samples",
+          query: null,
+          reasoning: "Starting research with sample history to discover musical DNA",
+        },
+        researchIteration: 1,
+        statusMessages: ["🔬 Starting deep dive research..."],
+      };
+    }
 
-  // First iteration: start with samples search
-  if (iteration === 0) {
-    writer?.({
-      type: "status",
-      message: "🔬 Starting deep dive research...",
-      node: "research_manager",
-      timestamp: new Date().toISOString(),
+    if (!state.spotifyData || iteration > MAX_PLANNED_STEPS) {
+      return { researchComplete: true, statusMessages: ["✅ Deep dive complete"] };
+    }
+
+    const { title, artist } = state.spotifyData;
+    status(`🧠 Planning the next research step (${iteration}/${MAX_PLANNED_STEPS})...`);
+
+    const messages = plannerMessages({
+      track: { title, artist },
+      research: state.researchData,
+      step: iteration,
+      maxSteps: MAX_PLANNED_STEPS,
     });
+    let plan: ResearchPlan;
+    let call: LlmCallRecord;
+    try {
+      const result = await runtime.llm.invoke(
+        PLANNER_CALL_SITE,
+        "fast",
+        messages,
+        ResearchPlanOutput,
+        {
+          purpose: runtime.purpose,
+          runId: state.runId ?? runIdOf(config, runtime.newId),
+          maxOutputTokens: PLANNER_MAX_OUTPUT_TOKENS,
+          signal: config.signal,
+        },
+      );
+      plan = result.output;
+      call = answeredCall(PLANNER_CALL_SITE, result);
+    } catch (error) {
+      if (config.signal?.aborted || isAbortError(error)) throw error;
+      // Only a provider-layer failure ends the research; anything else is a bug and is thrown.
+      const failed = failedCall(PLANNER_CALL_SITE, "fast", error);
+      if (failed.status === "unexpected") throw error;
+      console.warn(`⚠️ [Research Manager] Planner unavailable (${failed.status})`);
+      return {
+        researchComplete: true,
+        usage: [failed],
+        statusMessages: [`Research complete (planner unavailable: ${failed.status})`],
+      };
+    }
 
+    console.log(`📋 [Research Manager] Plan: ${plan.nextAction} - ${plan.reasoning}`);
+    if (plan.nextAction === "done") {
+      status("✅ Deep dive complete");
+      return { researchComplete: true, usage: [call], statusMessages: [`✅ ${plan.reasoning}`] };
+    }
+
+    status(`🔍 ${plan.reasoning}`);
     return {
-      researchPlan: {
-        nextAction: "search_samples",
-        query: `${state.spotifyData?.title} ${state.spotifyData?.artist}`,
-        reasoning: "Starting research with sample history to discover musical DNA",
-      },
-      researchIteration: 1,
-      statusMessages: ["🔬 Starting deep dive research..."],
+      researchPlan: plan,
+      researchIteration: iteration + 1,
+      usage: [call],
+      statusMessages: [`🔍 ${plan.reasoning}`],
     };
-  }
-
-  // Use LLM to analyze current findings and decide next steps
-  if (!state.spotifyData) {
-    console.log("⚠️ [Research Manager] No track data, completing research");
-    return {
-      researchComplete: true,
-      statusMessages: ["Research complete (no track data)"],
-    };
-  }
-
-  const { title, artist } = state.spotifyData;
-
-  writer?.({
-    type: "status",
-    message: `🧠 Analyzing findings with ${GEMINI_MODEL_PRO} (iteration ${iteration}/3)...`,
-    node: "research_manager",
-    timestamp: new Date().toISOString(),
-  });
-
-  const prompt = formatResearchManagerPrompt(title, artist, state.researchData, iteration);
-
-  // Use unified Gemini client for structured output (Pro tier for reasoning)
-  const result = await generateStructuredOutput({
-    prompt,
-    schema: ResearchPlanSchema,
-    useFallbackOnQuota: true,
-    tier: "pro",
-  });
-
-  if (!result.data) {
-    console.error("❌ [Research Manager] LLM failed:", result.error);
-    return {
-      researchComplete: true,
-      statusMessages: ["Research complete (LLM error)"],
-    };
-  }
-
-  const plan = result.data as ResearchPlan;
-  console.log(`📋 [Research Manager] Plan: ${plan.nextAction} - ${plan.reasoning}`);
-
-  // Check if research is complete
-  if (plan.nextAction === "done" || iteration >= 3) {
-    writer?.({
-      type: "status",
-      message: "✅ Deep dive complete",
-      node: "research_manager",
-      timestamp: new Date().toISOString(),
-    });
-
-    return {
-      researchComplete: true,
-      statusMessages: [`✅ ${plan.reasoning}`],
-    };
-  }
-
-  // Continue with next search
-  writer?.({
-    type: "status",
-    message: `🔍 ${plan.reasoning}`,
-    node: "research_manager",
-    timestamp: new Date().toISOString(),
-  });
-
-  return {
-    researchPlan: plan,
-    researchIteration: iteration + 1,
-    statusMessages: [`🔍 ${plan.reasoning}`],
   };
 }
 
@@ -244,62 +257,85 @@ function extractMbidFromResearch(researchData: ResearchData): string | null {
 // Node: Research Tool (executes searches)
 // =============================================================================
 
+/** The source each research step reads, for its errors. */
+const ACTION_SOURCE: Record<Exclude<ResearchPlan["nextAction"], "done">, SourceId> = {
+  search_samples: "tavily",
+  search_production: "tavily",
+  search_general: "tavily",
+  search_musicbrainz: "musicbrainz",
+  search_artist_collaborators: "musicbrainz",
+  search_lastfm_tags: "lastfm",
+  search_lastfm_similar_tracks: "lastfm",
+  search_lastfm_similar_artists: "lastfm",
+  search_lastfm_artist_info: "lastfm",
+  search_listenbrainz_similar: "listenbrainz",
+};
+
+/** "search_lastfm_similar_tracks" → "lastfm similar tracks". */
+export const actionLabel = (action: string) => action.replace(/^search_/, "").replaceAll("_", " ");
+
+function createResearchToolNode(runtime: AgentRuntime) {
+  return (state: ResearcherStateType, config: LangGraphRunnableConfig) =>
+    researchToolNode(state, config, runtime);
+}
+
 async function researchToolNode(
   state: ResearcherStateType,
   config: LangGraphRunnableConfig,
+  runtime: AgentRuntime,
 ): Promise<Partial<ResearcherStateType>> {
   const writer = config.writer;
   const plan = state.researchPlan;
 
-  if (!plan || !state.spotifyData) {
+  if (!plan || plan.nextAction === "done" || !state.spotifyData) {
     return { researchComplete: true };
   }
 
   const { title, artist } = state.spotifyData;
-  const actionLabel = plan.nextAction.replace("search_", "").replace("_", " ");
+  const label = actionLabel(plan.nextAction);
+  // Every search stops when the run is cancelled.
+  const options = { signal: config.signal };
 
   console.log(`🔧 [Research Tool] Executing: ${plan.nextAction}`);
 
   writer?.({
     type: "status",
-    message: `🔎 Searching ${actionLabel}...`,
+    message: `🔎 Searching ${label}...`,
     node: "research_tool",
-    timestamp: new Date().toISOString(),
+    timestamp: timestampOf(runtime),
   });
 
-  // Prepare new research data (will be merged via appending reducer)
-  const newData: ResearchData = {
-    samples: [],
-    productionTrivia: [],
-    relatedArtists: [],
-    collaborators: [],
-    artistTopTracks: [],
-    lastfmTags: [],
-    lastfmSimilarTracks: [],
-    lastfmSimilarArtists: [],
-    lastfmArtistBio: undefined,
-    listenbrainzSimilarArtists: [],
-  };
-
-  try {
+  // One search attempt; its result is merged into the research by the appending reducer.
+  const search = async (): Promise<ResearchData> => {
+    const newData: ResearchData = {
+      samples: [],
+      productionTrivia: [],
+      relatedArtists: [],
+      collaborators: [],
+      artistTopTracks: [],
+      lastfmTags: [],
+      lastfmSimilarTracks: [],
+      lastfmSimilarArtists: [],
+      lastfmArtistBio: undefined,
+      listenbrainzSimilarArtists: [],
+    };
     let result: string;
 
     switch (plan.nextAction) {
       case "search_samples":
-        result = await searchSamples.invoke({
-          songTitle: title,
-          artistName: artist,
-        });
+        config.signal?.throwIfAborted();
+        result = await searchSamples.invoke({ songTitle: title, artistName: artist }, options);
         if (!result.startsWith("Error") && !result.startsWith("No sample")) {
           newData.samples.push(result);
         }
         break;
 
       case "search_production":
-        result = await searchProductionHistory.invoke({
-          songTitle: title,
-          artistName: artist,
-        });
+        config.signal?.throwIfAborted();
+        result = await searchProductionHistory.invoke(
+          { songTitle: title, artistName: artist },
+          options,
+        );
         if (!result.startsWith("Error") && !result.startsWith("No production")) {
           newData.productionTrivia.push(result);
         }
@@ -308,7 +344,8 @@ async function researchToolNode(
       case "search_general": {
         // Use the custom query from the plan (for following leads)
         const query = plan.query || `${title} ${artist} music history`;
-        result = await searchMusicInfo.invoke({ query });
+        config.signal?.throwIfAborted();
+        result = await searchMusicInfo.invoke({ query }, options);
         if (!result.startsWith("Error") && !result.startsWith("No results")) {
           // Classify general results as production trivia
           newData.productionTrivia.push(result);
@@ -318,7 +355,8 @@ async function researchToolNode(
 
       case "search_musicbrainz":
         // Use MusicBrainz for structured genealogy data
-        result = await getMusicBrainzRelations.invoke({ title, artist });
+        config.signal?.throwIfAborted();
+        result = await getMusicBrainzRelations.invoke({ title, artist }, options);
         try {
           const mbData = JSON.parse(result);
           if (mbData.found && mbData.genealogy) {
@@ -342,7 +380,8 @@ async function researchToolNode(
 
       case "search_artist_collaborators":
         // Use MusicBrainz to get artist collaborators (producers, writers)
-        result = await getMusicBrainzArtist.invoke({ artistName: artist });
+        config.signal?.throwIfAborted();
+        result = await getMusicBrainzArtist.invoke({ artistName: artist }, options);
         try {
           const artistData = JSON.parse(result);
           if (artistData.found && artistData.collaborators?.length > 0) {
@@ -360,36 +399,13 @@ async function researchToolNode(
         }
         break;
 
-      case "search_artist_top_tracks": {
-        // Use Spotify to get artist's top tracks for "More from this artist"
-        const artistId = state.spotifyData.artistIds?.[0];
-        if (artistId) {
-          result = await getArtistTopTracks.invoke({ artistId });
-          try {
-            const topTracksData = JSON.parse(result);
-            if (topTracksData.topTracks?.length > 0) {
-              newData.artistTopTracks = topTracksData.topTracks;
-              newData.relatedArtists.push(
-                `[Spotify Top Tracks] ${JSON.stringify(topTracksData.topTracks)}`,
-              );
-            }
-          } catch {
-            if (!result.includes("error")) {
-              newData.relatedArtists.push(result);
-            }
-          }
-        } else {
-          console.log("⚠️ [Research Tool] No artist ID available for top tracks");
-        }
-        break;
-      }
-
       case "search_lastfm_tags":
         // Fetch both track and artist tags in parallel
         {
+          config.signal?.throwIfAborted();
           const [trackTagsResult, artistTagsResult] = await Promise.allSettled([
-            getLastfmTrackTags.invoke({ title, artist }),
-            getLastfmArtistTags.invoke({ artist }),
+            getLastfmTrackTags.invoke({ title, artist }, options),
+            getLastfmArtistTags.invoke({ artist }, options),
           ]);
 
           if (trackTagsResult.status === "fulfilled") {
@@ -427,7 +443,8 @@ async function researchToolNode(
         break;
 
       case "search_lastfm_similar_tracks":
-        result = await getLastfmSimilarTracks.invoke({ title, artist });
+        config.signal?.throwIfAborted();
+        result = await getLastfmSimilarTracks.invoke({ title, artist }, options);
         try {
           const data = JSON.parse(result);
           if (data.found && data.tracks?.length > 0) {
@@ -444,7 +461,8 @@ async function researchToolNode(
         break;
 
       case "search_lastfm_similar_artists":
-        result = await getLastfmSimilarArtists.invoke({ artist });
+        config.signal?.throwIfAborted();
+        result = await getLastfmSimilarArtists.invoke({ artist }, options);
         try {
           const data = JSON.parse(result);
           if (data.found && data.artists?.length > 0) {
@@ -464,7 +482,8 @@ async function researchToolNode(
         break;
 
       case "search_lastfm_artist_info":
-        result = await getLastfmArtistInfo.invoke({ artist });
+        config.signal?.throwIfAborted();
+        result = await getLastfmArtistInfo.invoke({ artist }, options);
         try {
           const data = JSON.parse(result);
           if (data.found) {
@@ -494,10 +513,11 @@ async function researchToolNode(
         {
           // Extract MBID from existing research data if available
           const mbid = extractMbidFromResearch(state.researchData);
-          result = await getListenBrainzSimilarArtists.invoke({
-            artistMbid: mbid || undefined,
-            artistName: mbid ? undefined : artist,
-          });
+          config.signal?.throwIfAborted();
+          result = await getListenBrainzSimilarArtists.invoke(
+            { artistMbid: mbid || undefined, artistName: mbid ? undefined : artist },
+            options,
+          );
           try {
             const data = JSON.parse(result);
             if (data.found && data.artists?.length > 0) {
@@ -516,24 +536,31 @@ async function researchToolNode(
           }
         }
         break;
-
-      default:
-        console.warn(`⚠️ [Research Tool] Unknown action: ${plan.nextAction}`);
-        return { researchComplete: true };
     }
+    return newData;
+  };
 
+  try {
+    // At most one more attempt, for a transient failure only; no other retry wraps this one.
+    const newData = await withRetry(search, {
+      maxAttempts: 2,
+      initialInterval: SEARCH_RETRY_MS,
+      signal: config.signal,
+    });
     console.log(`✅ [Research Tool] Found data for ${plan.nextAction}`);
-
     return {
       researchData: newData,
-      statusMessages: [`Found ${actionLabel} information`],
+      statusMessages: [`Found ${label} information`],
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, message);
-
+    // A cancelled run stops here; any other failure is recorded as the source's error and the
+    // research goes on.
+    if (config.signal?.aborted || isAbortError(error)) throw error;
+    const record = errorRecord(ACTION_SOURCE[plan.nextAction], error);
+    console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, record.message);
     return {
-      statusMessages: [`Search failed: ${actionLabel}`],
+      sourceErrors: [record],
+      statusMessages: [`⚠️ Search failed: ${label} (${record.code})`],
     };
   }
 }
@@ -543,14 +570,9 @@ async function researchToolNode(
 // =============================================================================
 
 function shouldContinueResearch(state: ResearcherStateType): string {
-  // Exit conditions
+  // Exit conditions (the manager stops after the fixed step and MAX_PLANNED_STEPS planned ones)
   if (state.researchComplete) {
     console.log("🏁 [Router] Research marked complete");
-    return END;
-  }
-
-  if (state.researchIteration >= 3) {
-    console.log("🏁 [Router] Max iterations reached");
     return END;
   }
 
@@ -569,11 +591,6 @@ function afterToolExecution(state: ResearcherStateType): string {
     return END;
   }
 
-  if (state.researchIteration >= 3) {
-    console.log("🏁 [Router] Max iterations after tool");
-    return END;
-  }
-
   console.log("🔄 [Router] Looping back to research_manager");
   return "research_manager";
 }
@@ -588,18 +605,18 @@ function afterToolExecution(state: ResearcherStateType): string {
  * Flow: research_manager → [research_tool → research_manager]* → END
  *
  * The loop continues until:
- * - researchComplete is true
- * - researchIteration reaches 3
+ * - researchComplete is true (the planner chose "done", failed, or used its steps)
  * - researchPlan.nextAction is "done"
+ *
+ * No node has a retry policy: the planner's transient failures are retried inside the provider
+ * layer (a node retry would be another model call), and a search at most once by its node. A
+ * failed search is a source error and the research goes on; only a cancelled run or a bug
+ * leaves the subgraph as an error.
  */
-export function createResearcherSubgraph() {
+export function createResearcherSubgraph(runtime: AgentRuntime = defaultAgentRuntime) {
   const workflow = new StateGraph(ResearcherState)
-    .addNode("research_manager", researchManagerNode, {
-      retryPolicy: { maxAttempts: 2 },
-    })
-    .addNode("research_tool", researchToolNode, {
-      retryPolicy: { maxAttempts: 3 },
-    })
+    .addNode("research_manager", createResearchManagerNode(runtime))
+    .addNode("research_tool", createResearchToolNode(runtime))
     .addEdge(START, "research_manager")
     .addConditionalEdges("research_manager", shouldContinueResearch, {
       research_tool: "research_tool",
@@ -613,10 +630,12 @@ export function createResearcherSubgraph() {
   return workflow.compile();
 }
 
-// Cached singleton — the compiled subgraph has no mutable state
+// Cached subgraph for the default runtime — the compiled subgraph has no mutable state
 let cachedSubgraph: ReturnType<typeof createResearcherSubgraph> | null = null;
 
-export function getCachedResearcherSubgraph() {
+/** The subgraph for `runtime`; the one for the default runtime is compiled once. */
+export function getCachedResearcherSubgraph(runtime: AgentRuntime = defaultAgentRuntime) {
+  if (runtime !== defaultAgentRuntime) return createResearcherSubgraph(runtime);
   if (!cachedSubgraph) {
     cachedSubgraph = createResearcherSubgraph();
   }

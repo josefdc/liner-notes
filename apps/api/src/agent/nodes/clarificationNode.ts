@@ -8,6 +8,8 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getTrackDetails } from "../../sources/spotify.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
+import { isAbortError } from "../errors.js";
+import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 
 interface DisambiguationInterrupt {
   type: string;
@@ -18,6 +20,7 @@ interface DisambiguationInterrupt {
 export async function clarificationNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
+  runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   console.log("⏸️ [Clarification] Waiting for user to select track...");
   const store = getStore();
@@ -56,10 +59,11 @@ export async function clarificationNode(
     code: "SPOTIFY-FOUND",
     message: `User confirmed: "${selected.title}" // ${selected.artist}`,
     node: "clarification",
-    timestamp: new Date().toISOString(),
+    timestamp: timestampOf(runtime),
   });
 
   // Save disambiguation preference in long-term memory
+  config.signal?.throwIfAborted();
   if (store && state.candidates) {
     const normalizedQuery = state.songQuery.toLowerCase().trim();
     const candidateIds = state.candidates
@@ -70,7 +74,7 @@ export async function clarificationNode(
       await store.put(["disambiguation"], normalizedQuery, {
         selectedTrackId: selectedId,
         candidateIds,
-        timestamp: Date.now(),
+        timestamp: runtime.now().getTime(),
       });
     } catch (e) {
       console.warn("⚠️ [Clarification] Store write error:", e);
@@ -79,7 +83,11 @@ export async function clarificationNode(
 
   // Fetch full Spotify data for selected track
   try {
-    const detailsResult = await getTrackDetails.invoke({ trackId: selectedId });
+    config.signal?.throwIfAborted();
+    const detailsResult = await getTrackDetails.invoke(
+      { trackId: selectedId },
+      { signal: config.signal },
+    );
     const spotifyData = JSON.parse(detailsResult) as SpotifyData;
 
     console.log("✅ [Clarification] User selected:", spotifyData.title);
@@ -90,10 +98,11 @@ export async function clarificationNode(
       candidates: null, // Clear candidates
       statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
     };
-  } catch {
-    // Fallback: minimal SpotifyData from the candidate. The duration is unknown here, so it is
-    // left empty rather than guessed: 0 means unknown, though the composer still falls back to
-    // the model's value until #22.
+  } catch (error) {
+    if (config.signal?.aborted || isAbortError(error)) throw error;
+    // Fallback: minimal SpotifyData from the candidate. What the candidate does not carry is
+    // left unknown rather than guessed: the duration (0, shown as missing) and whether the
+    // track is explicit (null).
     return {
       spotifyData: {
         id: selected.id,
@@ -106,7 +115,7 @@ export async function clarificationNode(
         popularity: selected.popularity,
         duration: "",
         durationMs: 0,
-        explicit: false,
+        explicit: null,
         spotifyUrl: `https://open.spotify.com/track/${selected.id}`,
         previewUrl: null,
       },

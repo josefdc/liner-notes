@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { LlmError } from "../llm/errors.js";
 import { SourceError } from "../sources/http.js";
-import { isAbortError, isTransient, TRANSIENT_RETRY, TransientError, withRetry } from "./errors.js";
+import { isAbortError, isTransient, TransientError, withRetry } from "./errors.js";
 
 describe("isTransient", () => {
   it.each([
@@ -50,10 +50,6 @@ describe("isTransient", () => {
       expect(isAbortError(error)).toBe(true);
       expect(isTransient(error)).toBe(false);
     }
-  });
-
-  it("is the retry rule of the graph's retry policy", () => {
-    expect(TRANSIENT_RETRY).toEqual({ maxAttempts: 2, retryOn: isTransient });
   });
 });
 

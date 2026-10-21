@@ -3,6 +3,7 @@ import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
+import { llm } from "../../llm/invoke.js";
 import { getDb } from "../../store/database.js";
 import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
 import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
@@ -336,8 +337,20 @@ async function executeRun(
     }
   }
   recordRun("update a run", (db) => updateRun(db, threadId, { status }));
+  // A finished run's model calls are no longer counted; a paused one keeps its count, so the
+  // per-run cap still covers it when it is resumed.
+  if (status !== "interrupted") endModelRun(threadId);
   console.log(`[Run ${threadId}] ${outcome.kind}; recorded ${status}`);
   return outcome;
+}
+
+/** Forgets a finished run's call count in the provider layer. Never fails the run. */
+function endModelRun(runId: string): void {
+  try {
+    llm.endRun(runId);
+  } catch (err) {
+    console.warn(`[Run ${runId}] Could not end the model run:`, err);
+  }
 }
 
 // =============================================================================

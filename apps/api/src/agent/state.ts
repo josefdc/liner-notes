@@ -362,6 +362,13 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // The run this invocation belongs to: the thread id, or an id minted once when there is no
+  // thread. Every model call of the run counts against one cap under this id. Set once.
+  runId: Annotation<string | null>({
+    reducer: (prev, next) => prev ?? next,
+    default: () => null,
+  }),
+
   // The track's ISRC, when the scout found one; null when unknown.
   isrc: Annotation<string | null>({
     reducer: (_, next) => next,

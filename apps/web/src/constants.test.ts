@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayableFactoids, normalizeTrack } from './constants';
+import { displayableFactoids, modelUnavailableText, normalizeTrack } from './constants';
 import type { TrackData } from './types';
 
 describe('displayableFactoids', () => {
@@ -88,5 +88,14 @@ describe('factoids that repeat estimated audio values', () => {
       'g4',
       'g5',
     ]);
+  });
+});
+
+describe('modelUnavailableText', () => {
+  it('says live model calls are paused when the budget is exhausted', () => {
+    expect(modelUnavailableText('budget_exhausted')).toBe(
+      'live model calls are paused (budget reached)',
+    );
+    expect(modelUnavailableText('budget_exhausted')).not.toMatch(/did not respond/);
   });
 });

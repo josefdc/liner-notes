@@ -109,7 +109,13 @@ export type AudioUnavailableReason =
   | 'not_run';
 
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
-export type ModelUnavailableReason = 'no_output' | 'rate_limited' | 'timeout' | 'auth' | 'error';
+export type ModelUnavailableReason =
+  | 'no_output'
+  | 'rate_limited'
+  | 'timeout'
+  | 'auth'
+  | 'error'
+  | 'budget_exhausted';
 
 export interface TrackData {
   id: string;

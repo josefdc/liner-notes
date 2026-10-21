@@ -3,9 +3,10 @@
  * GET /api/factoids/decrypt/stream (one per category, as server-sent events).
  *
  * Each model call goes through the provider layer (`llm.invoke`, tier `main`, schema
- * `FactoidsOutput`) with its own run id, so a request makes at most MAX_LLM_CALLS_PER_RUN
- * calls; the request's abort signal stops a call in flight when the client leaves. There is no
- * evidence here: these factoids are model inference, and the prompt says so.
+ * `FactoidsOutput`). A request is one run: its calls share a run id, so it makes at most
+ * MAX_LLM_CALLS_PER_RUN calls; the request's abort signal stops a call in flight when the
+ * client leaves. There is no evidence here: these factoids are model inference, and the prompt
+ * says so.
  */
 
 import { randomUUID } from "node:crypto";
@@ -13,11 +14,10 @@ import { type ComposerFactoid, FactoidsOutput } from "@liner-notes/contract";
 import { type Response, Router } from "express";
 import { z } from "zod";
 import { isLlmError } from "../../llm/errors.js";
-import { type LlmMessage, llm } from "../../llm/invoke.js";
+import type { LlmPurpose } from "../../config/settings.js";
+import { type Llm, type LlmMessage, llm } from "../../llm/invoke.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
-
-const router = Router();
 
 /** Interval between heartbeat messages on the factoid stream. */
 export const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -94,14 +94,16 @@ export function factoidMessages(
   ];
 }
 
-/** Calls the model for factoids; throws the provider layer's error when it fails. */
-async function generateFactoids(messages: LlmMessage[], signal: AbortSignal) {
-  return llm.invoke(FACTOIDS_CALL_SITE, "main", messages, FactoidsOutput, {
-    purpose: "dev",
-    runId: `factoids-${randomUUID()}`,
-    maxOutputTokens: FACTOIDS_MAX_OUTPUT_TOKENS,
-    signal,
-  });
+/**
+ * The client-facing code for a failed call: the provider's rate limit, the budget or the call
+ * cap (live calls paused), or a plain failure. Details stay in the server log.
+ */
+export function failureCode(error: unknown): "rate_limited" | "budget_exhausted" | "failed" {
+  if (isLlmError(error, "rate_limited")) return "rate_limited";
+  if (isLlmError(error, "budget_exceeded") || isLlmError(error, "call_cap")) {
+    return "budget_exhausted";
+  }
+  return "failed";
 }
 
 /** A factoid card from the model's output, with ids set by code. */
@@ -132,72 +134,13 @@ const STREAM_CATEGORIES = [
 ];
 
 // =============================================================================
-// POST /api/factoids/decrypt
-// =============================================================================
-
-/**
- * Generate additional obscure facts for a track
- *
- * POST /api/factoids/decrypt
- * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...", "existingFactoidIds": ["f1", "f2"] }
- * Returns: { factoids: Factoid[] } - up to 3 new facts with entities (fewer when the model
- * knows fewer), numbered after the existing ids
- * A malformed body is a 400 `invalid_input`; a failed generation a 500 `failed`.
- */
-router.post(
-  "/api/factoids/decrypt",
-  asyncRoute(async (req, res) => {
-    const parsed = DecryptBodySchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      sendError(res, "invalid_input", {
-        issues: describeIssues(parsed.error),
-        example: DECRYPT_EXAMPLE,
-      });
-      return;
-    }
-    const { trackTitle, trackArtist, existingFactoidIds } = parsed.data;
-    const track = describeTrack(trackTitle, trackArtist);
-
-    console.log(`[Factoids] Decrypting more facts for ${track}`);
-
-    // Stops the model call when the client leaves before the answer.
-    const disconnect = new AbortController();
-    res.on("close", () => {
-      if (!res.writableEnded) disconnect.abort();
-    });
-
-    let result: Awaited<ReturnType<typeof generateFactoids>>;
-    try {
-      result = await generateFactoids(
-        factoidMessages({ title: trackTitle, artist: trackArtist }, STREAM_CATEGORIES),
-        disconnect.signal,
-      );
-    } catch (error) {
-      console.error(`[Factoids] Decrypt failed (${failure(error)})`);
-      if (!disconnect.signal.aborted) sendError(res, "failed");
-      return;
-    }
-
-    res.json({
-      success: true,
-      factoids: result.output.factoids
-        .slice(0, DECRYPT_COUNT)
-        .map((card, i) => toFactoid(card, `f${existingFactoidIds.length + i + 1}`)),
-      meta: {
-        trackId: parsed.data.trackId,
-        model: result.deployment,
-        timestamp: new Date().toISOString(),
-      },
-    });
-  }),
-);
-
-// =============================================================================
-// GET /api/factoids/decrypt/stream
+// Event streams
 // =============================================================================
 
 const STREAM_ERRORS = {
   invalid_input: "The request is not valid.",
+  rate_limited: "The model is busy. Please try again later.",
+  budget_exhausted: "Live model calls are paused for now.",
   failed: "This fact could not be generated.",
 } as const;
 
@@ -254,76 +197,183 @@ function openEventStream(res: Response) {
   };
 }
 
-// HEAD gets the stream's headers only; it never asks the model.
-router.head("/api/factoids/decrypt/stream", eventStreamHead);
+export interface FactoidsRouterOptions {
+  /** The purpose tag of the routes' model calls (budget accounting). */
+  purpose?: LlmPurpose;
+  /** The model layer (default: the shared provider layer). */
+  llm?: Llm;
+}
 
 /**
- * Stream factoids one-by-one via SSE for faster perceived speed
- *
- * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2
- * Messages (all on the default `message` event):
- * - { type: "connected" }
- * - { type: "factoid", data: Factoid }
- * - { type: "error", code, error, index? }: invalid input, or one factoid that failed
- * - { type: "heartbeat" }: every 15 s while the stream is open
- * - { type: "done" }: always last
- *
- * Invalid input is reported in the stream (an EventSource cannot read an error status). When
- * the client disconnects, no further factoid is requested and nothing more is written.
+ * The factoid routes. Each request is one run: its calls share one run id, so a request makes
+ * at most MAX_LLM_CALLS_PER_RUN calls, and the run is ended when the request is.
  */
-router.get(
-  "/api/factoids/decrypt/stream",
-  asyncRoute(async (req, res) => {
-    const stream = openEventStream(res);
+export function createFactoidsRouter({
+  purpose = "dev",
+  llm: layer = llm,
+}: FactoidsRouterOptions = {}): Router {
+  const router = Router();
 
-    const parsed = StreamQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      markFailed(res);
-      stream.error("invalid_input", { issues: describeIssues(parsed.error) });
-      stream.done();
-      return;
-    }
-    const { trackTitle, trackArtist, existingIds } = parsed.data;
-    const track = describeTrack(trackTitle, trackArtist);
+  /** One request's model calls: one run id, the request's purpose and abort signal. */
+  function requestRun(signal: AbortSignal) {
+    const runId = `factoids-${randomUUID()}`;
+    return {
+      generate: (messages: LlmMessage[]) =>
+        layer.invoke(FACTOIDS_CALL_SITE, "main", messages, FactoidsOutput, {
+          purpose,
+          runId,
+          maxOutputTokens: FACTOIDS_MAX_OUTPUT_TOKENS,
+          signal,
+        }),
+      end: () => layer.endRun(runId),
+    };
+  }
 
-    console.log(`[Factoids] Streaming factoids for ${track}`);
-    stream.send({ type: "connected", timestamp: new Date().toISOString() });
+  // =============================================================================
+  // POST /api/factoids/decrypt
+  // =============================================================================
 
-    for (let i = 0; i < STREAM_CATEGORIES.length && !stream.closed; i++) {
-      const factoidId = `f${existingIds.length + i + 1}`;
-      // The stream's signal stops the call in flight when the client leaves; the race below
-      // stops waiting for it at once.
-      let card: ComposerFactoid | undefined;
+  /**
+   * Generate additional obscure facts for a track
+   *
+   * POST /api/factoids/decrypt
+   * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...", "existingFactoidIds": ["f1", "f2"] }
+   * Returns: { factoids: Factoid[] } - up to 3 new facts with entities (fewer when the model
+   * knows fewer), numbered after the existing ids
+   * A malformed body is a 400 `invalid_input`; the model's rate limit a 429 `rate_limited`; the
+   * budget or the call cap a 503 `budget_exhausted`; any other failed generation a 500 `failed`.
+   * An empty list is a valid answer (nothing documented the model is sure of).
+   */
+  router.post(
+    "/api/factoids/decrypt",
+    asyncRoute(async (req, res) => {
+      const parsed = DecryptBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendError(res, "invalid_input", {
+          issues: describeIssues(parsed.error),
+          example: DECRYPT_EXAMPLE,
+        });
+        return;
+      }
+      const { trackTitle, trackArtist, existingFactoidIds } = parsed.data;
+      const track = describeTrack(trackTitle, trackArtist);
+
+      console.log(`[Factoids] Decrypting more facts for ${track}`);
+
+      // Stops the model call when the client leaves before the answer.
+      const disconnect = new AbortController();
+      res.on("close", () => {
+        if (!res.writableEnded) disconnect.abort();
+      });
+
+      const run = requestRun(disconnect.signal);
+      let result: Awaited<ReturnType<typeof run.generate>>;
       try {
-        const outcome = await stream.untilClosed(
-          generateFactoids(
-            factoidMessages({ title: trackTitle, artist: trackArtist }, [STREAM_CATEGORIES[i]]),
-            stream.signal,
-          ),
+        result = await run.generate(
+          factoidMessages({ title: trackTitle, artist: trackArtist }, STREAM_CATEGORIES),
         );
-        if (outcome === CLOSED) break;
-        card = outcome.output.factoids[0];
       } catch (error) {
-        if (stream.closed) break;
-        console.error(`[Factoids] Factoid ${i + 1} failed (${failure(error)})`);
-        stream.error("failed", { index: i });
-        continue;
+        console.error(`[Factoids] Decrypt failed (${failure(error)})`);
+        if (!disconnect.signal.aborted) sendError(res, failureCode(error));
+        return;
+      } finally {
+        run.end();
       }
 
-      if (card) {
-        stream.send({ type: "factoid", data: toFactoid(card, factoidId) });
-      } else {
-        console.warn(`[Factoids] Factoid ${i + 1}: the model wrote none`);
-        stream.error("failed", { index: i });
+      res.json({
+        success: true,
+        factoids: result.output.factoids
+          .slice(0, DECRYPT_COUNT)
+          .map((card, i) => toFactoid(card, `f${existingFactoidIds.length + i + 1}`)),
+        meta: {
+          trackId: parsed.data.trackId,
+          model: result.deployment,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }),
+  );
+
+  // =============================================================================
+  // GET /api/factoids/decrypt/stream
+  // =============================================================================
+
+  // HEAD gets the stream's headers only; it never asks the model.
+  router.head("/api/factoids/decrypt/stream", eventStreamHead);
+
+  /**
+   * Stream factoids one-by-one via SSE for faster perceived speed
+   *
+   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2
+   * Messages (all on the default `message` event):
+   * - { type: "connected" }
+   * - { type: "factoid", data: Factoid }
+   * - { type: "error", code, error, index? }: invalid input, or one factoid that failed
+   *   (`failed`, `rate_limited`, or `budget_exhausted` when live calls are paused); a focus the
+   *   model knows nothing documented about sends nothing
+   * - { type: "heartbeat" }: every 15 s while the stream is open
+   * - { type: "done" }: always last
+   *
+   * Invalid input is reported in the stream (an EventSource cannot read an error status). When
+   * the client disconnects, no further factoid is requested and nothing more is written.
+   */
+  router.get(
+    "/api/factoids/decrypt/stream",
+    asyncRoute(async (req, res) => {
+      const stream = openEventStream(res);
+
+      const parsed = StreamQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        markFailed(res);
+        stream.error("invalid_input", { issues: describeIssues(parsed.error) });
+        stream.done();
+        return;
       }
-    }
+      const { trackTitle, trackArtist, existingIds } = parsed.data;
+      const track = describeTrack(trackTitle, trackArtist);
 
-    if (stream.closed) {
-      console.log(`[Factoids] Client left; stopped streaming factoids for ${track}`);
-      return;
-    }
-    stream.done();
-  }),
-);
+      console.log(`[Factoids] Streaming factoids for ${track}`);
+      stream.send({ type: "connected", timestamp: new Date().toISOString() });
 
-export default router;
+      const run = requestRun(stream.signal);
+      try {
+        for (let i = 0; i < STREAM_CATEGORIES.length && !stream.closed; i++) {
+          const factoidId = `f${existingIds.length + i + 1}`;
+          // The stream's signal stops the call in flight when the client leaves; the race below
+          // stops waiting for it at once.
+          let card: ComposerFactoid | undefined;
+          try {
+            const outcome = await stream.untilClosed(
+              run.generate(
+                factoidMessages({ title: trackTitle, artist: trackArtist }, [STREAM_CATEGORIES[i]]),
+              ),
+            );
+            if (outcome === CLOSED) break;
+            card = outcome.output.factoids[0];
+          } catch (error) {
+            if (stream.closed) break;
+            console.error(`[Factoids] Factoid ${i + 1} failed (${failure(error)})`);
+            stream.error(failureCode(error), { index: i });
+            continue;
+          }
+
+          // An empty answer is valid (nothing documented the model is sure of): no card, no error.
+          if (card) stream.send({ type: "factoid", data: toFactoid(card, factoidId) });
+          else console.log(`[Factoids] Factoid ${i + 1}: nothing documented`);
+        }
+      } finally {
+        run.end();
+      }
+
+      if (stream.closed) {
+        console.log(`[Factoids] Client left; stopped streaming factoids for ${track}`);
+        return;
+      }
+      stream.done();
+    }),
+  );
+
+  return router;
+}
+
+export default createFactoidsRouter();

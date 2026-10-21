@@ -50,6 +50,7 @@ vi.mock("../sources/listenbrainz.js", () => ({
 }));
 
 import { LlmError } from "../llm/errors.js";
+import { TransientError } from "./errors.js";
 import { MAX_PLANNED_STEPS, actionLabel, createResearcherSubgraph } from "./researcherSubgraph.js";
 import type { SpotifyData } from "./state.js";
 import { messagesOf, stubLlm, testRuntime } from "./testing/stubLlm.js";
@@ -175,6 +176,24 @@ describe("researcher subgraph", () => {
       expect.objectContaining({ source: "musicbrainz", code: "invalid_response" }),
     ]);
     expect(tools.getLastfmArtistInfo.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a transiently failing search once, records it and goes on", async () => {
+    tools.searchProductionHistory.invoke.mockImplementation(async () => {
+      throw new TransientError("search 503", 503);
+    });
+    const final = await createResearcherSubgraph(
+      testRuntime(planner(plan("search_production"), plan("search_lastfm_artist_info"))),
+    ).invoke({ spotifyData });
+
+    expect(tools.searchProductionHistory.invoke).toHaveBeenCalledTimes(2);
+    expect(final.sourceErrors).toEqual([expect.objectContaining({ source: "tavily" })]);
+    expect(tools.getLastfmArtistInfo.invoke).toHaveBeenCalledTimes(1);
+    expect(final.statusMessages).toContain("⚠️ Search failed: production (unavailable)");
+    tools.searchProductionHistory.invoke.mockReset();
+    tools.searchProductionHistory.invoke.mockImplementation(
+      async () => "[searchProductionHistory] found",
+    );
   });
 
   it("names a step with every underscore replaced", () => {

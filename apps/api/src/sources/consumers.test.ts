@@ -162,19 +162,17 @@ describe("tool output that consumers must drop", () => {
       expectNothingKept(out.researchData);
     });
 
-    it("the historian's fallback research keeps nothing", { timeout: 15_000 }, async () => {
+    it("a planner bug fails the research instead of being hidden", async () => {
       network(scenario);
-      // The planner fails on every attempt, so the historian falls back to direct searches.
-      planner.plans = ["throw", "throw", "throw", "throw"];
+      planner.plans = ["throw"];
 
-      const out = await historianNode(
-        { spotifyData: SPOTIFY_DATA } as unknown as SonicAgentStateType,
-        { writer: () => {} } as never,
-        runtime,
-      );
-
-      expect(out.statusMessages?.join(" ")).toMatch(/Enhanced research complete/);
-      expectNothingKept(out.researchData);
+      await expect(
+        historianNode(
+          { spotifyData: SPOTIFY_DATA } as unknown as SonicAgentStateType,
+          { writer: () => {} } as never,
+          runtime,
+        ),
+      ).rejects.toThrow("planner unavailable");
     });
   });
 });

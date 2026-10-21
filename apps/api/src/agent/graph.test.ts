@@ -85,16 +85,23 @@ vi.mock("../sources/musicbrainz.js", async (importOriginal) => ({
 vi.mock("../sources/listenbrainz.js", () => ({
   getListenBrainzSimilarArtists: tools.getListenBrainzSimilarArtists,
 }));
+const hooks = vi.hoisted(() => ({
+  /** Replaces the artwork enricher when set. */
+  enrich: null as null | ((genealogy: unknown) => Promise<unknown>),
+  putAudio: vi.fn(),
+  putResearch: vi.fn(),
+}));
 vi.mock("../store/cache.js", () => ({
   getCache: () => ({
     getAudio: () => null,
-    putAudio: () => {},
+    putAudio: hooks.putAudio,
     getResearch: () => null,
-    putResearch: () => {},
+    putResearch: hooks.putResearch,
   }),
 }));
 vi.mock("./enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: unknown) => genealogy,
+  enrichGenealogyWithArtwork: async (genealogy: unknown) =>
+    hooks.enrich ? hooks.enrich(genealogy) : genealogy,
 }));
 
 import { createLlm, type LlmDependencies } from "../llm/invoke.js";
@@ -109,7 +116,8 @@ import {
 } from "../llm/testing/providerStub.js";
 import { buildSonicAgentGraph } from "./graph.js";
 import type { TrackData } from "./schema.js";
-import { testRuntime } from "./testing/stubLlm.js";
+import { TransientError } from "./errors.js";
+import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
 const QUERY = "ice ice baby";
 
@@ -118,6 +126,9 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "agent-graph-"));
   writeFileSync(join(dir, "spend.jsonl"), "");
   for (const tool of Object.values(tools)) tool.invoke.mockClear();
+  hooks.enrich = null;
+  hooks.putAudio.mockClear();
+  hooks.putResearch.mockClear();
   // Every source is stubbed: any other request is a mistake, and fails.
   vi.stubGlobal("fetch", () => {
     throw new Error("network denied");
@@ -311,9 +322,8 @@ describe("the analysis graph", () => {
       claims: [],
       run: { fallback: true, usage: { llmCalls: 4 } },
     });
-    // Built from the sources only: the web research and the Spotify metadata.
+    // Built from primary records only: the web hit about the bass line is not shown.
     expect(result.trackData?.factoids.map((f) => [f.title, f.content])).toEqual([
-      ["Sample Detective", "The bass line comes from Under Pressure by Queen and David Bowie."],
       ["Release Info", 'Released in 1990 on "To the Extreme". Spotify popularity score: 90/100.'],
     ]);
   });
@@ -372,9 +382,201 @@ describe("the analysis graph", () => {
     expect(tools.getMusicBrainzRelations.invoke).not.toHaveBeenCalled();
   });
 
+  it("gives no node a retry policy: retries happen once, inside the nodes", () => {
+    const graph = buildSonicAgentGraph({ runtime: testRuntime(llmWith({})) });
+    for (const name of ["scout", "clarification", "engineer", "historian", "composer"] as const) {
+      expect(graph.nodes[name].retryPolicy, name).toBeUndefined();
+    }
+  });
+
   it("joins the two branches with one list-form edge", () => {
     const graph = buildSonicAgentGraph({ runtime: testRuntime(llmWith({})) });
     const joins = Object.keys(graph.channels).filter((name) => name.startsWith("join:"));
     expect(joins).toEqual(["join:engineer+historian:composer"]);
+  });
+});
+
+// =============================================================================
+// Failures, cancellation and run identity (on a stub model layer)
+// =============================================================================
+
+const COMPOSITION = {
+  claims: [],
+  factoids: [
+    {
+      title: "Borrowed bass",
+      text: "From a record.",
+      type: "sample",
+      entities: [],
+      evidenceIds: [],
+    },
+  ],
+  genealogyNodes: [
+    {
+      id: "current",
+      role: "current",
+      label: "Ice Ice Baby",
+      trackTitle: null,
+      trackArtist: null,
+      year: null,
+    },
+  ],
+  genealogyLinks: [],
+};
+
+/** A model layer that composes COMPOSITION and plans `steps`, then "done". */
+function stubModel(steps: string[], planner?: (call: StubCall) => unknown) {
+  return stubLlm((call) => {
+    if (call.callSite === "composer") return COMPOSITION;
+    if (planner) return planner(call);
+    const step = Number(JSON.stringify(call.input).match(/Planning step (\d+)/)?.[1] ?? 1);
+    const next = steps[step - 1] ?? "done";
+    return { nextAction: next, query: null, reasoning: `planned ${next}` };
+  });
+}
+
+interface Driven {
+  threw: unknown;
+  events: Array<Record<string, unknown>>;
+  state: Record<string, unknown> & { trackData?: TrackData | null };
+}
+
+/** Runs the graph with `streamMode` updates and custom events; never throws. */
+async function drive(
+  llm: ReturnType<typeof stubLlm>,
+  options: { threadId?: string; signal?: AbortSignal; store?: InMemoryStore; at?: string } = {},
+): Promise<Driven> {
+  const graph = buildSonicAgentGraph({
+    runtime: testRuntime(llm, options.at),
+    ...(options.threadId ? { checkpointer: new MemorySaver() } : {}),
+    store: options.store ?? new InMemoryStore(),
+  });
+  const events: Array<Record<string, unknown>> = [];
+  let threw: unknown = null;
+  let state: Driven["state"] = {};
+  try {
+    const stream = await graph.stream(
+      { songQuery: QUERY },
+      {
+        ...(options.threadId ? { configurable: { thread_id: options.threadId } } : {}),
+        streamMode: ["values", "custom"],
+        signal: options.signal,
+      },
+    );
+    for await (const [mode, data] of stream as AsyncIterable<[string, Record<string, unknown>]>) {
+      if (mode === "custom") events.push(data);
+      else state = data;
+    }
+  } catch (error) {
+    threw = error;
+  }
+  return { threw, events, state };
+}
+
+describe("the analysis graph under failure", () => {
+  it("keeps the planner's calls and reports the source when a search keeps failing", async () => {
+    tools.searchProductionHistory.invoke.mockImplementation(async () => {
+      throw new TransientError("search 503", 503);
+    });
+    const llm = stubModel(["search_production", "done"]);
+
+    const { threw, state } = await drive(llm, { threadId: "t-search" });
+
+    expect(threw).toBeNull();
+    const run = state.trackData?.run;
+    expect((state.usage as Array<{ callSite: string }>).map((u) => u.callSite)).toEqual([
+      "research_planner",
+      "research_planner",
+      "composer",
+    ]);
+    expect(run?.usage).toMatchObject({ llmCalls: 3, inputTokens: 300 });
+    expect(run?.sourceErrors).toEqual([expect.objectContaining({ source: "tavily" })]);
+    // One retry of the failing search, and nothing searched twice.
+    expect(tools.searchProductionHistory.invoke).toHaveBeenCalledTimes(2);
+    expect(tools.searchSamples.invoke).toHaveBeenCalledTimes(1);
+    expect(tools.getMusicBrainzRelations.invoke).not.toHaveBeenCalled();
+    tools.searchProductionHistory.invoke.mockReset();
+    tools.searchProductionHistory.invoke.mockImplementation(async () => "Recorded in Miami.");
+  });
+
+  it("fails the run on a planner bug instead of hiding it", async () => {
+    const llm = stubModel([], () => {
+      throw new TypeError("cannot read properties of undefined (planner bug)");
+    });
+
+    const { threw, state } = await drive(llm, { threadId: "t-bug" });
+
+    expect(threw).toBeInstanceOf(TypeError);
+    expect(state.trackData ?? null).toBeNull();
+    expect(llm.calls.map((call) => call.callSite)).toEqual(["research_planner"]);
+  });
+
+  it("stores and reports nothing when the run is cancelled during artwork enrichment", async () => {
+    const controller = new AbortController();
+    let release: () => void = () => {};
+    hooks.enrich = (genealogy) =>
+      new Promise((resolve) => {
+        release = () => resolve(genealogy);
+        controller.abort();
+      });
+    const store = new InMemoryStore();
+
+    const { threw, events } = await drive(stubModel(["done"]), {
+      threadId: "t-enrich",
+      signal: controller.signal,
+      store,
+    });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(threw).not.toBeNull();
+    expect(await store.get(["tracks"], QUERY)).toBeNull();
+    expect(events.filter((event) => event.type === "complete")).toEqual([]);
+  });
+
+  it("passes the run's signal to the scout and the audio analysis, and caches no audio after a cancel", async () => {
+    const controller = new AbortController();
+    let audioSignal: AbortSignal | undefined;
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) => {
+      audioSignal = (args[1] as { signal?: AbortSignal } | undefined)?.signal;
+      controller.abort();
+      return JSON.stringify({ source: "analyzed", bpm: 116, key: "D", mode: "minor" });
+    });
+
+    const { threw } = await drive(stubModel(["done"]), {
+      threadId: "t-audio",
+      signal: controller.signal,
+    });
+
+    expect(threw).not.toBeNull();
+    expect(audioSignal?.aborted).toBe(true);
+    expect(hooks.putAudio).not.toHaveBeenCalled();
+    expect(hooks.putResearch).not.toHaveBeenCalled();
+    const scoutOptions = tools.searchMultipleTracks.invoke.mock.calls[0] as unknown[];
+    expect((scoutOptions[1] as { signal?: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("stamps every status event with the runtime's clock", async () => {
+    const { events } = await drive(stubModel(["search_lastfm_tags"]), {
+      threadId: "t-clock",
+      at: "2020-02-02T02:02:02.000Z",
+    });
+
+    const stamped = events.filter((event) => event.timestamp !== undefined);
+    expect(new Set(stamped.map((event) => event.node))).toEqual(
+      new Set(["scout", "engineer", "historian", "research_manager", "research_tool", "composer"]),
+    );
+    for (const event of stamped) expect(event.timestamp).toBe("2020-02-02T02:02:02.000Z");
+  });
+
+  it("counts every model call of a run under one run id, even without a thread", async () => {
+    const llm = stubModel(["search_lastfm_tags", "done"]);
+
+    const { state } = await drive(llm);
+
+    const runIds = new Set(llm.calls.map((call) => call.options.runId));
+    expect(llm.calls).toHaveLength(3);
+    expect(runIds.size).toBe(1);
+    expect(state.trackData?.run).toMatchObject({ id: [...runIds][0], usage: { llmCalls: 3 } });
   });
 });

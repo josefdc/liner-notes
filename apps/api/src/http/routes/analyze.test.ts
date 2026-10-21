@@ -23,6 +23,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSonicAgentGraph } from "../../agent/graph.js";
+import { llm } from "../../llm/invoke.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
@@ -380,6 +381,20 @@ describe("analyze routes", () => {
       expect(events.at(-1)?.type).toBe("done");
       const threadId = ofType(events, "connected")[0].threadId as string;
       expect(runStatus(threadId)).toBe("completed");
+    });
+
+    it("ends the model run when a run finishes, not while it waits for a choice", async () => {
+      const endRun = vi.spyOn(llm, "endRun").mockImplementation(() => {});
+
+      const { events } = await sse(streamPath("plain hurt"));
+      const threadId = ofType(events, "connected")[0].threadId as string;
+      expect(endRun).toHaveBeenCalledWith(threadId);
+
+      endRun.mockClear();
+      const paused = await pausedThread();
+      expect(endRun).not.toHaveBeenCalledWith(paused);
+      await sse(resumePath(paused, "track-a"));
+      expect(endRun).toHaveBeenCalledWith(paused);
     });
 
     it("sends one complete after a resume", async () => {

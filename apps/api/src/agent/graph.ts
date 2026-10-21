@@ -7,8 +7,12 @@
  *
  * The engineer and the historian run in parallel and meet at the composer through one
  * list-form edge, so the composer runs once, after both, however many steps either branch
- * takes. Retry policies retry transient errors only (`TRANSIENT_RETRY`); the composer has none:
- * its model call is retried inside the provider layer, and any failure gives the fallback.
+ * takes. No node has a retry policy: every node handles its own failures (the scout and the
+ * searches retry once or twice themselves, model calls are retried inside the provider layer),
+ * so retries never stack and a model call is never repeated by a node retry.
+ *
+ * The scout, the first node of every run, sets the run id once (the thread id, or a new id
+ * from the runtime without a thread): every model call of the run counts under it.
  *
  * `buildSonicAgentGraph` takes the runtime (model layer, clock, ids), the checkpointer and the
  * store, so tests and replays run the same graph on their own dependencies.
@@ -19,7 +23,6 @@ import { END, START, StateGraph } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { getDb } from "../store/database.js";
 import { SqliteStore } from "../store/store.js";
-import { TRANSIENT_RETRY } from "./errors.js";
 import {
   clarificationNode,
   composerNode,
@@ -28,7 +31,7 @@ import {
   historianNode,
   scoutNode,
 } from "./nodes/index.js";
-import { type AgentRuntime, defaultAgentRuntime } from "./runtime.js";
+import { type AgentRuntime, defaultAgentRuntime, runIdFor } from "./runtime.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import { SonicAgentState, type SonicAgentStateType } from "./state.js";
 
@@ -65,14 +68,18 @@ export function buildSonicAgentGraph({
   store,
 }: GraphDependencies = {}) {
   const workflow = new StateGraph(SonicAgentState)
-    .addNode("scout", scoutNode, { retryPolicy: TRANSIENT_RETRY })
-    .addNode("clarification", clarificationNode)
-    .addNode("engineer", engineerNode, { retryPolicy: TRANSIENT_RETRY })
-    .addNode(
-      "historian",
-      (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
-        historianNode(state, config, runtime),
-      { retryPolicy: TRANSIENT_RETRY },
+    .addNode("scout", async (state: SonicAgentStateType, config: LangGraphRunnableConfig) => ({
+      ...(await scoutNode(state, config, runtime)),
+      runId: runIdFor(state, config, runtime),
+    }))
+    .addNode("clarification", (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
+      clarificationNode(state, config, runtime),
+    )
+    .addNode("engineer", (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
+      engineerNode(state, config, runtime),
+    )
+    .addNode("historian", (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
+      historianNode(state, config, runtime),
     )
     .addNode(
       "composer",

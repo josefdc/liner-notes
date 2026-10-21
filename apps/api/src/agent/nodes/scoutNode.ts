@@ -5,7 +5,8 @@
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { searchMultipleTracks } from "../../sources/spotify.js";
-import { withRetry, TransientError } from "../errors.js";
+import { isAbortError, withRetry, TransientError } from "../errors.js";
+import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
 
@@ -14,6 +15,7 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export async function scoutNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
+  runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   const writer = config.writer;
   const store = getStore();
@@ -23,14 +25,17 @@ export async function scoutNode(
   if (store) {
     try {
       const cached = await store.get(["tracks"], normalizedQuery);
-      if (cached?.value?.trackData && Date.now() - cached.value.timestamp < CACHE_TTL_MS) {
+      if (
+        cached?.value?.trackData &&
+        runtime.now().getTime() - cached.value.timestamp < CACHE_TTL_MS
+      ) {
         console.log("📦 [Scout] Cache hit for:", normalizedQuery);
         writer?.({
           type: "status",
           code: "NET-200",
           message: "Cache hit — returning stored analysis",
           node: "scout",
-          timestamp: new Date().toISOString(),
+          timestamp: timestampOf(runtime),
         });
         writer?.({ type: "complete", data: cached.value.trackData });
         return { trackData: cached.value.trackData };
@@ -45,7 +50,7 @@ export async function scoutNode(
     code: "NET-100",
     message: "Establishing connection to Spotify API...",
     node: "scout",
-    timestamp: new Date().toISOString(),
+    timestamp: timestampOf(runtime),
   });
 
   console.log("🔍 [Scout] Searching for:", state.songQuery);
@@ -53,10 +58,10 @@ export async function scoutNode(
   try {
     // Search for multiple tracks to detect ambiguity (with retry on transient failures)
     const searchResult = await withRetry(async () => {
-      const result = await searchMultipleTracks.invoke({
-        query: state.songQuery,
-        limit: 5,
-      });
+      const result = await searchMultipleTracks.invoke(
+        { query: state.songQuery, limit: 5 },
+        { signal: config.signal },
+      );
       // Spotify tools return error strings, not thrown exceptions
       if (result.startsWith("Error") && (result.includes("Rate limit") || result.includes("429"))) {
         throw new TransientError(result);
@@ -116,7 +121,7 @@ export async function scoutNode(
                   code: "SPOTIFY-FOUND",
                   message: `Remembered preference: "${remembered.title}" // ${remembered.artist}`,
                   node: "scout",
-                  timestamp: new Date().toISOString(),
+                  timestamp: timestampOf(runtime),
                 });
                 return {
                   spotifyData: remembered,
@@ -173,7 +178,7 @@ export async function scoutNode(
       code: "SPOTIFY-FOUND",
       message: `Target acquired: "${topTrack.title}" // ${topTrack.artist}`,
       node: "scout",
-      timestamp: new Date().toISOString(),
+      timestamp: timestampOf(runtime),
     });
     console.log("✅ [Scout] Auto-selected:", topTrack.title, "by", topTrack.artist);
 
@@ -183,6 +188,8 @@ export async function scoutNode(
       statusMessages: [`✅ Found: "${topTrack.title}" by ${topTrack.artist}`],
     };
   } catch (error) {
+    // A cancelled run stops here instead of reporting a search error.
+    if (config.signal?.aborted || isAbortError(error)) throw error;
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("❌ [Scout] Error:", message);
     return {

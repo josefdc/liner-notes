@@ -40,5 +40,17 @@ export function runIdOf(config: LangGraphRunnableConfig | undefined, fallback: (
   return typeof threadId === "string" && threadId !== "" ? threadId : fallback();
 }
 
+/**
+ * The run id of a graph invocation: the one in the state (set once, by the first node), else
+ * the thread id, else a new id from the runtime.
+ */
+export function runIdFor(
+  state: { runId?: string | null },
+  config: LangGraphRunnableConfig | undefined,
+  runtime: AgentRuntime,
+): string {
+  return state.runId ?? runIdOf(config, runtime.newId);
+}
+
 /** An ISO timestamp from the runtime's clock. */
 export const timestampOf = (runtime: AgentRuntime) => runtime.now().toISOString();

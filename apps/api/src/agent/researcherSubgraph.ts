@@ -15,7 +15,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { ResearchPlanOutput } from "@liner-notes/contract";
 
 import { answeredCall, failedCall } from "./callRecords.js";
-import { isAbortError, isTransient, TRANSIENT_RETRY } from "./errors.js";
+import { isAbortError, withRetry } from "./errors.js";
 import { plannerMessages } from "./prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
 import { searchSamples, searchProductionHistory, searchMusicInfo } from "../sources/search.js";
@@ -37,6 +37,8 @@ export const PLANNER_CALL_SITE = "research_planner";
 export const PLANNER_MAX_OUTPUT_TOKENS = 1500;
 /** Research steps chosen by the planner, after the fixed first step. */
 export const MAX_PLANNED_STEPS = 2;
+/** Wait before a search's one retry after a transient failure. */
+export const SEARCH_RETRY_MS = 500;
 
 // =============================================================================
 // Researcher Subgraph State
@@ -303,21 +305,20 @@ async function researchToolNode(
     timestamp: timestampOf(runtime),
   });
 
-  // Prepare new research data (will be merged via appending reducer)
-  const newData: ResearchData = {
-    samples: [],
-    productionTrivia: [],
-    relatedArtists: [],
-    collaborators: [],
-    artistTopTracks: [],
-    lastfmTags: [],
-    lastfmSimilarTracks: [],
-    lastfmSimilarArtists: [],
-    lastfmArtistBio: undefined,
-    listenbrainzSimilarArtists: [],
-  };
-
-  try {
+  // One search attempt; its result is merged into the research by the appending reducer.
+  const search = async (): Promise<ResearchData> => {
+    const newData: ResearchData = {
+      samples: [],
+      productionTrivia: [],
+      relatedArtists: [],
+      collaborators: [],
+      artistTopTracks: [],
+      lastfmTags: [],
+      lastfmSimilarTracks: [],
+      lastfmSimilarArtists: [],
+      lastfmArtistBio: undefined,
+      listenbrainzSimilarArtists: [],
+    };
     let result: string;
 
     switch (plan.nextAction) {
@@ -526,22 +527,26 @@ async function researchToolNode(
         }
         break;
     }
+    return newData;
+  };
 
+  try {
+    // At most one more attempt, for a transient failure only; no other retry wraps this one.
+    const newData = await withRetry(search, { maxAttempts: 2, initialInterval: SEARCH_RETRY_MS });
     console.log(`✅ [Research Tool] Found data for ${plan.nextAction}`);
-
     return {
       researchData: newData,
       statusMessages: [`Found ${label} information`],
     };
   } catch (error) {
-    // A cancelled run stops here; a transient failure goes to the node's retry policy; any
-    // other failure is recorded as the source's error and the research goes on.
-    if (config.signal?.aborted || isAbortError(error) || isTransient(error)) throw error;
+    // A cancelled run stops here; any other failure is recorded as the source's error and the
+    // research goes on.
+    if (config.signal?.aborted || isAbortError(error)) throw error;
     const record = errorRecord(ACTION_SOURCE[plan.nextAction], error);
     console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, record.message);
     return {
       sourceErrors: [record],
-      statusMessages: [`Search failed: ${label}`],
+      statusMessages: [`⚠️ Search failed: ${label} (${record.code})`],
     };
   }
 }
@@ -589,16 +594,15 @@ function afterToolExecution(state: ResearcherStateType): string {
  * - researchComplete is true (the planner chose "done", failed, or used its steps)
  * - researchPlan.nextAction is "done"
  *
- * The planner's transient failures are retried inside the provider layer, so its node has no
- * retry policy (a retry would be another model call); a search is retried once on a transient
- * error.
+ * No node has a retry policy: the planner's transient failures are retried inside the provider
+ * layer (a node retry would be another model call), and a search at most once by its node. A
+ * failed search is a source error and the research goes on; only a cancelled run or a bug
+ * leaves the subgraph as an error.
  */
 export function createResearcherSubgraph(runtime: AgentRuntime = defaultAgentRuntime) {
   const workflow = new StateGraph(ResearcherState)
     .addNode("research_manager", createResearchManagerNode(runtime))
-    .addNode("research_tool", createResearchToolNode(runtime), {
-      retryPolicy: TRANSIENT_RETRY,
-    })
+    .addNode("research_tool", createResearchToolNode(runtime))
     .addEdge(START, "research_manager")
     .addConditionalEdges("research_manager", shouldContinueResearch, {
       research_tool: "research_tool",

@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FactoidsOutput } from "@liner-notes/contract";
 import { LlmError } from "../../llm/errors.js";
 import { createTestApp } from "../testApp.js";
-import factoidsRouter, { FACTOIDS_SYSTEM_PROMPT } from "./factoids.js";
+import { llm } from "../../llm/invoke.js";
+import factoidsRouter, { createFactoidsRouter, FACTOIDS_SYSTEM_PROMPT } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -103,7 +104,7 @@ describe("POST /api/factoids/decrypt", () => {
   });
 
   it("truncates long metadata to 200 code points instead of refusing it", async () => {
-    model.invoke.mockRejectedValue(new LlmError("rate_limited", "factoids: 429"));
+    model.invoke.mockRejectedValue(new LlmError("provider", "factoids: 500"));
     const title = `${"\u{1F3B5}".repeat(199)}ab`; // 201 code points
     const artist = "x".repeat(300);
 
@@ -160,7 +161,7 @@ describe("POST /api/factoids/decrypt", () => {
   });
 
   it("accepts ids the model chose in any printable form", async () => {
-    model.invoke.mockRejectedValue(new LlmError("rate_limited", "factoids: 429"));
+    model.invoke.mockRejectedValue(new LlmError("provider", "factoids: 500"));
     const ids = ["prod #2", "fact.3 (sample)", "ü-é", "\u{1F3B5}".repeat(64)];
 
     const res = await request(app())
@@ -188,6 +189,38 @@ describe("POST /api/factoids/decrypt", () => {
     expect(res.status).toBe(200);
     expect(res.body.factoids).toHaveLength(3);
     expect(model.invoke).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["rate_limited", 429, "rate_limited"],
+    ["budget_exceeded", 503, "budget_exhausted"],
+    ["call_cap", 503, "budget_exhausted"],
+    ["provider", 500, "failed"],
+  ] as const)("answers a %s failure with %i %s", async (kind, status, code) => {
+    model.invoke.mockRejectedValue(new LlmError(kind, `factoids: ${kind}`));
+
+    const res = await request(app()).post("/api/factoids/decrypt").send(validBody).timeout(2000);
+
+    expect(res.status).toBe(status);
+    expect(res.body).toMatchObject({ success: false, code });
+  });
+
+  it("answers an empty list with 200: nothing documented is not a failure", async () => {
+    model.invoke.mockResolvedValue(answerNone());
+
+    const res = await request(app()).post("/api/factoids/decrypt").send(validBody).timeout(2000);
+
+    expect(res.status).toBe(200);
+    expect(res.body.factoids).toEqual([]);
+  });
+
+  it("tags the calls with the purpose the router was created with", async () => {
+    model.invoke.mockResolvedValue(answer("a"));
+    const evalApp = createTestApp(createFactoidsRouter({ purpose: "eval" }));
+
+    await request(evalApp).post("/api/factoids/decrypt").send(validBody).timeout(2000);
+
+    expect(model.invoke.mock.calls[0][4]).toMatchObject({ purpose: "eval" });
   });
 
   it("answers a failed generation with a generic message, not the upstream one", async () => {
@@ -370,9 +403,7 @@ describe("GET /api/factoids/decrypt/stream", () => {
 
   it("reports failures in the stream with a code and a generic message, then done", async () => {
     model.invoke
-      .mockRejectedValueOnce(
-        new LlmError("rate_limited", "upstream said: quota for key AIza-secret"),
-      )
+      .mockRejectedValueOnce(new LlmError("provider", "upstream said: quota for key AIza-secret"))
       .mockRejectedValueOnce(new Error("socket hang up at /home/user/app/node_modules/x.js"))
       .mockResolvedValueOnce(answer("f5"));
 
@@ -427,20 +458,44 @@ describe("GET /api/factoids/decrypt/stream", () => {
     );
   });
 
-  it("reports a category the model wrote nothing for as failed", async () => {
+  it("sends nothing for a focus the model knows nothing documented about (not 'failed')", async () => {
     model.invoke.mockResolvedValueOnce(answerNone()).mockResolvedValue(answer("x"));
 
     const stream = await openStream(QUERY);
     await stream.waitFor(ofType("done"));
 
-    expect(stream.messages.map((m) => m.type)).toEqual([
-      "connected",
-      "error",
-      "factoid",
-      "factoid",
-      "done",
+    expect(stream.messages.map((m) => m.type)).toEqual(["connected", "factoid", "factoid", "done"]);
+    expect(stream.messages[1]).toMatchObject({ data: { id: "f4", content: "Content." } });
+  });
+
+  it("reports the rate limit and a paused budget with their own codes", async () => {
+    model.invoke
+      .mockRejectedValueOnce(new LlmError("rate_limited", "429"))
+      .mockRejectedValueOnce(new LlmError("budget_exceeded", "cap"))
+      .mockRejectedValueOnce(new LlmError("call_cap", "cap"));
+
+    const stream = await openStream(QUERY);
+    await stream.waitFor(ofType("done"));
+
+    expect(stream.messages.filter(ofType("error")).map((m) => m.code)).toEqual([
+      "rate_limited",
+      "budget_exhausted",
+      "budget_exhausted",
     ]);
-    expect(stream.messages[2]).toMatchObject({ data: { id: "f4", content: "Content." } });
+  });
+
+  it("makes the stream's calls under one run id and ends that run", async () => {
+    model.invoke.mockResolvedValue(answer("x"));
+    const endRun = vi.spyOn(llm, "endRun").mockImplementation(() => {});
+
+    const stream = await openStream(QUERY);
+    await stream.waitFor(ofType("done"));
+
+    const runIds = model.invoke.mock.calls.map(([, , , , options]) => options.runId);
+    expect(runIds).toHaveLength(3);
+    expect(new Set(runIds).size).toBe(1);
+    await until(() => endRun.mock.calls.length === 1);
+    expect(endRun).toHaveBeenCalledWith(runIds[0]);
   });
 
   it("truncates long metadata and numbers ids after all existing ones", async () => {

@@ -22,7 +22,6 @@ import {
   composerOutputIssues,
   type Evidence,
   type FactoidType,
-  type GenealogyRole,
   type LinkType,
   type RunInfo,
   type SourceError,
@@ -36,7 +35,7 @@ import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
 import { composerMessages, type PromptRecording, type PromptTrack } from "../prompts.js";
-import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "../runtime.js";
+import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import {
   type Factoid,
   type Genealogy,
@@ -165,18 +164,17 @@ export async function musicBrainzRecording(
 // From the model's output to TrackData
 // =============================================================================
 
-const ROLE_GROUP: Record<GenealogyRole, number> = {
-  current: 1,
-  source: 2,
-  derived: 3,
-  influence: 4,
-};
-const ROLE_SIZE: Record<GenealogyRole, number> = {
-  current: 40,
-  source: 28,
-  derived: 28,
-  influence: 22,
-};
+/** The analysed track's node. */
+const CURRENT_GROUP = 1;
+const CURRENT_SIZE = 40;
+/**
+ * Every other node the model proposes is drawn as a related influence: the web labels a node by
+ * its group ("Sampled in this track" for 2, "Samples this track" for 3), and no model statement
+ * is supported until a verifier judges it, so none may be drawn as a documented relation.
+ */
+const MODEL_NODE_GROUP = 4;
+const MODEL_NODE_SIZE = 22;
+
 const LINK_VALUE: Record<LinkType, number> = {
   sample: 3,
   interpolation: 3,
@@ -185,7 +183,7 @@ const LINK_VALUE: Record<LinkType, number> = {
   producer: 1,
   influence: 1,
 };
-/** Relations that state a documented fact; without evidence they are shown as an influence. */
+/** Relations that state a documented fact; from the model they are shown as an influence. */
 const DOCUMENTED_RELATIONS = new Set<LinkType>(["sample", "interpolation", "cover", "remix"]);
 
 const FACTOID_ABOUT: Record<FactoidType, ClaimAbout> = {
@@ -205,8 +203,8 @@ interface Composed {
 
 /**
  * Factoids, claims and the genealogy from the model's output. Ids come from `newId`; cited ids
- * that are not in the evidence pack are dropped; every model claim is `inferred` (no verifier
- * has judged it); a link is `sourced` only when all it cites is in the pack.
+ * that are not in the evidence pack are dropped; every model claim and link is `inferred` until
+ * a verifier judges it, and every node it proposes is drawn as a related influence.
  */
 export function composeFromOutput(
   output: ComposerOutputType,
@@ -257,42 +255,61 @@ export function composeFromOutput(
     };
   });
 
-  // The analysed track is always the node "current", labelled from Spotify.
-  const currentId = output.genealogyNodes.find((node) => node.role === "current")?.id;
-  const nodeId = (id: string) => (id === currentId ? "current" : id);
+  // The analysed track is always the node "current", labelled from Spotify. A model node that
+  // is not the analysed track but uses the id "current" is renamed, so there is one current
+  // node and no link from the track to itself.
+  const idOf = new Map<string, string>();
+  const used = new Set(["current"]);
+  for (const node of output.genealogyNodes) {
+    if (node.role === "current") {
+      idOf.set(node.id, "current");
+      continue;
+    }
+    let id = node.id;
+    while (used.has(id)) id = `${id}-related`;
+    used.add(id);
+    idOf.set(node.id, id);
+  }
   const nodes: GenealogyNode[] = [
     {
       id: "current",
-      group: ROLE_GROUP.current,
+      group: CURRENT_GROUP,
       label: spotify.title,
-      size: ROLE_SIZE.current,
+      size: CURRENT_SIZE,
       trackTitle: spotify.title,
       trackArtist: spotify.artist,
     },
     ...output.genealogyNodes
       .filter((node) => node.role !== "current")
       .map((node) => ({
-        id: node.id,
-        group: ROLE_GROUP[node.role],
+        id: idOf.get(node.id) ?? node.id,
+        group: MODEL_NODE_GROUP,
         label: node.label,
-        size: ROLE_SIZE[node.role],
+        size: MODEL_NODE_SIZE,
         ...(node.trackTitle ? { trackTitle: node.trackTitle } : {}),
         ...(node.trackArtist ? { trackArtist: node.trackArtist } : {}),
       })),
   ];
-  const links: GenealogyLink[] = output.genealogyLinks.map((link) => {
-    const evidenceIds = cited(link.evidenceIds);
-    const sourced = evidenceIds.length > 0 && evidenceIds.length === link.evidenceIds.length;
-    const type = sourced || !DOCUMENTED_RELATIONS.has(link.type) ? link.type : "influence";
-    return {
-      source: nodeId(link.source),
-      target: nodeId(link.target),
-      value: LINK_VALUE[type],
-      type,
-      kind: sourced ? "sourced" : "inferred",
-      origin: "model",
-      evidenceIds,
-    };
+  // Every model link is an inference: cited ids that exist in the pack are kept, but citing is
+  // not support (only a verifier's verdict is), so a sample, interpolation, cover or remix the
+  // model proposes is drawn as an influence. Only links built by code from a source record may
+  // be sourced.
+  const links: GenealogyLink[] = output.genealogyLinks.flatMap((link) => {
+    const source = idOf.get(link.source);
+    const target = idOf.get(link.target);
+    if (!source || !target || source === target) return [];
+    const type = DOCUMENTED_RELATIONS.has(link.type) ? "influence" : link.type;
+    return [
+      {
+        source,
+        target,
+        value: LINK_VALUE[type],
+        type,
+        kind: "inferred" as const,
+        origin: "model" as const,
+        evidenceIds: cited(link.evidenceIds),
+      },
+    ];
   });
   return { factoids, claims, genealogy: { nodes, links } };
 }
@@ -301,9 +318,13 @@ export function composeFromOutput(
  * Album artwork and previews for the genealogy nodes. The enricher's answer is used for
  * artwork only: nodes, labels and links stay as composed.
  */
-async function withArtwork(genealogy: Genealogy, coverUrl: string): Promise<Genealogy> {
+async function withArtwork(
+  genealogy: Genealogy,
+  coverUrl: string,
+  signal: AbortSignal | undefined,
+): Promise<Genealogy> {
   try {
-    const enriched = await enrichGenealogyWithArtwork(genealogy, coverUrl);
+    const enriched = await enrichGenealogyWithArtwork(genealogy, coverUrl, signal);
     const byId = new Map(enriched.nodes.map((node) => [node.id, node]));
     return {
       nodes: genealogy.nodes.map((node) => {
@@ -319,6 +340,7 @@ async function withArtwork(genealogy: Genealogy, coverUrl: string): Promise<Gene
       links: genealogy.links,
     };
   } catch (error) {
+    if (signal?.aborted || isAbortError(error)) throw error;
     console.warn("⚠️ [Composer] Could not enrich genealogy:", error);
     return genealogy;
   }
@@ -341,6 +363,7 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     ...measuredAudioFields(state.audioFeatures),
+    // No node writes isrc, preview or evidence yet (#24, #27): they are null and empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
     evidence: state.evidence,
@@ -382,7 +405,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     }
 
     const signal = config.signal;
-    const runId = runIdOf(config, runtime.newId);
+    const runId = runIdFor(state, config, runtime);
     const writer = config.writer;
     const status = (code: string, message: string) =>
       writer?.({
@@ -410,6 +433,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     status("GEMINI-CONNECT", "Composing the liner notes...");
     console.log("🎼 [Composer] Synthesizing data for:", spotify.title);
 
+    // state.isrc is null until the scout records the ISRC (#24): no lookup is made then.
     const { recording, errors: sourceErrors } = await musicBrainzRecording(
       spotify,
       state.isrc,
@@ -423,7 +447,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       research: state.researchData,
     });
 
-    let composed: Composed;
+    // Only the model call is guarded: any failure of it gives the fallback. A bug in what
+    // follows is not a model failure and fails the run.
+    let output: ComposerOutputType;
     let call: LlmCallRecord;
     try {
       const result = await runtime.llm.invoke(
@@ -446,11 +472,12 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         );
       }
       call = answeredCall(COMPOSER_CALL_SITE, result);
-      composed = composeFromOutput(result.output, spotify, state.evidence, runtime.newId);
+      output = result.output;
     } catch (error) {
       if (signal?.aborted || isAbortError(error)) throw error;
       return composeFallback(error);
     }
+    const composed = composeFromOutput(output, spotify, state.evidence, runtime.newId);
 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
     const trackData: TrackData = {
@@ -460,11 +487,13 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       segmentsSource: "template",
       samples: [],
       factoids: composed.factoids,
-      genealogy: await withArtwork(composed.genealogy, spotify.coverUrl),
+      genealogy: await withArtwork(composed.genealogy, spotify.coverUrl, signal),
       claims: composed.claims,
       run: runInfo(false, [call], sourceErrors),
     };
 
+    // A cancelled run reports nothing and stores nothing.
+    signal?.throwIfAborted();
     writer?.({ type: "complete", data: trackData });
 
     // Cache the result in long-term memory (unless the audio may be measurable later). The
@@ -475,11 +504,13 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       const normalizedQuery = state.songQuery.toLowerCase().trim();
       const { run: _run, ...cached } = trackData;
       try {
+        signal?.throwIfAborted();
         await store.put(["tracks"], normalizedQuery, {
           trackData: cached,
           timestamp: runtime.now().getTime(),
         });
       } catch (e) {
+        if (signal?.aborted) throw e;
         console.warn("⚠️ [Composer] Store write error:", e);
       }
     }
@@ -509,12 +540,13 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       const trackData: TrackData = {
         ...fallback,
         ...baseFields(state, spotify!),
-        genealogy: await withArtwork(fallback.genealogy, spotify!.coverUrl),
+        genealogy: await withArtwork(fallback.genealogy, spotify!.coverUrl, signal),
         claims: [],
         modelUnavailable: true,
         modelUnavailableReason: reason,
         run: runInfo(true, [failed], sourceErrors),
       };
+      signal?.throwIfAborted();
       writer?.({ type: "complete", data: trackData });
       return {
         trackData,

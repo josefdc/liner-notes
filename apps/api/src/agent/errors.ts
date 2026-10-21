@@ -2,9 +2,10 @@
  * Typed errors of the agent's nodes, and the retry rules that go with them.
  *
  * A node either handles a failure (records it in the state as a typed entry: a source error,
- * a model call's error kind) or lets it through. What it lets through is retried by the graph's
- * retry policy only when it is transient (`isTransient`); anything else fails at once, so the
- * policy never repeats work that cannot succeed. A cancelled run is never retried.
+ * a model call's error kind) or lets it through, and what it lets through fails the run: a
+ * cancelled run, or a bug. No node has a graph retry policy: model calls are retried inside the
+ * provider layer, a search at most once by its node (`withRetry`, transient errors only), so
+ * retries never stack. A cancelled run is never retried.
  */
 
 import { isLlmError } from "../llm/errors.js";
@@ -70,12 +71,6 @@ export function isTransient(error: unknown): boolean {
   const code = codeOf(error);
   return code !== undefined && NETWORK_CODES.has(code);
 }
-
-/**
- * The graph's retry policy for a node that can fail transiently: one more attempt, for
- * transient errors only.
- */
-export const TRANSIENT_RETRY = { maxAttempts: 2, retryOn: isTransient } as const;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

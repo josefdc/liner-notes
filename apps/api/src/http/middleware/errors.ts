@@ -15,6 +15,10 @@ export const HTTP_ERRORS = {
   rate_limited: { status: 429, message: "Too many requests. Please try again later." },
   failed: { status: 500, message: "The request could not be completed. Please try again." },
   internal_error: { status: 500, message: "Something went wrong. Please try again." },
+  budget_exhausted: {
+    status: 503,
+    message: "Live model calls are paused for now. Please try again later.",
+  },
   upstream_unavailable: {
     status: 502,
     message: "A music service is not responding right now. Please try again later.",

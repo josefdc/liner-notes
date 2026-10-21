@@ -369,12 +369,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   onClick={handleDecryptMore}
                   disabled={isDecrypting}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4
-                               border border-dashed border-cyber/30 rounded-[--radius-md]
+                               border border-dashed border-cyber/30 rounded-md
                                text-xs font-mono text-cyber/70 uppercase tracking-wider
                                hover:border-cyber hover:text-cyber hover:bg-cyber/5
                                focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none
                                disabled:opacity-50 disabled:cursor-wait
-                               transition-all duration-[--duration-fast]"
+                               transition-all duration-(--duration-fast)"
                 >
                   {isDecrypting ? (
                     <>
@@ -424,7 +424,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
           {/* P3:25 — Decrypt complete toast */}
           {showDecryptToast && (
-            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-cyber/10 border border-cyber/30 rounded-[--radius-sm] text-cyber text-xs font-mono tracking-widest animate-slide-up-fade shadow-glow-cyber-subtle">
+            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-cyber/10 border border-cyber/30 rounded-sm text-cyber text-xs font-mono tracking-widest animate-slide-up-fade shadow-glow-cyber-subtle">
               {decryptToastCount} NEW INTEL DECODED
             </div>
           )}
@@ -444,16 +444,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
           {/* Album Art Container */}
           <div className="relative w-56 h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 mb-8 mt-4 group flex-shrink-0">
-            <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-[--duration-dramatic]"></div>
+            <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-(--duration-dramatic)"></div>
             {track.coverUrl ? (
               <img
                 src={track.coverUrl}
                 alt="Album Art"
-                className={`w-full h-full object-cover rounded-[--radius-lg] shadow-elevated-lg relative z-10 border border-white/10 transition-all duration-[--duration-dramatic] ${isPlaying ? 'animate-pulse-slow shadow-[var(--shadow-glow-cyber)]' : ''}`}
+                className={`w-full h-full object-cover rounded-lg shadow-elevated-lg relative z-10 border border-white/10 transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow shadow-[var(--shadow-glow-cyber)]' : ''}`}
               />
             ) : (
               <div
-                className={`w-full h-full rounded-[--radius-lg] shadow-elevated-lg relative z-10 border border-white/10 bg-gray-900 flex items-center justify-center transition-all duration-[--duration-dramatic] ${isPlaying ? 'animate-pulse-slow' : ''}`}
+                className={`w-full h-full rounded-lg shadow-elevated-lg relative z-10 border border-white/10 bg-gray-900 flex items-center justify-center transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''}`}
               >
                 <Music size={64} className="text-text-muted" />
               </div>
@@ -465,7 +465,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="text-3xl md:text-4xl font-light leading-[--leading-tight] text-white tracking-[--tracking-tight] mb-2 text-shadow-dark outline-none"
+              className="text-3xl md:text-4xl font-light leading-tight text-white tracking-tight mb-2 text-shadow-dark outline-none"
             >
               {track.title}
             </h1>
@@ -503,7 +503,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               <button
                 type="button"
                 onClick={handlePlayPause}
-                className={`w-16 h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 hover:shadow-[var(--shadow-glow-white-hover)] hover:ring-2 hover:ring-white/20 active:scale-95 transition-all duration-[--duration-fast] ease-[--ease-spring] shadow-[var(--shadow-glow-white)] ${isPlaying ? 'animate-[glow-breathe-white_3s_ease-in-out_infinite]' : ''}`}
+                className={`w-16 h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 hover:shadow-[var(--shadow-glow-white-hover)] hover:ring-2 hover:ring-white/20 active:scale-95 transition-all duration-(--duration-fast) ease-spring shadow-[var(--shadow-glow-white)] ${isPlaying ? 'animate-[glow-breathe-white_3s_ease-in-out_infinite]' : ''}`}
                 aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
               >
                 {isPlaying ? (

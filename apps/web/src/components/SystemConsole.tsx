@@ -90,9 +90,9 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
       aria-label="Analysis system console"
     >
       {/* Glow Effect Background */}
-      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/15 to-accent-purple/10 rounded-[--radius-md] blur opacity-20 group-hover:opacity-40 transition duration-[--duration-dramatic] ease-[--ease-out-expo]"></div>
+      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/15 to-accent-purple/10 rounded-md blur opacity-20 group-hover:opacity-40 transition duration-(--duration-dramatic) ease-out-expo"></div>
 
-      <div className="relative rounded-[--radius-md] overflow-hidden border border-border bg-black/90 shadow-2xl backdrop-blur-xl">
+      <div className="relative rounded-md overflow-hidden border border-border bg-black/90 shadow-2xl backdrop-blur-xl">
         {/* Terminal Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -177,7 +177,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
             {/* Complete Indicator */}
             {isComplete && (
               <div className="pt-4 pb-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/30 rounded-[--radius-sm] text-status-success text-xs tracking-widest font-mono">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/30 rounded-sm text-status-success text-xs tracking-widest font-mono">
                   <Activity size={14} />
                   <span>PROCESS COMPLETE</span>
                 </div>

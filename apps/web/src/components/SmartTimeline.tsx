@@ -173,7 +173,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
 
       {/* Structure Bar */}
       {segments.length > 0 ? (
-        <div className="h-3 w-full flex rounded-[--radius-xs] overflow-hidden relative" role="list">
+        <div className="h-3 w-full flex rounded-xs overflow-hidden relative" role="list">
           {segments.map((seg) => (
             <div
               // Labels repeat (two choruses); a segment's span is unique.
@@ -181,7 +181,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               role="listitem"
               aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
               tabIndex={0}
-              className="h-full relative group transition-all duration-[--duration-normal] hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/50"
+              className="h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/50"
               style={{
                 width: `${Math.max(seg.end - seg.start, 0)}%`,
                 backgroundColor: seg.color,
@@ -195,7 +195,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
           ))}
         </div>
       ) : (
-        <div className="h-3 w-full rounded-[--radius-xs] bg-white/5 flex items-center justify-center">
+        <div className="h-3 w-full rounded-xs bg-white/5 flex items-center justify-center">
           <span className="text-[8px] font-mono text-text-tertiary uppercase tracking-widest">
             STRUCTURE DATA UNAVAILABLE
           </span>

@@ -1,0 +1,2 @@
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer theme{:root,:host{--radius-md:.375rem;--space-md:16px;--text-chrome:10px;--text-chrome--line-height:14px}}@layer base,components;@layer utilities{.flex{display:flex}.rounded-md{border-radius:var(--radius-md)}.p-\(--space-md\){padding:var(--space-md)}.text-chrome{font-size:var(--text-chrome);line-height:var(--tw-leading,var(--text-chrome--line-height))}}

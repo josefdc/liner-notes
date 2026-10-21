@@ -22,7 +22,7 @@ export default defineConfig({
           name: "web",
           root: "apps/web",
           environment: "happy-dom",
-          include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}"],
+          include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}", "config/**/*.test.ts"],
         },
       },
       {

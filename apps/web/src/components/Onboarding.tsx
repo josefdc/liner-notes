@@ -513,10 +513,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
             <Network size={64} className="text-cyber relative z-10 mx-auto" />
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-sans font-light tracking-[--tracking-wide] leading-[--leading-tight] text-shadow-glow-cyber">
+          <h1 className="text-4xl md:text-5xl font-sans font-light tracking-wide leading-tight text-shadow-glow-cyber">
             The Sonic Agent
           </h1>
-          <p className="text-text-secondary font-sans text-base max-w-md mx-auto leading-[--leading-relaxed]">
+          <p className="text-text-secondary font-sans text-base max-w-md mx-auto leading-relaxed">
             Enter a song to analyze its DNA — BPM, samples, production history, and more.
           </p>
 
@@ -572,7 +572,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   ref={dropdownRef}
                   id="search-suggestions"
                   role="listbox"
-                  className="absolute z-50 w-full mt-2 bg-surface-overlay backdrop-blur-lg border border-border rounded-[--radius-lg] shadow-elevated-lg max-h-[320px] overflow-y-auto animate-scale-in"
+                  className="absolute z-50 w-full mt-2 bg-surface-overlay backdrop-blur-lg border border-border rounded-lg shadow-elevated-lg max-h-[320px] overflow-y-auto animate-scale-in"
                 >
                   {suggestions.map((candidate, index) => (
                     <button
@@ -630,7 +630,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
           {/* Error State (Item 10 — in-character error copy) */}
           {status === 'error' && (
-            <div className="bg-status-error/5 border border-status-error/20 rounded-[--radius-md] p-6 space-y-4">
+            <div className="bg-status-error/5 border border-status-error/20 rounded-md p-6 space-y-4">
               <div className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
                 <CircleAlert size={16} />
                 SIGNAL LOST
@@ -725,7 +725,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <img
                   src={displayTrack.coverUrl}
                   alt={displayTrack.title}
-                  className="w-20 h-20 rounded-[--radius-md] shadow-lg border border-white/10"
+                  className="w-20 h-20 rounded-md shadow-lg border border-white/10"
                 />
               )}
               <div className="text-center">
@@ -771,7 +771,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       setHitlSelectedIndex(index);
                       setHitlCountdown(null);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-[--radius-sm] text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
                       index === hitlSelectedIndex
                         ? 'bg-cyber/15 border border-cyber/30'
                         : 'bg-white/5 border border-transparent hover:bg-white/10'

@@ -201,7 +201,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 
   return (
-    <div className="h-full w-full p-[--space-md] md:p-[--space-2xl] flex flex-col gap-[--space-xl] md:gap-[--space-2xl] overflow-y-auto overflow-x-hidden pb-20 md:pb-10">
+    <div className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-y-auto overflow-x-hidden pb-20 md:pb-10">
       {/* Top Bar (P0:3 — New Search button, P0:5 — removed date slider) */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-stagger-in stagger-1">
         <div>
@@ -228,7 +228,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Now Playing Hero Section (P2:17 — stagger animation) */}
       {trackData && (
-        <section className="bg-surface border border-border rounded-[--radius-lg] p-[--space-xl] md:p-[--space-2xl] relative overflow-hidden group transition-all duration-[--duration-slow] animate-stagger-in stagger-2">
+        <section className="shrink-0 bg-surface border border-border rounded-lg p-(--space-xl) md:p-(--space-2xl) relative overflow-hidden group transition-all duration-(--duration-slow) animate-stagger-in stagger-2">
           {/* Background blur effect */}
           {trackData.coverUrl && (
             <img
@@ -241,15 +241,15 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="relative z-10 flex flex-col md:flex-row gap-6 items-center md:items-start">
             {/* Album Cover */}
             <div className="relative w-32 h-32 md:w-40 md:h-40 flex-shrink-0 group/cover">
-              <div className="absolute inset-0 bg-cyber/15 blur-2xl rounded opacity-0 group-hover/cover:opacity-40 transition-opacity duration-[--duration-slow]"></div>
+              <div className="absolute inset-0 bg-cyber/15 blur-2xl rounded opacity-0 group-hover/cover:opacity-40 transition-opacity duration-(--duration-slow)"></div>
               {trackData.coverUrl ? (
                 <img
                   src={trackData.coverUrl}
                   alt={trackData.title}
-                  className="w-full h-full object-cover rounded-[--radius-md] border border-white/10 shadow-2xl relative z-10"
+                  className="w-full h-full object-cover rounded-md border border-white/10 shadow-2xl relative z-10"
                 />
               ) : (
-                <div className="w-full h-full rounded-[--radius-md] border border-white/10 bg-gray-900 flex items-center justify-center">
+                <div className="w-full h-full rounded-md border border-white/10 bg-gray-900 flex items-center justify-center">
                   <Music size={48} className="text-text-muted" />
                 </div>
               )}
@@ -304,7 +304,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     href={trackData.spotifyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-[--duration-fast] ease-[--ease-out-expo] rounded-[--radius-sm] focus-visible:ring-2 focus-visible:ring-spotify/50 focus-visible:outline-none"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/50 focus-visible:outline-none"
                   >
                     <ExternalLink size={14} />
                     SPOTIFY
@@ -316,12 +316,13 @@ const Dashboard: React.FC<DashboardProps> = ({
         </section>
       )}
 
-      {/* Main Grid (P2:17 — stagger animations) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+      {/* Main Grid (P2:17 — stagger animations). It fills spare height but never shrinks below its
+          content, and the hero above never shrinks: the page scrolls instead of clipping them. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
         {/* Hero: Sonic Fingerprint */}
         <section
           aria-label="Sonic Fingerprint"
-          className="lg:col-span-1 bg-surface border border-border rounded-[--radius-md] p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
+          className="lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
             <SectionLabel
@@ -374,7 +375,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             </p>
           )}
 
-          <div className="flex gap-[--space-lg] overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
+          <div className="flex gap-(--space-lg) overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
             {relatedTracks.map((rec) => (
               <div
                 key={rec.id}
@@ -389,40 +390,42 @@ const Dashboard: React.FC<DashboardProps> = ({
                 }}
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
-                className="relative min-w-[280px] bg-void border border-border p-4 rounded-[--radius-md] cursor-pointer group hover:border-cyber/30 hover:bg-surface-hover hover:-translate-y-1 hover:shadow-glow-cyber-subtle focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none transition-[transform,box-shadow,border-color,background-color] duration-[--duration-normal] ease-[--ease-out-expo] animate-fade-in-up opacity-0"
+                data-hovered={hoveredCardId === rec.id || undefined}
+                className="relative min-w-[280px] rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`,
                   animationFillMode: 'forwards',
                 }}
               >
-                <div className="relative aspect-square rounded-[--radius-md] overflow-hidden mb-4 bg-gray-900">
-                  {rec.img ? (
-                    <img
-                      src={rec.img}
-                      alt={rec.title}
-                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-[--duration-slow]"
-                    />
-                  ) : (
-                    <PlaceholderCover title={rec.title} group={rec.group} />
-                  )}
-                  {/* Target Scan Overlay on hover */}
-                  <TargetScanOverlay
-                    isHovered={hoveredCardId === rec.id}
-                    index={relatedTracks.indexOf(rec)}
-                  />
-                </div>
+                {/* The card lifts inside a box that stays put, so a pointer near its bottom edge
+                    does not drop the hover the lift itself causes. */}
+                <div className="h-full bg-void border border-border p-4 rounded-md group-hover:border-cyber/30 group-hover:bg-surface-hover group-hover:-translate-y-1 group-hover:shadow-glow-cyber-subtle transition-[translate,box-shadow,border-color,background-color] duration-(--duration-normal) ease-out-expo">
+                  <div className="relative aspect-square rounded-md overflow-hidden mb-4 bg-gray-900">
+                    {rec.img ? (
+                      <img
+                        src={rec.img}
+                        alt={rec.title}
+                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-(--duration-slow)"
+                      />
+                    ) : (
+                      <PlaceholderCover title={rec.title} group={rec.group} />
+                    )}
+                    {/* Target Scan Overlay on hover */}
+                    <TargetScanOverlay isHovered={hoveredCardId === rec.id} />
+                  </div>
 
-                <div className="space-y-1">
-                  <h4 className="font-semibold text-white truncate">{rec.title}</h4>
-                  {rec.artist && (
-                    <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
-                  )}
-                </div>
+                  <div className="space-y-1">
+                    <h4 className="font-semibold text-white truncate">{rec.title}</h4>
+                    {rec.artist && (
+                      <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
+                    )}
+                  </div>
 
-                <div className="mt-4 pt-3 border-t border-white/5">
-                  <Badge variant="analog" glow>
-                    <span className="font-bold">LOGIC:</span> {rec.reason}
-                  </Badge>
+                  <div className="mt-4 pt-3 border-t border-white/5">
+                    <Badge variant="analog" glow>
+                      <span className="font-bold">LOGIC:</span> {rec.reason}
+                    </Badge>
+                  </div>
                 </div>
               </div>
             ))}
@@ -440,7 +443,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* UX: Undo toast (replaces confirm dialog) */}
       {undoToast && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-5 py-3 bg-surface-overlay backdrop-blur-lg border border-cyber/30 rounded-[--radius-md] shadow-elevated-lg animate-slide-up-fade"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-5 py-3 bg-surface-overlay backdrop-blur-lg border border-cyber/30 rounded-md shadow-elevated-lg animate-slide-up-fade"
           onMouseEnter={handleToastMouseEnter}
           onMouseLeave={handleToastMouseLeave}
         >

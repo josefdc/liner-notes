@@ -19,6 +19,7 @@
     "lint": "biome check --error-on-warnings .",
     "format": "biome format --write .",
     "guard:honest": "node scripts/guard-honest.mjs",
+    "check:css": "node scripts/check-built-css.mjs",
     "test:e2e": "playwright test",
     "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs"
   },

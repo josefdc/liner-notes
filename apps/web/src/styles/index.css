@@ -100,6 +100,9 @@
   --color-text-secondary: rgba(255, 255, 255, 0.7);
   --color-text-tertiary: rgba(255, 255, 255, 0.45);
   --color-text-muted: rgba(255, 255, 255, 0.25);
+  /* Neutral badge text: at least 4.5:1 on the badge's tint over any surface up to surface-active
+     (tertiary is 4.0-4.5:1 there) */
+  --color-text-chip: rgba(255, 255, 255, 0.5);
 
   /* Line heights */
   --leading-tight: 1.15;
@@ -122,8 +125,10 @@
   --space-2xl: 48px;
   --space-3xl: 64px;
 
-  /* Chrome text size (badges, status bars, metadata) */
+  /* Chrome text size (badges, status bars, metadata), with its own line height so a small badge
+     is the same height wherever it sits */
   --text-chrome: 10px;
+  --text-chrome--line-height: 14px;
 
   /* White glow for play button */
   --shadow-glow-white: 0 0 20px rgba(255, 255, 255, 0.15);
@@ -136,8 +141,6 @@
   /* Animations */
   --animate-scan-vertical: scan-vertical 1.5s ease-in-out infinite;
   --animate-scan-horizontal: scan-horizontal 2s ease-in-out infinite;
-  --animate-scanline: scanline 8s linear infinite;
-  --animate-blink: blink 0.8s step-end infinite;
   --animate-spin-slow: spin-slow 3s linear infinite;
   --animate-fade-in-right: fade-in-right 0.3s ease-out forwards;
   --animate-fade-in-up: fade-in-up 0.4s ease-out forwards;
@@ -151,7 +154,6 @@
   --animate-glow-breathe: glow-breathe 3s ease-in-out infinite;
   --animate-scale-in: scale-in 200ms var(--ease-out-expo) forwards;
   --animate-slide-up-fade: slide-up-fade 400ms var(--ease-out-expo) forwards;
-  --animate-fade-out: fade-out 150ms ease-out forwards;
 
   /* Keyframes */
   @keyframes scan-vertical {
@@ -169,25 +171,6 @@
     }
     100% {
       left: 100%;
-    }
-  }
-
-  @keyframes scanline {
-    0% {
-      transform: translateY(-100%);
-    }
-    100% {
-      transform: translateY(100vh);
-    }
-  }
-
-  @keyframes blink {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0;
     }
   }
 
@@ -321,15 +304,6 @@
     }
   }
 
-  @keyframes fade-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0;
-    }
-  }
-
   @keyframes glow-breathe-white {
     0%,
     100% {
@@ -337,19 +311,6 @@
     }
     50% {
       box-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
-    }
-  }
-
-  @keyframes lock-wiggle {
-    0%,
-    100% {
-      transform: rotate(0deg);
-    }
-    25% {
-      transform: rotate(-5deg);
-    }
-    75% {
-      transform: rotate(5deg);
     }
   }
 
@@ -485,13 +446,6 @@
   }
   .stagger-8 {
     animation-delay: 400ms;
-  }
-
-  /* Timeline marker glow on hover */
-  .marker-glow:hover {
-    filter: drop-shadow(0 0 4px currentColor);
-    transform: scale(1.2);
-    transition: all var(--duration-fast) var(--ease-out-expo);
   }
 
   /* Skip rendering for off-screen log entries */

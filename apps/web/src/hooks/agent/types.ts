@@ -73,12 +73,18 @@ export interface AgentStreamEvent {
   error?: string;
 }
 
-// Use same hostname as the frontend, but port 3001 for the API
-// This allows network access from mobile devices
-export const API_BASE_URL =
-  typeof window !== 'undefined'
-    ? `http://${window.location.hostname}:3001`
-    : 'http://localhost:3001';
+/**
+ * The API's root URL, `/api` prefix included, from `VITE_API_URL` at build time: a path on the web
+ * app's own origin (`/api`) or an absolute URL (`https://api.example.com/api`). A trailing slash is
+ * dropped. Unset or empty, it is `/api` on the web app's origin, which the Vite dev server proxies
+ * to the API (vite.config.ts) and the web image's nginx forwards to it.
+ */
+export function apiBaseUrl(configured: string | undefined): string {
+  const base = configured?.trim().replace(/\/+$/, '');
+  return base || '/api';
+}
+
+export const API_BASE_URL = apiBaseUrl(import.meta.env.VITE_API_URL);
 
 // Re-export types needed by consumers of the hook
 export type { Factoid };

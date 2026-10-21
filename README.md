@@ -135,8 +135,18 @@ Override the ports with `WEB_PORT`, `API_PORT` and `AUDIO_PORT`, or pick service
 `DEV_SERVICES=web,api`. Each service can also run alone: `npm run dev -w apps/web`,
 `npm run dev -w apps/api`, `npm run dev -w services/audio`.
 
-The web app always calls the API on port 3001, so `API_PORT` is only useful when the web app is
-not needed. The audio service needs [uv](https://docs.astral.sh/uv/); without it, run
+The web app calls the API at `/api` on its own origin, and the Vite dev server forwards those
+requests to the API on `API_PORT` (default 3001), or to `API_PROXY_TARGET` when set (an http(s)
+origin such as `http://192.168.1.20:3001`, for an API running elsewhere). A build can point the web app elsewhere with
+`VITE_API_URL`, the API's root URL including `/api` (see `apps/web/.env.example`); the web
+image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API. A value that
+cannot work (`api`, or an absolute URL without a path) stops the build with an error.
+
+The web dev server listens on loopback only. `WEB_HOST=0.0.0.0 npm run dev` serves it on the
+network (to try it from a phone, say); anyone who can reach that port can then also start
+analyses through the `/api` proxy, on your model budget.
+
+The audio service needs [uv](https://docs.astral.sh/uv/); without it, run
 `DEV_SERVICES=web,api npm run dev`.
 
 Then open http://localhost:3000
@@ -148,6 +158,7 @@ npm run lint           # Biome (lint + formatting); `npm run format` rewrites fi
 npm run typecheck      # TypeScript in every workspace
 npm run guard:honest   # counts of placeholder-data patterns; lower the baseline with -- --update
 npm test               # Vitest: API, web and script tests
+npm run build && npm run check:css   # the built CSS is Tailwind output with no invalid values
 npm run test:e2e       # Playwright against the web app with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
 cd services/audio && uv run ruff check . && uv run ruff format --check .
 cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
@@ -166,11 +177,19 @@ Run all services with Docker Compose:
 docker-compose up --build
 ```
 
-| Service        | URL                        |
-|----------------|----------------------------|
-| Frontend       | http://localhost (port 80)  |
-| Backend API    | http://localhost:3001       |
-| Audio Analysis | http://localhost:3002       |
+| Service        | URL                                                     |
+|----------------|---------------------------------------------------------|
+| Frontend       | http://localhost (port 80)                              |
+| Backend API    | http://localhost/api (direct: http://127.0.0.1:3001)    |
+| Audio Analysis | internal to the API (direct: http://127.0.0.1:3002)     |
+
+The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
+and the audio service's ports are published on the host's loopback only. The API runs with
+`TRUST_PROXY=1`, so its per-IP rate limits use the client address nginx puts in
+`X-Forwarded-For`. Behind another proxy (for example a TLS terminator in front of nginx), set it
+to the number of proxies in the shell that runs compose, e.g.
+`TRUST_PROXY=2 docker-compose up --build`; compose's `environment:` overrides `apps/api/.env`,
+so setting it there has no effect.
 
 ---
 

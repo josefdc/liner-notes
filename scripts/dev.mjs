@@ -4,6 +4,10 @@
 //   npm run dev                          all three on 3000 / 3001 / 3002
 //   WEB_PORT=3110 API_PORT=3111 AUDIO_PORT=3112 npm run dev
 //   DEV_SERVICES=web,api npm run dev     a subset
+//   WEB_HOST=0.0.0.0 npm run dev         serve the web app (and its /api proxy) on the network;
+//                                        the default is loopback only
+//   API_PROXY_TARGET=http://host:3001 DEV_SERVICES=web npm run dev
+//                                        the web app with an API that runs elsewhere
 //
 // Output lines are prefixed with the service name. If one service exits, the others are
 // stopped and this script exits with the first failing service's exit code. The API runs
@@ -19,6 +23,8 @@ const services = {
     workspace: "apps/web",
     // strictPort: never drift onto the next port (the API's) when the web port is taken
     args: ["--", "--port", WEB_PORT ?? "3000", "--strictPort"],
+    // The web dev server proxies /api to the API on API_PORT (apps/web/vite.config.ts), which
+    // it reads from the inherited environment.
     env: {},
   },
   api: {
@@ -48,12 +54,6 @@ for (const name of selected) {
     );
     process.exit(1);
   }
-}
-
-if (API_PORT && API_PORT !== "3001" && selected.includes("web")) {
-  console.warn(
-    "[dev] note: the web app still calls the API on port 3001; API_PORT moves only the API",
-  );
 }
 
 const children = new Map();

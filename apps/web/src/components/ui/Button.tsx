@@ -31,10 +31,14 @@ const sizeStyles: Record<ButtonSize, string> = {
 
 const baseStyles = [
   'inline-flex items-center justify-center',
-  'bg-transparent border font-mono tracking-widest uppercase rounded-[--radius-sm]',
-  'transition-all duration-[--duration-fast] ease-[--ease-out-expo]',
+  'bg-transparent border font-mono tracking-widest uppercase rounded-sm',
+  // One transition list: colours, the glow and focus ring (box-shadow), the hover lift
+  // (translate) and the press (scale). Durations pair with the properties in order; the focus
+  // ring answers faster than the rest.
+  'transition-[color,background-color,border-color,box-shadow,translate,scale] ease-out-expo',
+  'duration-[var(--duration-fast),var(--duration-fast),var(--duration-fast),var(--duration-focus),var(--duration-fast),var(--duration-fast)]',
   'active:scale-[0.97]',
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-void transition-shadow duration-[--duration-focus]',
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-void',
   'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
 ].join(' ');
 

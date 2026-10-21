@@ -112,7 +112,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
           key={entity.id}
           onClick={() => onEntityClick?.(entity)}
           className={`
-            inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-[--radius-sm]
+            inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-sm
             border transition-all cursor-pointer
             ${ENTITY_COLORS[entity.type]}
           `}
@@ -138,11 +138,11 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
 
   return (
     <div
-      className={`relative bg-surface/80 backdrop-blur-sm border border-border border-l-2 ${getBorderColor(factoid.type)} p-[--space-md] md:p-[--space-lg] rounded-[--radius-md] group ${getHoverBorderColor(factoid.type)} hover:bg-surface transition-all duration-[--duration-normal] ease-[--ease-out-expo] animate-fade-in-up overflow-hidden`}
+      className={`relative bg-surface/80 backdrop-blur-sm border border-border border-l-2 ${getBorderColor(factoid.type)} p-(--space-md) md:p-(--space-lg) rounded-md group ${getHoverBorderColor(factoid.type)} hover:bg-surface transition-all duration-(--duration-normal) ease-out-expo animate-fade-in-up overflow-hidden`}
     >
       {/* Subtle gradient glow on hover */}
       <div
-        className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[--duration-slow] pointer-events-none bg-gradient-to-br from-transparent via-transparent ${
+        className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-(--duration-slow) pointer-events-none bg-gradient-to-br from-transparent via-transparent ${
           factoid.type === 'production'
             ? 'to-cyber/[0.03]'
             : factoid.type === 'credits'
@@ -164,7 +164,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
         >
           {style.icon}
         </span>
-        <span className="text-xs font-semibold text-text-secondary uppercase font-mono tracking-[--tracking-wider] truncate">
+        <span className="text-xs font-semibold text-text-secondary uppercase font-mono tracking-wider truncate">
           {factoid.title}
         </span>
         <span
@@ -175,7 +175,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
       </div>
 
       {/* Content */}
-      <p className="relative text-sm text-text-secondary leading-relaxed font-sans group-hover:text-text-primary transition-colors duration-[--duration-fast]">
+      <p className="relative text-sm text-text-secondary leading-relaxed font-sans group-hover:text-text-primary transition-colors duration-(--duration-fast)">
         {renderedContent}
       </p>
 

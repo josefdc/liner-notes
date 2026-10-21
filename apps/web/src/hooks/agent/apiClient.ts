@@ -17,7 +17,7 @@ export async function fetchSuggestions(
   limit: number = 5,
 ): Promise<SearchCandidate[]> {
   const response = await fetch(
-    `${API_BASE_URL}/api/search/suggest?query=${encodeURIComponent(query)}&limit=${limit}`,
+    `${API_BASE_URL}/search/suggest?query=${encodeURIComponent(query)}&limit=${limit}`,
   );
   if (!response.ok) {
     throw new Error(`Search suggestions failed (HTTP ${response.status})`);

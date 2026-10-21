@@ -1,0 +1,68 @@
+[project]
+name = "liner-notes-evals-audio"
+# Never published.
+version = "0.0.0"
+description = "Accuracy of the audio service's tempo and key estimates on annotated datasets"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+# The harness imports the service's own modules (services/audio is put on sys.path, see
+# evals_audio/service.py), so the service's runtime dependencies are needed here, at the
+# versions its lock pins: the constraints below keep the numerics identical, and
+# tests/test_service_pins.py fails when the two locks drift apart.
+dependencies = [
+    "fastapi>=0.125.0",
+    "httpx>=0.28.1",
+    "librosa==1.0.0",
+    "mirdata==1.0.0",
+    "numpy>=2.3.5",
+    "pydantic>=2.12.5",
+    "scipy>=1.16.3",
+    "soundfile>=0.13.1",
+    "uvicorn>=0.38.0",
+]
+
+[project.optional-dependencies]
+# The Essentia estimators (essentia-tensorflow, as the service's "models" extra).
+models = [
+    "essentia-tensorflow==2.1b6.dev1389",
+]
+
+[tool.uv]
+package = true
+# Only resolve releases that have been public for two weeks.
+exclude-newer = "14 days"
+# ruff 0.17.1 (2026-10-15) was pinned before this rule; the exception can go after 2026-10-29.
+exclude-newer-package = { ruff = "2026-10-16T00:00:00Z" }
+# The versions services/audio/uv.lock resolves, so both run the same numerics.
+constraint-dependencies = [
+    "numpy==2.3.5",
+    "scipy==1.16.3",
+    "soundfile==0.13.1",
+    "soxr==1.0.0",
+    "numba==0.63.1",
+    "llvmlite==0.46.0",
+    "scikit-learn==1.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["evals_audio"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff==0.17.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -71,6 +71,7 @@ vi.mock("../sources/audio.js", async (importOriginal) => ({
   analyzeAudioPreview: tools.analyzeAudioPreview,
 }));
 vi.mock("../sources/lastfm.js", () => ({
+  lastfmConfigured: () => true,
   getLastfmTrackTags: tools.getLastfmTrackTags,
   getLastfmArtistTags: tools.getLastfmArtistTags,
   getLastfmSimilarTracks: tools.getLastfmSimilarTracks,
@@ -128,6 +129,8 @@ import { engineerNode } from "./nodes/engineerNode.js";
 import type { SonicAgentStateType } from "./state.js";
 import type { TrackData } from "./schema.js";
 import { TransientError } from "./errors.js";
+import { SourceError } from "../sources/http.js";
+import { failureWith, toolFailure } from "../sources/toolResult.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
 const QUERY = "ice ice baby";
@@ -486,6 +489,47 @@ async function drive(
 }
 
 describe("the analysis graph under failure", () => {
+  it("caches research when a source is only not configured, and stores that with it", async () => {
+    const missing = async () =>
+      JSON.stringify(failureWith("not_configured", "Last.fm is not configured"));
+    for (const tool of [
+      tools.getLastfmTrackTags,
+      tools.getLastfmArtistTags,
+      tools.getLastfmSimilarTracks,
+    ]) {
+      tool.invoke.mockImplementationOnce(missing);
+    }
+
+    const { threw, state } = await drive(stubModel(["done"]), { threadId: "t-no-key" });
+
+    expect(threw).toBeNull();
+    expect(state.trackData?.run?.sourceErrors).toEqual([
+      expect.objectContaining({ source: "lastfm", code: "not_configured" }),
+    ]);
+    expect(hooks.putResearch).toHaveBeenCalledTimes(1);
+    const [key, research] = hooks.putResearch.mock.calls[0] as [string, Record<string, unknown>];
+    expect(key).toMatch(/^v3:3Fcfwhm8oRrBvBZ8KGhtea:lastfm=1:tavily=[01]$/);
+    expect(research.notConfigured).toEqual([
+      expect.objectContaining({ source: "lastfm", code: "not_configured" }),
+    ]);
+  });
+
+  it("does not cache research when a source failed for a passing reason", async () => {
+    tools.getMusicBrainzRelations.invoke.mockImplementationOnce(async () =>
+      JSON.stringify(toolFailure(new SourceError("musicbrainz", "timeout", "no answer"))),
+    );
+
+    const { threw, state } = await drive(stubModel(["search_musicbrainz", "done"]), {
+      threadId: "t-timeout",
+    });
+
+    expect(threw).toBeNull();
+    expect(state.trackData?.run?.sourceErrors).toEqual([
+      expect.objectContaining({ source: "musicbrainz", code: "timeout" }),
+    ]);
+    expect(hooks.putResearch).not.toHaveBeenCalled();
+  });
+
   it("keeps the planner's calls and reports the source when a search keeps failing", async () => {
     tools.searchProductionHistory.invoke.mockImplementation(async () => {
       throw new TransientError("search 503", 503);

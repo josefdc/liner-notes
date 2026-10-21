@@ -72,7 +72,7 @@ interface MBSearchResponse {
   count: number;
 }
 
-interface MBArtist {
+export interface MBArtist {
   id: string;
   name: string;
   type?: string;
@@ -139,7 +139,12 @@ const RECORDING_SHAPE: Shape = {
 };
 const ARTIST_SEARCH_SHAPE: Shape = {
   count: true,
-  artists: [{ id: true, name: true, score: true, type: true, country: true }],
+  artists: [{ id: true, name: true, score: true, type: true, country: true, disambiguation: true }],
+};
+const URL_SHAPE: Shape = {
+  id: true,
+  resource: true,
+  relations: [{ type: true, artist: { id: true, name: true } }],
 };
 const ARTIST_SHAPE: Shape = {
   id: true,
@@ -449,7 +454,7 @@ function withoutEdition(album: string): string {
 
 type RecordingSearch =
   | { recording: MBRecording }
-  | { recording: null; reason: "not_found" | "ambiguous"; detail: string };
+  | { recording: null; reason: "no_input" | "not_found" | "ambiguous"; detail: string };
 
 /** Orders candidates: no disambiguation first, then most releases, then the earliest release. */
 function compareCandidates(a: MBRecording, b: MBRecording): number {
@@ -488,7 +493,7 @@ async function searchRecording(
   const bareTitle = withoutFeatured(title, parts);
   const wantedTitle = normalizeName(bareTitle);
   if (!wantedTitle || !normalizeName(artist) || parts.length === 0) {
-    return { recording: null, reason: "not_found", detail: "nothing to search for" };
+    return { recording: null, reason: "no_input", detail: "nothing to search for" };
   }
 
   // Every part as its own phrase, so the search finds "Earth, Wind & Fire" and "A feat. B".
@@ -551,45 +556,100 @@ async function getRecordingWithRelations(mbid: string, signal?: AbortSignal): Pr
   );
 }
 
-/** The artist named exactly `name` (after normalising) among MusicBrainz's matches, or null. */
-async function searchArtistExact(name: string, signal?: AbortSignal): Promise<MBArtist | null> {
+/** The artists named exactly `name` (after normalising) among MusicBrainz's matches. */
+async function searchArtistsExact(name: string, signal?: AbortSignal): Promise<MBArtist[]> {
   const wanted = normalizeName(name);
-  if (!wanted) return null;
+  if (!wanted) return [];
   const data = await mbFetch<{ artists?: MBArtist[] }>(
     "artist",
     { query: `artist:"${escapeLucene(name.trim())}"`, limit: "10" },
     ARTIST_SEARCH_SHAPE,
     signal,
   );
-  return (
-    (Array.isArray(data?.artists) ? data.artists : []).find(
-      (a) => isMbid(a?.id) && typeof a.name === "string" && normalizeName(a.name) === wanted,
-    ) ?? null
+  const exact = (Array.isArray(data?.artists) ? data.artists : []).filter(
+    (a) => isMbid(a?.id) && typeof a.name === "string" && normalizeName(a.name) === wanted,
   );
+  return exact.filter((a, i) => exact.findIndex((b) => b.id === a.id) === i);
+}
+
+const SPOTIFY_ARTIST_ID = /^[A-Za-z0-9]{22}$/;
+
+/**
+ * The MusicBrainz artists whose relationships link the Spotify artist page with this id; []
+ * when MusicBrainz has no such link (it answers 404 for an unknown URL) or the id is malformed.
+ */
+async function artistsLinkedToSpotify(
+  spotifyArtistId: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  if (!SPOTIFY_ARTIST_ID.test(spotifyArtistId)) return [];
+  try {
+    const data = await mbFetch<{ relations?: Array<{ artist?: { id?: unknown } }> }>(
+      "url",
+      { resource: `https://open.spotify.com/artist/${spotifyArtistId}`, inc: "artist-rels" },
+      URL_SHAPE,
+      signal,
+    );
+    return (Array.isArray(data?.relations) ? data.relations : [])
+      .map((r) => r?.artist?.id)
+      .filter(isMbid);
+  } catch (error) {
+    if (!signal?.aborted && isSourceError(error, "http") && error.status === 404) return [];
+    throw error;
+  }
+}
+
+/** How an artist name resolved on MusicBrainz. */
+export type ArtistMatch =
+  | { artist: MBArtist; via: "name" | "spotify" }
+  | { artist: null; reason: "no_input" | "not_found" | "ambiguous"; detail: string };
+
+export interface FindArtistOptions {
+  /** The track's artists one by one (`name` may join them); the first one is looked up. */
+  artistNames?: string[];
+  /** The Spotify id of the artist looked up, to tell artists of the same name apart. */
+  spotifyArtistId?: string;
+  signal?: AbortSignal;
 }
 
 /**
- * The MusicBrainz artist for a name, or null; never a different artist.
+ * The MusicBrainz artist for a name; never a different artist and never a guess.
  *
- * `name` is searched whole and only an exact (normalised) name match is accepted, so
- * "Earth, Wind & Fire" and "Tyler, The Creator" resolve to themselves. When several artists share
- * that exact name, the first one in MusicBrainz's ranking is taken. A Spotify artist string
- * joins several artists with ", ", which cannot be told apart from a comma in one name; when the
- * caller passes the separate `artistNames`, the first one is tried if the whole name has no
- * match. Goes through the rate-limited queue; ListenBrainz resolves artists here too.
+ * The name looked up is the first of `artistNames` when given (a Spotify artist string joins
+ * several artists with ", ", which cannot be told apart from a comma in one name, so the joined
+ * string is never searched as one artist), else `name`. Only an exact (normalised) name match is
+ * accepted, so "Earth, Wind & Fire" and "Tyler, The Creator" resolve to themselves. When several
+ * artists share that exact name (Nirvana, Bush, Low…), the one MusicBrainz links to the Spotify
+ * artist page `spotifyArtistId` is taken; without such a link the answer is "ambiguous", never
+ * the first match. Goes through the rate-limited queue; ListenBrainz resolves artists here too.
  */
 export async function findArtist(
   name: string,
-  artistNames?: string[],
-  signal?: AbortSignal,
-): Promise<MBArtist | null> {
-  const whole = await searchArtistExact(name, signal);
-  if (whole) return whole;
-  const first = artistNames?.find((n) => normalizeName(n));
-  if (first && normalizeName(first) !== normalizeName(name)) {
-    return searchArtistExact(first, signal);
+  options: FindArtistOptions = {},
+): Promise<ArtistMatch> {
+  const { signal, spotifyArtistId } = options;
+  const names = (options.artistNames ?? []).filter((n) => normalizeName(n));
+  const wanted = names.length > 0 ? names[0] : name;
+  if (!normalizeName(wanted)) {
+    return { artist: null, reason: "no_input", detail: "no artist name to look up" };
   }
-  return null;
+  const matches = await searchArtistsExact(wanted, signal);
+  if (matches.length === 0) {
+    return { artist: null, reason: "not_found", detail: `no MusicBrainz artist named "${wanted}"` };
+  }
+  if (matches.length === 1) return { artist: matches[0], via: "name" };
+
+  // Several artists share the name: only a link to the Spotify artist tells them apart.
+  const linked = spotifyArtistId ? await artistsLinkedToSpotify(spotifyArtistId, signal) : [];
+  const picked = matches.filter((m) => linked.includes(m.id));
+  if (picked.length === 1) return { artist: picked[0], via: "spotify" };
+  return {
+    artist: null,
+    reason: "ambiguous",
+    detail:
+      `${matches.length} MusicBrainz artists are named "${wanted}" and none is linked to ` +
+      (spotifyArtistId ? "this Spotify artist" : "a known Spotify artist"),
+  };
 }
 
 /**
@@ -636,13 +696,19 @@ function parseRelations(relations: MBRelation[]): GenealogyRelation[] {
   return genealogy;
 }
 
-/** The credited artists of a recording, each with its MusicBrainz artist MBID. */
+/** The credited artists of a recording: the artist's name, the name credited and its MBID. */
 function artistCreditOf(
   credits: MBArtistCredit[] | undefined,
-): Array<{ name: string; mbid: string }> {
+): Array<{ name: string; credited: string; mbid: string }> {
   return (Array.isArray(credits) ? credits : []).flatMap((c) =>
     isMbid(c?.artist?.id) && typeof c.artist.name === "string"
-      ? [{ name: c.artist.name, mbid: c.artist.id }]
+      ? [
+          {
+            name: c.artist.name,
+            credited: typeof c.name === "string" ? c.name : c.artist.name,
+            mbid: c.artist.id,
+          },
+        ]
       : [],
   );
 }
@@ -746,18 +812,22 @@ export const getMusicBrainzRelations = tool(
  * Get artist discography and related artists
  */
 export const getMusicBrainzArtist = tool(
-  async ({ artistName, artistNames }, config): Promise<string> => {
+  async ({ artistName, artistNames, artistMbid, spotifyArtistId }, config): Promise<string> => {
     const signal = config?.signal;
     try {
-      console.log(`🧠 [MusicBrainz] Searching artist: "${artistName}"`);
-
-      const artist = await findArtist(artistName, artistNames, signal);
-      if (!artist) {
-        return JSON.stringify({
-          found: false,
-          reason: "not_found",
-          message: `Artist "${artistName}" not found`,
-        });
+      // The artist's own MBID when an earlier step identified it; else its name.
+      let id = isMbid(artistMbid) ? artistMbid : null;
+      if (!id) {
+        console.log(`🧠 [MusicBrainz] Searching artist: "${artistName}"`);
+        const match = await findArtist(artistName, { artistNames, spotifyArtistId, signal });
+        if (!match.artist) {
+          return JSON.stringify({
+            found: false,
+            reason: ARTIST_REASON[match.reason],
+            message: match.detail,
+          });
+        }
+        id = match.artist.id;
       }
 
       // Get artist relationships
@@ -767,7 +837,7 @@ export const getMusicBrainzArtist = tool(
         type?: string;
         country?: string;
         relations?: MBRelation[];
-      }>(`artist/${artist.id}`, { inc: "artist-rels recording-rels" }, ARTIST_SHAPE, signal);
+      }>(`artist/${id}`, { inc: "artist-rels recording-rels" }, ARTIST_SHAPE, signal);
 
       // Extract collaborators and influences
       const relations = Array.isArray(artistData.relations) ? artistData.relations : [];
@@ -781,7 +851,7 @@ export const getMusicBrainzArtist = tool(
 
       return JSON.stringify({
         found: true,
-        mbid: artist.id,
+        mbid: id,
         name: artistData.name,
         type: artistData.type,
         country: artistData.country,
@@ -805,9 +875,24 @@ export const getMusicBrainzArtist = tool(
         .array(z.string())
         .optional()
         .describe("When artistName joins several artists: the artists one by one"),
+      artistMbid: z
+        .string()
+        .optional()
+        .describe("The artist's own MusicBrainz MBID, when known (skips the name search)"),
+      spotifyArtistId: z
+        .string()
+        .optional()
+        .describe("The artist's Spotify id, to tell artists with the same name apart"),
     }),
   },
 );
+
+/** The tool `reason` of an artist name that did not resolve. */
+export const ARTIST_REASON = {
+  no_input: "no_input",
+  not_found: "artist_not_identified",
+  ambiguous: "ambiguous_artist",
+} as const;
 
 // =============================================================================
 // ISRC lookup and recording relationships

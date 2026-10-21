@@ -3,6 +3,7 @@
  * by its text. Text that is not a result object is the source's invalid response.
  */
 
+import { SourceError as SourceErrorSchema } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import { SourceError } from "./http.js";
 import { failureWith, readToolResult, sourceErrorCode, toolFailure } from "./toolResult.js";
@@ -29,6 +30,26 @@ describe("readToolResult", () => {
     expect(readToolResult("lastfm", raw)).toEqual({
       kind: "failed",
       error: { source: "lastfm", code: "rate_limited", message: "Last.fm error 29: slow down" },
+    });
+  });
+
+  it.each(SourceErrorSchema.shape.code.options)("reads every contract code, here %s", (code) => {
+    expect(readToolResult("lastfm", JSON.stringify({ found: false, code, error: "x" }))).toEqual({
+      kind: "failed",
+      error: { source: "lastfm", code, message: "x" },
+    });
+  });
+
+  it("names the source the result names (a MusicBrainz failure inside a ListenBrainz tool)", () => {
+    const raw = JSON.stringify(toolFailure(new SourceError("musicbrainz", "rate_limited", "503")));
+    expect(readToolResult("listenbrainz", raw)).toMatchObject({
+      kind: "failed",
+      error: { source: "musicbrainz", code: "rate_limited" },
+    });
+    // A source outside the contract (the audio service) is not a research source.
+    const audio = JSON.stringify({ found: false, code: "timeout", error: "x", source: "audio" });
+    expect(readToolResult("listenbrainz", audio)).toMatchObject({
+      error: { source: "listenbrainz" },
     });
   });
 

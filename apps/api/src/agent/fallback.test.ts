@@ -131,12 +131,39 @@ describe("createFallbackTrackData", () => {
       {
         spotifyData: spotify,
         audioFeatures: null,
-        researchData: { ...emptyResearch, collaborators: ["Queen (producer)"] },
+        researchData: {
+          ...emptyResearch,
+          collaborators: ["Queen (producer)"],
+          collaboratorsOf: "David Bowie",
+        },
       } as unknown as SonicAgentStateType,
       { newId: () => `fixed-${++n}` },
     );
     expect(td.factoids.map((f) => f.id)).toEqual(["fixed-1", "fixed-3"]);
     expect(td.factoids[0].entities?.[0].id).toBe("fixed-2");
+  });
+
+  it("names the artist the collaborators belong to, never the joined artists of the track", async () => {
+    const td = await createFallbackTrackData({
+      spotifyData: { ...spotify, artist: "Ramsey Lewis, Earth, Wind & Fire" },
+      audioFeatures: null,
+      researchData: {
+        ...emptyResearch,
+        collaborators: ["Maurice White (producer)"],
+        collaboratorsOf: "Ramsey Lewis",
+      },
+    } as unknown as SonicAgentStateType);
+    const card = td.factoids.find((f) => f.title === "Collaboration Network");
+    expect(card?.content).toBe("Ramsey Lewis has worked with: Maurice White (producer).");
+  });
+
+  it("shows no collaborators card when it is not known whose they are", async () => {
+    const td = await createFallbackTrackData({
+      spotifyData: spotify,
+      audioFeatures: null,
+      researchData: { ...emptyResearch, collaborators: ["Queen (producer)"] },
+    } as unknown as SonicAgentStateType);
+    expect(td.factoids.map((f) => f.title)).not.toContain("Collaboration Network");
   });
 
   it("returns a schema-valid payload with no factoids when nothing is known", async () => {

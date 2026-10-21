@@ -56,6 +56,7 @@ describe("web search without an API key", () => {
       found: false,
       code: "not_configured",
       error: "tavily: TAVILY_API_KEY is not set",
+      source: "tavily",
       unavailable: true,
     });
     expect(readToolResult("tavily", result)).toMatchObject({

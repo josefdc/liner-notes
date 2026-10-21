@@ -3,27 +3,33 @@
  *
  * A research tool resolves with one of three JSON objects:
  *   - found: `{ found: true, … }` with the data;
- *   - nothing found: `{ found: false, reason?, message? }`: the source answered and holds nothing
- *     for the request (no recording identified, no tags);
- *   - failure: `{ found: false, code, error, unavailable? }`: the source could not be read. `code`
- *     is the contract's SourceError code; `unavailable: true` marks a source that is not
- *     configured (nothing was requested).
- * Consumers branch on `found` and `code` through `readToolResult`, never on the text: a message
- * such as "No … found" or "Error: …" is never research.
+ *   - not answered: `{ found: false, reason, message? }`. `reason` is typed: the source answered
+ *     with nothing for the request (`not_found`, `no_results`, …), or the request was not made or
+ *     not identified (`no_input`, `ambiguous_artist`, …; see the consumers' reason lists);
+ *   - failure: `{ found: false, code, error, source?, unavailable? }`: the source could not be
+ *     read. `code` is the contract's SourceError code; `source` names the source that failed when
+ *     it is not the tool's own (a ListenBrainz tool resolving a name on MusicBrainz);
+ *     `unavailable: true` marks a source that is not configured or whose key was rejected.
+ * Consumers branch on `found`, `reason` and `code` through `readToolResult`, never on the text:
+ * a message such as "No … found" or "Error: …" is never research.
  */
 
-import type { SourceError as SourceErrorRecord, SourceId } from "@liner-notes/contract";
+import {
+  type SourceError as SourceErrorRecord,
+  SourceError as SourceErrorSchema,
+  SourceId as SourceIdSchema,
+  type SourceId,
+} from "@liner-notes/contract";
 import { describeError, isSourceError } from "./http.js";
 
 export type SourceErrorCode = SourceErrorRecord["code"];
 
-const CODES: ReadonlySet<string> = new Set<SourceErrorCode>([
-  "not_configured",
-  "unavailable",
-  "timeout",
-  "rate_limited",
-  "invalid_response",
-]);
+/** The contract's codes and sources; a code added there is read here without a change. */
+const CODES: ReadonlySet<string> = new Set(SourceErrorSchema.shape.code.options);
+const SOURCES: ReadonlySet<string> = new Set(SourceIdSchema.options);
+
+const isSourceId = (value: unknown): value is SourceId =>
+  typeof value === "string" && SOURCES.has(value);
 
 /**
  * The contract code of a failure. A deadline is a timeout; a request the caller cancelled is
@@ -45,13 +51,18 @@ export interface ToolFailure {
   found: false;
   code: SourceErrorCode;
   error: string;
-  /** Set when the source is not configured: nothing was requested. */
+  /** The source that failed, when it is not the tool's own. */
+  source?: SourceId;
+  /** Set when the source is not configured or its key was rejected (a permanent state). */
   unavailable?: true;
 }
 
-/** The tool result for a failure, with its code. */
+/** The tool result for a failure, with its code and the source that failed. */
 export function toolFailure(error: unknown): ToolFailure {
-  return failureWith(sourceErrorCode(error), describeError(error));
+  const failure = failureWith(sourceErrorCode(error), describeError(error));
+  return isSourceError(error) && isSourceId(error.source)
+    ? { ...failure, source: error.source }
+    : failure;
 }
 
 /** The tool result for a failure whose code is already known (e.g. a source's own error). */
@@ -68,9 +79,10 @@ export type ToolOutcome<T> =
   | { kind: "failed"; error: SourceErrorRecord };
 
 /**
- * A tool result as found data, "nothing found" or the source's error. A result that is not one
- * of the documented objects (text, a list, malformed JSON) is the source's invalid response:
- * never research. A failure without a known code counts as "unavailable".
+ * A tool result as found data, "not answered" (with its typed reason) or the source's error. A
+ * result that is not one of the documented objects (text, a list, malformed JSON) is the
+ * source's invalid response: never research. A failure without a known code counts as
+ * "unavailable". The failure is the tool's `source` unless the result names another one.
  */
 export function readToolResult<T extends object = Record<string, unknown>>(
   source: SourceId,
@@ -88,12 +100,13 @@ export function readToolResult<T extends object = Record<string, unknown>>(
     return failed(source, "invalid_response", "the tool did not return a result object");
   }
   const result = value as Record<string, unknown>;
+  const from = isSourceId(result.source) ? result.source : source;
   const message = typeof result.error === "string" ? describeError(result.error) : undefined;
   if (typeof result.code === "string" && CODES.has(result.code)) {
-    return failed(source, result.code as SourceErrorCode, message);
+    return failed(from, result.code as SourceErrorCode, message);
   }
-  if (result.unavailable === true) return failed(source, "not_configured", message);
-  if (result.error !== undefined) return failed(source, "unavailable", message);
+  if (result.unavailable === true) return failed(from, "not_configured", message);
+  if (result.error !== undefined) return failed(from, "unavailable", message);
   if (result.found === true) return { kind: "found", data: result as T };
   const reason = typeof result.reason === "string" ? result.reason : null;
   return { kind: "none", reason };

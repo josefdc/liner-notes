@@ -14,7 +14,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
 import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
-import { findArtist, isMbid } from "./musicbrainz.js";
+import { ARTIST_REASON, findArtist, isMbid } from "./musicbrainz.js";
 import { toolFailure } from "./toolResult.js";
 
 dotenv.config();
@@ -43,7 +43,10 @@ const SIMILAR_SHAPE: Shape = [{ artist_mbid: true, name: true, score: true }];
 export interface SimilarArtist {
   name: string;
   mbid: string;
-  /** The dataset's raw score (a count of shared listening sessions, not 0-1). */
+  /**
+   * The raw co-listening score of ListenBrainz's similar-artists dataset: higher is more
+   * similar; it has no fixed maximum and is not 0-1.
+   */
   score: number;
 }
 
@@ -96,32 +99,25 @@ export async function fetchSimilarArtists(mbid: string, limit = MAX_ARTISTS, sig
  * Get similar artists from ListenBrainz based on listening patterns
  */
 export const getListenBrainzSimilarArtists = tool(
-  async ({ artistMbid, artistName, artistNames }, config): Promise<string> => {
+  async ({ artistMbid, artistName, artistNames, spotifyArtistId }, config): Promise<string> => {
     const signal = config?.signal;
     try {
       // The artist's own MBID: given, or resolved from its exact name on MusicBrainz.
-      let artist = artistMbid ? { mbid: artistMbid, name: artistName ?? null } : null;
-      if (!artist && artistName) {
-        console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName}"...`);
-        const found = await findArtist(artistName, artistNames, signal);
-        if (!found) {
-          // Nothing is asked of ListenBrainz for an artist MusicBrainz cannot identify.
+      let artist = isMbid(artistMbid) ? { mbid: artistMbid, name: artistName ?? null } : null;
+      if (!artist) {
+        console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName ?? ""}"...`);
+        const match = await findArtist(artistName ?? "", { artistNames, spotifyArtistId, signal });
+        if (!match.artist) {
+          // Nothing is asked of ListenBrainz for an artist MusicBrainz cannot identify, nor for a
+          // request without a name (our input, not the source, is missing).
           return JSON.stringify({
             found: false,
-            reason: "artist_not_identified",
-            message: `No MusicBrainz artist named exactly "${artistName}"`,
+            reason: ARTIST_REASON[match.reason],
+            message: match.detail,
           });
         }
-        artist = { mbid: found.id, name: found.name };
-        console.log(`✅ [ListenBrainz] Resolved MBID: ${found.id}`);
-      }
-
-      if (!artist) {
-        return JSON.stringify(
-          toolFailure(
-            new SourceError("listenbrainz", "invalid_input", "artistMbid or artistName required"),
-          ),
-        );
+        artist = { mbid: match.artist.id, name: match.artist.name };
+        console.log(`✅ [ListenBrainz] Resolved MBID: ${match.artist.id}`);
       }
 
       console.log(`🔗 [ListenBrainz] Getting similar artists for MBID: ${artist.mbid}`);
@@ -136,6 +132,7 @@ export const getListenBrainzSimilarArtists = tool(
       // A cancelled run rejects: nothing is reported for it.
       if (signal?.aborted) throw error;
       console.error("❌ [ListenBrainz] Similar artists error:", describeError(error));
+      // A failure while resolving the name on MusicBrainz names MusicBrainz as the source.
       return JSON.stringify(toolFailure(error));
     }
   },
@@ -158,6 +155,10 @@ export const getListenBrainzSimilarArtists = tool(
         .array(z.string())
         .optional()
         .describe("When artistName joins several artists: the artists one by one"),
+      spotifyArtistId: z
+        .string()
+        .optional()
+        .describe("The artist's Spotify id, to tell artists with the same name apart"),
     }),
   },
 );

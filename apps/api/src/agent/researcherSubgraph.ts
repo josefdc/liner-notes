@@ -36,6 +36,7 @@ import {
   getMusicBrainzArtist,
   isMbid,
   normalizeName,
+  withoutFeatured,
 } from "../sources/musicbrainz.js";
 import {
   getLastfmTrackTags,
@@ -95,6 +96,8 @@ export const ResearcherState = Annotation.Root({
         ...(next.listenbrainzSimilarArtists || []),
       ],
       noneFound: [...(prev.noneFound || []), ...(next.noneFound || [])],
+      notAsked: [...(prev.notAsked || []), ...(next.notAsked || [])],
+      collaboratorsOf: next.collaboratorsOf || prev.collaboratorsOf,
     }),
     default: () => emptyResearch(),
   }),
@@ -249,12 +252,33 @@ function createResearchManagerNode(runtime: AgentRuntime) {
 // Reading the tools' results
 // =============================================================================
 
-/** The track's artist as research asks for it: the first credited artist, and all of them. */
-export function trackArtists(spotify: SpotifyData): { primary: string; names: string[] } {
+/** The track's artists and title as research asks for them. */
+export interface TrackQuery {
+  /** The first credited artist: artist-level questions are about this artist. */
+  primary: string;
+  /** The credited artists one by one, when known; else the one name Spotify gave. */
+  names: string[];
+  /** The primary artist's Spotify id, when known (tells artists of the same name apart). */
+  spotifyArtistId: string | undefined;
+  /** The title without a featured-artist note ("Song (feat. X)" → "Song"). */
+  title: string;
+}
+
+/**
+ * The track as research asks for it. Without the separate artist names (e.g. a track picked from
+ * candidates whose details could not be read), Spotify's string is searched as one name: it
+ * cannot be split, since a comma also occurs inside names ("Earth, Wind & Fire").
+ */
+export function trackQuery(spotify: SpotifyData): TrackQuery {
   const names = (spotify.artistNames ?? []).filter((n) => n.trim() !== "");
-  return names.length > 0
-    ? { primary: names[0], names }
-    : { primary: spotify.artist, names: [spotify.artist] };
+  const known = names.length > 0 ? names : [spotify.artist];
+  const id = spotify.artistIds?.[0];
+  return {
+    primary: known[0],
+    names: known,
+    spotifyArtistId: id && id.trim() !== "" ? id : undefined,
+    title: withoutFeatured(spotify.title, known) || spotify.title,
+  };
 }
 
 /** The artist's own MusicBrainz identity, as research found it. */
@@ -264,16 +288,21 @@ export interface ArtistRef {
 }
 
 /**
- * The track's own artist among a recording's credited artists: the credit named like the
- * primary artist, else the first credit (the recording search only matches recordings credited
- * to exactly the track's artists). Never a related or similar artist, never the recording's id.
+ * The track's own artist among a recording's credited artists: the credit whose name (as
+ * credited, or the artist's MusicBrainz name) is the track's first artist, else the first credit
+ * (the recording search only matches recordings credited to exactly the track's artists). Never
+ * a related or similar artist, never the recording's id.
  */
 export function artistFromCredit(credits: unknown, primary: string): ArtistRef | null {
   const list = (Array.isArray(credits) ? credits : []).filter(
-    (c): c is ArtistRef => isMbid(c?.mbid) && typeof c?.name === "string",
+    (c): c is ArtistRef & { credited?: unknown } => isMbid(c?.mbid) && typeof c?.name === "string",
   );
   const wanted = normalizeName(primary);
-  return list.find((c) => normalizeName(c.name) === wanted) ?? list[0] ?? null;
+  const named = (c: ArtistRef & { credited?: unknown }) =>
+    normalizeName(c.name) === wanted ||
+    (typeof c.credited === "string" && normalizeName(c.credited) === wanted);
+  const own = list.find(named) ?? list[0];
+  return own ? { mbid: own.mbid, name: own.name } : null;
 }
 
 /** Tag lines ("name (count)"), each tag once (case-insensitive), `existing` first. */
@@ -291,40 +320,45 @@ export function mergeTags(existing: string[], tags: unknown): string[] {
 const score = (value: unknown) => (Number(value) || 0).toFixed(2);
 
 /**
- * Last.fm similar tracks by rank, with Last.fm's raw match value and its scale (0 to 1). Never a
- * percentage: the most similar track would always read "100 %".
+ * Last.fm similar tracks by rank, with Last.fm's match value, which is relative to its closest
+ * match (that one is 1). Never a percentage, and never read as an absolute similarity.
  */
 export function similarTrackLines(tracks: unknown): string[] {
   return (Array.isArray(tracks) ? tracks : [])
     .filter((t) => typeof t?.name === "string" && typeof t?.artist === "string")
     .map(
-      (t, i) => `${i + 1}. ${t.name} by ${t.artist} (Last.fm match ${score(t.match)}, scale 0-1)`,
+      (t, i) =>
+        `${i + 1}. ${t.name} by ${t.artist} (Last.fm match ${score(t.match)}, ` +
+        "relative to its closest match = 1)",
     );
 }
 
-/** Last.fm similar artists by rank, with Last.fm's raw match value and its scale (0 to 1). */
+/** Last.fm similar artists by rank, with Last.fm's match value relative to its closest match. */
 export function similarArtistLines(artists: unknown): string[] {
   return (Array.isArray(artists) ? artists : [])
     .filter((a) => typeof a?.name === "string")
-    .map((a, i) => `${i + 1}. ${a.name} (Last.fm match ${score(a.match)}, scale 0-1)`);
+    .map(
+      (a, i) =>
+        `${i + 1}. ${a.name} (Last.fm match ${score(a.match)}, relative to its closest match = 1)`,
+    );
 }
 
 /**
- * ListenBrainz similar artists by rank, with the dataset's raw score (shared listening
- * sessions; higher is more similar; no fixed maximum, so not a percentage).
+ * ListenBrainz similar artists by rank, with the raw co-listening score of its similar-artists
+ * dataset (higher is more similar; no fixed maximum, so not a percentage).
  */
 export function listenBrainzLines(artists: unknown, of: string): string[] {
   return (Array.isArray(artists) ? artists : [])
     .filter((a) => typeof a?.name === "string")
     .map(
       (a, i) =>
-        `${i + 1}. ${a.name} (similar to ${of}; ListenBrainz score ${Number(a.score) || 0}, ` +
-        "a count of shared listening sessions)",
+        `${i + 1}. ${a.name} (similar to ${of}; ListenBrainz co-listening score ` +
+        `${Number(a.score) || 0}, higher is more similar, no fixed maximum)`,
     );
 }
 
-/** The label of an empty step, for `noneFound`. Written by code: never source text. */
-const NONE_LABEL = {
+/** The label of a step for `noneFound` and `notAsked`. Written by code: never source text. */
+const STEP_LABEL = {
   samples: "web search: sample history",
   production: "web search: production history",
   general: "web search: the planner's lead",
@@ -337,20 +371,29 @@ const NONE_LABEL = {
   artistInfo: "Last.fm artist info",
   listenbrainz: "ListenBrainz similar artists",
 } as const;
-export type NoneLabel = keyof typeof NONE_LABEL;
+export type NoneLabel = keyof typeof STEP_LABEL;
 
-/** What a tool's typed `reason` adds to an empty step's label. */
-const REASON_NOTE: Record<string, string> = {
-  ambiguous: "several matching recordings; none picked",
-  artist_not_identified: "skipped: no MusicBrainz artist with exactly this name",
+/**
+ * Tool reasons that mean the source was not asked, or could not identify the track or artist:
+ * no answer either way, so never "nothing found". Any other reason is the source's empty answer.
+ */
+const NOT_ASKED: Record<string, string> = {
+  no_input: "not asked: no name to ask for",
+  ambiguous: "not identified: several matching recordings, none picked",
+  ambiguous_artist:
+    "not asked: several MusicBrainz artists have this name and none is linked to the Spotify artist",
+  artist_not_identified: "not asked: no MusicBrainz artist with exactly this name",
+  invalid_request: "not answered: Last.fm refused the request",
+  other_artist: "dropped: Last.fm answered for another artist",
 };
 
 /** What a research step read: its data, the sources it could not read, the empty answers. */
 export class StepReader {
   readonly errors: SourceError[] = [];
   readonly none: string[] = [];
+  readonly notAsked: string[] = [];
 
-  /** The data of a found result; null (recorded as an error or "nothing found") otherwise. */
+  /** The data of a found result; null (recorded as an error, empty or not asked) otherwise. */
   read<T extends object = Record<string, unknown>>(
     source: SourceId,
     raw: unknown,
@@ -359,13 +402,15 @@ export class StepReader {
     const outcome = readToolResult<T>(source, raw);
     if (outcome.kind === "found") return outcome.data;
     if (outcome.kind === "failed") this.errors.push(outcome.error);
-    else this.nothing(label, outcome.reason ? REASON_NOTE[outcome.reason] : undefined);
+    else if (outcome.reason && outcome.reason in NOT_ASKED) {
+      this.notAsked.push(`${STEP_LABEL[label]} (${NOT_ASKED[outcome.reason]})`);
+    } else this.nothing(label);
     return null;
   }
 
   /** Records a step whose source answered with nothing for the track. */
   nothing(label: NoneLabel, note?: string) {
-    this.none.push(note ? `${NONE_LABEL[label]} (${note})` : NONE_LABEL[label]);
+    this.none.push(note ? `${STEP_LABEL[label]} (${note})` : STEP_LABEL[label]);
   }
 }
 
@@ -425,6 +470,7 @@ function emptyResearch(): ResearchData {
     lastfmArtistBio: undefined,
     listenbrainzSimilarArtists: [],
     noneFound: [],
+    notAsked: [],
   };
 }
 
@@ -462,7 +508,11 @@ async function researchToolNode(
   }
 
   const { title, artist, album } = state.spotifyData;
-  const { primary, names: artistNames } = trackArtists(state.spotifyData);
+  // Artist-level questions are about the first credited artist; Last.fm's track questions use
+  // it with the title without a featured-artist note (the joined string is no artist).
+  const query = trackQuery(state.spotifyData);
+  const { primary, names: artistNames, spotifyArtistId } = query;
+  const known = state.artistMbid;
   const label = actionLabel(plan.nextAction);
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
@@ -517,10 +567,10 @@ async function researchToolNode(
 
       case "search_general": {
         // Use the custom query from the plan (for following leads)
-        const query = plan.query || `${title} ${artist} music history`;
+        const lead = plan.query || `${title} ${artist} music history`;
         config.signal?.throwIfAborted();
         // Classify general results as production trivia
-        const text = webText(await searchMusicInfo.invoke({ query }, options), "general");
+        const text = webText(await searchMusicInfo.invoke({ query: lead }, options), "general");
         if (text) newData.productionTrivia.push(text);
         break;
       }
@@ -567,14 +617,22 @@ async function researchToolNode(
           collaborators?: Array<{ name?: unknown; relationship?: unknown }>;
         }>(
           "musicbrainz",
-          await getMusicBrainzArtist.invoke({ artistName: artist, artistNames }, options),
+          await getMusicBrainzArtist.invoke(
+            {
+              artistName: primary,
+              artistNames,
+              ...(known ? { artistMbid: known.mbid } : {}),
+              ...(spotifyArtistId ? { spotifyArtistId } : {}),
+            },
+            options,
+          ),
           "collaborators",
         );
         if (!artistData) break;
-        // findArtist matched this artist by its exact name: the track's own artist.
-        if (isMbid(artistData.mbid) && typeof artistData.name === "string") {
-          step.artist = { mbid: artistData.mbid, name: artistData.name };
-        }
+        // The artist an earlier step identified, or the one MusicBrainz names exactly so (told
+        // apart from artists of the same name by its Spotify link): the track's own artist.
+        const of = typeof artistData.name === "string" ? artistData.name : primary;
+        if (isMbid(artistData.mbid)) step.artist = { mbid: artistData.mbid, name: of };
         const collaborators = (artistData.collaborators ?? []).filter(
           (c): c is { name: string; relationship: string } =>
             typeof c?.name === "string" && typeof c.relationship === "string",
@@ -584,8 +642,9 @@ async function researchToolNode(
           break;
         }
         newData.collaborators = collaborators.map((c) => `${c.name} (${c.relationship})`);
+        newData.collaboratorsOf = of;
         newData.productionTrivia.push(
-          `[MusicBrainz Artist] ${artist} collaborators: ${JSON.stringify(collaborators)}`,
+          `[MusicBrainz Artist] ${of} collaborators: ${JSON.stringify(collaborators)}`,
         );
         break;
       }
@@ -594,8 +653,8 @@ async function researchToolNode(
         // Fetch both track and artist tags in parallel
         config.signal?.throwIfAborted();
         const [trackTags, artistTags] = await Promise.all([
-          getLastfmTrackTags.invoke({ title, artist }, options),
-          getLastfmArtistTags.invoke({ artist }, options),
+          getLastfmTrackTags.invoke({ title: query.title, artist: primary }, options),
+          getLastfmArtistTags.invoke({ artist: primary }, options),
         ]);
         const track = reader.read<{ tags?: unknown }>("lastfm", trackTags, "trackTags");
         const byArtist = reader.read<{ tags?: unknown }>("lastfm", artistTags, "artistTags");
@@ -607,7 +666,7 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const data = reader.read<{ tracks?: unknown }>(
           "lastfm",
-          await getLastfmSimilarTracks.invoke({ title, artist }, options),
+          await getLastfmSimilarTracks.invoke({ title: query.title, artist: primary }, options),
           "similarTracks",
         );
         newData.lastfmSimilarTracks = similarTrackLines(data?.tracks);
@@ -618,7 +677,7 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const data = reader.read<{ artists?: unknown }>(
           "lastfm",
-          await getLastfmSimilarArtists.invoke({ artist }, options),
+          await getLastfmSimilarArtists.invoke({ artist: primary }, options),
           "similarArtists",
         );
         newData.lastfmSimilarArtists = similarArtistLines(data?.artists);
@@ -629,7 +688,7 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const data = reader.read<{ bio?: unknown; tags?: unknown; similarArtists?: unknown }>(
           "lastfm",
-          await getLastfmArtistInfo.invoke({ artist }, options),
+          await getLastfmArtistInfo.invoke({ artist: primary }, options),
           "artistInfo",
         );
         if (!data) break;
@@ -653,25 +712,29 @@ async function researchToolNode(
       case "search_listenbrainz_similar": {
         // Only the track's own artist: its MBID from an earlier MusicBrainz step, else its
         // exact name, which the tool resolves on MusicBrainz (and skips when it cannot).
-        const own = state.artistMbid;
         config.signal?.throwIfAborted();
         const data = reader.read<{ artist?: { name?: unknown }; artists?: unknown }>(
           "listenbrainz",
           await getListenBrainzSimilarArtists.invoke(
-            own
-              ? { artistMbid: own.mbid, artistName: own.name }
-              : { artistName: artist, artistNames },
+            known
+              ? { artistMbid: known.mbid, artistName: known.name }
+              : {
+                  artistName: primary,
+                  artistNames,
+                  ...(spotifyArtistId ? { spotifyArtistId } : {}),
+                },
             options,
           ),
           "listenbrainz",
         );
         const of =
-          typeof data?.artist?.name === "string" ? data.artist.name : (own?.name ?? primary);
+          typeof data?.artist?.name === "string" ? data.artist.name : (known?.name ?? primary);
         newData.listenbrainzSimilarArtists = listenBrainzLines(data?.artists, of);
         break;
       }
     }
     newData.noneFound = reader.none;
+    newData.notAsked = reader.notAsked;
     return step;
   };
 
@@ -689,12 +752,18 @@ async function researchToolNode(
     for (const message of warnings) {
       writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
     }
+    // A step whose source was not asked, or could not identify the track, did not find
+    // "nothing": it has its own status.
+    const empty =
+      step.reader.none.length === 0 && step.reader.notAsked.length > 0
+        ? `Not asked or not identified: ${label}`
+        : `Nothing found: ${label}`;
     const status = [
       ...warnings,
       ...(holdsData(step.data)
         ? [`Found ${label} information`]
         : errors.length === 0
-          ? [`Nothing found: ${label}`]
+          ? [empty]
           : []),
     ];
     return {

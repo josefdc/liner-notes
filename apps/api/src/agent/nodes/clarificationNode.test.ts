@@ -1,6 +1,7 @@
 /**
  * Clarification: a run cancelled after the user picked a track writes no disambiguation
- * memory and does not turn the cancelled track lookup into the candidate fallback.
+ * memory and does not turn the cancelled track lookup into the candidate fallback. The
+ * candidate fallback keeps the separate artists and their Spotify ids.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +29,9 @@ import { clarificationNode } from "./clarificationNode.js";
 const candidates = ["a", "b"].map((id) => ({
   id: `track-${id}`,
   title: `Title ${id}`,
-  artist: "Artist",
+  artist: "Ramsey Lewis, Earth, Wind & Fire",
+  artistNames: ["Ramsey Lewis", "Earth, Wind & Fire"],
+  artistIds: ["1".repeat(22), "2".repeat(22)],
   album: "Album",
   coverUrl: "",
   popularity: 40,
@@ -106,5 +109,21 @@ describe("clarificationNode when the run is cancelled", () => {
       { signal: expect.any(AbortSignal) },
     );
     expect(node.settled).toBe("rejected");
+  });
+});
+
+describe("clarificationNode's candidate fallback", () => {
+  it("keeps the candidate's separate artists and Spotify ids", async () => {
+    const { graph, node, thread } = await pausedAtChoice(() => {});
+    spotify.details.mockResolvedValue("not a track");
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.spotifyData).toMatchObject({
+      artist: "Ramsey Lewis, Earth, Wind & Fire",
+      artistNames: ["Ramsey Lewis", "Earth, Wind & Fire"],
+      artistIds: ["1".repeat(22), "2".repeat(22)],
+    });
   });
 });

@@ -579,7 +579,7 @@ describe("composerNode", () => {
       expect(store.put).toHaveBeenCalledTimes(1);
       const [namespace, , value] = store.put.mock.calls[0];
       // Versioned: results cached by older code are not served.
-      expect(namespace).toEqual(["tracks", "v2"]);
+      expect(namespace).toEqual(["tracks", "v3"]);
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });

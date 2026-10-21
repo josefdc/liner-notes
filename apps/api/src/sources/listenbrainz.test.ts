@@ -199,4 +199,56 @@ describe("ListenBrainz similar artists", () => {
       "535afeda-2538-435d-9dd1-5e10be586774",
     );
   });
+  it.each([
+    ["no name", {}],
+    ["an empty name", { artistName: " " }],
+  ])("%s: nothing is asked and it is not the source's failure", async (_name, input) => {
+    const net = stubFetch(() => undefined);
+
+    const data = JSON.parse(await getListenBrainzSimilarArtists.invoke(input));
+
+    expect(data).toMatchObject({ found: false, reason: "no_input" });
+    expect(data).not.toHaveProperty("code");
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("artists of the same name without a Spotify link: nothing is asked of ListenBrainz", async () => {
+    const net = stubFetch((call) => {
+      if (call.url.startsWith(MB_ARTIST_SEARCH)) {
+        return json({
+          count: 2,
+          artists: [
+            { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Nirvana", score: 100 },
+            { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Nirvana", score: 100 },
+          ],
+        });
+      }
+      if (call.url.startsWith("https://musicbrainz.org/ws/2/url?")) {
+        return json({ error: "Not Found" }, { status: 404 });
+      }
+      return isLabs(call) ? json(fixture) : undefined;
+    });
+
+    const data = JSON.parse(
+      await getListenBrainzSimilarArtists.invoke({
+        artistName: "Nirvana",
+        spotifyArtistId: "6olE6TJLqED3rqDCT0FyPh",
+      }),
+    );
+
+    expect(data).toMatchObject({ found: false, reason: "ambiguous_artist" });
+    expect(net.calls.filter(isLabs)).toHaveLength(0);
+  });
+
+  it("a MusicBrainz failure while resolving the name names MusicBrainz as the source", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(MB_ARTIST_SEARCH)
+        ? json({ error: "busy" }, { status: 503, headers: { "Retry-After": "0" } })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistName: "Queen" }));
+
+    expect(data).toMatchObject({ found: false, code: "rate_limited", source: "musicbrainz" });
+  });
 });

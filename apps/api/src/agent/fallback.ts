@@ -163,13 +163,14 @@ export async function createFallbackTrackData(
 
   // 3. Song-meaning research is not used (its page text can quote the song).
 
-  // 4. Artist collaborators network
-  if (research.collaborators && research.collaborators.length > 0) {
+  // 4. Artist collaborators network: they are one artist's (MusicBrainz names which), never
+  //    the joined artists of a multi-artist track.
+  if (research.collaborators && research.collaborators.length > 0 && research.collaboratorsOf) {
     const collabNames = research.collaborators.slice(0, 4).join(", ");
     factoids.push({
       id: generateId(),
       title: "Collaboration Network",
-      content: `${spotify.artist} has worked with: ${collabNames}.`,
+      content: `${research.collaboratorsOf} has worked with: ${collabNames}.`,
       type: "connection",
       entities: research.collaborators.slice(0, 4).map((name) => ({
         id: generateId(),

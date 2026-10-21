@@ -180,4 +180,116 @@ describe("Last.fm tools with a key", () => {
 
     expect(data).toEqual({ found: false, code, error: `Last.fm error ${error}: ${message}` });
   });
+  it.each([
+    [10, "Invalid API key - You must be granted a valid key by last.fm"],
+    [26, "Suspended API key - Access for your account has been suspended"],
+    [4, "Authentication Failed"],
+  ])(
+    "reads Last.fm's error %s as a rejected key (lasting, like a missing key)",
+    async (error, message) => {
+      stubFetch((call) =>
+        call.url.startsWith(API) ? json({ error, message }, { status: 403 }) : undefined,
+      );
+
+      const data = JSON.parse(await getLastfmArtistTags.invoke({ artist: "Queen" }));
+
+      expect(data).toEqual({
+        found: false,
+        code: "not_configured",
+        error: `Last.fm rejected the API key (Last.fm error ${error}: ${message})`,
+        unavailable: true,
+      });
+    },
+  );
+
+  it("reads error 6 without 'not found' as a refused request, not as nothing there", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(API)
+        ? json({ error: 6, message: "Invalid parameters - Your request is missing a parameter" })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmArtistTags.invoke({ artist: "Queen" }));
+
+    expect(data).toMatchObject({ found: false, reason: "invalid_request" });
+    expect(data).not.toHaveProperty("code");
+  });
+
+  it.each([
+    ["track tags", () => getLastfmTrackTags.invoke({ title: "Song", artist: " " })],
+    ["similar tracks", () => getLastfmSimilarTracks.invoke({ title: "", artist: "Queen" })],
+    ["artist info", () => getLastfmArtistInfo.invoke({ artist: "" })],
+  ])("%s: an empty name is not sent and is not the source's failure", async (_name, run) => {
+    const net = stubFetch(() => undefined);
+
+    const data = JSON.parse(await run());
+
+    expect(net.calls).toHaveLength(0);
+    expect(data).toMatchObject({ found: false, reason: "no_input" });
+    expect(data).not.toHaveProperty("code");
+  });
+
+  it("drops an answer Last.fm's autocorrection gave for another artist", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(API)
+        ? json({
+            similarartists: {
+              artist: [{ name: "Other", match: "1" }],
+              "@attr": { artist: "Ramsey Lewis Trio" },
+            },
+          })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmSimilarArtists.invoke({ artist: "Ramsey Lewis" }));
+
+    expect(data).toMatchObject({ found: false, reason: "other_artist" });
+    expect(data).not.toHaveProperty("artists");
+  });
+
+  it("keeps an answer for the artist asked for, whatever its case or punctuation", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(API)
+        ? json({
+            toptags: {
+              tag: [{ name: "funk", count: 90 }],
+              "@attr": { artist: "EARTH WIND AND FIRE" },
+            },
+          })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmArtistTags.invoke({ artist: "Earth, Wind & Fire" }));
+
+    expect(data).toEqual({ found: true, tags: [{ name: "funk", count: 90 }] });
+  });
+
+  it("leaves out the bio of a page Last.fm shares between artists of the same name", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(API)
+        ? json({
+            artist: {
+              name: "Nirvana",
+              bio: { summary: "There are multiple artists with this name: 1) a 60s band…" },
+              tags: { tag: [{ name: "grunge", count: 100 }] },
+            },
+          })
+        : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Nirvana" }));
+
+    expect(data).toMatchObject({ found: true, name: "Nirvana" });
+    expect(data.bio).toBeUndefined();
+  });
+
+  it("reads artist info with no bio, tags or similar artists as nothing found", async () => {
+    stubFetch((call) =>
+      call.url.startsWith(API) ? json({ artist: { name: "Queen" } }) : undefined,
+    );
+
+    const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Queen" }));
+
+    expect(data).toMatchObject({ found: false, reason: "not_found" });
+  });
 });

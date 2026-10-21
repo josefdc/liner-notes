@@ -13,6 +13,7 @@
  */
 
 import type Database from "better-sqlite3";
+import { SourceError } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
 import {
@@ -65,6 +66,9 @@ const ResearchSchema = z
     lastfmArtistBio: z.string().optional(),
     listenbrainzSimilarArtists: stringList.optional(),
     noneFound: stringList.optional(),
+    notAsked: stringList.optional(),
+    collaboratorsOf: z.string().optional(),
+    notConfigured: z.array(SourceError).optional(),
   })
   .passthrough();
 

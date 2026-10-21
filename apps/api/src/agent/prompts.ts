@@ -102,10 +102,10 @@ export function unavailableSources(errors: readonly SourceError[] | undefined): 
     .join("\n");
 }
 
-/** The research steps whose source answered with nothing, or "(none)". */
-function nothingFound(research: ResearchData | null): string {
-  const labels = [...new Set(research?.noneFound ?? [])];
-  return labels.length > 0 ? labels.map((l) => `- ${l}`).join("\n") : "(none)";
+/** A list of labels written by code, one line each, or "(none)". */
+function labelList(labels: string[] | undefined): string {
+  const unique = [...new Set(labels ?? [])];
+  return unique.length > 0 ? unique.map((l) => `- ${l}`).join("\n") : "(none)";
 }
 
 // =============================================================================
@@ -184,7 +184,6 @@ function measuredForPrompt(audio: AudioFeatures | null) {
 const RESEARCH_SECTIONS: ReadonlyArray<[label: string, pick: (r: ResearchData) => string[]]> = [
   ["samples research", (r) => r.samples ?? []],
   ["production research", (r) => r.productionTrivia ?? []],
-  ["related artists", (r) => r.relatedArtists ?? []],
   ["MusicBrainz collaborators", (r) => joined(r.collaborators)],
   ["Last.fm tags", (r) => joined(r.lastfmTags, ", ")],
   ["Last.fm similar tracks", (r) => joined(r.lastfmSimilarTracks)],
@@ -256,7 +255,10 @@ export function composerUserPrompt(input: ComposerPromptInput): string {
     unavailableSources(input.sourceErrors),
     "",
     "Research steps whose source answered with nothing for this track:",
-    nothingFound(input.research),
+    labelList(input.research?.noneFound),
+    "",
+    "Research steps not asked, or whose source could not identify the track (no answer either way):",
+    labelList(input.research?.notAsked),
   ].join("\n");
 }
 
@@ -354,7 +356,10 @@ export function plannerUserPrompt(input: PlannerPromptInput): string {
     unavailableSources(input.sourceErrors),
     "",
     "Steps whose source answered with nothing for this track:",
-    nothingFound(r),
+    labelList(r.noneFound),
+    "",
+    "Steps not asked, or whose source could not identify the track (no answer either way):",
+    labelList(r.notAsked),
     "",
     "Research collected so far (untrusted):",
     entries.length > 0 ? entries.join("\n\n") : "(none yet)",

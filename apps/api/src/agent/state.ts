@@ -176,6 +176,10 @@ export interface ResearchData {
    * cached before its removal still type-checks; it is dropped when that research is read.
    */
   songMeaning?: string[];
+  /**
+   * No longer written: similar artists are kept in `lastfmSimilarArtists` and
+   * `listenbrainzSimilarArtists`, by rank. Required only so research cached before still parses.
+   */
   relatedArtists: string[];
   /** Artist collaborators from MusicBrainz */
   collaborators?: string[];
@@ -194,6 +198,18 @@ export interface ResearchData {
    * e.g. "Last.fm similar tracks"). A source that could not be read is a source error instead.
    */
   noneFound?: string[];
+  /**
+   * Research steps not asked, or whose source could not identify the track or artist (labels
+   * written by code, e.g. "ListenBrainz similar artists (skipped: …)"): no answer either way.
+   */
+  notAsked?: string[];
+  /** The artist `collaborators` belong to, as MusicBrainz names it (one artist of the track). */
+  collaboratorsOf?: string;
+  /**
+   * Only in the research cache: the sources that were not configured (or whose key was rejected)
+   * when this research was made, restored as the run's source errors on a cache hit.
+   */
+  notConfigured?: SourceError[];
 }
 
 // =============================================================================
@@ -342,6 +358,8 @@ export const SonicAgentState = Annotation.Root({
         ...(next.listenbrainzSimilarArtists || []),
       ],
       noneFound: [...(prev.noneFound || []), ...(next.noneFound || [])],
+      notAsked: [...(prev.notAsked || []), ...(next.notAsked || [])],
+      collaboratorsOf: next.collaboratorsOf || prev.collaboratorsOf,
     }),
     default: () => ({
       samples: [],
@@ -354,6 +372,7 @@ export const SonicAgentState = Annotation.Root({
       lastfmArtistBio: undefined,
       listenbrainzSimilarArtists: [],
       noneFound: [],
+      notAsked: [],
     }),
   }),
 

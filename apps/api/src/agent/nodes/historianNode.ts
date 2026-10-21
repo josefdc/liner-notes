@@ -16,7 +16,9 @@ import {
   getLastfmTrackTags,
   getLastfmArtistTags,
   getLastfmSimilarTracks,
+  lastfmConfigured,
 } from "../../sources/lastfm.js";
+import { tavilyConfigured } from "../../sources/search.js";
 import {
   getCachedResearcherSubgraph,
   mergeTags,
@@ -24,6 +26,7 @@ import {
   type ResearcherStateType,
   similarTrackLines,
   StepReader,
+  trackQuery,
   uniqueErrors,
   unreadableStatus,
 } from "../researcherSubgraph.js";
@@ -52,13 +55,20 @@ export async function historianNode(
   }
 
   const writer = config.writer;
+  // Research depends on which optional sources have a key: adding one later runs it again.
+  const cacheKey = researchCacheKey(state.spotifyData.id, {
+    lastfm: lastfmConfigured(),
+    tavily: tavilyConfigured(),
+  });
 
   // Check persistent research cache first
   try {
     const cache = getCache();
-    const cached = cache.getResearch(researchCacheKey(state.spotifyData.id));
+    const cached = cache.getResearch(cacheKey);
     if (cached) {
-      const cachedResearch = withoutSongMeaning(cached);
+      // The sources that were not configured when it was made are reported again: a cached
+      // answer without them would read as "read, nothing there".
+      const { notConfigured = [], ...cachedResearch } = withoutSongMeaning(cached);
       console.log("📚 [Historian] Cache hit for:", state.spotifyData.title);
       writer?.({
         type: "status",
@@ -69,7 +79,11 @@ export async function historianNode(
       });
       return {
         researchData: cachedResearch,
-        statusMessages: ["📚 Research (cached): loaded from persistent cache"],
+        ...(notConfigured.length > 0 ? { sourceErrors: notConfigured } : {}),
+        statusMessages: [
+          "📚 Research (cached): loaded from persistent cache",
+          ...unreadableStatus(notConfigured),
+        ],
       };
     }
   } catch {
@@ -85,6 +99,9 @@ export async function historianNode(
   });
 
   const { title, artist } = state.spotifyData;
+  // Last.fm is asked about the first credited artist and the title without a featured-artist
+  // note: the joined Spotify string is no artist, and Last.fm would answer "not found".
+  const query = trackQuery(state.spotifyData);
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
   console.log("📚 [Historian] Deep dive research for:", title, "by", artist);
@@ -93,14 +110,13 @@ export async function historianNode(
   // This ensures genre tags are always available regardless of which actions the LLM picks.
   // Each result is read by its type: data, "nothing found" (recorded, never a fact) or the
   // source's error (a source error, and the prompts say Last.fm was unavailable).
-  const prefetchData: Partial<ResearchData> = {};
   const prefetch = new StepReader();
   console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
   config.signal?.throwIfAborted();
   const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
-    getLastfmTrackTags.invoke({ title, artist }, options),
-    getLastfmArtistTags.invoke({ artist }, options),
-    getLastfmSimilarTracks.invoke({ title, artist }, options),
+    getLastfmTrackTags.invoke({ title: query.title, artist: query.primary }, options),
+    getLastfmArtistTags.invoke({ artist: query.primary }, options),
+    getLastfmSimilarTracks.invoke({ title: query.title, artist: query.primary }, options),
   ]);
   config.signal?.throwIfAborted();
   const settled = (result: PromiseSettledResult<string>, label: NoneLabel) => {
@@ -112,8 +128,10 @@ export async function historianNode(
   const trackTags = settled(trackTagsResult, "trackTags");
   const artistTags = settled(artistTagsResult, "artistTags");
   const similarTracks = settled(similarTracksResult, "similarTracks");
-  prefetchData.lastfmTags = mergeTags(mergeTags([], trackTags?.tags), artistTags?.tags);
-  prefetchData.lastfmSimilarTracks = similarTrackLines(similarTracks?.tracks);
+  const prefetchData = {
+    lastfmTags: mergeTags(mergeTags([], trackTags?.tags), artistTags?.tags),
+    lastfmSimilarTracks: similarTrackLines(similarTracks?.tracks),
+  };
   console.log(
     `✅ [Historian] Pre-fetched ${prefetchData.lastfmTags.length} tags, ` +
       `${prefetchData.lastfmSimilarTracks.length} similar tracks from Last.fm ` +
@@ -131,6 +149,20 @@ export async function historianNode(
     });
   }
 
+  // The research starts from what the pre-fetch read: the planner sees its tags, similar tracks,
+  // empty answers and unreadable sources, and does not spend a step asking again.
+  const before = state.researchData ?? EMPTY_RESEARCH;
+  const seeded: ResearchData = {
+    ...before,
+    lastfmTags: [...prefetchData.lastfmTags, ...(before.lastfmTags ?? [])],
+    lastfmSimilarTracks: [
+      ...prefetchData.lastfmSimilarTracks,
+      ...(before.lastfmSimilarTracks ?? []),
+    ],
+    noneFound: [...prefetch.none, ...(before.noneFound ?? [])],
+    notAsked: [...prefetch.notAsked, ...(before.notAsked ?? [])],
+  };
+
   // The research subgraph: its last state is kept whatever happens, so the planner's calls,
   // the source errors and the steps that finished reach the run even when it stops early.
   let finalState: Partial<ResearcherStateType> = {};
@@ -142,9 +174,9 @@ export async function historianNode(
     const stream = await researcherGraph.stream(
       {
         spotifyData: state.spotifyData,
-        ...(state.researchData ? { researchData: state.researchData } : {}),
+        researchData: seeded,
         runId: runIdFor(state, config, runtime),
-        // The planner reads which sources could not be read, and what found nothing.
+        // The planner reads which sources could not be read.
         sourceErrors: prefetchErrors,
       },
       {
@@ -172,17 +204,8 @@ export async function historianNode(
     console.error("❌ [Historian] Research stopped early:", (error as Error).message);
   }
 
-  // Merge pre-fetched Last.fm data with the research results
-  const research = finalState.researchData ?? state.researchData ?? EMPTY_RESEARCH;
-  const mergedResearch: ResearchData = {
-    ...research,
-    lastfmTags: [...(prefetchData.lastfmTags || []), ...(research.lastfmTags || [])],
-    lastfmSimilarTracks: [
-      ...(prefetchData.lastfmSimilarTracks || []),
-      ...(research.lastfmSimilarTracks || []),
-    ],
-    noneFound: [...prefetch.none, ...(research.noneFound || [])],
-  };
+  // The subgraph's research starts with the pre-fetched data.
+  const mergedResearch: ResearchData = finalState.researchData ?? seeded;
   // The subgraph's state starts with the pre-fetch errors; each source and code counts once.
   const sourceErrors = uniqueErrors([
     ...prefetchErrors,
@@ -191,16 +214,23 @@ export async function historianNode(
   ]);
 
   // Nothing is written for a cancelled run. Research is cached only when it is complete: not
-  // when it stopped early, a source could not be read, or a planner call failed (the next run
-  // may find more, as with audio that failed transiently).
+  // when it stopped early, a source could not be read for a passing reason (an outage, a
+  // timeout, a rate limit, a bad answer), or a planner call failed (the next run may find more,
+  // as with audio that failed transiently). A source that is not configured is a lasting state:
+  // it does not block the cache, its errors are stored with the research and reported on a hit,
+  // and the cache key names the configured sources, so adding a key runs the research again.
   config.signal?.throwIfAborted();
+  const notConfigured = sourceErrors.filter((e) => e.code === "not_configured");
   const complete =
     !failure &&
-    sourceErrors.length === 0 &&
+    sourceErrors.length === notConfigured.length &&
     (finalState.usage ?? []).every((call) => call.status === "ok");
   if (complete) {
     try {
-      getCache().putResearch(researchCacheKey(state.spotifyData.id), mergedResearch);
+      getCache().putResearch(cacheKey, {
+        ...mergedResearch,
+        ...(notConfigured.length > 0 ? { notConfigured } : {}),
+      });
     } catch {
       // Non-critical
     }

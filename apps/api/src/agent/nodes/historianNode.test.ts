@@ -41,8 +41,17 @@ vi.mock("../researcherSubgraph.js", async (importOriginal) => {
 });
 vi.mock("../../sources/lastfm.js", () => {
   const none = { invoke: async () => JSON.stringify({ found: false }) };
-  return { getLastfmTrackTags: none, getLastfmArtistTags: none, getLastfmSimilarTracks: none };
+  return {
+    getLastfmTrackTags: none,
+    getLastfmArtistTags: none,
+    getLastfmSimilarTracks: none,
+    lastfmConfigured: () => true,
+  };
 });
+vi.mock("../../sources/search.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../sources/search.js")>()),
+  tavilyConfigured: () => true,
+}));
 
 import { SourceError } from "../../sources/http.js";
 import { historianNode } from "./historianNode.js";
@@ -142,8 +151,8 @@ describe("historianNode", () => {
 
       await historianNode(state, { writer: () => {} } as never);
 
-      expect(cache.getResearch).toHaveBeenCalledWith("v2:x");
-      expect(cache.putResearch).toHaveBeenCalledWith("v2:x", expect.anything());
+      expect(cache.getResearch).toHaveBeenCalledWith("v3:x:lastfm=1:tavily=1");
+      expect(cache.putResearch).toHaveBeenCalledWith("v3:x:lastfm=1:tavily=1", expect.anything());
     });
 
     it("does not store research when a planner call failed", async () => {

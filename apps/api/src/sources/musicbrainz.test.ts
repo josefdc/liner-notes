@@ -457,6 +457,109 @@ describe("MusicBrainz client", () => {
 
       expect(data).toMatchObject({ found: true, mbid: SAMPLED_ID });
     });
+
+    it("with the artists listed, never searches the joined string as one artist", async () => {
+      const net = artistSearch({
+        'artist:"Daft Punk, Pharrell Williams"': {
+          count: 1,
+          artists: [
+            {
+              id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              name: "Daft Punk, Pharrell Williams",
+              score: 100,
+            },
+          ],
+        },
+        'artist:"Daft Punk"': {
+          count: 1,
+          artists: [{ id: SAMPLED_ID, name: "Daft Punk", score: 100 }],
+        },
+      });
+
+      const data = JSON.parse(
+        await getMusicBrainzArtist.invoke({
+          artistName: "Daft Punk, Pharrell Williams",
+          artistNames: ["Daft Punk", "Pharrell Williams"],
+        }),
+      );
+
+      expect(data).toMatchObject({ found: true, mbid: SAMPLED_ID });
+      expect(net.calls.filter((c) => c.url.startsWith(`${MB}/artist?`)).map(searchQuery)).toEqual([
+        'artist:"Daft Punk"',
+      ]);
+    });
+
+    describe("artists of the same name", () => {
+      const UK = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      const US = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+      const SPOTIFY = "6olE6TJLqED3rqDCT0FyPh";
+      const homonyms = (linked: string | null) =>
+        stubFetch((call) => {
+          if (call.url.startsWith(`${MB}/artist?`)) {
+            return json({
+              count: 2,
+              artists: [
+                { id: UK, name: "Nirvana", score: 100, disambiguation: "60s band from the UK" },
+                { id: US, name: "Nirvana", score: 100, disambiguation: "90s US grunge band" },
+              ],
+            });
+          }
+          if (call.url.startsWith(`${MB}/url?`)) {
+            return linked
+              ? json({ id: "u", relations: [{ type: "free streaming", artist: { id: linked } }] })
+              : json({ error: "Not Found" }, { status: 404 });
+          }
+          if (call.url.startsWith(`${MB}/artist/`)) {
+            const id = new URL(call.url).pathname.split("/").pop();
+            return json({ id, name: "Nirvana", relations: [] });
+          }
+          return undefined;
+        });
+
+      it("takes the one MusicBrainz links to the Spotify artist", async () => {
+        const net = homonyms(US);
+
+        const match = await findArtist("Nirvana", { spotifyArtistId: SPOTIFY });
+
+        expect(match).toMatchObject({ artist: { id: US }, via: "spotify" });
+        const [lookup] = net.calls.filter((c) => c.url.startsWith(`${MB}/url?`));
+        expect(new URL(lookup.url).searchParams.get("resource")).toBe(
+          `https://open.spotify.com/artist/${SPOTIFY}`,
+        );
+      });
+
+      it.each([
+        ["no Spotify link on MusicBrainz", null, SPOTIFY],
+        ["a link to another artist", "cccccccc-cccc-4ccc-8ccc-cccccccccccc", SPOTIFY],
+        ["no Spotify id", US, undefined],
+      ])("is ambiguous with %s, never the first match", async (_name, linked, id) => {
+        homonyms(linked);
+
+        const match = await findArtist("Nirvana", { spotifyArtistId: id });
+
+        expect(match).toMatchObject({ artist: null, reason: "ambiguous" });
+      });
+
+      it("the collaborators tool asks nothing more and says why", async () => {
+        const net = homonyms(null);
+
+        const data = JSON.parse(
+          await getMusicBrainzArtist.invoke({ artistName: "Nirvana", spotifyArtistId: SPOTIFY }),
+        );
+
+        expect(data).toMatchObject({ found: false, reason: "ambiguous_artist" });
+        expect(net.calls.filter((c) => c.url.startsWith(`${MB}/artist/`))).toHaveLength(0);
+      });
+    });
+
+    it("an empty name is not looked up and is not the source's failure", async () => {
+      const net = stubFetch(() => undefined);
+
+      const data = JSON.parse(await getMusicBrainzArtist.invoke({ artistName: " " }));
+
+      expect(data).toMatchObject({ found: false, reason: "no_input" });
+      expect(net.calls).toHaveLength(0);
+    });
   });
 
   it("sends one request at a time, spaced by the queue", async () => {

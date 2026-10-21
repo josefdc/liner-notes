@@ -119,6 +119,11 @@ interface TavilyResponse {
 
 let warnedNoKey = false;
 
+/** True when web search can be asked (TAVILY_API_KEY is set, or a replay cassette answers). */
+export function tavilyConfigured(): boolean {
+  return Boolean(credential("TAVILY_API_KEY"));
+}
+
 /**
  * Searches the web. Rejects with SourceError "unavailable" when TAVILY_API_KEY is not set (no
  * request is made), and with the request's typed error when Tavily cannot answer.

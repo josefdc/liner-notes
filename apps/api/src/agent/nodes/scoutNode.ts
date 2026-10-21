@@ -159,6 +159,8 @@ export async function scoutNode(
         id: t.id,
         title: t.title,
         artist: t.artist,
+        ...(t.artistNames ? { artistNames: t.artistNames } : {}),
+        ...(t.artistIds ? { artistIds: t.artistIds } : {}),
         album: t.album,
         coverUrl: t.coverUrl,
         releaseYear: t.releaseDate?.split("-")[0],

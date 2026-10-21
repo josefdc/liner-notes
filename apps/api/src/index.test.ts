@@ -1,6 +1,6 @@
 /**
- * Starts the real entry point in a child process (dummy keys, a scratch database, and every setting
- * the tests rely on pinned, because the entry point also reads apps/api/.env): malformed requests do not take it down, it binds 127.0.0.1 by default, it
+ * Starts the real entry point in a child process (dummy keys, a scratch database, and every
+ * setting the tests rely on pinned, because the entry point also reads apps/api/.env): malformed requests do not take it down, it binds 127.0.0.1 by default, it
  * settles runs left open only once it listens, it refuses invalid configuration, and it shuts
  * down cleanly on SIGTERM. Also checks the process-level error handlers with a small fixture.
  *
@@ -267,10 +267,12 @@ describe("an API process whose log reader has gone", () => {
     withDatabase(dbPath, (db) =>
       startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }),
     );
-    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, {}, [
+    // The launcher passes its environment (the same pinned settings) on to the API.
+    const port = await freePort();
+    const launcher = start(CLOSED_LOG_READER_FIXTURE, dir, apiEnv(port, dbPath), [
       TSX_LOADER,
       ENTRY,
-      String(await freePort()),
+      String(port),
       dbPath,
     ]);
     expect(await launcher.exit).toBe(0);

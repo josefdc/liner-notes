@@ -72,8 +72,9 @@ jobs:
             sonic-analysis.cache-from=type=gha,scope=sonic-analysis
             sonic-analysis.cache-to=type=gha,scope=sonic-analysis,mode=max
       # Loads the audio image (its layers come from the build above) to check how it runs:
-      # as a non-root user, decoding and analysing a generated clip offline, and serving
-      # /health as "degraded" when the models are not downloaded.
+      # as a non-root user, analysing a generated band offline with the Essentia estimators
+      # (RhythmExtractor2013 and KeyExtractor), and serving /health as "degraded" when the
+      # models are not downloaded.
       - name: Load the audio image
         uses: docker/bake-action@v7
         with:
@@ -90,9 +91,39 @@ jobs:
           echo "audio image runs as uid $uid"
           test "$uid" -ne 0
 
-          docker run --rm --network none liner-notes-audio:ci sh -c '
-            ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=5" /tmp/tone.mp3 &&
-            python -c "import main; assert main.ESSENTIA_AVAILABLE, \"essentia-tensorflow does not import\"; print(main.analyze_audio_file(\"/tmp/tone.mp3\"))"'
+          # 30 s of kick, snare and an Am-F-C-G pad at 120 BPM, written as MP3 in the container:
+          # the default (Essentia) estimators must report its tempo and a key.
+          docker run --rm -i --network none liner-notes-audio:ci python - <<'PY'
+          import numpy as np
+          import soundfile as sf
+
+          import estimators
+          import main
+
+          assert estimators.ESSENTIA_AVAILABLE and main.ESTIMATOR.name == "essentia", main.ESTIMATOR.name
+          sr, bpm = 44100, 120
+          y = np.zeros(30 * sr)
+          t = np.arange(sr // 4) / sr
+          kick = np.sin(2 * np.pi * (50 + 80 * np.exp(-t / 0.03)) * t) * np.exp(-t / 0.12)
+          snare = np.random.default_rng(1).standard_normal(t.size) * np.exp(-t / 0.06)
+          chords = [(220.0, 261.63, 329.63), (174.61, 220.0, 261.63), (130.81, 164.81, 196.0),
+                    (196.0, 246.94, 293.66)]
+          for n, beat in enumerate(np.arange(0, 30, 60 / bpm)):
+              i = int(beat * sr)
+              hit = (kick if n % 2 == 0 else 0.5 * snare)[: y.size - i]
+              y[i : i + hit.size] += hit
+              if n % 4 == 0:
+                  tb = np.arange(min(int(4 * 60 / bpm * sr), y.size - i)) / sr
+                  pad = sum(np.sin(2 * np.pi * f * tb) for f in chords[(n // 4) % 4])
+                  y[i : i + tb.size] += 0.15 * pad * np.exp(-tb / 3)
+          sf.write("/tmp/band.mp3", (0.8 * y / np.abs(y).max()).astype(np.float32), sr, format="MP3")
+          result = main.analyze_audio_file("/tmp/band.mp3")
+          v2 = result["v2"]
+          print({key: v2[key] for key in ("analyzerVersion", "gate", "tempo", "key")})
+          assert v2["tempo"]["method"].startswith("essentia.RhythmExtractor2013"), v2["tempo"]
+          assert abs(v2["tempo"]["bpm"] - 120) <= 1 and result["bpm"] == 120, v2["tempo"]
+          assert v2["key"]["method"] == "essentia.KeyExtractor", v2["key"]
+          PY
 
           docker run -d --name audio-smoke -e AUDIO_FETCH_MODELS=0 -p 127.0.0.1:3102:3002 \
             liner-notes-audio:ci

@@ -11,7 +11,8 @@ FROM ghcr.io/astral-sh/uv:0.12.24-python3.12-trixie-slim@sha256:c45e18882c3b26a1
 WORKDIR /app
 
 # soundfile decodes the previews with the libsndfile in its wheel; libsndfile1 is its fallback.
-# ffmpeg makes the test clip in CI's image checks. wget serves the docker-compose healthcheck.
+# ffmpeg is no longer used by the service or CI's image checks; it stays until the image is
+# slimmed down. wget serves the docker-compose healthcheck.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \

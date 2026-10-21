@@ -115,7 +115,7 @@ Edit `apps/api/.env` with your API keys. The API refuses to start without the Sp
 | `SPOTIFY_CLIENT_SECRET`  | [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) |
 | `GEMINI_API_KEY`         | [Google AI Studio](https://aistudio.google.com/)        |
 | `TAVILY_API_KEY`         | [Tavily](https://tavily.com/)                           |
-| `MUSICBRAINZ_USER_AGENT` | Format: `AppName/Version (email)` |
+| `SOURCE_USER_AGENT`      | Optional: `AppName/Version ( contact )` sent to the record sources; defaults to this project |
 | `AUDIO_ANALYSIS_URL`     | `http://localhost:3002` (default for local dev)          |
 
 ### 3. Run All Services

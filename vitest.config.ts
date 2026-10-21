@@ -9,6 +9,21 @@ export default defineConfig({
           name: "api",
           root: "apps/api",
           environment: "node",
+          // Several modules load apps/api/.env on import, and dotenv never replaces a variable that
+          // is already set: these empty values keep a developer's .env from reaching the tests
+          // (real credentials, a custom User-Agent, cassette mode). A test that needs one sets it.
+          env: {
+            MUSICBRAINZ_USER_AGENT: "",
+            SOURCE_USER_AGENT: "",
+            SOURCE_TIMEOUT_MS: "",
+            SOURCE_CASSETTE: "",
+            DISCOGS_TOKEN: "",
+            SHS_API_KEY: "",
+            GENIUS_ACCESS_TOKEN: "",
+            GEMINI_API_KEY: "",
+            TAVILY_API_KEY: "",
+            LASTFM_API_KEY: "",
+          },
           include: ["src/**/*.test.ts", "test/**/*.test.ts"],
         },
       },

@@ -64,6 +64,19 @@ export function isEventStreamRequest(req: Request): boolean {
   return EVENT_STREAM_PATHS.has(path);
 }
 
+/**
+ * HEAD on an event-stream route: the stream's headers and no body. Express would otherwise
+ * answer HEAD with the GET handler, which starts a run or asks the model for a stream nobody
+ * reads. Mounted before the GET route.
+ */
+export const eventStreamHead: RequestHandler = (_req, res) => {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.end();
+};
+
 /** Answers with a 200 event stream that carries one error message, then `done`. */
 export function sendStreamError(res: Response, code: HttpErrorCode): void {
   if (res.headersSent || res.destroyed) return;
@@ -92,8 +105,8 @@ export function logText(value: unknown): string {
 }
 
 /**
- * Wraps an async route so a rejection reaches the error handler. Express 4 does not await route
- * handlers: without this, a rejection is unhandled and the request never gets an answer.
+ * Wraps an async route so a rejection reaches the error handler. Express 5 forwards a rejected
+ * promise itself too; the wrapper returns nothing, so each rejection is passed on exactly once.
  */
 export function asyncRoute(
   handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,

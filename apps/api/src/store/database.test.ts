@@ -1043,11 +1043,17 @@ describe("migrations", () => {
          },
        });
        const db = new BetterSqlite(dbPath, { timeout: 10000 });
-       db.pragma("journal_mode = WAL");
+       if (db.pragma("journal_mode", { simple: true }) !== "wal") throw new Error("not in WAL mode");
        while (Date.now() < Number(startAt)) {}
        runMigrations(db, [slow(1, "one"), slow(2, "two")]);
        db.close();`,
     );
+    // The file is switched to WAL before the processes start. Two connections switching a new
+    // file at once get SQLITE_BUSY at once, without waiting for the busy timeout; that race is
+    // not what this test is about.
+    const init = new Database(dbPath);
+    init.pragma("journal_mode = WAL");
+    init.close();
     const startAt = String(Date.now() + 4000);
     const runOne = () =>
       new Promise<{ code: number | null; stderr: string }>((done) => {

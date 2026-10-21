@@ -86,7 +86,7 @@ The system consists of three services that run simultaneously:
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 24 or later, with npm 11.18 or later (it enforces the install-script allowlist in `.npmrc`)
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 

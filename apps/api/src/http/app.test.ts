@@ -11,7 +11,9 @@ import {
   DEFAULT_SEARCH_RATE_LIMIT,
   type HttpSettings,
 } from "../config/settings.js";
+import { request as httpRequest } from "node:http";
 import { connect } from "node:net";
+import { brotliCompressSync, deflateSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import express from "express";
 import { generateStructuredOutput } from "../agent/geminiClient.js";
 import { createApp } from "./app.js";
@@ -165,6 +167,28 @@ describe("error handling", () => {
     }
   });
 
+  it("handles a rejected promise once, from a wrapped or a plain async handler", async () => {
+    const router = Router();
+    router.get(
+      "/api/wrapped",
+      asyncRoute(async () => {
+        throw new Error("wrapped");
+      }),
+    );
+    router.get("/api/plain", async () => {
+      throw new Error("plain");
+    });
+    const server = createApp({ http: settings(), routers: [router] });
+
+    for (const path of ["/api/wrapped", "/api/plain"]) {
+      vi.mocked(console.error).mockClear();
+      const res = await request(server).get(path).timeout(2000);
+      expect(res.status).toBe(500);
+      expect(res.body.code).toBe("internal_error");
+      expect(vi.mocked(console.error)).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it("ends a response that had already started when the error came", async () => {
     const router = Router();
     router.get("/api/partial", (_req, res, next) => {
@@ -215,6 +239,186 @@ describe("error handling", () => {
   it("does not advertise the framework", async () => {
     const res = await request(app()).get("/api/health");
     expect(res.headers["x-powered-by"]).toBeUndefined();
+  });
+});
+
+/** Listens on a free port and returns a raw POST helper: node:http sends the body byte for byte. */
+async function listen(server: express.Express) {
+  const http = server.listen(0, "127.0.0.1");
+  await new Promise((resolve) => http.once("listening", resolve));
+  const { port } = http.address() as { port: number };
+  const post = (path: string, headers: Record<string, string | number>, body: Buffer) =>
+    new Promise<{ status?: number; code?: string }>((resolve, reject) => {
+      const req = httpRequest({ host: "127.0.0.1", port, method: "POST", path, headers }, (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          text += chunk;
+        });
+        res.on("end", () => resolve({ status: res.statusCode, code: JSON.parse(text).code }));
+      });
+      req.on("error", reject);
+      req.end(body);
+    });
+  const close = async () => {
+    http.closeAllConnections();
+    await new Promise((resolve) => http.close(resolve));
+  };
+  return { post, close };
+}
+
+describe("content encodings", () => {
+  const postEncoded = (
+    post: Awaited<ReturnType<typeof listen>>["post"],
+    encoding: string,
+    body: Buffer,
+    path = "/api/factoids/decrypt",
+  ) =>
+    post(
+      path,
+      {
+        "Content-Type": "application/json",
+        "Content-Encoding": encoding,
+        "Content-Length": body.length,
+      },
+      body,
+    );
+
+  it("decodes gzip and deflate bodies and applies the size limit to the decoded body", async () => {
+    const { post, close } = await listen(app());
+    try {
+      const small = JSON.stringify({ padding: "a" });
+      for (const [encoding, body] of [
+        ["gzip", gzipSync(small)],
+        ["deflate", deflateSync(small)],
+        ["identity", Buffer.from(small)],
+      ] as const) {
+        expect(await postEncoded(post, encoding, body)).toEqual({
+          status: 400,
+          code: "invalid_input",
+        });
+      }
+
+      // Under 1 kB on the wire, 64 kB once decoded.
+      const large = gzipSync(JSON.stringify({ padding: "a".repeat(64 * 1024) }));
+      expect(large.length).toBeLessThan(1024);
+      expect(await postEncoded(post, "gzip", large)).toEqual({
+        status: 413,
+        code: "payload_too_large",
+      });
+      expect(await postEncoded(post, "gzip", Buffer.from(small))).toEqual({
+        status: 400,
+        code: "bad_request",
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("refuses brotli, several codings and unknown codings with 415", async () => {
+    const { post, close } = await listen(app());
+    try {
+      const body = brotliCompressSync(JSON.stringify({ padding: "a" }));
+      for (const encoding of [
+        "br",
+        "BR",
+        " br ",
+        "gzip, br",
+        "gzip, deflate",
+        "compress",
+        "x-gzip",
+      ]) {
+        expect(await postEncoded(post, encoding, body), encoding).toEqual({
+          status: 415,
+          code: "unsupported_media_type",
+        });
+      }
+      // A chunked body (no Content-Length) is refused the same way.
+      expect(
+        await post(
+          "/api/factoids/decrypt",
+          {
+            "Content-Type": "application/json",
+            "Content-Encoding": "br",
+            "Transfer-Encoding": "chunked",
+          },
+          body,
+        ),
+      ).toEqual({ status: 415, code: "unsupported_media_type" });
+      // An empty header means identity: the body reaches validation.
+      const plain = Buffer.from(JSON.stringify({ padding: "a" }));
+      expect(await postEncoded(post, "", plain)).toEqual({ status: 400, code: "invalid_input" });
+      // A request without a body passes, whatever it says about the body's encoding.
+      const health = await request(app()).get("/api/health").set("Content-Encoding", "br");
+      expect(health.status).toBe(200);
+    } finally {
+      await close();
+    }
+  });
+
+  it("does not decode brotli: 50 bodies of 71 bytes that need a 16 MB window each use no memory", async () => {
+    const raw = Buffer.concat([
+      Buffer.from('{"padding":"'),
+      Buffer.alloc(64 * 1024 * 1024, 0x61),
+      Buffer.from('"}'),
+    ]);
+    const bomb = brotliCompressSync(raw, {
+      params: {
+        [zlibConstants.BROTLI_PARAM_QUALITY]: 5,
+        [zlibConstants.BROTLI_PARAM_LGWIN]: 24,
+        [zlibConstants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+      },
+    });
+    expect(bomb.length).toBeLessThan(100);
+
+    const { post, close } = await listen(app());
+    try {
+      // Any path parses JSON bodies; this one has no rate limit. Warm it up first, so the
+      // measurement only sees the bodies.
+      await postEncoded(post, "br", bomb, "/api/nope");
+      const before = process.memoryUsage().rss;
+      let peak = before;
+      const sample = setInterval(() => {
+        peak = Math.max(peak, process.memoryUsage().rss);
+      }, 1);
+      const results = await Promise.all(
+        Array.from({ length: 50 }, () => postEncoded(post, "br", bomb, "/api/nope")),
+      );
+      clearInterval(sample);
+      peak = Math.max(peak, process.memoryUsage().rss);
+
+      expect(new Set(results.map((r) => r.status))).toEqual(new Set([415]));
+      // Decoding them would take about 50 x 16 MB.
+      expect((peak - before) / 2 ** 20).toBeLessThan(32);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("requests without a JSON body", () => {
+  // Express 5 leaves req.body undefined when nothing was parsed: no body, or another type.
+  const bodies: Array<[string, string | undefined, string | undefined]> = [
+    ["no body", undefined, undefined],
+    ["a text/plain body", "text/plain", "Midnight City M83"],
+    [
+      "a JSON body under another media type",
+      "application/vnd.api+json",
+      '{"query":"x","threadId":"a","selectedTrackId":"b"}',
+    ],
+  ];
+
+  it.each(
+    ["/api/analyze", "/api/analyze/resume"].flatMap((path) =>
+      bodies.map(([label, type, body]) => [path, label, type, body] as const),
+    ),
+  )("POST %s with %s answers 400 invalid_input", async (path, _label, type, body) => {
+    let req = request(app()).post(path).timeout(2000);
+    if (type) req = req.set("Content-Type", type);
+    const res = await (body === undefined ? req : req.send(body));
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, code: "invalid_input" });
   });
 });
 

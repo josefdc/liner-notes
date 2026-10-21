@@ -1,7 +1,7 @@
 import { type Response, Router } from "express";
 import { z } from "zod";
 import { type GenerateResult, generateStructuredOutput } from "../../agent/geminiClient.js";
-import { asyncRoute, markFailed, sendError } from "../middleware/errors.js";
+import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { boundedText, describeIssues, factoidId, newestIds, trackId } from "../validation.js";
 
 const router = Router();
@@ -243,6 +243,9 @@ const STREAM_CATEGORIES = [
   "obscure samples, influences, or interpolations",
   "little-known collaborators, session musicians, or equipment used",
 ];
+
+// HEAD gets the stream's headers only; it never asks the model.
+router.head("/api/factoids/decrypt/stream", eventStreamHead);
 
 /**
  * Stream factoids one-by-one via SSE for faster perceived speed

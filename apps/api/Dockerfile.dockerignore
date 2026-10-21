@@ -1,12 +1,13 @@
 # =============================================================================
 # Docker Ignore - API build (context: repository root, Dockerfile: apps/api/Dockerfile)
-# Allowlist: only the root manifests, the workspace manifests and the API.
+# Allowlist: only the root manifests and .npmrc, the workspace manifests and the API.
 # =============================================================================
 
 **
 
 !package.json
 !package-lock.json
+!.npmrc
 !apps/api
 !apps/web/package.json
 !services/audio/package.json

@@ -14,11 +14,15 @@ import { packageDir, repoDir } from "./testing/samples.js";
 const script = join(packageDir, "scripts", "contract-check.mjs");
 let repo = "";
 
+// Git in these repositories ignores the user's and the machine's configuration, so settings
+// such as automatic packing or another object format cannot change what the tests see.
+const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+
 const git = (...args: string[]) =>
   execFileSync(
     "git",
     ["-C", repo, "-c", "user.name=test", "-c", "user.email=test@example.com", ...args],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: gitEnv },
   ).trim();
 
 const snapshotsDir = () => join(repo, "packages", "contract", "snapshots");
@@ -31,7 +35,10 @@ function commit(message: string): string {
 }
 
 function check(base: string) {
-  const result = spawnSync("node", [script, "--base", base, "--repo", repo], { encoding: "utf8" });
+  const result = spawnSync("node", [script, "--base", base, "--repo", repo], {
+    encoding: "utf8",
+    env: gitEnv,
+  });
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
 
@@ -157,11 +164,38 @@ describe("contract-check", { timeout: 30_000 }, () => {
   });
 
   it("exits 2 when git cannot read the base, instead of reporting no snapshots", () => {
-    const base = git("rev-parse", "HEAD");
-    const tree = git("rev-parse", `${base}:packages/contract/snapshots`);
-    rmSync(join(repo, ".git", "objects", tree.slice(0, 2), tree.slice(2)));
+    // A commit whose tree object does not exist: git resolves the base but cannot read its
+    // files. Writing the commit directly keeps this independent of how git stores objects
+    // (deleting a loose object fails when git has packed it). The id has the repository's
+    // own hash length.
+    const missingTree = "1".repeat(git("rev-parse", "HEAD").length);
+    const base = execFileSync("git", ["-C", repo, "hash-object", "-t", "commit", "-w", "--stdin"], {
+      encoding: "utf8",
+      env: gitEnv,
+      input: `tree ${missingTree}\nauthor test <test@example.com> 0 +0000\ncommitter test <test@example.com> 0 +0000\n\nbase without its tree\n`,
+    }).trim();
     const result = check(base);
     expect(result.status).toBe(2);
+    expect(result.out).toContain("cannot read packages/contract/snapshots");
+    expect(result.out).not.toContain("nothing to compare");
+  });
+
+  it("exits 2 when the base lists the snapshots but cannot read them", () => {
+    // packages/contract/snapshots points at a tree that was never written.
+    const missingTree = "1".repeat(git("rev-parse", "HEAD").length);
+    const mktree = (input: string, ...flags: string[]) =>
+      execFileSync("git", ["-C", repo, "mktree", ...flags], {
+        encoding: "utf8",
+        env: gitEnv,
+        input,
+      }).trim();
+    const contract = mktree(`040000 tree ${missingTree}\tsnapshots\n`, "--missing");
+    const packages = mktree(`040000 tree ${contract}\tcontract\n`);
+    const root = mktree(`040000 tree ${packages}\tpackages\n`);
+    const base = git("commit-tree", root, "-m", "snapshots listed but unreadable");
+    const result = check(base);
+    expect(result.status).toBe(2);
+    expect(result.out).toContain("cannot read packages/contract/snapshots");
     expect(result.out).not.toContain("nothing to compare");
   });
 });

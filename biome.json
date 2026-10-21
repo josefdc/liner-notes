@@ -6,7 +6,14 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!evals/reports", "!services/audio/**/*.py"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!evals/reports",
+      "!services/audio/**/*.py",
+      "!scripts/fixtures"
+    ]
   },
   "formatter": {
     "enabled": true,

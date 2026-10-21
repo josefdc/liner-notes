@@ -4,22 +4,28 @@
 //   npm run check:css                               (after npm run build)
 //   node scripts/check-built-css.mjs [dist-dir]     default: apps/web/dist
 //
-// - Tailwind ran: the stylesheet that index.html links starts with the `/*! tailwindcss v4`
-//   banner (after any @charset/@import statements) and has the `.flex` utility. Without the
-//   Tailwind plugin the build still exits 0 and ships the raw source CSS. Other CSS files (a
-//   lazily loaded chunk's styles, say) are not required to carry them.
+// - Tailwind ran: a stylesheet that index.html links from assets/ carries Tailwind's output
+//   marker (the `/*! tailwindcss v4` banner, or an `@layer theme {...}` / `@layer properties
+//   {...}` block; the minifier drops the banner when other CSS comes first, such as an
+//   `@import url(...)` or a library stylesheet) and has the `.flex` utility. Without the Tailwind
+//   plugin the build still exits 0 and ships the raw source CSS. Other CSS files (a lazily loaded
+//   chunk's styles, a stylesheet copied from public/) are not required to carry them.
 // - No CSS file keeps Tailwind source at-rules (`@tailwind`, `@theme`, `@apply`, ...).
 // - No declaration uses a bare `--name` as a value. Tailwind v3's `p-[--space-md]` compiles in v4
-//   to `padding:--space-md`, which browsers drop, so the padding silently disappears; v4 spells it
-//   `p-(--space-md)`, i.e. `var(--space-md)`. Allowed: `var(--x)`, `anchor(--x ...)`, custom
-//   property values, and the properties whose values are dashed idents (anchor-name,
-//   view-transition-name, transition-property, ...). Strings, comments and url() are skipped.
+//   to `padding:--space-md` (and `--tw-leading:--leading-tight` for `leading-[...]`), which
+//   browsers drop, so the padding silently disappears; v4 spells it `p-(--space-md)`, i.e.
+//   `var(--space-md)`. Allowed: `var(--x)`, `anchor(--x ...)`, the values of custom properties
+//   other than Tailwind's own `--tw-*`, and the properties whose values are dashed idents
+//   (anchor-name, view-transition-name, transition-property, ...). Strings, comments and url()
+//   are skipped.
 
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const TAILWIND_BANNER = "/*! tailwindcss v4";
+// Layers that only Tailwind's compiler writes as blocks; the source has `@layer theme, base, ...;`.
+const OUTPUT_LAYERS = new Set(["theme", "properties"]);
 const KNOWN_UTILITY = ".flex";
 const SOURCE_AT_RULES = new Set([
   "tailwind",
@@ -59,6 +65,9 @@ const DASHED_IDENT_PROPERTIES = new Set([
   "counter-reset",
   "counter-increment",
   "counter-set",
+  // Counter-style names (`@counter-style --x`).
+  "list-style",
+  "list-style-type",
 ]);
 // Functions whose arguments may be dashed idents anywhere (var() only as its first argument).
 const DASHED_IDENT_FUNCTIONS = new Set(["anchor", "anchor-size"]);
@@ -132,7 +141,8 @@ function blockEnd(css, open) {
 }
 
 /**
- * Parses CSS into the at-rule names, rule selectors and declarations the checks need. Rules and
+ * Parses CSS into the at-rules (name, prelude, whether it has a block), rule selectors and
+ * declarations the checks need. Rules and
  * at-rules nest (CSS nesting, @media, @layer, @supports, @keyframes): a block item that reaches
  * `{` before `;` is a nested rule, anything else with a `:` is a declaration.
  */
@@ -155,7 +165,14 @@ export function parseCss(css) {
       const stop = Math.min(itemEnd(css, i), end);
       const prelude = css.slice(i, stop);
       const atRule = css[i] === "@";
-      if (atRule) atRules.push(css.slice(i + 1, nameEnd(css, i + 1)).toLowerCase());
+      if (atRule) {
+        const nameStop = nameEnd(css, i + 1);
+        atRules.push({
+          name: css.slice(i + 1, nameStop).toLowerCase(),
+          prelude: css.slice(nameStop, stop).trim(),
+          block: css[stop] === "{",
+        });
+      }
       if (css[stop] === "{") {
         const close = blockEnd(css, stop);
         if (!atRule) selectors.push(prelude.trim());
@@ -250,16 +267,15 @@ export function bareDashedIdents(value) {
   return found;
 }
 
-/** Whether `css`, after leading @charset/@import statements, starts with the Tailwind banner. */
-export function startsWithBanner(css) {
-  let i = 0;
-  for (;;) {
-    while (i < css.length && /\s/.test(css[i])) i += 1;
-    const next = css.slice(i, i + 8).toLowerCase();
-    if (!next.startsWith("@charset") && !next.startsWith("@import")) break;
-    i = itemEnd(css, i) + 1;
-  }
-  return css.startsWith(TAILWIND_BANNER, i);
+/**
+ * Whether `css` carries Tailwind's output marker: its banner comment anywhere, or a
+ * `@layer theme`/`@layer properties` block (the minifier keeps those when it drops the banner).
+ */
+export function hasTailwindMarker(css, atRules = parseCss(css).atRules) {
+  if (css.includes(TAILWIND_BANNER)) return true;
+  return atRules.some(
+    (rule) => rule.name === "layer" && rule.block && OUTPUT_LAYERS.has(rule.prelude),
+  );
 }
 
 /** Problems in one CSS file. `entry` adds the checks that Tailwind generated it. */
@@ -267,8 +283,10 @@ export function checkCss(css, { entry = false } = {}) {
   const problems = [];
   const { atRules, declarations, selectors } = parseCss(css);
   if (entry) {
-    if (!startsWithBanner(css)) {
-      problems.push(`does not start with the "${TAILWIND_BANNER}" banner (Tailwind did not run)`);
+    if (!hasTailwindMarker(css, atRules)) {
+      problems.push(
+        `has neither the "${TAILWIND_BANNER}" banner nor an @layer theme/properties block (Tailwind did not run)`,
+      );
     }
     const hasUtility = selectors.some((list) =>
       list.split(",").some((selector) => selector.trim() === KNOWN_UTILITY),
@@ -277,13 +295,16 @@ export function checkCss(css, { entry = false } = {}) {
       problems.push(`has no "${KNOWN_UTILITY}" rule (Tailwind did not generate utilities)`);
     }
   }
-  const leftover = [...new Set(atRules.filter((name) => SOURCE_AT_RULES.has(name)))];
+  const leftover = [
+    ...new Set(atRules.map((rule) => rule.name).filter((name) => SOURCE_AT_RULES.has(name))),
+  ];
   if (leftover.length > 0) {
     problems.push(`still has Tailwind source at-rules: ${leftover.map((n) => `@${n}`).join(", ")}`);
   }
   const reported = new Set();
   for (const { property, value } of declarations) {
-    if (property.startsWith("--") || DASHED_IDENT_PROPERTIES.has(property)) continue;
+    const customProperty = property.startsWith("--") && !property.startsWith("--tw-");
+    if (customProperty || DASHED_IDENT_PROPERTIES.has(property)) continue;
     const names = bareDashedIdents(value);
     const declaration = `${property}:${value}`;
     if (names.length === 0 || reported.has(declaration)) continue;
@@ -295,21 +316,35 @@ export function checkCss(css, { entry = false } = {}) {
   return problems;
 }
 
-/** Local stylesheets that an index.html links, as paths relative to the dist directory. */
+/** Local stylesheets that an index.html links, as URL paths without the leading `/` or `./`. */
 export function linkedStylesheets(html) {
   const links = [];
   for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
     if (!/\brel\s*=\s*["']?stylesheet\b/i.test(tag)) continue;
     const href = /\bhref\s*=\s*["']?([^"'\s>]+)/i.exec(tag)?.[1];
     if (!href || /^([a-z][\w+.-]*:)?\/\//i.test(href)) continue;
-    links.push(href.replace(/^\.?\//, ""));
+    links.push(href.split(/[?#]/)[0].replace(/^\.?\//, ""));
   }
   return links;
 }
 
 /**
- * Checks every CSS file in `<dist>/assets`. The Tailwind checks apply to the stylesheets that
- * index.html links (without index.html: the largest CSS file).
+ * The file in `dist` that a linked URL path serves, whatever base the app is built with: the
+ * longest tail of the path that exists (`app/assets/x.css` → `assets/x.css` under `--base /app/`).
+ */
+export function resolveInDist(dist, urlPath) {
+  const parts = urlPath.split("/").filter(Boolean);
+  for (let start = 0; start < parts.length; start += 1) {
+    const candidate = parts.slice(start).join("/");
+    if (existsSync(join(dist, candidate))) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Checks every CSS file in `<dist>/assets`, and the stylesheets index.html links from elsewhere
+ * in `dist` (a file copied from public/). The Tailwind checks apply to the linked stylesheets in
+ * assets/ (without index.html: the largest CSS file there).
  * Returns `{ files, problems }`, each problem as "<file>: <problem>".
  */
 export function checkDist(dist) {
@@ -317,26 +352,34 @@ export function checkDist(dist) {
   if (!existsSync(assets)) {
     return { files: [], problems: [`assets/ does not exist; build the web app first`] };
   }
-  const files = readdirSync(assets)
+  const built = readdirSync(assets)
     .filter((name) => name.endsWith(".css"))
     .sort()
     .map((name) => `assets/${name}`);
-  if (files.length === 0) {
-    return { files, problems: ["assets/ has no .css file; build the web app first"] };
+  if (built.length === 0) {
+    return { files: built, problems: ["assets/ has no .css file; build the web app first"] };
   }
 
   const problems = [];
+  const files = [...built];
   const indexPath = join(dist, "index.html");
   let entries;
   if (existsSync(indexPath)) {
-    entries = linkedStylesheets(readFileSync(indexPath, "utf8"));
-    if (entries.length === 0) problems.push("index.html: links no local stylesheet");
-    for (const entry of entries) {
-      if (!files.includes(entry)) problems.push(`index.html: links ${entry}, which does not exist`);
+    entries = [];
+    for (const link of linkedStylesheets(readFileSync(indexPath, "utf8"))) {
+      const file = resolveInDist(dist, link);
+      if (!file) {
+        problems.push(`index.html: links ${link}, which is not in the build`);
+      } else if (file.startsWith("assets/")) {
+        entries.push(file);
+      } else if (file.endsWith(".css") && !files.includes(file)) {
+        files.push(file);
+      }
     }
+    if (entries.length === 0) problems.push("index.html: links no stylesheet from assets/");
   } else {
     const size = (file) => statSync(join(dist, file)).size;
-    entries = [files.reduce((a, b) => (size(b) > size(a) ? b : a))];
+    entries = [built.reduce((a, b) => (size(b) > size(a) ? b : a))];
   }
 
   for (const file of files) {

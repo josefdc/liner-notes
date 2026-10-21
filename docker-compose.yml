@@ -49,13 +49,15 @@ services:
     # Values here override apps/api/.env. CORS_ORIGINS comes from the shell running compose
     # (default: http://localhost and http://127.0.0.1), not from apps/api/.env. The web app calls
     # /api on its own origin and needs no CORS entry; list other origins that call the API.
-    # TRUST_PROXY=1: every request arrives from nginx, which sets X-Forwarded-For, so the per-IP
-    # rate limits key on the browser's address instead of one shared bucket for nginx.
+    # TRUST_PROXY (default 1): every request arrives from nginx, which sets X-Forwarded-For, so the
+    # per-IP rate limits key on the browser's address instead of one shared bucket for nginx. Set
+    # it in the shell that runs compose (e.g. TRUST_PROXY=2 behind a TLS proxy in front of nginx);
+    # apps/api/.env cannot change it, since this list overrides that file.
     environment:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
-      - TRUST_PROXY=1
+      - TRUST_PROXY=${TRUST_PROXY:-1}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
       - AUDIO_ANALYSIS_URL=http://sonic-analysis:3002
       - SQLITE_DB_PATH=/app/data/sonic-agent.db
@@ -79,8 +81,10 @@ services:
       context: ./services/audio
       dockerfile: Dockerfile
     container_name: sonic-analysis
+    # Only the API calls the audio service (over sonic-network); the port is published on the
+    # host's loopback for local checks such as curl http://127.0.0.1:3002/health.
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
     networks:
       - sonic-network
     restart: unless-stopped

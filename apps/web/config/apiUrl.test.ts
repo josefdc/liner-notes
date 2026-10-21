@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { apiUrlWarning } from './apiUrl';
+import { apiProxyTarget, apiUrlProblem } from './apiUrl';
 
-describe('apiUrlWarning', () => {
+describe('apiUrlProblem', () => {
   it.each([
     [undefined, true],
     ['', true],
@@ -11,24 +11,54 @@ describe('apiUrlWarning', () => {
     ['https://api.example.test/api', true],
     ['http://localhost:3001/api/', true],
   ])('accepts %j (serving: %s)', (value, serving) => {
-    expect(apiUrlWarning(value, serving)).toBeNull();
+    expect(apiUrlProblem(value, serving)).toBeNull();
   });
 
   it('warns that the dev proxy forwards only /api', () => {
-    expect(apiUrlWarning('/backend/api', true)).toContain('forward only /api');
+    expect(apiUrlProblem('/backend/api', true)).toEqual({
+      level: 'warning',
+      message: expect.stringContaining('forward only /api'),
+    });
   });
 
   it.each(['api', 'example.test/api', '//example.test/api', 'ftp://example.test/api'])(
-    'rejects %j as neither a path nor an http(s) URL',
+    'fails %j as neither a path nor an http(s) URL',
     (value) => {
-      expect(apiUrlWarning(value, false)).toContain('neither a path');
+      expect(apiUrlProblem(value, false)).toEqual({
+        level: 'error',
+        message: expect.stringContaining('neither a path'),
+      });
     },
   );
 
-  it('rejects an absolute URL without a path', () => {
-    expect(apiUrlWarning('https://api.example.test', false)).toContain(
-      'https://api.example.test/api',
-    );
-    expect(apiUrlWarning('https://api.example.test/', false)).toContain('has no path');
+  it('fails an absolute URL without a path', () => {
+    expect(apiUrlProblem('https://api.example.test', false)).toEqual({
+      level: 'error',
+      message: expect.stringContaining('https://api.example.test/api'),
+    });
+    expect(apiUrlProblem('https://api.example.test/', true)?.level).toBe('error');
   });
+});
+
+describe('apiProxyTarget', () => {
+  it('is the local API on API_PORT (default 3001) without API_PROXY_TARGET', () => {
+    expect(apiProxyTarget({})).toBe('http://127.0.0.1:3001');
+    expect(apiProxyTarget({ API_PORT: '3111' })).toBe('http://127.0.0.1:3111');
+    expect(apiProxyTarget({ API_PROXY_TARGET: ' ', API_PORT: '3111' })).toBe(
+      'http://127.0.0.1:3111',
+    );
+  });
+
+  it('takes an http(s) origin from API_PROXY_TARGET', () => {
+    expect(apiProxyTarget({ API_PROXY_TARGET: 'http://api.internal:3001/' })).toBe(
+      'http://api.internal:3001',
+    );
+  });
+
+  it.each(['api.internal:3001', 'ftp://api.internal', 'http://api.internal:3001/api'])(
+    'rejects API_PROXY_TARGET=%j',
+    (value) => {
+      expect(() => apiProxyTarget({ API_PROXY_TARGET: value })).toThrow('API_PROXY_TARGET');
+    },
+  );
 });

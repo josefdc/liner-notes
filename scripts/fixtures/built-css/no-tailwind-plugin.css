@@ -1,0 +1,1 @@
+@layer utilities{@tailwind utilities;}@theme{--space-md: 16px;}.card{@apply flex;}

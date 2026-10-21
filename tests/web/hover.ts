@@ -1,9 +1,13 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-// Hovering a connected-track card reliably. The card sits below the fold at 1440x900, and the
-// app focuses the Dashboard heading a frame or two after the Dashboard mounts, which scrolls the
-// page back to the top. On a slow machine that can happen after a test has scrolled the card into
-// view and placed the pointer on it, moving the card away from the pointer.
+// Hovering a connected-track card reliably. The click on PROCEED TO COMMAND CENTER leaves the
+// pointer where, at 1440x900, the card then fades in. Chrome sends the card a mouseover whose
+// relatedTarget is the onboarding button that was just removed; React ignores an over event whose
+// relatedTarget it manages (it expects that element's mouseout, which never comes), so the card's
+// onMouseEnter never runs, and later moves inside the card are not entries either. Whether the
+// card is already under the pointer at that moment depends on timing, so slow machines (CI) hit
+// it. The fix: move the pointer off the card before hovering it, and wait until the card stops
+// moving (fade-in, lazy chunks) before choosing the point.
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -53,7 +57,7 @@ export async function hoverCard(
 ): Promise<{ box: Box; point: { x: number; y: number } }> {
   let result: { box: Box; point: { x: number; y: number } } | undefined;
   await expect(async () => {
-    // Measure the card at rest, with the pointer away from it.
+    // Measure the card at rest with the pointer off it, so the next move is a real entry.
     await page.mouse.move(0, 0);
     await expect(card).not.toHaveAttribute("data-hovered", "true");
     const box = await placeInDashboard(card);

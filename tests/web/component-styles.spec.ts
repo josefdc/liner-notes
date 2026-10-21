@@ -82,74 +82,126 @@ test("small badges have one height wherever they sit", async ({ page }) => {
   for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 24 });
 });
 
-/** WCAG contrast of each neutral badge's text against its composited background. */
-const neutralBadgeContrast = (page: Page) =>
-  page.locator("span.border-white\\/15").evaluateAll((elements) => {
-    type Rgba = { r: number; g: number; b: number; a: number };
-    const parse = (value: string): Rgba | null => {
-      const match = /rgba?\(([^)]+)\)/.exec(value);
-      if (!match) return null;
+// An all-white album cover, the worst case behind the translucent hero and Player backgrounds.
+const WHITE_COVER = "https://i.scdn.co/image/white-cover";
+const WHITE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640"><rect width="100%" height="100%" fill="#fff"/></svg>';
+
+/** A fixture whose result shows the white cover. */
+function withWhiteCover(fixture: ReturnType<typeof loadFixture>) {
+  const complete = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  complete.data.coverUrl = WHITE_COVER;
+  return fixture;
+}
+
+type Rgba = { r: number; g: number; b: number; a: number };
+const channel = (value: number) => {
+  const v = value / 255;
+  return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+};
+const luminance = (c: Rgba) =>
+  0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+const over = (top: Rgba, bottom: Rgba): Rgba => ({
+  r: top.r * top.a + bottom.r * (1 - top.a),
+  g: top.g * top.a + bottom.g * (1 - top.a),
+  b: top.b * top.a + bottom.b * (1 - top.a),
+  a: 1,
+});
+
+/**
+ * WCAG contrast of the grey text in each neutral badge, against what the page actually draws
+ * behind it: the badge's text and icons are hidden, the area inside its border is screenshotted
+ * (cover image, blur and every translucent layer included), and its brightest pixel is the
+ * background. Coloured values inside a badge (cyan, amber, pink) are not measured here.
+ */
+async function neutralBadgeContrast(page: Page) {
+  await page.addStyleTag({
+    content:
+      "[data-measuring],[data-measuring] *{color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
+  });
+  const badges = page.locator("span.border-white\\/15");
+  const result: Array<{ text: string; ratio: number }> = [];
+  for (let i = 0; i < (await badges.count()); i += 1) {
+    const badge = badges.nth(i);
+    await badge.scrollIntoViewIfNeeded();
+    const texts = await badge.evaluate((element) => {
+      const found: Array<{ text: string; color: string }> = [];
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!text.textContent?.trim() || !text.parentElement) continue;
+        found.push({
+          text: text.textContent.trim(),
+          color: getComputedStyle(text.parentElement).color,
+        });
+      }
+      element.setAttribute("data-measuring", "");
+      return found;
+    });
+    const box = await badge.boundingBox();
+    if (!box) throw new Error("a neutral badge has no box");
+    const png = await page.screenshot({
+      clip: { x: box.x + 2, y: box.y + 2, width: box.width - 4, height: box.height - 4 },
+      animations: "disabled",
+    });
+    await badge.evaluate((element) => element.removeAttribute("data-measuring"));
+    const background: Rgba = await page.evaluate(async (base64) => {
+      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.drawImage(bitmap, 0, 0);
+      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+      let best = { r: 0, g: 0, b: 0, a: 1 };
+      for (let j = 0; j < data.length; j += 4) {
+        if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
+          best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+        }
+      }
+      return best;
+    }, png.toString("base64"));
+    for (const { text, color } of texts) {
+      const match = /rgba?\(([^)]+)\)/.exec(color);
+      if (!match) continue;
       const [r, g, b, a = 1] = match[1]
         .split(/[\s,/]+/)
         .filter(Boolean)
         .map(Number);
-      return { r, g, b, a };
-    };
-    const over = (top: Rgba, bottom: Rgba): Rgba => ({
-      r: top.r * top.a + bottom.r * (1 - top.a),
-      g: top.g * top.a + bottom.g * (1 - top.a),
-      b: top.b * top.a + bottom.b * (1 - top.a),
-      a: 1,
-    });
-    const channel = (value: number) => {
-      const v = value / 255;
-      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    };
-    const luminance = (c: Rgba) =>
-      0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
-    const result: Array<{ text: string; ratio: number }> = [];
-    for (const badge of elements) {
-      const chain: Element[] = [];
-      for (let node: Element | null = badge; node; node = node.parentElement) chain.unshift(node);
-      let background: Rgba = { r: 255, g: 255, b: 255, a: 1 };
-      for (const node of chain) {
-        const color = parse(getComputedStyle(node).backgroundColor);
-        if (color && color.a > 0) background = over(color, background);
-      }
-      // Every text node inside the badge, with the colour it is drawn in.
-      const walker = document.createTreeWalker(badge, NodeFilter.SHOW_TEXT);
-      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        if (!text.textContent?.trim() || !text.parentElement) continue;
-        const color = parse(getComputedStyle(text.parentElement).color);
-        if (!color) continue;
-        // Coloured values (cyan, amber, pink) are checked by their own variants; this is the grey.
-        if (!(color.r === color.g && color.g === color.b)) continue;
-        const foreground = over(color, background);
-        const [light, dark] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
-        result.push({
-          text: text.textContent.trim(),
-          ratio: Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100,
-        });
-      }
+      if (!(r === g && g === b)) continue;
+      const foreground = over({ r, g, b, a }, background);
+      const [light, dark] = [luminance(foreground), luminance(background)].sort((x, y) => y - x);
+      result.push({ text, ratio: Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100 });
     }
-    return result;
-  });
+  }
+  return result;
+}
 
 for (const fixture of ["full-result", "missing-states"]) {
-  test(`neutral badge text meets 4.5:1 on the Dashboard and the Player (${fixture})`, async ({
-    page,
-  }) => {
-    await useMockApi(page, fixture === "full-result" ? explicitResult() : loadFixture(fixture));
-    await analyzeAndOpenDashboard(page, "Track");
-    const dashboard = await neutralBadgeContrast(page);
-    await openPlayer(page);
-    const player = await neutralBadgeContrast(page);
-    expect(dashboard.length).toBeGreaterThan(0);
-    expect(player.length).toBeGreaterThan(0);
-    for (const { text, ratio } of [...dashboard, ...player]) {
-      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
+  for (const cover of ["no cover", "a white cover"]) {
+    test(`neutral badge text meets 4.5:1 on the Dashboard and the Player (${fixture}, ${cover})`, async ({
+      page,
+    }) => {
+      await page.route("https://i.scdn.co/**", (route) =>
+        route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
+      );
+      const data = fixture === "full-result" ? explicitResult() : loadFixture(fixture);
+      await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await analyzeAndOpenDashboard(page, "Track");
+      const dashboard = await neutralBadgeContrast(page);
+      await openPlayer(page);
+      // The Player's background cover fades in.
+      await page.waitForTimeout(500);
+      const player = await neutralBadgeContrast(page);
+      expect(dashboard.length).toBeGreaterThan(0);
+      expect(player.length).toBeGreaterThan(0);
+      for (const { text, ratio } of [...dashboard, ...player]) {
+        expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
 }
 
 test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ page }) => {

@@ -136,9 +136,11 @@ Override the ports with `WEB_PORT`, `API_PORT` and `AUDIO_PORT`, or pick service
 `npm run dev -w apps/api`, `npm run dev -w services/audio`.
 
 The web app calls the API at `/api` on its own origin, and the Vite dev server forwards those
-requests to the API on `API_PORT` (default 3001). A build can point the web app elsewhere with
+requests to the API on `API_PORT` (default 3001), or to `API_PROXY_TARGET` when set (an http(s)
+origin such as `http://192.168.1.20:3001`, for an API running elsewhere). A build can point the web app elsewhere with
 `VITE_API_URL`, the API's root URL including `/api` (see `apps/web/.env.example`); the web
-image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API.
+image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API. A value that
+cannot work (`api`, or an absolute URL without a path) stops the build with an error.
 
 The web dev server listens on loopback only. `WEB_HOST=0.0.0.0 npm run dev` serves it on the
 network (to try it from a phone, say); anyone who can reach that port can then also start
@@ -175,16 +177,19 @@ Run all services with Docker Compose:
 docker-compose up --build
 ```
 
-| Service        | URL                                                  |
-|----------------|------------------------------------------------------|
-| Frontend       | http://localhost (port 80)                           |
-| Backend API    | http://localhost/api (direct: http://127.0.0.1:3001) |
-| Audio Analysis | http://localhost:3002                                |
+| Service        | URL                                                     |
+|----------------|---------------------------------------------------------|
+| Frontend       | http://localhost (port 80)                              |
+| Backend API    | http://localhost/api (direct: http://127.0.0.1:3001)    |
+| Audio Analysis | internal to the API (direct: http://127.0.0.1:3002)     |
 
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
-own port is published on the host's loopback only, and the API runs with `TRUST_PROXY=1` so its
-per-IP rate limits use the client address nginx puts in `X-Forwarded-For`. Behind a second proxy
-(for example a TLS terminator in front of nginx), raise `TRUST_PROXY` to the number of proxies.
+and the audio service's ports are published on the host's loopback only. The API runs with
+`TRUST_PROXY=1`, so its per-IP rate limits use the client address nginx puts in
+`X-Forwarded-For`. Behind another proxy (for example a TLS terminator in front of nginx), set it
+to the number of proxies in the shell that runs compose, e.g.
+`TRUST_PROXY=2 docker-compose up --build`; compose's `environment:` overrides `apps/api/.env`,
+so setting it there has no effect.
 
 ---
 

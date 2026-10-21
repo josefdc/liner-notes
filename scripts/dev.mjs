@@ -6,6 +6,8 @@
 //   DEV_SERVICES=web,api npm run dev     a subset
 //   WEB_HOST=0.0.0.0 npm run dev         serve the web app (and its /api proxy) on the network;
 //                                        the default is loopback only
+//   API_PROXY_TARGET=http://host:3001 DEV_SERVICES=web npm run dev
+//                                        the web app with an API that runs elsewhere
 //
 // Output lines are prefixed with the service name. If one service exits, the others are
 // stopped and this script exits with the first failing service's exit code. The API runs

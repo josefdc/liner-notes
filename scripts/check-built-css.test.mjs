@@ -1,13 +1,30 @@
 // Fixture tests for the built-CSS check. Run with `npm test`.
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { bareDashedIdents, checkCss, checkDist, linkedStylesheets } from "./check-built-css.mjs";
 
 const script = join(import.meta.dirname, "check-built-css.mjs");
+
+// Outputs of real `vite build` runs with @tailwindcss/vite 4.3.3, on a page using `flex`,
+// `p-(--space-md)`, `rounded-md` and `text-chrome`, with this entry stylesheet:
+//   @layer theme, base, components, utilities;
+//   @import "tailwindcss/theme.css" layer(theme);
+//   @import "tailwindcss/utilities.css" layer(utilities) source(none);
+//   @source "../index.html";
+//   @theme { --space-md: 16px; --text-chrome: 10px; --text-chrome--line-height: 14px; }
+// - tailwind.css: main.js imports only that stylesheet.
+// - after-font-import.css: the stylesheet starts with `@import url("https://fonts...")`.
+// - after-vendor-css.css: main.js imports a library stylesheet before it.
+// - after-component-css.css: main.js first imports a component that imports its own CSS.
+// In the last three the minifier drops Tailwind's `/*! ... */` banner.
+// - no-tailwind-plugin.css: the build without tailwindcss() in the Vite config, from an entry
+//   with `@import "tailwindcss/utilities.css" layer(utilities)`, a `@theme` and an `@apply`.
+const fixture = (name) =>
+  readFileSync(join(import.meta.dirname, "fixtures", "built-css", `${name}.css`), "utf8");
 const banner = "/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */\n";
 // Excerpts of a real minified build (apps/web/dist) that must pass.
 const realExcerpt = [
@@ -33,10 +50,30 @@ describe("checkCss", () => {
     expect(entry(css)).toEqual([]);
   });
 
-  it("accepts @charset and @import statements before the banner", () => {
-    const css = `@charset "utf-8";@import "https://fonts.googleapis.com/css2?family=Inter;x";${valid}`;
-    expect(entry(css)).toEqual([]);
-    expect(entry(`@import url(https://fonts.example/a.css);\n${valid}`)).toEqual([]);
+  it.each(["tailwind", "after-font-import", "after-vendor-css", "after-component-css"])(
+    "passes the real build %s.css",
+    (name) => {
+      expect(entry(fixture(name))).toEqual([]);
+    },
+  );
+
+  it("fails the real build without the Tailwind plugin", () => {
+    expect(entry(fixture("no-tailwind-plugin"))).toEqual([
+      expect.stringContaining("Tailwind did not run"),
+      expect.stringContaining('no ".flex" rule'),
+      expect.stringContaining("@tailwind, @theme, @apply"),
+    ]);
+  });
+
+  it("takes the banner anywhere, or an @layer theme/properties block, as Tailwind's marker", () => {
+    const utilities = "@layer utilities{.flex{display:flex}}";
+    expect(entry(`.vendor{color:red}${banner}${utilities}`)).toEqual([]);
+    expect(entry(`.vendor{color:red}@layer theme{:root{--a:1px}}${utilities}`)).toEqual([]);
+    expect(entry(`@layer properties{@supports (x:y){*{--tw-a:0}}}${utilities}`)).toEqual([]);
+    // The source's layer order statement is not output.
+    expect(entry(`@layer theme,base,components,utilities;${utilities}`)).toEqual([
+      expect.stringContaining("Tailwind did not run"),
+    ]);
   });
 
   it.each([
@@ -51,6 +88,8 @@ describe("checkCss", () => {
     ["@reference inside a string", '.a{content:"mail me@reference.example"}'],
     ["a var() fallback", ".a{color:var(--x,var(--y,red))}"],
     ["a custom property set to a dashed ident", ".a{--name:--other}"],
+    ["a counter-style name", ".a{list-style:--ctr;list-style-type:--ctr}"],
+    ["Tailwind's own variables", ".a{--tw-gradient-stops:var(--a,var(--b));--tw-ease:initial}"],
     ["a dashed ident in a comment", ".a{color:red/* :--x */}"],
   ])("does not flag %s", (_name, rule) => {
     expect(entry(`${valid}${rule}`)).toEqual([]);
@@ -64,6 +103,7 @@ describe("checkCss", () => {
     ["an unminified value", ".p {\n  padding: --x;\n}", "--x"],
     ["a var() second argument", ".c{color:var(--a, --b)}", "--b"],
     ["a function named like a variable", ".f{font-family:--theme(--f, serif)}", "--theme()"],
+    ["a Tailwind variable (leading-[--x])", ".l{--tw-leading:--leading-tight}", "--leading-tight"],
   ])("flags a bare variable name as %s", (_name, rule, name) => {
     const problems = entry(`${valid}${rule}`);
     expect(problems).toHaveLength(1);
@@ -78,7 +118,7 @@ describe("checkCss", () => {
   it("fails CSS that Tailwind did not process", () => {
     const raw = '@import "tailwindcss";\n@theme {\n  --radius-md: 8px;\n}\n.x{color:red}';
     const problems = entry(raw);
-    expect(problems.some((problem) => problem.includes("banner"))).toBe(true);
+    expect(problems.some((problem) => problem.includes("did not run"))).toBe(true);
     expect(problems.some((problem) => problem.includes('".flex"'))).toBe(true);
     expect(problems.some((problem) => problem.includes("@theme"))).toBe(true);
   });
@@ -162,7 +202,7 @@ describe("checkDist and the command", () => {
     });
     const result = run(dir);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("assets/index-1.css: does not start with");
+    expect(result.stderr).toContain("assets/index-1.css: has neither the");
     expect(result.stderr).not.toContain("assets/other.css");
   });
 
@@ -180,13 +220,41 @@ describe("checkDist and the command", () => {
     expect(checkDist(dir).problems).toEqual([]);
   });
 
-  it("fails when index.html links no stylesheet or a missing one", () => {
+  it("fails when index.html links no stylesheet from assets/ or a missing one", () => {
     const none = dist({ "index.html": "<p>", "assets/index-1.css": valid });
-    expect(checkDist(none).problems).toEqual(["index.html: links no local stylesheet"]);
+    expect(checkDist(none).problems).toEqual(["index.html: links no stylesheet from assets/"]);
     const missing = dist({ "index.html": indexHtml, "assets/other.css": valid });
     expect(checkDist(missing).problems).toContain(
-      "index.html: links assets/index-1.css, which does not exist",
+      "index.html: links assets/index-1.css, which is not in the build",
     );
+  });
+
+  it("resolves links under a base path (vite build --base /app/)", () => {
+    const dir = dist({
+      "index.html": '<link rel="stylesheet" href="/app/assets/index-1.css?v=1">',
+      "assets/index-1.css": valid,
+    });
+    expect(checkDist(dir)).toEqual({ files: ["assets/index-1.css"], problems: [] });
+  });
+
+  it("checks a stylesheet copied from public/ for values only", () => {
+    const html = `${indexHtml}<link rel="stylesheet" href="/fonts.css">`;
+    const ok = dist({ "index.html": html, "assets/index-1.css": valid, "fonts.css": ".f{x:y}" });
+    expect(checkDist(ok)).toEqual({ files: ["assets/index-1.css", "fonts.css"], problems: [] });
+    const bad = dist({
+      "index.html": html,
+      "assets/index-1.css": valid,
+      "fonts.css": ".f{margin:--gap}",
+    });
+    expect(checkDist(bad).problems).toEqual([expect.stringMatching(/^fonts\.css: bare/)]);
+    const onlyPublic = dist({
+      "index.html": '<link rel="stylesheet" href="/fonts.css">',
+      "assets/index-1.css": valid,
+      "fonts.css": ".f{x:y}",
+    });
+    expect(checkDist(onlyPublic).problems).toEqual([
+      "index.html: links no stylesheet from assets/",
+    ]);
   });
 
   it("fails without a build", () => {

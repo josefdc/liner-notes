@@ -348,7 +348,7 @@ describe("analyze routes", () => {
       expect(runStatus(threadId)).toBe("completed");
     });
 
-    it("uses the candidate's own data, with no invented duration, when the track lookup fails", async () => {
+    it("uses the candidate's own data, with no invented duration or explicit flag, when the track lookup fails", async () => {
       stub.detailsFail = true;
       const threadId = await pausedThread();
 
@@ -360,6 +360,7 @@ describe("analyze routes", () => {
         title: "Title track-a",
         duration: "",
         durationMs: 0,
+        explicit: null,
         previewUrl: null,
       });
     });

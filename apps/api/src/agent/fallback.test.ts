@@ -5,21 +5,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// A working model: any call made while building the fallback would add its facts.
+// A working model layer: any call made while building the fallback would add its facts.
 const model = vi.hoisted(() => ({
-  generateStructuredOutput: vi.fn(async () => ({
-    data: {
-      factoids: [
-        { title: "MODEL_FACT", content: "MODEL_FACT invented by a model", type: "trivia" },
-      ],
-    },
-    model: "fast-model",
-    groundingUsed: false,
+  invoke: vi.fn(async () => ({
+    output: { factoids: [{ title: "MODEL_FACT", text: "MODEL_FACT invented by a model" }] },
   })),
 }));
-vi.mock("./geminiClient.js", () => ({
-  generateStructuredOutput: model.generateStructuredOutput,
-}));
+vi.mock("../llm/invoke.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../llm/invoke.js")>();
+  return { ...actual, llm: { ...actual.llm, invoke: model.invoke } };
+});
 
 import { createFallbackTrackData } from "./fallback.js";
 import { TrackDataSchema } from "./schema.js";
@@ -124,6 +119,26 @@ describe("createFallbackTrackData", () => {
     expect(allText(td.factoids)).toContain("98.5 BPM in A Minor");
   });
 
+  it("leaves out the duration and the explicit flag when they are unknown", async () => {
+    const td = await build(null, emptyResearch, { durationMs: 0, explicit: null });
+    expect(td).not.toHaveProperty("durationSeconds");
+    expect(td).not.toHaveProperty("explicit");
+  });
+
+  it("takes its ids from the id source it is given", async () => {
+    let n = 0;
+    const td = await createFallbackTrackData(
+      {
+        spotifyData: spotify,
+        audioFeatures: null,
+        researchData: { ...emptyResearch, collaborators: ["Queen (producer)"] },
+      } as unknown as SonicAgentStateType,
+      { newId: () => `fixed-${++n}` },
+    );
+    expect(td.factoids.map((f) => f.id)).toEqual(["fixed-1", "fixed-3"]);
+    expect(td.factoids[0].entities?.[0].id).toBe("fixed-2");
+  });
+
   it("returns a schema-valid payload with no factoids when nothing is known", async () => {
     const td = await build(null, emptyResearch, {
       releaseDate: "",
@@ -147,9 +162,9 @@ describe("createFallbackTrackData", () => {
   });
 
   it("makes no model call and contains no model-generated facts", async () => {
-    model.generateStructuredOutput.mockClear();
+    model.invoke.mockClear();
     const td = await build(null);
-    expect(model.generateStructuredOutput).not.toHaveBeenCalled();
+    expect(model.invoke).not.toHaveBeenCalled();
     expect(allText(td.factoids)).not.toContain("MODEL_FACT");
   });
 

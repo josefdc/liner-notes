@@ -1,45 +1,96 @@
 /**
- * Composer Node — Synthesis with Gemini structured output
- * Uses unified geminiClient for structured output with Google Search grounding
+ * Composer node: writes the liner notes (claims, factoid cards and the genealogy graph) with
+ * one model call on the `main` tier, through the provider layer (`llm.invoke`, schema
+ * `ComposerOutput`).
+ *
+ * The model writes text only. Track metadata comes from Spotify, the duration from Spotify
+ * only, and measured values from the audio measurement: `ComposerOutput` has no field for any
+ * of them. Every model statement is a claim of kind `inferred` until a verifier judges it.
+ *
+ * On any failure of the model call (budget refused, per-run call cap, rate limit, timeout,
+ * network, an incomplete, refused or invalid answer) the result is the fallback built from
+ * measured and sourced data only, flagged `run.fallback`, and the call's typed error is
+ * recorded in `usage`. The node does not throw for a model failure; a cancelled run stops it.
  */
 
-import { getStore } from "@langchain/langgraph";
-import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { generateStructuredOutput, GEMINI_MODEL_PRO } from "../geminiClient.js";
-import { FlatTrackDataSchema, transformFlatToTrackData } from "../schema.js";
-import { COMPOSER_SYSTEM_PROMPT, formatComposerPrompt } from "../prompts.js";
+import { getStore, type LangGraphRunnableConfig } from "@langchain/langgraph";
+import {
+  type Claim,
+  type ClaimAbout,
+  type ComposerOutput as ComposerOutputType,
+  ComposerOutput,
+  composerOutputIssues,
+  type Evidence,
+  type FactoidType,
+  type GenealogyRole,
+  type LinkType,
+  type RunInfo,
+  type SourceError,
+} from "@liner-notes/contract";
+import { isLlmError, LlmError } from "../../llm/errors.js";
+import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
+import { pickRecording } from "../../sources/identity.js";
+import { errorRecord } from "../../sources/records.js";
+import { answeredCall, failedCall, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
+import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
-import { withRetry, TransientError, isTransient } from "../errors.js";
-import type { SonicAgentStateType } from "../state.js";
+import { composerMessages, type PromptRecording, type PromptTrack } from "../prompts.js";
+import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "../runtime.js";
+import {
+  type Factoid,
+  type Genealogy,
+  type GenealogyLink,
+  type GenealogyNode,
+  measuredAudioFields,
+  type TrackData,
+} from "../schema.js";
+import {
+  createDefaultSegments,
+  type LlmCallRecord,
+  type SonicAgentStateType,
+  type SpotifyData,
+} from "../state.js";
 
-/** A short, readable reason from a model error (provider errors often arrive as JSON text). */
-export function modelErrorReason(error: string | undefined): string {
-  if (!error) return "No output from the model";
-  try {
-    const parsed = JSON.parse(error) as { error?: { message?: string; status?: string } };
-    const message = parsed.error?.message;
-    if (message) {
-      return (parsed.error?.status ? `${message} (${parsed.error.status})` : message).slice(0, 300);
-    }
-  } catch {
-    // Not JSON — use the text as is
-  }
-  return error.slice(0, 300);
-}
+export const COMPOSER_CALL_SITE = "composer";
+/** Output budget of the composer call, reasoning included (main tier: low effort). */
+export const COMPOSER_MAX_OUTPUT_TOKENS = 6000;
 
-export type ModelUnavailableReason = "no_output" | "rate_limited" | "timeout" | "auth" | "error";
+export type ModelUnavailableReason =
+  | "no_output"
+  | "rate_limited"
+  | "timeout"
+  | "auth"
+  | "error"
+  | "budget_exhausted";
 
 /**
- * The category sent to clients when the model call fails. Provider error text stays in the
- * server log: it can name keys, projects or quotas and is not meant for users.
+ * The category sent to clients when the model call fails, from the error's kind. Provider
+ * text stays in the server log: it can name keys, deployments or quotas.
  */
-export function modelErrorCategory(error: string | undefined): ModelUnavailableReason {
-  if (!error) return "no_output";
-  if (/\b429\b|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(error)) return "rate_limited";
-  if (/timed? ?out|DEADLINE_EXCEEDED|ETIMEDOUT|\babort/i.test(error)) return "timeout";
-  if (/\b40[13]\b|API key|UNAUTHENTICATED|PERMISSION_DENIED|credential/i.test(error)) return "auth";
-  return "error";
+export function modelErrorCategory(error: unknown): ModelUnavailableReason {
+  if (!isLlmError(error)) return "error";
+  switch (error.kind) {
+    case "budget_exceeded":
+    case "call_cap":
+      return "budget_exhausted";
+    case "rate_limited":
+      return "rate_limited";
+    case "timeout":
+      return "timeout";
+    case "not_configured":
+      return "auth";
+    case "provider":
+      return error.status === 401 || error.status === 403 ? "auth" : "error";
+    case "incomplete":
+    case "refused":
+    case "invalid_output":
+    case "invalid_response":
+    case "content_filtered":
+      return "no_output";
+    default:
+      return "error";
+  }
 }
 
 const MODEL_REASON_TEXT: Record<ModelUnavailableReason, string> = {
@@ -48,120 +99,386 @@ const MODEL_REASON_TEXT: Record<ModelUnavailableReason, string> = {
   timeout: "timed out",
   auth: "not authorised",
   error: "request failed",
+  budget_exhausted: "budget exhausted",
 };
 
 // Audio problems that may clear up on the next run. A result missing audio for one of these
 // reasons is not stored, so it is not served after the analysis service recovers.
 const TRANSIENT_AUDIO_REASONS = new Set(["service_unavailable", "analysis_failed", "not_run"]);
 
-export async function composerNode(
-  state: SonicAgentStateType,
-  config: LangGraphRunnableConfig,
-): Promise<Partial<SonicAgentStateType>> {
-  if (!state.spotifyData) {
-    return {
-      error: "No Spotify data to compose",
-      statusMessages: ["❌ Cannot compose - missing track data"],
-    };
-  }
+// =============================================================================
+// Prompt metadata
+// =============================================================================
 
-  const writer = config.writer;
-  const store = getStore();
-  writer?.({
-    type: "status",
-    code: "GEMINI-CONNECT",
-    message: `Connecting to neural synthesis engine (${GEMINI_MODEL_PRO})...`,
-    node: "composer",
-    timestamp: new Date().toISOString(),
+/** The minimal Spotify fields the app shows: title, artist, album and year. */
+export function promptTrack(spotify: SpotifyData): PromptTrack {
+  return {
+    title: spotify.title,
+    artist: spotify.artist,
+    album: spotify.album || null,
+    year: spotify.releaseDate?.split("-")[0] || null,
+  };
+}
+
+/**
+ * The MusicBrainz recording filed under the track's ISRC that passes the identity checks, or
+ * null (no ISRC, no match). A failed lookup is a source error, not a failed run.
+ */
+export async function musicBrainzRecording(
+  spotify: SpotifyData,
+  isrc: string | null,
+  signal: AbortSignal | undefined,
+): Promise<{ recording: PromptRecording | null; errors: SourceError[] }> {
+  if (!isrc) return { recording: null, errors: [] };
+  try {
+    const candidates = await lookupIsrc(isrc, signal);
+    const { recording } = pickRecording(
+      {
+        isrc,
+        title: spotify.title,
+        artists: [spotify.artist],
+        durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
+      },
+      candidates,
+    );
+    if (!recording) return { recording: null, errors: [] };
+    return {
+      recording: {
+        mbid: recording.id,
+        title: recording.title,
+        artistCredit: creditString(recording["artist-credit"]),
+        firstReleaseDate: recording["first-release-date"] || null,
+        lengthSeconds:
+          typeof recording.length === "number" && recording.length > 0
+            ? Math.round(recording.length / 1000)
+            : null,
+      },
+      errors: [],
+    };
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) throw error;
+    return { recording: null, errors: [errorRecord("musicbrainz", error)] };
+  }
+}
+
+// =============================================================================
+// From the model's output to TrackData
+// =============================================================================
+
+const ROLE_GROUP: Record<GenealogyRole, number> = {
+  current: 1,
+  source: 2,
+  derived: 3,
+  influence: 4,
+};
+const ROLE_SIZE: Record<GenealogyRole, number> = {
+  current: 40,
+  source: 28,
+  derived: 28,
+  influence: 22,
+};
+const LINK_VALUE: Record<LinkType, number> = {
+  sample: 3,
+  interpolation: 3,
+  cover: 2,
+  remix: 2,
+  producer: 1,
+  influence: 1,
+};
+/** Relations that state a documented fact; without evidence they are shown as an influence. */
+const DOCUMENTED_RELATIONS = new Set<LinkType>(["sample", "interpolation", "cover", "remix"]);
+
+const FACTOID_ABOUT: Record<FactoidType, ClaimAbout> = {
+  production: "production",
+  trivia: "trivia",
+  credits: "credit",
+  sample: "sample",
+  curiosity: "trivia",
+  connection: "connection",
+};
+
+interface Composed {
+  factoids: Factoid[];
+  claims: Claim[];
+  genealogy: Genealogy;
+}
+
+/**
+ * Factoids, claims and the genealogy from the model's output. Ids come from `newId`; cited ids
+ * that are not in the evidence pack are dropped; every model claim is `inferred` (no verifier
+ * has judged it); a link is `sourced` only when all it cites is in the pack.
+ */
+export function composeFromOutput(
+  output: ComposerOutputType,
+  spotify: SpotifyData,
+  evidence: readonly Evidence[],
+  newId: () => string,
+): Composed {
+  const known = new Set(evidence.map((item) => item.id));
+  const cited = (ids: readonly string[]) => ids.filter((id) => known.has(id));
+  const modelClaim = (fields: Pick<Claim, "text" | "about" | "evidenceIds">): Claim => ({
+    id: newId(),
+    ...fields,
+    kind: "inferred",
+    origin: "model",
+    verdict: null,
+    verdictReason: null,
+    numericCheck: "n/a",
   });
 
-  console.log("🎼 [Composer] Synthesizing data for:", state.spotifyData.title);
+  const claims: Claim[] = output.claims.map((claim) => ({
+    ...modelClaim({ text: claim.text, about: claim.about, evidenceIds: cited(claim.evidenceIds) }),
+    ...(claim.field ? { field: claim.field } : {}),
+  }));
 
-  const prompt = formatComposerPrompt(state.spotifyData, state.audioFeatures, state.researchData);
-
-  // Use FLATTENED schema to avoid Gemini nesting depth limits
-  // Then transform back to full TrackData structure (with retry on transient failures)
-  const result = await withRetry(
-    async () => {
-      const r = await generateStructuredOutput({
-        prompt,
-        schema: FlatTrackDataSchema,
-        systemPrompt: COMPOSER_SYSTEM_PROMPT,
-        useGoogleSearch: true, // Enable grounding for real-time data
-        useFallbackOnQuota: true, // Auto-fallback through model chain on quota errors
-        tier: "pro",
-      });
-      if (!r.data && r.error && isTransient(r.error)) {
-        throw new TransientError(`Gemini: ${r.error}`);
-      }
-      return r;
-    },
-    { maxAttempts: 2, initialInterval: 2000 },
-  );
-
-  if (result.data) {
-    // Transform flat LLM output to full nested TrackData. Measured audio fields (bpm, key,
-    // energy, ...) and keyMoments come from the audio measurement, never from the model.
-    let trackData = transformFlatToTrackData(result.data, state.audioFeatures);
-
-    // Track metadata is known from Spotify; keep it even if the model output differs.
-    const spotify = state.spotifyData;
-    trackData = {
-      ...trackData,
-      id: spotify.id,
-      title: spotify.title,
-      artist: spotify.artist,
-      album: spotify.album,
-      coverUrl: spotify.coverUrl || trackData.coverUrl,
-      spotifyUrl: spotify.spotifyUrl || trackData.spotifyUrl,
-      explicit: spotify.explicit ?? trackData.explicit,
-      releaseYear: spotify.releaseDate?.split("-")[0] || trackData.releaseYear,
-      durationSeconds: spotify.durationMs
-        ? Math.round(spotify.durationMs / 1000)
-        : trackData.durationSeconds,
+  const factoids: Factoid[] = output.factoids.map((card) => {
+    const claim: Claim = {
+      ...modelClaim({
+        text: card.text,
+        about: FACTOID_ABOUT[card.type],
+        evidenceIds: cited(card.evidenceIds),
+      }),
+      factoid: { title: card.title, type: card.type, entities: card.entities },
     };
+    claims.push(claim);
+    const entities = card.entities.map((entity) => ({
+      id: newId(),
+      text: entity.text,
+      type: entity.type,
+      searchQuery: entity.text,
+    }));
+    return {
+      id: newId(),
+      title: card.title,
+      content: card.text,
+      type: card.type,
+      ...(entities.length > 0 ? { entities } : {}),
+      claimId: claim.id,
+    };
+  });
 
-    // Pass through Spotify preview URL for audio playback in Player
-    if (spotify.previewUrl) {
-      trackData = { ...trackData, previewUrl: spotify.previewUrl };
+  // The analysed track is always the node "current", labelled from Spotify.
+  const currentId = output.genealogyNodes.find((node) => node.role === "current")?.id;
+  const nodeId = (id: string) => (id === currentId ? "current" : id);
+  const nodes: GenealogyNode[] = [
+    {
+      id: "current",
+      group: ROLE_GROUP.current,
+      label: spotify.title,
+      size: ROLE_SIZE.current,
+      trackTitle: spotify.title,
+      trackArtist: spotify.artist,
+    },
+    ...output.genealogyNodes
+      .filter((node) => node.role !== "current")
+      .map((node) => ({
+        id: node.id,
+        group: ROLE_GROUP[node.role],
+        label: node.label,
+        size: ROLE_SIZE[node.role],
+        ...(node.trackTitle ? { trackTitle: node.trackTitle } : {}),
+        ...(node.trackArtist ? { trackArtist: node.trackArtist } : {}),
+      })),
+  ];
+  const links: GenealogyLink[] = output.genealogyLinks.map((link) => {
+    const evidenceIds = cited(link.evidenceIds);
+    const sourced = evidenceIds.length > 0 && evidenceIds.length === link.evidenceIds.length;
+    const type = sourced || !DOCUMENTED_RELATIONS.has(link.type) ? link.type : "influence";
+    return {
+      source: nodeId(link.source),
+      target: nodeId(link.target),
+      value: LINK_VALUE[type],
+      type,
+      kind: sourced ? "sourced" : "inferred",
+      origin: "model",
+      evidenceIds,
+    };
+  });
+  return { factoids, claims, genealogy: { nodes, links } };
+}
+
+/**
+ * Album artwork and previews for the genealogy nodes. The enricher's answer is used for
+ * artwork only: nodes, labels and links stay as composed.
+ */
+async function withArtwork(genealogy: Genealogy, coverUrl: string): Promise<Genealogy> {
+  try {
+    const enriched = await enrichGenealogyWithArtwork(genealogy, coverUrl);
+    const byId = new Map(enriched.nodes.map((node) => [node.id, node]));
+    return {
+      nodes: genealogy.nodes.map((node) => {
+        const found = byId.get(node.id);
+        if (!found) return node;
+        return {
+          ...node,
+          ...(found.img ? { img: found.img } : {}),
+          ...(found.previewUrl ? { previewUrl: found.previewUrl } : {}),
+          ...(found.spotifyId ? { spotifyId: found.spotifyId } : {}),
+        };
+      }),
+      links: genealogy.links,
+    };
+  } catch (error) {
+    console.warn("⚠️ [Composer] Could not enrich genealogy:", error);
+    return genealogy;
+  }
+}
+
+/** The fields every result takes from Spotify, the measurement and the evidence state. */
+function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
+  return {
+    id: spotify.id,
+    title: spotify.title,
+    artist: spotify.artist,
+    album: spotify.album,
+    coverUrl: spotify.coverUrl,
+    ...(spotify.spotifyUrl ? { spotifyUrl: spotify.spotifyUrl } : {}),
+    ...(spotify.previewUrl ? { previewUrl: spotify.previewUrl } : {}),
+    ...(spotify.releaseDate?.split("-")[0]
+      ? { releaseYear: spotify.releaseDate.split("-")[0] }
+      : {}),
+    ...(typeof spotify.explicit === "boolean" ? { explicit: spotify.explicit } : {}),
+    // From Spotify only, never from a model; missing when Spotify gave none.
+    ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
+    ...measuredAudioFields(state.audioFeatures),
+    ...(state.isrc ? { isrc: state.isrc } : {}),
+    ...(state.preview ? { preview: state.preview } : {}),
+    evidence: state.evidence,
+  };
+}
+
+/**
+ * The state with the evidence-model channels present: a state written before they existed (or
+ * a node called outside the graph) reads them as empty.
+ */
+function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
+  return {
+    ...state,
+    evidence: state.evidence ?? [],
+    claims: state.claims ?? [],
+    usage: state.usage ?? [],
+    sourceErrors: state.sourceErrors ?? [],
+    isrc: state.isrc ?? null,
+    preview: state.preview ?? null,
+  };
+}
+
+// =============================================================================
+// The node
+// =============================================================================
+
+export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) {
+  return async function composerNode(
+    input: SonicAgentStateType,
+    config: LangGraphRunnableConfig,
+  ): Promise<Partial<SonicAgentStateType>> {
+    const state = withChannelDefaults(input);
+    const spotify = state.spotifyData;
+    if (!spotify) {
+      return {
+        error: "No Spotify data to compose",
+        statusMessages: ["❌ Cannot compose - missing track data"],
+      };
     }
 
-    console.log(
-      `✅ [Composer] Generated via ${result.model}${result.groundingUsed ? " + Google Search" : ""}`,
-    );
-
-    // Enrich genealogy with real Spotify album artwork
-    writer?.({
-      type: "status",
-      code: "GRAPH-ENRICH",
-      message: "Cross-referencing visual artifacts from Spotify...",
-      node: "composer",
-      timestamp: new Date().toISOString(),
+    const signal = config.signal;
+    const runId = runIdOf(config, runtime.newId);
+    const writer = config.writer;
+    const status = (code: string, message: string) =>
+      writer?.({
+        type: "status",
+        code,
+        message,
+        node: "composer",
+        timestamp: timestampOf(runtime),
+      });
+    const runInfo = (
+      fallback: boolean,
+      calls: LlmCallRecord[],
+      errors: SourceError[],
+    ): RunInfo => ({
+      id: runId,
+      mode: "live",
+      recordedAt: null,
+      commit: null,
+      analyzerVersion: null,
+      fallback,
+      usage: runUsage([...state.usage, ...calls], runtime.llm.callsForRun(runId)),
+      sourceErrors: [...state.sourceErrors, ...errors],
     });
 
+    status("GEMINI-CONNECT", "Composing the liner notes...");
+    console.log("🎼 [Composer] Synthesizing data for:", spotify.title);
+
+    const { recording, errors: sourceErrors } = await musicBrainzRecording(
+      spotify,
+      state.isrc,
+      signal,
+    );
+    const messages = composerMessages({
+      track: promptTrack(spotify),
+      recording,
+      audio: state.audioFeatures,
+      evidence: state.evidence,
+      research: state.researchData,
+    });
+
+    let composed: Composed;
+    let call: LlmCallRecord;
     try {
-      const enrichedGenealogy = await enrichGenealogyWithArtwork(
-        trackData.genealogy,
-        state.spotifyData?.coverUrl || trackData.coverUrl,
+      const result = await runtime.llm.invoke(
+        COMPOSER_CALL_SITE,
+        "main",
+        messages,
+        ComposerOutput,
+        {
+          purpose: runtime.purpose,
+          runId,
+          maxOutputTokens: COMPOSER_MAX_OUTPUT_TOKENS,
+          signal,
+        },
       );
-      trackData = { ...trackData, genealogy: enrichedGenealogy };
-      console.log("✅ [Composer] Enriched genealogy with Spotify artwork");
-    } catch (enrichError) {
-      console.warn("⚠️ [Composer] Could not enrich genealogy:", enrichError);
+      const issues = composerOutputIssues(result.output);
+      if (issues.length > 0) {
+        throw new LlmError(
+          "invalid_output",
+          `${COMPOSER_CALL_SITE}: the answer breaks the ComposerOutput rules (${issues.slice(0, 3).join("; ")})`,
+        );
+      }
+      call = answeredCall(COMPOSER_CALL_SITE, result);
+      composed = composeFromOutput(result.output, spotify, state.evidence, runtime.newId);
+    } catch (error) {
+      if (signal?.aborted || isAbortError(error)) throw error;
+      return composeFallback(error);
     }
+
+    status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
+    const trackData: TrackData = {
+      ...baseFields(state, spotify),
+      // A generic structure, not an analysis of this track
+      segments: createDefaultSegments(spotify.durationMs),
+      segmentsSource: "template",
+      samples: [],
+      factoids: composed.factoids,
+      genealogy: await withArtwork(composed.genealogy, spotify.coverUrl),
+      claims: composed.claims,
+      run: runInfo(false, [call], sourceErrors),
+    };
 
     writer?.({ type: "complete", data: trackData });
 
-    // Cache successful result in long-term memory (unless the audio may be measurable later)
+    // Cache the result in long-term memory (unless the audio may be measurable later). The
+    // run information belongs to this run, not to a later one served from the cache.
+    const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
     if (store && !transientAudio) {
       const normalizedQuery = state.songQuery.toLowerCase().trim();
+      const { run: _run, ...cached } = trackData;
       try {
         await store.put(["tracks"], normalizedQuery, {
-          trackData,
-          timestamp: Date.now(),
+          trackData: cached,
+          timestamp: runtime.now().getTime(),
         });
-        console.log("📦 [Composer] Cached result for:", normalizedQuery);
       } catch (e) {
         console.warn("⚠️ [Composer] Store write error:", e);
       }
@@ -169,60 +486,48 @@ export async function composerNode(
 
     return {
       trackData,
+      claims: composed.claims,
+      usage: [call],
+      sourceErrors,
       statusMessages: ["🎼 Analysis complete!"],
     };
-  }
 
-  // Fallback: Build from state data if LLM fails
-  const modelError = modelErrorCategory(result.error);
-  const modelErrorText = MODEL_REASON_TEXT[modelError];
-  console.log("⚠️ [Composer] LLM failed, using fallback data:", modelErrorReason(result.error));
-  console.log(
-    "📊 [Composer] Error details:",
-    JSON.stringify(
-      {
-        error: result.error,
-        model: result.model,
-        hasResearchData: {
-          samples: state.researchData?.samples?.length || 0,
-          productionTrivia: state.researchData?.productionTrivia?.length || 0,
-        },
-      },
-      null,
-      2,
-    ),
-  );
+    /** The honest fallback: measured and sourced data only, no model text. */
+    async function composeFallback(error: unknown): Promise<Partial<SonicAgentStateType>> {
+      const reason = modelErrorCategory(error);
+      const failed = failedCall(COMPOSER_CALL_SITE, "main", error);
+      console.warn(
+        `⚠️ [Composer] Model unavailable (${failed.status}); building the result from source data:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      status(
+        "GEMINI-ERROR",
+        `Model unavailable (${MODEL_REASON_TEXT[reason]}); building the result from source data only`,
+      );
 
-  writer?.({
-    type: "status",
-    code: "GEMINI-ERROR",
-    message: `Model unavailable (${modelErrorText}); building the result from source data only`,
-    node: "composer",
-    timestamp: new Date().toISOString(),
-  });
-
-  let fallbackData = {
-    ...(await createFallbackTrackData(state)),
-    modelUnavailable: true,
-    modelUnavailableReason: modelError,
-  };
-
-  // Still try to enrich artwork for fallback
-  try {
-    const enrichedGenealogy = await enrichGenealogyWithArtwork(
-      fallbackData.genealogy,
-      state.spotifyData?.coverUrl || fallbackData.coverUrl,
-    );
-    fallbackData = { ...fallbackData, genealogy: enrichedGenealogy };
-  } catch {
-    // Ignore enrichment errors in fallback
-  }
-
-  writer?.({ type: "complete", data: fallbackData });
-  console.log("⚠️ [Composer] Generated fallback track data without the model");
-
-  return {
-    trackData: fallbackData,
-    statusMessages: [`⚠️ Model unavailable (${modelErrorText}); showing source data only`],
+      const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
+      const trackData: TrackData = {
+        ...fallback,
+        ...baseFields(state, spotify!),
+        genealogy: await withArtwork(fallback.genealogy, spotify!.coverUrl),
+        claims: [],
+        modelUnavailable: true,
+        modelUnavailableReason: reason,
+        run: runInfo(true, [failed], sourceErrors),
+      };
+      writer?.({ type: "complete", data: trackData });
+      return {
+        trackData,
+        claims: [],
+        usage: [failed],
+        sourceErrors,
+        statusMessages: [
+          `⚠️ Model unavailable (${MODEL_REASON_TEXT[reason]}); showing source data only`,
+        ],
+      };
+    }
   };
 }
+
+/** The composer with the default runtime (the shared provider layer, the system clock). */
+export const composerNode = createComposerNode();

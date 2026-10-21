@@ -10,7 +10,7 @@
 import { measuredAudioFields, type TrackData } from "./schema.js";
 import {
   createDefaultSegments,
-  generateId,
+  generateId as newRandomId,
   type AudioFeatures,
   type SonicAgentStateType,
   type Factoid,
@@ -108,11 +108,20 @@ function describeRelease(spotify: SpotifyData): string | null {
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
+export interface FallbackOptions {
+  /** Ids for factoids and entities (default: random UUIDs). */
+  newId?: () => string;
+}
+
 /**
  * Build TrackData from state when the main composer LLM call fails.
  * Extracts factoids from research data; adds metadata factoids only for known values.
  */
-export async function createFallbackTrackData(state: SonicAgentStateType): Promise<TrackData> {
+export async function createFallbackTrackData(
+  state: SonicAgentStateType,
+  options: FallbackOptions = {},
+): Promise<TrackData> {
+  const generateId = options.newId ?? newRandomId;
   const spotify = state.spotifyData!;
   const audio = state.audioFeatures ?? null;
 
@@ -264,10 +273,12 @@ export async function createFallbackTrackData(state: SonicAgentStateType): Promi
     coverUrl: spotify.coverUrl,
     spotifyUrl: spotify.spotifyUrl,
     releaseYear,
-    explicit: spotify.explicit,
+    // Unknown (null) is left out rather than shown as "not explicit"
+    ...(typeof spotify.explicit === "boolean" ? { explicit: spotify.explicit } : {}),
     // Measured audio values or null, with the reason when missing
     ...measuredAudioFields(audio),
-    durationSeconds: spotify.durationMs ? Math.round(spotify.durationMs / 1000) : undefined,
+    // From Spotify only; missing when Spotify gave none
+    ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     // A generic structure, not an analysis of this track
     segments: createDefaultSegments(spotify.durationMs),
     segmentsSource: "template",

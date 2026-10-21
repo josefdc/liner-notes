@@ -91,9 +91,9 @@ export async function clarificationNode(
       statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
     };
   } catch {
-    // Fallback: minimal SpotifyData from the candidate. The duration is unknown here, so it is
-    // left empty rather than guessed: 0 means unknown, though the composer still falls back to
-    // the model's value until #22.
+    // Fallback: minimal SpotifyData from the candidate. What the candidate does not carry is
+    // left unknown rather than guessed: the duration (0, shown as missing) and whether the
+    // track is explicit (null).
     return {
       spotifyData: {
         id: selected.id,
@@ -106,7 +106,7 @@ export async function clarificationNode(
         popularity: selected.popularity,
         duration: "",
         durationMs: 0,
-        explicit: false,
+        explicit: null,
         spotifyUrl: `https://open.spotify.com/track/${selected.id}`,
         previewUrl: null,
       },

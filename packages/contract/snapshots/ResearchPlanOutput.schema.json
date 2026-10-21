@@ -1,0 +1,71 @@
+{
+  "input": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ResearchPlanOutput.schema.json",
+    "type": "object",
+    "properties": {
+      "nextAction": {
+        "type": "string",
+        "enum": [
+          "search_samples",
+          "search_production",
+          "search_general",
+          "search_musicbrainz",
+          "search_artist_collaborators",
+          "search_lastfm_tags",
+          "search_lastfm_similar_tracks",
+          "search_lastfm_similar_artists",
+          "search_lastfm_artist_info",
+          "search_listenbrainz_similar",
+          "done"
+        ]
+      },
+      "query": {
+        "description": "A specific web search query for search_samples, search_production and search_general; null for the other steps",
+        "type": ["string", "null"]
+      },
+      "reasoning": {
+        "type": "string",
+        "description": "One or two sentences: what is missing, or which lead this follows"
+      }
+    },
+    "required": ["nextAction", "query", "reasoning"],
+    "additionalProperties": false
+  },
+  "output": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ResearchPlanOutput.schema.json",
+    "type": "object",
+    "properties": {
+      "nextAction": {
+        "type": "string",
+        "enum": [
+          "search_samples",
+          "search_production",
+          "search_general",
+          "search_musicbrainz",
+          "search_artist_collaborators",
+          "search_lastfm_tags",
+          "search_lastfm_similar_tracks",
+          "search_lastfm_similar_artists",
+          "search_lastfm_artist_info",
+          "search_listenbrainz_similar",
+          "done"
+        ]
+      },
+      "query": {
+        "description": "A specific web search query for search_samples, search_production and search_general; null for the other steps",
+        "type": ["string", "null"]
+      },
+      "reasoning": {
+        "type": "string",
+        "description": "One or two sentences: what is missing, or which lead this follows"
+      }
+    },
+    "required": ["nextAction", "query", "reasoning"],
+    "additionalProperties": false
+  },
+  "unknownKeys": { "$": "strict" },
+  "refinements": [],
+  "tolerant": []
+}

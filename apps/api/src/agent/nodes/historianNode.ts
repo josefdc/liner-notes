@@ -12,8 +12,9 @@ import {
   getLastfmArtistTags,
   getLastfmSimilarTracks,
 } from "../../sources/lastfm.js";
-import { getCachedResearcherSubgraph } from "../researcherSubgraph.js";
-import { withRetry } from "../errors.js";
+import { getCachedResearcherSubgraph, type ResearcherStateType } from "../researcherSubgraph.js";
+import { isAbortError, withRetry } from "../errors.js";
+import { type AgentRuntime, defaultAgentRuntime, runIdOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
 import type { SonicAgentStateType, ResearchData } from "../state.js";
 
@@ -29,6 +30,7 @@ export function withoutSongMeaning(research: ResearchData): ResearchData {
 export async function historianNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
+  runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
     return { statusMessages: ["⚠️ Skipping research - no track data"] };
@@ -68,6 +70,8 @@ export async function historianNode(
   });
 
   const { title, artist } = state.spotifyData;
+  // Every search stops when the run is cancelled.
+  const options = { signal: config.signal };
   console.log("📚 [Historian] Deep dive research for:", title, "by", artist);
 
   // Pre-fetch Last.fm tags and similar tracks in parallel (outside the researcher loop)
@@ -76,9 +80,9 @@ export async function historianNode(
   try {
     console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
     const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
-      getLastfmTrackTags.invoke({ title, artist }),
-      getLastfmArtistTags.invoke({ artist }),
-      getLastfmSimilarTracks.invoke({ title, artist }),
+      getLastfmTrackTags.invoke({ title, artist }, options),
+      getLastfmArtistTags.invoke({ artist }, options),
+      getLastfmSimilarTracks.invoke({ title, artist }, options),
     ]);
 
     // Process track tags
@@ -141,19 +145,22 @@ export async function historianNode(
 
   try {
     // Use cached researcher subgraph singleton with streaming
-    const researcherGraph = getCachedResearcherSubgraph();
+    const researcherGraph = getCachedResearcherSubgraph(runtime);
 
+    // The run's abort signal stops the planner's model calls and the searches.
     const stream = await researcherGraph.stream(
       {
         spotifyData: state.spotifyData,
         researchData: state.researchData,
+        runId: runIdOf(config, runtime.newId),
       },
       {
         streamMode: ["values", "custom"],
+        signal: config.signal,
       },
     );
 
-    let finalState: any = {};
+    let finalState: Partial<ResearcherStateType> = {};
     for await (const event of stream) {
       const [mode, chunk] = event as unknown as [string, unknown];
       if (mode === "custom") {
@@ -161,7 +168,7 @@ export async function historianNode(
         writer?.(chunk);
       } else if (mode === "values") {
         // Last values chunk = final accumulated state
-        finalState = chunk;
+        finalState = chunk as Partial<ResearcherStateType>;
       }
     }
 
@@ -178,15 +185,13 @@ export async function historianNode(
     });
 
     // Merge pre-fetched Last.fm data with subgraph research results
+    const research = finalState.researchData ?? state.researchData;
     const mergedResearch: ResearchData = {
-      ...finalState.researchData,
-      lastfmTags: [
-        ...(prefetchData.lastfmTags || []),
-        ...(finalState.researchData?.lastfmTags || []),
-      ],
+      ...research,
+      lastfmTags: [...(prefetchData.lastfmTags || []), ...(research.lastfmTags || [])],
       lastfmSimilarTracks: [
         ...(prefetchData.lastfmSimilarTracks || []),
-        ...(finalState.researchData?.lastfmSimilarTracks || []),
+        ...(research.lastfmSimilarTracks || []),
       ],
     };
 
@@ -199,9 +204,13 @@ export async function historianNode(
 
     return {
       researchData: mergedResearch,
+      usage: finalState.usage ?? [],
+      sourceErrors: finalState.sourceErrors ?? [],
       statusMessages: finalState.statusMessages || [],
     };
   } catch (error) {
+    // A cancelled run stops here: no fallback searches, no cache write.
+    if (config.signal?.aborted || isAbortError(error)) throw error;
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("❌ [Historian] Deep dive error:", message);
 
@@ -224,9 +233,11 @@ export async function historianNode(
     try {
       // Enhanced research: MusicBrainz for structured data, plus web search
       const [samplesResult, triviaResult, musicBrainzResult] = await Promise.allSettled([
-        withRetry(() => searchSamples.invoke({ songTitle: title, artistName: artist })),
-        withRetry(() => searchProductionHistory.invoke({ songTitle: title, artistName: artist })),
-        withRetry(() => getMusicBrainzRelations.invoke({ title, artist })),
+        withRetry(() => searchSamples.invoke({ songTitle: title, artistName: artist }, options)),
+        withRetry(() =>
+          searchProductionHistory.invoke({ songTitle: title, artistName: artist }, options),
+        ),
+        withRetry(() => getMusicBrainzRelations.invoke({ title, artist }, options)),
       ]);
 
       // Process web search results

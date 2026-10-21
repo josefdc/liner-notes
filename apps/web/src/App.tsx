@@ -26,24 +26,24 @@ const DashboardSkeleton = (
     {/* Header skeleton */}
     <div className="flex justify-between items-center">
       <div className="space-y-2">
-        <div className={`h-7 w-48 ${shimmerClass} rounded-[--radius-sm]`} />
-        <div className={`h-3 w-64 ${shimmerClass} rounded-[--radius-sm]`} />
+        <div className={`h-7 w-48 ${shimmerClass} rounded-sm`} />
+        <div className={`h-3 w-64 ${shimmerClass} rounded-sm`} />
       </div>
     </div>
     {/* Hero card skeleton */}
-    <div className={`h-48 ${shimmerClass} border border-white/10 rounded-[--radius-lg]`} />
+    <div className={`h-48 ${shimmerClass} border border-white/10 rounded-lg`} />
     {/* Grid skeleton */}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
       <div
-        className={`lg:col-span-1 ${shimmerClass} border border-white/10 rounded-[--radius-lg] min-h-[300px]`}
+        className={`lg:col-span-1 ${shimmerClass} border border-white/10 rounded-lg min-h-[300px]`}
       />
       <div className="lg:col-span-2 flex flex-col gap-6">
-        <div className={`h-5 w-40 ${shimmerClass} rounded-[--radius-sm]`} />
+        <div className={`h-5 w-40 ${shimmerClass} rounded-sm`} />
         <div className="flex gap-4">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className={`min-w-[280px] h-80 ${shimmerClass} border border-white/10 rounded-[--radius-lg]`}
+              className={`min-w-[280px] h-80 ${shimmerClass} border border-white/10 rounded-lg`}
             />
           ))}
         </div>
@@ -55,13 +55,13 @@ const DashboardSkeleton = (
 const PlayerSkeleton = (
   <div className="h-full w-full flex flex-col bg-void animate-fade-in">
     <div className="px-6 py-4 border-b border-white/5">
-      <div className={`h-4 w-32 ${shimmerClass} rounded-[--radius-sm]`} />
+      <div className={`h-4 w-32 ${shimmerClass} rounded-sm`} />
     </div>
     <div className="flex-1 flex items-center justify-center">
       <div className="text-center space-y-6">
-        <div className={`w-64 h-64 mx-auto ${shimmerClass} rounded-[--radius-md]`} />
-        <div className={`h-6 w-48 mx-auto ${shimmerClass} rounded-[--radius-sm]`} />
-        <div className={`h-4 w-32 mx-auto ${shimmerClass} rounded-[--radius-sm]`} />
+        <div className={`w-64 h-64 mx-auto ${shimmerClass} rounded-md`} />
+        <div className={`h-6 w-48 mx-auto ${shimmerClass} rounded-sm`} />
+        <div className={`h-4 w-32 mx-auto ${shimmerClass} rounded-sm`} />
       </div>
     </div>
   </div>

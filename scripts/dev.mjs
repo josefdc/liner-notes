@@ -19,6 +19,8 @@ const services = {
     workspace: "apps/web",
     // strictPort: never drift onto the next port (the API's) when the web port is taken
     args: ["--", "--port", WEB_PORT ?? "3000", "--strictPort"],
+    // The web dev server proxies /api to the API on API_PORT (apps/web/vite.config.ts), which
+    // it reads from the inherited environment.
     env: {},
   },
   api: {
@@ -48,12 +50,6 @@ for (const name of selected) {
     );
     process.exit(1);
   }
-}
-
-if (API_PORT && API_PORT !== "3001" && selected.includes("web")) {
-  console.warn(
-    "[dev] note: the web app still calls the API on port 3001; API_PORT moves only the API",
-  );
 }
 
 const children = new Map();

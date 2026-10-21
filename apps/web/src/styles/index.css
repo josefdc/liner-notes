@@ -136,8 +136,6 @@
   /* Animations */
   --animate-scan-vertical: scan-vertical 1.5s ease-in-out infinite;
   --animate-scan-horizontal: scan-horizontal 2s ease-in-out infinite;
-  --animate-scanline: scanline 8s linear infinite;
-  --animate-blink: blink 0.8s step-end infinite;
   --animate-spin-slow: spin-slow 3s linear infinite;
   --animate-fade-in-right: fade-in-right 0.3s ease-out forwards;
   --animate-fade-in-up: fade-in-up 0.4s ease-out forwards;
@@ -151,7 +149,6 @@
   --animate-glow-breathe: glow-breathe 3s ease-in-out infinite;
   --animate-scale-in: scale-in 200ms var(--ease-out-expo) forwards;
   --animate-slide-up-fade: slide-up-fade 400ms var(--ease-out-expo) forwards;
-  --animate-fade-out: fade-out 150ms ease-out forwards;
 
   /* Keyframes */
   @keyframes scan-vertical {
@@ -169,25 +166,6 @@
     }
     100% {
       left: 100%;
-    }
-  }
-
-  @keyframes scanline {
-    0% {
-      transform: translateY(-100%);
-    }
-    100% {
-      transform: translateY(100vh);
-    }
-  }
-
-  @keyframes blink {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0;
     }
   }
 
@@ -321,15 +299,6 @@
     }
   }
 
-  @keyframes fade-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0;
-    }
-  }
-
   @keyframes glow-breathe-white {
     0%,
     100% {
@@ -337,19 +306,6 @@
     }
     50% {
       box-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
-    }
-  }
-
-  @keyframes lock-wiggle {
-    0%,
-    100% {
-      transform: rotate(0deg);
-    }
-    25% {
-      transform: rotate(-5deg);
-    }
-    75% {
-      transform: rotate(5deg);
     }
   }
 
@@ -485,13 +441,6 @@
   }
   .stagger-8 {
     animation-delay: 400ms;
-  }
-
-  /* Timeline marker glow on hover */
-  .marker-glow:hover {
-    filter: drop-shadow(0 0 4px currentColor);
-    transform: scale(1.2);
-    transition: all var(--duration-fast) var(--ease-out-expo);
   }
 
   /* Skip rendering for off-screen log entries */

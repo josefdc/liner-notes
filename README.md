@@ -136,8 +136,12 @@ Override the ports with `WEB_PORT`, `API_PORT` and `AUDIO_PORT`, or pick service
 `DEV_SERVICES=web,api`. Each service can also run alone: `npm run dev -w apps/web`,
 `npm run dev -w apps/api`, `npm run dev -w services/audio`.
 
-The web app always calls the API on port 3001, so `API_PORT` is only useful when the web app is
-not needed. The audio service needs [uv](https://docs.astral.sh/uv/); without it, run
+The web app calls the API at `/api` on its own origin, and the Vite dev server forwards those
+requests to the API on `API_PORT` (default 3001). A build can point the web app elsewhere with
+`VITE_API_URL`, the API's root URL including `/api` (see `apps/web/.env.example`); the web
+image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API.
+
+The audio service needs [uv](https://docs.astral.sh/uv/); without it, run
 `DEV_SERVICES=web,api npm run dev`.
 
 Then open http://localhost:3000

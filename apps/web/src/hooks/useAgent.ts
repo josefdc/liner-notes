@@ -333,7 +333,7 @@ export function useAgent(): UseAgentReturn {
       addLog(`🔍 Searching for "${query}"...`);
 
       try {
-        const url = `${API_BASE_URL}/api/analyze/stream?query=${encodeURIComponent(query)}`;
+        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}`;
         openRunStream(url, run, () =>
           setState((prev) =>
             prev.status === 'connecting' ? { ...prev, status: 'searching' } : prev,
@@ -375,7 +375,7 @@ export function useAgent(): UseAgentReturn {
       }));
 
       try {
-        const url = `${API_BASE_URL}/api/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}`;
+        const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}`;
         openRunStream(url, run);
       } catch (error) {
         fail(run, error instanceof Error ? error.message : 'Selection failed');
@@ -418,7 +418,7 @@ export function useAgent(): UseAgentReturn {
           existingIds: existingIds.join(','),
         });
 
-        const url = `${API_BASE_URL}/api/factoids/decrypt/stream?${params}`;
+        const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;
         const eventSource = new EventSource(url);
         let active = true;
 

@@ -94,9 +94,9 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
   const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
 
   return (
-    <div className="relative bg-surface border border-border rounded-[--radius-md] overflow-hidden group hover:border-cyber/30 transition-colors ease-[--ease-out-expo]">
+    <div className="relative bg-surface border border-border rounded-md overflow-hidden group hover:border-cyber/30 transition-colors ease-out-expo">
       {/* Glow effect on hover */}
-      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/10 to-transparent rounded-[--radius-md] blur opacity-0 group-hover:opacity-30 transition duration-[--duration-slow] pointer-events-none"></div>
+      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/10 to-transparent rounded-md blur opacity-0 group-hover:opacity-30 transition duration-(--duration-slow) pointer-events-none"></div>
 
       {/* Collapsible Header - Always visible */}
       <button
@@ -109,10 +109,10 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             ? 'Collapse activity log'
             : `Expand activity log${lastLog ? `, last event: ${lastLog.message}` : ''}`
         }
-        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-[--duration-fast] cursor-pointer focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none"
+        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-[--tracking-widest] flex items-center gap-2 flex-shrink-0">
+          <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
             <Activity size={12} className="text-cyber" />
             Agent Activity Log
             <span className="text-[10px] text-text-muted">({logs.length})</span>
@@ -139,7 +139,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           )}
           <ChevronDown
             size={14}
-            className={`text-text-tertiary transition-transform duration-[--duration-normal] ${isExpanded ? 'rotate-180' : ''}`}
+            className={`text-text-tertiary transition-transform duration-(--duration-normal) ${isExpanded ? 'rotate-180' : ''}`}
           />
         </div>
       </button>
@@ -149,7 +149,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
         id="activity-log-content"
         role="region"
         aria-label="Agent activity log entries"
-        className={`relative z-10 overflow-hidden transition-all duration-[--duration-normal] ease-in-out ${isExpanded ? 'max-h-[280px]' : 'max-h-0'}`}
+        className={`relative z-10 overflow-hidden transition-all duration-(--duration-normal) ease-in-out ${isExpanded ? 'max-h-[280px]' : 'max-h-0'}`}
       >
         <div className="border-t border-white/5">
           {/* Log List */}
@@ -176,7 +176,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                   {/* Timeline Dot */}
                   <div
                     className={`
-                    absolute left-[9px] top-1 w-2 h-2 rounded-full border-2 transition-all duration-[--duration-normal] z-10 box-border
+                    absolute left-[9px] top-1 w-2 h-2 rounded-full border-2 transition-all duration-(--duration-normal) z-10 box-border
                     ${
                       isFirst && !isComplete
                         ? 'bg-cyber border-cyber shadow-[0_0_6px_#00F0FF] animate-pulse ring-2 ring-cyber/20'
@@ -188,7 +188,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                   {/* Card Content */}
                   <div
                     className={`
-                    relative p-2 rounded-[--radius-md] border transition-all duration-[--duration-normal]
+                    relative p-2 rounded-md border transition-all duration-(--duration-normal)
                     ${
                       isFirst && !isComplete
                         ? `${colors.bg} ${colors.border}`

@@ -34,12 +34,12 @@ const glowStyles: Record<BadgeVariant, string> = {
 };
 
 const sizeStyles: Record<BadgeSize, string> = {
-  sm: 'px-2.5 py-1 text-[--text-chrome] gap-1',
+  sm: 'px-2.5 py-1 text-chrome gap-1',
   md: 'px-3 py-1.5 text-xs gap-1.5',
 };
 
 const baseStyles =
-  'inline-flex items-center rounded-[--radius-sm] border font-mono uppercase tracking-[--tracking-widest] transition-all duration-[--duration-fast]';
+  'inline-flex items-center rounded-sm border font-mono uppercase tracking-widest transition-all duration-(--duration-fast)';
 
 export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
   (

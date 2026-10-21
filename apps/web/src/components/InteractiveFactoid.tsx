@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Info, ChevronRight, Mic2, Music, Users, Sparkles, Link2 } from 'lucide-react';
+import { Info, ChevronRight, MicVocal, Music, Users, Sparkles, Link2 } from 'lucide-react';
 import type { Factoid, FactoidEntity } from '../types';
 
 interface InteractiveFactoidProps {
@@ -62,7 +62,7 @@ function getFactoidStyle(type: Factoid['type']): {
 } {
   switch (type) {
     case 'production':
-      return { icon: <Mic2 size={14} />, color: 'text-cyber', label: 'PRODUCTION' };
+      return { icon: <MicVocal size={14} />, color: 'text-cyber', label: 'PRODUCTION' };
     case 'credits':
       return { icon: <Users size={14} />, color: 'text-analog', label: 'CREDITS' };
     case 'sample':

@@ -9,7 +9,7 @@ import {
   Search,
   ChevronDown,
   Lock,
-  Unlock,
+  LockOpen,
 } from 'lucide-react';
 import { audioValues, displayableFactoids, normalizeTrack } from '../constants';
 import SmartTimeline from './SmartTimeline';
@@ -367,7 +367,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     </>
                   ) : (
                     <>
-                      <Unlock size={12} />[ DECRYPT MORE ]
+                      <LockOpen size={12} />[ DECRYPT MORE ]
                     </>
                   )}
                 </button>

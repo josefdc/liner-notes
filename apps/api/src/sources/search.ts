@@ -13,7 +13,6 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import dotenv from "dotenv";
 import {
   credential,
   describeError,
@@ -23,8 +22,6 @@ import {
   SourceError,
 } from "./http.js";
 import { keyRejected, notAnswered, toolFailure } from "./toolResult.js";
-
-dotenv.config();
 
 // =============================================================================
 // Configuration

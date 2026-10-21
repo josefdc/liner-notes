@@ -16,7 +16,6 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import dotenv from "dotenv";
 import {
   abortError,
   describeError,
@@ -26,8 +25,6 @@ import {
   SourceError,
 } from "./http.js";
 import { type NotAskedReason, notAnswered, toolFailure } from "./toolResult.js";
-
-dotenv.config();
 
 // =============================================================================
 // TypeScript Interfaces

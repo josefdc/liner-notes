@@ -16,11 +16,8 @@
  * - Rate limit handling
  */
 
-import dotenv from "dotenv";
 import type { Genealogy, GenealogyNode } from "./schema.js";
 import { getCache, type SpotifySearchResult } from "../store/cache.js";
-
-dotenv.config();
 
 // =============================================================================
 // Types

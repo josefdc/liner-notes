@@ -78,7 +78,8 @@ export function createShutdown({
     drain.unref();
 
     // Stops accepting connections and closes idle ones; the callback runs once every open
-    // connection has ended.
+    // connection has ended. On Node 26 a connection whose first request head has not been parsed
+    // yet counts as idle too, so it is closed here and not drained.
     server.close(() => {
       clearTimeout(forced);
       clearTimeout(drain);

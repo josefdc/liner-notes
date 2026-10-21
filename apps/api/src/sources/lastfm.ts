@@ -19,7 +19,6 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import dotenv from "dotenv";
 import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
 import { normalizeName } from "./musicbrainz.js";
 import {
@@ -30,8 +29,6 @@ import {
   type ToolFailure,
   toolFailure,
 } from "./toolResult.js";
-
-dotenv.config();
 
 // =============================================================================
 // Configuration

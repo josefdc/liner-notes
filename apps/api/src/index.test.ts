@@ -11,7 +11,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
-import { connect, createServer, type Server } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -135,8 +135,57 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   STORE_RETENTION_DAYS: "",
   RUN_RETENTION_DAYS: "",
   SOURCE_CASSETTE: "",
+  // No model call can be live or billed: no key, cassettes replayed, no spend log.
+  AZURE_OPENAI_API_KEY: "",
+  LLM_CASSETTE: "replay",
+  LLM_SPEND_LOG: "",
   ...extra,
 });
+
+const CONTINUE = "HTTP/1.1 100 Continue\r\n\r\n";
+
+/**
+ * Opens a POST whose body never completes, and resolves once the API has read the request head
+ * (it answers "100 Continue"). Until then the connection counts as idle: server.close() closes
+ * it at once (Node 26), and a shutdown signalled earlier would have nothing to drain.
+ * `received` is everything the API has sent on the connection; anything after the 100 (an early
+ * answer, such as a 429) means the request was not held.
+ */
+async function openRequest(port: number): Promise<{ socket: Socket; received: () => string }> {
+  const socket = connect(port, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => {
+    socket.once("connect", () => resolve());
+    socket.once("error", (error) => reject(new Error(`could not connect: ${error.message}`)));
+    socket.once("close", () => reject(new Error("the connection closed before it was open")));
+  });
+  socket.on("error", () => {});
+  let received = "";
+  socket.on("data", (chunk: Buffer) => {
+    received += chunk;
+  });
+  socket.write(
+    "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+      "Content-Type: application/json\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n",
+  );
+  const interim = await new Promise<string>((resolve) => {
+    const timer = setTimeout(() => resolve("no interim answer within 5 s"), 5_000);
+    const onData = () => {
+      if (!received.includes("\r\n\r\n")) return;
+      clearTimeout(timer);
+      socket.off("data", onData);
+      resolve(received);
+    };
+    socket.on("data", onData);
+    socket.once("close", () => {
+      clearTimeout(timer);
+      resolve(`the connection closed after ${JSON.stringify(received)}`);
+    });
+  });
+  expect(interim).toBe(CONTINUE);
+  socket.write("{");
+  expect(received).toBe(CONTINUE);
+  return { socket, received: () => received };
+}
 
 /** Starts the API on a free port with a scratch database and waits until it answers. */
 async function startApi(): Promise<{ api: Child; port: number; dbPath: string }> {
@@ -219,13 +268,7 @@ describe("the API process", () => {
 
     // A request still in progress (its body never completes) keeps a connection open, so the
     // shutdown has to drain.
-    const socket = connect(port, "127.0.0.1");
-    await new Promise((resolve) => socket.once("connect", resolve));
-    socket.on("error", () => {});
-    socket.write(
-      "POST /api/factoids/decrypt HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
-        "Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
-    );
+    const { socket, received } = await openRequest(port);
     const socketClosed = new Promise((resolve) => socket.once("close", resolve));
 
     // In development the signal arrives twice within milliseconds: the second one is sent as
@@ -241,6 +284,7 @@ describe("the API process", () => {
     // The open connection was given the drain (3 s) and closed well before the timeout (8 s).
     expect(Date.now() - signalledAt).toBeGreaterThanOrEqual(2900);
     expect(Date.now() - signalledAt).toBeLessThan(7000);
+    expect(received()).toBe(CONTINUE); // held until the drain closed it, never answered
 
     expect(api.output()).toContain("ignored as a duplicate");
     expect(api.output()).toContain("[Database] Connection closed.");
@@ -275,10 +319,12 @@ describe("an API process whose log reader has gone", () => {
       String(port),
       dbPath,
     ]);
-    expect(await launcher.exit).toBe(0);
+    const exitCode = await launcher.exit;
 
+    // An { error } line (the API did not start, or answered the open request) fails here, shown.
     const result = JSON.parse(launcher.output().trim().split("\n").pop() ?? "{}");
-    expect(result).toMatchObject({ code: 0, signal: null });
+    expect(result).toMatchObject({ code: 0, signal: null, afterContinue: "" });
+    expect(exitCode).toBe(0);
     expect(result.ms).toBeGreaterThanOrEqual(2900); // the open request was given the drain
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
   }, 60_000);

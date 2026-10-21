@@ -14,6 +14,11 @@
  * The API key is optional: SHS_API_KEY is sent as `X-API-Key` when set, and without it requests
  * are anonymous, with a lower rate limit.
  *
+ * The parser follows the payload of the published Python wrapper (arthurtofani/secondhandsongs:
+ * `uri`, `title`, `performer`, `isOriginal`, `versions`, `originals`, `covers`, `sampledBy`,
+ * `usesSamplesFrom`); the API's own documentation could not be read to confirm it, and the
+ * fixtures are synthetic in that shape. Any other shape is reported as an invalid answer.
+ *
  * @see https://secondhandsongs.com/page/API
  */
 
@@ -33,6 +38,7 @@ import {
   systemClock,
   type TrackRef,
   titlesMatch,
+  unexpectedShape,
 } from "./records.js";
 
 const SITE = "https://secondhandsongs.com";
@@ -66,6 +72,11 @@ interface ShsPerformance extends ShsPerformanceSummary {
 
 export interface ShsRelationship {
   kind: "cover-of" | "covered-by" | "samples" | "sampled-by";
+  /**
+   * "track": claimed for the track. "work": a fact about the song (its covers), not claimed for
+   * a recording that is not the song's original recording.
+   */
+  about: "track" | "work";
   title: string;
   performer: string;
   /** The related performance's page. */
@@ -104,78 +115,127 @@ export function shsLink(url: string): ShsLink | null {
 
 const pageOf = (link: ShsLink) => `${SITE}/${link.kind}/${link.id}`;
 
-function shsGet<T>(link: ShsLink, scrub: Shape): Promise<T> {
+async function shsGet<T>(link: ShsLink, scrub: Shape, signal?: AbortSignal): Promise<T> {
   const key = credential(SHS_API_KEY);
-  return fetchJson<T>({
+  const answer = await fetchJson<T>({
     source: "secondhandsongs",
     url: pageOf(link),
     headers: { Accept: "application/json", ...(key ? { "X-API-Key": key } : {}) },
     scrub,
+    signal,
   });
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) {
+    throw unexpectedShape("secondhandsongs", `${link.kind} ${link.id} is not an object`);
+  }
+  return answer;
 }
 
 /** A related performance as a record; null when it has no page or title. */
-function related(kind: ShsRelationship["kind"], p: ShsPerformanceSummary | undefined) {
+function related(
+  kind: ShsRelationship["kind"],
+  about: ShsRelationship["about"],
+  p: ShsPerformanceSummary | undefined,
+): ShsRelationship | null {
   const url = p?.uri ? shsLink(p.uri) : null;
   if (url?.kind !== "performance" || typeof p?.title !== "string") return null;
   return {
     kind,
+    about,
     title: p.title,
     performer: p.performer?.name?.trim() ?? "",
     url: pageOf(url),
     date: typeof p.date === "string" && p.date ? p.date : null,
-  } satisfies ShsRelationship;
+  };
 }
 
-const isRecord = (r: ShsRelationship | null): r is ShsRelationship => r !== null;
+/** Records once per kind and related performance, in order. */
+function unique(records: Array<ShsRelationship | null>): ShsRelationship[] {
+  const seen = new Set<string>();
+  return records.filter((r): r is ShsRelationship => {
+    if (!r || seen.has(`${r.kind} ${r.url}`)) return false;
+    seen.add(`${r.kind} ${r.url}`);
+    return true;
+  });
+}
+
+const list = <T>(v: T[] | undefined) => (Array.isArray(v) ? v : []);
 
 type Read =
   | { ok: true; title: string; performer: string; records: ShsRelationship[] }
   | { ok: false; reason: string };
 
-function readWork(work: ShsWork, track: TrackRef): Read {
-  const title = work?.title ?? "";
-  if (!titlesMatch(track.title, title)) {
+/**
+ * A work: the track's performer must have a version titled as the track. A version by the same
+ * performer is never a cover, whatever its title ("(Taylor's Version)", "(Live)"). When the
+ * performer has the original version, the other performers' versions are covers of the song
+ * (about the track only when it is the song's original recording); otherwise the track is a
+ * cover of the original versions.
+ */
+function readWork(work: ShsWork, track: TrackRef, trackIsOriginal: boolean): Read {
+  const title = typeof work?.title === "string" ? work.title : "";
+  if (!titlesMatch(track.title, title, track.artists)) {
     return { ok: false, reason: `work "${title}" is not "${track.title}"` };
   }
-  const versions = Array.isArray(work.versions) ? work.versions : [];
-  const own = versions.filter(
-    (v) =>
-      typeof v?.title === "string" &&
-      titlesMatch(track.title, v.title) &&
-      creditStringMatches(v.performer?.name ?? "", track.artists),
-  );
-  if (own.length === 0) {
+  const versions = list(work.versions).filter((v) => typeof v?.title === "string");
+  const byPerformer = (v: ShsPerformanceSummary) =>
+    creditStringMatches(v.performer?.name ?? "", track.artists);
+  const own = versions.filter(byPerformer);
+  const titled = own.filter((v) => titlesMatch(track.title, v.title ?? "", track.artists));
+  if (titled.length === 0) {
     return {
       ok: false,
       reason: `no version of "${title}" by ${track.artists.join(", ")} among ${versions.length}`,
     };
   }
-  const ownPages = new Set(own.map((v) => v.uri));
-  const others = versions.filter((v) => !ownPages.has(v.uri));
+  const others = versions.filter((v) => !byPerformer(v));
   const original = own.some((v) => v.isOriginal === true);
   const records = original
-    ? others.filter((v) => v.isOriginal !== true).map((v) => related("covered-by", v))
-    : others.filter((v) => v.isOriginal === true).map((v) => related("cover-of", v));
+    ? others
+        .filter((v) => v.isOriginal !== true)
+        .map((v) => related("covered-by", trackIsOriginal ? "track" : "work", v))
+    : others.filter((v) => v.isOriginal === true).map((v) => related("cover-of", "track", v));
   return {
     ok: true,
     title,
-    performer: own[0].performer?.name ?? track.artists.join(", "),
-    records: records.filter(isRecord),
+    performer: titled[0].performer?.name ?? track.artists.join(", "),
+    records: unique(records),
   };
 }
 
+/**
+ * A performance: its title and performer are checked. An original performance is a cover of
+ * nothing, and neither the performance itself nor a performance by the same performer is
+ * listed as its original or its cover.
+ */
 function readPerformance(p: ShsPerformance, track: TrackRef): Read {
   const check = checkIdentity(track, { title: p?.title ?? "", artists: p?.performer?.name ?? "" });
   if (!check.ok) return { ok: false, reason: check.reason };
-  const list = <T>(v: T[] | undefined) => (Array.isArray(v) ? v : []);
+  const self = p.uri ? shsLink(p.uri) : null;
+  const other = (q: ShsPerformanceSummary | undefined) => {
+    const link = q?.uri ? shsLink(q.uri) : null;
+    const same = self && link && link.kind === self.kind && link.id === self.id;
+    return !same && !creditStringMatches(q?.performer?.name ?? "", track.artists);
+  };
+  const originals =
+    p.isOriginal === true
+      ? []
+      : list(p.originals)
+          .map((o) => o?.original)
+          .filter(other);
   const records = [
-    ...list(p.originals).map((o) => related("cover-of", o?.original)),
-    ...list(p.covers).map((c) => related("covered-by", c)),
-    ...list(p.usesSamplesFrom).map((s) => related("samples", s)),
-    ...list(p.sampledBy).map((s) => related("sampled-by", s)),
-  ].filter(isRecord);
-  return { ok: true, title: p.title ?? "", performer: p.performer?.name ?? "", records };
+    ...originals.map((o) => related("cover-of", "track", o)),
+    ...list(p.covers)
+      .filter(other)
+      .map((c) => related("covered-by", "track", c)),
+    ...list(p.usesSamplesFrom).map((s) => related("samples", "track", s)),
+    ...list(p.sampledBy).map((s) => related("sampled-by", "track", s)),
+  ];
+  return {
+    ok: true,
+    title: p.title ?? "",
+    performer: p.performer?.name ?? "",
+    records: unique(records),
+  };
 }
 
 /**
@@ -186,7 +246,7 @@ function readPerformance(p: ShsPerformance, track: TrackRef): Read {
 export async function shsRelationships(
   track: TrackRef,
   links: ShsLink[],
-  options: { now?: Clock } = {},
+  options: { now?: Clock; signal?: AbortSignal; trackIsOriginal?: boolean } = {},
 ): Promise<SourceResult<ShsRelationship>> {
   const ordered = [...links].sort((a, b) =>
     a.kind === b.kind ? a.id - b.id : a.kind === "performance" ? -1 : 1,
@@ -200,8 +260,15 @@ export async function shsRelationships(
   try {
     const read =
       link.kind === "work"
-        ? readWork(await shsGet<ShsWork>(link, WORK_SHAPE), track)
-        : readPerformance(await shsGet<ShsPerformance>(link, PERFORMANCE_SHAPE), track);
+        ? readWork(
+            await shsGet<ShsWork>(link, WORK_SHAPE, options.signal),
+            track,
+            options.trackIsOriginal ?? false,
+          )
+        : readPerformance(
+            await shsGet<ShsPerformance>(link, PERFORMANCE_SHAPE, options.signal),
+            track,
+          );
     if (!read.ok) {
       return missing("secondhandsongs", read.reason, { omitted: [{ ref, reason: read.reason }] });
     }
@@ -215,20 +282,30 @@ export async function shsRelationships(
     const evidence = kept.map((r) => {
       const other = r.url.slice(r.url.lastIndexOf("/") + 1);
       const when = r.date ? ` (${r.date})` : "";
+      // A cover of the song is stated about the song, on its work page.
+      const subject =
+        r.about === "work"
+          ? `the song ${quoted(read.title)} (as performed by ${read.performer})`
+          : quoted(read.title, read.performer);
       return primaryEvidence({
         source: "secondhandsongs",
         recordRef: `${ref}/${r.kind}/${other}`,
         url: pageOf(link),
         title: `${read.title} — SecondHandSongs`,
-        excerpt: `SecondHandSongs: ${quoted(read.title, read.performer)} ${RELATION_PHRASE[r.kind]} ${quoted(r.title, r.performer)}${when}.`,
+        excerpt: `SecondHandSongs: ${subject} ${RELATION_PHRASE[r.kind]} ${quoted(r.title, r.performer)}${when}.`,
         retrievedAt: at,
       });
     });
+    const notes = [
+      read.records.length > kept.length
+        ? `${read.records.length - kept.length} more not listed`
+        : null,
+      kept.some((r) => r.about === "work")
+        ? "covers of the song, not claimed for this recording: it is not the song's original recording"
+        : null,
+    ].filter((n): n is string => n !== null);
     return found("secondhandsongs", kept, evidence, {
-      incomplete:
-        read.records.length > kept.length
-          ? `${read.records.length - kept.length} more not listed`
-          : null,
+      incomplete: notes.length > 0 ? notes.join("; ") : null,
     });
   } catch (error) {
     return failed("secondhandsongs", error);

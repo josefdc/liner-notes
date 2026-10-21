@@ -1,0 +1,1678 @@
+{
+  "recording-count": 96,
+  "recording-offset": 0,
+  "recordings": [
+    {
+      "id": "005b9285-a0a6-46e1-a450-cf1f3ca2257b",
+      "title": "Love Story but it's gay",
+      "first-release-date": "",
+      "length": 241000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Reinaeiry",
+          "joinphrase": "",
+          "artist": {
+            "id": "249c9f32-2b08-4741-b745-16e1dc5f2e22",
+            "name": "Reinaeiry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "07ee3a90-e79d-4438-9fae-2f9c945cd85c",
+      "title": "Love Story (Digital Dog remix)",
+      "first-release-date": "2009-03-02",
+      "length": 358573,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "085ce646-3805-4416-b80b-c966e16f5457",
+      "title": "Love Story",
+      "first-release-date": "2013-03-01",
+      "length": 220000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Aziliz Country Band",
+          "joinphrase": "",
+          "artist": {
+            "id": "0dbe327f-3f7e-414b-bdff-29e5649d384b",
+            "name": "Aziliz Country Band"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0b490331-16a2-4c24-bb46-b49a6192a80b",
+      "title": "Love Story",
+      "first-release-date": "2022-12-13",
+      "length": 236875,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Sweet Little Band",
+          "joinphrase": "",
+          "artist": {
+            "id": "f18ed420-f81a-43f6-83ff-9c021d5ef1c9",
+            "name": "Sweet Little Band"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0c4fabe1-c879-406d-bba6-81c056495893",
+      "title": "Love Story",
+      "first-release-date": "2023",
+      "length": 253000,
+      "disambiguation": "live, 2014-10-09: BBC Radio 1 Live Lounge, London, England, UK",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0f333783-9dbb-4d83-bd79-21f5d58bcaa7",
+      "title": "Love Story",
+      "first-release-date": "",
+      "length": null,
+      "disambiguation": "live, 2023‐08: SoFi Stadium, Inglewood, CA, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "10785657-f947-4659-b4d3-5c3df78530f3",
+      "title": "Love Story",
+      "first-release-date": "2009-06-16",
+      "length": 361000,
+      "disambiguation": "live, 2008-10-06: CMT Crossroads",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        },
+        {
+          "name": "Def Leppard",
+          "joinphrase": "",
+          "artist": {
+            "id": "7249b899-8db8-43e7-9e6e-22f1e736024e",
+            "name": "Def Leppard"
+          }
+        }
+      ]
+    },
+    {
+      "id": "13ddd539-b815-41bf-b8d2-85a63ee44803",
+      "title": "Love Story (Water Under the Bridge remix)",
+      "first-release-date": "2020-03-15",
+      "length": 211000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Left at London",
+          "joinphrase": " × ",
+          "artist": {
+            "id": "3944b36f-0ec2-4972-bab4-c45477b7b8f1",
+            "name": "Left at London"
+          }
+        },
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "14870c92-4ae5-4502-a275-2cbc11b81091",
+      "title": "Love Story (Taylor's version)",
+      "first-release-date": "2022-06-24",
+      "length": 235966,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Ana Done",
+          "joinphrase": "",
+          "artist": {
+            "id": "13d7c2e3-28a1-4b4e-81fc-8e6820c1a3d7",
+            "name": "Ana Done"
+          }
+        }
+      ]
+    },
+    {
+      "id": "15015861-9c77-41b1-b122-6a580740e3cd",
+      "title": "Love Story Meets Love Story (Taylor Swift remix)",
+      "first-release-date": "2009-09-15",
+      "length": 384880,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Jon Schmidt",
+          "joinphrase": "",
+          "artist": {
+            "id": "cd706565-fa68-4eab-8d17-f1d58bf3b299",
+            "name": "Jon Schmidt"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1e141b98-eed4-4312-9f72-4efc61ed24df",
+      "title": "Love Story",
+      "first-release-date": "2008-11-11",
+      "length": 234000,
+      "disambiguation": "US version",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "245d80ef-dde5-41ca-83d9-ee74de995bfc",
+      "title": "Love Story (Taylor's version)",
+      "first-release-date": "2021-02-25",
+      "length": 234000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2626cdc3-572f-4311-b6c2-7008d084ed72",
+      "title": "Love Story",
+      "first-release-date": "",
+      "length": 234000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Jess Thristan",
+          "joinphrase": "",
+          "artist": {
+            "id": "db897961-29bd-4978-9606-7c4037ce1527",
+            "name": "Jess Thristan"
+          }
+        }
+      ]
+    },
+    {
+      "id": "293fd1b3-8a74-4226-a08e-4bcf2bf44cf3",
+      "title": "Love Story (Party Supplies remix)",
+      "first-release-date": "2012-11-02",
+      "length": 263604,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "29ddf5ff-13ea-4b5d-9a8a-b98c9cbaa66e",
+      "title": "Love Story",
+      "first-release-date": "2014",
+      "length": 238000,
+      "disambiguation": "live, 2014-06-01",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2cdbb9b6-0ef8-472b-acfa-09dcc579adf8",
+      "title": "Love Story",
+      "first-release-date": "2013",
+      "length": 230000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Larry Kenzal",
+          "joinphrase": "",
+          "artist": {
+            "id": "61021c9d-3772-4616-bda2-89cfe62f8f34",
+            "name": "Larry Kenzal"
+          }
+        }
+      ]
+    },
+    {
+      "id": "31f1d56c-2244-4acb-aa32-e1673dff9ef2",
+      "title": "Love Story",
+      "first-release-date": "2015",
+      "length": 190772,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Rockabye Baby!",
+          "joinphrase": "",
+          "artist": {
+            "id": "5a045b09-af06-4348-9ce6-d51b6a370770",
+            "name": "Rockabye Baby!"
+          }
+        }
+      ]
+    },
+    {
+      "id": "321cc770-1c16-4457-a569-7997d431995b",
+      "title": "Love Story",
+      "first-release-date": "2009-02",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "331263a7-793b-49a5-b278-f8482bf15c3a",
+      "title": "Love Story",
+      "first-release-date": "2023",
+      "length": null,
+      "disambiguation": "live, 2015-05-24: BBC Radio 1’s Big Weekend, Earlham Park, Norwich, England, UK",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "34c34875-8734-4a15-a943-686fda5c7538",
+      "title": "Love Story (Summertime remix)",
+      "first-release-date": "2009",
+      "length": 255000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "362a5335-7fae-4f7a-915e-5d4ad9410a55",
+      "title": "Love Story (Digital Dog mix)",
+      "first-release-date": "2009-06-22",
+      "length": 181826,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "39b6a7c8-85b3-46fb-8500-eabc67a0cf59",
+      "title": "Love Story",
+      "first-release-date": "2012-10-08",
+      "length": 221000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "The Partners",
+          "joinphrase": "",
+          "artist": {
+            "id": "9d32a311-7d05-44e9-9233-03314a85ea7a",
+            "name": "The Partners"
+          }
+        }
+      ]
+    },
+    {
+      "id": "46faa9d9-4fe6-48c1-95f2-fdb8afb1ee4c",
+      "title": "Love Story (Behind the Scenes)",
+      "first-release-date": "2009-10-26",
+      "length": 1320000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "4b47d254-ae44-498a-b406-62de75625f0c",
+      "title": "Love Story",
+      "first-release-date": "2011",
+      "length": null,
+      "disambiguation": "live, 2011-02-16: Nippon Budokan, Kitanomaru Kōen, Chiyoda, Tokyo, Japan",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "4dccb977-1ff7-47de-8621-070f0c4dc902",
+      "title": "Style / Love Story / You Belong With Me",
+      "first-release-date": "2019",
+      "length": null,
+      "disambiguation": "live, 2018-11-20: Tokyo Dome, Tokyo, Japan",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5094d2c5-93fe-43f5-b02b-c7d341d764b6",
+      "title": "Love Story",
+      "first-release-date": "2021-01-04",
+      "length": 190000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Sarah Cothran",
+          "joinphrase": "",
+          "artist": {
+            "id": "f8f06408-ad0f-481e-b62c-591103dc528d",
+            "name": "Sarah Cothran"
+          }
+        }
+      ]
+    },
+    {
+      "id": "526f5303-dc68-4ac0-9587-b3cd33a5c5b6",
+      "title": "Love Story",
+      "first-release-date": "2008",
+      "length": 234000,
+      "disambiguation": "international mix",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "54b62de2-894e-427a-942b-1607c4285893",
+      "title": "Love Story (Taylor's Version) Elvira Remix",
+      "first-release-date": "2021-04-09",
+      "length": 211000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "54cdb5c4-f0e8-4a33-9b10-0750ca7b98e6",
+      "title": "Love Story",
+      "first-release-date": "2015-09-20",
+      "length": 268486,
+      "disambiguation": "live, 2015-09-18: Nationwide Arena, Columbus, OH, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "54f1c993-2523-48ae-ac0c-279c41b27af8",
+      "title": "Love Story",
+      "first-release-date": "2024-11-01",
+      "length": 239000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "First to Eleven",
+          "joinphrase": "",
+          "artist": {
+            "id": "7b9ab1b7-7cef-4965-bad7-9f119ce8b6ff",
+            "name": "First to Eleven"
+          }
+        }
+      ]
+    },
+    {
+      "id": "560599de-d644-42ba-b776-6c6f2f71fe41",
+      "title": "Love Story",
+      "first-release-date": "2025-10-24",
+      "length": 212000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Call It Off",
+          "joinphrase": "",
+          "artist": {
+            "id": "536329c9-5580-45c6-8b16-03f36976a559",
+            "name": "Call It Off"
+          }
+        }
+      ]
+    },
+    {
+      "id": "56d45e0c-7c5e-4662-8f61-f455a70b2820",
+      "title": "Love Story",
+      "first-release-date": "2022-02-04",
+      "length": 259000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Denim Daisy",
+          "joinphrase": "",
+          "artist": {
+            "id": "86c0f3df-9283-48a0-8e3f-6c93bebb9e45",
+            "name": "Denim Daisy"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5865ffd8-8d2f-4914-accb-c8291f2641ae",
+      "title": "Love Story (Jason Nevins radio edit)",
+      "first-release-date": "2009-03",
+      "length": 210000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5f6cd44c-00ec-4fba-b7e3-e9ba032f1f8a",
+      "title": "Love Story",
+      "first-release-date": "2020-04-17",
+      "length": 232500,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Tyler Ward",
+          "joinphrase": ", ",
+          "artist": {
+            "id": "21462e8d-d20b-4049-bcbd-57e0a4b9be5c",
+            "name": "Tyler Ward"
+          }
+        },
+        {
+          "name": "Karis",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "b3e60870-3b77-4591-ad6e-b8151b52fc7d",
+            "name": "Karis"
+          }
+        },
+        {
+          "name": "Ray Lorraine",
+          "joinphrase": "",
+          "artist": {
+            "id": "e7465886-f454-4dfc-98eb-8668695faa72",
+            "name": "Ray Lorraine"
+          }
+        }
+      ]
+    },
+    {
+      "id": "61720ba6-d33b-4444-b8f9-62f536b2eb3a",
+      "title": "Love Story (stripped)",
+      "first-release-date": "2009-02",
+      "length": 221000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "63a2249a-adc1-4707-b8fb-bc3761080823",
+      "title": "Love Story (live at V-Fest UK)",
+      "first-release-date": "2009-10-26",
+      "length": 267000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "64b107cf-30bf-45a1-9dcc-c3d864b913e0",
+      "title": "Love Story (Digital Dog dub)",
+      "first-release-date": "2009",
+      "length": 340000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "67545c3e-f9c6-4517-98f1-33db39023eb1",
+      "title": "Love Story (J Stax edit)",
+      "first-release-date": "2009-03-06",
+      "length": 221800,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6b2facc4-1213-4b20-85ed-e7c6c010a031",
+      "title": "Love Story // Check Yes Juliet (Live)",
+      "first-release-date": "2021-07-26",
+      "length": 254000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Nicotine Dolls",
+          "joinphrase": "",
+          "artist": {
+            "id": "da01cfd6-29b7-49ca-99a5-0c032df95d47",
+            "name": "Nicotine Dolls"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6fef4fc3-4680-418c-9767-fae7173304ec",
+      "title": "Love Story",
+      "first-release-date": "2009",
+      "length": 222000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "72552624-0bf3-471a-9088-eef5066d9fb0",
+      "title": "Love Story (Digital Dog radio mix)",
+      "first-release-date": "2008-09-12",
+      "length": 191000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7689a847-21da-4931-8229-2350b62b4600",
+      "title": "Love Story",
+      "first-release-date": "2009-03-31",
+      "length": null,
+      "disambiguation": "karaoke",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "77cce343-14e4-4e01-9e50-4ac84366aebf",
+      "title": "Love Story",
+      "first-release-date": "",
+      "length": null,
+      "disambiguation": "live, 2008-10-06: CMT Crossroads",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": " & ",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        },
+        {
+          "name": "Def Leppard",
+          "joinphrase": "",
+          "artist": {
+            "id": "7249b899-8db8-43e7-9e6e-22f1e736024e",
+            "name": "Def Leppard"
+          }
+        }
+      ]
+    },
+    {
+      "id": "78317d50-8cb1-46ed-bbe9-4f07c5fb4d2c",
+      "title": "Love Story (J Stax club mix)",
+      "first-release-date": "2009-03-02",
+      "length": 328853,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "79a788c6-cf46-4df2-8652-57021cb6aba2",
+      "title": "Love Story / You Belong With Me",
+      "first-release-date": "2019",
+      "length": null,
+      "disambiguation": "live, 2018-11-21: Tokyo Dome, Kōraku, Bunkyō, Tokyo, Japan",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7d7f9f69-6b0a-4e77-978d-732c389e565f",
+      "title": "Love Story",
+      "first-release-date": "2015",
+      "length": 57000,
+      "disambiguation": "part of “The Taylor Swift Megamix” DJ-mix",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7e132d05-7077-4379-a6b9-8e9716cc678b",
+      "title": "Love Story",
+      "first-release-date": "2015-06-06",
+      "length": 220000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Radiant Life Perspective",
+          "joinphrase": "",
+          "artist": {
+            "id": "2278d78b-c818-43e0-b21a-b325fe77d7ff",
+            "name": "Radiant Life Perspective"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7ff75359-6ff2-4602-b86b-208587521d65",
+      "title": "Love Story (Aviators remix)",
+      "first-release-date": "2013-07-29",
+      "length": 294000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "810fed01-8633-4046-8805-b6ca27b33705",
+      "title": "Love Story",
+      "first-release-date": "2020-04-24",
+      "length": 221028,
+      "disambiguation": "live, 2008-06-28: Clear Channel Stripped, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "815c5a70-c706-4c77-b8d2-ea3ce28cc036",
+      "title": "Love Story",
+      "first-release-date": "2009-07-07",
+      "length": 204000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Forever the Sickest Kids",
+          "joinphrase": "",
+          "artist": {
+            "id": "5c6f8874-cb53-4f4d-9168-cc2af8c7ecf9",
+            "name": "Forever the Sickest Kids"
+          }
+        }
+      ]
+    },
+    {
+      "id": "81653c7e-4ad5-4ba2-b23b-8882f8987a85",
+      "title": "Love Story",
+      "first-release-date": "2022-03-22",
+      "length": 237000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "black midi",
+          "joinphrase": "",
+          "artist": {
+            "id": "4afbef0a-05ee-4551-b0e0-f1f1870d8f1c",
+            "name": "black midi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "832c2f11-2142-42e8-a968-40e0e03dd9c4",
+      "title": "Love Story",
+      "first-release-date": "2010",
+      "length": 286288,
+      "disambiguation": "live, 2010‐04‐15: Staples Center, Los Angeles, CA, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8a8301c7-c96f-4fa6-881f-02185d1764d3",
+      "title": "Love Story (The Wedding Violin version)",
+      "first-release-date": "2024-04-05",
+      "length": 229230,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Ana Done",
+          "joinphrase": "",
+          "artist": {
+            "id": "13d7c2e3-28a1-4b4e-81fc-8e6820c1a3d7",
+            "name": "Ana Done"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8ad2af3a-6611-46ea-86f3-6bcf4da76568",
+      "title": "Love Story (Taylor’s version) (Elvira remix)",
+      "first-release-date": "2021-03-23",
+      "length": 212000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8c823804-31d4-4ab3-9a3d-c5b7fedb752e",
+      "title": "Style / Love Story / You Belong With Me",
+      "first-release-date": "2019-01-01",
+      "length": 390000,
+      "disambiguation": "live, 2018-10-06: AT&T Stadium, Arlington, TX, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8dbf822c-96d8-4b73-a3b4-5596d23850f7",
+      "title": "Love Story (Klassik remix)",
+      "first-release-date": "2009",
+      "length": 206000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9086b742-358b-4f73-9a14-84cb1a9ce4ce",
+      "title": "Love Story",
+      "first-release-date": "2008-09-12",
+      "length": 235266,
+      "disambiguation": "US version",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "92cd3eba-f0d2-43f4-ac1a-5688b455acb4",
+      "title": "Love Story",
+      "first-release-date": "2025-04-04",
+      "length": 177280,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Myleene Klass",
+          "joinphrase": "",
+          "artist": {
+            "id": "060f0ad4-9c6e-41a9-90fd-355636641971",
+            "name": "Myleene Klass"
+          }
+        }
+      ]
+    },
+    {
+      "id": "93484aa2-0ce6-4356-9ff4-9db61e07acd5",
+      "title": "Love Story (Taylor’s version)",
+      "first-release-date": "2021-02-12",
+      "length": 235766,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "96a9be99-7c9b-4779-b0c2-681eed86e041",
+      "title": "Love Story (lower -3)",
+      "first-release-date": "",
+      "length": null,
+      "disambiguation": "3:56",
+      "artist-credit": [
+        {
+          "name": "Piano Karaoke",
+          "joinphrase": "",
+          "artist": {
+            "id": "23bf5e07-0709-4dc1-a7bb-e4fb3abf96d8",
+            "name": "Piano Karaoke"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9898351d-285a-44ae-b6c2-35fed3c51850",
+      "title": "Love Story",
+      "first-release-date": "2013-06-06",
+      "length": 241000,
+      "disambiguation": "international mix",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "996c8c21-ee00-4b40-be21-4b29f93db3fe",
+      "title": "Style / Love Story / You Belong With Me",
+      "first-release-date": "",
+      "length": null,
+      "disambiguation": "live, 2018-10-06: AT&T Stadium, Arlington, TX, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9bda5c34-2f15-4c4b-94bc-fe3941085381",
+      "title": "Love Story",
+      "first-release-date": "2011-11-21",
+      "length": 527000,
+      "disambiguation": "live: Speak Now World Tour",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a3f8aea5-51da-4578-8cb7-445e9bc8b1a5",
+      "title": "Love Story",
+      "first-release-date": "2008-09-12",
+      "length": 234000,
+      "disambiguation": "U.S. pop mix",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a463853a-29d8-4470-9a8f-6fbb40d1a139",
+      "title": "Love Story (piano version)",
+      "first-release-date": "2021-11-05",
+      "length": 286735,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "The Chillest",
+          "joinphrase": "",
+          "artist": {
+            "id": "109f5f64-8ab3-4b59-b756-9922c0f19de7",
+            "name": "The Chillest"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a51e88c4-b47b-4b94-965a-5ce7ac7da086",
+      "title": "Love Story",
+      "first-release-date": "2025-01-17",
+      "length": 349880,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "af08b701-6ab1-4f32-9832-f3d056c723db",
+      "title": "Love Story",
+      "first-release-date": "2009",
+      "length": null,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b1f350bd-6fe0-47b3-a748-a6572fb718e8",
+      "title": "Love story",
+      "first-release-date": "2016",
+      "length": 133511,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Long Ashton Pantomime",
+          "joinphrase": "",
+          "artist": {
+            "id": "1f102769-7a6f-4ad8-9b17-1ca28a297c68",
+            "name": "Long Ashton Pantomime"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b7194512-11f6-48d3-a589-c1afaa56b515",
+      "title": "Love Story",
+      "first-release-date": "2014",
+      "length": 307000,
+      "disambiguation": "live, 2014-09-19: iHeart Festival, MGM Grand Theater, Las Vegas, NV, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b991fe3f-7469-4363-934f-d6e0d61413bf",
+      "title": "Love Story",
+      "first-release-date": "2018-12-02",
+      "length": 517000,
+      "disambiguation": "live, 2009-10-10: Allstate Arena, Rosemont, IL, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bc917759-9eb3-444e-b51d-4a32a3e0b701",
+      "title": "Love Story",
+      "first-release-date": "2023-03-20",
+      "length": 238000,
+      "disambiguation": "live, 2023-03-17: State Farm Stadium, Glendale, AZ, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bfed9bf4-e8e1-4ec0-9742-076d14457af3",
+      "title": "Love Story",
+      "first-release-date": "2015-05-06",
+      "length": 425000,
+      "disambiguation": "live, 2015-05-06: Tokyo Dome, Tokyo, Japan",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c135f535-c4b7-4927-80b7-6b60c54c7d03",
+      "title": "Love Story",
+      "first-release-date": "2022-11-18",
+      "length": 208819,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Twenty One Two",
+          "joinphrase": "",
+          "artist": {
+            "id": "e1d442cc-f84b-4247-b83a-78448e0cacd9",
+            "name": "Twenty One Two"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c53577a0-98fb-48ba-b360-e529e8acc889",
+      "title": "Love Story",
+      "first-release-date": "2010-03-03",
+      "length": 236871,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "コロムビアオルゴール",
+          "joinphrase": "",
+          "artist": {
+            "id": "12b4b7e3-6404-4136-8288-b9d8ffc90ea4",
+            "name": "コロムビアオルゴール"
+          }
+        }
+      ]
+    },
+    {
+      "id": "c99bedea-d058-4e12-9f36-4c2696c780d9",
+      "title": "Love Story (Taylor’s version)",
+      "first-release-date": "2021-04-09",
+      "length": 241000,
+      "disambiguation": "lyric video",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ca4ab48b-bbe4-4edc-851f-ce70534d1085",
+      "title": "Taylor Swift Mash-Up",
+      "first-release-date": "2013-10-29",
+      "length": 279331,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Anthem Lights",
+          "joinphrase": "",
+          "artist": {
+            "id": "8f76b73c-6db1-4e59-ae1e-b4e1545d7963",
+            "name": "Anthem Lights"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ca4c7fd2-7202-4564-b889-66a1b564ebad",
+      "title": "Love Story",
+      "first-release-date": "2024-03-14",
+      "length": 243540,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cb4e40b5-9821-479c-8075-0d8b75fe77cf",
+      "title": "Taylor",
+      "first-release-date": "2013-10-13",
+      "length": 220898,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Timeflies",
+          "joinphrase": "",
+          "artist": {
+            "id": "4388976f-9e02-42d9-b66f-1b9e124e3ca6",
+            "name": "Timeflies"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d0f7f850-94cc-4a4e-bc29-ad87098de533",
+      "title": "Love Story",
+      "first-release-date": "2013-04-22",
+      "length": null,
+      "disambiguation": "live, 2013-01-28: La Seine, Paris, France",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d5cb72cc-7547-4908-9a8b-f74ac07cb9bd",
+      "title": "Love Story",
+      "first-release-date": "2009-02-03",
+      "length": 206000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Kidz Bop",
+          "joinphrase": "",
+          "artist": {
+            "id": "31c0df3c-2d23-41d3-a772-ec3cfc3cc625",
+            "name": "Kidz Bop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d722f39e-1320-4b05-bda1-0e492188e3ba",
+      "title": "Love Story",
+      "first-release-date": "2017-09-29",
+      "length": 238487,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "8-Bit Misfits",
+          "joinphrase": "",
+          "artist": {
+            "id": "e0438aeb-9793-404c-8618-eb751faf1c24",
+            "name": "8-Bit Misfits"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d783e6c5-761f-4fc3-bfcf-6089cdfc8f96",
+      "title": "Love Story",
+      "first-release-date": "2009-03-31",
+      "length": 239466,
+      "disambiguation": "instrumental with background vocals",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dcbfecf1-66e2-4e7f-9710-45ce0b7af5c3",
+      "title": "Love Story",
+      "first-release-date": "2015-12-20",
+      "length": 320000,
+      "disambiguation": "live, 2015-11-28: ANZ Stadium, Sydney, Australia",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dd8fc9c7-ddeb-4bee-a73e-663db4c3aa6a",
+      "title": "Love Story",
+      "first-release-date": "2025-12-12",
+      "length": 235000,
+      "disambiguation": "Dolby Atmos mix",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e058fd06-211b-4838-93f6-46b53c76c6c3",
+      "title": "Love Story (Taylor Swift Cover)",
+      "first-release-date": "",
+      "length": 236000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "The Offspring",
+          "joinphrase": "",
+          "artist": {
+            "id": "23a03e33-a603-404e-bcbf-2c00159d7067",
+            "name": "The Offspring"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e3a1e3a2-93ed-42b1-a6fe-5f4b8d2e1cd6",
+      "title": "Love Story",
+      "first-release-date": "2024",
+      "length": null,
+      "disambiguation": "live, 2024-06-02: Groupama Stadium, Décines-Charpieu, France",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e94fac59-9a96-4065-9b67-4e813498aab4",
+      "title": "Love Story (live - Journey to Fearless)",
+      "first-release-date": "2010-10-24",
+      "length": 239000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ec969a27-df5e-4a4b-9c28-3fff836b4c78",
+      "title": "Love Story",
+      "first-release-date": "2013-04-23",
+      "length": 214000,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Lullaby Players",
+          "joinphrase": "",
+          "artist": {
+            "id": "bf98c035-18c9-4a1a-abe6-0e5b68d3088d",
+            "name": "Lullaby Players"
+          }
+        }
+      ]
+    },
+    {
+      "id": "eec66c43-41d6-4a74-a7e6-e0c3dcd97be5",
+      "title": "Love Story",
+      "first-release-date": "2011",
+      "length": null,
+      "disambiguation": "V Festival Girls: England 2009",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f0bf8185-7c3f-4e3b-b21f-ea542837bdce",
+      "title": "Style / Love Story / You Belong With Me",
+      "first-release-date": "2019",
+      "length": null,
+      "disambiguation": "live, 2018-11-21: Tokyo Dome, Tokyo, Japan",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f126a072-6ab2-407f-a310-423b63958926",
+      "title": "Love Story",
+      "first-release-date": "2024-08-28",
+      "length": null,
+      "disambiguation": "live, 2024-08-02: PGE Narodowy, Warsaw, Poland",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f25a3d5c-5ee5-4613-9806-a5bbab6dc361",
+      "title": "Love Story",
+      "first-release-date": "2014",
+      "length": 326000,
+      "disambiguation": "live, 2014-06-01: Saitama Super Arena, Saitama, Japan",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f7a6fe24-3c7b-47c2-9366-f7598c9e7c94",
+      "title": "Love Story (acoustic version)",
+      "first-release-date": "2022-12-02",
+      "length": 240252,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Twenty One Two",
+          "joinphrase": "",
+          "artist": {
+            "id": "e1d442cc-f84b-4247-b83a-78448e0cacd9",
+            "name": "Twenty One Two"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fa079f35-2a62-4dd4-8edc-ffaad4152088",
+      "title": "Love Story",
+      "first-release-date": "2024-03-03",
+      "length": null,
+      "disambiguation": "live, 2010-10-26: Ed Sullivan Theater, New York, NY, USA",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fa2973ed-2efd-4fde-85b9-fb83674da8fb",
+      "title": "Love Story (Taylor’s version)",
+      "first-release-date": "2021-04-09",
+      "length": 237000,
+      "disambiguation": "Dolby Atmos mix",
+      "artist-credit": [
+        {
+          "name": "Taylor Swift",
+          "joinphrase": "",
+          "artist": {
+            "id": "20244d07-534f-4eff-b4d4-930878889970",
+            "name": "Taylor Swift"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ff1a8acb-f375-4110-90d0-25ea7cfd07a5",
+      "title": "Love Story",
+      "first-release-date": "2023-02-02",
+      "length": 67125,
+      "disambiguation": "",
+      "artist-credit": [
+        {
+          "name": "Peaceful Noise",
+          "joinphrase": "",
+          "artist": {
+            "id": "366bdb1a-07fe-4273-b192-ba988c4fd217",
+            "name": "Peaceful Noise"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -192,7 +192,8 @@ describe("credits filtered to the track", () => {
     const match = findTrack(release, TRACK);
     if (!match.ok) throw new Error(match.reason);
     expect(match.track.position).toBe("A");
-    const credits = trackCredits(release, match.track);
+    const { credits, ambiguous } = trackCredits(release, match.track);
+    expect(ambiguous).toBe(0);
     expect(credits.map((c) => [c.name, c.scope])).toEqual([
       ["On The Track", "track"],
       ["Whole Release", "release"],
@@ -255,5 +256,127 @@ describe("credits filtered to the track", () => {
     ).toBe(599648);
     expect(discogsReleaseId("https://www.discogs.com/master/5427")).toBeNull();
     expect(discogsReleaseId("https://example.com/release/599648")).toBeNull();
+  });
+});
+
+describe("review findings", () => {
+  beforeEach(() => {
+    process.env.DISCOGS_TOKEN = TOKEN;
+  });
+
+  /** Two discs, each numbered from 1 under its heading. */
+  const twoDiscs: DiscogsRelease = {
+    id: 20,
+    title: "Deluxe",
+    artists: [{ name: "Rick Astley" }],
+    extraartists: [
+      { name: "Producer One", role: "Producer", tracks: "2" },
+      { name: "Remixer Two", role: "Remix", tracks: "1 to 2" },
+      { name: "Everyone", role: "Mastered By", tracks: "" },
+    ],
+    tracklist: [
+      { position: "", type_: "heading", title: "CD1" },
+      { position: "1", type_: "track", title: "Intro", duration: "1:00" },
+      { position: "2", type_: "track", title: "Other Song", duration: "4:00" },
+      { position: "", type_: "heading", title: "CD2" },
+      { position: "1", type_: "track", title: "Bonus", duration: "3:00" },
+      { position: "2", type_: "track", title: "Never Gonna Give You Up", duration: "3:32" },
+    ],
+  };
+
+  it("leaves out credits that name a position repeated on another disc", () => {
+    const match = findTrack(twoDiscs, TRACK);
+    if (!match.ok) throw new Error(match.reason);
+    const { credits, ambiguous } = trackCredits(twoDiscs, match.track);
+    // "2" and "1 to 2" may be CD1's; only the whole-release credit is certain.
+    expect(credits.map((c) => c.name)).toEqual(["Everyone"]);
+    expect(ambiguous).toBe(2);
+    expect(creditCovers("2", "2", ["1", "2", "1", "2"])).toBe("ambiguous");
+    expect(creditCovers("3", "2", ["1", "2", "1", "2"])).toBe(false);
+    expect(creditCovers("B1 to B2", "A1", ["A1", "A2", "B1", "B2"])).toBe(false);
+  });
+
+  it("says so in the result when credits are left out", async () => {
+    stubFetch(() => json(twoDiscs));
+    const result = await discogsTrackCredits(TRACK, [20], { now });
+    expect(result.status === "found" && result.incomplete).toBe(
+      "2 credits name position 2, which repeats on the release; left out",
+    );
+  });
+
+  it("lists at most 25 credits and says how many more there are", async () => {
+    const many = {
+      ...rickRoll,
+      extraartists: Array.from({ length: 30 }, (_, i) => ({
+        id: i + 1,
+        name: `Session Player ${i + 1}`,
+        role: "Musician",
+        tracks: "A",
+      })),
+    };
+    stubFetch(() => json(many));
+    const result = await discogsTrackCredits(TRACK, [249504], { now });
+    if (result.status !== "found") throw new Error(result.reason);
+    expect(result.records).toHaveLength(25);
+    expect(result.evidence).toHaveLength(25);
+    expect(result.incomplete).toBe("5 more credits not listed");
+  });
+
+  it("skips a hole in the tracklist instead of losing the release", async () => {
+    const holed = { ...rickRoll, tracklist: [null, ...rickRoll.tracklist, null] };
+    stubFetch(() => json(holed));
+    const result = await discogsTrackCredits(TRACK, [249504], { now });
+    expect(result.status).toBe("found");
+  });
+
+  it("reports an answer that is not a release as an invalid response", async () => {
+    stubFetch(() => json(["not", "a", "release"]));
+    const result = await discogsTrackCredits(TRACK, [249504]);
+    expect(result).toMatchObject({ status: "missing", error: { code: "invalid_response" } });
+  });
+
+  it("does not take a heading for a track", () => {
+    const headed: DiscogsRelease = {
+      ...twoDiscs,
+      tracklist: [
+        { position: "", type_: "heading", title: "Never Gonna Give You Up" },
+        { position: "1", type_: "track", title: "Together Forever", duration: "3:20" },
+      ],
+    };
+    expect(findTrack(headed, TRACK)).toMatchObject({ ok: false });
+  });
+
+  it("omits a release Discogs does not have and goes on to the next", async () => {
+    const net = stubFetch((call) =>
+      call.url.endsWith("/404404")
+        ? json({ message: "Release not found." }, { status: 404 })
+        : json(rickRoll),
+    );
+    const result = await discogsTrackCredits(TRACK, [404404, 249504], { now });
+    expect(result.status).toBe("found");
+    expect(result.omitted).toEqual([
+      { ref: "release/404404", reason: "Discogs has no such release" },
+    ]);
+    expect(net.calls).toHaveLength(2);
+  });
+
+  it("reads an artist name variation marked with a trailing asterisk", () => {
+    expect(findTrack({ ...rickRoll, artists: [{ name: "Rick Astley*" }] }, TRACK).ok).toBe(true);
+  });
+
+  it("keeps the token out of the cassette even when the answer echoes it", async () => {
+    const echo = { ...rickRoll, title: `Never Gonna Give You Up token=${TOKEN}` };
+    const run = await recordThenReplay(
+      () => json(echo),
+      () => discogsTrackCredits(TRACK, [249504], { now }),
+    );
+    expect(run.live.status).toBe("found");
+    expect(run.cassettes.discogs).not.toContain(TOKEN);
+    const denied = await recordThenReplay(
+      () => json({ message: `Invalid consumer token ${TOKEN}` }, { status: 401 }),
+      () => discogsTrackCredits(TRACK, [249504]),
+    );
+    expect(denied.live.status).toBe("missing");
+    expect(denied.cassettes.discogs).not.toContain(TOKEN);
   });
 });

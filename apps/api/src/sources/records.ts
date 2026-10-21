@@ -15,7 +15,7 @@ import {
   type SourceError as SourceErrorRecord,
   type SourceId,
 } from "@liner-notes/contract";
-import { describeError, isSourceError } from "./http.js";
+import { describeError, isSourceError, type SourceName, SourceError } from "./http.js";
 import { normalizeName, withoutFeatured } from "./musicbrainz.js";
 
 // =============================================================================
@@ -54,19 +54,25 @@ const REMASTER = String.raw`(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?
 const REMASTER_BRACKETED = new RegExp(String.raw`\s*[([]\s*${REMASTER}\s*[)\]]`, "gi");
 const REMASTER_DASHED = new RegExp(String.raw`\s+-\s+${REMASTER}\s*$`, "i");
 
-/** A title without featured-artist and remaster suffixes: "Under Pressure - Remastered 2011". */
-export function bareTitle(title: string): string {
-  return withoutFeatured(title).replace(REMASTER_BRACKETED, "").replace(REMASTER_DASHED, "").trim();
+/**
+ * A title without featured-artist and remaster suffixes: "Under Pressure - Remastered 2011".
+ * `artists` are the credited artists, for the notes that name them ("Song (with X)").
+ */
+export function bareTitle(title: string, artists: readonly string[] = []): string {
+  return withoutFeatured(title, artists)
+    .replace(REMASTER_BRACKETED, "")
+    .replace(REMASTER_DASHED, "")
+    .trim();
 }
 
 /** A title for comparison: bare, lowercase, no punctuation, "&" read as "and". */
-export function normalizeTitle(title: string): string {
-  return normalizeName(bareTitle(title));
+export function normalizeTitle(title: string, artists: readonly string[] = []): string {
+  return normalizeName(bareTitle(title, artists));
 }
 
-export function titlesMatch(a: string, b: string): boolean {
-  const left = normalizeTitle(a);
-  return left !== "" && left === normalizeTitle(b);
+export function titlesMatch(a: string, b: string, artists: readonly string[] = []): boolean {
+  const left = normalizeTitle(a, artists);
+  return left !== "" && left === normalizeTitle(b, artists);
 }
 
 /**
@@ -166,7 +172,7 @@ export function checkIdentity(
   candidate: Candidate,
   toleranceMs = DURATION_TOLERANCE_MS,
 ): IdentityCheck {
-  if (!titlesMatch(track.title, candidate.title)) {
+  if (!titlesMatch(track.title, candidate.title, track.artists)) {
     return {
       ok: false,
       failed: "title",
@@ -308,13 +314,20 @@ export function failed<T>(
 ): SourceResult<T> {
   const message = describeError(error);
   let code: SourceErrorRecord["code"] = "unavailable";
+  // A TypeError here is a payload of an unexpected shape, read past a check.
+  if (error instanceof TypeError) code = "invalid_response";
   if (isSourceError(error)) {
-    if (error.kind === "timeout") code = "timeout";
+    if (error.kind === "timeout" || error.kind === "aborted") code = "timeout";
     else if (error.kind === "rate_limited") code = "rate_limited";
     else if (error.kind === "parse" || error.kind === "content_type") code = "invalid_response";
     else if (error.kind === "unavailable") code = "not_configured";
   }
   return missing(source, message, { omitted, error: { source, code, message } });
+}
+
+/** A payload that is not the shape the source documents; reported as an invalid response. */
+export function unexpectedShape(source: SourceName, what: string): SourceError {
+  return new SourceError(source, "parse", `unexpected answer: ${what}`);
 }
 
 /** Per-source identity counts summed over results, for the run's identity accuracy report. */

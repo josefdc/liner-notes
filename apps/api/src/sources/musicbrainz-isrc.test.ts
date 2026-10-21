@@ -18,14 +18,24 @@ import underPressureDetails from "./fixtures/musicbrainz-recording-details-under
 };
 import iceWork from "./fixtures/musicbrainz-work-ice-ice-baby.json" with { type: "json" };
 import { json, stubFetch } from "./testing/fetchStub.js";
+import hallelujahDetails from "./fixtures/musicbrainz-recording-details-hallelujah-live.json" with {
+  type: "json",
+};
+import iceWorkRecordings1 from "./fixtures/musicbrainz-work-recordings-ice-ice-baby-1.json" with {
+  type: "json",
+};
 import {
   browseRecordingReleases,
+  browseWorkRecordings,
+  creditString,
   getRecordingDetails,
   lookupIsrc,
   type MbRecordingDetails,
   MusicBrainzRateLimiter,
   normalizeIsrc,
+  normalizeName,
   recordingRelationships,
+  withoutFeatured,
   workCovers,
 } from "./musicbrainz.js";
 
@@ -200,5 +210,58 @@ describe("workCovers", () => {
     const own = covers[0].recording?.mbid as string;
     expect(workCovers(iceWork, own).map((c) => c.recording?.mbid)).not.toContain(own);
     expect(workCovers(iceWork, own)).toHaveLength(5);
+  });
+});
+
+describe("review findings", () => {
+  it("reads a work's recordings with their first release dates, page by page", async () => {
+    const net = stubFetch((call) => {
+      const offset = new URL(call.url).searchParams.get("offset");
+      return json(offset === "0" ? iceWorkRecordings1 : { "recording-count": 117, recordings: [] });
+    });
+    const { recordings, total } = await browseWorkRecordings(
+      "e0ebb61d-7f69-3667-a2b1-dcd447d80f3d",
+    );
+    expect(total).toBe(117);
+    expect(recordings).toHaveLength(100);
+    expect(recordings.find((r) => r.id === ICE)?.["first-release-date"]).toBe("1990-09-04");
+    const params = net.calls.map((c) => new URL(c.url).searchParams);
+    expect(params.map((p) => p.get("offset"))).toEqual(["0", "100"]);
+    expect(params[0].get("work")).toBe("e0ebb61d-7f69-3667-a2b1-dcd447d80f3d");
+  });
+
+  it("reads a relationship filed twice once", () => {
+    // Jeff Buckley's live "Hallelujah" (USSM10902080) performs the work twice, dated 1995-01-31
+    // and 1995-01.
+    expect(hallelujahDetails.relations).toHaveLength(2);
+    const relations = recordingRelationships(hallelujahDetails as MbRecordingDetails);
+    expect(relations.map((r) => [r.kind, r.work?.title])).toEqual([["cover-of", "Hallelujah"]]);
+  });
+
+  it("reads a credit that is not a list as no credit", () => {
+    expect(creditString({ name: "Queen" } as never)).toBe("");
+    expect(creditString(undefined)).toBe("");
+  });
+
+  it("keeps the marks that change a letter outside the Latin script", () => {
+    expect(normalizeName("バカ")).not.toBe(normalizeName("ハカ"));
+    expect(normalizeName("Beyoncé")).toBe("beyonce");
+    expect(normalizeName("Sigur Rós")).toBe(normalizeName("Sigur Ros"));
+  });
+
+  it("strips a featured-artist note, not a title that looks like one", () => {
+    expect(withoutFeatured("Stay (With Me)")).toBe("Stay (With Me)");
+    expect(withoutFeatured("Welcome to Ft. Lauderdale")).toBe("Welcome to Ft. Lauderdale");
+    expect(withoutFeatured("Song (feat. Anyone)")).toBe("Song");
+    expect(withoutFeatured("Song [ft. Anyone]")).toBe("Song");
+    expect(withoutFeatured("Song - feat. Anyone")).toBe("Song");
+    expect(withoutFeatured("Song (with Rihanna)", ["Eminem", "Rihanna"])).toBe("Song");
+    expect(withoutFeatured("Song feat. Rihanna", ["Eminem", "Rihanna"])).toBe("Song");
+    expect(withoutFeatured("Song feat. Rihanna", ["Eminem"])).toBe("Song feat. Rihanna");
+  });
+
+  it("reads an ISRC written with en dashes or spaces", () => {
+    expect(normalizeIsrc("US–UM7–24–01994")).toBe("USUM72401994");
+    expect(normalizeIsrc("USUM7 2401994")).toBe("USUM72401994");
   });
 });

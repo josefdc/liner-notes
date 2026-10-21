@@ -13,20 +13,46 @@ import iceDetails from "./fixtures/musicbrainz-recording-details-ice-ice-baby.js
 import iceIsrc from "./fixtures/musicbrainz-isrc-ice-ice-baby.json" with { type: "json" };
 import iceReleases from "./fixtures/musicbrainz-releases-ice-ice-baby.json" with { type: "json" };
 import iceWork from "./fixtures/musicbrainz-work-ice-ice-baby.json" with { type: "json" };
+import iceWorkRecordings1 from "./fixtures/musicbrainz-work-recordings-ice-ice-baby-1.json" with {
+  type: "json",
+};
+import iceWorkRecordings2 from "./fixtures/musicbrainz-work-recordings-ice-ice-baby-2.json" with {
+  type: "json",
+};
 import geniusSearch from "./fixtures/genius-search-ice-ice-baby.json" with { type: "json" };
 import geniusSong from "./fixtures/genius-song-ice-ice-baby.json" with { type: "json" };
 import shsWork from "./fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
+import hallelujahDetails from "./fixtures/musicbrainz-recording-details-hallelujah-live.json" with {
+  type: "json",
+};
+import hallelujahIsrc from "./fixtures/musicbrainz-isrc-hallelujah-live.json" with { type: "json" };
+import loveStoryTvDetails from "./fixtures/musicbrainz-recording-details-love-story-taylors-version.json" with {
+  type: "json",
+};
+import loveStoryTvIsrc from "./fixtures/musicbrainz-isrc-love-story-taylors-version.json" with {
+  type: "json",
+};
+import loveStoryWork from "./fixtures/musicbrainz-work-love-story.json" with { type: "json" };
+import loveStoryWorkRecordings from "./fixtures/musicbrainz-work-recordings-love-story.json" with {
+  type: "json",
+};
 import { type FetchCall, type FetchRoute, json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
 import {
   collectPrimarySources,
   discogsCandidates,
   musicBrainzRelationships,
+  originalPerformance,
   pickRecording,
   primarySourcesTool,
   resolveIdentity,
 } from "./identity.js";
-import { MusicBrainzRateLimiter, type MbRecordingSummary } from "./musicbrainz.js";
+import {
+  type MbRecordingDetails,
+  type MbRecordingSummary,
+  MusicBrainzRateLimiter,
+} from "./musicbrainz.js";
+import { never } from "./testing/fetchStub.js";
 import type { TrackRef } from "./records.js";
 
 const MB = "https://musicbrainz.org/ws/2";
@@ -48,6 +74,10 @@ const musicBrainz: FetchRoute = (call: FetchCall) => {
   if (call.url.startsWith(`${MB}/recording/${ICE}?`)) return json(iceDetails);
   if (call.url.startsWith(`${MB}/release?`)) return json(iceReleases);
   if (call.url.startsWith(`${MB}/work/${ICE_WORK}?`)) return json(iceWork);
+  if (call.url.startsWith(`${MB}/recording?work=${ICE_WORK}&`)) {
+    const offset = new URL(call.url).searchParams.get("offset");
+    return json(offset === "0" ? iceWorkRecordings1 : iceWorkRecordings2);
+  }
   return undefined;
 };
 
@@ -140,6 +170,23 @@ describe("pickRecording on the five recordings MusicBrainz files under USCA29001
     expect(pick.recording).toBeNull();
     expect(pick.reason).toContain("cannot be told apart");
   });
+
+  it("without a duration to compare, takes the only one with no disambiguation comment", () => {
+    const twin = (id: string, disambiguation: string) => ({
+      id,
+      title: "Ice Ice Baby",
+      length: null,
+      disambiguation,
+      "artist-credit": [{ name: "Vanilla Ice", artist: { id: "x", name: "Vanilla Ice" } }],
+    });
+    const edit = twin("00000000-0000-4000-8000-000000000004", "radio edit");
+    const plain = twin("00000000-0000-4000-8000-000000000005", "");
+    const pick = pickRecording({ ...ICE_TRACK, durationMs: null }, [edit, plain]);
+    expect(pick.recording?.id).toBe(plain.id);
+    expect(pick.omitted).toEqual([
+      { ref: `recording/${edit.id}`, reason: `recording/${plain.id} is the closer match` },
+    ]);
+  });
 });
 
 describe("discogsCandidates on the recording's releases", () => {
@@ -165,6 +212,8 @@ describe("resolveIdentity", () => {
       geniusUrl: "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
       shsLinks: [{ kind: "work", id: 4196 }],
       releasesError: null,
+      // 1990-09-04; no recording of the work that is not a cover came out before 1990.
+      original: { original: true, reason: 'the earliest release of "Ice Ice Baby" (1990)' },
     });
     expect(identity?.discogsReleaseIds[0]).toBe(599648);
     expect(result.identity).toEqual({ matched: 1, rejected: 4, missing: 0 });
@@ -172,6 +221,10 @@ describe("resolveIdentity", () => {
       "/ws/2/isrc/USCA29001716",
       `/ws/2/recording/${ICE}`,
       "/ws/2/release",
+      `/ws/2/work/${ICE_WORK}`,
+      // The work's 117 recordings, in two pages, to date them.
+      "/ws/2/recording",
+      "/ws/2/recording",
     ]);
   });
 
@@ -222,6 +275,7 @@ describe("musicBrainzRelationships", () => {
     if (result.status !== "found") throw new Error(result.reason);
     expect(result.records).toContainEqual({
       kind: "samples",
+      about: "track",
       recording: {
         mbid: UNDER_PRESSURE,
         title: "Under Pressure",
@@ -231,8 +285,19 @@ describe("musicBrainzRelationships", () => {
       work: null,
       attributes: [],
     });
-    expect(result.records.filter((r) => r.kind === "covered-by")).toHaveLength(6);
+    const covers = result.records.filter((r) => r.kind === "covered-by");
+    expect(covers).toHaveLength(6);
+    // The original recording: the covers of its work are claimed for it.
+    expect(covers.every((c) => c.about === "track")).toBe(true);
+    expect(result.incomplete).toBeNull();
     expectValidEvidence(result.evidence);
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        url: `https://musicbrainz.org/work/${ICE_WORK}`,
+        excerpt:
+          'MusicBrainz: the work "Ice Ice Baby" is covered by "Ice Ice Baby" by Faith No More.',
+      }),
+    );
     expect(result.evidence[0]).toMatchObject({
       id: `musicbrainz:recording/${ICE}`,
       url: `https://musicbrainz.org/recording/${ICE}`,
@@ -420,5 +485,263 @@ describe("collectPrimarySources", () => {
     }
     expect(all).not.toContain("test-token");
     expect(run.cassettes.musicbrainz).toContain(ICE);
+  });
+});
+
+describe("work-level relationships are claimed only for the work's original recording", () => {
+  const LOVE_STORY_WORK = "c8975007-ba64-3e81-9a3c-69a3ba2fab95";
+  const LOVE_STORY_TV = "93484aa2-0ce6-4356-9ff4-9db61e07acd5";
+  /** "Love Story (Taylor's Version)" (2021), from captures of USUG12100342. */
+  const LOVE_STORY_TRACK: TrackRef = {
+    isrc: "USUG12100342",
+    title: "Love Story (Taylor’s Version)",
+    artists: ["Taylor Swift"],
+    durationMs: 235_766,
+  };
+  const loveStory: FetchRoute = (call) => {
+    if (call.url.startsWith(`${MB}/isrc/USUG12100342?`)) return json(loveStoryTvIsrc);
+    if (call.url.startsWith(`${MB}/recording/${LOVE_STORY_TV}?`)) return json(loveStoryTvDetails);
+    if (call.url.startsWith(`${MB}/release?`)) return json({ "release-count": 0, releases: [] });
+    if (call.url.startsWith(`${MB}/work/${LOVE_STORY_WORK}?`)) return json(loveStoryWork);
+    return undefined;
+  };
+
+  it("states the covers of the 2008 song as covers of the work, not of the 2021 re-recording", async () => {
+    const net = stubFetch(loveStory);
+    const resolution = await resolveIdentity(LOVE_STORY_TRACK);
+    expect(resolution.identity?.original).toEqual({
+      original: false,
+      reason: 'titled "Love Story (Taylor’s version)", a version of "Love Story"',
+    });
+    // Ruled out by its title: the work's recordings are not dated.
+    expect(net.calls.some((c) => c.url.includes("/recording?work="))).toBe(false);
+
+    const result = await musicBrainzRelationships(resolution, { now });
+    if (result.status !== "found") throw new Error(result.reason);
+    const covers = result.records.filter((r) => r.kind === "covered-by");
+    expect(covers.map((c) => c.recording?.artist)).toEqual(
+      expect.arrayContaining(["Kidz Bop", "Forever the Sickest Kids"]),
+    );
+    expect(covers.every((c) => c.about === "work")).toBe(true);
+    expect(result.incomplete).toContain('covers are of the work "Love Story", not this recording');
+    // One remix and 31 covers: 25 listed, the rest counted.
+    expect(result.records).toHaveLength(25);
+    expect(result.incomplete).toMatch(/; 7 more not listed$/);
+    const coverEvidence = result.evidence.filter((e) => e.excerpt.includes("covered by"));
+    expect(coverEvidence.length).toBeGreaterThan(0);
+    for (const e of coverEvidence) {
+      expect(e.url).toBe(`https://musicbrainz.org/work/${LOVE_STORY_WORK}`);
+      expect(e.excerpt).toMatch(/^MusicBrainz: the work "Love Story" is covered by /);
+    }
+    expectValidEvidence(result.evidence);
+  });
+
+  /** All 96 recordings of the work, with their first release dates. */
+  const dated = {
+    recordings: loveStoryWorkRecordings.recordings as MbRecordingSummary[],
+    total: loveStoryWorkRecordings["recording-count"],
+  };
+
+  const studio = (overrides: Partial<MbRecordingDetails>, attributes: string[] = []) => ({
+    details: {
+      id: "6fef4fc3-4680-418c-9767-fae7173304ec",
+      title: "Love Story",
+      "first-release-date": "2009",
+      disambiguation: "",
+      "artist-credit": [{ name: "Taylor Swift", artist: { id: "x", name: "Taylor Swift" } }],
+      ...overrides,
+    },
+    works: [{ mbid: LOVE_STORY_WORK, title: "Love Story", cover: false, attributes }],
+  });
+
+  it("does not take a live recording with the song's title and artist for the original", () => {
+    // 810fed01: "Love Story" by Taylor Swift, filed live in the work's recordings.
+    const live = studio(
+      {
+        id: "810fed01-8633-4046-8805-b6ca27b33705",
+        disambiguation: "live, 2008-06-28: Clear Channel Stripped, USA",
+      },
+      ["live"],
+    );
+    expect(originalPerformance(live.details, live.works, dated)).toEqual({
+      original: false,
+      reason: 'a live performance of "Love Story"',
+    });
+    const unattributed = studio({ disambiguation: "live, 2008-06-28" });
+    expect(originalPerformance(unattributed.details, unattributed.works, dated)).toEqual({
+      original: false,
+      reason: 'filed as "live, 2008-06-28"',
+    });
+  });
+
+  it("does not take a later recording of the same title and artist for the original", () => {
+    const later = studio({});
+    const check = originalPerformance(later.details, later.works, dated);
+    expect(check.original).toBe(false);
+    expect(check.reason).toMatch(
+      /by Taylor Swift was released in 2008, before this recording \(2009\)$/,
+    );
+  });
+
+  it("answers no when not every recording of the work could be dated", () => {
+    const early = studio({ "first-release-date": "2008" });
+    const all = dated;
+    expect(originalPerformance(early.details, early.works, all)).toMatchObject({ original: true });
+    const partial = { recordings: all.recordings.slice(0, 10), total: all.total };
+    expect(originalPerformance(early.details, early.works, partial)).toEqual({
+      original: false,
+      reason: 'only 10 of the 96 recordings of "Love Story" could be compared',
+    });
+    expect(originalPerformance(early.details, early.works, null).original).toBe(false);
+    expect(
+      originalPerformance({ ...early.details, "first-release-date": "" }, early.works, all)
+        .original,
+    ).toBe(false);
+  });
+
+  it("does not claim the song's covers or samples for a live version of the original", async () => {
+    process.env.GENIUS_ACCESS_TOKEN = "genius-test-token-0123456789";
+    const live = {
+      ...iceDetails,
+      disambiguation: "live, 1991",
+      relations: iceDetails.relations.map((r) =>
+        r.type === "performance" ? { ...r, attributes: ["live"] } : r,
+      ),
+    };
+    stubFetch((call) => {
+      if (call.url.startsWith(`${MB}/recording/${ICE}?`)) return json(live);
+      if (call.url.startsWith("https://api.genius.com/search?")) return json(geniusSearch);
+      if (call.url === "https://api.genius.com/songs/9000001") return json(geniusSong);
+      return withShs(call);
+    });
+    const sources = await collectPrimarySources(ICE_TRACK, { now });
+    expect(sources.identity?.original).toEqual({
+      original: false,
+      reason: 'a live performance of "Ice Ice Baby"',
+    });
+    const songLevel = [
+      ...(sources.musicbrainz.status === "found"
+        ? sources.musicbrainz.records.filter((r) => r.kind === "covered-by")
+        : []),
+      ...(sources.genius.status === "found" ? sources.genius.records : []),
+      ...(sources.secondhandsongs.status === "found" ? sources.secondhandsongs.records : []),
+    ];
+    expect(songLevel.length).toBeGreaterThan(0);
+    expect(songLevel.every((r) => r.about === "work")).toBe(true);
+    // The recording's own relationships still belong to it.
+    expect(
+      sources.musicbrainz.status === "found" &&
+        sources.musicbrainz.records.find((r) => r.kind === "samples")?.about,
+    ).toBe("track");
+  });
+});
+
+describe("one relationship filed twice is read once", () => {
+  it("dedupes the two performances of Hallelujah in Jeff Buckley's live recording", async () => {
+    // USSM10902080: one work, related twice (1995-01-31 and 1995-01).
+    const net = stubFetch((call) => {
+      if (call.url.startsWith(`${MB}/isrc/USSM10902080?`)) return json(hallelujahIsrc);
+      if (call.url.startsWith(`${MB}/recording/f3abe296-2541-4d42-a3ad-cb8615cbc886?`)) {
+        return json(hallelujahDetails);
+      }
+      if (call.url.startsWith(`${MB}/release?`)) return json({ "release-count": 0, releases: [] });
+      return undefined;
+    });
+    const sources = await collectPrimarySources(
+      { isrc: "USSM10902080", title: "Hallelujah", artists: ["Jeff Buckley"], durationMs: 455_506 },
+      { now },
+    );
+    expect(sources.identity?.works).toEqual([
+      {
+        mbid: "9d0296b2-e2d6-3aaa-8e38-7f15d38ed906",
+        title: "Hallelujah",
+        cover: true,
+        attributes: ["cover", "live"],
+      },
+    ]);
+    if (sources.musicbrainz.status !== "found") throw new Error(sources.musicbrainz.reason);
+    expect(sources.musicbrainz.records.filter((r) => r.kind === "cover-of")).toHaveLength(1);
+    const ids = sources.evidence.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // A cover's work is not read for covers of its own.
+    expect(net.calls.some((c) => c.url.includes("/ws/2/work/"))).toBe(false);
+  });
+});
+
+describe("robustness", () => {
+  it("keeps the other sources when one answer is malformed", async () => {
+    // A relation list with a hole and a credit that is not a list.
+    const malformed = {
+      ...iceDetails,
+      relations: [
+        ...iceDetails.relations.map((r) =>
+          r.type === "samples material" && r.recording
+            ? { ...r, recording: { ...r.recording, "artist-credit": { name: "Queen" } } }
+            : r,
+        ),
+        null,
+      ],
+    };
+    stubFetch((call) =>
+      call.url.startsWith(`${MB}/recording/${ICE}?`) ? json(malformed) : withShs(call),
+    );
+    const sources = await collectPrimarySources(ICE_TRACK, { now });
+    expect(sources.musicbrainz).toMatchObject({
+      status: "missing",
+      error: { source: "musicbrainz", code: "invalid_response" },
+    });
+    expect(sources.secondhandsongs.status).toBe("found");
+  });
+
+  it("stops at the deadline: whatever has not answered is missing (timeout)", async () => {
+    stubFetch(never);
+    const started = Date.now();
+    const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 100 });
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(sources.musicbrainz).toMatchObject({
+      status: "missing",
+      error: { code: "timeout" },
+    });
+    const controller = new AbortController();
+    const pending = collectPrimarySources(ICE_TRACK, { now, signal: controller.signal });
+    controller.abort();
+    expect((await pending).musicbrainz).toMatchObject({ error: { code: "timeout" } });
+  });
+
+  it("reports the Discogs source missing when the recording's releases cannot be read", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
+    const net = stubFetch((call) =>
+      call.url.startsWith(`${MB}/release?`)
+        ? json({ error: "boom" }, { status: 500 })
+        : withShs(call),
+    );
+    const sources = await collectPrimarySources(ICE_TRACK, { now });
+    expect(sources.discogs).toMatchObject({ status: "missing" });
+    expect(sources.discogs.status === "missing" && sources.discogs.reason).toMatch(
+      /^MusicBrainz releases could not be read: musicbrainz: HTTP 500/,
+    );
+    expect(net.calls.some((c) => c.url.startsWith("https://api.discogs.com/"))).toBe(false);
+  });
+
+  it("says when not every release of the recording was read", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
+    const release = {
+      id: 599648,
+      title: "To the Extreme",
+      artists: [{ id: 1, name: "Vanilla Ice" }],
+      extraartists: [{ id: 2, name: "Test Engineer", role: "Engineer", tracks: "" }],
+      tracklist: [{ position: "1", type_: "track", title: "Ice Ice Baby", duration: "4:31" }],
+    };
+    stubFetch((call) => {
+      if (call.url.startsWith(`${MB}/release?`)) {
+        return json({ ...iceReleases, "release-count": 250 });
+      }
+      if (call.url.startsWith("https://api.discogs.com/")) return json(release);
+      return withShs(call);
+    });
+    const sources = await collectPrimarySources(ICE_TRACK, { now });
+    expect(sources.discogs.status === "found" && sources.discogs.incomplete).toBe(
+      "only 13 of the recording's 250 releases were read for Discogs links",
+    );
   });
 });

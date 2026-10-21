@@ -61,12 +61,13 @@ describe("with GENIUS_ACCESS_TOKEN", () => {
 
   it("reads the linked song's relationships, never its lyrics", async () => {
     const net = stubFetch(api);
-    const result = await geniusRelationships(TRACK, LINKED, { now });
+    const result = await geniusRelationships(TRACK, LINKED, { now, trackIsOriginal: true });
     if (result.status !== "found") throw new Error(result.reason);
 
     expect(result.records).toEqual([
       {
         kind: "samples",
+        about: "track",
         songId: 9000003,
         title: "Under Pressure",
         artist: "Queen & David Bowie",
@@ -74,6 +75,7 @@ describe("with GENIUS_ACCESS_TOKEN", () => {
       },
       {
         kind: "covered-by",
+        about: "track",
         songId: 9000004,
         title: "Ice Ice Baby",
         artist: "Glee Cast",
@@ -92,7 +94,7 @@ describe("with GENIUS_ACCESS_TOKEN", () => {
       expect(item).toMatchObject({ source: "genius", sourceTier: "primary-record", url: LINKED });
     }
     expect(result.evidence[0].excerpt).toBe(
-      'Genius: "Ice Ice Baby" by Vanilla Ice samples "Under Pressure" by Queen & David Bowie.',
+      'Genius: the song "Ice Ice Baby" by Vanilla Ice samples "Under Pressure" by Queen & David Bowie.',
     );
   });
 
@@ -174,5 +176,96 @@ describe("Genius links", () => {
     expect(geniusPage("https://genius.com.evil.example/x")).toBeNull();
     expect(geniusSongIdFromUrl("https://genius.com/songs/123")).toBe(123);
     expect(geniusSongIdFromUrl(LINKED)).toBeNull();
+  });
+});
+
+describe("review findings", () => {
+  beforeEach(() => {
+    process.env.GENIUS_ACCESS_TOKEN = TOKEN;
+  });
+
+  it("does not claim the song's relationships for a recording that is not its original", async () => {
+    stubFetch(api);
+    const result = await geniusRelationships(TRACK, LINKED, { now });
+    if (result.status !== "found") throw new Error(result.reason);
+    expect(result.records.map((r) => [r.kind, r.about])).toEqual([
+      ["samples", "work"],
+      ["covered-by", "work"],
+    ]);
+    expect(result.incomplete).toBe(
+      "relationships of the song, not claimed for this recording: it is not the song's original recording",
+    );
+    // A cover of another song is the performer's version: it holds for the track either way.
+    const cover = {
+      ...song,
+      response: {
+        song: {
+          ...song.response.song,
+          song_relationships: [
+            {
+              relationship_type: "cover_of",
+              songs: [song.response.song.song_relationships[0].songs[0]],
+            },
+          ],
+        },
+      },
+    };
+    stubFetch((call) => (call.url.includes("/songs/") ? json(cover) : api(call)));
+    const covered = await geniusRelationships(TRACK, LINKED, { now });
+    expect(covered.status === "found" && covered.records[0].about).toBe("track");
+  });
+
+  it("matches the linked page whatever the case of its path", async () => {
+    const net = stubFetch(api);
+    const result = await geniusRelationships(TRACK, LINKED.toLowerCase(), { now });
+    expect(result.status).toBe("found");
+    expect(net.calls[1].url).toBe("https://api.genius.com/songs/9000001");
+  });
+
+  it("lists each related song once per kind, at most 25, and says how many more", async () => {
+    const other = (i: number) => ({
+      id: 9500000 + i,
+      title: `Sampler ${i}`,
+      url: `https://genius.com/Sampler-${i}-lyrics`,
+      artist_names: `Artist ${i}`,
+    });
+    const many = {
+      ...song,
+      response: {
+        song: {
+          ...song.response.song,
+          song_relationships: [
+            {
+              relationship_type: "sampled_in",
+              songs: [...Array.from({ length: 30 }, (_, i) => other(i)), other(0)],
+            },
+          ],
+        },
+      },
+    };
+    stubFetch((call) => (call.url.includes("/songs/") ? json(many) : api(call)));
+    const result = await geniusRelationships(TRACK, LINKED, { now, trackIsOriginal: true });
+    if (result.status !== "found") throw new Error(result.reason);
+    expect(result.records).toHaveLength(25);
+    expect(result.incomplete).toBe("5 more not listed");
+    expect(new Set(result.evidence.map((e) => e.id)).size).toBe(25);
+  });
+
+  it("keeps the token out of the cassette even when the answer echoes it", async () => {
+    const echoed = {
+      ...search,
+      response: {
+        hits: search.response.hits.map((h) => ({
+          ...h,
+          result: { ...h.result, title: `${h.result.title} access_token=${TOKEN}` },
+        })),
+      },
+    };
+    const run = await recordThenReplay(
+      (call) => (call.url.includes("/search") ? json(echoed) : api(call)),
+      () => geniusRelationships(TRACK, LINKED, { now }),
+    );
+    expect(run.cassettes.genius).toContain("access_token=[redacted]");
+    expect(run.cassettes.genius).not.toContain(TOKEN);
   });
 });

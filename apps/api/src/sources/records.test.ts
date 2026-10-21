@@ -10,6 +10,7 @@ import {
   DURATION_TOLERANCE_MS,
   durationCheck,
   failed,
+  found,
   identityAccuracy,
   missing,
   parseClockDuration,
@@ -116,6 +117,25 @@ describe("results and Evidence", () => {
     const rejected = missing("discogs", "r", { omitted: [{ ref: "release/1", reason: "x" }] });
     expect(identityAccuracy([missing("discogs", "none"), rejected])).toEqual({
       discogs: { matched: 0, rejected: 1, missing: 1 },
+    });
+    const twice = [found("genius", [], []), found("genius", [], []), missing("genius", "none")];
+    expect(identityAccuracy(twice)).toEqual({ genius: { matched: 2, rejected: 0, missing: 1 } });
+  });
+
+  it("counts a record that was identified but holds nothing as matched, not missing", () => {
+    expect(missing("discogs", "no credits", { matched: 1 }).identity).toEqual({
+      matched: 1,
+      rejected: 0,
+      missing: 0,
+    });
+  });
+
+  it("reports a malformed answer as an invalid response, and a deadline as a timeout", () => {
+    expect(failed("discogs", new TypeError("x is not iterable"))).toMatchObject({
+      error: { code: "invalid_response" },
+    });
+    expect(failed("discogs", new SourceError("discogs", "aborted", "aborted"))).toMatchObject({
+      error: { code: "timeout" },
     });
   });
 });

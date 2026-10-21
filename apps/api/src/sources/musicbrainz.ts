@@ -258,20 +258,43 @@ export function escapeLucene(text: string): string {
  * names: "Me & Bobby McGee" and "Me and Bobby McGee" are the same title.
  */
 export function normalizeName(text: string): string {
-  return text
-    .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
+  return (
+    text
+      .normalize("NFKD")
+      // Accents are dropped from Latin letters only: in other scripts a combining mark changes
+      // the letter (the dakuten of バ is not decoration on ハ).
+      .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+      .normalize("NFC")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
+      .trim()
+  );
 }
 
-/** A title without a featured-artist suffix: "Song (feat. X)", "Song - feat. X", "Song ft. X". */
-export function withoutFeatured(title: string): string {
+/**
+ * A title without a featured-artist note: "Song (feat. X)", "Song [ft. X]", "Song - feat. X"
+ * always; "Song (with X)" and "Song feat. X" only when X is among `artists`, so "Stay (With
+ * Me)" and "Welcome to Ft. Lauderdale" keep their titles.
+ */
+export function withoutFeatured(title: string, artists: readonly string[] = []): string {
+  const credited = new Set(artists.map(normalizeName).filter(Boolean));
+  const namesCredited = (text: string) => {
+    const parts = text
+      .split(/\s*(?:,|&|\band\b|\/)\s*/i)
+      .map(normalizeName)
+      .filter(Boolean);
+    return parts.length > 0 && parts.every((p) => credited.has(p));
+  };
   return title
-    .replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, "")
-    .replace(/\s+(?:-\s+)?(?:feat\.?|ft\.?|featuring)\s.*$/i, "")
+    .replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring)\s[^)\]]*[)\]]/gi, "")
+    .replace(/\s*[([]\s*with\s([^)\]]*)[)\]]/gi, (all, who: string) =>
+      namesCredited(who) ? "" : all,
+    )
+    .replace(/\s+-\s+(?:feat\.?|ft\.?|featuring)\s.*$/i, "")
+    .replace(/\s+(?:feat\.?|ft\.?|featuring)\s(.*)$/i, (all, who: string) =>
+      namesCredited(who) ? "" : all,
+    )
     .trim();
 }
 
@@ -285,7 +308,12 @@ const MAX_RETRY_WAIT_MS = 2000;
  * request (503, or 429) it is retried once, after its Retry-After (at most 2 s), through the
  * queue again.
  */
-async function mbFetch<T>(path: string, params: Record<string, string>, scrub: Shape): Promise<T> {
+async function mbFetch<T>(
+  path: string,
+  params: Record<string, string>,
+  scrub: Shape,
+  signal?: AbortSignal,
+): Promise<T> {
   const url = new URL(`${MB_API_BASE}/${path}`);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   url.searchParams.set("fmt", "json");
@@ -298,12 +326,13 @@ async function mbFetch<T>(path: string, params: Record<string, string>, scrub: S
         headers: { Accept: "application/json" },
         rateLimitStatuses: [429, 503],
         scrub,
+        signal,
       });
     });
   try {
     return await attempt();
   } catch (error) {
-    if (!isSourceError(error, "rate_limited")) throw error;
+    if (!isSourceError(error, "rate_limited") || signal?.aborted) throw error;
     await delay(Math.min(error.retryAfterMs ?? MAX_RETRY_WAIT_MS, MAX_RETRY_WAIT_MS));
     return attempt();
   }
@@ -392,11 +421,11 @@ async function searchRecording(
   artistNames?: string[],
   album?: string,
 ): Promise<RecordingSearch> {
-  const bareTitle = withoutFeatured(title);
-  const wantedTitle = normalizeName(bareTitle);
   const parts = (artistNames?.length ? artistNames : artist.split(","))
     .map((p) => p.trim())
     .filter((p) => normalizeName(p));
+  const bareTitle = withoutFeatured(title, parts);
+  const wantedTitle = normalizeName(bareTitle);
   if (!wantedTitle || !normalizeName(artist) || parts.length === 0) {
     return { recording: null, reason: "not_found", detail: "nothing to search for" };
   }
@@ -416,7 +445,7 @@ async function searchRecording(
     (r) =>
       isMbid(r?.id) &&
       typeof r.title === "string" &&
-      normalizeName(withoutFeatured(r.title)) === wantedTitle &&
+      normalizeName(withoutFeatured(r.title, parts)) === wantedTitle &&
       creditedTo(r, artist, artistNames),
   );
   if (exact.length === 0) {
@@ -697,9 +726,9 @@ export const getMusicBrainzArtist = tool(
 
 const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 
-/** An ISRC in its canonical form (upper case, no hyphens or spaces), or null. */
+/** An ISRC in its canonical form (upper case, no hyphens, dashes or spaces), or null. */
 export function normalizeIsrc(value: string): string | null {
-  const isrc = value.replace(/[\s-]/g, "").toUpperCase();
+  const isrc = value.replace(/[\s\u2010-\u2015-]/g, "").toUpperCase();
   return ISRC.test(isrc) ? isrc : null;
 }
 
@@ -712,6 +741,7 @@ export interface MbCredit {
 export interface MbRecordingSummary {
   id: string;
   title: string;
+  "first-release-date"?: string;
   /** Milliseconds; null when MusicBrainz does not know it. */
   length?: number | null;
   disambiguation?: string;
@@ -752,6 +782,7 @@ const CREDIT_SHAPE: Shape = [{ name: true, joinphrase: true, artist: { id: true,
 const RECORDING_SUMMARY_SHAPE: Shape = {
   id: true,
   title: true,
+  "first-release-date": true,
   length: true,
   disambiguation: true,
   "artist-credit": CREDIT_SHAPE,
@@ -807,7 +838,10 @@ const WORK_SHAPE: Shape = {
  * Several recordings can share one ISRC (an edit filed with the album version's code), so the
  * caller still checks title, artist and duration.
  */
-export async function lookupIsrc(isrc: string): Promise<MbRecordingSummary[]> {
+export async function lookupIsrc(
+  isrc: string,
+  signal?: AbortSignal,
+): Promise<MbRecordingSummary[]> {
   const code = normalizeIsrc(isrc);
   if (!code) throw new SourceError("musicbrainz", "invalid_input", "not an ISRC");
   try {
@@ -815,6 +849,7 @@ export async function lookupIsrc(isrc: string): Promise<MbRecordingSummary[]> {
       `isrc/${code}`,
       { inc: "artist-credits" },
       ISRC_SHAPE,
+      signal,
     );
     return (Array.isArray(data?.recordings) ? data.recordings : []).filter(
       (r) => isMbid(r?.id) && typeof r.title === "string",
@@ -826,12 +861,16 @@ export async function lookupIsrc(isrc: string): Promise<MbRecordingSummary[]> {
 }
 
 /** A recording with its recording and work relationships, and the URLs linked to its works. */
-export async function getRecordingDetails(mbid: string): Promise<MbRecordingDetails> {
+export async function getRecordingDetails(
+  mbid: string,
+  signal?: AbortSignal,
+): Promise<MbRecordingDetails> {
   if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
   return mbFetch<MbRecordingDetails>(
     `recording/${mbid}`,
     { inc: "artist-credits recording-rels work-rels work-level-rels url-rels" },
     RECORDING_DETAILS_SHAPE,
+    signal,
   );
 }
 
@@ -844,6 +883,7 @@ const RELEASE_PAGE = 100;
 export async function browseRecordingReleases(
   mbid: string,
   maxPages = 2,
+  signal?: AbortSignal,
 ): Promise<{ releases: MbReleaseSummary[]; total: number }> {
   if (!isMbid(mbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
   const releases: MbReleaseSummary[] = [];
@@ -860,6 +900,7 @@ export async function browseRecordingReleases(
         offset: String(page * RELEASE_PAGE),
       },
       RELEASE_BROWSE_SHAPE,
+      signal,
     );
     const batch = (Array.isArray(data?.releases) ? data.releases : []).filter((r) => isMbid(r?.id));
     releases.push(...batch);
@@ -870,14 +911,59 @@ export async function browseRecordingReleases(
 }
 
 /** A work with the recordings that perform it (each with its credit and attributes). */
-export async function getWorkRecordings(workMbid: string): Promise<MbWork> {
+export async function getWorkRecordings(workMbid: string, signal?: AbortSignal): Promise<MbWork> {
   if (!isMbid(workMbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
-  return mbFetch<MbWork>(`work/${workMbid}`, { inc: "recording-rels artist-credits" }, WORK_SHAPE);
+  return mbFetch<MbWork>(
+    `work/${workMbid}`,
+    { inc: "recording-rels artist-credits" },
+    WORK_SHAPE,
+    signal,
+  );
+}
+
+const WORK_RECORDINGS_SHAPE: Shape = {
+  "recording-count": true,
+  recordings: [RECORDING_SUMMARY_SHAPE],
+};
+
+/**
+ * The recordings of a work with their first release dates (the work lookup has no dates). Reads
+ * at most `maxPages` pages of 100; `total` says how many there are.
+ */
+export async function browseWorkRecordings(
+  workMbid: string,
+  maxPages = 2,
+  signal?: AbortSignal,
+): Promise<{ recordings: MbRecordingSummary[]; total: number }> {
+  if (!isMbid(workMbid)) throw new SourceError("musicbrainz", "invalid_input", "not an MBID");
+  const recordings: MbRecordingSummary[] = [];
+  let total = 0;
+  for (let page = 0; page < maxPages; page++) {
+    const data = await mbFetch<{ "recording-count"?: number; recordings?: MbRecordingSummary[] }>(
+      "recording",
+      {
+        work: workMbid,
+        inc: "artist-credits",
+        limit: String(RELEASE_PAGE),
+        offset: String(page * RELEASE_PAGE),
+      },
+      WORK_RECORDINGS_SHAPE,
+      signal,
+    );
+    const batch = (Array.isArray(data?.recordings) ? data.recordings : []).filter((r) =>
+      isMbid(r?.id),
+    );
+    recordings.push(...batch);
+    total =
+      typeof data?.["recording-count"] === "number" ? data["recording-count"] : recordings.length;
+    if (batch.length < RELEASE_PAGE || recordings.length >= total) break;
+  }
+  return { recordings, total };
 }
 
 /** The credit as MusicBrainz prints it: "Queen & David Bowie". */
 export function creditString(credits: MbCredit[] | undefined): string {
-  return (credits ?? [])
+  return (Array.isArray(credits) ? credits : [])
     .filter((c) => typeof c?.name === "string")
     .map((c) => `${c.name}${c.joinphrase ?? ""}`)
     .join("")
@@ -894,10 +980,32 @@ export type MbRelationshipKind =
 
 export interface MbRelationship {
   kind: MbRelationshipKind;
+  /**
+   * "track": a fact about the matched recording. "work": a fact about the song it performs (a
+   * cover of the work), not claimed for this recording.
+   */
+  about: "track" | "work";
   /** The related recording; null when the relationship is to a work. */
   recording: { mbid: string; title: string; artist: string; lengthMs: number | null } | null;
   work: { mbid: string; title: string } | null;
   attributes: string[];
+}
+
+/**
+ * Relationships kept once per kind and other end: MusicBrainz can file one relationship twice
+ * (two performance relationships to one work, with different dates).
+ */
+class UniqueRelationships {
+  readonly list: MbRelationship[] = [];
+  private readonly seen = new Set<string>();
+
+  add(relationship: MbRelationship): void {
+    const other = relationship.recording?.mbid ?? `work:${relationship.work?.mbid}`;
+    const key = `${relationship.kind} ${other}`;
+    if (this.seen.has(key)) return;
+    this.seen.add(key);
+    this.list.push(relationship);
+  }
 }
 
 const relatedRecording = (r: MbRecordingSummary): MbRelationship["recording"] => ({
@@ -914,7 +1022,7 @@ const relatedRecording = (r: MbRecordingSummary): MbRelationship["recording"] =>
  * makes this recording a cover of that work.
  */
 export function recordingRelationships(details: MbRecordingDetails): MbRelationship[] {
-  const out: MbRelationship[] = [];
+  const out = new UniqueRelationships();
   for (const rel of Array.isArray(details?.relations) ? details.relations : []) {
     const attributes = Array.isArray(rel.attributes) ? rel.attributes.map(String) : [];
     const forward = rel.direction !== "backward";
@@ -923,7 +1031,13 @@ export function recordingRelationships(details: MbRecordingDetails): MbRelations
       if (rel.type === "samples material") kind = forward ? "samples" : "sampled-by";
       else if (rel.type === "remix") kind = forward ? "remix-of" : "remixed-by";
       if (kind) {
-        out.push({ kind, recording: relatedRecording(rel.recording), work: null, attributes });
+        out.add({
+          kind,
+          about: "track",
+          recording: relatedRecording(rel.recording),
+          work: null,
+          attributes,
+        });
       }
     } else if (
       rel.type === "performance" &&
@@ -931,20 +1045,24 @@ export function recordingRelationships(details: MbRecordingDetails): MbRelations
       isMbid(rel.work.id) &&
       attributes.includes("cover")
     ) {
-      out.push({
+      out.add({
         kind: "cover-of",
+        about: "track",
         recording: null,
         work: { mbid: rel.work.id, title: rel.work.title },
         attributes,
       });
     }
   }
-  return out;
+  return out.list;
 }
 
-/** The recordings filed as covers of a work, other than `ownRecording`. */
+/**
+ * The recordings filed as covers of a work, other than `ownRecording`. These are covers of the
+ * work (the song), not of any one recording of it.
+ */
 export function workCovers(work: MbWork, ownRecording: string): MbRelationship[] {
-  const out: MbRelationship[] = [];
+  const out = new UniqueRelationships();
   for (const rel of Array.isArray(work?.relations) ? work.relations : []) {
     const attributes = Array.isArray(rel.attributes) ? rel.attributes.map(String) : [];
     const recording = rel.recording;
@@ -958,14 +1076,15 @@ export function workCovers(work: MbWork, ownRecording: string): MbRelationship[]
     ) {
       continue;
     }
-    out.push({
+    out.add({
       kind: "covered-by",
+      about: "work",
       recording: relatedRecording(recording),
       work: { mbid: work.id, title: work.title },
       attributes,
     });
   }
-  return out;
+  return out.list;
 }
 
 // =============================================================================

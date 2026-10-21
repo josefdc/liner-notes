@@ -1,0 +1,134 @@
+{
+  "id": "93484aa2-0ce6-4356-9ff4-9db61e07acd5",
+  "title": "Love Story (Taylor’s version)",
+  "length": 235766,
+  "disambiguation": "",
+  "artist-credit": [
+    {
+      "name": "Taylor Swift",
+      "joinphrase": "",
+      "artist": {
+        "id": "20244d07-534f-4eff-b4d4-930878889970",
+        "name": "Taylor Swift"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "mashes up",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "76adbb14-5d7d-4e48-b611-aab4d3a7ca06",
+        "title": "pov",
+        "length": 240000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "PaulGMashups",
+            "joinphrase": "",
+            "artist": {
+              "id": "b61a94a3-8ff3-42e6-8786-ccdccfff4cab",
+              "name": "PaulGMashups"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "mashes up",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "dc9272d3-699b-4b00-82a8-de6f6a350908",
+        "title": "The One That Got Away / Love Story (Taylor’s Version) (Katy Perry vs. Taylor Swift)",
+        "length": 255000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "XaiDor’s Mashups",
+            "joinphrase": "",
+            "artist": {
+              "id": "06286c16-ba10-44f2-9588-ef692c11973e",
+              "name": "XaiDor’s Mashups"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "music video",
+      "direction": "forward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "c99bedea-d058-4e12-9f36-4c2696c780d9",
+        "title": "Love Story (Taylor’s version)",
+        "length": 241000,
+        "disambiguation": "lyric video",
+        "artist-credit": [
+          {
+            "name": "Taylor Swift",
+            "joinphrase": "",
+            "artist": {
+              "id": "20244d07-534f-4eff-b4d4-930878889970",
+              "name": "Taylor Swift"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "remix",
+      "direction": "backward",
+      "target-type": "recording",
+      "attributes": [],
+      "recording": {
+        "id": "8ad2af3a-6611-46ea-86f3-6bcf4da76568",
+        "title": "Love Story (Taylor’s version) (Elvira remix)",
+        "length": 212000,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Taylor Swift",
+            "joinphrase": "",
+            "artist": {
+              "id": "20244d07-534f-4eff-b4d4-930878889970",
+              "name": "Taylor Swift"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "performance",
+      "direction": "forward",
+      "target-type": "work",
+      "attributes": [],
+      "work": {
+        "id": "c8975007-ba64-3e81-9a3c-69a3ba2fab95",
+        "title": "Love Story",
+        "relations": [
+          {
+            "type": "lyrics",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://genius.com/Taylor-swift-love-story-lyrics"
+            }
+          },
+          {
+            "type": "secondhandsongs",
+            "direction": "backward",
+            "target-type": "url",
+            "url": {
+              "resource": "https://secondhandsongs.com/work/113979"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

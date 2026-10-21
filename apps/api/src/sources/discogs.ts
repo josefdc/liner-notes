@@ -23,6 +23,7 @@ import {
   MAX_RECORDS,
   missing,
   notConfigured,
+  unexpectedShape,
   type Omission,
   PRINTED_DURATION_TOLERANCE_MS,
   parseClockDuration,
@@ -112,8 +113,8 @@ export function discogsReleaseId(url: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-export async function getDiscogsRelease(id: number): Promise<DiscogsRelease> {
-  return fetchJson<DiscogsRelease>({
+export async function getDiscogsRelease(id: number, signal?: AbortSignal): Promise<DiscogsRelease> {
+  const release = await fetchJson<DiscogsRelease>({
     source: "discogs",
     url: `${API}/releases/${id}`,
     headers: {
@@ -121,7 +122,12 @@ export async function getDiscogsRelease(id: number): Promise<DiscogsRelease> {
       Authorization: `Discogs token=${credential(DISCOGS_TOKEN) ?? ""}`,
     },
     scrub: RELEASE_SHAPE,
+    signal,
   });
+  if (!release || typeof release !== "object" || typeof release.id !== "number") {
+    throw unexpectedShape("discogs", `release ${id} is not a release`);
+  }
+  return release;
 }
 
 /** "Producer, Written-By" → ["Producer", "Written-By"]; commas inside brackets stay. */
@@ -145,33 +151,45 @@ export function splitRoles(role: string | undefined): string[] {
 
 const samePosition = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase();
 
+export type Coverage = boolean | "all" | "ambiguous";
+
 /**
  * Whether a release credit's `tracks` field covers a position: "all" when it is empty (the
  * credit is for the whole release), otherwise a list of positions and ranges ("A1, B2",
- * "A1 to A3") read against the tracklist's order.
+ * "A1 to A3") read against the tracklist's order. A position that occurs more than once (each
+ * disc numbered from 1 under its own heading) cannot be told apart in a `tracks` field, so a
+ * credit naming one, or a range bounded by one, that could cover the track is "ambiguous".
  */
 export function creditCovers(
   tracks: string | undefined,
   position: string,
   order: string[],
-): boolean | "all" {
+): Coverage {
   if (!tracks?.trim()) return "all";
-  const index = order.findIndex((p) => samePosition(p, position));
+  const indexes = (p: string) => order.flatMap((q, i) => (samePosition(q, p) ? [i] : []));
+  const own = indexes(position);
+  let ambiguous = false;
   for (const part of tracks.split(",")) {
     const range = part.match(/^\s*(.+?)\s+to\s+(.+?)\s*$/i);
     if (range) {
-      const from = order.findIndex((p) => samePosition(p, range[1]));
-      const to = order.findIndex((p) => samePosition(p, range[2]));
-      if (index >= 0 && from >= 0 && to >= from && index >= from && index <= to) return true;
+      const from = indexes(range[1]);
+      const to = indexes(range[2]);
+      if (from.length === 0 || to.length === 0) continue;
+      const spans = from.flatMap((f) => to.filter((t) => t >= f).map((t) => [f, t] as const));
+      const hits = spans.filter(([f, t]) => own.some((i) => i >= f && i <= t));
+      if (hits.length === 0) continue;
+      if (own.length === 1 && from.length === 1 && to.length === 1) return true;
+      ambiguous = true;
     } else if (samePosition(part, position)) {
-      return true;
+      if (own.length === 1) return true;
+      ambiguous = true;
     }
   }
-  return false;
+  return ambiguous ? "ambiguous" : false;
 }
 
 const creditedArtists = (artists: DiscogsArtist[] | undefined) =>
-  (artists ?? [])
+  (Array.isArray(artists) ? artists : [])
     .filter((a) => typeof a?.name === "string")
     .map((a) => ({ names: [a.name, a.anv ?? ""].filter(Boolean) }));
 
@@ -183,13 +201,17 @@ type TrackMatch = { ok: true; track: DiscogsTrack } | { ok: false; reason: strin
  * tracks passing is ambiguous and omitted, unless exactly one has a matching printed duration.
  */
 export function findTrack(release: DiscogsRelease, track: TrackRef): TrackMatch {
+  // Headings and index tracks ("type_": "heading" / "index") are not tracks.
   const tracks = (Array.isArray(release?.tracklist) ? release.tracklist : []).filter(
     (t) => typeof t?.title === "string" && (t.type_ === undefined || t.type_ === "track"),
   );
   const reasons: Array<{ failed: string; reason: string }> = [];
   const passing: Array<{ track: DiscogsTrack; durationKnown: boolean }> = [];
   for (const candidate of tracks) {
-    const artists = candidate.artists?.length ? candidate.artists : release.artists;
+    const artists =
+      Array.isArray(candidate.artists) && candidate.artists.length
+        ? candidate.artists
+        : release.artists;
     const check = checkIdentity(
       track,
       {
@@ -216,10 +238,18 @@ export function findTrack(release: DiscogsRelease, track: TrackRef): TrackMatch 
   };
 }
 
-/** The credits that name the track, in the release's order. */
-export function trackCredits(release: DiscogsRelease, matched: DiscogsTrack): DiscogsCredit[] {
+/**
+ * The credits that name the track, in the release's order, and how many release credits were
+ * left out because the position they name repeats on the release.
+ */
+export function trackCredits(
+  release: DiscogsRelease,
+  matched: DiscogsTrack,
+): { credits: DiscogsCredit[]; ambiguous: number } {
   const position = matched.position?.trim() ?? "";
-  const order = (release.tracklist ?? []).map((t) => t.position?.trim() ?? "");
+  const order = (Array.isArray(release.tracklist) ? release.tracklist : [])
+    .filter((t) => t && (t.type_ === undefined || t.type_ === "track"))
+    .map((t) => t.position?.trim() ?? "");
   const credit = (a: DiscogsArtist, scope: DiscogsCredit["scope"]): DiscogsCredit => ({
     releaseId: release.id,
     position,
@@ -229,21 +259,24 @@ export function trackCredits(release: DiscogsRelease, matched: DiscogsTrack): Di
     roles: splitRoles(a.role),
     scope,
   });
+  const list = <T>(v: T[] | undefined) => (Array.isArray(v) ? v : []);
   const credits: DiscogsCredit[] = [];
-  for (const a of matched.extraartists ?? []) {
+  let ambiguous = 0;
+  for (const a of list(matched.extraartists)) {
     if (typeof a?.name === "string") credits.push(credit(a, "track"));
   }
-  for (const a of release.extraartists ?? []) {
+  for (const a of list(release.extraartists)) {
     if (typeof a?.name !== "string") continue;
-    const covers = position
+    const covers: Coverage = position
       ? creditCovers(a.tracks, position, order)
       : a.tracks?.trim()
         ? false
         : "all";
     if (covers === true) credits.push(credit(a, "track"));
     else if (covers === "all") credits.push(credit(a, "release"));
+    else if (covers === "ambiguous") ambiguous++;
   }
-  return credits.filter((c) => c.roles.length > 0);
+  return { credits: credits.filter((c) => c.roles.length > 0), ambiguous };
 }
 
 function creditEvidence(release: DiscogsRelease, credit: DiscogsCredit, index: number, at: string) {
@@ -270,7 +303,7 @@ function creditEvidence(release: DiscogsRelease, credit: DiscogsCredit, index: n
 export async function discogsTrackCredits(
   track: TrackRef,
   releaseIds: number[],
-  options: { maxReleases?: number; now?: Clock } = {},
+  options: { maxReleases?: number; now?: Clock; signal?: AbortSignal; note?: string | null } = {},
 ): Promise<SourceResult<DiscogsCredit>> {
   if (!discogsConfigured()) return notConfigured("discogs", DISCOGS_TOKEN);
   const ids = [...new Set(releaseIds)].slice(0, options.maxReleases ?? 3);
@@ -283,7 +316,7 @@ export async function discogsTrackCredits(
     for (const id of ids) {
       let release: DiscogsRelease;
       try {
-        release = await getDiscogsRelease(id);
+        release = await getDiscogsRelease(id, options.signal);
       } catch (error) {
         if (isSourceError(error, "http") && error.status === 404) {
           omitted.push({ ref: `release/${id}`, reason: "Discogs has no such release" });
@@ -297,15 +330,27 @@ export async function discogsTrackCredits(
         omitted.push({ ref: `release/${id}`, reason: match.reason });
         continue;
       }
-      const credits = trackCredits(release, match.track).slice(0, MAX_RECORDS);
-      if (credits.length === 0) {
-        return missing("discogs", `Discogs release ${id} lists no credits for the track`, {
-          omitted,
-          matched: 1,
-        });
+      const { credits: all, ambiguous } = trackCredits(release, match.track);
+      const notes = [
+        all.length > MAX_RECORDS ? `${all.length - MAX_RECORDS} more credits not listed` : null,
+        ambiguous > 0
+          ? `${ambiguous} credits name position ${match.track.position}, which repeats on the release; left out`
+          : null,
+        options.note ?? null,
+      ].filter((n): n is string => n !== null);
+      if (all.length === 0) {
+        return missing(
+          "discogs",
+          [`Discogs release ${id} lists no credits for the track`, ...notes].join("; "),
+          { omitted, matched: 1 },
+        );
       }
+      const credits = all.slice(0, MAX_RECORDS);
       const evidence = credits.map((c, i) => creditEvidence(release, c, i, at));
-      return found("discogs", credits, evidence, { omitted });
+      return found("discogs", credits, evidence, {
+        omitted,
+        incomplete: notes.length > 0 ? notes.join("; ") : null,
+      });
     }
   } catch (error) {
     return failed("discogs", error, omitted);

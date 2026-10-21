@@ -33,11 +33,22 @@ const MAX_TEXT = 4000;
 const MAX_ERROR_TEXT = 500;
 const MAX_DETAIL = 200;
 
+/** The source credentials, redacted whatever their length: each is sent on every request. */
+const SOURCE_CREDENTIALS = new Set(["DISCOGS_TOKEN", "SHS_API_KEY", "GENIUS_ACCESS_TOKEN"]);
+
 /** Values of the environment's credentials, so an echoed key is recognised wherever it appears. */
 function knownSecrets(): string[] {
-  return Object.entries(process.env)
-    .filter(([name, value]) => /KEY|SECRET|TOKEN|PASSWORD/i.test(name) && (value?.length ?? 0) >= 8)
-    .map(([, value]) => value as string);
+  return (
+    Object.entries(process.env)
+      .filter(([name, value]) =>
+        SOURCE_CREDENTIALS.has(name)
+          ? Boolean(value)
+          : /KEY|SECRET|TOKEN|PASSWORD/i.test(name) && (value?.length ?? 0) >= 8,
+      )
+      .map(([, value]) => value as string)
+      // Longest first, so a key that contains a shorter one is removed whole.
+      .sort((a, b) => b.length - a.length)
+  );
 }
 
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -316,6 +327,7 @@ export function pick(value: unknown, shape: Shape): unknown {
 }
 
 const SECRET_KEYS = new Set([
+  "x-api-key",
   "access_token",
   "refresh_token",
   "api_key",
@@ -589,12 +601,47 @@ function errorDetail(body: unknown): string | undefined {
   return found?.trim().slice(0, MAX_DETAIL);
 }
 
+/** Headers that carry a credential: such a request never follows a redirect off its origin. */
+const CREDENTIAL_HEADERS = new Set(["authorization", "proxy-authorization", "x-api-key", "cookie"]);
+const MAX_REDIRECTS = 5;
+
+/**
+ * Fetches `url`. A request that carries a credential follows redirects itself, and only within
+ * its own origin: fetch drops Authorization on a cross-origin redirect but forwards other
+ * headers (an X-API-Key), and a downgrade to http would send it in clear.
+ */
+async function fetchWithin(req: SourceRequest, url: string, init: RequestInit): Promise<Response> {
+  const credentialed = Object.keys(req.headers ?? {}).some((name) =>
+    CREDENTIAL_HEADERS.has(name.toLowerCase()),
+  );
+  if (!credentialed) return fetch(url, init);
+  let current = new URL(url);
+  for (let hop = 0; ; hop++) {
+    const response = await fetch(current, { ...init, redirect: "manual" });
+    const location = response.headers.get("location");
+    if (response.status < 300 || response.status > 399 || !location) return response;
+    const next = new URL(location, current);
+    if (next.origin !== current.origin) {
+      throw new SourceError(
+        req.source,
+        "http",
+        `HTTP ${response.status} redirect to ${next.origin} refused: the request carries a credential`,
+        { status: response.status },
+      );
+    }
+    if (hop >= MAX_REDIRECTS) {
+      throw new SourceError(req.source, "http", "too many redirects", { status: response.status });
+    }
+    current = next;
+  }
+}
+
 async function fetchLive(req: SourceRequest, url: string, method: string): Promise<Recorded> {
   const timeoutMs = req.timeoutMs ?? defaultTimeoutMs();
   const timeout = AbortSignal.timeout(timeoutMs);
   const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout;
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithin(req, url, {
       method,
       headers: { "User-Agent": userAgent(), ...req.headers },
       body: req.body,
@@ -616,6 +663,7 @@ async function fetchLive(req: SourceRequest, url: string, method: string): Promi
     recorded.text = text.slice(0, MAX_TEXT * 4);
     return recorded;
   } catch (error) {
+    if (isSourceError(error)) throw error;
     if (req.signal?.aborted) {
       throw new SourceError(req.source, "aborted", "request aborted", { cause: error });
     }

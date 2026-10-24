@@ -5,13 +5,27 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { packageDir, repoDir } from "./testing/samples.js";
 
-const script = join(packageDir, "scripts", "contract-check.mjs");
+// The script runs on the built package, which it finds at ../dist from its own location. The
+// tests build into a directory of their own and run a copy of the script there, so they never
+// rewrite packages/contract/dist while other test files import it. That directory sits under
+// the package's node_modules, so the build resolves the same zod as packages/contract/dist does.
+const builds = join(packageDir, "node_modules", ".cache");
+let build = "";
+let script = "";
 let repo = "";
 
 // Git in these repositories ignores the user's and the machine's configuration, so settings
@@ -54,16 +68,23 @@ function withExtraField() {
 }
 
 beforeAll(() => {
-  // The script runs on the built package.
-  execFileSync(join(repoDir, "node_modules", ".bin", "tsc"), ["-p", "tsconfig.build.json"], {
-    cwd: packageDir,
-  });
+  mkdirSync(builds, { recursive: true });
+  build = mkdtempSync(join(builds, "contract-check-"));
+  execFileSync(
+    join(repoDir, "node_modules", ".bin", "tsc"),
+    ["-p", "tsconfig.build.json", "--outDir", join(build, "dist")],
+    { cwd: packageDir },
+  );
+  script = join(build, "scripts", "contract-check.mjs");
+  mkdirSync(dirname(script));
+  copyFileSync(join(packageDir, "scripts", "contract-check.mjs"), script);
   repo = mkdtempSync(join(tmpdir(), "contract-check-"));
   git("init", "-q");
 }, 60_000);
 
 afterAll(() => {
   if (repo) rmSync(repo, { recursive: true, force: true });
+  if (build) rmSync(build, { recursive: true, force: true });
 });
 
 // Each test spawns node and git several times: allow well beyond the 5 s default.

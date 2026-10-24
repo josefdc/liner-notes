@@ -165,7 +165,8 @@ describe("scoutNode with Spotify results that carry no popularity", () => {
     spotifySearch([
       hit,
       spotifyTrack("Ice Ice Baby (Karaoke Version)", ["Karaoke Hits Band"]),
-      spotifyTrack("Baby", ["Justin Bieber", "Ludacris"]),
+      // Another artist's song whose title is within the query ("Baby") would make it a choice.
+      spotifyTrack("Under Pressure", ["Queen", "David Bowie"]),
       spotifyTrack("Ice Cream", ["BLACKPINK", "Selena Gomez"]),
     ]);
 
@@ -252,7 +253,8 @@ describe("scoutNode never selects another recording on its own", () => {
 
     expect(out.spotifyData ?? null).toBeNull();
     expect(out.candidates).toHaveLength(3);
-    expect(out.queryMatch).toBe("artist");
+    // The title match is listed first, then the songs of the artist the query names.
+    expect(out.candidates?.[0]).toMatchObject({ title: "Rihanna", artist: "Yxng Bane" });
   });
 
   it("selects PSY's song for the Korean title, as an exact match", async () => {
@@ -315,5 +317,94 @@ describe("scoutNode's remembered choice", () => {
 
     expect(out.spotifyData ?? null).toBeNull();
     expect(ids(out.candidates)).toEqual([unrelated.id]);
+  });
+});
+
+describe("scoutNode with a query spelt unlike the original, or that is only a title", () => {
+  it("asks instead of selecting a cover spelt like the query when Spotify lists the original first", async () => {
+    const original = spotifyTrack("Don't Stop Believin'", ["Journey"], {
+      external_ids: { isrc: "USSM18100116" },
+    });
+    spotifySearch([
+      original,
+      spotifyTrack("Don't Stop Believin' - 2022 Remaster", ["Journey"]),
+      spotifyTrack("Don't Stop Believin' (Glee Cast Version)", ["Glee Cast"]),
+      spotifyTrack("Any Way You Want It", ["Journey"]),
+      spotifyTrack("Don't Stop Believing", ["Petra Haden"], {
+        external_ids: { isrc: "USA2B1900001" },
+      }),
+    ]);
+
+    const out = await scout("Dont Stop Believing");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+    expect(ids(out.candidates)).toContain(original.id);
+  });
+
+  it("asks instead of selecting a cover spelt like the query that Spotify lists first", async () => {
+    const original = spotifyTrack("Sweet Child O' Mine", ["Guns N' Roses"], {
+      external_ids: { isrc: "USGF18714801" },
+    });
+    spotifySearch([
+      spotifyTrack("Sweet Child of Mine", ["Sheryl Crow"], {
+        external_ids: { isrc: "USIR19900001" },
+      }),
+      original,
+      spotifyTrack("November Rain", ["Guns N' Roses"]),
+    ]);
+
+    const out = await scout("Sweet Child of Mine");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+    expect(ids(out.candidates)).toContain(original.id);
+  });
+
+  it("asks instead of selecting a cover with the romanised title of a Japanese original", async () => {
+    const original = spotifyTrack("夜に駆ける", ["YOASOBI"], {
+      external_ids: { isrc: "JPP302000245" },
+    });
+    spotifySearch([
+      original,
+      spotifyTrack("Into The Night", ["YOASOBI"]),
+      spotifyTrack("Yoru ni Kakeru", ["Rainych"], { external_ids: { isrc: "QZES52000002" } }),
+    ]);
+
+    const out = await scout("Yoru ni Kakeru");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(ids(out.candidates)).toContain(original.id);
+  });
+
+  it("asks when the query is a title that is also an artist's name", async () => {
+    const frank = spotifyTrack("Bad Religion", ["Frank Ocean"]);
+    const band = spotifyTrack("Bad Religion", ["Bad Religion"], {
+      external_ids: { isrc: "USEP48100001" },
+    });
+    spotifySearch([frank, spotifyTrack("Punk Rock Song", ["Bad Religion"]), band]);
+
+    const out = await scout("Bad Religion");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(ids(out.candidates).slice(0, 2)).toEqual([frank.id, band.id]);
+  });
+
+  it("selects the original recording over a re-recording Spotify lists first", async () => {
+    const original = spotifyTrack("Love Story", ["Taylor Swift"], {
+      external_ids: { isrc: "USCJY0803275" },
+    });
+    spotifySearch([
+      spotifyTrack("Love Story (Taylor's Version)", ["Taylor Swift"], {
+        external_ids: { isrc: "USUG12100342" },
+      }),
+      original,
+      spotifyTrack("Love Story", ["Indila"]),
+    ]);
+
+    const out = await scout("Love Story Taylor Swift");
+
+    expect(out.spotifyData?.id).toBe(original.id);
+    expect(out.isrc).toBe("USCJY0803275");
   });
 });

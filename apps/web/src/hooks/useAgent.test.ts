@@ -67,8 +67,8 @@ class FakeEventSource {
 const streams = () => FakeEventSource.instances;
 const lastStream = () => streams()[streams().length - 1];
 const candidates = [
-  { id: 'c1', title: 'Hurt', artist: 'Johnny Cash', album: 'A', coverUrl: '', popularity: 0 },
-  { id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails', album: 'B', coverUrl: '', popularity: 0 },
+  { id: 'c1', title: 'Hurt', artist: 'Johnny Cash', album: 'A', coverUrl: '' },
+  { id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails', album: 'B', coverUrl: '' },
 ];
 /** A result as the API sends it (a TrackAnalysis). */
 const track = {

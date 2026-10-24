@@ -16,13 +16,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmError, type LlmErrorKind } from "../../llm/errors.js";
 import { messagesOf, stubLlm, testRuntime } from "../testing/stubLlm.js";
 
-const store = vi.hoisted(() => ({ put: vi.fn() }));
-const enrich = vi.hoisted(() => ({ during: null as null | (() => void) }));
+const store = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn() }));
+const enrich = vi.hoisted(() => ({
+  during: null as null | (() => void),
+  /** A preview URL the enricher gives every genealogy node, when set. */
+  nodePreview: null as string | null,
+}));
 const mb = vi.hoisted(() => ({ lookupIsrc: vi.fn() }));
 vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: unknown) => {
+  enrichGenealogyWithArtwork: async (genealogy: { nodes: object[] }) => {
     enrich.during?.();
-    return genealogy;
+    const previewUrl = enrich.nodePreview;
+    if (!previewUrl) return genealogy;
+    return { ...genealogy, nodes: genealogy.nodes.map((node) => ({ ...node, previewUrl })) };
   },
 }));
 vi.mock("@langchain/langgraph", async (importOriginal) => ({
@@ -37,6 +43,7 @@ vi.mock("../../sources/musicbrainz.js", async (importOriginal) => ({
 import { SourceError } from "../../sources/http.js";
 import type { AudioFeatures, SonicAgentStateType } from "../state.js";
 import { createComposerNode, modelErrorCategory } from "./composerNode.js";
+import { scoutNode } from "./scoutNode.js";
 
 const output: ComposerOutput = {
   claims: [
@@ -128,7 +135,6 @@ function stateWith(
       album: "To the Extreme",
       releaseDate: "1990-09-10",
       coverUrl: "https://i.scdn.co/image/x",
-      popularity: 70,
       duration: "4:30",
       durationMs: 270000,
       explicit: false,
@@ -148,6 +154,8 @@ function stateWith(
     sourceErrors: [],
     isrc: null,
     preview: null,
+    // The scout selected the track as the query's clear match.
+    selectedBy: "match",
   } as unknown as SonicAgentStateType;
 }
 
@@ -163,6 +171,8 @@ const failing = (kind: LlmErrorKind) =>
 describe("composerNode", () => {
   beforeEach(() => {
     store.put.mockReset();
+    store.get.mockReset();
+    enrich.nodePreview = null;
     mb.lookupIsrc.mockReset();
     for (const method of ["log", "warn", "error"] as const) {
       vi.spyOn(console, method).mockImplementation(() => {});
@@ -543,6 +553,36 @@ describe("composerNode", () => {
       expect(out.trackData?.isrc).toBe("USSM19000001");
     });
 
+    it("matches a recording credited to two artists against each of them", async () => {
+      mb.lookupIsrc.mockResolvedValue([
+        {
+          id: "0f1e2d3c-0000-4000-8000-000000000002",
+          title: "Gangsta's Paradise",
+          length: 240_000,
+          "artist-credit": [
+            { name: "Coolio", joinphrase: " feat. ", artist: { id: "a1", name: "Coolio" } },
+            { name: "L.V.", artist: { id: "a2", name: "L.V." } },
+          ],
+        },
+      ]);
+      const llm = succeeding();
+      const state = {
+        ...stateWith(null, {
+          title: "Gangsta's Paradise",
+          artist: "Coolio, L.V.",
+          artistNames: ["Coolio", "L.V."],
+          durationMs: 240_000,
+        }),
+        isrc: "USTO10500102",
+      } as SonicAgentStateType;
+
+      await createComposerNode(testRuntime(llm))(state, config());
+
+      expect(messagesOf(llm.calls[0]).user).toContain(
+        '"mbid":"0f1e2d3c-0000-4000-8000-000000000002"',
+      );
+    });
+
     it("records a failed lookup as a source error and composes without it", async () => {
       mb.lookupIsrc.mockRejectedValue(new SourceError("musicbrainz", "timeout", "timed out"));
       const llm = succeeding();
@@ -612,6 +652,14 @@ describe("composerNode", () => {
       expect(store.put).not.toHaveBeenCalled();
     });
 
+    it("does not store a result for a track picked from the track picker", async () => {
+      await createComposerNode(testRuntime(succeeding()))(
+        { ...stateWith(measured), selectedBy: "user" } as SonicAgentStateType,
+        config(),
+      );
+      expect(store.put).not.toHaveBeenCalled();
+    });
+
     it("stores a result when a source is only not configured", async () => {
       await createComposerNode(testRuntime(succeeding()))(
         {
@@ -633,6 +681,42 @@ describe("composerNode", () => {
       expect(store.put.mock.calls[0][1]).toMatch(/^ice ice baby\|lastfm=[01]:tavily=[01]$/);
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
+    });
+
+    it("sends the preview URLs with this run's result but stores none, so a cache hit shows none", async () => {
+      const trackPreview = "https://p.scdn.co/mp3-preview/track";
+      const nodePreview = "https://p.scdn.co/mp3-preview/node";
+      enrich.nodePreview = nodePreview;
+      const runtime = testRuntime(succeeding());
+      const writer = vi.fn();
+
+      await createComposerNode(runtime)(stateWith(measured, { previewUrl: trackPreview }), {
+        writer,
+        configurable: { thread_id: "run-1" },
+      } as never);
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data.previewUrl).toBe(trackPreview);
+      expect(complete.data.genealogy.nodes[0].previewUrl).toBe(nodePreview);
+      expect(store.put).toHaveBeenCalledTimes(1);
+      const [namespace, key, value] = store.put.mock.calls[0];
+      expect(JSON.stringify(value)).not.toContain("mp3-preview");
+      expect(value.trackData).not.toHaveProperty("previewUrl");
+
+      // The next search of the song is served from the store.
+      store.get.mockImplementation(async (ns: string[], k: string) =>
+        JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
+      );
+      const served = vi.fn();
+      const out = await scoutNode(
+        { songQuery: "Ice Ice Baby" } as SonicAgentStateType,
+        { writer: served } as never,
+        runtime,
+      );
+      expect(out.trackData).toBeTruthy();
+      expect(out.trackData).not.toHaveProperty("previewUrl");
+      const hit = served.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(JSON.stringify(hit.data)).not.toContain("mp3-preview");
     });
   });
 

@@ -28,7 +28,6 @@ const spotify: SpotifyData = {
   album: "To the Extreme",
   releaseDate: "1990-09-10",
   coverUrl: "https://i.scdn.co/image/x",
-  popularity: 70,
   duration: "4:30",
   durationMs: 270000,
   explicit: false,
@@ -168,17 +167,24 @@ describe("createFallbackTrackData", () => {
     const td = await build(null, emptyResearch, {
       releaseDate: "",
       album: "",
-      popularity: undefined as unknown as number,
     });
     expect(td.factoids).toEqual([]);
     const parsed = TrackDataSchema.safeParse(td);
     expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
   });
 
+  it("states Spotify's popularity only when the track data carries one", async () => {
+    // Spotify no longer sends it to this app; data recorded before may still carry it.
+    const withScore = allText((await build(null, emptyResearch, { popularity: 70 })).factoids);
+    const without = allText((await build(null)).factoids);
+
+    expect(withScore).toContain("Spotify popularity score: 70/100.");
+    expect(without).not.toMatch(/popularity/i);
+  });
+
   it("omits missing metadata instead of printing undefined or Unknown", async () => {
     const td = await build(null, emptyResearch, {
       releaseDate: "",
-      popularity: undefined as unknown as number,
     });
 
     const text = allText(td.factoids);

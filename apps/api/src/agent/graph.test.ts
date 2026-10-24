@@ -26,7 +26,6 @@ const tools = vi.hoisted(() => {
     album: "To the Extreme",
     releaseDate: "1990-09-10",
     coverUrl: "https://i.scdn.co/image/x",
-    popularity: 90,
     duration: "4:31",
     durationMs: 271_000,
     explicit: false,
@@ -133,7 +132,8 @@ import { SourceError } from "../sources/http.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
-const QUERY = "ice ice baby";
+// The web's query names the artist: a title alone always asks which recording is meant.
+const QUERY = "Ice Ice Baby Vanilla Ice";
 
 let dir: string;
 beforeEach(() => {
@@ -339,7 +339,7 @@ describe("the analysis graph", () => {
     });
     // Built from primary records only: the web hit about the bass line is not shown.
     expect(result.trackData?.factoids.map((f) => [f.title, f.content])).toEqual([
-      ["Release Info", 'Released in 1990 on "To the Extreme". Spotify popularity score: 90/100.'],
+      ["Release Info", 'Released in 1990 on "To the Extreme".'],
     ]);
   });
 

@@ -41,12 +41,16 @@ export function setReplayPacingForTests(next: ReplayPacing): () => void {
 /** What a replay spends: nothing (no model is called). */
 const NO_USAGE = { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, usd: 0 };
 
-/** The recorded result as the result of run `runId`. */
+/**
+ * The recorded result as the result of run `runId`. It says nothing about how a search text
+ * matched the track (`queryMatch`): that belonged to the recorded run, not to this one.
+ */
 export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnalysis {
-  const run = record.analysis.run;
+  const { queryMatch: _match, ...analysis } = record.analysis;
+  const run = analysis.run;
   if (!run) throw new Error(`Replay record ${record.slug} has no run information`);
   return {
-    ...record.analysis,
+    ...analysis,
     run: {
       ...run,
       id: runId,

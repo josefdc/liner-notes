@@ -11,13 +11,18 @@
  * and the result key name which optional sources (Last.fm, Tavily) had a key, so adding a key
  * later runs the research and the composer again. A rejected key is not "not configured": it
  * blocks both caches until it is fixed, as any other source failure does.
+ * v4: results keyed by the track (its Spotify id) instead of the search text. The search runs
+ * first and picks the track; only then is a stored result looked up, so a result is never
+ * served for a text that now finds another track, nor for another user's text that happened to
+ * lead to a pick. Stored results carry no preview URL and no search match (both belong to one
+ * run).
  */
 
 import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
-export const TRACKS_NAMESPACE: string[] = ["tracks", "v3"];
+export const TRACKS_NAMESPACE: string[] = ["tracks", "v4"];
 
 /** The optional research sources that are configured (have a key). */
 export interface ConfiguredSources {
@@ -37,6 +42,6 @@ const flags = (configured: ConfiguredSources) =>
 export const researchCacheKey = (spotifyId: string, configured: ConfiguredSources) =>
   `v3:${spotifyId}:${flags(configured)}`;
 
-/** Result cache key of a query (normalised), for the sources configured now. */
-export const resultCacheKey = (normalizedQuery: string, configured: ConfiguredSources) =>
-  `${normalizedQuery}|${flags(configured)}`;
+/** Result cache key of a track (its Spotify id), for the sources configured now. */
+export const resultCacheKey = (spotifyId: string, configured: ConfiguredSources) =>
+  `${spotifyId}|${flags(configured)}`;

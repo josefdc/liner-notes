@@ -196,6 +196,16 @@ export const PreviewMatch = z.object({
   ),
 });
 
+/**
+ * How the search text matched the analysed track, judged on its title and artists:
+ * - `exact`: the text is the track's title, with or without its credited artists;
+ * - `partial`: the title and the text share their words only in part;
+ * - `artist`: only a credited artist is named; the title does not match;
+ * - `none`: neither the title nor an artist matches: the track may not be the song searched for.
+ */
+export const QueryMatch = z.enum(["exact", "partial", "artist", "none"]);
+export type QueryMatch = z.infer<typeof QueryMatch>;
+
 // =============================================================================
 // Run information
 // =============================================================================
@@ -306,6 +316,10 @@ export const TrackAnalysis = z.object({
     .catch(null)
     .describe("null when not measured, or when this reader cannot read the measurement"),
   preview: PreviewMatch.nullable().optional().catch(null),
+  queryMatch: QueryMatch.nullable()
+    .optional()
+    .catch(null)
+    .describe("How this run's search text matched the track; null or absent when unknown"),
   evidence: tolerantList(Evidence).optional(),
   claims: tolerantList(Claim).optional(),
   run: RunInfo.optional(),

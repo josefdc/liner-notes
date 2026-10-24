@@ -35,6 +35,29 @@ vi.mock("@langchain/langgraph", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@langchain/langgraph")>()),
   getStore: () => store,
 }));
+// The scout's search, for the test that serves a stored result: it finds the composed track.
+vi.mock("../../sources/spotify.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../sources/spotify.js")>()),
+  searchMultipleTracks: {
+    invoke: async () =>
+      JSON.stringify([
+        {
+          id: "x",
+          title: "Ice Ice Baby",
+          artist: "Vanilla Ice",
+          artistIds: ["a1"],
+          album: "To the Extreme",
+          releaseDate: "1990-09-10",
+          coverUrl: "https://i.scdn.co/image/x",
+          duration: "4:30",
+          durationMs: 270000,
+          explicit: false,
+          spotifyUrl: "https://open.spotify.com/track/x",
+          previewUrl: null,
+        },
+      ]),
+  },
+}));
 vi.mock("../../sources/musicbrainz.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sources/musicbrainz.js")>()),
   lookupIsrc: mb.lookupIsrc,
@@ -652,12 +675,48 @@ describe("composerNode", () => {
       expect(store.put).not.toHaveBeenCalled();
     });
 
-    it("does not store a result for a track picked from the track picker", async () => {
+    it("stores a result for a track picked from the track picker under that track", async () => {
       await createComposerNode(testRuntime(succeeding()))(
-        { ...stateWith(measured), selectedBy: "user" } as SonicAgentStateType,
+        { ...stateWith(measured), selectedBy: "user", queryMatch: "none" } as SonicAgentStateType,
+        config(),
+      );
+      expect(store.put).toHaveBeenCalledTimes(1);
+      const [, key, value] = store.put.mock.calls[0];
+      expect(key).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
+      expect(value.trackData).toMatchObject({ id: "x" });
+    });
+
+    it("does not store a result for a track neither the scout nor the user chose", async () => {
+      await createComposerNode(testRuntime(succeeding()))(
+        { ...stateWith(measured), selectedBy: null } as SonicAgentStateType,
         config(),
       );
       expect(store.put).not.toHaveBeenCalled();
+    });
+
+    it("sends how the query matched the track with the result, and stores no match", async () => {
+      const writer = vi.fn();
+      await createComposerNode(testRuntime(succeeding()))(
+        { ...stateWith(measured), queryMatch: "artist" } as SonicAgentStateType,
+        { writer, configurable: { thread_id: "run-1" } } as never,
+      );
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data.queryMatch).toBe("artist");
+      expect(TrackAnalysis.parse(complete.data).queryMatch).toBe("artist");
+      expect(store.put).toHaveBeenCalledTimes(1);
+      expect(store.put.mock.calls[0][2].trackData).not.toHaveProperty("queryMatch");
+    });
+
+    it("sends how the query matched the track with the fallback result too", async () => {
+      const writer = vi.fn();
+      await createComposerNode(testRuntime(failing("rate_limited")))(
+        { ...stateWith(measured), queryMatch: "none" } as SonicAgentStateType,
+        { writer, configurable: { thread_id: "run-1" } } as never,
+      );
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data).toMatchObject({ modelUnavailable: true, queryMatch: "none" });
     });
 
     it("stores a result when a source is only not configured", async () => {
@@ -677,8 +736,9 @@ describe("composerNode", () => {
       const [namespace, , value] = store.put.mock.calls[0];
       // Versioned: results cached by older code are not served. The key names the configured
       // sources: adding a key later composes the result again.
-      expect(namespace).toEqual(["tracks", "v3"]);
-      expect(store.put.mock.calls[0][1]).toMatch(/^ice ice baby\|lastfm=[01]:tavily=[01]$/);
+      // Keyed by the track (its Spotify id), never by the search text.
+      expect(namespace).toEqual(["tracks", "v4"]);
+      expect(store.put.mock.calls[0][1]).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });
@@ -742,13 +802,13 @@ describe("composerNode", () => {
       expect(JSON.stringify(value)).not.toContain("mp3-preview");
       expect(value.trackData).not.toHaveProperty("previewUrl");
 
-      // The next search of the song is served from the store.
+      // The next search that finds the song is served from the store.
       store.get.mockImplementation(async (ns: string[], k: string) =>
         JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
       );
       const served = vi.fn();
       const out = await scoutNode(
-        { songQuery: "Ice Ice Baby" } as SonicAgentStateType,
+        { songQuery: "Ice Ice Baby Vanilla Ice", hitlConfig: { maxCandidates: 5 } } as never,
         { writer: served } as never,
         runtime,
       );

@@ -1,20 +1,20 @@
 /**
  * Scout Node — Searches Spotify, picks the result that matches the query, and returns the
- * candidates instead when the user has to choose (see trackMatch.ts).
+ * candidates instead when the user has to choose (see trackMatch.ts). A result stored for the
+ * picked track is served without composing it again (storedResults.ts): the search always runs
+ * first, so what is served is about the track this query finds now.
  */
 
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { SearchCandidate as SearchCandidateSchema, TrackAnalysis } from "@liner-notes/contract";
+import { SearchCandidate as SearchCandidateSchema } from "@liner-notes/contract";
 import { searchMultipleTracks } from "../../sources/spotify.js";
-import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { isAbortError, withRetry, TransientError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
+import { readStoredResult, servedResult } from "../storedResults.js";
 import { needsChoice, rankTracks } from "../trackMatch.js";
-
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function scoutNode(
   state: SonicAgentStateType,
@@ -22,41 +22,6 @@ export async function scoutNode(
   runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   const writer = config.writer;
-  const store = getStore();
-  const normalizedQuery = state.songQuery.toLowerCase().trim();
-
-  // Check long-term memory for cached result
-  if (store) {
-    try {
-      // The key names the configured sources: adding a key later composes the result again.
-      const cached = await store.get(
-        TRACKS_NAMESPACE,
-        resultCacheKey(normalizedQuery, configuredSources()),
-      );
-      const fresh =
-        cached?.value?.trackData && runtime.now().getTime() - cached.value.timestamp < CACHE_TTL_MS;
-      // A stored result the contract no longer accepts would be refused on every search until
-      // it expires: it is composed again instead.
-      const usable = fresh && TrackAnalysis.safeParse(cached.value.trackData).success;
-      if (fresh && !usable) {
-        console.warn("⚠️ [Scout] Stored result does not fit the contract; composing again");
-      }
-      if (usable) {
-        console.log("📦 [Scout] Cache hit for:", normalizedQuery);
-        writer?.({
-          type: "status",
-          code: "NET-200",
-          message: "Cache hit — returning stored analysis",
-          node: "scout",
-          timestamp: timestampOf(runtime),
-        });
-        writer?.({ type: "complete", data: cached.value.trackData });
-        return { trackData: cached.value.trackData };
-      }
-    } catch (e) {
-      console.warn("⚠️ [Scout] Store read error:", e);
-    }
-  }
 
   writer?.({
     type: "status",
@@ -177,6 +142,29 @@ export async function scoutNode(
     }
 
     // Unambiguous: auto-select top result
+    const selected = {
+      spotifyData: topTrack,
+      selectedTrackId: topTrack.id,
+      isrc: topTrack.isrc ?? null,
+      queryMatch,
+      selectedBy: "match" as const,
+    };
+    const stored = await readStoredResult(getStore(), topTrack.id, runtime.now());
+    config.signal?.throwIfAborted();
+    if (stored) {
+      console.log("📦 [Scout] Stored result for:", topTrack.id);
+      const trackData = servedResult(stored, queryMatch);
+      writer?.({
+        type: "status",
+        code: "NET-200",
+        message: "Cache hit — returning stored analysis",
+        node: "scout",
+        timestamp: timestampOf(runtime),
+      });
+      writer?.({ type: "complete", data: trackData });
+      return { ...selected, trackData };
+    }
+
     writer?.({
       type: "status",
       code: "SPOTIFY-FOUND",
@@ -187,11 +175,7 @@ export async function scoutNode(
     console.log("✅ [Scout] Auto-selected:", topTrack.title, "by", topTrack.artist);
 
     return {
-      spotifyData: topTrack,
-      selectedTrackId: topTrack.id,
-      isrc: topTrack.isrc ?? null,
-      queryMatch,
-      selectedBy: "match",
+      ...selected,
       statusMessages: [`✅ Found: "${topTrack.title}" by ${topTrack.artist}`],
     };
   } catch (error) {

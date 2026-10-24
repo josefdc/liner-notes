@@ -42,6 +42,28 @@ const CHOICE_B = "0RunsRouteTestTrackB01";
 const hooks = vi.hoisted(() => ({ dropTable: null as null | (() => void) }));
 
 vi.mock("../../sources/spotify.js", () => ({
+  // The real scout's search ("cachehit …" queries): it finds TRACK_ID, by the artist and title
+  // the query names, so the scout selects it and serves the result stored for it.
+  searchMultipleTracks: {
+    invoke: async () =>
+      JSON.stringify([
+        {
+          id: "0RunsRouteTestTrack001",
+          title: "Someone Else Typed",
+          artist: "Cachehit",
+          artistIds: [],
+          album: "Album",
+          releaseDate: "1994",
+          coverUrl: "",
+          isrc: null,
+          duration: "3:38",
+          durationMs: 218000,
+          explicit: false,
+          spotifyUrl: "https://open.spotify.com/track/0RunsRouteTestTrack001",
+          previewUrl: null,
+        },
+      ]),
+  },
   getTrackDetails: {
     invoke: async ({ trackId }: { trackId: string }) =>
       JSON.stringify({
@@ -125,6 +147,8 @@ vi.mock("../../agent/nodes/index.js", async () => {
         },
         // Not a TrackAnalysis field: never stored, never served.
         songQuery: state.songQuery,
+        // How this run's text matched the track: sent with the run's result, never stored.
+        queryMatch: "partial",
       };
       if (state.songQuery.startsWith("badresult")) delete trackData.title;
       config.writer?.({ type: "complete", data: trackData });
@@ -243,6 +267,8 @@ describe("runs routes", () => {
     await analyze(`${typed} first`);
     const { runId, events } = await analyze(typed);
     expect(events.map((e) => e.type)).toContain("complete");
+    const complete = events.find((e) => e.type === "complete") as { data?: object } | undefined;
+    expect(complete?.data).toMatchObject({ queryMatch: "partial" });
 
     const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
     expect(res.status).toBe(200);
@@ -266,6 +292,9 @@ describe("runs routes", () => {
       expect(text).not.toMatch(/dzcdn|hdnea/);
     }
     expect(res.body.analysis.genealogy.nodes[0]).toMatchObject({ id: "self", img: "" });
+    // How that run's text matched the track is not served to someone who opens the track.
+    expect(res.body.analysis).not.toHaveProperty("queryMatch");
+    expect(getRun(getDb(), runId)?.analysis).not.toHaveProperty("queryMatch");
 
     const byId = await request(app).get(`/api/runs/${runId}`);
     expect(byId.status).toBe(200);
@@ -439,12 +468,18 @@ describe("runs routes", () => {
     const query = "cachehit someone else typed";
     await new SqliteStore(getDb()).put(
       TRACKS_NAMESPACE,
-      resultCacheKey(query, configuredSources()),
+      resultCacheKey(TRACK_ID, configuredSources()),
       { trackData: cached, timestamp: Date.now() },
     );
 
     const hit = await analyze(query);
-    expect(hit.events.map((e) => e.type)).toEqual(["connected", "status", "complete", "done"]);
+    expect(hit.events.map((e) => e.type)).toEqual([
+      "connected",
+      "status",
+      "status",
+      "complete",
+      "done",
+    ]);
     expect(getRun(getDb(), hit.runId)).toMatchObject({
       status: "completed",
       mode: "replay",

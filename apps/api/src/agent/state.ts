@@ -364,8 +364,8 @@ export const SonicAgentState = Annotation.Root({
   }),
 
   // Who chose the track: "match" when the scout selected it as the query's clear match, "user"
-  // when it came from the track picker (a click or the picker's countdown). Only a clear match
-  // may be served to the next search of the same text.
+  // when it came from the track picker (a click or the picker's countdown). Either way the
+  // result is stored under the track, never under the search text.
   selectedBy: Annotation<"match" | "user" | null>({
     reducer: (_, next) => next,
     default: () => null,
@@ -424,7 +424,8 @@ export const SonicAgentState = Annotation.Root({
 
   // How the query matched the chosen track by title and artist (trackMatch.ts); while the user
   // is choosing, how it matched the best result. "none" is a low match: nothing Spotify
-  // returned carries the query's title or artist. null before the scout has searched.
+  // returned carries the query's title or artist. null before the scout has searched. The
+  // result carries it (TrackAnalysis.queryMatch), so the web can say when it is not exact.
   queryMatch: Annotation<QueryMatch | null>({
     reducer: (_, next) => next,
     default: () => null,

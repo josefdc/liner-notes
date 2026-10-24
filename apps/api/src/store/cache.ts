@@ -29,10 +29,14 @@ export { isMatchedMeasurement, isMeasuredAudio } from "./measuredAudio.js";
 // Types
 // =============================================================================
 
+/**
+ * What the artwork cache keeps of a Spotify search: the cover and the track it belongs to. No
+ * preview URL: previews are looked up afresh for each run and never stored (the table's
+ * `preview_url` column is left null; migration 6 cleared the values older code wrote).
+ */
 export interface SpotifySearchResult {
   coverUrl: string | null;
   spotifyUrl: string | null;
-  previewUrl: string | null;
   spotifyId: string | null;
   trackTitle: string | null;
   trackArtist: string | null;
@@ -122,22 +126,21 @@ function prepareStatements(db: Database.Database) {
       {
         cover_url: string | null;
         spotify_url: string | null;
-        preview_url: string | null;
         spotify_id: string | null;
         track_title: string | null;
         track_artist: string | null;
         expires_at: number;
       }
     >(
-      "SELECT cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
+      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
     ),
     putArtwork: db.prepare(
-      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(search_key) DO UPDATE SET
          cover_url = excluded.cover_url,
          spotify_url = excluded.spotify_url,
-         preview_url = excluded.preview_url,
+         preview_url = NULL,
          spotify_id = excluded.spotify_id,
          track_title = excluded.track_title,
          track_artist = excluded.track_artist,
@@ -263,7 +266,6 @@ export class SonicCache {
       return {
         coverUrl: row.cover_url,
         spotifyUrl: row.spotify_url,
-        previewUrl: row.preview_url,
         spotifyId: row.spotify_id,
         trackTitle: row.track_title,
         trackArtist: row.track_artist,
@@ -280,7 +282,6 @@ export class SonicCache {
         searchKey,
         result.coverUrl,
         result.spotifyUrl,
-        result.previewUrl,
         result.spotifyId,
         result.trackTitle,
         result.trackArtist,

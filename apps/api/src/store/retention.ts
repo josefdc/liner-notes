@@ -12,7 +12,7 @@
  *   except the ["disambiguation"] namespace: those are the user's track choices, which the scout
  *   reads without rewriting, so their age says nothing about whether they are still used.
  * - Run records are deleted when they finished (or, if never finished, started) longer ago than
- *   the run retention.
+ *   the run retention, and the events their streams sent with them.
  *
  * Defaults: checkpoints 24 hours, store items 30 days, runs 30 days. Override with
  * CHECKPOINT_RETENTION_HOURS (at least 1), STORE_RETENTION_DAYS and RUN_RETENTION_DAYS (at
@@ -89,6 +89,7 @@ export interface PruneResult {
   writes: number;
   storeItems: number;
   runs: number;
+  runEvents: number;
 }
 
 function tableExists(db: Database.Database, name: string): boolean {
@@ -132,7 +133,14 @@ export function pruneDatabase(
   policy: RetentionPolicy = retentionFromEnv(),
   now: number = Date.now(),
 ): PruneResult {
-  const result: PruneResult = { threads: 0, checkpoints: 0, writes: 0, storeItems: 0, runs: 0 };
+  const result: PruneResult = {
+    threads: 0,
+    checkpoints: 0,
+    writes: 0,
+    storeItems: 0,
+    runs: 0,
+    runEvents: 0,
+  };
 
   const runCutoff = Math.floor((now - policy.runRetentionMs) / 1000);
 
@@ -164,13 +172,19 @@ export function pruneDatabase(
     result.runs = db
       .prepare("DELETE FROM runs WHERE COALESCE(finished_at, created_at) <= ?")
       .run(runCutoff).changes;
+    // Events go with their run, including those of a run whose record could not be written.
+    result.runEvents = db
+      .prepare("DELETE FROM run_events WHERE run_id NOT IN (SELECT run_id FROM runs)")
+      .run().changes;
   })();
 
-  const total = result.checkpoints + result.writes + result.storeItems + result.runs;
+  const total =
+    result.checkpoints + result.writes + result.storeItems + result.runs + result.runEvents;
   if (total > 0) {
     console.log(
       `[Retention] Pruned ${result.threads} threads (${result.checkpoints} checkpoints, ` +
-        `${result.writes} writes), ${result.storeItems} store items, ${result.runs} runs`,
+        `${result.writes} writes), ${result.storeItems} store items, ${result.runs} runs ` +
+        `(${result.runEvents} events)`,
     );
   }
   return result;

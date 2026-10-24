@@ -97,9 +97,17 @@ export interface EventStream {
   done(): void;
 }
 
+/** An event as the stream wrote it, with its run id and seq. */
+export type SentEvent = EventBody & { runId: string | null; seq: number };
+
 export interface EventStreamOptions {
   /** Interval between heartbeat events; 0 sends none. */
   heartbeatMs?: number;
+  /**
+   * Called with each event written that carries a seq (every event but heartbeats), once it is
+   * written. An error it throws is logged and does not affect the stream.
+   */
+  onSent?: (event: SentEvent) => void;
 }
 
 /** Writes the headers of an event stream (status 200) and flushes them at once. */
@@ -116,9 +124,17 @@ function openStream(
   kind: StreamKind,
   res: Response,
   runId: string | null,
-  { heartbeatMs = HEARTBEAT_INTERVAL_MS }: EventStreamOptions = {},
+  { heartbeatMs = HEARTBEAT_INTERVAL_MS, onSent }: EventStreamOptions = {},
 ): EventStream {
   writeHead(res);
+
+  const sent = (event: SentEvent) => {
+    try {
+      onSent?.(event);
+    } catch (err) {
+      console.error(`[SSE ${kind.name}] ${event.type} event sent but not observed:`, err);
+    }
+  };
 
   let seq = 0;
   let outcome: string | null = null;
@@ -165,7 +181,8 @@ function openStream(
   };
 
   const sendNumbered = (body: EventBody, replacedWith?: Record<string, unknown>): boolean => {
-    const encoded = encode({ ...body, runId, seq });
+    const event: SentEvent = { ...body, runId, seq };
+    const encoded = encode(event);
     if ("problem" in encoded) {
       if (kind.replaced.has(body.type)) {
         // The client is waiting for this event: it is told the request failed instead.
@@ -183,6 +200,7 @@ function openStream(
     res.write(encoded.line);
     seq += 1;
     if (kind.outcomes.has(body.type)) outcome = body.type;
+    sent(event);
     return true;
   };
 
@@ -204,7 +222,15 @@ function openStream(
   });
 
   const done = () => {
-    if (writable()) write({ type: "done", runId, seq: seq++, timestamp: new Date().toISOString() });
+    if (writable()) {
+      const event: SentEvent = {
+        type: "done",
+        runId,
+        seq: seq++,
+        timestamp: new Date().toISOString(),
+      };
+      if (write(event)) sent(event);
+    }
     ended = true;
     clearInterval(heartbeat);
     if (!res.writableEnded && !res.destroyed) res.end();

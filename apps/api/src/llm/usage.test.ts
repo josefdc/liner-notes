@@ -41,7 +41,7 @@ describe("llm_usage", () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'llm_usage'").get()).toBe(
       undefined,
     );
-    expect(runMigrations(db)).toEqual([4]);
+    expect(runMigrations(db, MIGRATIONS.slice(0, 4))).toEqual([4]);
     expect(db.pragma("user_version", { simple: true })).toBe(4);
     db.close();
   });

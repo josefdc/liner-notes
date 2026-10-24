@@ -163,6 +163,7 @@ describe("pruneDatabase", () => {
       writes: 0,
       storeItems: 0,
       runs: 0,
+      runEvents: 0,
     });
     fresh.close();
   });

@@ -5,7 +5,15 @@ import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { llm } from "../../llm/invoke.js";
 import { getDb } from "../../store/database.js";
-import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
+import {
+  appendRunEvent,
+  getRun,
+  nextEventStream,
+  type RunStatus,
+  startRun,
+  storeRunResult,
+  updateRun,
+} from "../../store/runs.js";
 import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
 import { nodeEvent, openAnalysisStream } from "../sse.js";
 
@@ -347,7 +355,15 @@ async function executeRun(
       console.error(`[Run ${threadId}] Could not read the thread:`, err);
     }
   }
-  recordRun("update a run", (db) => updateRun(db, threadId, { status }));
+  recordRun("update a run", (db) =>
+    db.transaction(() => {
+      updateRun(db, threadId, { status });
+      // The result is stored with the run, so GET /api/runs can serve it again.
+      if (outcome.kind === "complete" && !storeRunResult(db, threadId, outcome.trackData)) {
+        console.error(`[Run ${threadId}] The result fails the contract; it was not stored`);
+      }
+    })(),
+  );
   // A finished run's model calls are no longer counted; a paused one keeps its count, so the
   // per-run cap still covers it when it is resumed.
   if (status !== "interrupted") endModelRun(threadId);
@@ -476,11 +492,29 @@ const timestamp = () => new Date().toISOString();
  * cannot read any other status, so errors are sent in the stream), a heartbeat every
  * HEARTBEAT_INTERVAL_MS that keeps proxies from closing an idle connection, and every event
  * built and checked by the stream adapter (../sse.ts).
+ *
+ * Once `storeEvents` is called (when the request has claimed the run) the events it sends are
+ * stored with the run, as the run's next stream: a resume's events follow the first stream's
+ * instead of clashing with them, since each stream numbers its events from 0. The events of a
+ * request that was refused before it claimed the run are not stored.
  */
 function openEventStream(res: Response, runId?: string) {
-  const stream = openAnalysisStream(res, runId);
+  let storedAs: number | null = null;
+  const stream = openAnalysisStream(res, runId, {
+    onSent: (event) => {
+      const streamNumber = storedAs;
+      if (!runId || streamNumber === null) return;
+      recordRun("store an event", (db) => appendRunEvent(db, runId, streamNumber, event));
+    },
+  });
   return {
     stream,
+    storeEvents(): void {
+      if (!runId) return;
+      recordRun("number a stream", (db) => {
+        storedAs = nextEventStream(db, runId);
+      });
+    },
     /**
      * Sends a graph node's writer payload, translated to a contract event. False when the
      * result (`complete`) failed the contract and the client was sent an error in its place; a
@@ -639,6 +673,8 @@ router.post(
  * - complete { data }: the result, exactly once per finished run
  * - error { code, error }: a code from ERRORS and a short message
  * - done: the stream is over
+ *
+ * The events sent and the result are stored with the run; GET /api/runs/:id serves them again.
  */
 router.get(
   "/api/analyze/stream",
@@ -655,6 +691,7 @@ router.get(
     // The run id is the thread id.
     const threadId = startAnalysis(query);
     const stream = openEventStream(res, threadId);
+    stream.storeEvents();
     console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
     const control = new RunControl(req, res, threadId);
     await guardStream(stream, async () => {
@@ -727,7 +764,10 @@ router.get(
           stream.error(code);
           stream.done();
         },
-        started: () => stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
+        started: () => {
+          stream.storeEvents();
+          stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() });
+        },
         emit: stream.emit,
         finish: (outcome) => {
           sendStreamOutcome(stream, outcome, threadId);

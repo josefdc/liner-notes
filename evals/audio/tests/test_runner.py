@@ -7,9 +7,12 @@ import pytest
 from evals_audio.datasets import Reference
 from evals_audio.metrics import Key, summarize
 from evals_audio.runner import (
+    CALIBRATION_UNAVAILABLE,
     KEY_WEAK,
     NO_ESTIMATE,
+    SEVERAL_RULES,
     TEMPO_LOW_CONFIDENCE,
+    TEMPO_LOW_PERIODICITY,
     TEMPO_UNSTEADY,
     captured_stderr,
     items_for,
@@ -78,6 +81,7 @@ def test_tempo_withheld_and_failed_tracks_are_counted_apart():
         "estimate": "119",
         "confidence": 0.4,
         "steady": None,
+        "rules": ["tempo does not hold over the window"],
         "scores": {"acc1": 1.0, "acc2": 1.0},
     }
     assert by_id["d"]["withheldReason"] == "no estimate" and "unreturned" not in by_id["d"]
@@ -142,31 +146,126 @@ class FakeTempo:
 
 
 class FakeEstimator:
-    """Returns a tempo only when its confidence clears min_tempo_confidence."""
+    """
+    Like the service's estimators: no tempo when the onsets do not repeat enough (`periodic`
+    False, standing in for estimators.MIN_TEMPO_PERIODICITY) or when the confidence is under
+    min_tempo_confidence.
+    """
 
     min_tempo_confidence = 0.3
 
-    def __init__(self, tempo):
-        self._tempo = tempo
+    def __init__(self, tempo, periodic=True):
+        self._tempo, self.periodic = tempo, periodic
 
-    def tempo(self, signals):
-        if self._tempo is None or self._tempo.confidence < self.min_tempo_confidence:
+    def tempo(self, signals, periodicity_lifted=False):
+        if self._tempo is None or not (self.periodic or periodicity_lifted):
+            return None
+        if self._tempo.confidence < self.min_tempo_confidence:
             return None
         return self._tempo
 
 
-def test_a_tempo_under_the_confidence_minimum_is_withheld_not_missing():
+@pytest.fixture
+def fake_minimums(monkeypatch):
+    """service.tempo_without_minimums for FakeEstimator (the real one patches the service)."""
+    from evals_audio import service
+
+    def lifted(signals, est):
+        est.min_tempo_confidence = 0.0
+        try:
+            tempo = est.tempo(signals, periodicity_lifted=True)
+        finally:
+            del est.min_tempo_confidence
+        # The steadiness check uses the periodicity minimum too: without repeating onsets no
+        # part of the window counts, so the tempo does not hold.
+        return (None, False) if tempo is None else (tempo, tempo.steady and est.periodic)
+
+    monkeypatch.setattr(service, "tempo_without_minimums", lifted)
+
+
+def test_a_tempo_under_the_confidence_minimum_is_withheld_not_missing(fake_minimums):
     est = FakeEstimator(FakeTempo(128.0, 0.12, steady=False))
     assert tempo_withheld(None, est) == {
         "reason": TEMPO_LOW_CONFIDENCE,
+        "rules": [TEMPO_LOW_CONFIDENCE, TEMPO_UNSTEADY],
         "bpm": 128.0,
         "confidence": 0.12,
         "steady": False,
     }
     assert est.min_tempo_confidence == 0.3  # the minimum is restored
-    assert tempo_withheld(None, FakeEstimator(None)) == {"reason": NO_ESTIMATE}
+    assert tempo_withheld(None, FakeEstimator(None)) == {"reason": NO_ESTIMATE, "rules": []}
     unsteady = tempo_withheld(None, FakeEstimator(FakeTempo(90.0, 0.8, steady=False)))
-    assert unsteady["reason"] == TEMPO_UNSTEADY
+    assert unsteady["rules"] == [TEMPO_UNSTEADY]
+
+
+def test_a_tempo_under_the_periodicity_minimum_is_withheld_not_missing(fake_minimums):
+    out = tempo_withheld(None, FakeEstimator(FakeTempo(143.0, 0.5), periodic=False))
+    assert out["reason"] == TEMPO_LOW_PERIODICITY and out["bpm"] == 143.0
+    # Without repeating onsets the steadiness check fails too.
+    assert out["rules"] == [TEMPO_LOW_PERIODICITY, TEMPO_UNSTEADY]
+    weak = tempo_withheld(None, FakeEstimator(FakeTempo(143.0, 0.1), periodic=False))
+    assert weak["rules"] == [TEMPO_LOW_PERIODICITY, TEMPO_LOW_CONFIDENCE, TEMPO_UNSTEADY]
+
+
+def test_withheld_cost_counts_a_clip_under_a_rule_only_when_that_rule_alone_withholds_it():
+    refs = {t: ref(t, 120.0) for t in "abc"}
+
+    def withheld(tid, bpm, rules):
+        return {
+            "trackId": tid,
+            "results": {
+                "x": {
+                    "gate": PASS,
+                    "tempo": None,
+                    "tempoWithheld": {"reason": rules[0], "rules": rules, "bpm": bpm},
+                }
+            },
+        }
+
+    analysed = [
+        withheld("a", 120.0, [TEMPO_LOW_CONFIDENCE]),
+        withheld("b", 121.0, [TEMPO_LOW_CONFIDENCE, TEMPO_UNSTEADY]),
+        withheld("c", 60.0, [TEMPO_UNSTEADY]),
+    ]
+    _, rows = items_for("tempo", refs, analysed, "x")
+    groups = {g["rule"]: g for g in withheld_cost(rows, ["acc1"], seed=1)["rules"]}
+    assert {k: g["count"] for k, g in groups.items()} == {
+        TEMPO_LOW_CONFIDENCE: 1,
+        TEMPO_UNSTEADY: 1,
+        SEVERAL_RULES: 1,
+        "all": 3,
+    }
+    # Lifting the confidence minimum alone returns a only: b would still not hold.
+    assert groups[TEMPO_LOW_CONFIDENCE]["metrics"]["acc1"]["ifReturnedOverN"]["total"] == 1.0
+    assert groups["all"]["metrics"]["acc1"]["ifReturnedOverN"]["total"] == 2.0
+
+
+def test_a_failed_calibration_call_keeps_the_served_answer(monkeypatch, tmp_path):
+    from evals_audio import clips, runner, service
+
+    class Est:
+        def tempo(self, signals):
+            raise RuntimeError("estimator broke on the second call")
+
+        def key(self, signals):
+            raise RuntimeError("key broke")
+
+    served = {
+        "gate": PASS,
+        "tempo": None,
+        "key": {"tonic": "C", "mode": "major", "strength": 0.9},
+    }
+    monkeypatch.setattr(clips, "read_clip", lambda *a: (b"", {"offsetSeconds": 0.0}))
+    monkeypatch.setattr(service, "decode", lambda wav: object())
+    monkeypatch.setattr(service, "analyze", lambda signals, est: dict(served))
+    monkeypatch.setattr(runner, "_estimators", lambda names: {"x": Est()})
+    record = runner.analyze_track(("d", "t1", "unused", 1, ("x",)))
+    result = record["results"]["x"]
+    assert "error" not in result and result["key"] == served["key"]
+    assert result["tempoWithheld"]["reason"] == CALIBRATION_UNAVAILABLE
+    assert "estimator broke" in result["tempoWithheld"]["error"]
+    _, rows = items_for("tempo", {"t1": ref("t1", 120.0)}, [record], "x")
+    assert rows[0]["withheldReason"] == CALIBRATION_UNAVAILABLE and not rows[0].get("failed")
 
 
 class FakeKey:

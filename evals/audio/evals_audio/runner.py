@@ -23,11 +23,16 @@ from .metrics import Item, acc1, acc2, estimate, mirex_key_score, parse_key
 MAX_JOBS = 4  # the box is shared
 METRICS = {"tempo": ("acc1", "acc2"), "key": ("mirex", "exact")}
 METRIC_LABELS = {"acc1": "Acc1", "acc2": "Acc2", "mirex": "MIREX", "exact": "exact"}
-# Why a withheld answer has no value (the key reasons other than KEY_WEAK are the service's own).
+# The rules that withhold an answer the estimator had (the key reasons other than KEY_WEAK are
+# the service's own evidence rule), and "no estimate" for no value with every rule lifted.
 NO_ESTIMATE = "no estimate"
-TEMPO_UNSTEADY = "tempo does not hold over the window"
+TEMPO_LOW_PERIODICITY = "onsets do not repeat enough (periodicity under the minimum)"
 TEMPO_LOW_CONFIDENCE = "confidence under the estimator's minimum"
+TEMPO_UNSTEADY = "tempo does not hold over the window"
 KEY_WEAK = "key strength under the minimum"
+CALIBRATION_UNAVAILABLE = "unknown (the calibration call failed)"
+# Withheld cost rows: clips that more than one rule withholds.
+SEVERAL_RULES = "several rules"
 # One thread per worker for the numeric libraries, so N workers use about N cores.
 THREAD_ENV = (
     "OMP_NUM_THREADS",
@@ -59,57 +64,81 @@ def analyze_track(task: tuple) -> dict:
     for name, est in _estimators(tuple(names)).items():
         try:
             v2 = service.analyze(signals, est)
-            results[name] = {"gate": v2["gate"], "tempo": v2["tempo"], "key": v2["key"]}
-            if v2["gate"]["passed"] and v2["tempo"] is None:
-                results[name]["tempoWithheld"] = tempo_withheld(signals, est)
-            if v2["gate"]["passed"] and v2["key"] is None:
-                results[name].update(key_withheld(signals, est))
         except Exception as e:
             results[name] = {"error": f"{type(e).__name__}: {e}"}
+            continue
+        results[name] = {"gate": v2["gate"], "tempo": v2["tempo"], "key": v2["key"]}
+        # Calibration only: a failure here never touches the answer the service gave.
+        if v2["gate"]["passed"] and v2["tempo"] is None:
+            try:
+                results[name]["tempoWithheld"] = tempo_withheld(signals, est)
+            except Exception as e:
+                results[name]["tempoWithheld"] = {
+                    "reason": CALIBRATION_UNAVAILABLE,
+                    "rules": [],
+                    "error": f"{type(e).__name__}: {e}",
+                }
+        if v2["gate"]["passed"] and v2["key"] is None:
+            try:
+                results[name].update(key_withheld(signals, est))
+            except Exception as e:
+                results[name].update(
+                    keyWithheld=CALIBRATION_UNAVAILABLE,
+                    keyRules=[],
+                    keyUnreturned=None,
+                    calibrationError=f"{type(e).__name__}: {e}",
+                )
     return {"trackId": track_id, "window": window, "results": results}
 
 
-def _tempo_block(tempo, reason: str) -> dict:
+def _tempo_block(tempo, rules: list[str], steady: bool) -> dict:
     return {
-        "reason": reason,
+        "reason": rules[0],
+        "rules": rules,
         "bpm": round(float(tempo.bpm), 2),
         "confidence": None if tempo.confidence is None else round(float(tempo.confidence), 3),
-        "steady": bool(tempo.steady),
+        "steady": steady,
     }
 
 
 def tempo_withheld(signals, est) -> dict:
     """
     Why the service returned no tempo, and the estimate it did not return (kept apart, for
-    calibration only): a tempo that did not hold over the window, or one under the
-    estimator's confidence minimum (recomputed with the minimum lifted; it may not hold over
-    the window either, `steady` says). "no estimate" when the estimator has no tempo even
-    then (too little periodicity, too few beats, out of range).
+    calibration only). `rules` lists every rule that withholds it, in the order the service
+    applies them: onsets that do not repeat enough (the periodicity minimum), a confidence
+    under the estimator's minimum, a tempo that does not hold over the window. The estimate
+    is recomputed with the minimums lifted. "no estimate" (no rules) when the estimator has no
+    tempo even then (out of range, too few beats).
     """
     tempo = est.tempo(signals)
     if tempo is not None:
-        return _tempo_block(tempo, TEMPO_UNSTEADY)
+        return _tempo_block(tempo, [TEMPO_UNSTEADY], bool(tempo.steady))
     lifted = service.tempo_without_confidence_minimum(signals, est)
+    if lifted is not None:
+        rules = [TEMPO_LOW_CONFIDENCE] + ([] if lifted.steady else [TEMPO_UNSTEADY])
+        return _tempo_block(lifted, rules, bool(lifted.steady))
+    lifted, steady = service.tempo_without_minimums(signals, est)
     if lifted is None:
-        return {"reason": NO_ESTIMATE}
-    return _tempo_block(lifted, TEMPO_LOW_CONFIDENCE)
+        return {"reason": NO_ESTIMATE, "rules": []}
+    rules = [TEMPO_LOW_PERIODICITY]
+    if lifted.confidence is not None and lifted.confidence < est.min_tempo_confidence:
+        rules.append(TEMPO_LOW_CONFIDENCE)
+    if not steady:
+        rules.append(TEMPO_UNSTEADY)
+    return _tempo_block(lifted, rules, steady)
 
 
 def key_withheld(signals, est) -> dict:
     """
-    Why the service returned no key (its evidence rule, cached on the signals, or a strength
-    under KEY_MIN_STRENGTH), and the key the estimator gives with both lifted, kept apart for
-    calibration only. A key stopped by the evidence rule can also be under the minimum
-    strength; `strength` shows it.
+    Why the service returned no key, and the key the estimator gives with both rules lifted
+    (the evidence rule, cached on the signals, and KEY_MIN_STRENGTH), kept apart for
+    calibration only. `keyRules` lists every rule that withholds it.
     """
     withheld = signals.key_withheld()
     raw = service.key_without_withholding(signals, est)
-    if withheld is not None:
-        reason = str(withheld)
-    elif raw is not None and (raw.strength or 0.0) < service.key_min_strength():
-        reason = KEY_WEAK
-    else:
-        reason = "the estimator returned no key"
+    rules = [] if withheld is None else [str(withheld)]
+    if raw is not None and (raw.strength or 0.0) < service.key_min_strength():
+        rules.append(KEY_WEAK)
     unreturned = None
     if raw is not None:
         unreturned = {
@@ -117,7 +146,11 @@ def key_withheld(signals, est) -> dict:
             "mode": raw.mode,
             "strength": None if raw.strength is None else round(raw.strength, 3),
         }
-    return {"keyWithheld": reason, "keyUnreturned": unreturned}
+    return {
+        "keyWithheld": rules[0] if rules else "the estimator returned no key",
+        "keyRules": rules,
+        "keyUnreturned": unreturned,
+    }
 
 
 @contextmanager
@@ -234,17 +267,23 @@ def withheld_detail(suite: str, reference, result: dict) -> dict:
             out["unreturned"] = {
                 "estimate": str(key),
                 "confidence": raw.get("strength"),
+                "rules": result.get("keyRules") or [out["withheldReason"]],
                 "scores": {"mirex": s, "exact": float(s == 1.0)},
             }
+        if result.get("calibrationError"):
+            out["calibrationError"] = result["calibrationError"]
         return out
     detail = result.get("tempoWithheld") or {"reason": "unknown"}
     out = {"withheldReason": detail["reason"]}
+    if detail.get("error"):
+        out["calibrationError"] = detail["error"]
     if "bpm" in detail:
         bpm = detail["bpm"]
         out["unreturned"] = {
             "estimate": f"{bpm:g}",
             "confidence": detail.get("confidence"),
             "steady": detail.get("steady"),
+            "rules": detail.get("rules") or [detail["reason"]],
             "scores": {"acc1": float(acc1(bpm, reference)), "acc2": float(acc2(bpm, reference))},
         }
     return out
@@ -253,16 +292,19 @@ def withheld_detail(suite: str, reference, result: dict) -> dict:
 def withheld_cost(rows: list[dict], metric_names, seed: int) -> dict:
     """
     What each withholding rule costs, from the per-track rows of one estimator: the estimates
-    the service made but did not return, scored and grouped by the rule that withheld them,
-    with what correct / n would be if that rule's estimates had been returned too ("all": every
-    rule's). Clips with no estimate at all (gate, no estimate) stay at no correct value.
+    the service made but did not return, scored. A clip is counted under a rule only when
+    that rule alone withholds it, so a rule's row is what lifting that rule alone would give;
+    clips that several rules withhold have their own row (SEVERAL_RULES), and "all" lifts every
+    rule. Clips with no estimate at all (gate, no estimate) stay at no correct value.
     """
     n = len(rows)
     returned = [r["scores"] for r in rows if r.get("scores") is not None]
     by_rule: dict[str, list[dict]] = {}
     for r in rows:
         if r.get("unreturned"):
-            by_rule.setdefault(r["withheldReason"], []).append(r["unreturned"]["scores"])
+            rules = r["unreturned"].get("rules") or [r["withheldReason"]]
+            group = rules[0] if len(rules) == 1 else SEVERAL_RULES
+            by_rule.setdefault(group, []).append(r["unreturned"]["scores"])
     groups = sorted(by_rule.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     if len(groups) > 1:
         groups.append(("all", [s for _, scores in groups for s in scores]))

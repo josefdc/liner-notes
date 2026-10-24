@@ -99,6 +99,31 @@ def tempo_without_confidence_minimum(signals, est):
         del est.min_tempo_confidence  # back to the class value
 
 
+def tempo_without_minimums(signals, est):
+    """
+    The tempo the estimator would give without the onset-periodicity minimum
+    (estimators.MIN_TEMPO_PERIODICITY) and its confidence minimum, both lifted for one call,
+    and whether it holds over the window as the service judges it. The steadiness check uses
+    the same periodicity minimum, so it is recomputed (estimators.steady_tempo) after the
+    minimum is restored. (None, False) when there is still no tempo. Calibration only.
+    """
+    _, estimators = load()
+    minimum = estimators.MIN_TEMPO_PERIODICITY
+    estimators.MIN_TEMPO_PERIODICITY = 0.0
+    try:
+        tempo = tempo_without_confidence_minimum(signals, est)
+    finally:
+        estimators.MIN_TEMPO_PERIODICITY = minimum
+    if tempo is None:
+        return None, False
+    return tempo, bool(estimators.steady_tempo(tempo.beats, tempo.bpm, signals))
+
+
+def tempo_periodicity_minimum() -> float:
+    _, estimators = load()
+    return estimators.MIN_TEMPO_PERIODICITY
+
+
 def key_without_withholding(signals, est):
     """
     The key the estimator would give if neither the service's evidence rule

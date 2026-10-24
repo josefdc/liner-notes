@@ -49,7 +49,11 @@ logger = logging.getLogger("evals_audio")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    p = argparse.ArgumentParser(prog="python -m evals_audio", description=__doc__.split("\n\n")[1])
+    # No abbreviated options: a prefix of --data-dir or --report-dir would slip past the
+    # filter that keeps local paths out of the recorded command.
+    p = argparse.ArgumentParser(
+        prog="python -m evals_audio", description=__doc__.split("\n\n")[1], allow_abbrev=False
+    )
     p.add_argument("--suite", choices=sorted(datasets.SUITE_DATASETS))
     p.add_argument("--dataset", choices=sorted(datasets.DATASETS))
     p.add_argument("--limit", type=int, help="tracks to draw at the seed (default: all usable)")
@@ -256,7 +260,13 @@ def main(argv: list[str] | None = None) -> int:
         budget = DiskBudget(root, cap_bytes())
         with exclusive(root):
             return run(args, argv, names, root, budget)
-    except (service.EstimatorUnavailable, SettingError, DataCapExceeded, DataDirBusy) as e:
+    except (
+        service.EstimatorUnavailable,
+        SettingError,
+        DataCapExceeded,
+        DataDirBusy,
+        report.OlderResults,
+    ) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
     except DownloadFailed as e:
@@ -308,6 +318,9 @@ def fetch(spec, home: Path, args, budget: DiskBudget):
 def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget) -> int:
     started = time.monotonic()
     started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    if not args.no_report:
+        # Refuse an older results file for the date now, not after the analysis.
+        report.load(args.report_dir / f"audio-{started_at.date().isoformat()}.json")
     spec = datasets.DATASETS[args.dataset]
     home = root / spec.mirdata_name
     refs, selected, present, fetched = fetch(spec, home, args, budget)

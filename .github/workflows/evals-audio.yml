@@ -3,17 +3,20 @@ name: evals audio
 # The audio accuracy harness (evals/audio): lint, its unit tests and the check that it runs
 # the service's own library versions. No dataset is downloaded and no suite is run; the
 # suites are run by hand (see evals/audio/README.md). The harness imports services/audio, so a
-# change there runs this too.
+# change there runs this too (a smoke test runs the real service on synthesized audio), and
+# the committed reports are checked against their results files.
 on:
   pull_request:
     paths:
       - "evals/audio/**"
+      - "evals/reports/audio-*"
       - "services/audio/**"
       - ".github/workflows/evals-audio.yml"
   push:
     branches: [main]
     paths:
       - "evals/audio/**"
+      - "evals/reports/audio-*"
       - "services/audio/**"
       - ".github/workflows/evals-audio.yml"
   workflow_dispatch:

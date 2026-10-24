@@ -1,8 +1,8 @@
 """
 The dated report: `evals/reports/audio-<date>.json` holds the runs of that date with the
 per-track results, and `audio-<date>.md` is rendered from it alone, so the tables can be
-re-derived from the JSON. A run replaces an earlier one only when suite, dataset, seeds and
-limit are all the same; otherwise both are kept.
+re-derived from the JSON. A run replaces an earlier one only when suite, dataset, seeds,
+limit and estimators are all the same; otherwise both are kept.
 
 The JSON carries track ids (a short hash for datasets whose ids are file names), where each
 clip was cut, the service's estimates, confidences, per-track scores and withheld reasons. It
@@ -18,21 +18,35 @@ from collections import Counter
 from pathlib import Path
 
 from .metrics import MIN_CURVE_ANSWERED
-from .runner import METRIC_LABELS, METRICS
+from .runner import METRIC_LABELS, METRICS, SEVERAL_RULES
 from .storage import human
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+
+class OlderResults(RuntimeError):
+    """The dated results file was written by an older harness and cannot be merged into."""
 
 
 def load(path: Path) -> dict:
-    if path.exists():
-        doc = json.loads(path.read_text())
-        if doc.get("schemaVersion") == SCHEMA_VERSION:
-            return doc
-    return {"schemaVersion": SCHEMA_VERSION, "runs": []}
+    """
+    The dated results file, or a new one. A file from an older harness (another
+    schemaVersion) is refused rather than dropped: its runs would be lost without a word.
+    """
+    if not path.exists():
+        return {"schemaVersion": SCHEMA_VERSION, "runs": []}
+    doc = json.loads(path.read_text())
+    if doc.get("schemaVersion") != SCHEMA_VERSION:
+        raise OlderResults(
+            f"{path} was written by another version of the harness (schemaVersion "
+            f"{doc.get('schemaVersion')}, now {SCHEMA_VERSION}); move or delete it to start "
+            "that date's report afresh, or pass --report-dir"
+        )
+    return doc
 
 
 def run_key(run: dict) -> tuple:
+    """A run replaces another only with the same suite, dataset, seeds, limit and estimators."""
     seeds = run["seeds"]
     return (
         run["suite"],
@@ -41,6 +55,7 @@ def run_key(run: dict) -> tuple:
         seeds["clips"],
         seeds["bootstrap"],
         run["limit"],
+        tuple(sorted(run["summaries"])),
     )
 
 
@@ -181,7 +196,7 @@ def paired_section(run: dict) -> list[str]:
                         pct(r["secondMean"]),
                         f"{r['firstHigher']} / {r['secondHigher']}",
                         f"mean difference {diff}; sign-flip p = {r['signFlipP']:.3f} "
-                        f"({r['signFlipMethod']})",
+                        f"({r['signFlipMethod']})" + coverage_note(r.get("differenceCoverage")),
                     ]
                 )
     head = [
@@ -193,6 +208,28 @@ def paired_section(run: dict) -> list[str]:
         "test",
     ]
     return out + table(head, rows) + [""]
+
+
+def source_lengths(run: dict) -> str:
+    """The range of the measured recordings' lengths, from the clip windows."""
+    windows = [c["window"] for c in run["clips"] if c.get("window")]
+    if not windows:
+        return ""
+    lengths = [w["sourceSeconds"] for w in windows]
+    whole = sum(1 for w in windows if w["durationSeconds"] >= w["sourceSeconds"])
+    return (
+        f" The {len(windows)} recordings measured are {min(lengths):.1f}-{max(lengths):.1f} s "
+        f"long (used whole: {whole})."
+    )
+
+
+def coverage_note(check: dict | None) -> str:
+    if not check or check.get("coverage") is None:
+        return ""
+    return (
+        f"; the interval covers the mean in {pct(check['coverage'])} of {check['draws']:,} "
+        "resamples of these differences"
+    )
 
 
 def withheld_section(run: dict) -> list[str]:
@@ -218,21 +255,22 @@ def withheld_section(run: dict) -> list[str]:
             + f". The estimator still had an estimate for {scored} of them."
         )
     rules = (
-        "a tempo that did not hold over the window, or one under the estimator's confidence "
-        "minimum (recomputed with the minimum lifted)"
+        "onsets that do not repeat enough (the periodicity minimum), a confidence under the "
+        "estimator's minimum or a tempo that does not hold over the window"
         if run["suite"] == "tempo"
-        else "a key stopped by the evidence rule or under the minimum strength (recomputed "
-        "with both lifted)"
+        else "the evidence rule or a strength under the minimum"
     )
     out += [
         "",
-        f"For {rules}, the estimator had an estimate that the service did not return. Scored "
-        "against the reference, it shows what each rule costs: a rule that helps withholds "
-        "estimates that are right less often than the ones it returns. These estimates never "
-        "reach a user and are not counted in the tables above. The first row per estimator is "
-        "what the service returned, as served; each further row gives the estimates one rule "
-        "withheld and what correct / n would be if they were returned too. Clips with no "
-        "estimate at all (gate, no estimate) stay at no correct value.",
+        f"When {rules} withholds an answer, the estimator usually still has an estimate: the "
+        "harness recomputes it with the rule lifted and scores it against the reference, which "
+        "shows what each rule costs. A rule that helps withholds estimates that are right less "
+        "often than the ones it returns. These estimates never reach a user and are not counted "
+        "in the tables above. The first row per estimator is what the service returned, as "
+        "served. A rule's row counts the clips that this rule alone withholds, so its last "
+        "column is what correct / n would be with that rule alone lifted; clips that several "
+        "rules withhold have their own row, and the last row lifts every rule. Clips with no "
+        "estimate even with every rule lifted (the gate, no estimate) stay at no correct value.",
         "",
     ]
     rows = []
@@ -243,7 +281,10 @@ def withheld_section(run: dict) -> list[str]:
             served += [frac(summary["overAnswered"][m]), frac(summary["overN"][m])]
         rows.append(served)
         for group in cost["rules"]:
-            label = "all withheld estimates" if group["rule"] == "all" else group["rule"]
+            label = {
+                "all": "every rule lifted",
+                SEVERAL_RULES: "withheld by several rules",
+            }.get(group["rule"], f"only: {group['rule']}")
             row = [f"`{name}`", f"{label} ({group['count']})"]
             for m in metrics:
                 c = group["metrics"][m]
@@ -361,6 +402,36 @@ def decode_section(run: dict) -> list[str]:
     return out + [""]
 
 
+P_VALUES = object()  # where the p-value bullet goes; it needs the count from the document
+
+
+def count_p_values(doc: dict) -> int:
+    """How many p-values the report prints: McNemar and sign-flip rows, and AUC lines."""
+    count = 0
+    for run in doc["runs"]:
+        paired = run.get("paired") or {}
+        for key in ("bothAnswered", "allN"):
+            count += len((paired.get(key) or {}).get("metrics", {}))
+        for curve in run["coverage"].values():
+            count += sum(1 for r in (curve.get("ranking") or {}).values() if r["p"] is not None)
+    return count
+
+
+def p_value_note(doc: dict) -> str:
+    n = count_p_values(doc)
+    return (
+        "- **p-values** are exact where it is cheap (McNemar; sign-flip; the AUC's permutation "
+        "test up to 200,000 orderings) and Monte Carlo at a fixed seed otherwise, as labelled, "
+        "computed as (hits + 1) / (resamples + 1). Each is for one comparison. This report "
+        f"prints {n}; about {0.05 * n:.1f} of them are expected under 0.05 by chance alone, so "
+        "none should be read as a finding without a correction for the number of tests."
+    )
+
+
+def guide(doc: dict) -> list[str]:
+    return [p_value_note(doc) if line is P_VALUES else line for line in GUIDE]
+
+
 GUIDE = [
     "## How to read it",
     "",
@@ -381,18 +452,15 @@ GUIDE = [
     "(10,000 resamples, fixed seed) for MIREX, with no interval when every score is equal. Each "
     "interval rests on the denominator printed next to it, which for correct / answered can be "
     "far below n.",
-    "- **Paired MIREX difference**: most paired differences are zero, and a bootstrap interval "
-    "then covers well under 95 % (about 74-77 % when simulated from measured key differences "
-    "at n = 11 and n = 50). It uses a paired t interval whose spread includes two "
-    "pseudo-differences at -1 and +1, the ends of the range. The same simulation gives "
-    "coverage of 0.999 or more, and 0.95-0.98 for denser differences, so it is conservative and "
-    'wide at small n. The sign-flip p-value tests "no difference" over every sign pattern of '
+    "- **Paired MIREX difference**: most paired key differences are zero, and a bootstrap "
+    "interval can then cover far less than 95 %. The interval here is a paired t interval whose "
+    "spread includes two pseudo-differences at -1 and +1, the ends of the range, so it never "
+    "collapses to zero width. Each row says how often it covered the mean when that row's own "
+    "differences were resampled. It is wide at small n and is not conservative in general: on "
+    "dense differences it can cover less than 95 % (`evals/audio/scripts/paired_coverage.py` "
+    'simulates both). The sign-flip p-value tests "no difference" over every sign pattern of '
     "the nonzero differences (exact up to 16 of them).",
-    "- **p-values** are exact where it is cheap (McNemar; sign-flip; the AUC's permutation test "
-    "up to 200,000 orderings) and Monte Carlo at a fixed seed otherwise, as labelled. Each is "
-    "for one comparison: the report prints about twenty, so one or two under 0.05 are expected "
-    "by chance alone and none should be read as a finding without a correction for the number "
-    "of tests.",
+    P_VALUES,
     "- **Comparability**: one 30 s window per clip and the excluded labels make these numbers "
     "incomparable with published figures for the same datasets (computed on full excerpts, "
     "usually on every labelled track).",
@@ -418,7 +486,7 @@ def render(doc: dict) -> str:
         "The estimator bake-off with beat-this, style hit@k against Discogs styles and the "
         "agreement with Deezer's `bpm` come in the next part of this work and are not here.",
         "",
-        *GUIDE,
+        *guide(doc),
     ]
     for run in doc["runs"]:
         seeds = run["seeds"]
@@ -438,7 +506,7 @@ def render(doc: dict) -> str:
             f"- Seeds: selection {seeds['selection']}, clip windows {seeds['clips']}, bootstrap "
             f"{seeds['bootstrap']}. Selection: {run['selection']}. Clips: "
             f"{run['clipSeconds']:g} s, the start fixed by the clip seed and the track id "
-            "(SHA-256); a recording of 30 s or less is used whole.",
+            "(SHA-256); a recording of 30 s or less is used whole." + source_lengths(run),
             "",
         ]
         out += dataset_section(run)

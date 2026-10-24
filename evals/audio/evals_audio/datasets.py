@@ -112,12 +112,13 @@ DATASETS: dict[str, Dataset] = {
         hash_ids=True,
         reference_note="the contest's ground-truth tempo (one value per excerpt)",
         notes=(
-            "698 excerpts of about 30 s from BallroomDancers.com, eight dance styles. The "
-            "excerpts are 29.4-31.8 s long, so the 30 s window is in effect the whole excerpt.",
+            "698 excerpts of about 30 s from BallroomDancers.com, eight dance styles, so the "
+            "30 s window covers nearly all of each excerpt.",
             "Published Ballroom figures use all 698 excerpts; a sample of n clips is only "
             "comparable within its interval.",
             "Ballroom's track ids are its file names (album names included), so the results "
-            "use the first 10 hex digits of a SHA-256 of the id; `uv run python -m evals_audio "
+            "use the first 10 hex digits of a SHA-256 of the dataset name and the id; `uv run "
+            "python -m evals_audio "
             "--lookup ID --dataset ballroom` maps one back from the local index.",
         ),
     ),

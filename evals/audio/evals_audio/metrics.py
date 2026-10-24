@@ -313,13 +313,32 @@ def _auc_permutation(right: list[float], wrong: list[float], seed: int) -> tuple
         sums = ranks[groups].sum(axis=1)
         if k != n1:  # the combinations picked the wrong answers
             sums = ranks.sum() - sums
-        method = "exact permutation"
-    else:
-        order = np.random.default_rng(seed).random((AUC_RESAMPLES, total)).argsort(axis=1)
-        sums = ranks[order[:, :n1]].sum(axis=1)
-        method = f"Monte Carlo, {AUC_RESAMPLES:,} permutations"
-    p = float(np.mean(auc(sums) >= observed - 1e-12))
-    return observed, p, method
+        p = float(np.mean(auc(sums) >= observed - 1e-12))
+        return observed, p, "exact permutation"
+    rng = np.random.default_rng(seed)
+    hits = 0
+    for size in _chunks(AUC_RESAMPLES):
+        order = rng.random((size, total)).argsort(axis=1)
+        hits += int(np.sum(auc(ranks[order[:, :n1]].sum(axis=1)) >= observed - 1e-12))
+    return (
+        observed,
+        monte_carlo_p(hits, AUC_RESAMPLES),
+        f"Monte Carlo, {AUC_RESAMPLES:,} permutations",
+    )
+
+
+MONTE_CARLO_CHUNK = 10_000  # resamples drawn at once, to keep memory flat on large n
+
+
+def _chunks(total: int, size: int = MONTE_CARLO_CHUNK):
+    while total > 0:
+        yield min(size, total)
+        total -= size
+
+
+def monte_carlo_p(hits: int, resamples: int) -> float:
+    """(hits + 1) / (resamples + 1): counts the observed arrangement, so it is never 0."""
+    return (hits + 1) / (resamples + 1)
 
 
 @dataclass(frozen=True)
@@ -418,6 +437,30 @@ def paired_difference_interval(differences: Sequence[float], level: float = CI_L
     return Estimate(n, float(d.sum()), mean, low, high, method)
 
 
+COVERAGE_DRAWS = 2_000
+
+
+def resampled_coverage(
+    differences: Sequence[float], seed: int, draws: int = COVERAGE_DRAWS
+) -> float | None:
+    """
+    How often paired_difference_interval covers the mean of `differences` when the pairs are
+    resampled with replacement, the observed differences standing in for the population: a
+    check of the interval on data like the run's own, not a guarantee.
+    """
+    pop = np.asarray(differences, dtype=float)
+    n = int(pop.size)
+    if n < 2:
+        return None
+    mu = float(pop.mean())
+    rng = np.random.default_rng(seed)
+    hits = 0
+    for _ in range(draws):
+        e = paired_difference_interval(list(rng.choice(pop, n)))
+        hits += e.low - 1e-12 <= mu <= e.high + 1e-12
+    return hits / draws
+
+
 def sign_flip_p(differences: Sequence[float], seed: int) -> tuple[float, str]:
     """
     Two-sided sign-flip permutation p-value for "no difference" (the paired differences are
@@ -432,13 +475,14 @@ def sign_flip_p(differences: Sequence[float], seed: int) -> tuple[float, str]:
     observed = abs(float(d.sum()))
     if k <= SIGN_FLIP_EXACT_MAX:
         signs = 1 - 2 * ((np.arange(2**k)[:, None] >> np.arange(k)) & 1)
-        method = "exact"
-    else:
-        signs = np.random.default_rng(seed).choice([-1, 1], size=(SIGN_FLIP_RESAMPLES, k))
-        method = f"Monte Carlo, {SIGN_FLIP_RESAMPLES:,} sign patterns"
-    sums = np.abs(signs @ d)
-    p = float(np.mean(sums >= observed - 1e-12))
-    return p, method
+        return float(np.mean(np.abs(signs @ d) >= observed - 1e-12)), "exact"
+    rng = np.random.default_rng(seed)
+    hits = 0
+    for size in _chunks(SIGN_FLIP_RESAMPLES):
+        signs = rng.choice([-1, 1], size=(size, k))
+        hits += int(np.sum(np.abs(signs @ d) >= observed - 1e-12))
+    method = f"Monte Carlo, {SIGN_FLIP_RESAMPLES:,} sign patterns"
+    return monte_carlo_p(hits, SIGN_FLIP_RESAMPLES), method
 
 
 def compare(
@@ -489,6 +533,10 @@ def compare(
                     "firstHigher": int(np.sum(a > b)),
                     "secondHigher": int(np.sum(a < b)),
                     "difference": paired_difference_interval(list(a - b)).as_dict(),
+                    "differenceCoverage": {
+                        "draws": COVERAGE_DRAWS,
+                        "coverage": resampled_coverage(list(a - b), seed + 10 + j),
+                    },
                     "signFlipP": p,
                     "signFlipMethod": p_method,
                 }

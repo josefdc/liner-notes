@@ -255,7 +255,8 @@ def test_sign_flip_p_is_exact_for_few_nonzero_differences():
     assert (p, method) == (pytest.approx(2 / 8), "exact")
     assert sign_flip_p([0.0, 0.0], seed=1) == (1.0, "exact")
     p, method = sign_flip_p([0.5] * 30, seed=1)
-    assert method.startswith("Monte Carlo") and p < 1e-3
+    # Monte Carlo: (hits + 1) / (resamples + 1), never 0.
+    assert method.startswith("Monte Carlo") and p == pytest.approx(1 / 100_001)
     assert sign_flip_p([0.5] * 30, seed=1) == (p, method)  # fixed seed
 
 

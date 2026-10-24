@@ -4,7 +4,14 @@ import pytest
 
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, compare, coverage_curve, ranking_auc, summarize
-from evals_audio.report import SCHEMA_VERSION, add_run, load, render
+from evals_audio.report import (
+    SCHEMA_VERSION,
+    OlderResults,
+    add_run,
+    count_p_values,
+    load,
+    render,
+)
 from evals_audio.runner import withheld_cost
 from evals_audio.service import REPO_ROOT
 
@@ -129,10 +136,29 @@ def test_a_run_is_replaced_only_by_one_with_the_same_seeds_and_limit():
     )
 
 
-def test_an_older_results_file_is_not_merged(tmp_path):
+def test_an_older_results_file_is_refused_not_dropped(tmp_path):
     path = tmp_path / "audio-2026-10-21.json"
     path.write_text(json.dumps({"schemaVersion": 1, "runs": [{"suite": "tempo"}]}))
-    assert load(path) == {"schemaVersion": SCHEMA_VERSION, "runs": []}
+    with pytest.raises(OlderResults, match="schemaVersion 1"):
+        load(path)
+    assert load(tmp_path / "missing.json") == {"schemaVersion": SCHEMA_VERSION, "runs": []}
+
+
+def test_a_run_with_other_estimators_does_not_replace_the_paired_run():
+    both = run()
+    librosa_only = run()
+    librosa_only["summaries"] = {"librosa": both["summaries"]["librosa"]}
+    doc = add_run(add_run({"schemaVersion": SCHEMA_VERSION, "runs": []}, both), librosa_only)
+    assert sorted(len(r["summaries"]) for r in doc["runs"]) == [1, 2]
+
+
+def test_the_guide_counts_the_p_values_it_prints():
+    doc = {"date": "2026-10-21", "runs": [run()]}
+    n = count_p_values(doc)
+    # 2 metrics x 2 paired blocks, and one AUC per binary metric and estimator when defined.
+    ranking = [r for c in run()["coverage"].values() for r in c["ranking"].values()]
+    assert n == 4 + sum(1 for r in ranking if r["p"] is not None)
+    assert f"This report prints {n};" in render(doc)
 
 
 def test_render_gives_coverage_over_n_and_over_answered_with_intervals():

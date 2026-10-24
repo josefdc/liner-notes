@@ -51,3 +51,9 @@ def test_main_exits_with_distinct_codes(monkeypatch, tmp_path, capsys):
     assert cli.main(argv) == 5
     err = capsys.readouterr().err
     assert "a download failed" in err and "a local file could not be read or written" in err
+
+
+def test_abbreviated_options_are_refused(capsys):
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--suite", "tempo", "--data-d", "/somewhere"])
+    assert "unrecognized arguments" in capsys.readouterr().err

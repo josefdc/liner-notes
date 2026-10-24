@@ -93,24 +93,34 @@ A track the service answered nothing for is *withheld*. Every metric is given tw
 right value), and **correct / answered** (how often a value the service shows is right), next
 to the coverage (answered / n). Two estimators that answer different tracks are compared in a
 paired table on the same tracks, not by the over-answered column: exact McNemar for the binary
-metrics; for MIREX a paired t interval whose spread includes two pseudo-differences at -1 and +1
-(conservative: it covered 95 % or more in simulations from measured differences, where a
-bootstrap covered about 75 %) and an exact sign-flip p-value. Other intervals are 95 %: Wilson
+metrics; for MIREX a paired t interval whose spread includes two pseudo-differences at -1 and +1,
+and an exact sign-flip p-value. Paired key differences are mostly zero, where a bootstrap
+interval covers far less than 95 %; this interval does not collapse there, but it is not
+conservative in general. Each paired row reports how often it covered the mean on resamples of
+its own differences, and `scripts/paired_coverage.py` simulates it next to a BCa bootstrap on a
+results file and on random sparse and dense differences (`uv run python
+scripts/paired_coverage.py ../reports/audio-<date>.json`). Other intervals are 95 %: Wilson
 score intervals for the binary metrics, a BCa bootstrap at a fixed seed for the MIREX score.
 
-The service withholds an answer for several reasons: the gate, a tempo that does not hold over
-the window, a tempo under the estimator's confidence minimum, a key stopped by the evidence
-rule, a key under the minimum strength. For all but the gate the estimator usually still has an
-estimate. The harness recomputes it with that rule lifted (never as the service's answer),
-scores it, and shows per rule what correct / n would be if those estimates were returned too.
-"No estimate" means the estimator has no value even with the rules lifted.
+The service withholds an answer for several reasons: the gate; for tempo, onsets that do not
+repeat enough (the onset-periodicity minimum), a confidence under the estimator's minimum, or a
+tempo that does not hold over the window; for key, the evidence rule or a strength under the
+minimum. For all but the gate the estimator usually still has an estimate. The harness
+recomputes it with the rules lifted (never as the service's answer), records every rule that
+withholds it, and scores it. A rule's row in the withheld table counts the clips that this
+rule alone withholds, so it shows what lifting that rule alone would give; clips withheld by
+several rules have their own row, and a last row lifts every rule. "No estimate" means the
+estimator has no value even with every rule lifted (a tempo out of range, too few beats).
+`tests/test_service_smoke.py` runs the real service on a synthesized clip and checks that each
+rule is really lifted.
 
 The accuracy-vs-coverage table ranks the answered tracks by the service's own confidence;
 answered tracks without a confidence are ranked last and listed. Each row carries its
 interval, rows on fewer than 10 tracks are left out, and an AUC with a permutation p-value
 (exact when there are at most 200,000 orderings, Monte Carlo at a fixed seed otherwise) says
-whether the confidence puts correct answers first at all. Every p-value is for one comparison;
-a report prints about twenty of them, so one or two under 0.05 are expected by chance.
+whether the confidence puts correct answers first at all. Monte Carlo p-values are
+(hits + 1) / (resamples + 1). Every p-value is for one comparison; each report says how many
+it prints and how many of them chance alone would put under 0.05.
 
 One random 30 s window per track, a sample of n tracks and the labels left out make these
 numbers incomparable with published figures for the same datasets.

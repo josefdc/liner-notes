@@ -72,6 +72,11 @@ const ERRORS = {
   timeout: { status: 504, message: "The analysis took too long. Please try again." },
   failed: HTTP_ERRORS.failed,
   live_disabled: HTTP_ERRORS.live_disabled,
+  budget_exhausted: {
+    status: 503,
+    message:
+      "Live analysis is paused for now: its budget is spent. Only the recorded showcase tracks can be shown.",
+  },
 } as const;
 
 type ErrorCode = keyof typeof ERRORS;
@@ -788,7 +793,7 @@ router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHe
  * { status: "interrupted", threadId, interrupt: { candidates } }; resume with
  * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS. Under
  * REPLAY_MODE (as for the stream below) a recorded track is answered with its recorded result
- * as a new run, and any other query with 503 live_disabled.
+ * as a new run, and any other query with 503 live_disabled (or budget_exhausted).
  */
 router.post(
   "/api/analyze",
@@ -803,9 +808,9 @@ router.post(
       return;
     }
 
-    const replay = chooseReplay((records) => records.forQuery(query));
+    const replay = await chooseReplay((records) => records.forQuery(query));
     if (replay.kind === "refused") {
-      sendJsonError(res, "live_disabled");
+      sendJsonError(res, replay.code);
       return;
     }
     if (replay.kind === "replay") {
@@ -848,7 +853,8 @@ router.post(
  * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) a query that names a
  * recorded track replays its recording as a new run (the same messages; the result says
  * `mode: "replay"` with when and from which commit it was recorded), and any other query gets
- * one `error` with code live_disabled, then done.
+ * one `error`, then done: live_disabled, or budget_exhausted when fallback paused live analysis
+ * because the model budget is spent (replay/mode.ts). Never a result made up in its place.
  */
 router.get(
   "/api/analyze/stream",
@@ -863,10 +869,10 @@ router.get(
     }
 
     // Decided before anything live is built: under REPLAY_MODE=only nothing live ever runs.
-    const replay = chooseReplay((records) => records.forQuery(query));
+    const replay = await chooseReplay((records) => records.forQuery(query));
     if (replay.kind === "refused") {
       const stream = openEventStream(res);
-      stream.error("live_disabled");
+      stream.error(replay.code);
       stream.done();
       return;
     }
@@ -900,8 +906,8 @@ router.get(
  * POST /api/analyze/resume
  * Body: { "threadId": "...", "selectedTrackId": "spotify_track_id" }
  * Refusals: 409 resume_in_progress; 404 choice_expired, not_waiting or run_interrupted;
- * 400 invalid_selection or invalid_input; 503 live_disabled when live services may not be used
- * (REPLAY_MODE).
+ * 400 invalid_selection or invalid_input; 503 live_disabled or budget_exhausted when live services
+ * may not be used (REPLAY_MODE).
  */
 router.post(
   "/api/analyze/resume",
@@ -916,8 +922,9 @@ router.post(
       return;
     }
     // A recorded run never pauses; a paused live run cannot go on without live services.
-    if (liveRefused()) {
-      sendJsonError(res, "live_disabled");
+    const refused = await liveRefused();
+    if (refused) {
+      sendJsonError(res, refused);
       return;
     }
 
@@ -950,8 +957,9 @@ router.get(
       stream.done();
       return;
     }
-    if (liveRefused()) {
-      stream.error("live_disabled");
+    const refused = await liveRefused();
+    if (refused) {
+      stream.error(refused);
       stream.done();
       return;
     }

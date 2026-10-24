@@ -31,3 +31,39 @@ export async function fetchSuggestions(
 
   return [];
 }
+
+/** A recorded run the API can replay (GET /api/replays): a showcase track. */
+export interface ReplayTrack {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  /** When the run was recorded (ISO time). */
+  recordedAt: string;
+}
+
+const isReplayTrack = (value: unknown): value is ReplayTrack => {
+  if (typeof value !== 'object' || value === null) return false;
+  const { id, title, artist, album, recordedAt } = value as Record<string, unknown>;
+  return (
+    typeof id === 'string' &&
+    id !== '' &&
+    typeof title === 'string' &&
+    typeof artist === 'string' &&
+    typeof album === 'string' &&
+    typeof recordedAt === 'string'
+  );
+};
+
+/**
+ * The recorded runs the API can replay. Entries this page cannot read are left out; a failed
+ * request rejects, so the caller can say the list is unavailable.
+ */
+export async function fetchReplays(): Promise<ReplayTrack[]> {
+  const response = await fetch(`${API_BASE_URL}/replays`);
+  if (!response.ok) {
+    throw new Error(`Recorded tracks unavailable (HTTP ${response.status})`);
+  }
+  const result = await response.json();
+  return Array.isArray(result?.replays) ? result.replays.filter(isReplayTrack) : [];
+}

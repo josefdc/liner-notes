@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TriangleAlert, Disc, Heart, Sparkles, Zap } from 'lucide-react';
+import { TriangleAlert, Disc, Heart, History, Sparkles, Zap } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
@@ -13,7 +13,9 @@ import {
   missingModelOutput,
   modelUnavailableText,
   moodLabel,
+  recordingOf,
 } from '../constants';
+import { isWholeRecording, recordedDate } from '../utils/recording';
 
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
@@ -65,7 +67,10 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   // Estimated (not measured) values come back null here: shown as not measured.
   const { bpm, key, energy, valence, danceability, acousticness } = audioValues(track);
   const hasModelScores = valence !== null || danceability !== null || acousticness !== null;
-  const measuredTitle = 'Measured from the audio preview';
+  // A replayed result's values were measured when its run was recorded, not now.
+  const measuredTitle = recordingOf(track)
+    ? 'Measured from the audio preview when this run was recorded'
+    : 'Measured from the audio preview';
   const iconSize = size === 'md' ? 12 : 10;
 
   return (
@@ -217,6 +222,52 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
           {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
         </Notice>
       )}
+    </section>
+  );
+};
+
+/**
+ * Says that a result is a recorded run served again, with when (and from which commit) it was
+ * recorded, so a replay never reads as a live analysis. Renders nothing for a live result.
+ *
+ * A result whose run says "replay" but neither when nor where it was recorded is a live run
+ * whose model answers were replayed from stored answers (a development setting): it is labelled
+ * as that, not as a whole recording.
+ */
+export const RecordedRunNotice: React.FC<{
+  track: TrackData;
+  /** One line, for narrow screens; the full text is its tooltip. */
+  compact?: boolean;
+  className?: string;
+}> = ({ track, compact = false, className = '' }) => {
+  const recording = recordingOf(track);
+  if (!recording) return null;
+  const date = recordedDate(recording.recordedAt);
+  const modelOnly = !isWholeRecording(track.run);
+  const title = modelOnly
+    ? 'Model answers replayed · not a live model call'
+    : `Recorded run · ${date ?? 'date not recorded'} · replayed`;
+  const text = modelOnly
+    ? "The model's answers in this result were replayed from stored answers that do not say " +
+      'when they were recorded. Other parts of it may have run live.'
+    : `This result was recorded ${date ? `on ${date}` : 'earlier'}` +
+      `${recording.commit ? ` (commit ${recording.commit})` : ''} and is shown again as it was ` +
+      'then. Nothing was analysed live for it.';
+  return (
+    <section
+      aria-label="Recorded run"
+      title={compact ? text : undefined}
+      className={`flex gap-3 items-start border border-cyber/30 bg-cyber/5 rounded-md ${compact ? 'px-3 py-1.5' : 'px-4 py-3'} ${className}`}
+    >
+      <History
+        size={compact ? 12 : 16}
+        className="text-cyber flex-shrink-0 mt-0.5"
+        aria-hidden="true"
+      />
+      <div className="text-xs font-mono text-text-secondary space-y-1">
+        <p className="text-cyber uppercase tracking-widest">{title}</p>
+        {compact ? <p className="sr-only">{text}</p> : <p>{text}</p>}
+      </div>
     </section>
   );
 };

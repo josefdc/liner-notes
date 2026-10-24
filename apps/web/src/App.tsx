@@ -14,7 +14,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Player = lazy(() => import('./components/Player'));
 import { AppPhase, type TrackData, type AgentLog } from './types';
 import { useAgent } from './hooks/useAgent';
-import type { AgentStatus, SearchCandidate } from './hooks/agent/types';
+import type { AgentStatus, ResultMode, SearchCandidate } from './hooks/agent/types';
 import type { Factoid, FactoidUnavailableCode } from './types';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
@@ -81,6 +81,7 @@ interface PhaseViewProps {
   errorCode: string | null;
   isLoading: boolean;
   isComplete: boolean;
+  isReplay: boolean;
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
@@ -94,6 +95,7 @@ interface PhaseViewProps {
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
     onUnavailable?: (code: FactoidUnavailableCode) => void,
+    resultMode?: ResultMode,
   ) => Promise<void>;
   // Navigation
   onAnalysisComplete: (trackData: TrackData) => void;
@@ -123,6 +125,7 @@ const PhaseView = React.memo<PhaseViewProps>(
     errorCode,
     isLoading,
     isComplete,
+    isReplay,
     candidates,
     analyze,
     selectCandidate,
@@ -151,6 +154,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             error={error}
             errorCode={errorCode}
             isLoading={isLoading}
+            isReplay={isReplay}
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
@@ -195,6 +199,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             error={error}
             errorCode={errorCode}
             isLoading={isLoading}
+            isReplay={isReplay}
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
@@ -229,6 +234,7 @@ const App: React.FC = () => {
     errorCode,
     isLoading,
     isComplete,
+    isReplay,
     analyze,
     selectCandidate,
     retry,
@@ -484,6 +490,7 @@ const App: React.FC = () => {
             errorCode={errorCode}
             isLoading={isLoading}
             isComplete={isComplete}
+            isReplay={isReplay}
             candidates={candidates}
             analyze={startSearch}
             selectCandidate={selectCandidate}

@@ -1,5 +1,14 @@
 import type React from 'react';
-import { useEffect, useState, useReducer, useRef, useCallback } from 'react';
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  useReducer,
+  useRef,
+  useCallback,
+} from 'react';
 import type { TrackData, AgentLog } from '../types';
 import {
   Network,
@@ -14,8 +23,17 @@ import {
 } from 'lucide-react';
 import type { SearchCandidate, AgentStatus } from '../hooks/agent/types';
 import SystemConsole from './SystemConsole';
+import {
+  isLiveUnavailable,
+  LIVE_UNAVAILABLE_COPY,
+  type LiveUnavailableCode,
+} from '../liveUnavailable';
+import type { ReplayTrack } from '../hooks/agent/apiClient';
 import { Button } from './ui/Button';
 import { inputVisualStyles } from './ui/Input';
+
+// Loaded only when live analysis turns out to be unavailable.
+const BudgetBanner = lazy(() => import('./BudgetBanner'));
 
 // ─── Status Messages (P0:1) ────────────────────────────────────────────────
 const STATUS_MESSAGES: Record<AgentStatus, string> = {
@@ -29,6 +47,55 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
   complete: 'INTEL READY // ENTERING COMMAND CENTER',
   error: 'Signal lost. Check your query and try again.',
 };
+
+// While a recorded run plays, the recorded progress is not live work: these replace the
+// messages above, so neither the screen nor the screen reader describes a live analysis.
+const REPLAY_PROGRESS_MESSAGE = 'Replaying a recorded analysis — nothing runs live...';
+// At most 40 characters: the completion line is revealed up to 40ch (typing-reveal).
+export const REPLAY_COMPLETE_MESSAGE = 'REPLAY READY // ENTERING COMMAND CENTER';
+
+/** The status line for a run, live or replayed. */
+function statusMessage(status: AgentStatus, isReplay: boolean): string {
+  if (!isReplay || status === 'idle' || status === 'error') return STATUS_MESSAGES[status];
+  return status === 'complete' ? REPLAY_COMPLETE_MESSAGE : REPLAY_PROGRESS_MESSAGE;
+}
+
+/**
+ * Shows the paused-analysis banner, or, when its code cannot be loaded (a page older than the
+ * deployed version, a dropped connection), the same explanation in plain text: never an empty
+ * page in the state the banner exists for.
+ */
+class BannerBoundary extends Component<
+  { code: LiveUnavailableCode; children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    const { title, text } = LIVE_UNAVAILABLE_COPY[this.props.code];
+    return (
+      <section
+        aria-label={title}
+        className="bg-analog/5 border border-analog/30 rounded-md p-6 space-y-4 text-left"
+      >
+        <div role="alert" className="space-y-4">
+          <h2 className="text-analog text-sm font-mono uppercase tracking-widest text-center">
+            {title}
+          </h2>
+          <p className="text-text-secondary text-xs font-mono leading-relaxed">{text}</p>
+        </div>
+        <p className="text-text-tertiary text-xs font-mono">
+          The recorded tracks could not be loaded. Reload the page to see them.
+        </p>
+      </section>
+    );
+  }
+}
 
 // Debounce hook for search suggestions
 function useDebounce<T>(value: T, delay: number): T {
@@ -173,6 +240,8 @@ interface OnboardingProps {
   /** The failure code of the error, when the server sent one. */
   errorCode: string | null;
   isLoading: boolean;
+  /** The run replays a recorded run (the status line says so instead of the live steps). */
+  isReplay?: boolean;
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
@@ -193,6 +262,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   error,
   errorCode,
   isLoading,
+  isReplay = false,
   candidates,
   analyze,
   selectCandidate,
@@ -227,12 +297,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const [announcedStatus, setAnnouncedStatus] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (status && STATUS_MESSAGES[status]) {
-        setAnnouncedStatus(STATUS_MESSAGES[status]);
-      }
+      const message = statusMessage(status, isReplay);
+      if (message) setAnnouncedStatus(message);
     }, 500);
     return () => clearTimeout(timer);
-  }, [status]);
+  }, [status, isReplay]);
 
   // ─── P1:14 HITL disambiguation state ─────────────────────────────────────
   const [hitlSelectedIndex, setHitlSelectedIndex] = useState(0);
@@ -463,6 +532,18 @@ const Onboarding: React.FC<OnboardingProps> = ({
     [candidates, hitlSelectedIndex, handleHitlSelect],
   );
 
+  // A recorded track offered while live analysis is unavailable: its title and artist name its
+  // recording, which the API replays (labelled as a recording).
+  const handleAnalyzeRecorded = useCallback(
+    (track: ReplayTrack) => {
+      const query = `${track.title} ${track.artist}`;
+      setSearchQuery(query);
+      setPreviewTrack({ title: track.title, artist: track.artist, coverUrl: '' });
+      analyze(query);
+    },
+    [analyze],
+  );
+
   // ─── P0:2 Error retry handlers ────────────────────────────────────────────
   const handleReset = useCallback(() => {
     setSearchQuery('');
@@ -630,8 +711,33 @@ const Onboarding: React.FC<OnboardingProps> = ({
             </Button>
           </form>
 
+          {/* Live analysis paused (budget) or off (recordings only): say so and offer the
+              recorded tracks; never a result in place of the analysis */}
+          {status === 'error' && isLiveUnavailable(errorCode) && (
+            <div className="space-y-3">
+              <BannerBoundary key={errorCode} code={errorCode}>
+                <Suspense
+                  fallback={
+                    <p role="status" className="text-text-tertiary text-xs font-mono">
+                      {LIVE_UNAVAILABLE_COPY[errorCode].title}. Loading the recorded tracks...
+                    </p>
+                  }
+                >
+                  <BudgetBanner code={errorCode} onPick={handleAnalyzeRecorded} />
+                </Suspense>
+              </BannerBoundary>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-analog/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+              >
+                or try a different song
+              </button>
+            </div>
+          )}
+
           {/* Error State (Item 10 — in-character error copy) */}
-          {status === 'error' && (
+          {status === 'error' && !isLiveUnavailable(errorCode) && (
             <div className="bg-status-error/5 border border-status-error/20 rounded-md p-6 space-y-4">
               <div className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
                 <CircleAlert size={16} />
@@ -655,7 +761,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors focus-visible:underline focus-visible:outline-none"
+                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-analog/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                 >
                   or try a different song
                 </button>
@@ -867,10 +973,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
           >
             {status === 'complete' ? (
               <span className="inline-block overflow-hidden whitespace-nowrap border-r-2 border-status-success animate-[typing-reveal_1s_steps(40)_forwards] max-w-0">
-                {STATUS_MESSAGES[status]}
+                {statusMessage(status, isReplay)}
               </span>
             ) : (
-              STATUS_MESSAGES[status] || `Status: ${status}`
+              statusMessage(status, isReplay) || `Status: ${status}`
             )}
           </div>
 

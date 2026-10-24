@@ -36,7 +36,15 @@ export interface AgentState {
   errorCode: string | null;
   isLoading: boolean;
   isComplete: boolean;
+  /**
+   * The run is a recorded run played again, not a live analysis: the API said so (its replay
+   * notice, or a result whose run.mode is "replay"). The progress screens say so too.
+   */
+  isReplay: boolean;
 }
+
+/** How a result was produced: computed live, or a recorded run replayed. */
+export type ResultMode = 'live' | 'replay';
 
 export interface UseAgentReturn extends AgentState {
   analyze: (query: string) => Promise<void>;
@@ -55,6 +63,8 @@ export interface UseAgentReturn extends AgentState {
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
     onUnavailable?: (code: FactoidUnavailableCode) => void,
+    /** How the result was produced (its run.mode): more facts stay on that side. */
+    resultMode?: ResultMode,
   ) => Promise<void>;
   /** Rejects when the request fails. */
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;

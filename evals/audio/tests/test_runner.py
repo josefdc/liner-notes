@@ -6,7 +6,17 @@ import pytest
 
 from evals_audio.datasets import Reference
 from evals_audio.metrics import Key, summarize
-from evals_audio.runner import captured_stderr, items_for, withheld_cost
+from evals_audio.runner import (
+    KEY_WEAK,
+    NO_ESTIMATE,
+    TEMPO_LOW_CONFIDENCE,
+    TEMPO_UNSTEADY,
+    captured_stderr,
+    items_for,
+    key_withheld,
+    tempo_withheld,
+    withheld_cost,
+)
 
 PASS = {"passed": True, "reason": None}
 
@@ -67,6 +77,7 @@ def test_tempo_withheld_and_failed_tracks_are_counted_apart():
     assert by_id["c"]["unreturned"] == {
         "estimate": "119",
         "confidence": 0.4,
+        "steady": None,
         "scores": {"acc1": 1.0, "acc2": 1.0},
     }
     assert by_id["d"]["withheldReason"] == "no estimate" and "unreturned" not in by_id["d"]
@@ -86,11 +97,105 @@ def test_withheld_cost_scores_what_the_service_did_not_return():
     _, rows = items_for("tempo", refs, tempo_analysed(), "x")
     cost = withheld_cost(rows, ["acc1", "acc2"], seed=1)
     assert (cost["n"], cost["returned"], cost["unreturned"]) == (6, 2, 1)
-    acc1 = cost["metrics"]["acc1"]
+    [group] = cost["rules"]  # one rule withheld an estimate: no "all" row
+    assert (group["rule"], group["count"]) == ("tempo does not hold over the window", 1)
+    acc1 = group["metrics"]["acc1"]
     # c's unreturned 119 was right.
     assert (acc1["unreturned"]["total"], acc1["unreturned"]["n"]) == (1.0, 1)
     # Returned too: a and c right out of all 6 clips.
     assert (acc1["ifReturnedOverN"]["total"], acc1["ifReturnedOverN"]["n"]) == (2.0, 6)
+
+
+def test_withheld_cost_has_a_row_per_rule_and_one_for_all():
+    refs = {t: ref(t, 120.0) for t in "abcdefg"}
+    analysed = tempo_analysed() + [
+        {
+            "trackId": "g",
+            "results": {
+                "x": {
+                    "gate": PASS,
+                    "tempo": None,
+                    "tempoWithheld": {
+                        "reason": TEMPO_LOW_CONFIDENCE,
+                        "bpm": 60.0,
+                        "confidence": 0.1,
+                        "steady": True,
+                    },
+                }
+            },
+        }
+    ]
+    _, rows = items_for("tempo", refs, analysed, "x")
+    cost = withheld_cost(rows, ["acc1", "acc2"], seed=1)
+    by_rule = {g["rule"]: g for g in cost["rules"]}
+    assert set(by_rule) == {TEMPO_UNSTEADY, TEMPO_LOW_CONFIDENCE, "all"}
+    low = by_rule[TEMPO_LOW_CONFIDENCE]["metrics"]
+    assert low["acc1"]["unreturned"]["total"] == 0.0  # 60 is half the reference
+    assert low["acc2"]["unreturned"]["total"] == 1.0
+    everything = by_rule["all"]["metrics"]["acc2"]["ifReturnedOverN"]
+    assert (everything["total"], everything["n"]) == (4.0, 7)  # a, b returned; c, g withheld
+
+
+class FakeTempo:
+    def __init__(self, bpm, confidence, steady=True):
+        self.bpm, self.confidence, self.steady = bpm, confidence, steady
+
+
+class FakeEstimator:
+    """Returns a tempo only when its confidence clears min_tempo_confidence."""
+
+    min_tempo_confidence = 0.3
+
+    def __init__(self, tempo):
+        self._tempo = tempo
+
+    def tempo(self, signals):
+        if self._tempo is None or self._tempo.confidence < self.min_tempo_confidence:
+            return None
+        return self._tempo
+
+
+def test_a_tempo_under_the_confidence_minimum_is_withheld_not_missing():
+    est = FakeEstimator(FakeTempo(128.0, 0.12, steady=False))
+    assert tempo_withheld(None, est) == {
+        "reason": TEMPO_LOW_CONFIDENCE,
+        "bpm": 128.0,
+        "confidence": 0.12,
+        "steady": False,
+    }
+    assert est.min_tempo_confidence == 0.3  # the minimum is restored
+    assert tempo_withheld(None, FakeEstimator(None)) == {"reason": NO_ESTIMATE}
+    unsteady = tempo_withheld(None, FakeEstimator(FakeTempo(90.0, 0.8, steady=False)))
+    assert unsteady["reason"] == TEMPO_UNSTEADY
+
+
+class FakeKey:
+    def __init__(self, strength):
+        self.tonic, self.mode, self.strength = "A", "minor", strength
+
+
+class FakeSignals:
+    def __init__(self, reason):
+        self._reason = reason
+
+    def key_withheld(self):
+        return self._reason
+
+
+def test_key_withholding_records_the_key_under_both_rules(monkeypatch):
+    from evals_audio import service
+
+    monkeypatch.setattr(service, "key_min_strength", lambda: 0.3)
+    monkeypatch.setattr(service, "key_without_withholding", lambda s, e: FakeKey(0.2))
+    # Under the minimum strength only.
+    out = key_withheld(FakeSignals(None), None)
+    assert out["keyWithheld"] == KEY_WEAK
+    assert out["keyUnreturned"] == {"tonic": "A", "mode": "minor", "strength": 0.2}
+    # Stopped by the evidence rule (and weak too): the rule is named, the key still recorded.
+    out = key_withheld(FakeSignals("no sustained pitch"), None)
+    assert out["keyWithheld"] == "no sustained pitch" and out["keyUnreturned"] is not None
+    monkeypatch.setattr(service, "key_without_withholding", lambda s, e: None)
+    assert key_withheld(FakeSignals(None), None)["keyWithheld"] == "the estimator returned no key"
 
 
 def key_analysed():
@@ -146,7 +251,7 @@ def test_key_answers_are_scored_with_the_mirex_weights():
     assert "unreturned" not in rows[3]
     assert [i.confidence for i in items] == [0.7, 0.8, None, None]
     cost = withheld_cost(rows, ["mirex", "exact"], seed=1)
-    assert cost["metrics"]["exact"]["ifReturnedOverN"]["total"] == 2.0
+    assert cost["rules"][0]["metrics"]["exact"]["ifReturnedOverN"]["total"] == 2.0
 
 
 @pytest.mark.parametrize("lines", [1, 3])

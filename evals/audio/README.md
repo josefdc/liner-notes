@@ -17,8 +17,10 @@ uv run ruff check . && uv run ruff format --check .
 
 Options: `--estimator librosa|essentia|all` (default `all`, which needs `--extra models`),
 `--seed S` (default 1), `--jobs J` (worker processes, at most 4), `--data-dir`, `--report-dir`,
-`--no-report`, and `--render <audio-date>.json` (renders the Markdown again from a results
-file alone). `--seed` sets three seeds at once; `--selection-seed` (which tracks are drawn),
+`--no-report`, `--render <audio-date>.json` (renders the Markdown again from a results file
+alone) and `--lookup ID --dataset NAME` (the dataset's own track id for an id in the results;
+see below). `--data-dir` and `--report-dir` are left out of the command a report records.
+`--seed` sets three seeds at once; `--selection-seed` (which tracks are drawn),
 `--clip-seed` (where each window starts) and `--bootstrap-seed` (the MIREX intervals) override
 one each, so the spread between seeds can be traced to one of them. Without `--limit` every
 usable track is measured, which downloads far more audio (see the cap below). Running another
@@ -70,8 +72,13 @@ got.
 The annotations are under Creative Commons licences (each report says which, and where that
 is stated). The audio is commercial excerpts (BallroomDancers.com, Beatport previews) with no
 licence: it is fetched for evaluation only and never redistributed. The committed results hold
-track ids, clip windows, the service's estimates and per-track scores, never reference labels
-or audio file names (which carry artist and title); each report credits the datasets.
+track ids, clip windows, the service's estimates and per-track scores. They store no reference
+labels and no audio file names, but they do not hide the labels: an estimate with its score
+often gives the reference away (a MIREX score of 1, 0.5, 0.3 or 0.2 fixes the key; an Acc1 hit
+pins the tempo within 4 %). The per-track results are therefore derived from the annotations,
+and each report's licence rows and credits apply to them. Ballroom's track ids are its audio
+file names, which carry album names, so its results use the first 10 hex digits of the SHA-256
+of the dataset and the id instead; `--lookup` maps one back from the local index.
 
 ## Clips and scores
 
@@ -85,15 +92,25 @@ A track the service answered nothing for is *withheld*. Every metric is given tw
 **correct / n**, where a withheld track counts as no correct value (how often a user gets a
 right value), and **correct / answered** (how often a value the service shows is right), next
 to the coverage (answered / n). Two estimators that answer different tracks are compared in a
-paired table on the same tracks, not by the over-answered column. Intervals are 95 %: Wilson
+paired table on the same tracks, not by the over-answered column: exact McNemar for the binary
+metrics; for MIREX a paired t interval whose spread includes two pseudo-differences at -1 and +1
+(conservative: it covered 95 % or more in simulations from measured differences, where a
+bootstrap covered about 75 %) and an exact sign-flip p-value. Other intervals are 95 %: Wilson
 score intervals for the binary metrics, a BCa bootstrap at a fixed seed for the MIREX score.
-For withheld tracks where the estimator still had an estimate (a tempo that did not hold, a key
-the evidence rule stopped), that estimate is scored apart to show what withholding costs.
+
+The service withholds an answer for several reasons: the gate, a tempo that does not hold over
+the window, a tempo under the estimator's confidence minimum, a key stopped by the evidence
+rule, a key under the minimum strength. For all but the gate the estimator usually still has an
+estimate. The harness recomputes it with that rule lifted (never as the service's answer),
+scores it, and shows per rule what correct / n would be if those estimates were returned too.
+"No estimate" means the estimator has no value even with the rules lifted.
 
 The accuracy-vs-coverage table ranks the answered tracks by the service's own confidence;
 answered tracks without a confidence are ranked last and listed. Each row carries its
-interval, rows on fewer than 10 tracks are left out, and an AUC with a Mann-Whitney p-value
-says whether the confidence puts correct answers first at all.
+interval, rows on fewer than 10 tracks are left out, and an AUC with a permutation p-value
+(exact when there are at most 200,000 orderings, Monte Carlo at a fixed seed otherwise) says
+whether the confidence puts correct answers first at all. Every p-value is for one comparison;
+a report prints about twenty of them, so one or two under 0.05 are expected by chance.
 
 One random 30 s window per track, a sample of n tracks and the labels left out make these
 numbers incomparable with published figures for the same datasets.

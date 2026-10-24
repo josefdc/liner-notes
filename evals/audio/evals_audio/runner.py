@@ -23,6 +23,11 @@ from .metrics import Item, acc1, acc2, estimate, mirex_key_score, parse_key
 MAX_JOBS = 4  # the box is shared
 METRICS = {"tempo": ("acc1", "acc2"), "key": ("mirex", "exact")}
 METRIC_LABELS = {"acc1": "Acc1", "acc2": "Acc2", "mirex": "MIREX", "exact": "exact"}
+# Why a withheld answer has no value (the key reasons other than KEY_WEAK are the service's own).
+NO_ESTIMATE = "no estimate"
+TEMPO_UNSTEADY = "tempo does not hold over the window"
+TEMPO_LOW_CONFIDENCE = "confidence under the estimator's minimum"
+KEY_WEAK = "key strength under the minimum"
 # One thread per worker for the numeric libraries, so N workers use about N cores.
 THREAD_ENV = (
     "OMP_NUM_THREADS",
@@ -56,40 +61,63 @@ def analyze_track(task: tuple) -> dict:
             v2 = service.analyze(signals, est)
             results[name] = {"gate": v2["gate"], "tempo": v2["tempo"], "key": v2["key"]}
             if v2["gate"]["passed"] and v2["tempo"] is None:
-                # Why the service returned no tempo: the estimator gave none (too little
-                # periodicity or confidence), or its tempo did not hold over the window. The
-                # estimate the service did not return is kept apart, for calibration only.
-                tempo = est.tempo(signals)
-                results[name]["tempoWithheld"] = (
-                    {"reason": "no estimate"}
-                    if tempo is None
-                    else {
-                        "reason": "tempo does not hold over the window",
-                        "bpm": round(float(tempo.bpm), 2),
-                        "confidence": None
-                        if tempo.confidence is None
-                        else round(float(tempo.confidence), 3),
-                    }
-                )
+                results[name]["tempoWithheld"] = tempo_withheld(signals, est)
             if v2["gate"]["passed"] and v2["key"] is None:
-                # The service's own reason (cached on the signals); None means the estimator
-                # itself returned nothing (e.g. a strength under KEY_MIN_STRENGTH).
-                withheld = signals.key_withheld()
-                results[name]["keyWithheld"] = None if withheld is None else str(withheld)
-                if withheld is not None:
-                    raw = service.key_without_evidence_rule(signals, est)
-                    results[name]["keyUnreturned"] = (
-                        None
-                        if raw is None
-                        else {
-                            "tonic": raw.tonic,
-                            "mode": raw.mode,
-                            "strength": None if raw.strength is None else round(raw.strength, 3),
-                        }
-                    )
+                results[name].update(key_withheld(signals, est))
         except Exception as e:
             results[name] = {"error": f"{type(e).__name__}: {e}"}
     return {"trackId": track_id, "window": window, "results": results}
+
+
+def _tempo_block(tempo, reason: str) -> dict:
+    return {
+        "reason": reason,
+        "bpm": round(float(tempo.bpm), 2),
+        "confidence": None if tempo.confidence is None else round(float(tempo.confidence), 3),
+        "steady": bool(tempo.steady),
+    }
+
+
+def tempo_withheld(signals, est) -> dict:
+    """
+    Why the service returned no tempo, and the estimate it did not return (kept apart, for
+    calibration only): a tempo that did not hold over the window, or one under the
+    estimator's confidence minimum (recomputed with the minimum lifted; it may not hold over
+    the window either, `steady` says). "no estimate" when the estimator has no tempo even
+    then (too little periodicity, too few beats, out of range).
+    """
+    tempo = est.tempo(signals)
+    if tempo is not None:
+        return _tempo_block(tempo, TEMPO_UNSTEADY)
+    lifted = service.tempo_without_confidence_minimum(signals, est)
+    if lifted is None:
+        return {"reason": NO_ESTIMATE}
+    return _tempo_block(lifted, TEMPO_LOW_CONFIDENCE)
+
+
+def key_withheld(signals, est) -> dict:
+    """
+    Why the service returned no key (its evidence rule, cached on the signals, or a strength
+    under KEY_MIN_STRENGTH), and the key the estimator gives with both lifted, kept apart for
+    calibration only. A key stopped by the evidence rule can also be under the minimum
+    strength; `strength` shows it.
+    """
+    withheld = signals.key_withheld()
+    raw = service.key_without_withholding(signals, est)
+    if withheld is not None:
+        reason = str(withheld)
+    elif raw is not None and (raw.strength or 0.0) < service.key_min_strength():
+        reason = KEY_WEAK
+    else:
+        reason = "the estimator returned no key"
+    unreturned = None
+    if raw is not None:
+        unreturned = {
+            "tonic": raw.tonic,
+            "mode": raw.mode,
+            "strength": None if raw.strength is None else round(raw.strength, 3),
+        }
+    return {"keyWithheld": reason, "keyUnreturned": unreturned}
 
 
 @contextmanager
@@ -190,8 +218,9 @@ def items_for(suite: str, refs: dict, analysed: list[dict], name: str) -> tuple[
 def withheld_detail(suite: str, reference, result: dict) -> dict:
     """
     Why the service withheld the answer, and how the estimate it did not return scores (a
-    tempo that did not hold over the window; a key the evidence rule stopped). The unreturned
-    estimate is for calibration only and never counts as the service's answer.
+    tempo that did not hold over the window or was under the confidence minimum; a key the
+    evidence rule stopped or under the minimum strength). The unreturned estimate is for
+    calibration only and never counts as the service's answer.
     """
     gate = result["gate"]
     if not gate["passed"]:
@@ -215,6 +244,7 @@ def withheld_detail(suite: str, reference, result: dict) -> dict:
         out["unreturned"] = {
             "estimate": f"{bpm:g}",
             "confidence": detail.get("confidence"),
+            "steady": detail.get("steady"),
             "scores": {"acc1": float(acc1(bpm, reference)), "acc2": float(acc2(bpm, reference))},
         }
     return out
@@ -222,21 +252,39 @@ def withheld_detail(suite: str, reference, result: dict) -> dict:
 
 def withheld_cost(rows: list[dict], metric_names, seed: int) -> dict:
     """
-    What the withholding rule costs, from the per-track rows of one estimator: the estimates
-    the service made but did not return (a tempo that did not hold, a key the evidence rule
-    stopped), scored, next to what the share over all n clips would be if they had been
-    returned too. Clips with no estimate at all (gate, no estimate) stay at no correct value.
+    What each withholding rule costs, from the per-track rows of one estimator: the estimates
+    the service made but did not return, scored and grouped by the rule that withheld them,
+    with what correct / n would be if that rule's estimates had been returned too ("all": every
+    rule's). Clips with no estimate at all (gate, no estimate) stay at no correct value.
     """
     n = len(rows)
     returned = [r["scores"] for r in rows if r.get("scores") is not None]
-    unreturned = [r["unreturned"]["scores"] for r in rows if r.get("unreturned")]
-    out = {"n": n, "returned": len(returned), "unreturned": len(unreturned), "metrics": {}}
-    for j, m in enumerate(metric_names):
-        kept = [s[m] for s in returned]
-        dropped = [s[m] for s in unreturned]
-        padding = [0.0] * (n - len(kept) - len(dropped))
-        out["metrics"][m] = {
-            "unreturned": estimate(m, dropped, seed + 200 + j).as_dict(),
-            "ifReturnedOverN": estimate(m, kept + dropped + padding, seed + 300 + j).as_dict(),
-        }
-    return out
+    by_rule: dict[str, list[dict]] = {}
+    for r in rows:
+        if r.get("unreturned"):
+            by_rule.setdefault(r["withheldReason"], []).append(r["unreturned"]["scores"])
+    groups = sorted(by_rule.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    if len(groups) > 1:
+        groups.append(("all", [s for _, scores in groups for s in scores]))
+
+    def block(dropped: list[dict], base: int) -> dict:
+        metrics = {}
+        for j, m in enumerate(metric_names):
+            kept = [s[m] for s in returned]
+            lost = [s[m] for s in dropped]
+            padding = [0.0] * (n - len(kept) - len(lost))
+            metrics[m] = {
+                "unreturned": estimate(m, lost, base + j).as_dict(),
+                "ifReturnedOverN": estimate(m, kept + lost + padding, base + 50 + j).as_dict(),
+            }
+        return {"count": len(dropped), "metrics": metrics}
+
+    return {
+        "n": n,
+        "returned": len(returned),
+        "unreturned": sum(len(s) for rule, s in groups if rule != "all"),
+        "rules": [
+            {"rule": rule, **block(scores, seed + 200 + 100 * k)}
+            for k, (rule, scores) in enumerate(groups)
+        ],
+    }

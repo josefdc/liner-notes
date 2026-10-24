@@ -24,6 +24,7 @@ binary (no interval when every score is equal).
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -172,7 +173,9 @@ def bca_mean(
     reproducible for a seed. When every value is equal no interval is given: resampling cannot
     say anything about the spread then.
     """
-    data = np.asarray(values, dtype=float)
+    # Sorted, so the interval depends on the values only, not on the order they come in (the
+    # summary lists clips by id, the coverage curve by confidence).
+    data = np.sort(np.asarray(values, dtype=float))
     n = int(data.size)
     if n == 0:
         return Estimate(0, 0.0, None, None, None, "BCa bootstrap")
@@ -272,22 +275,51 @@ def summarize(items: Sequence[Item], metric_names: Sequence[str], seed: int) -> 
     return Summary(len(items), len(answered), withheld, failed, over_n, over_answered)
 
 
-def ranking_auc(items: Sequence[Item], metric: str) -> dict:
+AUC_EXACT_MAX = 200_000  # orderings of correct vs wrong up to which the p-value is exact
+AUC_RESAMPLES = 100_000
+
+
+def ranking_auc(items: Sequence[Item], metric: str, seed: int = 0) -> dict:
     """
     Whether the service's confidence puts correct answers first: over the answered clips with
     a confidence, the chance that a correct one has a higher confidence than a wrong one (the
     area under the ROC curve; 0.5 is random order, ties count half), with a one-sided
-    Mann-Whitney p-value against random order. Binary metrics only.
+    Mann-Whitney permutation p-value against random order. The p-value is exact (every split of
+    the clips into correct and wrong) when there are at most AUC_EXACT_MAX splits, and a Monte
+    Carlo estimate at a fixed seed otherwise; ties are handled either way. Binary metrics only.
     """
     ranked = [i for i in items if i.answered and i.confidence is not None]
     right = [i.confidence for i in ranked if i.scores[metric] == 1.0]
     wrong = [i.confidence for i in ranked if i.scores[metric] != 1.0]
     out: dict = {"correct": len(right), "wrong": len(wrong), "auc": None, "p": None}
     if right and wrong:
-        test = stats.mannwhitneyu(right, wrong, alternative="greater")
-        out["auc"] = float(test.statistic) / (len(right) * len(wrong))
-        out["p"] = float(test.pvalue)
+        out["auc"], out["p"], out["pMethod"] = _auc_permutation(right, wrong, seed)
     return out
+
+
+def _auc_permutation(right: list[float], wrong: list[float], seed: int) -> tuple:
+    """AUC from mid-ranks, and its one-sided permutation p-value (see ranking_auc)."""
+    ranks = stats.rankdata(np.concatenate([right, wrong]))  # ties get the mean rank
+    n1, n2 = len(right), len(wrong)
+    total = n1 + n2
+
+    def auc(rank_sums):
+        return (rank_sums - n1 * (n1 + 1) / 2) / (n1 * n2)
+
+    observed = float(auc(ranks[:n1].sum()))
+    if math.comb(total, n1) <= AUC_EXACT_MAX:
+        k = min(n1, n2)
+        groups = np.array(list(itertools.combinations(range(total), k)), dtype=int)
+        sums = ranks[groups].sum(axis=1)
+        if k != n1:  # the combinations picked the wrong answers
+            sums = ranks.sum() - sums
+        method = "exact permutation"
+    else:
+        order = np.random.default_rng(seed).random((AUC_RESAMPLES, total)).argsort(axis=1)
+        sums = ranks[order[:, :n1]].sum(axis=1)
+        method = f"Monte Carlo, {AUC_RESAMPLES:,} permutations"
+    p = float(np.mean(auc(sums) >= observed - 1e-12))
+    return observed, p, method
 
 
 @dataclass(frozen=True)
@@ -356,6 +388,59 @@ def mcnemar_exact(b: int, c: int) -> float:
     return float(min(1.0, 2 * stats.binom.cdf(min(b, c), b + c, 0.5)))
 
 
+# Paired differences of MIREX scores lie in [-1, 1].
+DIFFERENCE_RANGE = 1.0
+SIGN_FLIP_EXACT_MAX = 16  # nonzero differences up to which all sign patterns are enumerated
+SIGN_FLIP_RESAMPLES = 100_000
+
+
+def paired_difference_interval(differences: Sequence[float], level: float = CI_LEVEL) -> Estimate:
+    """
+    Mean paired difference with a t interval whose spread includes two pseudo-differences at
+    the ends of the range (-1 and +1, about the mean), in the spirit of the Agresti-Caffo
+    interval for two proportions. Paired MIREX differences are mostly zero, and a plain t or
+    bootstrap interval then undercovers (a sample of zeros gives a zero-width interval); the
+    pseudo-differences keep the spread from collapsing. Coverage was checked by simulation
+    from observed difference distributions (see the report's guide).
+    """
+    d = np.asarray(differences, dtype=float)
+    n = int(d.size)
+    method = "paired t, ±1 pseudo-differences"
+    if n < 2:
+        mean = float(d.mean()) if n else None
+        return Estimate(n, float(d.sum()), mean, None, None, method, "fewer than two pairs")
+    mean = float(d.mean())
+    spread = np.concatenate([d - mean, [-DIFFERENCE_RANGE, DIFFERENCE_RANGE]])
+    sd = math.sqrt(float(np.sum(spread**2)) / (n + 1))
+    half = float(stats.t.ppf(0.5 + level / 2, n - 1)) * sd / math.sqrt(n)
+    low = max(-DIFFERENCE_RANGE, mean - half)
+    high = min(DIFFERENCE_RANGE, mean + half)
+    return Estimate(n, float(d.sum()), mean, low, high, method)
+
+
+def sign_flip_p(differences: Sequence[float], seed: int) -> tuple[float, str]:
+    """
+    Two-sided sign-flip permutation p-value for "no difference" (the paired differences are
+    symmetric about zero), with the mean as the statistic. Exact over every sign pattern of the
+    nonzero differences when there are at most SIGN_FLIP_EXACT_MAX of them; otherwise a Monte
+    Carlo estimate from SIGN_FLIP_RESAMPLES random patterns at a fixed seed.
+    """
+    d = np.asarray([x for x in differences if x != 0], dtype=float)
+    k = int(d.size)
+    if k == 0:
+        return 1.0, "exact"
+    observed = abs(float(d.sum()))
+    if k <= SIGN_FLIP_EXACT_MAX:
+        signs = 1 - 2 * ((np.arange(2**k)[:, None] >> np.arange(k)) & 1)
+        method = "exact"
+    else:
+        signs = np.random.default_rng(seed).choice([-1, 1], size=(SIGN_FLIP_RESAMPLES, k))
+        method = f"Monte Carlo, {SIGN_FLIP_RESAMPLES:,} sign patterns"
+    sums = np.abs(signs @ d)
+    p = float(np.mean(sums >= observed - 1e-12))
+    return p, method
+
+
 def compare(
     first: Sequence[Item],
     second: Sequence[Item],
@@ -370,8 +455,9 @@ def compare(
     - "allN": every clip, a withheld answer counted as not correct.
 
     Binary metrics give each side's correct count, the discordant pairs (right for one only)
-    and an exact McNemar p-value; MIREX gives each side's mean and the mean paired difference
-    (first minus second) with a BCa interval.
+    and an exact McNemar p-value. MIREX gives each side's mean, the pairs where one side scores
+    higher, the mean paired difference (first minus second) with paired_difference_interval,
+    and a sign-flip permutation p-value.
     """
     a_by = {i.track_id: i for i in first}
     b_by = {i.track_id: i for i in second}
@@ -396,10 +482,15 @@ def compare(
                     "mcnemarP": mcnemar_exact(only_a, only_b),
                 }
             else:
+                p, p_method = sign_flip_p(list(a - b), seed + j)
                 block["metrics"][m] = {
                     "firstMean": float(a.mean()) if subset else None,
                     "secondMean": float(b.mean()) if subset else None,
-                    "difference": bca_mean(list(a - b), seed + j).as_dict(),
+                    "firstHigher": int(np.sum(a > b)),
+                    "secondHigher": int(np.sum(a < b)),
+                    "difference": paired_difference_interval(list(a - b)).as_dict(),
+                    "signFlipP": p,
+                    "signFlipMethod": p_method,
                 }
         out[label] = block
     return out

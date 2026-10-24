@@ -86,14 +86,37 @@ def analyze(signals, est) -> dict:
     return main.analyze_signals(signals, est)["v2"]
 
 
-def key_without_evidence_rule(signals, est):
+def tempo_without_confidence_minimum(signals, est):
     """
-    The key the estimator would give if the service's evidence rule (Signals.key_withheld) let
-    it through: the estimator's own code, with the rule skipped for this one call. Used only to
-    show what the rule withholds; never scored as the service's answer.
+    The tempo the estimator would give without its confidence minimum
+    (`min_tempo_confidence`, lifted on this instance for one call). Used only to show what the
+    minimum withholds; never scored as the service's answer.
     """
+    est.min_tempo_confidence = 0.0
+    try:
+        return est.tempo(signals)
+    finally:
+        del est.min_tempo_confidence  # back to the class value
+
+
+def key_without_withholding(signals, est):
+    """
+    The key the estimator would give if neither the service's evidence rule
+    (Signals.key_withheld) nor the minimum strength (KEY_MIN_STRENGTH) stopped it: the
+    estimator's own code, with both lifted for this one call. Used only to show what they
+    withhold; never scored as the service's answer.
+    """
+    _, estimators = load()
+    minimum = estimators.KEY_MIN_STRENGTH
     signals.key_withheld = lambda: None
+    estimators.KEY_MIN_STRENGTH = 0.0
     try:
         return est.key(signals)
     finally:
+        estimators.KEY_MIN_STRENGTH = minimum
         del signals.key_withheld
+
+
+def key_min_strength() -> float:
+    _, estimators = load()
+    return estimators.KEY_MIN_STRENGTH

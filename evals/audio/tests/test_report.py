@@ -1,9 +1,12 @@
 import json
 
+import pytest
+
 from evals_audio.datasets import DATASETS
 from evals_audio.metrics import Item, compare, coverage_curve, ranking_auc, summarize
 from evals_audio.report import SCHEMA_VERSION, add_run, load, render
 from evals_audio.runner import withheld_cost
+from evals_audio.service import REPO_ROOT
 
 ITEMS = {
     "librosa": [
@@ -144,7 +147,8 @@ def test_render_gives_coverage_over_n_and_over_answered_with_intervals():
     assert "- `librosa` returns a tempo for 2 of 3 clips (66.7 %)" in text
     assert "### Paired comparison" in text
     assert "both answered (n = 1)" in text
-    assert "### Withheld" in text and "correct / n if returned too" in text
+    assert "### Withheld" in text and "Acc1: correct / n with these too" in text
+    assert "tempo does not hold over the window (1)" in text
     assert "### Accuracy vs coverage" in text and "Confidence ranking: Acc1" in text
     assert "--suite tempo --limit 3" in text
     assert "beat-this" in text  # says what is not covered yet
@@ -174,3 +178,20 @@ def test_the_markdown_is_rendered_from_the_json_alone(tmp_path):
     path.write_text(json.dumps(doc))
     assert main(["--render", str(path)]) == 0
     assert (tmp_path / "audio-2026-10-21.md").read_text() == render(doc)
+
+
+COMMITTED = sorted((REPO_ROOT / "evals" / "reports").glob("audio-*.json"))
+
+
+@pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])
+def test_each_committed_report_is_rendered_from_its_json_byte_for_byte(path):
+    doc = json.loads(path.read_text())
+    assert path.with_suffix(".md").read_text() == render(doc)
+
+
+@pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])
+def test_committed_results_name_no_local_path_or_audio_file(path):
+    text = path.read_text() + path.with_suffix(".md").read_text()
+    for marker in ("/home/", "/Users/", "/tmp/", "--data-dir", "--report-dir", '"reference"'):
+        assert marker not in text
+    assert ".wav" not in text and ".mp3" not in text.replace("<id>.LOFI.mp3", "")

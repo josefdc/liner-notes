@@ -42,6 +42,11 @@ from .storage import DataCapExceeded, DiskBudget
 
 logger = logging.getLogger("evals_audio")
 
+
+class DownloadError(OSError):
+    """A remote answered in a way the fetch cannot use (e.g. a range request not honoured)."""
+
+
 # Where each audio file was fetched from, per dataset directory.
 SOURCES_FILE = ".audio-sources.json"
 HTTP_TIMEOUT = httpx.Timeout(60.0, connect=20.0)
@@ -71,12 +76,15 @@ class Dataset:
     annotation_bytes: int  # upper bound on their size once extracted (for the budget)
     reference_note: str
     notes: tuple[str, ...] = field(default_factory=tuple)
+    # The dataset's track ids are audio file names that carry album or artist names; results
+    # use a short hash of the id instead (public_id), looked up locally with --lookup.
+    hash_ids: bool = False
 
 
 COMMERCIAL_AUDIO = (
     "commercial excerpts ({}); no licence is stated for the audio. Fetched into the local data "
-    "directory for evaluation only and never redistributed: the repository holds no audio, "
-    "reference labels or file names, only track ids and the service's own results."
+    "directory for evaluation only and never redistributed: the repository holds no audio and "
+    "no audio file names."
 )
 
 DATASETS: dict[str, Dataset] = {
@@ -101,12 +109,16 @@ DATASETS: dict[str, Dataset] = {
         ),
         annotation_remotes=("tempo",),
         annotation_bytes=20_000_000,
+        hash_ids=True,
         reference_note="the contest's ground-truth tempo (one value per excerpt)",
         notes=(
             "698 excerpts of about 30 s from BallroomDancers.com, eight dance styles. The "
             "excerpts are 29.4-31.8 s long, so the 30 s window is in effect the whole excerpt.",
             "Published Ballroom figures use all 698 excerpts; a sample of n clips is only "
             "comparable within its interval.",
+            "Ballroom's track ids are its file names (album names included), so the results "
+            "use the first 10 hex digits of a SHA-256 of the id; `uv run python -m evals_audio "
+            "--lookup ID --dataset ballroom` maps one back from the local index.",
         ),
     ),
     "giantsteps-tempo": Dataset(
@@ -307,6 +319,34 @@ def _details(dataset: Dataset, track) -> dict:
         "crowdTempi": len(shares),
         "topGap": shares[0] - shares[1] if len(shares) > 1 else 1.0,
     }
+
+
+PUBLIC_ID_HEX = 10
+
+
+def public_id(dataset: Dataset, track_id: str) -> str:
+    """
+    The id a track goes by in the committed results: the dataset's own id, or for a dataset
+    whose ids are file names (hash_ids) the first PUBLIC_ID_HEX hex digits of the SHA-256 of
+    (dataset, id). It depends on nothing else, so it is the same in every run.
+    """
+    if not dataset.hash_ids:
+        return track_id
+    digest = hashlib.sha256(f"{dataset.name}\x1f{track_id}".encode()).hexdigest()
+    return digest[:PUBLIC_ID_HEX]
+
+
+def public_ids(dataset: Dataset, refs: Iterable[Reference]) -> dict[str, str]:
+    """public_id for every reference; refuses a collision (none at 40 bits for these sizes)."""
+    ids = {r.track_id: public_id(dataset, r.track_id) for r in refs}
+    if len(set(ids.values())) != len(ids):
+        raise ValueError(f"two {dataset.name} track ids share a public id")
+    return ids
+
+
+def lookup(dataset: Dataset, refs: Iterable[Reference], pid: str) -> list[str]:
+    """The dataset's track ids whose public id is `pid` (local only: it needs the index)."""
+    return [r.track_id for r in refs if public_id(dataset, r.track_id) == pid]
 
 
 def select(refs: list[Reference], limit: int | None, seed: int) -> list[Reference]:
@@ -534,7 +574,7 @@ class _HTTPRangeFile(io.RawIOBase):
     def _range(self, start: int, end: int) -> bytes:
         response = self._client.get(self.url, headers={"Range": f"bytes={start}-{end}"})
         if response.status_code != 206:
-            raise OSError(f"range request returned {response.status_code}")
+            raise DownloadError(f"range request returned {response.status_code}")
         return response.content
 
     def readinto(self, b) -> int:

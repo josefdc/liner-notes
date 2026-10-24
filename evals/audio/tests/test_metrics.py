@@ -1,6 +1,8 @@
 import math
 
+import numpy as np
 import pytest
+from scipy import stats
 
 from evals_audio.metrics import (
     Item,
@@ -13,8 +15,10 @@ from evals_audio.metrics import (
     estimate,
     mcnemar_exact,
     mirex_key_score,
+    paired_difference_interval,
     parse_key,
     ranking_auc,
+    sign_flip_p,
     summarize,
     wilson,
 )
@@ -228,11 +232,56 @@ def test_paired_mirex_reports_the_mean_difference():
     m = compare(first, second, ["mirex"], seed=1)["allN"]["metrics"]["mirex"]
     assert m["firstMean"] == pytest.approx(0.5) and m["secondMean"] == pytest.approx(1 / 3)
     assert m["difference"]["mean"] == pytest.approx(1 / 6)
+    assert (m["firstHigher"], m["secondHigher"]) == (1, 0)
+    assert m["signFlipP"] == 1.0 and m["signFlipMethod"] == "exact"  # one pair: 2 patterns
+    assert m["difference"]["method"].startswith("paired t")
+
+
+def test_paired_difference_interval_never_collapses_on_zeros():
+    e = paired_difference_interval([0.0] * 11)
+    assert e.mean == 0.0 and e.low < 0 < e.high  # not a zero-width interval
+    e = paired_difference_interval([0.0] * 7 + [-0.5, -0.5, -0.2, 1.0])
+    assert e.low < e.mean < e.high and -1 <= e.low and e.high <= 1
+    # Wider than the plain t interval on the same differences.
+    d = np.array([0.0] * 7 + [-0.5, -0.5, -0.2, 1.0])
+    plain = stats.t.ppf(0.975, 10) * d.std(ddof=1) / np.sqrt(11)
+    assert e.high - e.mean > plain
+    assert paired_difference_interval([0.3]).low is None
+
+
+def test_sign_flip_p_is_exact_for_few_nonzero_differences():
+    # Three nonzero differences, all positive: 2 of the 8 sign patterns are as extreme.
+    p, method = sign_flip_p([0.0, 0.5, 0.0, 1.0, 0.2], seed=1)
+    assert (p, method) == (pytest.approx(2 / 8), "exact")
+    assert sign_flip_p([0.0, 0.0], seed=1) == (1.0, "exact")
+    p, method = sign_flip_p([0.5] * 30, seed=1)
+    assert method.startswith("Monte Carlo") and p < 1e-3
+    assert sign_flip_p([0.5] * 30, seed=1) == (p, method)  # fixed seed
 
 
 def test_comparison_needs_the_same_clips():
     with pytest.raises(ValueError):
         compare([Item("a", 1, {"acc1": 1.0})], [Item("b", 1, {"acc1": 1.0})], ["acc1"], seed=1)
+
+
+def test_ranking_auc_p_value_is_exact_with_ties_and_one_wrong_answer():
+    # 36 right, 1 wrong; the wrong one ties with a right one. With one wrong answer the exact
+    # p-value is the share of the 37 positions at which the wrong one would rank as low or lower.
+    conf = [0.1 + 0.02 * k for k in range(36)]
+    items = [Item(f"r{k:02d}", c, {"acc2": 1.0}) for k, c in enumerate(conf)]
+    items.append(Item("w", conf[5], {"acc2": 0.0}))
+    r = ranking_auc(items, "acc2")
+    assert r["pMethod"] == "exact permutation"
+    # Rank of the wrong answer among 37 is 6.5 (tied with the 6th); 7 of 37 placements are at
+    # least as favourable to "correct first" (positions 1..6 and the tied one).
+    assert r["p"] == pytest.approx(7 / 37)
+
+
+def test_ranking_auc_uses_monte_carlo_when_exact_is_too_costly():
+    items = [Item(f"t{k:02d}", k / 40, {"acc1": float(k % 2)}) for k in range(40)]
+    r = ranking_auc(items, "acc1", seed=2)
+    assert r["pMethod"].startswith("Monte Carlo")
+    assert r == ranking_auc(items, "acc1", seed=2)
 
 
 def test_ranking_auc_says_whether_the_confidence_puts_right_answers_first():
@@ -251,11 +300,20 @@ def test_ranking_auc_says_whether_the_confidence_puts_right_answers_first():
 
 
 def test_the_last_curve_point_is_the_summary_over_answered_clips():
+    # Ids in a different order from the confidences, so the summary (by id) and the curve (by
+    # confidence) see the scores in different orders; the BCa interval must not depend on it.
+    confidence = (0.2, 0.9, 0.5, 0.7, 0.1, 0.8, 0.3)
+    scores = (1.0, 0.5, 0.0, 0.3, 0.2, 1.0, 0.0)
     items = [
-        Item(t, c, {"mirex": v})
-        for t, c, v in zip("abcd", (0.9, 0.8, 0.7, 0.6), (1, 0.5, 0, 0.3), strict=True)
+        Item(t, c, {"mirex": v, "exact": float(v == 1.0)})
+        for t, c, v in zip("gbdafce", confidence, scores, strict=True)
     ]
-    points, _ = coverage_curve(items, ["mirex"], seed=5, min_answered=1)
-    assert (
-        points[-1].accuracy["mirex"] == summarize(items, ["mirex"], seed=5).over_answered["mirex"]
-    )
+    points, _ = coverage_curve(items, ["mirex", "exact"], seed=5, min_answered=1)
+    summary = summarize(items, ["mirex", "exact"], seed=5).over_answered
+    assert points[-1].accuracy == summary
+    assert points[-1].accuracy["mirex"].low is not None
+
+
+def test_bca_does_not_depend_on_the_order_of_the_values():
+    values = [1.0, 0.5, 0.0, 0.3, 0.2, 1.0, 0.0, 0.5]
+    assert bca_mean(values, seed=3) == bca_mean(values[::-1], seed=3)

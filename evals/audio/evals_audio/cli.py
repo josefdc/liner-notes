@@ -17,7 +17,10 @@ import platform
 import shlex
 import subprocess
 import sys
+import tarfile
 import time
+import urllib.error
+import zipfile
 from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -68,6 +71,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--no-report", action="store_true", help="print only; write no report")
     p.add_argument("--verbose", action="store_true")
     p.add_argument(
+        "--lookup",
+        metavar="ID",
+        help="print the dataset's own track id for an id in the results (needs --dataset and "
+        "the local annotations)",
+    )
+    p.add_argument(
         "--render",
         type=Path,
         metavar="JSON",
@@ -75,6 +84,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     args = p.parse_args(argv)
     if args.render is not None:
+        return args
+    if args.lookup is not None:
+        if args.dataset is None:
+            p.error("--lookup needs --dataset")
         return args
     if args.suite is None:
         p.error("--suite is required (or --render JSON)")
@@ -91,6 +104,42 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         if getattr(args, name) is None:
             setattr(args, name, args.seed)
     return args
+
+
+def lookup(args) -> int:
+    """Map an id from the results back to the dataset's track id, from the local index."""
+    spec = datasets.DATASETS[args.dataset]
+    home = data_dir(args.data_dir) / spec.mirdata_name
+    if not (home / ".annotations-complete").exists():
+        print(f"error: no {spec.name} annotations in {home}; run a suite first", file=sys.stderr)
+        return 2
+    found = datasets.lookup(spec, datasets.references(spec, home), args.lookup)
+    if not found:
+        print(f"error: no {spec.name} track has the id {args.lookup}", file=sys.stderr)
+        return 1
+    print("\n".join(found))
+    return 0
+
+
+# Options whose values are local paths: left out of the command recorded in the report.
+LOCAL_PATH_OPTIONS = ("--data-dir", "--report-dir")
+
+
+def recorded_command(argv: list[str]) -> str:
+    """The command line for the report, without options that name local paths."""
+    kept: list[str] = []
+    skip = False
+    for arg in argv:
+        if skip:
+            skip = False
+            continue
+        if arg in LOCAL_PATH_OPTIONS:
+            skip = True
+            continue
+        if arg.startswith(tuple(f"{o}=" for o in LOCAL_PATH_OPTIONS)):
+            continue
+        kept.append(arg)
+    return " ".join(["uv run python -m evals_audio", *(shlex.quote(a) for a in kept)])
 
 
 def git_commit() -> str:
@@ -155,14 +204,15 @@ def source_counts(refs: dict, sources: dict[str, str]) -> dict[str, int]:
     return dict(counts)
 
 
-def reference_stats(spec, measured: list, tracks: dict) -> dict | None:
+def reference_stats(spec, by_id: dict, tracks: dict) -> dict | None:
     """GiantSteps Tempo only: how fragile the v2 reference is, and Acc1 against v1 instead."""
     if spec.name != "giantsteps-tempo":
         return None
+    measured = list(by_id.values())
     n = len(measured)
-    v1 = {r.track_id: r.details.get("v1") for r in measured}
+    v1 = {tid: r.details.get("v1") for tid, r in by_id.items()}
     differ = sum(
-        1 for r in measured if v1[r.track_id] is not None and not acc1(v1[r.track_id], r.value)
+        1 for tid, r in by_id.items() if v1[tid] is not None and not acc1(v1[tid], r.value)
     )
     against_v1 = {}
     for name, rows in tracks.items():
@@ -195,6 +245,8 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",
     )
+    if args.lookup is not None:
+        return lookup(args)
     names = list(service.ESTIMATOR_NAMES) if args.estimator == "all" else [args.estimator]
     try:
         for name in names:
@@ -207,13 +259,50 @@ def main(argv: list[str] | None = None) -> int:
     except (service.EstimatorUnavailable, SettingError, DataCapExceeded, DataDirBusy) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    except (httpx.HTTPError, OSError) as e:
+    except DownloadFailed as e:
         print(
-            f"error: a download failed ({type(e).__name__}: {e}); files already verified are "
-            "kept, run the same command again to continue",
+            f"error: a download failed ({e}); files already verified are kept, run the same "
+            "command again to continue",
             file=sys.stderr,
         )
         return 4
+    except OSError as e:
+        print(
+            f"error: a local file could not be read or written ({type(e).__name__}: {e})",
+            file=sys.stderr,
+        )
+        return 5
+
+
+class DownloadFailed(RuntimeError):
+    """Fetching annotations or audio failed on the network side."""
+
+
+# What a failed download raises: httpx (the harness's own fetches), urllib (mirdata's), and a
+# stream or archive cut short. Local errors (a full disk, a directory that cannot be written)
+# are other OSErrors and are reported as such.
+DOWNLOAD_ERRORS = (
+    httpx.HTTPError,
+    datasets.DownloadError,
+    urllib.error.URLError,
+    ConnectionError,
+    TimeoutError,
+    tarfile.TarError,
+    zipfile.BadZipFile,
+    EOFError,
+)
+
+
+def fetch(spec, home: Path, args, budget: DiskBudget):
+    """Annotations, references, the selection and its audio; network failures as DownloadFailed."""
+    try:
+        datasets.ensure_annotations(spec, home, budget)
+        refs = datasets.references(spec, home)
+        selected = datasets.select(refs, args.limit, args.selection_seed)
+        present, fetched = datasets.ensure_audio(spec, home, selected, budget)
+    except DOWNLOAD_ERRORS as e:
+        raise DownloadFailed(f"{type(e).__name__}: {e}") from e
+    return refs, selected, present, fetched
 
 
 def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget) -> int:
@@ -221,11 +310,9 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
     started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
     spec = datasets.DATASETS[args.dataset]
     home = root / spec.mirdata_name
-    datasets.ensure_annotations(spec, home, budget)
-    refs = datasets.references(spec, home)
-    selected = datasets.select(refs, args.limit, args.selection_seed)
-    present, fetched = datasets.ensure_audio(spec, home, selected, budget)
-    unavailable = [r.track_id for r in selected if r.track_id not in present]
+    refs, selected, present, fetched = fetch(spec, home, args, budget)
+    pid = datasets.public_ids(spec, refs)
+    unavailable = [pid[r.track_id] for r in selected if r.track_id not in present]
     if not present:
         print(
             f"error: no audio could be fetched for {spec.name} "
@@ -237,7 +324,9 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
         print(f"warning: audio unavailable for {len(unavailable)} tracks: {unavailable}")
 
     measured = [r for r in selected if r.track_id in present]
-    by_id = {r.track_id: r for r in measured}
+    # From here on tracks go by their public id (datasets.public_id); the clip window still
+    # comes from the dataset's own id, so it is the same as before.
+    by_id = {pid[r.track_id]: r for r in measured}
     tasks = [
         (spec.name, r.track_id, str(home / r.audio_rel), args.clip_seed, tuple(names))
         for r in measured
@@ -247,7 +336,9 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
         if k == total or k % 10 == 0:
             print(f"  analysed {k}/{total}", file=sys.stderr)
 
-    analysed = runner.analyze_all(tasks, args.jobs, progress)
+    analysed = [
+        {**a, "trackId": pid[a["trackId"]]} for a in runner.analyze_all(tasks, args.jobs, progress)
+    ]
     metric_names = runner.METRICS[args.suite]
     items, summaries, curves, tracks, costs = {}, {}, {}, {}, {}
     for name in names:
@@ -267,7 +358,9 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
             ],
             "unranked": unranked,
             "ranking": {
-                m: ranking_auc(items[name], m) for m in metric_names if m in BINARY_METRICS
+                m: ranking_auc(items[name], m, args.bootstrap_seed)
+                for m in metric_names
+                if m in BINARY_METRICS
             },
         }
     print_summary(args.suite, spec.name, summaries)
@@ -286,7 +379,7 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
 
     windows = {a["trackId"]: a.get("window") for a in analysed}
     excluded = Counter(r.excluded for r in refs if r.excluded)
-    command = "uv run python -m evals_audio " + " ".join(shlex.quote(a) for a in argv)
+    command = recorded_command(argv)
     usable = sum(1 for r in refs if r.excluded is None)
     run_doc = {
         "suite": args.suite,
@@ -320,7 +413,7 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
             "credits": list(spec.credits),
             "sources": [list(s) for s in spec.sources],
             "referenceNote": spec.reference_note,
-            "referenceStats": reference_stats(spec, measured, tracks),
+            "referenceStats": reference_stats(spec, by_id, tracks),
             "notes": list(spec.notes),
             "tracksInIndex": len(refs),
             "usable": usable,
@@ -328,7 +421,7 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
             "selected": len(selected),
             "audioPresent": len(measured),
             "audioUnavailable": unavailable,
-            "audioSources": source_counts(by_id, fetched),
+            "audioSources": source_counts({r.track_id: r for r in measured}, fetched),
         },
         "summaries": {name: s.as_dict() for name, s in summaries.items()},
         "paired": paired,
@@ -336,7 +429,7 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
         "coverage": curves,
         # Track ids and where each clip was cut; the reference labels and the audio file
         # names stay in the local data directory.
-        "clips": [{"trackId": r.track_id, "window": windows.get(r.track_id)} for r in measured],
+        "clips": [{"trackId": t, "window": windows.get(t)} for t in by_id],
         "tracks": tracks,
     }
     date = started_at.date().isoformat()

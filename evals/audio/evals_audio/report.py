@@ -4,9 +4,11 @@ per-track results, and `audio-<date>.md` is rendered from it alone, so the table
 re-derived from the JSON. A run replaces an earlier one only when suite, dataset, seeds and
 limit are all the same; otherwise both are kept.
 
-The JSON carries track ids, where each clip was cut, the service's estimates, confidences,
-per-track scores and withheld reasons. Reference labels and audio file names (which carry
-artist and title) stay in the local data directory.
+The JSON carries track ids (a short hash for datasets whose ids are file names), where each
+clip was cut, the service's estimates, confidences, per-track scores and withheld reasons. It
+stores no reference labels and no audio file names, but an estimate with its score often
+gives the reference away (a MIREX score fixes the key; an Acc1 hit pins the tempo within
+4 %), so the per-track results are treated as derived from the annotations and credited.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from .metrics import MIN_CURVE_ANSWERED
 from .runner import METRIC_LABELS, METRICS
 from .storage import human
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def load(path: Path) -> dict:
@@ -169,7 +171,7 @@ def paired_section(run: dict) -> list[str]:
                 diff = (
                     "–"
                     if d["mean"] is None
-                    else f"{100 * d['mean']:+.1f} points{interval(d)} (BCa)"
+                    else f"{100 * d['mean']:+.1f} points{interval(d)} ({d['method']})"
                 )
                 rows.append(
                     [
@@ -177,8 +179,9 @@ def paired_section(run: dict) -> list[str]:
                         f"{label} (n = {block['n']})",
                         pct(r["firstMean"]),
                         pct(r["secondMean"]),
-                        "–",
-                        f"mean difference {diff}",
+                        f"{r['firstHigher']} / {r['secondHigher']}",
+                        f"mean difference {diff}; sign-flip p = {r['signFlipP']:.3f} "
+                        f"({r['signFlipMethod']})",
                     ]
                 )
     head = [
@@ -186,7 +189,7 @@ def paired_section(run: dict) -> list[str]:
         "clips",
         f"`{first}`",
         f"`{second}`",
-        f"right only for `{first}` / only for `{second}`",
+        f"pairs better for `{first}` / for `{second}`",
         "test",
     ]
     return out + table(head, rows) + [""]
@@ -200,55 +203,55 @@ def withheld_section(run: dict) -> list[str]:
     if not any(rows_by_name.values()):
         return []
     metrics = METRICS[run["suite"]]
-    what = (
-        "a tempo that did not hold over the window"
-        if run["suite"] == "tempo"
-        else "a key stopped by the evidence rule"
-    )
     out = ["### Withheld", ""]
     for name, rows in rows_by_name.items():
         if not rows:
             continue
         reasons = Counter(r.get("withheldReason", "unknown") for r in rows)
+        scored = sum(1 for r in rows if r.get("unreturned"))
         out.append(
             f"`{name}`, withheld {len(rows)}: "
             + "; ".join(
-                f"{reason}: {n}" for reason, n in sorted(reasons.items(), key=lambda x: -x[1])
+                f"{reason}: {n}"
+                for reason, n in sorted(reasons.items(), key=lambda x: (-x[1], x[0]))
             )
-            + "."
+            + f". The estimator still had an estimate for {scored} of them."
         )
+    rules = (
+        "a tempo that did not hold over the window, or one under the estimator's confidence "
+        "minimum (recomputed with the minimum lifted)"
+        if run["suite"] == "tempo"
+        else "a key stopped by the evidence rule or under the minimum strength (recomputed "
+        "with both lifted)"
+    )
     out += [
         "",
-        f"For {what}, the estimator had an estimate that the service did not return. Scored "
-        "against the reference, it shows what withholding costs: a rule that helps withholds "
+        f"For {rules}, the estimator had an estimate that the service did not return. Scored "
+        "against the reference, it shows what each rule costs: a rule that helps withholds "
         "estimates that are right less often than the ones it returns. These estimates never "
-        "reach a user and are not counted in the tables above; the last column is what correct "
-        "/ n would be if they were returned too.",
+        "reach a user and are not counted in the tables above. The first row per estimator is "
+        "what the service returned, as served; each further row gives the estimates one rule "
+        "withheld and what correct / n would be if they were returned too. Clips with no "
+        "estimate at all (gate, no estimate) stay at no correct value.",
         "",
     ]
     rows = []
     for name, cost in (run.get("withheldCost") or {}).items():
         summary = run["summaries"][name]
+        served = [f"`{name}`", f"returned ({summary['answered']})"]
         for m in metrics:
-            c = cost["metrics"][m]
-            rows.append(
-                [
-                    f"`{name}`",
-                    METRIC_LABELS[m],
-                    frac(c["unreturned"]),
-                    frac(summary["overAnswered"][m]),
-                    frac(summary["overN"][m]),
-                    frac(c["ifReturnedOverN"]),
-                ]
-            )
-    head = [
-        "estimator",
-        "metric",
-        "withheld estimates: correct",
-        "returned: correct",
-        "correct / n as served",
-        "correct / n if returned too",
-    ]
+            served += [frac(summary["overAnswered"][m]), frac(summary["overN"][m])]
+        rows.append(served)
+        for group in cost["rules"]:
+            label = "all withheld estimates" if group["rule"] == "all" else group["rule"]
+            row = [f"`{name}`", f"{label} ({group['count']})"]
+            for m in metrics:
+                c = group["metrics"][m]
+                row += [frac(c["unreturned"]), frac(c["ifReturnedOverN"])]
+            rows.append(row)
+    head = ["estimator", "answers"]
+    for m in metrics:
+        head += [f"{METRIC_LABELS[m]}: correct", f"{METRIC_LABELS[m]}: correct / n with these too"]
     return out + table(head, rows) + [""]
 
 
@@ -290,7 +293,7 @@ def coverage_section(run: dict) -> list[str]:
                 else:
                     parts.append(
                         f"{METRIC_LABELS[m]} AUC {r['auc']:.2f} ({r['correct']} correct, "
-                        f"{r['wrong']} wrong; p = {r['p']:.3f})"
+                        f"{r['wrong']} wrong; p = {r['p']:.3f}, {r['pMethod']})"
                     )
             out += ["", "Confidence ranking: " + "; ".join(parts) + "."]
         if curve["unranked"]:
@@ -378,6 +381,18 @@ GUIDE = [
     "(10,000 resamples, fixed seed) for MIREX, with no interval when every score is equal. Each "
     "interval rests on the denominator printed next to it, which for correct / answered can be "
     "far below n.",
+    "- **Paired MIREX difference**: most paired differences are zero, and a bootstrap interval "
+    "then covers well under 95 % (about 74-77 % when simulated from measured key differences "
+    "at n = 11 and n = 50). It uses a paired t interval whose spread includes two "
+    "pseudo-differences at -1 and +1, the ends of the range. The same simulation gives "
+    "coverage of 0.999 or more, and 0.95-0.98 for denser differences, so it is conservative and "
+    'wide at small n. The sign-flip p-value tests "no difference" over every sign pattern of '
+    "the nonzero differences (exact up to 16 of them).",
+    "- **p-values** are exact where it is cheap (McNemar; sign-flip; the AUC's permutation test "
+    "up to 200,000 orderings) and Monte Carlo at a fixed seed otherwise, as labelled. Each is "
+    "for one comparison: the report prints about twenty, so one or two under 0.05 are expected "
+    "by chance alone and none should be read as a finding without a correction for the number "
+    "of tests.",
     "- **Comparability**: one 30 s window per clip and the excluded labels make these numbers "
     "incomparable with published figures for the same datasets (computed on full excerpts, "
     "usually on every labelled track).",
@@ -393,8 +408,11 @@ def render(doc: dict) -> str:
         "measured by `evals/audio` (`uv run python -m evals_audio`). The harness imports the "
         "service and calls its own `analyze_signals` on 30-second clips, so the numbers are "
         "what the service returns, gate and withholding rules included. Rendered from "
-        f"`audio-{doc['date']}.json`, which holds the per-clip results (track ids, estimates, "
-        "scores; no reference labels or file names).",
+        f"`audio-{doc['date']}.json`, which holds the per-clip results: track ids, estimates "
+        "and scores. It stores no reference labels and no audio file names, but an estimate "
+        "with its score often gives the reference away (a MIREX score of 1, 0.5, 0.3 or 0.2 "
+        "fixes the key; an Acc1 hit pins the tempo within 4 %), so those results are derived "
+        "from the annotations: the licence and credits under each dataset apply to them.",
         "",
         "This report covers the tempo and key suites with the librosa and Essentia estimators. "
         "The estimator bake-off with beat-this, style hit@k against Discogs styles and the "

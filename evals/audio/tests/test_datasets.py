@@ -1,6 +1,15 @@
 import pytest
 
-from evals_audio.datasets import DATASETS, SUITE_DATASETS, Reference, parse_giantsteps_key, select
+from evals_audio.datasets import (
+    DATASETS,
+    SUITE_DATASETS,
+    Reference,
+    lookup,
+    parse_giantsteps_key,
+    public_id,
+    public_ids,
+    select,
+)
 from evals_audio.metrics import Key
 
 
@@ -53,3 +62,16 @@ def test_every_dataset_records_what_its_licence_covers_and_whom_to_credit():
     # Where the licence is known only from mirdata, the cell says so.
     assert "per mirdata" in DATASETS["ballroom"].annotation_licence
     assert "per mirdata" in DATASETS["giantsteps-tempo"].annotation_licence
+
+
+def test_ballroom_ids_are_replaced_by_a_stable_hash_and_can_be_looked_up_locally():
+    ballroom, key = DATASETS["ballroom"], DATASETS["giantsteps-key"]
+    pid = public_id(ballroom, "Albums-Cafe_Paradiso-07")
+    assert pid == public_id(ballroom, "Albums-Cafe_Paradiso-07")  # the same in every run
+    assert len(pid) == 10 and "Albums" not in pid and int(pid, 16) >= 0
+    assert public_id(key, "43") == "43"  # numeric dataset ids are kept
+    rs = refs(20)
+    ids = public_ids(ballroom, rs)
+    assert len(set(ids.values())) == len(rs)
+    assert lookup(ballroom, rs, ids["t007"]) == ["t007"]
+    assert lookup(ballroom, rs, "0000000000") == []

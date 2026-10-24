@@ -1,15 +1,21 @@
 /**
  * Deezer previews with a stubbed API. A preview is used only for the requested recording: the
- * entry for its ISRC, that entry's readable alternative, or a search result that strictly
- * matches it. Deezer reports errors (its quota included) inside an HTTP 200 answer: "no data"
- * (800) is a miss, the quota (4) an error.
+ * entry for its ISRC when it agrees with the track, that entry's readable alternative, or a
+ * search result that strictly matches it. Missing is always better than another recording's
+ * clip. Deezer reports errors (its quota included) inside an HTTP 200 answer: "no data" (800)
+ * is a miss, the quota (4) an error.
  */
 
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type DeezerPreviewResult, findDeezerPreview, searchDeezerPreview } from "./deezer.js";
+import {
+  type DeezerPreviewResult,
+  findDeezerPreview,
+  type PreviewRequest,
+  searchDeezerPreview,
+} from "./deezer.js";
 import { json, stubFetch } from "./testing/fetchStub.js";
 
 const API = "https://api.deezer.com";
@@ -26,15 +32,17 @@ interface Entry {
   readable?: boolean;
   isrc?: string;
   alternative?: { id: number };
+  title_version?: string;
 }
 
-function entry({ id, title, artist, duration = 300, album = "Album", ...rest }: Entry) {
+function entry({ id, title, artist, duration = 200, album = "After Hours", ...rest }: Entry) {
   return {
     id,
     title,
     duration,
     preview: clip(id),
     readable: true,
+    bpm: 171.1,
     artist: { id: id * 10, name: artist },
     album: { id: id * 100, title: album, cover_medium: "https://e-cdns-images.dzcdn.net/x.jpg" },
     ...rest,
@@ -64,12 +72,17 @@ function deezer(routes: {
   });
 }
 
-const BLINDING_LIGHTS = {
+const ISRC = "USUG11904206";
+const BLINDING_LIGHTS: PreviewRequest = {
   title: "Blinding Lights",
   artist: "The Weeknd",
-  isrc: "USUG11904206",
+  artistNames: ["The Weeknd"],
+  album: "After Hours",
+  isrc: ISRC,
   durationMs: 200_040,
 };
+const weeknd = (id: number, title: string, rest: Partial<Entry> = {}) =>
+  entry({ id, title, artist: "The Weeknd", ...rest });
 
 function matched(result: DeezerPreviewResult) {
   if (!result.found) throw new Error(`no preview: ${result.message}`);
@@ -80,6 +93,31 @@ function rejections(result: DeezerPreviewResult) {
   if (result.found) throw new Error(`unexpected preview of ${result.match.deezerId}`);
   return result.rejected;
 }
+
+/** The search's answer is all Deezer has: the request has no ISRC. */
+async function searchOnly(request: PreviewRequest, ...entries: Array<Record<string, unknown>>) {
+  deezer({ search: entries });
+  return findDeezerPreview({ ...request, isrc: null });
+}
+
+const GIANT_STEPS: PreviewRequest = {
+  title: "Giant Steps",
+  artist: "John Coltrane",
+  album: "Giant Steps",
+  durationMs: 286_000,
+};
+const ROCK_THE_BOAT: PreviewRequest = {
+  title: "Rock the Boat",
+  artist: "The Hues Corporation",
+  album: "Freedom for the Stallion",
+  durationMs: 205_000,
+};
+const LET_IT_GO: PreviewRequest = {
+  title: "Let It Go",
+  artist: "Idina Menzel",
+  album: "Frozen",
+  durationMs: 224_000,
+};
 
 describe("Deezer preview of one recording", () => {
   beforeEach(() => {
@@ -93,14 +131,7 @@ describe("Deezer preview of one recording", () => {
 
   describe("by ISRC", () => {
     it("uses the ISRC entry's preview and makes no other request", async () => {
-      const net = deezer({
-        isrc: entry({
-          id: 1,
-          title: "Blinding Lights",
-          artist: "The Weeknd",
-          isrc: "USUG11904206",
-        }),
-      });
+      const net = deezer({ isrc: weeknd(1, "Blinding Lights", { isrc: ISRC }) });
 
       const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
 
@@ -111,28 +142,75 @@ describe("Deezer preview of one recording", () => {
         deezerId: 1,
         score: null,
       });
-      expect(net.calls.map((call) => call.url)).toEqual([`${API}/track/isrc:USUG11904206`]);
+      expect(net.calls.map((call) => call.url)).toEqual([`${API}/track/isrc:${ISRC}`]);
+    });
+
+    it("takes an ISRC entry from another album or in another script", async () => {
+      deezer({
+        isrc: weeknd(2, "ブラインディング・ライツ", { isrc: ISRC, album: "The Highlights" }),
+      });
+
+      const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
+
+      expect(result.match).toMatchObject({ method: "isrc", deezerId: 2 });
+    });
+
+    it.each([
+      [
+        "a karaoke compilation that reuses the ISRC",
+        entry({
+          id: 3,
+          title: "Blinding Lights (Karaoke Version)",
+          artist: "Ameritz Karaoke",
+          album: "Karaoke Hits 2020",
+          duration: 215,
+          isrc: ISRC,
+        }),
+        "artist_differs",
+      ],
+      [
+        "a karaoke version credited to the artist",
+        weeknd(4, "Blinding Lights (Karaoke Version)", { isrc: ISRC }),
+        "other_version",
+      ],
+      [
+        "an entry 40 s longer",
+        weeknd(5, "Blinding Lights", { isrc: ISRC, duration: 240 }),
+        "duration_differs",
+      ],
+      [
+        "an entry on a re-recorded album",
+        weeknd(6, "Blinding Lights", { isrc: ISRC, album: "Greatest Hits (Re-Recorded)" }),
+        "other_version",
+      ],
+    ])("turns down an ISRC entry that is %s", async (_label, isrcEntry, reason) => {
+      deezer({ isrc: isrcEntry, search: [] });
+
+      const result = await findDeezerPreview(BLINDING_LIGHTS);
+
+      expect(rejections(result)).toEqual([{ deezerId: isrcEntry.id, method: "isrc", reason }]);
+    });
+
+    it("checks an ISRC entry without an isrc field like any other entry", async () => {
+      deezer({ isrc: weeknd(7, "Save Your Tears", { duration: 215 }), search: [] });
+      expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+        { deezerId: 7, method: "isrc", reason: "title_differs" },
+      ]);
+
+      deezer({ isrc: weeknd(8, "Blinding Lights") });
+      const same = matched(await findDeezerPreview(BLINDING_LIGHTS));
+      expect(same.match).toEqual({ provider: "deezer", method: "id", deezerId: 8, score: 0.99 });
     });
 
     it("reads the readable alternative by id when the ISRC entry is not readable", async () => {
       const net = deezer({
-        isrc: entry({
-          id: 177476,
-          title: "Blinding Lights",
-          artist: "The Weeknd",
-          isrc: "USUG11904206",
+        isrc: weeknd(177476, "Blinding Lights", {
+          isrc: ISRC,
           readable: false,
           preview: "",
           alternative: { id: 1178682 },
         }),
-        tracks: {
-          1178682: entry({
-            id: 1178682,
-            title: "Blinding Lights",
-            artist: "The Weeknd",
-            isrc: "USUG11904206",
-          }),
-        },
+        tracks: { 1178682: weeknd(1178682, "Blinding Lights", { isrc: ISRC }) },
       });
 
       const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
@@ -145,49 +223,78 @@ describe("Deezer preview of one recording", () => {
       });
       expect(result.previewUrl).toBe(clip(1178682));
       expect(net.calls.map((call) => call.url)).toEqual([
-        `${API}/track/isrc:USUG11904206`,
+        `${API}/track/isrc:${ISRC}`,
         `${API}/track/1178682`,
       ]);
     });
 
-    it("uses an alternative with another ISRC only when it strictly matches", async () => {
-      const isrcEntry = entry({
-        id: 5,
-        title: "Blinding Lights",
-        artist: "The Weeknd",
-        isrc: "USUG11904206",
-        readable: false,
-        alternative: { id: 6 },
-      });
-      const alternative = (title: string) =>
-        entry({ id: 6, title, artist: "The Weeknd", duration: 200, isrc: "XX0000000001" });
-
-      deezer({ isrc: isrcEntry, tracks: { 6: alternative("Blinding Lights") } });
-      const same = matched(await findDeezerPreview(BLINDING_LIGHTS));
-      expect(same.match).toEqual({ provider: "deezer", method: "id", deezerId: 6, score: 0.99 });
-
+    it("turns down an alternative with the same ISRC that is 40 s longer", async () => {
       deezer({
-        isrc: isrcEntry,
-        tracks: { 6: alternative("Blinding Lights (Chromatics Remix)") },
+        isrc: weeknd(9, "Blinding Lights", {
+          isrc: ISRC,
+          readable: false,
+          alternative: { id: 10 },
+        }),
+        tracks: { 10: weeknd(10, "Blinding Lights", { isrc: ISRC, duration: 240 }) },
         search: [],
       });
-      const remix = await findDeezerPreview(BLINDING_LIGHTS);
-      expect(rejections(remix)).toEqual([
-        { deezerId: 5, method: "isrc", reason: "not_readable" },
-        { deezerId: 6, method: "id", reason: "other_version" },
+
+      const result = await findDeezerPreview(BLINDING_LIGHTS);
+
+      expect(rejections(result)).toEqual([
+        { deezerId: 9, method: "isrc", reason: "not_readable" },
+        { deezerId: 10, method: "id", reason: "duration_differs" },
       ]);
+    });
+
+    it("uses an alternative with another ISRC only when it strictly matches", async () => {
+      const isrcEntry = weeknd(11, "Blinding Lights", {
+        isrc: ISRC,
+        readable: false,
+        alternative: { id: 12 },
+      });
+      const alternative = (title: string, album = "After Hours") =>
+        weeknd(12, title, { album, isrc: "XX0000000001" });
+
+      deezer({ isrc: isrcEntry, tracks: { 12: alternative("Blinding Lights") } });
+      const same = matched(await findDeezerPreview(BLINDING_LIGHTS));
+      expect(same.match).toEqual({ provider: "deezer", method: "id", deezerId: 12, score: 0.99 });
+
+      for (const [title, album, reason] of [
+        ["Blinding Lights (Chromatics Remix)", "After Hours", "other_version"],
+        ["Blinding Lights (Extended Mix)", "After Hours", "other_version"],
+        ["Blinding Lights", "The Highlights", "album_differs"],
+      ]) {
+        deezer({ isrc: isrcEntry, tracks: { 12: alternative(title, album) }, search: [] });
+        expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+          { deezerId: 11, method: "isrc", reason: "not_readable" },
+          { deezerId: 12, method: "id", reason },
+        ]);
+      }
+    });
+
+    it("does not read the alternative of an entry that is another recording", async () => {
+      const net = deezer({
+        isrc: entry({
+          id: 13,
+          title: "Blinding Lights",
+          artist: "Ameritz Karaoke",
+          isrc: ISRC,
+          readable: false,
+          alternative: { id: 14 },
+        }),
+        search: [],
+      });
+
+      await findDeezerPreview(BLINDING_LIGHTS);
+
+      expect(net.calls.some((call) => call.url === `${API}/track/14`)).toBe(false);
     });
 
     it("falls back to a strict search when the ISRC entry has no preview", async () => {
       const net = deezer({
-        isrc: entry({
-          id: 7,
-          title: "Blinding Lights",
-          artist: "The Weeknd",
-          isrc: "USUG11904206",
-          preview: "",
-        }),
-        search: [entry({ id: 8, title: "Blinding Lights", artist: "The Weeknd", duration: 200 })],
+        isrc: weeknd(15, "Blinding Lights", { isrc: ISRC, preview: "" }),
+        search: [weeknd(16, "Blinding Lights")],
       });
 
       const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
@@ -195,35 +302,44 @@ describe("Deezer preview of one recording", () => {
       expect(result.match).toEqual({
         provider: "deezer",
         method: "search",
-        deezerId: 8,
+        deezerId: 16,
         score: 0.99,
       });
       expect(net.calls.at(-1)?.url).toMatch(/^https:\/\/api\.deezer\.com\/search\/track\?/);
     });
 
     it("does not trust an ISRC entry that carries another ISRC", async () => {
+      deezer({ isrc: weeknd(17, "Blinding Lights", { isrc: "GBAAA0000001" }), search: [] });
+
+      expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+        { deezerId: 17, method: "isrc", reason: "isrc_differs" },
+      ]);
+    });
+
+    it("never takes in the search an entry the ISRC step turned down", async () => {
       deezer({
-        isrc: entry({
-          id: 9,
-          title: "Blinding Lights",
-          artist: "The Weeknd",
-          isrc: "GBAAA0000001",
-        }),
-        search: [],
+        isrc: weeknd(22, "Blinding Lights", { isrc: "USUG99999999" }),
+        search: [weeknd(22, "Blinding Lights")],
       });
 
-      const result = await findDeezerPreview(BLINDING_LIGHTS);
+      expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+        { deezerId: 22, method: "isrc", reason: "isrc_differs" },
+        { deezerId: 22, method: "search", reason: "turned_down_by_isrc" },
+      ]);
+    });
 
-      expect(rejections(result)).toEqual([{ deezerId: 9, method: "isrc", reason: "isrc_differs" }]);
+    it("never takes a search entry that carries another ISRC", async () => {
+      deezer({ search: [weeknd(23, "Blinding Lights", { isrc: "USXX12345678" })] });
+
+      expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+        { deezerId: 23, method: "search", reason: "isrc_differs" },
+      ]);
     });
   });
 
   describe("errors in a 200 answer", () => {
     it("reads code 800 (no data) as a miss and goes on to the search", async () => {
-      const net = deezer({
-        isrc: NO_DATA,
-        search: [entry({ id: 10, title: "Blinding Lights", artist: "The Weeknd", duration: 200 })],
-      });
+      const net = deezer({ isrc: NO_DATA, search: [weeknd(24, "Blinding Lights")] });
 
       const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
 
@@ -236,7 +352,7 @@ describe("Deezer preview of one recording", () => {
 
       const result = await findDeezerPreview(BLINDING_LIGHTS);
 
-      expect(result).toMatchObject({ found: false, previewUrl: null });
+      expect(result).toMatchObject({ found: false, previewUrl: null, errorCode: "rate_limited" });
       expect(result.found === false && result.error).toContain("Quota limit exceeded");
       expect(net.calls).toHaveLength(1);
     });
@@ -248,121 +364,103 @@ describe("Deezer preview of one recording", () => {
         await searchDeezerPreview.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
       );
 
-      expect(data).toMatchObject({ found: false, previewUrl: null });
+      expect(data).toMatchObject({ found: false, previewUrl: null, errorCode: "rate_limited" });
       expect(data.error).toContain("Quota limit exceeded");
     });
   });
 
   describe("strict search", () => {
-    const BOHEMIAN = {
+    const NIGHT = "A Night At The Opera (Deluxe Remastered Version)";
+    const BOHEMIAN: PreviewRequest = {
       title: "Bohemian Rhapsody - Remastered 2011",
       artist: "Queen",
       album: "A Night At The Opera (2011 Remaster)",
       durationMs: 354_320,
     };
-    const HURT = { title: "Hurt", artist: "Johnny Cash", durationMs: 218_000 };
+    const HURT: PreviewRequest = {
+      title: "Hurt",
+      artist: "Johnny Cash",
+      album: "American IV: The Man Comes Around",
+      durationMs: 218_000,
+    };
+    const queen = (id: number, title: string, album = NIGHT) =>
+      entry({ id, title, artist: "Queen", album, duration: 354 });
 
     it.each([
-      ["a live take", "Bohemian Rhapsody (Live Aid 1985)", "Queen", "Album", "other_version"],
+      ["a live take", "Bohemian Rhapsody (Live Aid 1985)", "Queen", NIGHT, "other_version"],
       ["a live album", "Bohemian Rhapsody", "Queen", "Live at Wembley '86", "other_version"],
-      ["a remix", "Bohemian Rhapsody (Kaskade Remix)", "Queen", "Album", "other_version"],
-      [
-        "a karaoke version",
-        "Bohemian Rhapsody (Karaoke Version)",
-        "Queen",
-        "Album",
-        "other_version",
-      ],
-      ["a cover", "Bohemian Rhapsody", "Panic! At The Disco", "Album", "artist_differs"],
-      ["a tribute band", "Bohemian Rhapsody", "Queen Tribute Band", "Album", "artist_differs"],
-      ["another song by the artist", "Killer Queen", "Queen", "Album", "title_differs"],
-      ["a longer title", "Bohemian Rhapsody Pt. 2", "Queen", "Album", "title_differs"],
+      ["a remix", "Bohemian Rhapsody (Kaskade Remix)", "Queen", NIGHT, "other_version"],
+      ["a karaoke version", "Bohemian Rhapsody (Karaoke Version)", "Queen", NIGHT, "other_version"],
+      ["a cover", "Bohemian Rhapsody", "Panic! At The Disco", NIGHT, "artist_differs"],
+      ["a tribute band", "Bohemian Rhapsody", "Queen Tribute Band", NIGHT, "artist_differs"],
+      ["another song by the artist", "Killer Queen", "Queen", NIGHT, "title_differs"],
+      ["a longer title", "Bohemian Rhapsody Pt. 2", "Queen", NIGHT, "title_differs"],
+      ["another album", "Bohemian Rhapsody", "Queen", "Greatest Hits", "album_differs"],
     ])("turns down %s", async (_label, title, artist, album, reason) => {
-      deezer({ search: [entry({ id: 20, title, artist, album, duration: 354 })] });
-
-      const result = await findDeezerPreview(BOHEMIAN);
+      const result = await searchOnly(
+        BOHEMIAN,
+        entry({ id: 20, title, artist, album, duration: 354 }),
+      );
 
       expect(result).toMatchObject({ found: false, previewUrl: null });
       expect(rejections(result)).toEqual([{ deezerId: 20, method: "search", reason }]);
     });
 
     it("picks the original over a live take and a remix listed first", async () => {
-      deezer({
-        search: [
-          entry({
-            id: 21,
-            title: "Bohemian Rhapsody (Live Aid 1985)",
-            artist: "Queen",
-            duration: 354,
-          }),
-          entry({
-            id: 22,
-            title: "Bohemian Rhapsody (Kaskade Remix)",
-            artist: "Queen",
-            duration: 354,
-          }),
-          entry({
-            id: 23,
-            title: "Bohemian Rhapsody (Remastered 2011)",
-            artist: "Queen",
-            duration: 354,
-          }),
-        ],
-      });
-
-      const result = matched(await findDeezerPreview(BOHEMIAN));
+      const result = matched(
+        await searchOnly(
+          BOHEMIAN,
+          queen(21, "Bohemian Rhapsody (Live Aid 1985)"),
+          queen(22, "Bohemian Rhapsody (Kaskade Remix)"),
+          queen(23, "Bohemian Rhapsody (Remastered 2011)"),
+        ),
+      );
 
       expect(result.match.deezerId).toBe(23);
     });
 
     it("never takes another recording's preview: a cover-only answer gives no preview", async () => {
-      deezer({
-        search: [
-          entry({ id: 30, title: "Hurt", artist: "Nine Inch Nails", duration: 218 }),
-          entry({ id: 31, title: "Hurt (Karaoke Version)", artist: "Karaoke Hits", duration: 218 }),
-        ],
-      });
-
-      const result = await findDeezerPreview(HURT);
+      const result = await searchOnly(
+        HURT,
+        entry({ id: 30, title: "Hurt", artist: "Nine Inch Nails", duration: 218 }),
+        entry({ id: 31, title: "Hurt (Karaoke Version)", artist: "Karaoke Hits", duration: 218 }),
+      );
 
       expect(result).toMatchObject({ found: false, previewUrl: null });
       expect(rejections(result).map((r) => r.reason)).toEqual(["artist_differs", "artist_differs"]);
     });
 
     it("uses the requested version when the requested track is one", async () => {
-      deezer({
-        search: [
-          entry({ id: 40, title: "Bohemian Rhapsody", artist: "Queen", duration: 355 }),
-          entry({
-            id: 41,
-            title: "Bohemian Rhapsody (Live Aid 1985)",
-            artist: "Queen",
-            duration: 355,
-          }),
-        ],
-      });
-
       const result = matched(
-        await findDeezerPreview({
-          title: "Bohemian Rhapsody - Live Aid 1985",
-          artist: "Queen",
-          durationMs: 355_000,
-        }),
+        await searchOnly(
+          { ...BOHEMIAN, title: "Bohemian Rhapsody - Live Aid 1985", album: "Live Aid" },
+          queen(40, "Bohemian Rhapsody", "Live Aid"),
+          queen(41, "Bohemian Rhapsody (Live Aid 1985)", "Live Aid"),
+        ),
       );
 
       expect(result.match.deezerId).toBe(41);
     });
 
     it("matches a Japanese title and turns down an unrelated song", async () => {
-      deezer({
-        search: [
-          entry({ id: 50, title: "Unrelated Song", artist: "Other Artist", duration: 261 }),
-          entry({ id: 51, title: "夜に駆ける", artist: "YOASOBI", duration: 261 }),
-        ],
-      });
-
+      const yoasobi = {
+        title: "夜に駆ける",
+        artist: "YOASOBI",
+        album: "夜に駆ける",
+        durationMs: 261_000,
+      };
       const result = matched(
-        await findDeezerPreview({ title: "夜に駆ける", artist: "YOASOBI", durationMs: 261_000 }),
+        await searchOnly(
+          yoasobi,
+          entry({ id: 50, title: "Unrelated Song", artist: "Other Artist", duration: 261 }),
+          entry({
+            id: 51,
+            title: "夜に駆ける",
+            artist: "YOASOBI",
+            album: "夜に駆ける",
+            duration: 261,
+          }),
+        ),
       );
 
       expect(result.match).toEqual({
@@ -374,18 +472,24 @@ describe("Deezer preview of one recording", () => {
     });
 
     it("gives no preview for a Japanese title when only an unrelated song has one", async () => {
-      deezer({
-        search: [
-          entry({ id: 52, title: "Unrelated Song", artist: "Other Artist", duration: 261 }),
-          entry({ id: 53, title: "夜に駆ける", artist: "YOASOBI", duration: 261, preview: "" }),
-        ],
-      });
-
-      const result = await findDeezerPreview({
+      const yoasobi = {
         title: "夜に駆ける",
         artist: "YOASOBI",
+        album: "夜に駆ける",
         durationMs: 261_000,
-      });
+      };
+      const result = await searchOnly(
+        yoasobi,
+        entry({ id: 52, title: "Unrelated Song", artist: "Other Artist", duration: 261 }),
+        entry({
+          id: 53,
+          title: "夜に駆ける",
+          artist: "YOASOBI",
+          album: "夜に駆ける",
+          duration: 261,
+          preview: "",
+        }),
+      );
 
       expect(rejections(result)).toEqual([
         { deezerId: 52, method: "search", reason: "artist_differs" },
@@ -399,11 +503,16 @@ describe("Deezer preview of one recording", () => {
       ["4 s longer", 222, false],
       ["4 s shorter", 214, false],
     ])("takes a duration %s: %s", async (_label, seconds, accepted) => {
-      deezer({
-        search: [entry({ id: 60, title: "Hurt", artist: "Johnny Cash", duration: seconds })],
-      });
-
-      const result = await findDeezerPreview(HURT);
+      const result = await searchOnly(
+        HURT,
+        entry({
+          id: 60,
+          title: "Hurt",
+          artist: "Johnny Cash",
+          album: HURT.album,
+          duration: seconds,
+        }),
+      );
 
       expect(result.found).toBe(accepted);
       if (!result.found) {
@@ -413,39 +522,264 @@ describe("Deezer preview of one recording", () => {
       }
     });
 
-    it("turns down a match when the requested duration is unknown", async () => {
-      deezer({ search: [entry({ id: 61, title: "Hurt", artist: "Johnny Cash", duration: 218 })] });
+    it("turns down a match when the requested duration or album is unknown", async () => {
+      const hurt = entry({
+        id: 61,
+        title: "Hurt",
+        artist: "Johnny Cash",
+        album: HURT.album,
+        duration: 218,
+      });
 
-      const result = await findDeezerPreview({ ...HURT, durationMs: 0 });
-
-      expect(rejections(result)[0]?.reason).toBe("duration_unknown");
+      const noDuration = await searchOnly({ ...HURT, durationMs: 0 }, hurt);
+      expect(rejections(noDuration)[0]?.reason).toBe("duration_unknown");
+      const noAlbum = await searchOnly({ ...HURT, album: "" }, hurt);
+      expect(rejections(noAlbum)[0]?.reason).toBe("album_unknown");
     });
 
     it("turns down an entry that is not readable", async () => {
-      deezer({
-        search: [
-          entry({ id: 62, title: "Hurt", artist: "Johnny Cash", duration: 218, readable: false }),
-        ],
-      });
-
-      const result = await findDeezerPreview(HURT);
+      const result = await searchOnly(
+        HURT,
+        entry({
+          id: 62,
+          title: "Hurt",
+          artist: "Johnny Cash",
+          album: HURT.album,
+          duration: 218,
+          readable: false,
+        }),
+      );
 
       expect(rejections(result)[0]?.reason).toBe("not_readable");
     });
 
-    it("matches spellings that differ only in accents, case and credits", async () => {
-      deezer({ search: [entry({ id: 63, title: "DÉJÀ VU", artist: "beyonce", duration: 240 })] });
-
+    it("matches spellings that differ only in accents, case, credits and edition labels", async () => {
       const result = matched(
-        await findDeezerPreview({
-          title: "Déjà Vu (feat. Jay-Z)",
-          artist: "Beyoncé, JAY-Z",
-          artistNames: ["Beyoncé", "JAY-Z"],
-          durationMs: 240_400,
-        }),
+        await searchOnly(
+          {
+            title: "Déjà Vu (feat. Jay-Z)",
+            artist: "Beyoncé, JAY-Z",
+            artistNames: ["Beyoncé", "JAY-Z"],
+            album: "B'Day",
+            durationMs: 240_400,
+          },
+          entry({
+            id: 63,
+            title: "DÉJÀ VU",
+            artist: "beyonce",
+            album: "B'Day (Deluxe Edition)",
+            duration: 240,
+          }),
+        ),
       );
 
       expect(result.match.deezerId).toBe(63);
+    });
+
+    it("reads a version Deezer gives apart from the title", async () => {
+      const result = await searchOnly(
+        BLINDING_LIGHTS,
+        weeknd(64, "Blinding Lights", { title_version: "(Live at SoFi)" }),
+      );
+
+      expect(rejections(result)[0]?.reason).toBe("other_version");
+    });
+
+    it("takes only the lead artist's own entry, not a featured artist's", async () => {
+      const result = await searchOnly(
+        {
+          title: "Stay",
+          artist: "Rihanna, Mikky Ekko",
+          artistNames: ["Rihanna", "Mikky Ekko"],
+          album: "Unapologetic",
+          durationMs: 240_000,
+        },
+        entry({
+          id: 65,
+          title: "Stay",
+          artist: "Mikky Ekko",
+          album: "Unapologetic",
+          duration: 240,
+        }),
+      );
+
+      expect(rejections(result)[0]?.reason).toBe("artist_differs");
+    });
+
+    // Each of these was taken as the requested recording before: other takes, re-recordings,
+    // instrumental and sing-along versions, parts and reprises, and live albums whose name does
+    // not say so. The title stays the same and the duration is within 3 s.
+    it.each([
+      ["an alternate take", GIANT_STEPS, "Giant Steps (Alternate Take)", "Giant Steps", 284],
+      [
+        "an alternate version",
+        GIANT_STEPS,
+        "Giant Steps (Alternate Version 1)",
+        "Giant Steps",
+        287,
+      ],
+      ["an outtake", GIANT_STEPS, "Giant Steps (Outtake)", "Giant Steps", 287],
+      [
+        "a numbered take",
+        {
+          title: "Strawberry Fields Forever - Remastered 2009",
+          artist: "The Beatles",
+          album: "Magical Mystery Tour",
+          durationMs: 247_000,
+        },
+        "Strawberry Fields Forever (Take 7)",
+        "Magical Mystery Tour",
+        249,
+      ],
+      ["a re-recording", ROCK_THE_BOAT, "Rock the Boat (Re-Recorded)", ROCK_THE_BOAT.album, 206],
+      [
+        "a one-word re-recording",
+        ROCK_THE_BOAT,
+        "Rock the Boat (Rerecorded)",
+        ROCK_THE_BOAT.album,
+        206,
+      ],
+      ["a new recording", ROCK_THE_BOAT, "Rock the Boat (New Recording)", ROCK_THE_BOAT.album, 206],
+      ["a dated version", ROCK_THE_BOAT, "Rock the Boat (2015 Version)", ROCK_THE_BOAT.album, 206],
+      [
+        "a re-recorded album",
+        ROCK_THE_BOAT,
+        "Rock the Boat",
+        "Freedom for the Stallion (Re-Recorded Versions)",
+        206,
+      ],
+      ["a karaoke album", ROCK_THE_BOAT, "Rock the Boat", "Karaoke: Freedom for the Stallion", 205],
+      [
+        "an instrumental from a film",
+        LET_IT_GO,
+        'Let It Go - From "Frozen" / Instrumental',
+        "Frozen",
+        224,
+      ],
+      [
+        "a sing-along from a film",
+        LET_IT_GO,
+        'Let It Go (From "Frozen"/Sing-Along)',
+        "Frozen",
+        224,
+      ],
+      ["a demo from a film", LET_IT_GO, 'Let It Go (From "Frozen" Demo)', "Frozen", 224],
+      ["a sing-along album", LET_IT_GO, "Let It Go", "Frozen (Sing-Along)", 224],
+      [
+        "part two for part one",
+        {
+          title: "Pigs on the Wing (Part One)",
+          artist: "Pink Floyd",
+          album: "Animals",
+          durationMs: 85_000,
+        },
+        "Pigs on the Wing (Part Two)",
+        "Animals",
+        83,
+      ],
+      [
+        "the song for its reprise",
+        { title: "Song (Reprise)", artist: "Artist", album: "Album", durationMs: 180_000 },
+        "Song",
+        "Album",
+        181,
+      ],
+      [
+        "an interlude for the song",
+        { title: "Song", artist: "Artist", album: "Album", durationMs: 100_000 },
+        "Song (Interlude)",
+        "Album",
+        101,
+      ],
+      [
+        "a live album without the word live",
+        {
+          title: "Hotel California - 2013 Remaster",
+          artist: "Eagles",
+          album: "Hotel California (2013 Remaster)",
+          durationMs: 391_000,
+        },
+        "Hotel California",
+        "Hell Freezes Over",
+        392,
+      ],
+      [
+        "a live album named Alive!",
+        {
+          title: "Rock and Roll All Nite",
+          artist: "KISS",
+          album: "Dressed to Kill",
+          durationMs: 168_000,
+        },
+        "Rock and Roll All Nite",
+        "Alive!",
+        168,
+      ],
+      [
+        "the same generic title on another album",
+        { title: "Intro", artist: "The xx", album: "xx", durationMs: 127_000 },
+        "Intro",
+        "I See You",
+        128,
+      ],
+    ])("gives no preview for %s", async (_label, request, title, album, duration) => {
+      const result = await searchOnly(
+        request,
+        entry({ id: 70, title, artist: request.artist, album, duration }),
+      );
+
+      expect(result).toMatchObject({ found: false, previewUrl: null });
+    });
+
+    it.each([
+      [
+        "remaster labels and an edition",
+        {
+          title: "Here Comes The Sun - Remastered 2009",
+          artist: "The Beatles",
+          album: "Abbey Road (Remastered)",
+          durationMs: 185_000,
+        },
+        "Here Comes The Sun (Remastered)",
+        "Abbey Road (Super Deluxe Edition)",
+      ],
+      ["a soundtrack label", LET_IT_GO, 'Let It Go (From "Frozen"/Soundtrack Version)', "Frozen"],
+      [
+        "the same alternative title",
+        {
+          title: "Gangnam Style (강남스타일)",
+          artist: "PSY",
+          album: "PSY 6甲",
+          durationMs: 219_000,
+        },
+        "Gangnam Style (강남스타일)",
+        "PSY 6甲",
+      ],
+    ])("still matches the same recording with %s", async (_label, request, title, album) => {
+      const duration = (request.durationMs ?? 0) / 1000;
+      const result = await searchOnly(
+        request,
+        entry({ id: 71, title, artist: request.artist, album, duration }),
+      );
+
+      expect(matched(result).match.deezerId).toBe(71);
+    });
+  });
+
+  describe("what a result holds", () => {
+    it("holds the clip and its match, never Deezer's bpm", async () => {
+      deezer({ isrc: weeknd(80, "Blinding Lights", { isrc: ISRC }) });
+
+      const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
+
+      expect(Object.keys(result).sort()).toEqual([
+        "artist",
+        "found",
+        "match",
+        "previewUrl",
+        "title",
+      ]);
+      expect(Object.keys(result.match).sort()).toEqual(["deezerId", "method", "provider", "score"]);
     });
   });
 
@@ -453,8 +787,8 @@ describe("Deezer preview of one recording", () => {
     it("never logs a preview URL", async () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       deezer({
-        isrc: entry({ id: 70, title: "Blinding Lights", artist: "The Weeknd", preview: "" }),
-        search: [entry({ id: 71, title: "Blinding Lights", artist: "The Weeknd", duration: 200 })],
+        isrc: weeknd(90, "Blinding Lights", { preview: "" }),
+        search: [weeknd(91, "Blinding Lights")],
       });
 
       matched(await findDeezerPreview(BLINDING_LIGHTS));
@@ -468,31 +802,26 @@ describe("Deezer preview of one recording", () => {
       expect(logged).not.toContain("hdnea");
     });
 
-    it("records the lookups without the preview", async () => {
+    it("records the lookups with the fields the match reads, without preview or bpm", async () => {
       const dir = mkdtempSync(join(tmpdir(), "deezer-cassette-"));
       process.env.SOURCE_CASSETTE = "record";
       process.env.SOURCE_CASSETTE_DIR = dir;
       vi.spyOn(console, "warn").mockImplementation(() => {});
       deezer({
-        isrc: entry({
-          id: 72,
-          title: "Blinding Lights",
-          artist: "The Weeknd",
-          preview: "",
-          isrc: "USUG11904206",
-        }),
-        search: [entry({ id: 73, title: "Blinding Lights", artist: "The Weeknd", duration: 200 })],
+        isrc: weeknd(92, "Blinding Lights", { preview: "", isrc: ISRC }),
+        search: [weeknd(93, "Blinding Lights")],
       });
       try {
         matched(await findDeezerPreview(BLINDING_LIGHTS));
 
-        const recorded = readdirSync(dir)
+        const text = readdirSync(dir)
           .map((file) => readFileSync(join(dir, file), "utf8"))
           .join("\n");
-        expect(recorded).toContain("USUG11904206");
-        expect(recorded).toContain("Blinding Lights");
-        expect(recorded).not.toContain("dzcdn.net");
-        expect(recorded).not.toContain("hdnea");
+        expect(text).toContain(ISRC);
+        expect(text).toContain("Blinding Lights");
+        expect(text).not.toContain("dzcdn.net");
+        expect(text).not.toContain("hdnea");
+        expect(text).not.toMatch(/"bpm"|"preview"/);
       } finally {
         delete process.env.SOURCE_CASSETTE;
         delete process.env.SOURCE_CASSETTE_DIR;

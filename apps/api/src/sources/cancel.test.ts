@@ -46,6 +46,7 @@ const deezerNoData = () =>
 const ICE_ICE_BABY = {
   title: "Ice Ice Baby",
   artist: "Vanilla Ice",
+  album: "To the Extreme",
   isrc: "USSB29000129",
   durationMs: 270_000,
 };
@@ -152,7 +153,15 @@ describe("tools stop their requests when the run is cancelled", () => {
       (signal) => searchDeezerPreview.invoke(ICE_ICE_BABY, { signal }),
       (call) =>
         call.url.startsWith("https://api.deezer.com/track/isrc:")
-          ? json({ id: 1, title: "Ice Ice Baby", readable: false, alternative: { id: 2 } })
+          ? json({
+              id: 1,
+              title: "Ice Ice Baby",
+              isrc: "USSB29000129",
+              duration: 270,
+              artist: { id: 1, name: "Vanilla Ice" },
+              readable: false,
+              alternative: { id: 2 },
+            })
           : call.url === "https://api.deezer.com/track/2"
             ? deezerNoData()
             : undefined,

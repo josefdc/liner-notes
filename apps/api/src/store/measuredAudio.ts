@@ -38,6 +38,25 @@ export function isMeasuredAudio(features: unknown): features is AudioFeatures {
   return MeasuredAudioSchema.safeParse(features).success;
 }
 
+/** How the measured clip was matched to the track (sources/audio.ts PreviewSourceMatch). */
+const PreviewMatchSchema = z.object({
+  provider: z.enum(["deezer", "spotify"]),
+  method: z.enum(["isrc", "id", "search"]),
+  score: z.number().min(0).max(1).nullable(),
+});
+
+/**
+ * True for a measurement that says how its clip was matched to the track. Rows without it were
+ * measured before previews were matched strictly (the clip may have been another recording's):
+ * the engineer measures such a track again, and the cache lets the new row replace the old one.
+ */
+export function isMatchedMeasurement(features: unknown): features is AudioFeatures {
+  return (
+    isMeasuredAudio(features) &&
+    PreviewMatchSchema.safeParse((features as { previewMatch?: unknown }).previewMatch).success
+  );
+}
+
 /** Parses stored `full_data` and returns it when it is a valid measurement, else null. */
 export function parseMeasuredAudio(fullData: string): AudioFeatures | null {
   let value: unknown;

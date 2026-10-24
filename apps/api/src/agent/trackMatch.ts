@@ -121,6 +121,17 @@ const VERSION_WORDS = new Set([
   "rerecorded",
   "vip",
   "bootleg",
+  "take",
+  "takes",
+  "alternate",
+  "outtake",
+  "outtakes",
+  "rerecord",
+  "rerecording",
+  "reprise",
+  "interlude",
+  "singalong",
+  "remake",
 ]);
 // Phrases that mean someone else performs the song.
 const COVER_PHRASES = [
@@ -131,6 +142,10 @@ const COVER_PHRASES = [
 const VERSION_PHRASES = [
   ...COVER_PHRASES,
   ["re", "recorded"],
+  ["re", "record"],
+  ["re", "recording"],
+  ["new", "recording"],
+  ["sing", "along"],
   ["en", "vivo"],
   ["ao", "vivo"],
   ["en", "directo"],
@@ -385,6 +400,7 @@ const RELEASE_LABELS = [
   ["album", "version"],
   ["radio", "version"],
   ["original", "version"],
+  ["soundtrack", "version"],
   ["mono", "version"],
   ["stereo", "version"],
 ];
@@ -595,60 +611,189 @@ export function needsChoice(ranked: RankedTrack[]): boolean {
   });
 }
 
+// Albums that hold other recordings of their songs: live, unplugged, re-recorded, karaoke,
+// tribute, instrumental or sing-along releases. Read only when two catalogues are compared.
+const RELEASE_MARKERS = [
+  ...ALBUM_MARKERS,
+  ["rerecorded"],
+  ["re", "recorded"],
+  ["rerecording"],
+  ["re", "recording"],
+  ["new", "recording"],
+  ["new", "recordings"],
+  ["karaoke"],
+  ["tribute"],
+  ["instrumental"],
+  ["instrumentals"],
+  ["sing", "along"],
+  ["singalong"],
+  ["covers"],
+  ["in", "the", "style", "of"],
+  ["originally", "performed"],
+  ["made", "famous"],
+  ["demos"],
+  ["outtakes"],
+  ["sessions"],
+  ["concert"],
+];
+// Words of an album's bracketed or dashed part that name an edition of the same release.
+const EDITION_WORDS = new Set([
+  "deluxe",
+  "super",
+  "special",
+  "expanded",
+  "edition",
+  "anniversary",
+  "remaster",
+  "remastered",
+  "version",
+  "bonus",
+  "track",
+  "tracks",
+  "explicit",
+  "clean",
+  "mono",
+  "stereo",
+  "reissue",
+  "collector",
+  "collectors",
+  "legacy",
+]);
+// A quoted work a title names as its source: `From "Frozen"`, `from “Encanto”`.
+const QUOTED_SOURCE = /\bfrom\s+(?:"[^"]*"|“[^”]*”|'[^']*'|‘[^’]*’|«[^»]*»)/giu;
+
 /**
  * How a title tells one recording from another, for comparing entries of two catalogues (a
- * Spotify track and a Deezer entry): the title proper and its alternative titles, and the words
- * the full title adds beyond them once credits, "From …" parts and labels of the original
- * release are left out ("Remastered 2011", "Radio Edit", "Single Version"), plus a live or
- * unplugged album.
+ * Spotify track and a Deezer entry):
+ * - `titles`: the title proper and the bracketed parts that read as another title (no label,
+ *   version or credit word in them: "(강남스타일)", but also "(Part One)" or "(Reprise)");
+ * - `extra`: the words of every other bracketed or " - " part, once credits, the quoted work a
+ *   title comes from (`From "Frozen"`) and labels of the original release ("Remastered 2011",
+ *   "Radio Edit", "Single Version") are left out. A "From …" part keeps its other words: "From
+ *   "Frozen" / Instrumental" still says instrumental.
  */
 interface RecordingTitle {
-  titles: string[][];
+  base: string[];
+  alternatives: string[][];
   extra: string[];
-  albumMarkers: string[];
 }
 
-function recordingTitle(title: string, album: string): RecordingTitle {
-  const parts = titleParts(title);
-  let extra = parts.suffix;
-  for (const part of [...parts.sources, ...parts.alternatives]) extra = without(extra, part);
-  for (const label of RELEASE_LABELS) extra = without(extra, label);
-  const remastered = extra.some((word) => word === "remaster" || word === "remastered");
-  extra = extra.filter(
-    (word) =>
-      !RELEASE_WORDS.has(word) && !JOINERS.has(word) && !(remastered && /^\d{4}$/.test(word)),
+function recordingTitle(title: string): RecordingTitle {
+  const unsourced = title.replace(QUOTED_SOURCE, " ");
+  const brackets = [...unsourced.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map(
+    (m) => m[1] ?? m[2] ?? "",
   );
-  const albumWords = without(words(album), parts.base);
-  return {
-    titles: [parts.base, ...parts.alternatives],
-    extra,
-    albumMarkers: ALBUM_MARKERS.filter((marker) => indexOf(albumWords, marker) >= 0).map((m) =>
-      m.join(" "),
-    ),
-  };
+  let rest = unsourced.replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
+  const parts = [...brackets];
+  const dash = rest.search(/\s[-–—]\s/);
+  if (dash >= 0) {
+    parts.push(rest.slice(dash + 3));
+    rest = rest.slice(0, dash);
+  }
+  const base = words(rest).length > 0 ? words(rest) : words(unsourced);
+  const alternatives: string[][] = [];
+  const extra: string[] = [];
+  for (const text of parts.flatMap((part) => part.split("/"))) {
+    let part = words(text);
+    if (part.length === 0 || (CREDIT_WORDS.has(part[0]) && part[0] !== "from")) continue;
+    // An unquoted "From …" names a work; only the version words in it are kept.
+    if (part[0] === "from") {
+      extra.push(...part.filter((word) => VERSION_WORDS.has(word)));
+      continue;
+    }
+    for (const label of RELEASE_LABELS) part = without(part, label);
+    const remastered = part.some((word) => word === "remaster" || word === "remastered");
+    part = part.filter((word) => !RELEASE_WORDS.has(word) && !(remastered && /^\d{4}$/.test(word)));
+    if (part.length === 0) continue;
+    const marked =
+      part.some((word) => LABEL_WORDS.has(word) || /^\d{4}$/.test(word)) ||
+      VERSION_PHRASES.some((phrase) => indexOf(part, phrase) >= 0);
+    if (marked) extra.push(...part.filter((word) => !JOINERS.has(word)));
+    else alternatives.push(part);
+  }
+  return { base, alternatives, extra };
+}
+
+/** The release markers of an album's name (see RELEASE_MARKERS), its own title left out. */
+function releaseMarkers(album: string, base: string[]): string[] {
+  const name = without(words(album), base);
+  return RELEASE_MARKERS.filter((marker) => indexOf(name, marker) >= 0).map((m) => m.join(" "));
+}
+
+/** An album's name without the parts that name an edition ("(2011 Remaster)", "- Deluxe"). */
+function albumName(album: string): string[] {
+  const parts = [...album.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map((m) => m[1] ?? m[2] ?? "");
+  let rest = album.replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
+  const dash = rest.search(/\s[-–—]\s/);
+  if (dash >= 0) {
+    parts.push(rest.slice(dash + 3));
+    rest = rest.slice(0, dash);
+  }
+  const edition = (part: string) =>
+    words(part).every((word) => EDITION_WORDS.has(word) || /^\d+(?:st|nd|rd|th)?$/.test(word));
+  return [...words(rest), ...parts.filter((part) => !edition(part)).flatMap(words)];
 }
 
 /**
- * Whether two catalogue entries carry the same recording by their titles:
- * - `title`: no title or alternative title of one is the title of the other;
- * - `version`: the titles agree but one is another version: its title adds words the other
- *   lacks ("Live Aid 1985", "Chromatics Remix", "Karaoke Version", "(2012)") or its album is a
- *   live or unplugged one and the other's is not;
- * - null: the same title and nothing that tells them apart.
+ * How two catalogue entries differ as recordings, judged on their titles and albums:
+ * - `title`: no title of one is a title of the other;
+ * - `version`: the titles agree but one is another version or take: it adds words the other
+ *   lacks ("Live Aid 1985", "Alternate Take", "Re-Recorded", "Instrumental", "(2012)"), a part
+ *   only one of them has ("(Part Two)", "(Reprise)"), or an album name that marks other
+ *   recordings (live, re-recorded, karaoke, tribute, sing-along) that the other's lacks;
+ * - null: nothing in the titles or album names tells them apart.
  * The comparison is strict on purpose: a version neither entry names can only be told apart by
- * other means (the duration, the ISRC).
+ * other means (the album, the duration, the ISRC).
  */
 export function recordingTitleDifference(
   a: { title: string; album?: string },
   b: { title: string; album?: string },
 ): "title" | "version" | null {
-  const x = recordingTitle(a.title, a.album ?? "");
-  const y = recordingTitle(b.title, b.album ?? "");
-  if (!x.titles.some((t) => y.titles.some((u) => same(t, u)))) return "title";
-  const key = (list: string[]) => [...list].sort().join(" ");
-  if (key(x.extra) !== key(y.extra)) return "version";
-  if (key(x.albumMarkers) !== key(y.albumMarkers)) return "version";
-  return null;
+  const x = recordingTitle(a.title);
+  const y = recordingTitle(b.title);
+  const xTitles = [x.base, ...x.alternatives];
+  const yTitles = [y.base, ...y.alternatives];
+  if (!xTitles.some((t) => yTitles.some((u) => same(t, u)))) return "title";
+  // A part read as another title must be a title of the other entry too.
+  const shared = (own: string[][], other: string[][]) =>
+    own.every((part) => other.some((t) => same(part, t)));
+  if (!shared(x.alternatives, yTitles) || !shared(y.alternatives, xTitles)) return "version";
+  return markedApart(a, x, b, y) ? "version" : null;
+}
+
+const sortedKey = (list: string[]) => [...list].sort().join(" ");
+
+function markedApart(
+  a: { album?: string },
+  x: RecordingTitle,
+  b: { album?: string },
+  y: RecordingTitle,
+): boolean {
+  if (sortedKey(x.extra) !== sortedKey(y.extra)) return true;
+  const xMarkers = releaseMarkers(a.album ?? "", x.base);
+  const yMarkers = releaseMarkers(b.album ?? "", y.base);
+  return sortedKey(xMarkers) !== sortedKey(yMarkers);
+}
+
+/**
+ * Whether one entry is marked as another version than the other (see recordingTitleDifference),
+ * whatever their titles: for two entries that share an ISRC, whose titles may be written in
+ * different scripts but whose versions must still agree.
+ */
+export function markedAsOtherVersion(
+  a: { title: string; album?: string },
+  b: { title: string; album?: string },
+): boolean {
+  return markedApart(a, recordingTitle(a.title), b, recordingTitle(b.title));
+}
+
+/**
+ * Whether two album names are the same release once edition labels are left out ("A Night At
+ * The Opera (2011 Remaster)" and "A Night At The Opera (Deluxe Edition)"). Unknown names never
+ * match.
+ */
+export function sameAlbumName(a: string | undefined, b: string | undefined): boolean {
+  return same(albumName(a ?? ""), albumName(b ?? ""));
 }
 
 /** Whether two artist names are the same name once normalised (a leading "The" may be left out). */

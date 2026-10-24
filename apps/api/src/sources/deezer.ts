@@ -1,14 +1,22 @@
 /**
- * Deezer previews for a chosen recording.
+ * Deezer previews for a chosen recording. Missing is always better than another recording's
+ * clip: nothing below ever falls back to "any track with a preview".
  *
- * The recording is looked up by its ISRC first (`/track/isrc:<ISRC>`). That entry can be another
- * Deezer entry of the recording that is not readable or has no preview: then the entry Deezer
- * names as its readable alternative is read by id (`/track/<id>`), and last a search is made.
- * An entry found by id or by search is used only when it is strictly the same recording: the
- * same artist, the same title once normalised (titles in any script), no other version (live,
- * remix, karaoke, cover, re-recording and the like) unless the requested track is that version,
- * and a duration within 3 s. Nothing else is ever used: when no entry fits, there is no preview,
- * and the reasons each entry was turned down are reported.
+ * The recording is looked up by its ISRC first (`/track/isrc:<ISRC>`). Even that entry is used
+ * only when it carries the requested ISRC and agrees with the track: the same lead artist, no
+ * other version (live, remix, karaoke, re-recording, take and the like) and a duration within
+ * 3 s, since ISRCs are reused by karaoke and compilation labels. An entry without an `isrc`
+ * field is not an ISRC match: it must pass the strict check below. When the ISRC entry is not
+ * readable or has no preview, the entry Deezer names as its readable alternative is read by id
+ * (`/track/<id>`), and last a search is made, which never takes an entry the ISRC step turned
+ * down or one that carries another ISRC.
+ *
+ * Any entry not confirmed by the requested ISRC is used only when it is strictly the same
+ * recording: the same lead artist, the same title once normalised (titles in any script), no
+ * other version unless the requested track is that version, the same album (edition labels
+ * aside: another album may be a live or re-recorded one whose name does not say so) and a
+ * duration within 3 s. When no entry fits there is no preview, and the reasons each entry was
+ * turned down are reported.
  *
  * Deezer reports errors inside an HTTP 200 answer: code 800 ("no data") means nothing was
  * found, code 4 is its quota. Durations are in seconds. Preview URLs are signed and expire
@@ -21,8 +29,15 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { recordingTitleDifference, sameArtistName } from "../agent/trackMatch.js";
+import {
+  markedAsOtherVersion,
+  recordingTitleDifference,
+  sameAlbumName,
+  sameArtistName,
+  words,
+} from "../agent/trackMatch.js";
 import { fetchJson, type Shape, SourceError } from "./http.js";
+import { type SourceErrorCode, sourceErrorCode } from "./toolResult.js";
 
 // =============================================================================
 // Deezer payloads
@@ -37,6 +52,8 @@ interface DeezerError {
 interface DeezerTrack {
   id: number;
   title: string;
+  /** The version part of the title ("(Live)"), which Deezer usually also puts in `title`. */
+  title_version?: string;
   /** 30-second MP3 URL (dzcdn.net), signed; "" when there is none. */
   preview?: string;
   /** false when the entry cannot be played in the requester's country. */
@@ -72,6 +89,7 @@ const DURATION_TOLERANCE_S = 3;
 const ENTRY_SHAPE = {
   id: true,
   title: true,
+  title_version: true,
   readable: true,
   isrc: true,
   duration: true,
@@ -101,12 +119,13 @@ export interface PreviewRequest {
 
 /**
  * How a Deezer entry was matched to the requested recording:
- * - `isrc`: the entry Deezer gives for the ISRC;
- * - `id`: the readable alternative Deezer names for that entry, read by its id;
+ * - `isrc`: the entry Deezer gives for the ISRC, carrying that ISRC;
+ * - `id`: an entry read by id: the readable alternative Deezer names for the ISRC entry, or the
+ *   ISRC entry itself when it does not carry the ISRC;
  * - `search`: a search result.
- * `score` is null for an entry with the requested ISRC. Any other entry has to match strictly by
- * artist, title and version to be used at all; its score is how close its duration is: 1 when
- * equal, 0.5 at the 3 s limit.
+ * `score` is null for an entry that carries the requested ISRC (and passed the checks of an ISRC
+ * entry). Any other entry has to match strictly to be used at all; its score is how close its
+ * duration is: 1 when equal, 0.5 at the 3 s limit.
  */
 export interface DeezerMatch {
   provider: "deezer";
@@ -123,8 +142,11 @@ export type DeezerRejection =
   | "artist_differs"
   | "title_differs"
   | "other_version"
+  | "album_differs"
+  | "album_unknown"
   | "duration_differs"
-  | "duration_unknown";
+  | "duration_unknown"
+  | "turned_down_by_isrc";
 
 export type DeezerPreviewResult =
   | {
@@ -143,6 +165,8 @@ export type DeezerPreviewResult =
       message: string;
       /** Set when Deezer could not be read (quota, network): nothing is known then. */
       error?: string;
+      /** The kind of that failure, for the run's source errors. */
+      errorCode?: SourceErrorCode;
     };
 
 type Rejected = Extract<DeezerPreviewResult, { found: false }>["rejected"];
@@ -182,30 +206,56 @@ const hasPreview = (entry: DeezerTrack) =>
 const sameIsrc = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.trim().toUpperCase() === b.trim().toUpperCase();
 
-function requestedArtists(request: PreviewRequest): string[] {
-  return request.artistNames?.length ? request.artistNames : [request.artist];
+/** The requested track's lead artist (Spotify lists it first). */
+function leadArtist(request: PreviewRequest): string {
+  return request.artistNames?.[0] ?? request.artist;
 }
 
-/**
- * Why an entry that was not found by the requested ISRC is not the requested recording, or null
- * when it strictly is (see the file comment).
- */
-function strictMismatch(request: PreviewRequest, entry: DeezerTrack): DeezerRejection | null {
-  const artist = entry.artist?.name ?? "";
-  if (!requestedArtists(request).some((name) => sameArtistName(name, artist))) {
-    return "artist_differs";
-  }
-  const difference = recordingTitleDifference(
-    { title: request.title, album: request.album },
-    { title: entry.title ?? "", album: entry.album?.title },
-  );
-  if (difference === "title") return "title_differs";
-  if (difference === "version") return "other_version";
+/** The entry's title with its version part, when Deezer gives that apart. */
+function fullTitle(entry: DeezerTrack): string {
+  const title = entry.title ?? "";
+  const version = entry.title_version?.trim();
+  if (!version || words(title).join(" ").includes(words(version).join(" "))) return title;
+  return `${title} ${version}`;
+}
+
+function durationMismatch(request: PreviewRequest, entry: DeezerTrack): DeezerRejection | null {
   const wanted = (request.durationMs ?? 0) / 1000;
   const got = entry.duration ?? 0;
   if (!(wanted > 0) || !(got > 0)) return "duration_unknown";
   if (Math.abs(wanted - got) > DURATION_TOLERANCE_S) return "duration_differs";
   return null;
+}
+
+/**
+ * Why an entry that carries the requested ISRC is still not the requested recording, or null.
+ * Its title may be written otherwise (another script, another spelling), but its lead artist,
+ * its version and its duration must agree.
+ */
+function isrcMismatch(request: PreviewRequest, entry: DeezerTrack): DeezerRejection | null {
+  if (!sameArtistName(leadArtist(request), entry.artist?.name ?? "")) return "artist_differs";
+  const requested = { title: request.title, album: request.album };
+  if (markedAsOtherVersion(requested, { title: fullTitle(entry), album: entry.album?.title })) {
+    return "other_version";
+  }
+  return durationMismatch(request, entry);
+}
+
+/**
+ * Why an entry not confirmed by the requested ISRC is not the requested recording, or null when
+ * it strictly is (see the file comment).
+ */
+function strictMismatch(request: PreviewRequest, entry: DeezerTrack): DeezerRejection | null {
+  if (!sameArtistName(leadArtist(request), entry.artist?.name ?? "")) return "artist_differs";
+  const difference = recordingTitleDifference(
+    { title: request.title, album: request.album },
+    { title: fullTitle(entry), album: entry.album?.title },
+  );
+  if (difference === "title") return "title_differs";
+  if (difference === "version") return "other_version";
+  if (!request.album?.trim()) return "album_unknown";
+  if (!sameAlbumName(request.album, entry.album?.title)) return "album_differs";
+  return durationMismatch(request, entry);
 }
 
 /** Why an entry's preview cannot be used at all, or null. */
@@ -234,15 +284,50 @@ function found(entry: DeezerTrack, match: DeezerMatch): DeezerPreviewResult {
   };
 }
 
-function notFound(rejected: Rejected, message: string, error?: string): DeezerPreviewResult {
+function notFound(
+  rejected: Rejected,
+  message: string,
+  failure?: { error: string; errorCode: SourceErrorCode },
+): DeezerPreviewResult {
   console.log(`⚠️ [Deezer] ${message}`);
-  return { found: false, previewUrl: null, rejected, message, ...(error ? { error } : {}) };
+  return { found: false, previewUrl: null, rejected, message, ...failure };
+}
+
+/**
+ * Checks an entry read by its own id or by ISRC: one that carries the requested ISRC passes the
+ * checks of an ISRC entry and is reported with `isrcMethod`; any other passes the strict check
+ * and is reported as matched by id, with its score.
+ */
+function judgeEntry(
+  request: PreviewRequest,
+  entry: DeezerTrack,
+  isrcMethod: DeezerMatch["method"],
+): { match: DeezerMatch; reason: null } | { match: null; reason: DeezerRejection } {
+  const carriesIsrc = sameIsrc(entry.isrc, request.isrc);
+  // Whether it is the recording comes first: only the recording's own entry that cannot be
+  // played is replaced by its alternative.
+  const reason =
+    (carriesIsrc ? isrcMismatch(request, entry) : strictMismatch(request, entry)) ??
+    unplayable(entry);
+  if (reason) return { match: null, reason };
+  return {
+    reason: null,
+    match: carriesIsrc
+      ? { provider: "deezer", method: isrcMethod, deezerId: entry.id, score: null }
+      : {
+          provider: "deezer",
+          method: "id",
+          deezerId: entry.id,
+          score: durationScore(request, entry),
+        },
+  };
 }
 
 /**
  * The preview of the entry Deezer gives for the request's ISRC, or of the readable alternative
- * it names for that entry. Not found when there is no ISRC, Deezer has no entry for it, or
- * neither entry can be used.
+ * it names for that entry, each checked as the file comment says. Not found when there is no
+ * ISRC, Deezer has no entry for it, or neither entry can be used; the entries turned down are
+ * listed, and a search never takes them.
  */
 export async function deezerPreviewByIsrc(
   request: PreviewRequest,
@@ -257,41 +342,32 @@ export async function deezerPreviewByIsrc(
     TRACK_SHAPE,
     signal,
   );
-  if (!entry || typeof entry.id !== "number")
+  if (!entry || typeof entry.id !== "number") {
     return notFound(rejected, `No entry for ISRC ${isrc}`);
-
-  // An entry that carries another ISRC is not the requested recording.
-  const reason = entry.isrc && !sameIsrc(entry.isrc, isrc) ? "isrc_differs" : unplayable(entry);
-  if (!reason) {
-    return found(entry, { provider: "deezer", method: "isrc", deezerId: entry.id, score: null });
   }
-  rejected.push({ deezerId: entry.id, method: "isrc", reason });
 
+  // An entry that carries another ISRC is not the requested recording, nor is its alternative.
+  if (entry.isrc && !sameIsrc(entry.isrc, isrc)) {
+    rejected.push({ deezerId: entry.id, method: "isrc", reason: "isrc_differs" });
+    return notFound(rejected, `The entry for ISRC ${isrc} carries another ISRC`);
+  }
+  const judged = judgeEntry(request, entry, "isrc");
+  if (judged.match) return found(entry, judged.match);
+  rejected.push({ deezerId: entry.id, method: "isrc", reason: judged.reason });
+
+  // Only an entry that is the recording but cannot be played is replaced by its alternative.
   const alternativeId = entry.alternative?.id;
-  if (
-    reason !== "isrc_differs" &&
-    typeof alternativeId === "number" &&
-    alternativeId !== entry.id
-  ) {
+  const replaceable = judged.reason === "not_readable" || judged.reason === "no_preview";
+  if (replaceable && typeof alternativeId === "number" && alternativeId !== entry.id) {
     const alternative = await deezerGet<DeezerTrack>(
       new URL(`${DEEZER_API_BASE}/track/${alternativeId}`),
       TRACK_SHAPE,
       signal,
     );
     if (alternative && typeof alternative.id === "number") {
-      // The same ISRC is the same recording; any other entry must match strictly.
-      const sameRecording = sameIsrc(alternative.isrc, isrc);
-      const why =
-        unplayable(alternative) ?? (sameRecording ? null : strictMismatch(request, alternative));
-      if (!why) {
-        return found(alternative, {
-          provider: "deezer",
-          method: "id",
-          deezerId: alternative.id,
-          score: sameRecording ? null : durationScore(request, alternative),
-        });
-      }
-      rejected.push({ deezerId: alternative.id, method: "id", reason: why });
+      const checked = judgeEntry(request, alternative, "id");
+      if (checked.match) return found(alternative, checked.match);
+      rejected.push({ deezerId: alternative.id, method: "id", reason: checked.reason });
     }
   }
   return notFound(rejected, `The entry for ISRC ${isrc} has no usable preview`);
@@ -299,14 +375,18 @@ export async function deezerPreviewByIsrc(
 
 /**
  * The preview of a search result that is strictly the requested recording (see the file
- * comment); of several, the one whose duration is closest. Never "any result with a preview".
+ * comment); of several, the one whose duration is closest. Never "any result with a preview",
+ * never an entry in `turnedDown` (the ISRC step's rejections), never one that carries another
+ * ISRC than the requested one.
  */
 export async function deezerPreviewBySearch(
   request: PreviewRequest,
   signal?: AbortSignal,
+  turnedDown: Rejected = [],
 ): Promise<DeezerPreviewResult> {
   const rejected: Rejected = [];
-  const artist = requestedArtists(request)[0] ?? "";
+  const excluded = new Set(turnedDown.map((entry) => entry.deezerId));
+  const artist = leadArtist(request);
   const url = new URL(`${DEEZER_API_BASE}/search/track`);
   url.searchParams.set("q", `${artist} ${request.title}`.trim());
   url.searchParams.set("limit", "10");
@@ -318,7 +398,10 @@ export async function deezerPreviewBySearch(
   let best: DeezerTrack | null = null;
   for (const entry of entries) {
     if (typeof entry?.id !== "number") continue;
-    const reason = unplayable(entry) ?? strictMismatch(request, entry);
+    const otherIsrc = !!entry.isrc && !!request.isrc && !sameIsrc(entry.isrc, request.isrc);
+    const reason = excluded.has(entry.id)
+      ? "turned_down_by_isrc"
+      : (unplayable(entry) ?? (otherIsrc ? "isrc_differs" : strictMismatch(request, entry)));
     if (reason) {
       rejected.push({ deezerId: entry.id, method: "search", reason });
       continue;
@@ -353,7 +436,10 @@ export function deezerFailure(
   if (signal?.aborted) throw error;
   const message = error instanceof Error ? error.message : "Unknown error";
   console.error("❌ [Deezer] Error:", message);
-  return notFound([], "Deezer could not be read", message);
+  return notFound([], "Deezer could not be read", {
+    error: message,
+    errorCode: sourceErrorCode(error),
+  });
 }
 
 /**
@@ -368,7 +454,7 @@ export async function findDeezerPreview(
   try {
     const byIsrc = await deezerPreviewByIsrc(request, signal);
     if (byIsrc.found) return byIsrc;
-    const bySearch = await deezerPreviewBySearch(request, signal);
+    const bySearch = await deezerPreviewBySearch(request, signal, byIsrc.rejected);
     if (bySearch.found) return bySearch;
     return { ...bySearch, rejected: [...byIsrc.rejected, ...bySearch.rejected] };
   } catch (error) {
@@ -388,8 +474,8 @@ export const searchDeezerPreview = tool(
     name: "deezer_search_preview",
     description:
       "Find the 30-second Deezer preview of one recording: by its ISRC first, then by a strict " +
-      "search (same artist, title and version, duration within 3 s). Returns no preview rather " +
-      "than another recording's. No authentication required.",
+      "search (same lead artist, title, version and album, duration within 3 s). Returns no " +
+      "preview rather than another recording's. No authentication required.",
     schema: z.object({
       title: z.string().describe("The song title"),
       artist: z.string().describe("The artist name"),

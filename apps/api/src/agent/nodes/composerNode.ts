@@ -351,11 +351,6 @@ async function withArtwork(
   }
 }
 
-/** The preview clip for the player; undefined when there is none. */
-function previewUrlOf(state: SonicAgentStateType, spotify: SpotifyData): string | undefined {
-  return state.previewUrl || spotify.previewUrl || undefined;
-}
-
 /** The fields every result takes from Spotify, the measurement and the evidence state. */
 function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
   return {
@@ -365,8 +360,9 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     album: spotify.album,
     coverUrl: spotify.coverUrl,
     ...(spotify.spotifyUrl ? { spotifyUrl: spotify.spotifyUrl } : {}),
-    // The run's clip of the chosen recording (the engineer's), else Spotify's own clip of it.
-    ...(previewUrlOf(state, spotify) ? { previewUrl: previewUrlOf(state, spotify) } : {}),
+    // The engineer's clip of the chosen recording, for the player; none when it found none (a
+    // clip it turned down is never sent).
+    ...(state.previewUrl ? { previewUrl: state.previewUrl } : {}),
     ...(spotify.releaseDate?.split("-")[0]
       ? { releaseYear: spotify.releaseDate.split("-")[0] }
       : {}),
@@ -374,8 +370,9 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     ...measuredAudioFields(state.audioFeatures),
-    // The ISRC is the one Spotify gave for the chosen track; `preview` is how the engineer
-    // matched the measured clip to it. No node writes evidence yet (#27): it is empty today.
+    // The ISRC is the one Spotify gave for the chosen track; `preview` is how the clip the audio
+    // values were measured on was matched to it (none when nothing was measured). No node writes
+    // evidence yet (#27): it is empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
     evidence: state.evidence,

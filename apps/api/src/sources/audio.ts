@@ -32,6 +32,7 @@ import {
   type PreviewRequest,
 } from "./deezer.js";
 import { describeError, fetchJson, isSourceError } from "./http.js";
+import type { SourceErrorCode } from "./toolResult.js";
 import type { AudioUnavailableReason } from "../agent/state.js";
 
 // =============================================================================
@@ -51,10 +52,21 @@ export interface KeyMoment {
  */
 export type PreviewSourceMatch = DeezerMatch | { provider: "spotify"; method: "id"; score: null };
 
-/** The chosen track's preview clip, or why there is none. */
-export type PreviewResolution =
+/** Deezer could not be read while the clip was looked up (its quota, the network). */
+export interface PreviewLookupError {
+  source: "deezer";
+  code: SourceErrorCode;
+  message: string;
+}
+
+/**
+ * The chosen track's preview clip, or why there is none. `sourceError` is set whenever Deezer
+ * could not be read, also when Spotify's own clip was used instead.
+ */
+export type PreviewResolution = (
   | { previewUrl: string; match: PreviewSourceMatch }
-  | { previewUrl: null; match: null; detail: string; error?: string };
+  | { previewUrl: null; match: null; detail: string }
+) & { sourceError?: PreviewLookupError };
 
 /** Result of analyze_audio_preview. Every value is measured or null. */
 export interface AudioAnalysisResult {
@@ -83,6 +95,8 @@ export interface AudioAnalysisResult {
   previewUrl?: string | null;
   /** How that clip was matched to the chosen track; null when there is none. */
   previewMatch?: PreviewSourceMatch | null;
+  /** Set when Deezer could not be read while the clip was looked up. */
+  previewSourceError?: PreviewLookupError;
 }
 
 // What the service may return. It sends null bpm when no tempo is found and null key/mode
@@ -185,6 +199,8 @@ export interface TrackPreviewRequest extends PreviewRequest {
   spotifyPreviewUrl?: string | null;
 }
 
+type DeezerRejected = Extract<DeezerPreviewResult, { found: false }>["rejected"];
+
 /** Why each turned-down Deezer entry was not used, for the "no preview" detail. */
 function rejectionSummary(results: DeezerPreviewResult[]): string {
   const reasons = results.flatMap((result) => (result.found ? [] : result.rejected));
@@ -209,9 +225,9 @@ export async function resolvePreview(
   }
   signal?.throwIfAborted();
 
-  const lookup = async (find: typeof deezerPreviewByIsrc) => {
+  const lookup = async (find: typeof deezerPreviewBySearch, turnedDown?: DeezerRejected) => {
     try {
-      return await find(request, signal);
+      return await find(request, signal, turnedDown);
     } catch (error) {
       return deezerFailure(error, signal);
     }
@@ -219,25 +235,36 @@ export async function resolvePreview(
 
   const byIsrc = await lookup(deezerPreviewByIsrc);
   if (byIsrc.found) return { previewUrl: byIsrc.previewUrl, match: byIsrc.match };
+  const failure = (result: DeezerPreviewResult) =>
+    !result.found && result.error
+      ? {
+          sourceError: {
+            source: "deezer" as const,
+            code: result.errorCode ?? "unavailable",
+            message: result.error,
+          },
+        }
+      : {};
 
   if (request.spotifyPreviewUrl) {
     console.log("🎵 [Audio] Using Spotify's own preview of the chosen track");
     return {
       previewUrl: request.spotifyPreviewUrl,
       match: { provider: "spotify", method: "id", score: null },
+      ...failure(byIsrc),
     };
   }
 
   // After a Deezer error a search would fail the same way.
-  const bySearch = byIsrc.error ? byIsrc : await lookup(deezerPreviewBySearch);
+  const bySearch = byIsrc.error ? byIsrc : await lookup(deezerPreviewBySearch, byIsrc.rejected);
   if (bySearch.found) return { previewUrl: bySearch.previewUrl, match: bySearch.match };
 
-  const error = bySearch.error ?? byIsrc.error;
-  const detail = error
-    ? "Deezer could not be read and Spotify has no preview of this track"
+  const failed = failure(bySearch);
+  const detail = failed.sourceError
+    ? `Deezer could not be read and Spotify has no preview of this track: ${failed.sourceError.message}`
     : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
   console.log(`⚠️ [Audio] ${detail}`);
-  return { previewUrl: null, match: null, detail, ...(error ? { error } : {}) };
+  return { previewUrl: null, match: null, detail, ...failed };
 }
 
 // =============================================================================
@@ -321,19 +348,25 @@ export const analyzeAudioPreview = tool(
       },
       signal,
     );
+    const lookupError = preview.sourceError ? { previewSourceError: preview.sourceError } : {};
     if (preview.previewUrl === null) {
       console.log("⚠️ [Audio] No preview of the chosen recording; audio not measured");
-      const detail = preview.error ? `${preview.detail}: ${preview.error}` : preview.detail;
       return JSON.stringify({
-        ...unavailable("no_preview", detail),
+        ...unavailable("no_preview", preview.detail),
         previewUrl: null,
         previewMatch: null,
+        ...lookupError,
       });
     }
     const effectivePreviewUrl = preview.previewUrl;
     // Every result below carries the clip and how it was matched, for the run's player.
     const withPreview = (result: AudioAnalysisResult): string =>
-      JSON.stringify({ ...result, previewUrl: effectivePreviewUrl, previewMatch: preview.match });
+      JSON.stringify({
+        ...result,
+        previewUrl: effectivePreviewUrl,
+        previewMatch: preview.match,
+        ...lookupError,
+      });
 
     if (!isAllowedPreviewUrl(effectivePreviewUrl)) {
       console.log("⚠️ [Audio] Preview URL host not allowed; audio not measured");
@@ -342,6 +375,7 @@ export const analyzeAudioPreview = tool(
         ...unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
         previewUrl: null,
         previewMatch: null,
+        ...lookupError,
       });
     }
 

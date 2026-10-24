@@ -8,9 +8,12 @@
  * clip was matched to the track; older rows are measured again.
  *
  * The clip is a preview of the chosen recording only (sources/audio.ts resolvePreview). The node
- * writes it for the player (`previewUrl`, for this run only: it is signed and expires) and how
- * it was matched (`preview`). On a cache hit a fresh clip is looked up for the player; without
- * one the player has none, never another recording's clip.
+ * writes it for the player (`previewUrl`, for this run only: it is signed and expires), and how
+ * the measured clip was matched (`preview`, only when something was measured). On a cache hit a
+ * fresh clip is looked up for the player, and `preview` still describes the clip the cached
+ * values were measured on: both are clips of the chosen recording, not always the same entry.
+ * Without a clip the player has none, never another recording's clip. When Deezer could not be
+ * read, that is recorded as a source error, apart from "no clip".
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -18,11 +21,13 @@ import {
   analyzeAudioPreview,
   type AudioAnalysisResult,
   isAllowedPreviewUrl,
+  type PreviewLookupError,
   type PreviewSourceMatch,
   resolvePreview,
   type TrackPreviewRequest,
 } from "../../sources/audio.js";
 import { getCache } from "../../store/cache.js";
+import { isMatchedMeasurement } from "../../store/measuredAudio.js";
 import type { SonicAgentStateType, AudioFeatures, AudioUnavailableReason } from "../state.js";
 import { isAbortError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
@@ -91,19 +96,29 @@ export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
 }
 
 /**
- * How a clip was matched, in the result's terms (the contract's PreviewMatch). A Deezer entry
- * read by id is reported as an ISRC match when it carries the requested ISRC, else as a search
- * match with its score. Spotify's own clip of the chosen track needed no matching; the contract
- * has no method for it, so it is reported as null (unknown), never as an ISRC or search match.
+ * How a clip was matched, in the result's terms (the contract's PreviewMatch):
+ * - the Deezer entry for the ISRC, or an entry read by id that carries the requested ISRC and
+ *   passed the same checks: `isrc`;
+ * - a Deezer entry read by id that does not carry it and matched strictly: `id`, with its score;
+ * - a strict search match: `search`, with its score;
+ * - Spotify's own clip of the chosen track: `{spotify, id}`, no score.
  */
 export function previewProvenance(
   match: PreviewSourceMatch | null | undefined,
 ): SonicAgentStateType["preview"] {
-  if (match?.provider !== "deezer") return null;
-  if (match.method === "search" || (match.method === "id" && match.score !== null)) {
-    return { provider: "deezer", method: "search", score: match.score };
+  if (!match) return null;
+  if (match.provider === "spotify") return { provider: "spotify", method: "id", score: null };
+  if (match.method === "isrc" || (match.method === "id" && match.score === null)) {
+    return { provider: "deezer", method: "isrc", score: null };
   }
-  return { provider: "deezer", method: "isrc", score: null };
+  return { provider: "deezer", method: match.method, score: match.score };
+}
+
+/** Deezer's failure while the clip was looked up, as the run's source error. */
+function lookupErrors(error: PreviewLookupError | undefined): Partial<SonicAgentStateType> {
+  return error
+    ? { sourceErrors: [{ source: error.source, code: error.code, message: error.message }] }
+    : {};
 }
 
 /** The chosen track, as resolvePreview needs it. */
@@ -120,19 +135,6 @@ function previewRequest(state: SonicAgentStateType): TrackPreviewRequest {
   };
 }
 
-/** True for a cached row this code wrote from a measurement of a matched clip. */
-function isTrustedCacheRow(row: AudioFeatures | null | undefined): row is AudioFeatures {
-  return (
-    row?.measured === true &&
-    typeof row.previewMatch?.provider === "string" &&
-    row.analyzer === "audio-service" &&
-    typeof row.bpm === "number" &&
-    row.bpm > 0 &&
-    typeof row.key === "string" &&
-    row.key !== ""
-  );
-}
-
 export async function engineerNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
@@ -144,17 +146,18 @@ export async function engineerNode(
 
   const writer = config.writer;
 
-  // Check persistent audio cache first. Rows without the measured marker are ignored.
+  // Check persistent audio cache first. Rows without the measured marker, or that do not say
+  // how their clip was matched, are ignored.
   let cachedAudio: AudioFeatures | null = null;
   try {
     cachedAudio = getCache().getAudio(state.spotifyData.id);
   } catch {
     // Cache not available — proceed with fresh analysis
   }
-  if (cachedAudio && !isTrustedCacheRow(cachedAudio)) {
+  if (cachedAudio && !isMatchedMeasurement(cachedAudio)) {
     console.log("🎧 [Engineer] Ignoring unmarked cached audio for:", state.spotifyData.title);
   }
-  if (isTrustedCacheRow(cachedAudio)) {
+  if (isMatchedMeasurement(cachedAudio)) {
     console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
     writer?.({
       type: "status",
@@ -165,9 +168,12 @@ export async function engineerNode(
     });
     // The cache keeps no clip URL (they expire): the player gets a fresh clip or none.
     let previewUrl: string | null = null;
+    let lookupError: PreviewLookupError | undefined;
     try {
-      const fresh = (await resolvePreview(previewRequest(state), config.signal)).previewUrl;
-      previewUrl = fresh && isAllowedPreviewUrl(fresh) ? fresh : null;
+      const fresh = await resolvePreview(previewRequest(state), config.signal);
+      previewUrl =
+        fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null;
+      lookupError = fresh.sourceError;
     } catch (error) {
       if (config.signal?.aborted || isAbortError(error)) throw error;
       console.warn("⚠️ [Engineer] Could not look up a preview:", error);
@@ -176,6 +182,7 @@ export async function engineerNode(
       audioFeatures: cachedAudio,
       preview: previewProvenance(cachedAudio.previewMatch),
       previewUrl,
+      ...lookupErrors(lookupError),
       statusMessages: [`🎵 Audio (cached): ${cachedAudio.bpm} BPM, ${cachedAudio.key}`],
     };
   }
@@ -209,10 +216,11 @@ export async function engineerNode(
     console.error("❌ [Engineer] Error:", message);
     audioFeatures = unavailableFeatures("analysis_failed", message);
   }
-  // The clip measured (or tried), for the player, and how it was matched.
+  // The clip for the player, and how it was matched when the service measured it.
   const previewOut = {
-    preview: previewProvenance(analysis?.previewMatch),
+    preview: analysis?.source === "analyzed" ? previewProvenance(analysis.previewMatch) : null,
     previewUrl: analysis?.previewUrl ?? null,
+    ...lookupErrors(analysis?.previewSourceError),
   };
 
   if (audioFeatures.unavailableReason) {

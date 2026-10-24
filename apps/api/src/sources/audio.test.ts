@@ -111,6 +111,7 @@ describe("audio service client", () => {
       await analyzeAudioPreview.invoke({
         title: "Ice Ice Baby",
         artist: "Vanilla Ice",
+        album: "To the Extreme",
         durationMs: 270_000,
       }),
     );
@@ -128,6 +129,7 @@ describe("the chosen track's preview clip", () => {
   const TRACK = {
     title: "Ice Ice Baby",
     artist: "Vanilla Ice",
+    album: "To the Extreme",
     isrc: "USSB29000129",
     durationMs: 271_000,
   };
@@ -230,6 +232,52 @@ describe("the chosen track's preview clip", () => {
       previewMatch: null,
     });
     expect(data.error).toContain("1 title_differs, 1 other_version, 1 artist_differs");
+    expect(net.calls.some((call) => call.url.startsWith(SERVICE))).toBe(false);
+  });
+
+  it("makes no search after a Deezer error and reports the error apart from the missing clip", async () => {
+    const net = network({
+      isrc: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } },
+    });
+
+    const preview = await resolvePreview(TRACK, undefined);
+
+    expect(preview).toMatchObject({
+      previewUrl: null,
+      match: null,
+      sourceError: { source: "deezer", code: "rate_limited" },
+    });
+    expect(net.calls.map((call) => call.url)).toEqual([
+      "https://api.deezer.com/track/isrc:USSB29000129",
+    ]);
+  });
+
+  it("still uses Spotify's own clip after a Deezer error, and reports the error", async () => {
+    network({ isrc: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
+
+    const preview = await resolvePreview({ ...TRACK, spotifyPreviewUrl: SPOTIFY_CLIP }, undefined);
+
+    expect(preview).toMatchObject({
+      previewUrl: SPOTIFY_CLIP,
+      sourceError: { source: "deezer", code: "rate_limited" },
+    });
+  });
+
+  it("gives the player no clip from a host the service would refuse", async () => {
+    const net = network({
+      isrc: {
+        ...deezerEntry(8, "Ice Ice Baby", "Vanilla Ice", "http://cdnt-preview.dzcdn.net/x.mp3"),
+        isrc: TRACK.isrc,
+      },
+    });
+
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+
+    expect(data).toMatchObject({
+      reason: "preview_rejected",
+      previewUrl: null,
+      previewMatch: null,
+    });
     expect(net.calls.some((call) => call.url.startsWith(SERVICE))).toBe(false);
   });
 

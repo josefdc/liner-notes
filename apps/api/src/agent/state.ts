@@ -430,13 +430,16 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // Where the analysed preview came from and how it was matched; null when unknown.
+  // Where the clip the audio values were measured on came from and how it was matched to the
+  // track; null when nothing was measured. On an audio-cache hit it describes the cached
+  // measurement's clip, which may be another entry of the recording than the player's clip.
   preview: Annotation<PreviewMatchValue | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),
 
   // The run's preview clip of the chosen recording, for the player; null when there is none.
+  // Spotify's own clip is used here only when the engineer chose it.
   // The URL is signed and expires within minutes: the checkpointer never saves it
   // (store/checkpointer.ts) and stored results drop it.
   previewUrl: Annotation<string | null>({

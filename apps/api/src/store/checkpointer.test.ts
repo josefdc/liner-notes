@@ -3,7 +3,7 @@
  * clip from memory, but neither the saved checkpoints nor the saved node writes hold it.
  */
 
-import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { Annotation, Command, END, interrupt, START, StateGraph } from "@langchain/langgraph";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { PreviewFreeSqliteSaver } from "./checkpointer.js";
@@ -80,5 +80,56 @@ describe("PreviewFreeSqliteSaver", () => {
       genealogy: { nodes: [{ id: "n", img: "" }] },
     });
     expect(state.values.note).toBe("kept");
+  });
+
+  it("saves no clip from the interrupt payload or inside an error text, and resumes", async () => {
+    const db = new Database(":memory:");
+    const Paused = Annotation.Root({
+      candidates: Annotation<Array<Record<string, unknown>> | null>({
+        reducer: (_, next) => next,
+        default: () => null,
+      }),
+      audioFeatures: Annotation<Record<string, unknown> | null>({
+        reducer: (_, next) => next,
+        default: () => null,
+      }),
+      picked: Annotation<string | null>({ reducer: (_, next) => next, default: () => null }),
+    });
+    let offered: unknown = null;
+    const graph = new StateGraph(Paused)
+      .addNode("scout", () => ({
+        candidates: [{ id: "a", title: "Ice Ice Baby", previewUrl: SPOTIFY_CLIP }],
+      }))
+      .addNode("clarification", (state) => {
+        offered = state.candidates;
+        return { picked: interrupt({ candidates: state.candidates }) as string };
+      })
+      .addNode("engineer", () => ({
+        audioFeatures: { unavailableDetail: `Could not read ${CLIP}` },
+      }))
+      .addEdge(START, "scout")
+      .addEdge("scout", "clarification")
+      .addEdge("clarification", "engineer")
+      .addEdge("engineer", END)
+      .compile({ checkpointer: new PreviewFreeSqliteSaver(db) });
+    const config = { configurable: { thread_id: "t-2" } };
+
+    await graph.invoke({}, config);
+    const paused = savedText(db);
+    expect(paused).toContain("Ice Ice Baby");
+    expect(paused).not.toContain("p.scdn.co");
+
+    const pending = await graph.getState(config);
+    expect(pending.tasks[0]?.interrupts[0]?.value).toEqual({
+      candidates: [{ id: "a", title: "Ice Ice Baby" }],
+    });
+
+    const out = await graph.invoke(new Command({ resume: "a" }), config);
+    expect(out.picked).toBe("a");
+    expect(offered).toEqual([{ id: "a", title: "Ice Ice Baby" }]);
+    const resumed = savedText(db);
+    expect(resumed).toContain("Could not read [preview]");
+    expect(resumed).not.toContain("dzcdn.net");
+    expect(resumed).not.toContain("hdnea");
   });
 });

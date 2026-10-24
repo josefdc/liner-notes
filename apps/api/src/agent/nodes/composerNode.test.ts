@@ -683,6 +683,22 @@ describe("composerNode", () => {
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });
 
+    it("sends no clip when the engineer gave the player none, even if Spotify has one", async () => {
+      const writer = vi.fn();
+      const state = {
+        ...stateWith(measured, { previewUrl: "https://p.scdn.co/mp3-preview/rejected" }),
+        previewUrl: null,
+      } as SonicAgentStateType;
+
+      await createComposerNode(testRuntime(succeeding()))(state, {
+        writer,
+        configurable: { thread_id: "run-3" },
+      } as never);
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data).not.toHaveProperty("previewUrl");
+    });
+
     it("sends the engineer's clip of the chosen recording for the player and stores none", async () => {
       const deezerClip = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/c.mp3?hdnea=exp=1~hmac=x";
       const runtime = testRuntime(succeeding());
@@ -712,7 +728,8 @@ describe("composerNode", () => {
       const runtime = testRuntime(succeeding());
       const writer = vi.fn();
 
-      await createComposerNode(runtime)(stateWith(measured, { previewUrl: trackPreview }), {
+      const state = { ...stateWith(measured), previewUrl: trackPreview } as SonicAgentStateType;
+      await createComposerNode(runtime)(state, {
         writer,
         configurable: { thread_id: "run-1" },
       } as never);

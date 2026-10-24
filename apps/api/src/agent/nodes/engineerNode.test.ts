@@ -283,6 +283,26 @@ describe("engineerNode", () => {
       expect(cache.putAudio).not.toHaveBeenCalled();
     });
 
+    it("gives the player no fresh clip from a host the service would refuse", async () => {
+      stubNetwork("down", "http://cdnt-preview.dzcdn.net/api/1/x.mp3");
+      cache.getAudio.mockReturnValue(matchedRow);
+      const { out } = await run("HOST");
+      expect(out.audioFeatures).toEqual(matchedRow);
+      expect(out.previewUrl).toBeNull();
+    });
+
+    it("reports a Deezer outage on a cache hit as a source error", async () => {
+      stubNetwork("down");
+      deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
+      cache.getAudio.mockReturnValue(matchedRow);
+      const { out } = await run("HITQ", "USSB29000129");
+      expect(out.audioFeatures).toEqual(matchedRow);
+      expect(out.previewUrl).toBeNull();
+      expect(out.sourceErrors).toEqual([
+        { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
+      ]);
+    });
+
     it("keeps the cached measurement but gives the player no clip when none matches now", async () => {
       stubNetwork("down");
       deezer.search = [deezerEntry(2, "Ice Ice Baby (Live)", "Vanilla Ice", PREVIEW)];
@@ -355,11 +375,41 @@ describe("engineerNode", () => {
       expect(text).not.toMatch(/\d+ BPM/);
     });
 
-    it("still gives the player the matched clip when the service is down", async () => {
+    it("still gives the player the matched clip when the service is down, with no provenance", async () => {
       stubNetwork("down");
       const { out } = await run("D2");
       expect(out.audioFeatures).toMatchObject({ unavailableReason: "service_unavailable" });
       expect(out.previewUrl).toBe(PREVIEW);
+      expect(out.preview).toBeNull();
+    });
+
+    it("records Spotify's own clip as matched by id", async () => {
+      stubNetwork("librosa-only", null);
+      const spotifyClip = "https://p.scdn.co/mp3-preview/own";
+      const state = stateFor("S", "USSB29000129");
+      state.spotifyData = { ...state.spotifyData, previewUrl: spotifyClip } as never;
+      const out = await engineerNode(state, { writer: () => {} } as never);
+      expect(out.previewUrl).toBe(spotifyClip);
+      expect(out.preview).toEqual({ provider: "spotify", method: "id", score: null });
+    });
+
+    it("reports a Deezer outage as a source error, apart from the missing clip", async () => {
+      const stub = stubNetwork("full");
+      deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
+      const { out } = await run("Q", "USSB29000129");
+      expect(out.audioFeatures).toMatchObject({ bpm: null, unavailableReason: "no_preview" });
+      expect(out.sourceErrors).toEqual([
+        { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
+      ]);
+      // After the quota error no search is made.
+      expect(stub.calls.filter((url) => url.startsWith("https://api.deezer.com/"))).toHaveLength(1);
+    });
+
+    it("records no source error when Deezer only has no clip of the recording", async () => {
+      stubNetwork("full", null);
+      const { out } = await run("N2", "USSB29000129");
+      expect(out.audioFeatures).toMatchObject({ unavailableReason: "no_preview" });
+      expect(out.sourceErrors).toBeUndefined();
     });
   });
 

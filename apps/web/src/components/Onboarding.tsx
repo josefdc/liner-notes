@@ -51,7 +51,8 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
 // While a recorded run plays, the recorded progress is not live work: these replace the
 // messages above, so neither the screen nor the screen reader describes a live analysis.
 const REPLAY_PROGRESS_MESSAGE = 'Replaying a recorded analysis — nothing runs live...';
-const REPLAY_COMPLETE_MESSAGE = 'RECORDING READY // ENTERING COMMAND CENTER';
+// At most 40 characters: the completion line is revealed up to 40ch (typing-reveal).
+export const REPLAY_COMPLETE_MESSAGE = 'REPLAY READY // ENTERING COMMAND CENTER';
 
 /** The status line for a run, live or replayed. */
 function statusMessage(status: AgentStatus, isReplay: boolean): string {
@@ -728,7 +729,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors focus-visible:underline focus-visible:outline-none"
+                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-analog/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
               >
                 or try a different song
               </button>
@@ -760,7 +761,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors focus-visible:underline focus-visible:outline-none"
+                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-analog/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                 >
                   or try a different song
                 </button>

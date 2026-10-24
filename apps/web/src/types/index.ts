@@ -116,10 +116,14 @@ export type AudioUnavailableReason =
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
 /**
  * Why the "more facts" stream could not write a fact, when the user should know: the model's
- * rate limit, live model calls paused by the budget, or live calls switched off on this server
- * (it replays recorded runs only).
+ * rate limit, live model calls paused by the budget, live calls switched off on this server
+ * (it replays recorded runs only), or, for a replayed result, a recording no longer served.
  */
-export type FactoidUnavailableCode = 'rate_limited' | 'budget_exhausted' | 'live_disabled';
+export type FactoidUnavailableCode =
+  | 'rate_limited'
+  | 'budget_exhausted'
+  | 'live_disabled'
+  | 'not_found';
 
 /**
  * The run that produced a result, as the API sends it with the result. A replay ("replay")

@@ -148,6 +148,20 @@ describe("liveBudgetState", () => {
     );
   });
 
+  it("warns about an unusable log at most once per TTL, though it reads it on every request", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const warn = vi.mocked(console.warn);
+    warn.mockClear();
+    for (let i = 0; i < 3; i++) {
+      expect((await liveBudgetState(env(), "dev")).state).toBe("unverifiable");
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/^\[Budget\] Live analysis off/);
+    vi.setSystemTime(Date.now() + BUDGET_STATE_TTL_MS);
+    await liveBudgetState(env(), "dev");
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
   it("does not keep an answer when the log cannot be used", async () => {
     expect((await liveBudgetState(env(), "dev")).state).toBe("unverifiable");
     writeFileSync(log, line(1));

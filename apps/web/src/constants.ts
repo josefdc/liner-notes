@@ -58,6 +58,7 @@ export const FACTOID_UNAVAILABLE_TEXT: Record<FactoidUnavailableCode, string> = 
   rate_limited: MODEL_UNAVAILABLE_TEXT.rate_limited,
   budget_exhausted: MODEL_UNAVAILABLE_TEXT.budget_exhausted,
   live_disabled: 'live model calls are off on this server, it replays recorded runs only',
+  not_found: 'the recording this result came from is no longer served here',
 };
 
 /** How a replayed result was recorded. */

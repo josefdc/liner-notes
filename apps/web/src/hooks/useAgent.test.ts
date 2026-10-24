@@ -242,22 +242,78 @@ describe('useAgent track picker', () => {
     expect(analysis.closed).toBe(true);
   });
 
-  it('asks for the picked track itself when its resume is refused because live analysis is unavailable', async () => {
+  /** GET /api/replays answers with these recordings. */
+  const recordings = (...replays: Array<{ id: string; title: string; artist: string }>) =>
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            replays: replays.map((r) => ({ ...r, album: 'A', recordedAt: '2026-10-22T14:03:00Z' })),
+          }),
+          { status: 200 },
+        ),
+    );
+  const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  it('replays the recording of the very track picked when its resume is refused', async () => {
+    // Recorded under its own title, which the query names alone.
+    recordings({ id: 'c2', title: 'Hurt (Recorded)', artist: 'Nine Inch Nails' });
     const { hook } = openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2');
     });
     const resume = lastStream();
     resume.send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    await settle();
 
     const search = lastStream();
     expect(search).not.toBe(resume);
-    expect(search.url).toContain('/analyze/stream?query=Hurt%20Nine%20Inch%20Nails');
+    expect(search.url).toContain('/analyze/stream?query=Hurt%20(Recorded)%20Nine%20Inch%20Nails');
     expect(hook.result.current.status).not.toBe('error');
-    // That search refused too (no recording): the paused state, with its code.
-    search.send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    // The reason stays in the log of the new run.
+    expect(hook.result.current.logs.map((log) => log.message)).toContain(
+      'Live analysis is unavailable: replaying the recording of the track you picked.',
+    );
+    search.send({ type: 'complete', data: track });
+    expect(hook.result.current.status).toBe('complete');
+  });
+
+  it('never shows another take than the one picked', async () => {
+    // c1 shares the picked track's title, but only c1 is recorded.
+    recordings({ id: 'c1', title: 'Hurt', artist: 'Nine Inch Nails' });
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    lastStream().send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    await settle();
+    expect(streams()).toHaveLength(2);
+    expect(hook.result.current.status).toBe('error');
     expect(hook.result.current.errorCode).toBe('budget_exhausted');
-    expect(streams()).toHaveLength(3);
+
+    // And when the recordings cannot be listed: the refusal as well.
+    fetchSpy.mockImplementation(async () => new Response('{}', { status: 503 }));
+    const second = openPicker();
+    await act(async () => {
+      await second.hook.result.current.selectCandidate('c2');
+    });
+    lastStream().send({ type: 'error', code: 'live_disabled', error: 'off' });
+    await settle();
+    expect(second.hook.result.current.errorCode).toBe('live_disabled');
+  });
+
+  it('does not show a replayed result of another track than the one asked for', async () => {
+    recordings({ id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails' });
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    lastStream().send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    await settle();
+    lastStream().send({ type: 'complete', data: { ...track, id: 'someone-else' } });
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.trackData).toBeNull();
   });
 
   it('says a run is a replay from the replay notice on, and ends it as a replay', () => {
@@ -289,6 +345,22 @@ describe('useAgent track picker', () => {
       result.current.analyze('Another');
     });
     expect(result.current.isReplay).toBe(false);
+  });
+
+  it('does not take a run whose model answers came from stored answers for a recording', () => {
+    const { result } = startAnalysis('Hurt Nine Inch Nails');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    // A live run in development with model cassettes: "replay", but no recording time or commit.
+    analysis.send({
+      type: 'complete',
+      data: {
+        ...track,
+        run: { id: 't1', mode: 'replay', recordedAt: null, commit: null, analyzerVersion: null },
+      },
+    });
+    expect(result.current.isReplay).toBe(false);
+    expect(completeLogs(result.current.logs)).toBe(1);
   });
 
   it("does not let the analysis stream's late done close the resume stream", async () => {
@@ -437,6 +509,24 @@ describe('useAgent factoid stream', () => {
     await pending;
     expect(onUnavailable.mock.calls).toEqual([['rate_limited'], ['budget_exhausted']]);
     expect(onFactoid).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a replayed result whose recording is no longer served', async () => {
+    const { result } = renderHook(() => useAgent());
+    const onUnavailable = vi.fn();
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      [],
+      () => {},
+      undefined,
+      onUnavailable,
+      'replay',
+    );
+    lastStream().send({ type: 'error', code: 'not_found', error: 'gone' });
+    lastStream().send({ type: 'done' });
+    await pending;
+    expect(onUnavailable.mock.calls).toEqual([['not_found']]);
   });
 
   it("sends the result's run mode, so more facts stay on its side", async () => {

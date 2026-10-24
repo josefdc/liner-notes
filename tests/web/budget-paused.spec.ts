@@ -56,6 +56,16 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   // The banner is announced and takes the focus from the search form it replaces.
   await expect(banner.getByRole("alert")).toContainText("Live analysis paused");
   await expect(banner.getByRole("heading", { name: "Live analysis paused" })).toBeFocused();
+  // From the banner, the keyboard reaches the recorded track, then "or try a different song",
+  // whose focus is visible.
+  await page.keyboard.press("Tab");
+  await expect(tracks.getByRole("button", { name: /Bright Lines/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  const other = page.getByRole("button", { name: "or try a different song" });
+  await expect(other).toBeFocused();
+  expect(await other.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe("none");
+  await page.keyboard.press("Shift+Tab");
+  expect(await other.evaluate((el) => getComputedStyle(el).boxShadow)).toBe("none");
 
   // Picking it analyses its title and artist, which the API answers with the recording.
   await tracks.getByRole("button", { name: /Bright Lines/ }).click();
@@ -152,7 +162,11 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   await expect(page.getByText(/Scanning Spotify catalog/)).toHaveCount(0);
 
   await releaseStream(page, "rest");
-  await expect(page.getByText("RECORDING READY // ENTERING COMMAND CENTER")).toBeAttached();
+  const ready = page.locator("span", { hasText: "REPLAY READY // ENTERING COMMAND CENTER" });
+  await expect(ready).toBeAttached();
+  // Revealed whole: the line fits the 40ch the reveal animation stops at.
+  await animationsSettled(page);
+  expect(await ready.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(page.getByText("INTEL READY", { exact: false })).toHaveCount(0);
   await expect(page.getByRole("log")).toContainText(
     "Recorded analysis replayed. Nothing was analysed live.",
@@ -198,9 +212,13 @@ test("a track picked after the budget tripped replays its recording", async ({ p
   await useMockApi(page, loadFixture("budget-paused-picker"));
   await page.goto("/");
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: /Test Artist/ }).click();
+  // The studio take (2001), the one with a recording.
+  await page.getByRole("button", { name: /Test Artist • 2001/ }).click();
 
-  // The resume is refused (budget spent); the picked track itself is asked for, and replays.
+  // The resume is refused (budget spent); the recording of that very track is replayed.
+  await expect(page.getByRole("log")).toContainText(
+    "Live analysis is unavailable: replaying the recording of the track you picked.",
+  );
   await expect(page.getByRole("log")).toContainText("Replaying an analysis recorded on");
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
@@ -209,5 +227,23 @@ test("a track picked after the budget tripped replays its recording", async ({ p
   await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
     "Recorded run · 22 Oct 2026 · replayed",
   );
+  expect(problems).toEqual([]);
+});
+
+test("a picked take without a recording ends paused, never with another take's recording", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await useMockApi(page, loadFixture("budget-paused-picker"));
+  await page.goto("/");
+  await search(page, "Bright Lines");
+  // The live take (2004): same title and artist as the recorded studio take, no recording.
+  await page.getByRole("button", { name: /Test Artist • 2004/ }).click();
+
+  await expect(page.getByRole("region", { name: "Live analysis paused" })).toBeVisible();
+  const requests = await apiRequests(page);
+  expect(requests).toContain("fetch /api/replays");
+  expect(requests.filter((r) => r.startsWith("stream /api/analyze/stream?"))).toHaveLength(1);
+  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toHaveCount(0);
   expect(problems).toEqual([]);
 });

@@ -28,7 +28,8 @@ import { defaultAgentRuntime } from "../../agent/runtime.js";
 import { isLlmError } from "../../llm/errors.js";
 import type { LlmPurpose } from "../../config/settings.js";
 import { type Llm, type LlmMessage, llm } from "../../llm/invoke.js";
-import { chooseReplay } from "../../replay/mode.js";
+import { chooseReplay, type ReplayChoice, recordingFor } from "../../replay/mode.js";
+import type { ReplaySet } from "../../replay/records.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
@@ -175,6 +176,7 @@ const STREAM_ERRORS = {
   rate_limited: "The model is busy. Please try again later.",
   budget_exhausted: "Live model calls are paused for now.",
   live_disabled: "Live facts are not available here. Only recorded tracks have facts.",
+  not_found: "The recording this result came from is no longer served, so it has no more facts.",
   failed: "This fact could not be generated.",
 } as const;
 
@@ -350,7 +352,7 @@ export function createFactoidsRouter({
    * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled (or
    * budget_exhausted, see above). `mode` (optional: the run.mode of the result the facts add to)
    * keeps them on the result's side whatever live services allow now: a replayed result only
-   * gets facts from its recording (none left, or live_disabled when it is no longer served), and
+   * gets facts from its recording (none left, or not_found when it is no longer served), and
    * a live result never gets recorded facts (the refusal instead).
    *
    * Invalid input is reported in the stream (an EventSource cannot read an error status). When
@@ -371,10 +373,20 @@ export function createFactoidsRouter({
       const { trackTitle, trackArtist, existingIds, mode } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
 
-      const replay = await chooseReplay((records) => records.forTitle(trackTitle, trackArtist), {
-        purpose,
-        resultMode: mode,
-      });
+      const find = (records: ReplaySet) => records.forTitle(trackTitle, trackArtist);
+      let replay: ReplayChoice;
+      if (mode === "replay") {
+        // A replayed result: its recording, or nothing (never live facts).
+        const record = recordingFor(find);
+        if (!record) {
+          error("not_found");
+          stream.done();
+          return;
+        }
+        replay = { kind: "replay", record };
+      } else {
+        replay = await chooseReplay(find, { purpose, resultMode: mode });
+      }
       if (replay.kind === "refused") {
         error(replay.code);
         stream.done();

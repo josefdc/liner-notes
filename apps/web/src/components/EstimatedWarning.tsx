@@ -15,7 +15,7 @@ import {
   moodLabel,
   recordingOf,
 } from '../constants';
-import { recordedDate } from '../utils/recordedDate';
+import { isWholeRecording, recordedDate } from '../utils/recording';
 
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
@@ -243,7 +243,7 @@ export const RecordedRunNotice: React.FC<{
   const recording = recordingOf(track);
   if (!recording) return null;
   const date = recordedDate(recording.recordedAt);
-  const modelOnly = recording.recordedAt === null && recording.commit === null;
+  const modelOnly = !isWholeRecording(track.run);
   const title = modelOnly
     ? 'Model answers replayed · not a live model call'
     : `Recorded run · ${date ?? 'date not recorded'} · replayed`;

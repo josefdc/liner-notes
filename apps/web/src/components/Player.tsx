@@ -18,6 +18,7 @@ import {
   normalizeTrack,
   recordingOf,
 } from '../constants';
+import { resultModeOf } from '../utils/recording';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
@@ -125,8 +126,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
   // How the result was produced: more facts stay on that side (recorded, or live).
-  const resultMode: ResultMode | undefined =
-    track.run?.mode === 'replay' || track.run?.mode === 'live' ? track.run.mode : undefined;
+  const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
   // DECRYPT MORE on a replayed result found no recorded fact that is not shown yet.
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);

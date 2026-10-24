@@ -2,7 +2,7 @@
   "suggestions": [],
   "replays": [
     {
-      "id": "t-showcase",
+      "id": "t-full",
       "title": "Bright Lines",
       "artist": "Test Artist",
       "album": "Test Album",
@@ -35,7 +35,7 @@
             "threadId": "paused-thread",
             "candidates": [
               {
-                "id": "t-showcase",
+                "id": "t-full",
                 "title": "Bright Lines",
                 "artist": "Test Artist",
                 "album": "Test Album",
@@ -43,12 +43,12 @@
                 "releaseYear": "2001"
               },
               {
-                "id": "t-other",
+                "id": "t-live-take",
                 "title": "Bright Lines",
-                "artist": "Another Artist",
-                "album": "Other Album",
+                "artist": "Test Artist",
+                "album": "Live at the Hall",
                 "coverUrl": "",
-                "releaseYear": "1999"
+                "releaseYear": "2004"
               }
             ],
             "message": "Multiple songs found. Please select the correct one."

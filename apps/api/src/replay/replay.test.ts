@@ -1156,19 +1156,15 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
     const recorded = await stream("replay");
     expect(recorded.map((e) => e.type)).toEqual(["connected", "factoid", "done"]);
     expect((recorded[1].data as { id: string }).id).toBe("fb");
-    // Its recording no longer served: refused, never live facts.
+    // Its recording no longer served: said so (not_found), never live facts.
     rmSync(join(replayDir, `${fixture.slug}.json`));
     resetReplaysForTests();
-    expect((await stream("replay")).map((e) => e.code ?? e.type)).toEqual([
-      "live_disabled",
-      "done",
-    ]);
+    const gone = await stream("replay");
+    expect(gone.map((e) => e.code ?? e.type)).toEqual(["not_found", "done"]);
+    expect(String(gone[0].error)).toMatch(/no longer served/);
     // Even with REPLAY_MODE=off.
     vi.stubEnv("REPLAY_MODE", "off");
-    expect((await stream("replay")).map((e) => e.code ?? e.type)).toEqual([
-      "live_disabled",
-      "done",
-    ]);
+    expect((await stream("replay")).map((e) => e.code ?? e.type)).toEqual(["not_found", "done"]);
     noLiveCalls();
   });
 });

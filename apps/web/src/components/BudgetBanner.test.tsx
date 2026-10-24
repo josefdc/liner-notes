@@ -74,7 +74,7 @@ describe('BudgetBanner', () => {
 });
 
 describe('BudgetBanner announcement', () => {
-  it('is an alert and takes the focus, since the search form it replaces is gone', () => {
+  it('is an alert and takes the focus, which the re-mounted search form lost', () => {
     render(
       <BudgetBanner
         code="budget_exhausted"

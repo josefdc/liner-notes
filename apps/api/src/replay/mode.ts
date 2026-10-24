@@ -13,7 +13,7 @@
  * value that is not a mode is taken as "only", so a mistake never spends anything.
  */
 
-import type { ReplayRecord, RunMode } from "@liner-notes/contract";
+import type { ReplayRecord } from "@liner-notes/contract";
 import { defaultAgentRuntime } from "../agent/runtime.js";
 import {
   type LlmPurpose,
@@ -72,31 +72,37 @@ export interface ReplayOptions {
   /** The budget purpose of the live work (see liveRefused). */
   purpose?: LlmPurpose;
   /**
-   * How the result the request is about was produced, when the client says so: more of a
-   * replayed result only ever comes from its recording, and more of a live result never does,
-   * whatever live services allow at the moment.
+   * The request is about a live result (the client says so): more of it never comes from a
+   * recording, whatever live services allow at the moment. More of a replayed result only ever
+   * comes from its recording: see recordingFor.
    */
-  resultMode?: RunMode;
+  resultMode?: "live";
 }
 
 /**
  * How to answer a request for the track `find` looks up among the records: live when live
  * services may be used, else that track's recording, else refused with the reason live
- * services may not be used (live_disabled or budget_exhausted). With `resultMode` the answer
- * stays on that side: a replayed result gets its recording or live_disabled, a live result gets
- * live services or the refusal.
+ * services may not be used (live_disabled or budget_exhausted). For a live result
+ * (`resultMode: "live"`) a refusal is never answered with a recording.
  */
 export async function chooseReplay(
   find: (records: ReturnType<typeof replays>) => ReplayRecord | null,
   { env = process.env, purpose, resultMode }: ReplayOptions = {},
 ): Promise<ReplayChoice> {
-  if (resultMode === "replay") {
-    const record = find(replays(env));
-    return record ? { kind: "replay", record } : { kind: "refused", code: "live_disabled" };
-  }
   const refused = await liveRefused(env, purpose);
   if (!refused) return { kind: "live" };
   if (resultMode === "live") return { kind: "refused", code: refused };
   const record = find(replays(env));
   return record ? { kind: "replay", record } : { kind: "refused", code: refused };
+}
+
+/**
+ * The recording a replayed result came from, whatever REPLAY_MODE and the budget say: more of a
+ * replayed result only ever comes from there. Null when it is no longer served.
+ */
+export function recordingFor(
+  find: (records: ReturnType<typeof replays>) => ReplayRecord | null,
+  env: NodeJS.ProcessEnv = process.env,
+): ReplayRecord | null {
+  return find(replays(env));
 }

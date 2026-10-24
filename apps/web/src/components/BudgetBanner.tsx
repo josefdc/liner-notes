@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { CirclePause, Disc3 } from 'lucide-react';
 import { fetchReplays, type ReplayTrack } from '../hooks/agent/apiClient';
-import { recordedDate } from '../utils/recordedDate';
+import { recordedDate } from '../utils/recording';
 import { LIVE_UNAVAILABLE_COPY, type LiveUnavailableCode } from '../liveUnavailable';
 
 interface BudgetBannerProps {
@@ -32,8 +32,9 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
   const { title, text } = LIVE_UNAVAILABLE_COPY[code];
   const headingRef = useRef<HTMLHeadingElement>(null);
 
-  // The search form the user just submitted is gone: the banner takes the focus, so keyboard
-  // and screen-reader users land on the explanation and the recorded tracks after it.
+  // The search form is mounted again after the analysis view, so the focus the user had on it
+  // is lost: the banner takes it, so keyboard and screen-reader users land on the explanation
+  // and the recorded tracks after it.
   useEffect(() => {
     headingRef.current?.focus();
   }, []);

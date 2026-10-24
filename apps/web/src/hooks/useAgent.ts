@@ -22,8 +22,9 @@ import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
 import type { AgentState, ResultMode, UseAgentReturn, SearchCandidate } from './agent/types';
 import { isLiveUnavailable } from '../liveUnavailable';
+import { isWholeRecording } from '../utils/recording';
 import { API_BASE_URL } from './agent/types';
-import { fetchSuggestions } from './agent/apiClient';
+import { fetchReplays, fetchSuggestions } from './agent/apiClient';
 import {
   type AnalysisEvent,
   eventSchemasLoaded,
@@ -89,6 +90,16 @@ interface Run {
   picked: SearchCandidate | null;
   /** The API said this run is a replay of a recorded run. */
   replay: boolean;
+  /** A result for any other track is not shown (a recording asked for by the track's id). */
+  expectedTrackId: string | null;
+}
+
+/** How `analyze` was asked for, when not by the user's own search. */
+interface AnalyzeOptions {
+  /** A log line saying why this search started. */
+  note?: string;
+  /** Only a result for this track is shown. */
+  expectedTrackId?: string;
 }
 
 function newRun(query: string): Run {
@@ -101,6 +112,7 @@ function newRun(query: string): Run {
     events: newRunEvents(),
     picked: null,
     replay: false,
+    expectedTrackId: null,
   };
 }
 
@@ -146,7 +158,9 @@ export function useAgent(): UseAgentReturn {
   const [initialRun] = useState(() => newRun(''));
   const runRef = useRef<Run>(initialRun);
   // `analyze`, for the stream handlers defined before it.
-  const analyzeRef = useRef<((query: string) => Promise<void>) | null>(null);
+  const analyzeRef = useRef<((query: string, options?: AnalyzeOptions) => Promise<void>) | null>(
+    null,
+  );
   // The run's open stream and the function that closes it (and stops its watchdog).
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
 
@@ -276,8 +290,14 @@ export function useAgent(): UseAgentReturn {
         }
 
         case 'complete': {
+          if (run.expectedTrackId !== null && data.data?.id !== run.expectedTrackId) {
+            close();
+            fail(run, 'The recording found is not the track you picked, so it is not shown.');
+            break;
+          }
           run.phase = 'complete';
-          run.replay ||= data.data?.run?.mode === 'replay';
+          // A whole recording, not a live run whose model answers came from stored answers.
+          run.replay ||= isWholeRecording(data.data?.run);
           const replay = run.replay;
           setState((prev) => ({
             ...prev,
@@ -300,15 +320,30 @@ export function useAgent(): UseAgentReturn {
         case 'error': {
           close();
           // The pick could not resume live (the budget tripped while the picker was open, or
-          // live analysis is off): ask for the picked track itself, which replays its
-          // recording when there is one, and otherwise says why nothing runs.
+          // live analysis is off). When the very track picked has a recording, that recording
+          // is replayed; another take with the same title and artist is not the track picked,
+          // so anything else ends with the refusal.
           const picked = run.picked;
           if (picked && isLiveUnavailable(data.code) && runRef.current === run) {
-            addLog(
-              'Live analysis is unavailable; looking for a recording of this track...',
-              'SYS-WARN',
-            );
-            void analyzeRef.current?.(`${picked.title} ${picked.artist}`);
+            const refusal = { message: data.error || 'The analysis failed.', code: data.code };
+            fetchReplays()
+              .then(
+                (tracks) => tracks.find((track) => track.id === picked.id) ?? null,
+                () => null,
+              )
+              .then((recording) => {
+                if (runRef.current !== run) return;
+                if (!recording) {
+                  fail(run, refusal.message, refusal.code);
+                  return;
+                }
+                // The recording's own title and artist name it alone (no two recordings share
+                // them); the result is still checked against the picked id.
+                void analyzeRef.current?.(`${recording.title} ${recording.artist}`, {
+                  note: 'Live analysis is unavailable: replaying the recording of the track you picked.',
+                  expectedTrackId: picked.id,
+                });
+              });
             break;
           }
           fail(run, data.error || 'The analysis failed.', data.code);
@@ -390,13 +425,16 @@ export function useAgent(): UseAgentReturn {
    * Analyze a song with streaming
    */
   const analyze = useCallback(
-    async (query: string) => {
+    async (query: string, options: AnalyzeOptions = {}) => {
       runRef.current.controller.abort();
       const run = newRun(query);
+      run.expectedTrackId = options.expectedTrackId ?? null;
       runRef.current = run;
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
       addLog(`🔍 Searching for "${query}"...`);
+      // Logged after the reset above, so it stays with the run it explains.
+      if (options.note) addLog(options.note, 'SYS-WARN');
 
       // Waits only on the first search: once the reader is loaded the stream opens at once.
       const ready = readersReady();
@@ -556,13 +594,15 @@ export function useAgent(): UseAgentReturn {
                 break;
 
               case 'error':
-                // The rate limit, a paused budget and live calls switched off are reported to
-                // the caller, which shows them; other failures are logged. Either way the
-                // stream goes on (one failed fact does not fail the others).
+                // The rate limit, a paused budget, live calls switched off and a recording no
+                // longer served are reported to the caller, which shows them; other failures
+                // are logged. Either way the stream goes on (one failed fact does not fail the
+                // others).
                 if (
                   data.code === 'rate_limited' ||
                   data.code === 'budget_exhausted' ||
-                  data.code === 'live_disabled'
+                  data.code === 'live_disabled' ||
+                  data.code === 'not_found'
                 ) {
                   onUnavailable?.(data.code);
                 } else {

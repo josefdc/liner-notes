@@ -481,19 +481,100 @@ def test_the_default_estimator_section_gives_the_criterion_evidence_and_decision
     assert "steadiness check lifted: Acc1" in section
     assert "(12 times as much)" in section and "where `essentia` adds nothing" in section
     assert "Decision: the service keeps `essentia` under the current withholding rules." in section
-    assert "beat-this also has no key" in section
+    assert "`beat-this` also has no key" in section
+    assert "as served: shown but wrong even forgiving octave and meter (Acc2)" in section
+
+
+def v(candidate, default, p, n=200):
+    return {"candidate": candidate, "default": default, "n": n, "p": p}
+
+
+def w(candidate, default, p):
+    return {**v(candidate, default, p), "shownCandidate": 58, "shownDefault": 73}
+
+
+def evidence(**row):
+    base = {
+        "name": "beat-this",
+        "data": "giantsteps-tempo",
+        "served1": v(46, 42, 0.572),
+        "served2": v(57, 57, 1.0),
+        "wrong1": w(12, 31, 0.0026),
+        "wrong2": w(1, 16, 0.0003),
+        "steady": v(150, 98, 1e-8),
+        "every": v(153, 115, 4e-5),
+    }
+    return {
+        "default": "essentia",
+        "candidates": ["beat-this"],
+        "rows": [{**base, **row}],
+        "cost": cost_run(),
+    }
 
 
 def test_the_decision_follows_the_numbers():
     from evals_audio.report import decision_lines
 
-    run = {"dataset": {"name": "giantsteps-tempo"}}
-    win = ("beat-this", run, {"candidate": 39, "default": 26, "n": 50, "p": 0.011})
-    served = decision_lines("essentia", ["beat-this"], [win], [], None)
+    served = decision_lines(evidence(served1=v(80, 42, 0.001)))
     assert "meets the accuracy part of the criterion" in served[0]
-    lifted = decision_lines("essentia", ["beat-this"], [], [win], None)
-    assert "keeps `essentia`" in lifted[0] and "39 vs 26 of 50, p = 0.011" in lifted[0]
-    assert "revisited once those rules" in lifted[0]
+
+    text = decision_lines(evidence())[0]
+    assert text.startswith("Decision: the service keeps `essentia` under the current")
+    # Wrong tempos shown: both measures, with their own p-values.
+    assert (
+        "`beat-this` shows fewer wrong tempos than `essentia` on giantsteps-tempo (1 vs 16 "
+        "wrong even forgiving octave and meter, p < 0.001; 12 vs 31 on the strict 4 % "
+        "measure, p = 0.003)"
+    ) in text
+    assert "input to recalibrating the withholding rules" in text
+    # The cost clause comes from the cost run, for this candidate.
+    assert "`beat-this` costs more than `essentia`: 12 times the CPU" in text
+    assert "700.0 MB installed + 81.1 MB model added to the service image" in text
+    # Both lifted views, each named.
+    assert "with only the steadiness check lifted, 150 vs 98 of 200, p < 0.001" in text
+    assert "with every rule lifted, 153 vs 115 of 200, p < 0.001" in text
+
+    worse = decision_lines(evidence(wrong1=w(40, 31, 0.01), wrong2=w(30, 16, 0.01)))[0]
+    assert "shows more wrong tempos than `essentia`" in worse and "weighs against it" in worse
+    plain = decision_lines(evidence(wrong1=w(30, 31, 1.0), wrong2=w(16, 16, 1.0)))[0]
+    assert "wrong tempos" not in plain
+
+
+def test_a_cheaper_candidate_is_not_said_to_cost_more():
+    from evals_audio.report import decision_lines
+
+    ev = evidence(name="librosa")
+    ev["candidates"] = ["librosa"]
+    cheap = cost_run()
+    cheap["memory"]["librosa"] = memory(0.05, 600_000_000)
+    cheap["install"]["librosa"] = {"extra": None, **install([], [])}
+    ev["cost"] = cheap
+    text = decision_lines(ev)[0]
+    assert "`librosa` costs no more than `essentia`: 0.17 times the CPU" in text
+    assert "costs more" not in text and "no key" not in text
+
+
+def test_the_wrong_shown_counts_come_from_the_rows_on_the_same_clips():
+    from evals_audio.report import wrong_shown
+
+    def rows(*scores):
+        return [
+            {"trackId": f"t{i}", "scores": None if s is None else {"acc1": s, "acc2": s}}
+            for i, s in enumerate(scores)
+        ]
+
+    run = {"tracks": {"a": rows(0.0, 0.0, 1.0, None), "b": rows(1.0, 0.0, None, 0.0)}}
+    out = wrong_shown(run, "a", "b", "acc1")
+    assert out == {
+        "candidate": 2,
+        "default": 2,
+        "shownCandidate": 3,
+        "shownDefault": 3,
+        "n": 4,
+        "p": 1.0,
+    }
+    run["tracks"]["b"] = rows(1.0)
+    assert wrong_shown(run, "a", "b", "acc1") is None  # not the same clips
 
 
 def test_p_values_under_a_thousandth_are_never_shown_as_zero():
@@ -520,8 +601,9 @@ def test_every_printed_p_value_is_counted():
     shown_tempo_pairs = (1 + 3) * 2 * 2  # Ballroom without beat-this, GiantSteps all three
     golden_pairs = 1 * 2 * 2  # Deezer only: the sheet-music tempo table is empty
     styles = 3
-    lifted = (2 + 1) * 2  # librosa on both runs, beat-this on GiantSteps; two views each
-    expected = shown_tempo_pairs + golden_pairs + styles + ranking + lifted
+    # librosa on both runs, beat-this on GiantSteps; two wrong-shown and two lifted tests each.
+    default_table = (2 + 1) * 4
+    expected = shown_tempo_pairs + golden_pairs + styles + ranking + default_table
     assert count_p_values(doc) == expected
     assert f"This report gives {expected} distinct ones" in text
 

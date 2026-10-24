@@ -18,7 +18,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from .metrics import MIN_CURVE_ANSWERED
+from .metrics import MIN_CURVE_ANSWERED, mcnemar_exact
 from .runner import METRIC_LABELS, METRICS, SEVERAL_RULES
 from .storage import human
 
@@ -510,26 +510,23 @@ def count_p_values(doc: dict) -> int:
         for curve in (run.get("coverage") or {}).values():
             count += sum(1 for r in (curve.get("ranking") or {}).values() if r["p"] is not None)
         count += len((run.get("styles") or {}).get("versusBaseline") or {})
-    return count + lifted_test_count(doc)
+    return count + default_test_count(doc)
 
 
-def lifted_test_count(doc: dict) -> int:
-    """The p-values the default-estimator table adds: its lifted-rule comparisons."""
+def default_test_count(doc: dict) -> int:
+    """
+    The p-values the default-estimator table adds to the run sections: the wrong-shown and
+    the lifted-rule comparisons (the as-served ones repeat a run's pair table).
+    """
     if is_legacy(doc):
         return 0
-    tempo = [r for r in doc["runs"] if r["suite"] == "tempo" and r.get("serviceDefault")]
-    if not tempo:
+    evidence = default_evidence(doc)
+    if evidence is None:
         return 0
-    default = tempo[0]["serviceDefault"]
-    count = 0
-    for run in tempo:
-        for name in run["summaries"]:
-            if name == default or name in run.get("trainedOn", []):
-                continue
-            for key in ("steadinessOnly", "everyRule"):
-                view = (run.get("lifted") or {}).get(key) or {}
-                count += versus(view.get("paired", []), name, default, "acc1") is not None
-    return count
+    return sum(
+        sum(1 for key in ("wrong1", "wrong2", "steady", "every") if row.get(key) is not None)
+        for row in evidence["rows"]
+    )
 
 
 def p_value_note(doc: dict) -> str:
@@ -807,14 +804,15 @@ def bakeoff_cell(kind: str, run: dict, metric: str, name: str) -> str:
     if metric == "time":
         median = m["perClip"]["medianWallSeconds"]
         return "–" if median is None else f"{median:.2f} s"
-    return image_cost(run, name)
+    cost = image_cost(run, name)
+    return "nothing (already in the image)" if cost == "nothing" else cost
 
 
 def image_cost(run: dict, name: str) -> str:
     image = run["install"][name]["serviceImage"]
     models = (run.get("modelFiles") or {}).get(name)
     if not image["packages"] and not models:
-        return "nothing (already in the image)"
+        return "nothing"
     extra = f" + {human(models['bytes'])} model" if models else ""
     return f"{human(image['installedBytes'])} installed{extra}"
 
@@ -824,8 +822,9 @@ def image_cost(run: dict, name: str) -> str:
 CRITERION = (
     "an estimator replaces the default when, on data it was not trained on, it gives more "
     "correct tempos (Acc1: within 4 %) over n than the default as the service serves them "
-    "(withholding rules included), with an exact McNemar p under 0.05 on the same clips, and its cost to the "
-    "image, the memory and the analysis time is worth that gain. The cost is weighed, not "
+    "(withholding rules included), with an exact McNemar p under 0.05 on the same clips, and "
+    "its cost to the image, the memory and the analysis time is worth that gain. The tempos it "
+    "shows that are wrong (a wrong BPM shown as measured) and the cost are weighed, not "
     "thresholded."
 )
 
@@ -855,49 +854,87 @@ def versus(pairs: list[dict], candidate: str, default: str, metric: str) -> dict
     return {"candidate": c, "default": d, "n": pair["allN"]["n"], "p": r["mcnemarP"]}
 
 
+def wrong_shown(run: dict, candidate: str, default: str, metric: str) -> dict | None:
+    """
+    Tempos each estimator returned that are wrong on `metric` (shown to a user as measured),
+    on the same clips, with the exact McNemar p on the clips where only one of them is wrong.
+    From the run's per-clip rows.
+    """
+    rows_c = {r["trackId"]: r for r in run["tracks"].get(candidate, [])}
+    rows_d = {r["trackId"]: r for r in run["tracks"].get(default, [])}
+    if not rows_c or set(rows_c) != set(rows_d):
+        return None
+
+    def wrong(r) -> bool:
+        return r.get("scores") is not None and r["scores"][metric] == 0.0
+
+    ids = sorted(rows_c)
+    only_c = sum(1 for t in ids if wrong(rows_c[t]) and not wrong(rows_d[t]))
+    only_d = sum(1 for t in ids if wrong(rows_d[t]) and not wrong(rows_c[t]))
+    return {
+        "candidate": sum(1 for t in ids if wrong(rows_c[t])),
+        "default": sum(1 for t in ids if wrong(rows_d[t])),
+        "shownCandidate": sum(1 for t in ids if rows_c[t].get("scores") is not None),
+        "shownDefault": sum(1 for t in ids if rows_d[t].get("scores") is not None),
+        "n": len(ids),
+        "p": mcnemar_exact(only_c, only_d),
+    }
+
+
 def versus_cell(v: dict | None) -> str:
     if v is None:
         return "–"
     return f"{v['candidate']} vs {v['default']} of {v['n']}, p {pval(v['p'])}"
 
 
-def default_section(doc: dict) -> list[str]:
+def wrong_cell(v: dict | None) -> str:
+    if v is None:
+        return "–"
+    return (
+        f"{v['candidate']} of {v['shownCandidate']} shown vs {v['default']} of "
+        f"{v['shownDefault']}, p {pval(v['p'])}"
+    )
+
+
+def significant(v: dict | None, more: bool) -> bool:
+    """v's candidate count is significantly above (more) or below the default's."""
+    if v is None or v["p"] >= 0.05:
+        return False
+    return v["candidate"] > v["default"] if more else v["candidate"] < v["default"]
+
+
+def default_evidence(doc: dict) -> dict | None:
+    """Every candidate against the service's default, on the data it was not trained on."""
     tempo = [r for r in doc["runs"] if r["suite"] == "tempo" and r.get("serviceDefault")]
     if not tempo:
-        return []
+        return None
     default = tempo[0]["serviceDefault"]
-    candidates = [n for r in tempo for n in r["summaries"] if n != default]
-    candidates = list(dict.fromkeys(candidates))
+    candidates = list(dict.fromkeys(n for r in tempo for n in r["summaries"] if n != default))
     if not candidates:
-        return []
+        return None
     golden = next((r for r in doc["runs"] if r["suite"] == "golden"), None)
-    cost = next((r for r in doc["runs"] if r["suite"] == "cost"), None)
-    rows, served_wins, lifted_wins = [], [], []
+    rows = []
     for name in candidates:
         for run in tempo:
             if name not in run["summaries"] or name in run.get("trainedOn", []):
                 continue
             lifted = run.get("lifted") or {}
-            served = [versus(run["paired"], name, default, m) for m in ("acc1", "acc2")]
-            steady = versus(
-                (lifted.get("steadinessOnly") or {}).get("paired", []), name, default, "acc1"
+            steady, every = (
+                versus((lifted.get(key) or {}).get("paired", []), name, default, "acc1")
+                for key in ("steadinessOnly", "everyRule")
             )
-            every = versus((lifted.get("everyRule") or {}).get("paired", []), name, default, "acc1")
             rows.append(
-                [f"`{name}`", run["dataset"]["name"]]
-                + [versus_cell(v) for v in (*served, steady, every)]
+                {
+                    "name": name,
+                    "data": run["dataset"]["name"],
+                    "served1": versus(run["paired"], name, default, "acc1"),
+                    "served2": versus(run["paired"], name, default, "acc2"),
+                    "wrong1": wrong_shown(run, name, default, "acc1"),
+                    "wrong2": wrong_shown(run, name, default, "acc2"),
+                    "steady": steady,
+                    "every": every,
+                }
             )
-            # The criterion is Acc1; Acc2 (octave and meter errors forgiven) is context.
-            served_wins += [
-                (name, run, v)
-                for v in served[:1]
-                if v and v["p"] < 0.05 and v["candidate"] > v["default"]
-            ]
-            lifted_wins += [
-                (name, run, v)
-                for v in (steady, every)
-                if v and v["p"] < 0.05 and v["candidate"] > v["default"]
-            ]
         if golden:
             block = (
                 golden["agreement"].get("deezer-bpm-unseen") or golden["agreement"]["deezer-bpm"]
@@ -905,17 +942,38 @@ def default_section(doc: dict) -> list[str]:
             agree = [versus(block["paired"], name, default, m) for m in ("acc1", "acc2")]
             if name in block["summaries"] and any(agree):
                 rows.append(
-                    [f"`{name}`", "golden previews, agreement with Deezer `bpm`"]
-                    + [versus_cell(v) for v in agree]
-                    + ["–", "–"]
+                    {
+                        "name": name,
+                        "data": "golden previews, agreement with Deezer `bpm`",
+                        "served1": agree[0],
+                        "served2": agree[1],
+                        "golden": True,
+                    }
                 )
+    cost = next((r for r in doc["runs"] if r["suite"] == "cost"), None)
+    return {"default": default, "candidates": candidates, "rows": rows, "cost": cost}
+
+
+def default_section(doc: dict) -> list[str]:
+    evidence = default_evidence(doc)
+    if evidence is None:
+        return []
+    default, candidates, cost = evidence["default"], evidence["candidates"], evidence["cost"]
     head = [
         "candidate",
         f"data (against `{default}`)",
-        "as served: Acc1",
-        "as served: Acc2",
-        "steadiness check lifted: Acc1",
-        "every rule lifted: Acc1",
+        "as served: Acc1 correct",
+        "as served: Acc2 correct",
+        "as served: shown but wrong (Acc1)",
+        "as served: shown but wrong even forgiving octave and meter (Acc2)",
+        "steadiness check lifted: Acc1 correct",
+        "every rule lifted: Acc1 correct",
+    ]
+    rows = [
+        [f"`{r['name']}`", r["data"], versus_cell(r["served1"]), versus_cell(r["served2"])]
+        + [wrong_cell(r.get(k)) for k in ("wrong1", "wrong2")]
+        + [versus_cell(r.get(k)) for k in ("steady", "every")]
+        for r in evidence["rows"]
     ]
     out = [
         "## Default estimator",
@@ -926,66 +984,132 @@ def default_section(doc: dict) -> list[str]:
         "",
         f"Criterion: {CRITERION}",
         "",
-        f"Evidence in this report, each candidate against `{default}` on the same clips "
-        "(correct / n of each, exact McNemar p), on data the candidate was not trained on:",
+        f"Evidence in this report, each candidate against `{default}` on the same clips, on data "
+        "the candidate was not trained on: correct / n of each, and the tempos each showed that "
+        "are wrong (out of those it showed), with exact McNemar p-values. The golden row is "
+        "agreement with Deezer's estimate, not accuracy.",
         "",
         *table(head, rows),
         "",
     ]
     if cost:
         out += cost_lines(cost, default, candidates) + [""]
-    out += decision_lines(default, candidates, served_wins, lifted_wins, cost)
+    out += decision_lines(evidence)
     return out
+
+
+def cost_figures(cost: dict, name: str, default: str) -> dict | None:
+    m, base = cost["memory"].get(name), cost["memory"].get(default)
+    if m is None or base is None:
+        return None
+    a, b = m["perClip"]["medianCpuSeconds"], base["perClip"]["medianCpuSeconds"]
+    image = cost["install"][name]["serviceImage"]
+    models = (cost.get("modelFiles") or {}).get(name)
+    return {
+        "ratio": a / b if a and b else None,
+        "cpu": a,
+        "defaultCpu": b,
+        "adds": bool(image["packages"]) or bool(models),
+        "image": image_cost(cost, name),
+    }
 
 
 def cost_lines(cost: dict, default: str, candidates: list[str]) -> list[str]:
     out = []
     base = cost["memory"].get(default)
     for name in candidates:
-        m = cost["memory"].get(name)
-        if m is None or base is None:
+        m, figures = cost["memory"].get(name), cost_figures(cost, name, default)
+        if figures is None:
             continue
-        a, b = m["perClip"]["medianCpuSeconds"], base["perClip"]["medianCpuSeconds"]
-        ratio = f" ({a / b:.2g} times as much)" if a and b else ""
+        ratio = "" if figures["ratio"] is None else f" ({figures['ratio']:.2g} times as much)"
         out.append(
-            f"- Cost of `{name}` against `{default}`: {a} s against {b} s of CPU per analysed "
-            f"clip{ratio}; peak RSS {human(m['peakRssBytes'])} against "
-            f"{human(base['peakRssBytes'])}; it adds {image_cost(cost, name)} to the service "
-            f"image, where `{default}` adds {image_cost(cost, default)}."
+            f"- Cost of `{name}` against `{default}`: {figures['cpu']} s against "
+            f"{figures['defaultCpu']} s of CPU per analysed clip{ratio}; peak RSS "
+            f"{human(m['peakRssBytes'])} against {human(base['peakRssBytes'])}; it adds "
+            f"{figures['image']} to the service image, where `{default}` adds "
+            f"{image_cost(cost, default)}."
         )
     return out
 
 
-def decision_lines(default, candidates, served_wins, lifted_wins, cost) -> list[str]:
+def decision_lines(evidence: dict) -> list[str]:
+    default, cost = evidence["default"], evidence["cost"]
+    annotated = [r for r in evidence["rows"] if not r.get("golden")]
+    served_wins = [r for r in annotated if significant(r["served1"], more=True)]
     if served_wins:
-        names = ", ".join(sorted({f"`{n}`" for n, _, _ in served_wins}))
+        names = ", ".join(sorted({f"`{r['name']}`" for r in served_wins}))
         return [
             f"As served, {names} meets the accuracy part of the criterion on data it was not "
             "trained on; whether its cost is worth it is the open decision.",
             "",
         ]
-    out = [
+    parts = [
         f"Decision: the service keeps `{default}` under the current withholding rules. As "
-        "served, no candidate gives significantly more correct tempos on data it was not "
-        "trained on",
+        "served, no candidate gives significantly more correct tempos (Acc1 over n) on data it "
+        "was not trained on."
     ]
+    for r in annotated:
+        w1, w2 = r.get("wrong1"), r.get("wrong2")
+        figures = (
+            f"{w2['candidate']} vs {w2['default']} wrong even forgiving octave and meter, "
+            f"p {pval(w2['p'])}; {w1['candidate']} vs {w1['default']} on the strict 4 % measure, "
+            f"p {pval(w1['p'])}"
+            if w1 and w2
+            else ""
+        )
+        if significant(w2, more=False) or significant(w1, more=False):
+            parts.append(
+                f"As served, `{r['name']}` shows fewer wrong tempos than `{default}` on "
+                f"{r['data']} ({figures}): that weighs for it, and it is an input to "
+                "recalibrating the withholding rules."
+            )
+        elif significant(w2, more=True) or significant(w1, more=True):
+            parts.append(
+                f"As served, `{r['name']}` shows more wrong tempos than `{default}` on "
+                f"{r['data']} ({figures}): that weighs against it."
+            )
     if cost:
-        out[0] += ", and the cost weighs against a change"
-    no_key = [n for n in candidates if n == "beat-this"]
-    if no_key:
-        out[0] += (
-            " (beat-this also has no key: the service would need it for tempo and another estimator for key)"
+        for name in evidence["candidates"]:
+            figures = cost_figures(cost, name, default)
+            if figures is None or figures["ratio"] is None:
+                continue
+            if figures["ratio"] > 1 or figures["adds"]:
+                parts.append(
+                    f"`{name}` costs more than `{default}`: {figures['ratio']:.2g} times the CPU "
+                    f"per analysed clip, and {figures['image']} added to the service image; "
+                    "that weighs against it."
+                )
+            else:
+                parts.append(
+                    f"`{name}` costs no more than `{default}`: {figures['ratio']:.2g} times the "
+                    "CPU per analysed clip, and nothing added to the service image."
+                )
+    if "beat-this" in evidence["candidates"]:
+        parts.append(
+            "`beat-this` also has no key: the service would need it for tempo and another "
+            "estimator for key."
         )
-    out[0] += "."
-    if lifted_wins:
-        name, run, v = lifted_wins[0]
-        out[0] += (
-            f" With the withholding rules lifted, `{name}` is ahead on {run['dataset']['name']} "
-            f"({v['candidate']} vs {v['default']} of {v['n']}, p {pval(v['p'])}), so the "
-            "default is to be revisited once those rules, the steadiness check first, are "
-            "recalibrated."
-        )
-    return out + [""]
+    for r in annotated:
+        if significant(r.get("steady"), more=True) or significant(r.get("every"), more=True):
+            s, e = r.get("steady"), r.get("every")
+            views = []
+            if s:
+                views.append(
+                    f"with only the steadiness check lifted, {s['candidate']} vs {s['default']} "
+                    f"of {s['n']}, p {pval(s['p'])}"
+                )
+            if e:
+                views.append(
+                    f"with every rule lifted, {e['candidate']} vs {e['default']} of {e['n']}, "
+                    f"p {pval(e['p'])}"
+                )
+            parts.append(
+                f"With the withholding rules lifted, `{r['name']}` is ahead on {r['data']} "
+                f"(Acc1 correct / n {'; '.join(views)}), so the default is to be revisited once "
+                "those rules, the steadiness check first, are recalibrated."
+            )
+            break
+    return [" ".join(parts), ""]
 
 
 def agreement_table(suite: str, block: dict) -> list[str]:
@@ -1189,7 +1313,7 @@ def styles_section(st: dict) -> list[str]:
         + ", ".join(f"`{s}`" for s in st["bestConstant"])
         + ".",
         f"- {st['outsideTaxonomy']} of the {st['n']} releases have no genre and style pair "
-        "among the model's 400 styles, so no top-k can hit them.",
+        "among the model's styles, so no top-k can hit them.",
     ]
     differ = sum(1 for t in st["tracks"] if t["stylesDiffer"])
     if differ:

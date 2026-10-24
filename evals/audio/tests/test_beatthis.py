@@ -148,3 +148,13 @@ def test_a_corrupted_checkpoint_on_disk_is_fetched_again(tmp_path, monkeypatch):
         == path
     )
     assert path.read_bytes() == payload
+
+
+def test_beats_that_change_tempo_are_not_steady_and_the_service_serves_no_tempo(signals):
+    change = np.concatenate([np.arange(0.0, 6.0, 0.6), np.arange(6.0, SECONDS - 0.01, 60 / 130)])
+    est = FixedBeats(change)
+    tempo = est.tempo(signals)
+    assert tempo is not None and tempo.steady is False
+    assert service.analyze(signals, est)["tempo"] is None
+    # The same signals with steady beats are served.
+    assert service.analyze(signals, FixedBeats(grid(BPM)))["tempo"] is not None

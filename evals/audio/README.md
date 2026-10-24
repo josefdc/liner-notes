@@ -10,7 +10,7 @@ per-track results next to it in `audio-<date>.json`.
 cd evals/audio
 uv sync                         # ~0.6 GB: enough for --estimator librosa and the tests
 uv sync --extra models          # adds ~0.6 GB: essentia-tensorflow, for the Essentia estimator
-uv sync --extra models --extra beat-this   # adds ~0.75 GB more: torch (CPU) and beat-this
+uv sync --extra models --extra beat-this   # adds torch (CPU) and beat-this; the cost suite measures it
 uv run python -m evals_audio --suite tempo --dataset ballroom --limit 50
 uv run python -m evals_audio --suite tempo --dataset giantsteps-tempo --limit 50
 uv run python -m evals_audio --suite key --dataset giantsteps-key --limit 50
@@ -52,8 +52,10 @@ The report opens with a bake-off table that puts every tempo estimator's figures
 the service image), with the same runs' figures when the withholding rules are lifted. A
 "Default estimator" section follows: the service's default (read from the service), the
 criterion for changing it, each candidate against the default on data it was not trained on
-(as served and with the rules lifted, exact McNemar), the cost, and the decision those numbers
-support. Pair tables of an estimator on its own training data are not printed. The bake-off
+(as served and with the rules lifted, exact McNemar), the tempos each shows that are wrong
+(strict 4 % and forgiving octave and meter, exact McNemar on the same clips), the cost per
+candidate, and the decision those numbers support. Everything in it is derived from the
+results file at render time. Pair tables of an estimator on its own training data are not printed. The bake-off
 evidence is the GiantSteps Tempo run, which the committed report draws with `--limit 200`.
 
 ### beat-this
@@ -67,7 +69,7 @@ fetched into `<data dir>/models/beat-this/` and checked against its SHA-256; tor
 the PyTorch CPU index. The authors trained `final0` on every dataset they used except GTZAN,
 Ballroom included, so its Ballroom figures are on its own training data: the report marks
 them and they are not evidence about new music. GiantSteps Tempo is not in its training data.
-Five golden songs are in the Harmonix Set, another of its training sets
+Some golden songs are in the Harmonix Set, another of its training sets
 (`beatthis.GOLDEN_IN_TRAINING`, matched by title and artist; a lower bound, since some
 training sets publish numbers or video ids rather than names); the golden suite repeats the
 Deezer comparison without them, for every estimator, and the bake-off table uses that one.
@@ -90,8 +92,9 @@ Deezer comparison without them, for every estimator, and the bake-off table uses
   source and date in `<data dir>/golden/discogs.json`; delete it to fetch them afresh. Only a
   definitive miss is cached (no link, a Discogs 404, no styles); a 429 or 5xx after the
   retries leaves the row out of the cache, so the next run asks again. Requests keep the
-  services' pace (MusicBrainz one a second, Discogs 25 a minute) and send a User-Agent with a
-  contact, as MusicBrainz asks.
+  services' pace (MusicBrainz one a second, Discogs 25 a minute) and send a User-Agent that
+  names the project and its owner's GitHub noreply identity (an identifier, not a monitored
+  mailbox).
 - loads the service's fingerprint models (its own `download_models.py`, into
   `<data dir>/models/essentia/`) and scores hit@k: a top-k style hits when its genre and style
   are both on the Discogs release. The constant baseline gives every track the same k styles
@@ -141,7 +144,7 @@ on their size, and mirdata's own download and extraction are not metered file by
 keeps its indexes in this project's environment (`.venv`), not in the data directory. One run
 at a time holds the directory (`.lock`); partial files left by a killed run are removed at the
 start of the next. Besides the datasets it holds the model files (`models/beat-this/`,
-`models/essentia/`, about 103 MB together, each asked of the budget and checked by SHA-256) and
+`models/essentia/`, each asked of the budget and checked by SHA-256) and
 the golden set's Discogs labels (`golden/discogs.json`); never the Deezer previews.
 
 mirdata 1.0.0 supplies the indexes, the annotations and the per-file MD5s; it does not fetch

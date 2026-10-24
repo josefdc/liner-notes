@@ -335,6 +335,16 @@ DOWNLOAD_ERRORS = (
 )
 
 
+def trained_on_dataset(names: list[str], dataset: str) -> list[str]:
+    """The estimators of a run whose model was trained on `dataset` (shown, never compared)."""
+    return [n for n in names if n == "beat-this" and dataset in beatthis.TRAINED_ON]
+
+
+def without_training_songs(values: dict) -> dict:
+    """Golden values without the songs beat-this was trained on (beatthis.GOLDEN_IN_TRAINING)."""
+    return {i: v for i, v in values.items() if i not in beatthis.GOLDEN_IN_TRAINING}
+
+
 def fetch_checkpoint(root: Path, budget: DiskBudget) -> Path:
     """beat-this's checkpoint in the data directory; network failures as DownloadFailed."""
     try:
@@ -418,7 +428,7 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
         }
     print_summary(args.suite, spec.name, summaries)
     paired = runner.compare_pairs(items, names, metric_names, args.bootstrap_seed)
-    trained_on = [n for n in names if n == "beat-this" and spec.name in beatthis.TRAINED_ON]
+    trained_on = trained_on_dataset(names, spec.name)
     lifted = (
         runner.lifted_views(tracks, names, metric_names, args.bootstrap_seed)
         if args.suite == "tempo" and len(names) > 1
@@ -597,7 +607,7 @@ def run_golden(args, argv: list[str], names: list[str], root: Path, budget: Disk
     if "beat-this" in names:
         blocks["deezer-bpm-unseen"] = golden.agreement(
             "tempo",
-            {i: v for i, v in deezer_bpm.items() if i not in seen},
+            without_training_songs(deezer_bpm),
             analysed,
             names,
             args.bootstrap_seed,

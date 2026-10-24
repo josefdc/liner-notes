@@ -50,7 +50,9 @@ from .metrics import Key, parse_key
 logger = logging.getLogger("evals_audio")
 
 GOLDEN_FILE = Path(__file__).resolve().parents[2] / "golden.jsonl"
-# MusicBrainz asks for a User-Agent with a working contact.
+# MusicBrainz asks for a User-Agent that identifies the client and how to reach its maker. This
+# names the project and its owner's GitHub identity (a noreply address: an identifier, not a
+# monitored mailbox); a reachable contact is the owner's to choose.
 USER_AGENT = "liner-notes-evals/0.0 (77589315+josefdc@users.noreply.github.com)"
 HTTP_TIMEOUT = httpx.Timeout(30.0, connect=15.0)
 DEEZER_TRACK = "https://api.deezer.com/track/{}"

@@ -166,3 +166,41 @@ def test_quieting_keeps_the_http_loggers_at_warning():
     assert logging.getLogger("httpx").level == logging.WARNING
     assert logging.getLogger("httpcore").level == logging.WARNING
     assert isinstance(golden.client(), httpx.Client)
+
+
+def test_the_unseen_comparison_leaves_out_training_songs_end_to_end(stubbed, monkeypatch, tmp_path):
+    from evals_audio import beatthis
+
+    seen = next(iter(beatthis.GOLDEN_IN_TRAINING))
+    rows = [ROW, golden.Row(seen, "rec-3", 3, "documented-samples", None, None)]
+    monkeypatch.setattr(golden, "read_rows", lambda: rows)
+
+    def analyze(tasks, jobs, progress=None, models_dir=None):
+        gate = {"passed": True, "reason": None}
+        block = {"gate": gate, "tempo": {"bpm": 120.0, "confidence": None}, "key": None}
+        return [
+            {"trackId": t[1], "window": {}, "styles": None, "results": dict.fromkeys(t[4], block)}
+            for t in tasks
+        ]
+
+    monkeypatch.setattr(runner, "analyze_all", analyze)
+
+    class WithReport(Args):
+        no_report = False
+        report_dir = tmp_path / "reports"
+
+    root = tmp_path / "data"
+    root.mkdir()
+    names = ["librosa", "beat-this"]
+    assert (
+        cli.run_golden(WithReport, ["--suite", "golden"], names, root, DiskBudget(root, 10**9)) == 0
+    )
+    doc = json.loads(next((tmp_path / "reports").glob("audio-*.json")).read_text())
+    agreement = doc["runs"][0]["agreement"]
+
+    def ids(key):
+        return {r["trackId"] for r in agreement[key]["tracks"]["beat-this"]}
+
+    assert ids("deezer-bpm") == {ROW.isrc, seen}
+    assert ids("deezer-bpm-unseen") == {ROW.isrc}
+    assert doc["runs"][0]["trainedOn"]["beat-this"] == {seen: beatthis.GOLDEN_IN_TRAINING[seen]}

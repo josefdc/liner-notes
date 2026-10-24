@@ -128,15 +128,14 @@ def test_the_key_evidence_and_strength_are_applied_to_the_recorded_key():
     name = "essentia"
     stats = {"tonic": "C", "mode": "major", "strength": 0.8}
     assert cal.derive_key(True, evidence(), stats, name, rules) == ["C", "major"]
-    # No sustained pitch over a beat: the line rules withhold, unless they are off.
+    # No sustained pitch over a beat: withheld at the minimum share of the mix's (or the
+    # harmonic part's) line energy.
     weak = evidence(ratio=0.01)
     assert cal.evidence_withheld(weak, rules, name) == "no sustained pitch"
     assert cal.derive_key(True, weak, stats, name, rules) is None
-    lines_off = rules.set("line_rules_with_beat", False, name)
-    assert cal.derive_key(True, weak, stats, name, lines_off) == ["C", "major"]
-    # ...but the one-source rules still apply over a beat.
-    speech = evidence(ratio=0.01, voice={"withoutNotes": True, "onePitch": False})
-    assert cal.evidence_withheld(speech, lines_off, name) is not None
+    assert cal.derive_key(True, weak, stats, name, rules.set("min_tonal_ratio", 0.0)) is not None
+    harmonic = {**weak, "harmonicTonalRatio": 0.5}
+    assert cal.evidence_withheld(harmonic, rules.set("tonal_source", "harmonic"), name) is None
     # Fewer than three pitch classes, at the level and with the vector chosen.
     two = evidence(classes=(0, 7))
     assert cal.evidence_withheld(two, rules, name) == "fewer than three pitch classes"
@@ -167,32 +166,34 @@ NO_CHANGE = {"fixed": [], "broken": []}
 def test_a_loosening_needs_right_extra_answers_at_every_criterion():
     old = {"n": 100, "old": 40, "oldRight": 32, "oldGross": 2}  # 80 % right, 5 % gross
     passing = comparison(**old, extra=37, extraRight=29, extraGross=4)  # 78.4 % [62.8, 88.6]
-    verdict = cal.judge(passing, {"d": passing}, NO_CHANGE, "key")
+    verdict = cal.judge(passing, {"d": passing}, NO_CHANGE)
     assert verdict["accepted"] and verdict["loosens"]
     few = comparison(**old, extra=1, extraRight=1)
-    assert cal.judge(few, {"d": few}, NO_CHANGE, "key")["failed"] == ["L1"]
+    assert cal.judge(few, {"d": few}, NO_CHANGE)["failed"] == ["L1"]
     diluting = comparison(**old, extra=200, extraRight=130)  # 65 %: 15 points under 80 %
-    assert cal.judge(diluting, {"d": diluting}, NO_CHANGE, "key")["failed"] == ["L2"]
+    assert cal.judge(diluting, {"d": diluting}, NO_CHANGE)["failed"] == ["L2"]
     gross = comparison(**old, extra=40, extraRight=32, extraGross=8)  # 20 % against 5 %
-    assert cal.judge(gross, {"d": gross}, NO_CHANGE, "key")["failed"] == ["L3"]
+    assert cal.judge(gross, {"d": gross}, NO_CHANGE)["failed"] == ["L3"]
     broken = {"fixed": [], "broken": ["a control"]}
-    assert cal.judge(passing, {"d": passing}, broken, "key")["failed"] == ["controls"]
+    assert cal.judge(passing, {"d": passing}, broken)["failed"] == ["L4"]
+    # On the evaluation clips only L1-L3 count (the controls are the ones the choice saw).
+    assert cal.judge(passing, {"d": passing}, broken, held_out=True)["accepted"]
 
 
 def test_a_tightening_needs_a_fixed_control_and_a_small_cost():
     old = {"n": 100, "old": 40, "oldRight": 30}
     cheap = comparison(**old, newRight=30, lost=1, lostRight=0, kept=39, keptRight=30)
     fixed = {"fixed": ["random-notes"], "broken": []}
-    assert cal.judge(cheap, {"d": cheap}, fixed, "key")["accepted"]
-    assert cal.judge(cheap, {"d": cheap}, NO_CHANGE, "key")["failed"] == ["T1"]
+    assert cal.judge(cheap, {"d": cheap}, fixed)["accepted"]
+    assert cal.judge(cheap, {"d": cheap}, NO_CHANGE)["failed"] == ["T1"]
     costly = comparison(**old, newRight=27, lost=3, lostRight=3, kept=37, keptRight=27)
-    assert cal.judge(costly, {"d": costly}, fixed, "key")["failed"] == ["T2"]
+    assert cal.judge(costly, {"d": costly}, fixed)["failed"] == ["T2"]
     # Withholding only right answers fails even when correct / n hardly moves.
     right_only = comparison(**old, newRight=29, lost=1, lostRight=1, kept=39, keptRight=29)
-    assert cal.judge(right_only, {"d": right_only}, fixed, "key")["failed"] == ["T2"]
+    assert cal.judge(right_only, {"d": right_only}, fixed)["failed"] == ["T2"]
     # A change on the controls only, at no cost on the clips, is a tightening that passes.
     free = comparison(**old, newRight=30, kept=40, keptRight=30)
-    assert cal.judge(free, {"d": free}, fixed, "tempo")["accepted"]
+    assert cal.judge(free, {"d": free}, fixed)["accepted"]
 
 
 def row(new, accepted=True, loosens=False, fixed=0, lost=0, value=0.5):
@@ -204,15 +205,16 @@ def row(new, accepted=True, loosens=False, fixed=0, lost=0, value=0.5):
     }
 
 
-def test_the_choice_takes_the_loosest_loosening_or_the_most_useful_tightening():
+def test_the_choice_takes_the_loosest_loosening_or_the_least_strict_tightening():
     assert cal.choose([row(10, False), row(12, loosens=True), row(15, loosens=True)]) == 2
-    assert cal.choose([row(10, False), row(9, fixed=1), row(8, fixed=2, lost=1)]) == 2
-    # Equal fixes: fewest answers withheld, then the least strict (a lower minimum, a higher
-    # tolerance), whatever the order of the grid.
-    rows = [row(9, fixed=1, lost=1, value=0.3), row(10, fixed=1, value=0.5)]
-    assert cal.choose([*rows, row(10, fixed=1, value=0.4)], "strength") == 2
-    drifts = [row(10, fixed=1, value=[6.0, 0.1]), row(10, fixed=1, value=[6.0, 0.12])]
-    assert cal.choose(drifts, "drift") == 1
+    # Tightenings: the least strict that passes (a lower minimum, a higher tolerance),
+    # whatever the controls it fixes and the order of the grid.
+    rows = [row(9, fixed=3, lost=1, value=0.6), row(10, fixed=1, value=0.4)]
+    assert cal.choose([*rows, row(10, False, value=0.3)], "strength") == 1
+    drifts = [row(10, fixed=1, value=[6.0, 0.12]), row(10, fixed=2, value=[6.0, 0.1])]
+    assert cal.choose(drifts, "drift") == 0
+    tolerances = [row(10, fixed=1, value=0.04), row(10, False, value=0.05)]
+    assert cal.choose(tolerances, "tolerance") == 0
     assert cal.choose([row(10, False), row(9, False)]) is None
 
 
@@ -224,7 +226,6 @@ def test_the_baseline_holds_the_values_before_this_calibration():
     assert (b.steady_tolerance, b.steady_lag_frames) == (0.05, 2.0)
     assert set(b.onset_check.values()) == {True}
     assert set(b.drift.values()) == {None}
-    assert set(b.line_rules_with_beat.values()) == {True}
     assert (b.min_tonal_ratio, b.class_vector, b.class_level, b.min_classes) == (
         0.1,
         "lines",
@@ -237,13 +238,13 @@ def test_the_baseline_holds_the_values_before_this_calibration():
 def test_the_service_values_are_read_from_the_service():
     """Pinned: the values this calibration chose, as the service holds them."""
     rules = cal.service_rules()
-    assert rules.min_strength == {"librosa": 0.3, "essentia": 0.7}
-    assert rules.line_rules_with_beat == {"librosa": True, "essentia": False}
-    assert rules.drift == {"librosa": [6.0, 0.12], "essentia": None, "beat-this": None}
+    assert rules.min_strength == {"librosa": 0.45, "essentia": 0.4}
+    assert rules.steady_tolerance == 0.04
+    assert rules.class_level == 0.1
+    assert rules.drift == {"librosa": None, "essentia": None, "beat-this": None}
     assert rules.onset_check == {"librosa": True, "essentia": True, "beat-this": True}
-    unchanged = ("min_periodicity", "min_confidence", "steady_tolerance", "steady_lag_frames")
-    unchanged += ("min_tonal_ratio",)
-    for field in (*unchanged, "class_level", "min_classes"):
+    unchanged = ("min_periodicity", "min_confidence", "steady_lag_frames", "min_tonal_ratio")
+    for field in (*unchanged, "tonal_source", "class_vector", "min_classes"):
         assert getattr(rules, field) == getattr(cal.BASELINE, field), field
 
 
@@ -321,7 +322,7 @@ def test_a_change_that_gives_a_control_a_value_it_should_not_have_is_refused():
     choice = cal.select(runs, ctl["controls"])
     group = next(f for f in choice["families"] if f["family"] == "onset")["groups"][0]
     assert group["candidates"][1]["controls"]["broken"] == ["swing"]
-    assert group["candidates"][1]["verdict"]["failed"] == ["controls"]
+    assert group["candidates"][1]["verdict"]["failed"] == ["L4"]
     assert group["chosen"] is True
 
 
@@ -429,4 +430,4 @@ def test_a_change_that_fails_on_the_evaluation_clips_is_reverted():
     assert change["rows"]["essentia"]["verdict"]["failed"] == ["L1", "L2"]
     assert reverted["rules"]["onset_check"]["essentia"] is True
     doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
-    assert "fails L1, L2; reverted" in render(doc)
+    assert "fails L1, L2: reverted" in render(doc)

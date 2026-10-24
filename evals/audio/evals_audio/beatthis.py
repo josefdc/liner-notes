@@ -149,13 +149,11 @@ def ensure_checkpoint(root: Path, budget: DiskBudget, client: httpx.Client | Non
             client.close()
 
 
-def tempo_from_beats(
-    beats: np.ndarray, signals, onset_check: bool = True, drift_tolerance: float | None = None
-):
+def tempo_from_beats(beats: np.ndarray, signals, onset_check: bool = True):
     """
     The service's rules applied to a list of beat times: None when there are too few beats or
     the median interval is out of range; otherwise the refined tempo and whether it holds
-    (the steadiness check, with or without its onset-tempo part, and its beat-drift test).
+    (the steadiness check, with or without its onset-tempo part).
     """
     from . import service
 
@@ -174,7 +172,7 @@ def tempo_from_beats(
         raw_confidence=None,
         beats=beats,
         method=METHOD,
-        steady=bool(measured.holds(onset_check=onset_check, drift_tolerance=drift_tolerance)),
+        steady=bool(measured.holds(onset_check=onset_check)),
         beats_follow_changes=True,
         steadiness=measured,
     )
@@ -185,10 +183,9 @@ class BeatThisEstimator:
     # beat-this gives no confidence, so there is no minimum to apply (the harness lifts this
     # attribute for calibration as it does for the others; 0 changes nothing).
     min_tempo_confidence = 0.0
-    # Its beats follow tempo changes, as Essentia's do: it takes the service's Essentia settings
-    # for the steadiness check (the onset-tempo part; no beat-drift test).
+    # Its beats follow tempo changes, as Essentia's do: it takes the service's Essentia setting
+    # for the onset-tempo part of the steadiness check.
     steady_onset_check = True
-    steady_drift_tolerance: float | None = None
 
     def __init__(self, checkpoint: str):
         import torch
@@ -212,9 +209,7 @@ class BeatThisEstimator:
         _, estimators = service.load()
         if signals.onset_periodicity < estimators.MIN_TEMPO_PERIODICITY:
             return None
-        return tempo_from_beats(
-            self.beats(signals), signals, self.steady_onset_check, self.steady_drift_tolerance
-        )
+        return tempo_from_beats(self.beats(signals), signals, self.steady_onset_check)
 
     def key(self, signals):
         return None

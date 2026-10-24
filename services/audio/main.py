@@ -63,7 +63,7 @@ logger = logging.getLogger("audio")
 # Version of the analysis output: bump it whenever a measurement can change for the same input
 # (algorithm, parameters, decoder or model change). The full version (analyzer_version())
 # adds the estimator and the model set as semver build metadata.
-ANALYZER_VERSION = "2.0.0"
+ANALYZER_VERSION = "2.1.0"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -109,8 +109,9 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.0.0+essentia.models-1a2b3c4d". Every result and /health carry it; it is part of the
-    API's cache key.
+    "2.1.0+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    cache is keyed by track, not by this version, so a version change does not by itself
+    invalidate cached results.)
     """
     build = [estimator_name or ESTIMATOR.name]
     if MODELS_LOADED:
@@ -263,8 +264,7 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
 
     tempo = _estimate(estimator.tempo, signals, "tempo")
     key = _estimate(estimator.key, signals, "key")
-    lines_with_beat = getattr(estimator, "key_lines_with_beat", True)
-    if key is None and (reason := signals.key_withheld(lines_with_beat)):
+    if key is None and (reason := signals.key_withheld()):
         logger.info("No key: %s", reason)
 
     # A beat grid is trusted when the tempo holds, or when the tracker follows tempo changes;

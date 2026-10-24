@@ -61,7 +61,8 @@ criterion for changing it, each candidate against the default on data it was not
 (strict 4 % and forgiving octave and meter, exact McNemar on the same clips), the cost per
 candidate, and the decision those numbers support. Everything in it is derived from the
 results file at render time. Pair tables of an estimator on its own training data are not printed. The bake-off
-evidence is the GiantSteps Tempo run, which the committed report draws with `--limit 200`.
+evidence is the GiantSteps Tempo run (`--limit 400`, every clip), and, when the report holds the
+calibration runs, the same comparison on each half of their clips and on all of them.
 
 ### Calibration
 
@@ -82,7 +83,9 @@ The controls (`evals_audio/controls.py`) come from the issue's lists of defects 
 generated probes (random chromatic notes, twelve-tone rows, a slow tempo swing, 12/8 at 60
 BPM, a bass-heavy band, noise carrying a siren, several talkers at once, and so on) and from the
 probe sets of the service's own tests, whose generators they reuse
-(`services/audio/tests/signals.py` and `music.py`, loaded by path).
+(`services/audio/tests/signals.py` and `music.py`, loaded by path). They include pitchless material drawn at 30
+seeds each (two drum kits, noise with a beat, a siren over drums, clicks), on which no value was
+set beforehand: none of it may get a key.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

@@ -309,6 +309,8 @@ def probe(name: str) -> np.ndarray:
 GROUPS = {
     "no-key": "no key: atonal, inharmonic or pitchless",
     "one-source": "no key: one held pitch or one voice, or one pitched source over drums",
+    "pitchless-seeded": "no key: drums, noise with a beat, a siren over drums and clicks, 30 "
+    "seeds each, drawn from the seed (tempo, kit, levels, sounds)",
     "music": "music the service's tests expect a key for",
     "no-tempo": "no single tempo",
     "tempo": "a known tempo (octave and meter)",
@@ -587,6 +589,18 @@ def controls() -> list[Control]:
             speech_over_piano,
             tempo=NONE,
             key=("C", "major"),
+        ),
+        # pitchless material at many seeds (services/audio/tests/signals.py PITCHLESS_SEEDED)
+        *(
+            c(
+                f"{family}-s{seed}",
+                "pitchless-seeded",
+                f"pitchless: {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed),
+                key=NONE,
+            )
+            for family, make in s.PITCHLESS_SEEDED.items()
+            for seed in s.UNSEEN_SEEDS
         ),
         # the service's own probe sets (tests/test_v2.py)
         *one_source_controls(),

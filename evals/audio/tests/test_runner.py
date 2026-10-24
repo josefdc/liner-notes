@@ -280,7 +280,7 @@ class FakeSignals:
     def __init__(self, reason):
         self._reason = reason
 
-    def key_withheld(self, lines_with_beat=True):
+    def key_withheld(self):
         return self._reason
 
 

@@ -89,7 +89,8 @@ def write(report_dir: Path, date: str, run: dict) -> tuple[Path, Path]:
     md_path = report_dir / f"audio-{date}.md"
     doc = add_run(load(json_path), run)
     doc["date"] = date
-    json_path.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
+    # Compact: the per-clip records are large; the Markdown is the readable form.
+    json_path.write_text(json.dumps(doc, separators=(",", ":"), ensure_ascii=False) + "\n")
     md_path.write_text(render(doc))
     return md_path, json_path
 
@@ -527,7 +528,8 @@ def default_test_count(doc: dict) -> int:
     evidence = default_evidence(doc)
     if evidence is None:
         return 0
-    return sum(
+    halves = calibration_report.default_halves(doc, evidence["default"], evidence["candidates"])
+    return len(halves) + sum(
         sum(1 for key in ("wrong1", "wrong2", "steady", "every") if row.get(key) is not None)
         for row in evidence["rows"]
     )
@@ -1000,10 +1002,49 @@ def default_section(doc: dict) -> list[str]:
         *table(head, rows),
         "",
     ]
+    halves = calibration_report.default_halves(doc, default, candidates)
+    if halves:
+        out += halves_lines(halves, default)
     if cost:
         out += cost_lines(cost, default, candidates) + [""]
-    out += decision_lines(evidence, calibrated=bool(calibration_report.runs_of(doc)[0]))
+    out += decision_lines(
+        evidence, calibrated=bool(calibration_report.runs_of(doc)[0]), halves=halves
+    )
     return out
+
+
+def halves_lines(halves: list[dict], default: str) -> list[str]:
+    rows = [
+        [
+            f"`{h['name']}`",
+            h["data"],
+            h["clips"],
+            f"{h['candidate']} vs {h['default']} of {h['n']}",
+            f"{h['onlyCandidate']} / {h['onlyDefault']}",
+            f"McNemar exact p {pval(h['p'])}",
+        ]
+        for h in halves
+    ]
+    return [
+        f"The same comparison against `{default}` on both halves of the calibration runs' "
+        "clips and on all of them (as served; the tempo rules these estimators use did not "
+        "change, so both halves serve this comparison equally). The clips come in groups "
+        "(artists, labels, tracks cut from the same release), so they are not independent and "
+        "each p-value overstates the evidence.",
+        "",
+        *table(
+            [
+                "candidate",
+                "data",
+                "clips",
+                "Acc1 correct",
+                f"right only for the candidate / only for `{default}`",
+                "test",
+            ],
+            rows,
+        ),
+        "",
+    ]
 
 
 def cost_figures(cost: dict, name: str, default: str) -> dict | None:
@@ -1040,10 +1081,53 @@ def cost_lines(cost: dict, default: str, candidates: list[str]) -> list[str]:
     return out
 
 
-def decision_lines(evidence: dict, calibrated: bool = False) -> list[str]:
+def halves_verdict(halves: list[dict]) -> tuple[list[str], list[str]]:
+    """Candidates ahead on all clips (McNemar p < 0.05), and sentences on halves that disagree."""
+    wins, notes = [], []
+    for name in dict.fromkeys(h["name"] for h in halves):
+        for data in dict.fromkeys(h["data"] for h in halves if h["name"] == name):
+            rows = {h["clips"]: h for h in halves if h["name"] == name and h["data"] == data}
+            pooled = rows.get("all")
+            if pooled and pooled["p"] < 0.05 and pooled["candidate"] > pooled["default"]:
+                wins.append(name)
+            parts = [rows.get(k) for k in ("calibration", "evaluation")]
+            if all(parts):
+                signs = {
+                    (r["candidate"] > r["default"]) - (r["candidate"] < r["default"]) for r in parts
+                }
+                significance = {r["p"] < 0.05 for r in parts}
+                # A disagreement: one half significant and the other not, or opposite
+                # directions with a significant half (two noisy halves are not one).
+                if len(significance) > 1 or (len(signs) > 1 and True in significance):
+                    c, e = parts
+                    notes.append(
+                        f"On {data} the halves disagree: `{name}` {c['candidate']} vs "
+                        f"{c['default']} of {c['n']} on the calibration clips (p {pval(c['p'])}), "
+                        f"{e['candidate']} vs {e['default']} of {e['n']} on the evaluation clips "
+                        f"(p {pval(e['p'])}); the pooled result is not stable."
+                    )
+    return list(dict.fromkeys(wins)), notes
+
+
+def decision_lines(
+    evidence: dict, calibrated: bool = False, halves: list[dict] | None = None
+) -> list[str]:
     default, cost = evidence["default"], evidence["cost"]
     annotated = [r for r in evidence["rows"] if not r.get("golden")]
-    served_wins = [r for r in annotated if significant(r["served1"], more=True)]
+    notes: list[str] = []
+    if halves:
+        wins, notes = halves_verdict(halves)
+        if wins:
+            names = ", ".join(f"`{n}`" for n in wins)
+            return [
+                f"On all the clips of the calibration runs, as served, {names} meets the "
+                "accuracy part of the criterion on data it was not trained on. "
+                + " ".join(notes)
+                + " Whether that and its cost are worth a change is the open decision.",
+                "",
+            ]
+    # With the calibration runs, the pooled clips decide (above), not one half's run.
+    served_wins = [] if halves else [r for r in annotated if significant(r["served1"], more=True)]
     if served_wins:
         names = ", ".join(sorted({f"`{r['name']}`" for r in served_wins}))
         return [
@@ -1055,7 +1139,7 @@ def decision_lines(evidence: dict, calibrated: bool = False) -> list[str]:
         f"Decision: the service keeps `{default}` under the current withholding rules. As "
         "served, no candidate gives significantly more correct tempos (Acc1 over n) on data it "
         "was not trained on."
-    ]
+    ] + notes
     for r in annotated:
         w1, w2 = r.get("wrong1"), r.get("wrong2")
         figures = (

@@ -187,10 +187,9 @@ times are seconds from the start of the preview. Every block is `null` when it w
 - **Tempo** is withheld when the onsets do not repeat at a beat rate (a steady chord, a pure
   tone, chords changing every 2 s, a rubato melody), when the estimator's confidence is low,
   or when the tempo does not hold in every part of the window that has a beat (90 BPM then
-  130, an accelerando; with librosa also a tempo that swings around the reported one within a
-  part, see `STEADY_DRIFT_WINDOW_S`; Essentia has no such check and still reports a band
-  swinging +-10 % every 12 s). A beatless intro is no evidence either way: a band that
-  starts 10 s in gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
+  130, an accelerando; each part's tempo within 4 %, so a band swinging +-12 % every 12 s
+  gets none, while one swinging +-10 % still passes). A beatless intro is no evidence either
+  way: a band that starts 10 s in gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
   whose beats follow the change, and dropped with librosa, whose tracker keeps one period.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
@@ -198,13 +197,13 @@ times are seconds from the start of the preview. Every block is `null` when it w
   harmonic/percussive separation). It is withheld when too little of the energy is in spectral
   lines (drums, click tracks, a metronome, noise with a beat); when the lines form a single
   harmonic series (a lone tone, or mains hum on 50 or 60 Hz, whose harmonics spell a G major
-  triad); when the lines and the notes of a single voice spell fewer than three pitch classes;
-  or when its strength is under the estimator's minimum (Essentia 0.7: atonal material such
-  as random chromatic notes or a twelve-tone row scores up to 0.69; librosa 0.3, whose
-  correlation does not separate atonal from tonal material). With a beat, Essentia's key does not go through the spectral-line rules: its
-  strength separates pitchless rhythm from tonal music, and the line rules withheld most keys
-  of electronic dance music, which it mostly gets right (the calibration section of
-  `evals/reports/audio-*.md` has the numbers). Without a beat, a pitch track of the harmonic part also
+  triad); when the lines and the notes of a single voice spell fewer than three pitch classes
+  (a class counts at 0.1 of the strongest); or when its strength is under the estimator's
+  minimum (Essentia 0.4, librosa 0.45). Neither strength separates atonal material from tonal
+  music: random chromatic notes or a twelve-tone row can still get a key. The spectral-line
+  rules are what keep keys off pitchless sound, and they also withhold many keys of
+  electronic dance music, whose synthesizers leave few narrow lines (the calibration section
+  of `evals/reports/audio-*.md` has the numbers). Without a beat, a pitch track of the harmonic part also
   decides: no key for one held pitch (a note with vibrato, whose sidebands hide the series, or
   a bend: its harmonics explain the lines and nothing else moves in the chromagram) or for a
   voice without stable notes (speech); a voice that moves between notes keeps the key even
@@ -214,7 +213,7 @@ times are seconds from the start of the preview. Every block is `null` when it w
   the allowance does not widen with the tracked pitch's span, since a band's bass line can look
   like one held pitch to the tracker while its chords are off that pitch's harmonics. A major
   triad over its own root in the bass is acoustically one harmonic series (harmonics 4, 5 and
-  6) and gets no key without a beat, and none with a beat from librosa. A sung line far out of tune, or with very wide
+  6) and gets no key, with or without a beat. A sung line far out of tune, or with very wide
   vibrato, can read as a voice without stable notes and gets no key: the rule errs toward
   withholding. Tonics are spelled with sharps (Essentia's Bb is reported as A#).
 - **Fingerprint** is `null` without the models, and for input the service judges not to be

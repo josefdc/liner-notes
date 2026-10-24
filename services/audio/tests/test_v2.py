@@ -132,11 +132,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.0.0+librosa"
-    assert main.analyzer_version("essentia") == "2.0.0+essentia"
+    assert main.analyzer_version("librosa") == "2.1.0+librosa"
+    assert main.analyzer_version("essentia") == "2.1.0+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.0.0+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.1.0+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -148,7 +148,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.0.0+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.1.0+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -362,64 +362,28 @@ def test_no_steady_tempo_without_a_beat_anywhere():
     assert not estimators.steady_tempo(np.arange(60) * 0.5, 120.0, flat)
 
 
-def swinging_beats(bpm: float = 100.0, swing: float = 0.1, period: float = 12.0) -> np.ndarray:
-    beats, t = [], 0.0
-    while t < 30.0:
-        beats.append(t)
-        t += 60.0 / (bpm * (1 + swing * np.sin(2 * np.pi * t / period)))
-    return np.array(beats)
-
-
-def test_beat_drift_is_the_largest_window_tempo_off_the_reported_one():
-    steady = np.arange(0.0, 30.0, 0.6)  # 100 BPM
-    assert estimators.beat_drift(steady, 100.0, 0.0, 10.0, 6.0) == pytest.approx(0.0, abs=1e-9)
-    # +-10 % around 100 BPM every 12 s: 6 s windows (half a period) see about 6 %.
-    drift = estimators.beat_drift(swinging_beats(), 100.0, 0.0, 10.0, 6.0)
-    assert 0.05 < drift < 0.1
-    assert estimators.beat_drift(steady[:3], 100.0, 0.0, 10.0, 6.0) is None  # under 4 beats
-
-
-# The drift tolerance, pinned here: librosa 0.12 in 6 s windows, none for Essentia (set by the
-# calibration in evals/audio).
-def test_the_drift_tolerance_withholds_a_tempo_that_swings_within_a_third():
-    assert estimators.STEADY_DRIFT_WINDOW_S == 6.0
-    assert estimators.LibrosaEstimator.steady_drift_tolerance == 0.12
-    assert estimators.EssentiaEstimator.steady_drift_tolerance is None
-    part = estimators.SteadyPart(rhythm=0.5, beat_bpm=100.0, onset_period=25.84, drift=0.13)
-    measured = estimators.Steadiness(100.0, True, (part,) * 3, period=25.84)
-    assert measured.holds()  # without a drift tolerance
-    assert not measured.holds(drift_tolerance=0.12)
-    assert measured.holds(drift_tolerance=0.14)
-    # A third without a beat is no evidence, its drift neither.
-    quiet = estimators.SteadyPart(rhythm=0.1, beat_bpm=100.0, onset_period=25.84, drift=0.5)
-    steady = estimators.Steadiness(100.0, True, (quiet, part, part), period=25.84)
-    assert steady.holds(drift_tolerance=0.14)
-
-
+# A band whose tempo swings around 100 BPM every 12 s (both estimators read about 107.7 at
+# +-10 % before). The thirds' medians smooth the swing: at the 0.04 tolerance the +-12 % swing
+# loses its tempo with both, while the +-10 % one keeps it (its thirds stay within 4 %; strict
+# expected failures, so a change is seen). librosa already withheld the +-12 % swing at 0.05.
 @pytest.mark.parametrize("estimator", ESTIMATORS)
 @pytest.mark.parametrize("swing", [0.1, 0.12])
 def test_no_tempo_for_a_slow_tempo_swing(swing, estimator, request):
-    """
-    A band whose tempo swings around 100 BPM every 12 s (both read about 107.7 at +-10 %
-    before). Essentia has no drift check and still reports one (strict expected failures).
-    """
-    if estimator == "essentia":
+    if swing == 0.1:
         request.applymarker(
-            pytest.mark.xfail(
-                strict=True,
-                reason="Essentia has no drift check: every tolerance that removed this tempo "
-                "also withheld a right Ballroom tempo in the calibration",
-            )
+            pytest.mark.xfail(strict=True, reason="its thirds stay within 4 % of the tempo")
         )
     _, v2 = analyse_array(signals.tempo_swing(swing=swing), estimator)
     assert v2["tempo"] is None
 
 
 def test_steady_tempo_follows_the_beat_grid():
+    """The tolerance (0.04, pinned here) was set by the calibration in evals/audio."""
+    assert estimators.STEADY_TEMPO_TOLERANCE == 0.04
     steady = np.arange(60) * 0.5
     assert estimators.steady_tempo(steady, 120.0)
-    assert not estimators.steady_tempo(steady, 126.5)  # 5.4% off
-    assert estimators.steady_tempo(steady, 125.9)  # 4.9% off
+    assert not estimators.steady_tempo(steady, 125.2)  # 4.2% off
+    assert estimators.steady_tempo(steady, 124.9)  # 3.9% off
     change = np.concatenate([np.arange(23) * 60 / 90, 15 + np.arange(33) * 60 / 130])
     assert not estimators.steady_tempo(change, 90.0)
     assert not estimators.steady_tempo(change, 130.0)
@@ -635,7 +599,7 @@ def test_essentia_flat_names_become_sharps(monkeypatch, name, tonic):
 # by the calibration in evals/audio from atonal controls and annotated clips.
 @pytest.mark.parametrize(
     ("estimator", "minimum"),
-    [(estimators.LibrosaEstimator, 0.3), (estimators.EssentiaEstimator, 0.7)],
+    [(estimators.LibrosaEstimator, 0.45), (estimators.EssentiaEstimator, 0.4)],
 )
 def test_weak_keys_are_withheld_at_each_estimators_minimum(estimator, minimum):
     assert estimator.min_key_strength == minimum
@@ -647,9 +611,9 @@ def test_weak_keys_are_withheld_at_each_estimators_minimum(estimator, minimum):
 
 
 # Atonal material: random chromatic notes (with and without drums), a chromatic cluster and
-# twelve-tone rows. Essentia scores them 0.21-0.69, under its minimum. librosa's correlation
-# overlaps tonal music (the rows score 0.62-0.82): it still keys all of them (strict expected
-# failures, so a change is seen).
+# twelve-tone rows. Neither estimator's strength separates it from tonal music: Essentia
+# (minimum 0.4) still keys seven of the ten, librosa (0.45) five. Those are strict expected
+# failures, so a change in either direction is seen.
 ATONAL = {
     **{f"random-notes-{k}": (lambda k=k: signals.random_notes(k)) for k in (83, 84, 85)},
     **{
@@ -659,40 +623,45 @@ ATONAL = {
     "chromatic-cluster": signals.chromatic_cluster,
     **{f"twelve-tone-row-{k}": (lambda k=k: signals.twelve_tone_row(k)) for k in (12, 13, 14)},
 }
-LIBROSA_KEYS_ATONAL = set(ATONAL)
+KEYS_ATONAL = {
+    "essentia": set(ATONAL) - {"random-notes-85", "random-notes-drums-84", "chromatic-cluster"},
+    "librosa": {
+        "random-notes-83",
+        "random-notes-84",
+        "twelve-tone-row-12",
+        "twelve-tone-row-13",
+        "twelve-tone-row-14",
+    },
+}
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
 @pytest.mark.parametrize("name", ATONAL)
 def test_no_key_for_atonal_material(name, estimator, request):
-    if estimator == "librosa" and name in LIBROSA_KEYS_ATONAL:
+    if name in KEYS_ATONAL[estimator]:
         request.applymarker(
             pytest.mark.xfail(
-                strict=True,
-                reason="librosa's key correlation is as high here as on tonal music",
+                strict=True, reason="the key strength is as high here as on tonal music"
             )
         )
     signals_ = estimators.Signals(ATONAL[name](), FIXTURE_SR)
     assert estimators.select_estimator(estimator).key(signals_) is None
 
 
-def test_over_a_beat_essentia_keys_by_its_strength_not_by_spectral_lines():
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_over_a_beat_the_spectral_lines_decide_for_both_estimators(estimator):
     """
-    D major pads under drums 18 dB louder: the pads leave too few spectral lines, so the line
-    rules withhold the key; librosa keeps them, Essentia (over a beat) does not and finds the
-    key. The one-source rules still apply to it (test_no_key_for_one_source_over_drums).
+    Pitchless drums at 128 BPM (kit seed 3): Essentia's strength for them is 0.85, so only the
+    spectral-line rule keeps a key off them. D major pads under drums 18 dB louder leave too few
+    lines as well and lose their key: the cost of that rule.
     """
+    drums = estimators.Signals(signals.drums_only(128, seed=3), FIXTURE_SR)
+    assert why(drums.key_withheld()) == "no sustained pitch"
+    assert estimators.select_estimator(estimator).key(drums) is None
     y = music.mix((signals.chord_pad_progression(), 0), (signals.drums_only(120, seed=2), 18))
-    signals_ = estimators.Signals(y, FIXTURE_SR)
-    assert signals_.has_beat
-    assert why(signals_.key_withheld()) == "no sustained pitch"
-    assert signals_.key_withheld(lines_with_beat=False) is None
-    assert estimators.LibrosaEstimator.key_lines_with_beat
-    assert not estimators.EssentiaEstimator.key_lines_with_beat
-    assert estimators.LibrosaEstimator().key(signals_) is None
-    if estimators.ESSENTIA_AVAILABLE:
-        key = estimators.EssentiaEstimator().key(signals_)
-        assert (key.tonic, key.mode) == ("D", "major")
+    buried = estimators.Signals(y, FIXTURE_SR)
+    assert buried.has_beat and why(buried.key_withheld()) == "no sustained pitch"
+    assert estimators.select_estimator(estimator).key(buried) is None
 
 
 @pytest.mark.parametrize(("confidence", "kept"), [(0.29, False), (0.31, True)])
@@ -817,6 +786,22 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("family", signals.PITCHLESS_SEEDED)
+def test_no_key_for_pitchless_material_at_unseen_seeds(family, estimator):
+    """
+    Drums, noise with a beat, a siren over drums and clicks, 30 seeds each (tempo, kit, noise,
+    levels and sounds drawn from the seed; none was used to set a threshold): never a key.
+    """
+    make, chosen = signals.PITCHLESS_SEEDED[family], estimators.select_estimator(estimator)
+    keyed = {}
+    for seed in signals.UNSEEN_SEEDS:
+        key = chosen.key(estimators.Signals(make(seed), FIXTURE_SR))
+        if key is not None:
+            keyed[seed] = (key.tonic, key.mode, key.strength)
+    assert keyed == {}
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
 @pytest.mark.parametrize("bpm", [85, 120, 174])
 def test_no_key_for_click_tracks(analyse, bpm, estimator):
     result, v2 = analyse(click_track(bpm), "MP3", estimator=estimator)
@@ -852,8 +837,9 @@ def why(withheld):
         (0.09, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], None, "no sustained pitch"),
         (0.11, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], None, None),
         (0.5, [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], None, "fewer than three pitch classes"),
-        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.27, 0, 0, 0, 0], None, "fewer than three pitch classes"),
-        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.29, 0, 0, 0, 0], None, None),
+        # The third class at 0.09 and 0.11 of the strongest: the level is 0.1.
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.09, 0, 0, 0, 0], None, "fewer than three pitch classes"),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.11, 0, 0, 0, 0], None, None),
         (0.5, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], 50.0, "one harmonic series on 50.0 Hz"),
     ],
 )
@@ -1822,7 +1808,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.0.0+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.1.0+{main.ESTIMATOR.name}"
     assert result["valence"] is None and result["danceability"] is None
 
 

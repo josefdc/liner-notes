@@ -213,8 +213,8 @@ def key_without_withholding(signals, est):
 
 
 def key_evidence(signals, est):
-    """Why the evidence rule withholds a key for this estimator (Signals.key_withheld), or None."""
-    return signals.key_withheld(getattr(est, "key_lines_with_beat", True))
+    """Why the evidence rule withholds a key (Signals.key_withheld, the same for every estimator)."""
+    return signals.key_withheld()
 
 
 def key_min_strength(est) -> float:

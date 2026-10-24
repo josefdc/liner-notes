@@ -10,31 +10,33 @@ strength). `derive_tempo` and `derive_key` apply a set of rule values (`Rules`) 
 records; at the service's own values they must give what the service served, and every run
 checks that on every clip (`mismatches`).
 
-The choice (`select`) is made on the calibration clips only (datasets.split_of) and on the
-generated controls (controls.py), one family of rules after another, under the acceptance
-criteria below, fixed before any evaluation clip was scored. `evaluate` then compares the
-service's values before this calibration (BASELINE) with the values it has now, on the
-evaluation clips, which never took part in a choice.
+The choice (`select`) follows the plan written before the calibration was run: it is made on
+the calibration clips only (datasets.split_of) and on the generated controls (controls.py), one
+family of rules after another in a fixed order, under the acceptance criteria below. A rule the
+service keeps per estimator is decided on that estimator's clips; a shared rule on Essentia's
+(the default), with librosa's shown. `confirm` then judges each change on the evaluation clips
+and reverts the ones that fail there; `evaluate` compares the service's values before this
+calibration (BASELINE) with the values it has now, on the evaluation clips.
 
-Acceptance (pooled over the family's datasets, per deciding estimator):
-- a loosening (answers the old value withheld): its extra answers are right (tempo Acc1, key
-  exact) with a Wilson 95 % lower bound of at least L1_MIN_LOWER; their share right is at most
-  L2_MAX_DROP below that of the answers the old value gave; their share wrong even forgiving
-  octave and meter (tempo) or relation (key: MIREX 0) is at most L3_MAX_GROSS_RISE above the
-  old answers' share;
-- a tightening (answers the old value gave, withheld): it must remove a value a control shows
-  where the truth is none or another value; correct / n falls by at most T2_MAX_DROP on each
-  dataset; and the answers it withholds are right less often than those it keeps;
-- either way, no control goes from right to wrong.
-Among accepted loosenings the one answering most calibration clips is chosen; among accepted
-tightenings (when no loosening is accepted) the one fixing most controls, then withholding
-fewest answers, then the least strict. Otherwise the value stays.
+Acceptance (pooled over the family's datasets):
+- a loosening (answers the old value withheld) is accepted when its extra answers are right
+  (tempo Acc1, key exact) with a Wilson 95 % lower bound of at least L1_MIN_LOWER (L1); their
+  share right is at most L2_MAX_DROP below that of the answers the old value gave (L2); their
+  share wrong even forgiving octave and meter (tempo) or unrelated (key: MIREX 0) is at most
+  L3_MAX_GROSS_RISE above the old answers' share (L3); and no control goes from right to wrong
+  (L4). The loosest value that passes is taken.
+- a tightening (answers the old value gave, withheld) is accepted when it removes a value a
+  control shows wrongly (T1), correct / n falls by at most T2_MAX_DROP on each dataset and the
+  answers it withholds are right less often than those it keeps (T2). The least strict value
+  that passes is taken.
+- on the evaluation clips a change that fails L1-L3 (a loosening) or T2 (a tightening) is
+  reverted; one that changes no evaluation clip stays.
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 
 import numpy as np
 
@@ -55,7 +57,8 @@ UPPER_HZ = (130.0, 260.0)
 OVERTONE_TOLERANCE = 0.01
 OVERTONE_HARMONICS = range(2, 9)
 PARTIAL_LOW_HZ = 30.0
-# Window lengths (s) at which the beat drift is recorded (estimators.beat_drift).
+# Window lengths (s) at which the beat drift is recorded (beat_drift): a candidate check the
+# service does not have.
 DRIFT_WINDOWS = (4.0, 6.0)
 
 SERVICE_ESTIMATORS = ("librosa", "essentia")
@@ -74,7 +77,6 @@ class Rules:
     steady_lag_frames: float
     onset_check: dict  # the steadiness check's onset-tempo part (missing: on)
     drift: dict  # [window s, tolerance] or None (missing: none)
-    line_rules_with_beat: dict  # the key evidence's spectral-line rules over a beat (missing: on)
     min_tonal_ratio: float
     tonal_source: str  # "mix" or "harmonic"
     class_vector: str  # "lines", "upper130", "upper260" or "fundamental"
@@ -87,7 +89,9 @@ class Rules:
 
     @classmethod
     def from_dict(cls, d: dict) -> Rules:
-        return cls(**d)
+        """The rules a run recorded (fields this harness no longer varies are left out)."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
     def set(self, name: str, value, estimator: str | None = None) -> Rules:
         """A copy with `name` set to `value` (for one estimator when the field is per estimator)."""
@@ -104,7 +108,6 @@ FIELD_DEFAULTS = {
     "min_confidence": 0.0,
     "onset_check": True,
     "drift": None,
-    "line_rules_with_beat": True,
     "min_strength": 0.0,
 }
 
@@ -121,7 +124,6 @@ BASELINE = Rules(
     steady_lag_frames=2.0,  # STEADY_LAG_FRAMES
     onset_check={"librosa": True, "essentia": True, "beat-this": True},
     drift={"librosa": None, "essentia": None, "beat-this": None},
-    line_rules_with_beat={"librosa": True, "essentia": True},
     min_tonal_ratio=0.1,  # MIN_TONAL_RATIO
     tonal_source="mix",
     class_vector="lines",
@@ -138,19 +140,13 @@ def service_rules() -> Rules:
     _, est = service.load()
     classes = {n: est.ESTIMATORS[n] for n in SERVICE_ESTIMATORS}
     tempo_classes = {**classes, "beat-this": BeatThisEstimator}
-
-    def drift(c):
-        tolerance = c.steady_drift_tolerance
-        return None if tolerance is None else [est.STEADY_DRIFT_WINDOW_S, tolerance]
-
     return Rules(
         min_periodicity=est.MIN_TEMPO_PERIODICITY,
         min_confidence={n: c.min_tempo_confidence for n, c in tempo_classes.items()},
         steady_tolerance=est.STEADY_TEMPO_TOLERANCE,
         steady_lag_frames=est.STEADY_LAG_FRAMES,
         onset_check={n: c.steady_onset_check for n, c in tempo_classes.items()},
-        drift={n: drift(c) for n, c in tempo_classes.items()},
-        line_rules_with_beat={n: c.key_lines_with_beat for n, c in classes.items()},
+        drift={n: None for n in tempo_classes},  # the service has no drift check
         min_tonal_ratio=est.MIN_TONAL_RATIO,
         tonal_source="mix",
         class_vector="lines",
@@ -290,6 +286,29 @@ def gate_stats(signals, loudness) -> dict:
     return record
 
 
+def beat_drift(
+    beats: np.ndarray, bpm: float, start: float, end: float, window: float
+) -> float | None:
+    """
+    The largest relative distance from `bpm` of the median beat interval (as a tempo) in the
+    windows of `window` seconds, half a window apart, between `start` and `end` (the last one
+    shorter); windows with fewer than four beats are skipped. None when none has four. The
+    steadiness check's thirds' medians hide a tempo that swings within a third; this shows it.
+    """
+    worst = None
+    t = start
+    while True:
+        stop = min(t + window, end)
+        inside = beats[(beats >= t) & (beats < stop)]
+        if inside.size >= 4:
+            local = 60.0 / float(np.median(np.diff(inside)))
+            distance = abs(local - bpm) / bpm
+            worst = distance if worst is None else max(worst, distance)
+        if stop >= end:
+            return worst
+        t += window / 2
+
+
 def tempo_stats(signals, est) -> dict | None:
     """The estimate with every tempo rule lifted, and what the steadiness check measured."""
     _, estimators = service.load()
@@ -319,7 +338,7 @@ def tempo_stats(signals, est) -> dict | None:
             "parts": [[_f(p.rhythm), _f(p.beat_bpm), _f(p.onset_period)] for p in measured.parts],
         },
         "drift": {
-            f"{w:g}": [_f(estimators.beat_drift(beats, tempo.bpm, a, b, w)) for a, b in thirds]
+            f"{w:g}": [_f(beat_drift(beats, tempo.bpm, a, b, w)) for a, b in thirds]
             for w in DRIFT_WINDOWS
         },
     }
@@ -423,8 +442,7 @@ def evidence_withheld(ev: dict, rules: Rules, name: str) -> str | None:
         return None
 
     if has_beat:
-        lines = rules.get("line_rules_with_beat", name)
-        withheld = tonality_rule(None, True) if lines else None
+        withheld = tonality_rule(None, True)
         if withheld is not None or voice is None:
             return withheld
         if voice["withoutNotes"]:
@@ -587,24 +605,35 @@ def control_changes(controls: list[dict], name: str, kind: str, new: Rules, old:
 class Family:
     key: str
     kind: str  # "tempo" or "key"
-    field: str  # the Rules field
+    field: str  # the Rules field ("class_rule", "tonal_rule": two fields at once)
     title: str
     values: tuple
+    # True: each deciding estimator gets its own value (the service keeps one per estimator);
+    # False: one value for every estimator, decided on Essentia's clips (the default) and
+    # checked on librosa's.
     per_estimator: bool
     deciding: tuple  # estimators whose clips decide
-    shown: tuple = ()  # estimators shown, not deciding
+    shown: tuple = ()  # estimators shown next to them, not deciding
 
 
 ESSENTIA_CONFIDENCES = (0.0, 0.1, 0.15, 0.2, 0.25, 1.5 / 5.32, 0.35, 0.4, 0.5)
 LIBROSA_CONFIDENCES = (0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5)
 STRENGTHS = (0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8)
 DRIFTS = (None, *([w, t] for w in DRIFT_WINDOWS for t in (0.08, 0.1, 0.12, 0.15)))
+TONAL_RULES = (
+    *(["mix", r] for r in (0.1, 0.075, 0.05, 0.03, 0.02, 0.0)),
+    *(["harmonic", r] for r in (0.5, 0.3, 0.2, 0.1)),
+)
 CLASS_RULES = tuple(
     [vector, level]
     for vector in ("lines", "fundamental", "upper130", "upper260")
     for level in (0.28, 0.2, 0.15, 0.1)
 )
+SHARED = {"per_estimator": False, "deciding": ("essentia",), "shown": ("librosa",)}
 
+# In the order of the plan: the steadiness check (its onset-tempo part, tolerance and a drift
+# test), the confidence and periodicity minimums, then the key evidence (the spectral-line
+# share, the pitch-class rule) and the key strength minimum.
 FAMILIES = (
     Family(
         "onset",
@@ -612,9 +641,10 @@ FAMILIES = (
         "onset_check",
         "steadiness check: librosa's tempo on each third's onsets",
         (True, False),
-        True,
-        ("essentia",),  # librosa's tracker keeps one period: it needs this part
-        ("beat-this",),
+        per_estimator=True,
+        # Only for a tracker whose beats follow tempo changes; librosa's keeps one period.
+        deciding=("essentia",),
+        shown=("beat-this",),
     ),
     Family(
         "tolerance",
@@ -622,8 +652,7 @@ FAMILIES = (
         "steady_tolerance",
         "steadiness check: tolerance",
         (0.04, 0.05, 0.06, 0.08, 0.1),
-        False,
-        SERVICE_ESTIMATORS,
+        **SHARED,
     ),
     Family(
         "drift",
@@ -631,8 +660,7 @@ FAMILIES = (
         "drift",
         "steadiness check: beat drift within a third (window, tolerance)",
         DRIFTS,
-        True,
-        SERVICE_ESTIMATORS,
+        **SHARED,
     ),
     Family(
         "confidence",
@@ -640,8 +668,8 @@ FAMILIES = (
         "min_confidence",
         "tempo confidence minimum",
         (),  # per estimator, below
-        True,
-        SERVICE_ESTIMATORS,
+        per_estimator=True,
+        deciding=SERVICE_ESTIMATORS,
     ),
     Family(
         "periodicity",
@@ -649,35 +677,16 @@ FAMILIES = (
         "min_periodicity",
         "onset periodicity minimum (tempo)",
         (0.1, 0.15, 0.2, 0.25, 0.3),
-        False,
-        SERVICE_ESTIMATORS,
-    ),
-    Family(
-        "strength",
-        "key",
-        "min_strength",
-        "key strength minimum",
-        STRENGTHS,
-        True,
-        SERVICE_ESTIMATORS,
-    ),
-    Family(
-        "lines",
-        "key",
-        "line_rules_with_beat",
-        "key evidence over a beat: the spectral-line rules",
-        (True, False),
-        True,
-        SERVICE_ESTIMATORS,
+        **SHARED,
     ),
     Family(
         "tonal",
         "key",
-        "min_tonal_ratio",
-        "key evidence: share of energy in spectral lines (no sustained pitch)",
-        (0.1, 0.075, 0.05, 0.03, 0.02, 0.0),
-        False,
-        SERVICE_ESTIMATORS,
+        "tonal_rule",
+        "key evidence: share of energy in spectral lines (no sustained pitch), of the mix or "
+        "of its harmonic part",
+        TONAL_RULES,
+        **SHARED,
     ),
     Family(
         "classes",
@@ -685,10 +694,19 @@ FAMILIES = (
         "class_rule",
         "key evidence: pitch classes (fewer than three), by vector and level",
         CLASS_RULES,
-        False,
-        SERVICE_ESTIMATORS,
+        **SHARED,
+    ),
+    Family(
+        "strength",
+        "key",
+        "min_strength",
+        "key strength minimum",
+        STRENGTHS,
+        per_estimator=True,
+        deciding=SERVICE_ESTIMATORS,
     ),
 )
+FAMILY_BY_KEY = {f.key: f for f in FAMILIES}
 
 
 def family_values(family: Family, name: str | None) -> tuple:
@@ -698,20 +716,34 @@ def family_values(family: Family, name: str | None) -> tuple:
 
 
 def apply(rules: Rules, family: Family, value, name: str | None) -> Rules:
+    """`rules` with the family set to `value`: for `name`, or for every estimator if shared."""
     if family.field == "class_rule":
         return rules.set("class_vector", value[0]).set("class_level", value[1])
-    return rules.set(family.field, value, name if family.per_estimator else None)
+    if family.field == "tonal_rule":
+        return rules.set("tonal_source", value[0]).set("min_tonal_ratio", value[1])
+    if family.per_estimator:
+        return rules.set(family.field, value, name)
+    old = getattr(rules, family.field)
+    if isinstance(old, dict):
+        return rules.set(family.field, {n: value for n in old})
+    return rules.set(family.field, value)
 
 
 def current(rules: Rules, family: Family, name: str | None):
     if family.field == "class_rule":
         return [rules.class_vector, rules.class_level]
-    return rules.get(family.field, name if family.per_estimator else None)
+    if family.field == "tonal_rule":
+        return [rules.tonal_source, rules.min_tonal_ratio]
+    return rules.get(family.field, name if isinstance(getattr(rules, family.field), dict) else None)
 
 
-def judge(cmp: dict, per_dataset: dict, changes: dict, kind: str) -> dict:
-    """The acceptance criteria for one candidate against the old value (see the docstring)."""
-    out: dict = {"loosens": cmp["extra"] > 0, "tightens": cmp["lost"] > 0 or bool(changes["fixed"])}
+def judge(cmp: dict, per_dataset: dict, changes: dict, held_out: bool = False) -> dict:
+    """
+    The plan's criteria for one candidate against the old value (see the docstring). On the
+    evaluation clips (`held_out`) only L1-L3 and T2 are judged; the controls are the same ones
+    the choice saw.
+    """
+    out: dict = {"loosens": cmp["extra"] > 0}
     reasons = []
     if cmp["extra"]:
         w = wilson(cmp["extraRight"], cmp["extra"])
@@ -722,19 +754,24 @@ def judge(cmp: dict, per_dataset: dict, changes: dict, kind: str) -> dict:
         out["L2"] = extra_share >= old_share - L2_MAX_DROP
         out["L3"] = cmp["extraGross"] / cmp["extra"] <= old_gross + L3_MAX_GROSS_RISE
         reasons += [r for r in ("L1", "L2", "L3") if not out[r]]
+        if not held_out:
+            out["L4"] = not changes["broken"]
+            reasons += [] if out["L4"] else ["L4"]
     if cmp["lost"] or (changes["fixed"] and not cmp["extra"]):
-        out["T1"] = bool(changes["fixed"])
         drops = [(d["newRight"] - d["oldRight"]) / d["n"] for d in per_dataset.values() if d["n"]]
         lost_share = _share(cmp["lostRight"], cmp["lost"])
         kept_share = _share(cmp["keptRight"], cmp["kept"])
         out["T2"] = all(x >= -T2_MAX_DROP for x in drops) and (
             lost_share is None or kept_share is None or lost_share < kept_share
         )
-        reasons += [r for r in ("T1", "T2") if not out[r]]
-    out["controls"] = not changes["broken"]
-    if not out["controls"]:
-        reasons.append("controls")
+        if not held_out:
+            out["T1"] = bool(changes["fixed"])
+            reasons += [] if out["T1"] else ["T1"]
+        reasons += [] if out["T2"] else ["T2"]
     changed = cmp["extra"] or cmp["lost"] or changes["fixed"] or changes["broken"]
+    if held_out:
+        changed = cmp["extra"] or cmp["lost"]
+    out["changed"] = bool(changed)
     out["accepted"] = bool(changed) and not reasons
     out["failed"] = reasons
     return out
@@ -744,7 +781,7 @@ def candidate_row(
     runs, controls, family, name, value, base: Rules, split: str = "calibration"
 ) -> dict:
     """One candidate for one estimator: the comparison on the clips of `split`, and the verdict."""
-    new = apply(base, family, value, name if family.per_estimator else None)
+    new = apply(base, family, value, name)
     per_dataset = {}
     for run in runs:
         clips = [c for c in run["clips"] if c["split"] == split]
@@ -761,47 +798,44 @@ def candidate_row(
         "pooled": pooled,
         "perDataset": per_dataset,
         "controls": changes,
-        "verdict": judge(pooled, per_dataset, changes, family.kind),
+        "verdict": judge(pooled, per_dataset, changes, held_out=split == "evaluation"),
     }
 
 
 def looseness(family: str, value) -> tuple:
     """Orders a family's values from the strictest to the least strict."""
-    if family in ("onset", "lines"):
+    if family == "onset":
         return (not value,)  # on is stricter than off
     if family == "drift":
         return (1, 0.0, 0.0) if value is None else (0, value[1], value[0])
-    if family == "classes":
+    if family in ("classes", "tonal"):
         return (-value[1],)
-    if family in ("tolerance",):
+    if family == "tolerance":
         return (value,)
     return (-value,)  # minimums: a lower one is less strict
 
 
 def choose(rows: list[dict], family: str = "") -> int | None:
-    """The index of the chosen candidate among accepted ones (see the docstring), or None."""
-    loose = [i for i, r in enumerate(rows) if r["verdict"]["accepted"] and r["verdict"]["loosens"]]
+    """
+    The plan's choice among accepted candidates: the loosest loosening (the one answering most
+    clips; ties: the least strict value), else the least strict tightening; None keeps the value.
+    """
+    accepted = [i for i, r in enumerate(rows) if r["verdict"]["accepted"]]
+    loose = [i for i in accepted if rows[i]["verdict"]["loosens"]]
     if loose:
         return max(
             loose, key=lambda i: (rows[i]["pooled"]["new"], looseness(family, rows[i]["value"]))
         )
-    tight = [i for i, r in enumerate(rows) if r["verdict"]["accepted"]]
-    if not tight:
+    if not accepted:
         return None
-    return max(
-        tight,
-        key=lambda i: (
-            len(rows[i]["controls"]["fixed"]),
-            -rows[i]["pooled"]["lost"],
-            looseness(family, rows[i]["value"]),
-        ),
-    )
+    return max(accepted, key=lambda i: looseness(family, rows[i]["value"]))
 
 
 def select(runs: list[dict], controls: list[dict]) -> dict:
     """
-    The choice, family by family, from the baseline: each family's candidates on the calibration
-    clips of the runs of its kind and on the controls, with the earlier choices in place.
+    The choice, family by family in the plan's order, from the baseline: each family's
+    candidates on the calibration clips of the runs of its kind and on the controls, with the
+    earlier choices in place.
     """
     rules = BASELINE
     out = []
@@ -809,70 +843,43 @@ def select(runs: list[dict], controls: list[dict]) -> dict:
         kind_runs = [r for r in runs if r["kind"] == family.kind]
         if not kind_runs:
             continue
-        names = family.deciding if family.per_estimator else (None,)
         entry: dict = {"family": family.key, "title": family.title, "kind": family.kind}
         groups = []
-        for name in names:
-            deciding = [name] if name else list(family.deciding)
-            rows_by = {
-                n: [
-                    candidate_row(kind_runs, controls, family, n, v, rules)
-                    for v in family_values(family, name)
-                ]
-                for n in deciding
-            }
-            if name is None:
-                # A shared rule must be accepted for every deciding estimator.
-                merged = []
-                for k, value in enumerate(family.values):
-                    per = {n: rows_by[n][k] for n in deciding}
-                    accepted = all(r["verdict"]["accepted"] for r in per.values())
-                    loosens = any(r["verdict"]["loosens"] for r in per.values())
-                    merged.append(
-                        {
-                            "value": value,
-                            "rows": per,
-                            "verdict": {"accepted": accepted, "loosens": loosens},
-                            "pooled": {"new": sum(r["pooled"]["new"] for r in per.values())},
-                            "controls": {
-                                "fixed": [f for r in per.values() for f in r["controls"]["fixed"]]
-                            },
-                        }
-                    )
-                for m in merged:
-                    m["pooled"]["lost"] = sum(r["pooled"]["lost"] for r in m["rows"].values())
-                pick = choose(merged, family.key)
-                chosen = merged[pick]["value"] if pick is not None else current(rules, family, None)
-                groups.append(
-                    {
-                        "estimator": None,
-                        "before": current(rules, family, None),
-                        "chosen": chosen,
-                        "candidates": merged,
-                    }
-                )
-                if pick is not None:
-                    rules = apply(rules, family, chosen, None)
-            else:
-                rows = rows_by[name]
-                pick = choose(rows, family.key)
-                before = current(rules, family, name)
-                chosen = rows[pick]["value"] if pick is not None else before
-                groups.append(
-                    {"estimator": name, "before": before, "chosen": chosen, "candidates": rows}
-                )
-                if pick is not None:
-                    rules = apply(rules, family, chosen, name)
-        for name in family.shown:
+        base = rules
+        for name in family.deciding:
             rows = [
                 candidate_row(kind_runs, controls, family, name, v, rules)
+                for v in family_values(family, name)
+            ]
+            pick = choose(rows, family.key)
+            before = current(rules, family, name)
+            chosen = rows[pick]["value"] if pick is not None else before
+            groups.append(
+                {
+                    "estimator": name,
+                    "shared": not family.per_estimator,
+                    "before": before,
+                    "chosen": chosen,
+                    "candidates": rows,
+                }
+            )
+            if pick is not None:
+                rules = apply(rules, family, chosen, name)
+        for name in family.shown:
+            if name not in kind_runs[0]["estimators"] and not any(
+                name in r["estimators"] for r in kind_runs
+            ):
+                continue
+            rows = [
+                candidate_row(kind_runs, controls, family, name, v, base)
                 for v in family_values(family, name)
             ]
             groups.append(
                 {
                     "estimator": name,
                     "shown": True,
-                    "before": current(rules, family, name),
+                    "shared": not family.per_estimator,
+                    "before": current(base, family, name),
                     "chosen": None,
                     "candidates": rows,
                 }
@@ -882,14 +889,12 @@ def select(runs: list[dict], controls: list[dict]) -> dict:
     return {"families": out, "rules": rules.as_dict()}
 
 
-FAMILY_BY_KEY = {f.key: f for f in FAMILIES}
-
-
 def confirm(runs: list[dict], controls: list[dict], choice: dict) -> dict:
     """
-    Each change the choice made, judged again with the same criteria on the evaluation clips
-    (and the controls), in the same order: a change that fails there is reverted to the value
-    before it. Returns the changes with their verdicts and the rules that remain.
+    Each change the choice made, judged again on the evaluation clips in the same order: a
+    change that fails L1-L3 (a loosening) or T2 (a tightening) there is reverted to the value
+    before it. A shared rule is judged on Essentia's clips and shown on librosa's. Returns the
+    changes with their verdicts and the rules that remain.
     """
     rules = BASELINE
     out = []
@@ -900,25 +905,23 @@ def confirm(runs: list[dict], controls: list[dict], choice: dict) -> dict:
             name = group["estimator"]
             if group.get("shown") or group["chosen"] == group["before"]:
                 continue
-            deciding = [name] if name else list(family.deciding)
+            names = [name, *([] if family.per_estimator else family.shown)]
             rows = {
                 n: candidate_row(
                     kind_runs, controls, family, n, group["chosen"], rules, "evaluation"
                 )
-                for n in deciding
+                for n in names
+                if any(n in r["estimators"] for r in kind_runs)
             }
-
-            def unchanged(r):
-                p, c = r["pooled"], r["controls"]
-                return not (p["extra"] or p["lost"] or c["fixed"] or c["broken"])
-
-            confirmed = all(r["verdict"]["accepted"] or unchanged(r) for r in rows.values())
+            verdict = rows[name]["verdict"]
+            confirmed = verdict["accepted"] or not verdict["changed"]
             out.append(
                 {
                     "family": family.key,
                     "title": family.title,
                     "kind": family.kind,
                     "estimator": name,
+                    "shared": not family.per_estimator,
                     "before": group["before"],
                     "chosen": group["chosen"],
                     "rows": rows,

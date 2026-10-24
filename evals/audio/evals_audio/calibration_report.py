@@ -7,7 +7,7 @@ section can be re-derived from the JSON.
 from __future__ import annotations
 
 from . import calibration as cal
-from .metrics import wilson
+from .metrics import mcnemar_exact, wilson
 
 KIND_RIGHT = {"tempo": "Acc1", "key": "exact"}
 KIND_GROSS = {
@@ -46,8 +46,8 @@ def table(head: list[str], rows: list[list[str]]) -> list[str]:
 def value_label(family: str, value) -> str:
     if family == "onset":
         return "on" if value else "off"
-    if family == "lines":
-        return "on" if value else "off (the key strength decides)"
+    if family == "tonal":
+        return f"{value[0]}, {value[1]:g}"
     if family == "drift":
         return "none" if value is None else f"{value[0]:g} s windows, {value[1]:g}"
     if family == "classes":
@@ -55,6 +55,31 @@ def value_label(family: str, value) -> str:
     if family == "confidence" and abs(value - 1.5 / 5.32) < 1e-9:
         return "1.5/5.32 (0.282)"
     return f"{value:g}"
+
+
+# How this calibration's values came about, beyond the procedure (the plan the procedure was
+# written in is not part of the repository).
+PROTOCOL_NOTES = (
+    "The procedure is applied as written before the calibration runs. After a first sweep of "
+    "the calibration clips, revisions were proposed and used in a first version of this "
+    "calibration: judging the key strength before the key evidence rules, a family that drops "
+    "the spectral-line rules over a beat for Essentia, choosing the tightening that fixes most "
+    "controls, and requiring a tightening to break no control. They were made after "
+    "calibration results had been seen; the line-rule family decided that version's main "
+    "result and let Essentia key a pitchless drum track (the service's own drum kit at 128 "
+    "BPM, kit seed 3). None of them is used here.",
+    "The evaluation clips were scored more than once: with that first version's choices (the "
+    "first time from measurements rounded to six decimals, which made a 0.04 tolerance look "
+    "as if it fixed a librosa control: one third was 0.96 of the tempo to the last bit), and "
+    "again here. The values here follow from the written procedure on the full-precision "
+    "recording; none was chosen or changed in response to an evaluation score.",
+    "Before the plan was written, earlier reports had shown why 39 of 50 GiantSteps+ keys were "
+    "withheld, some of them on clips that are now evaluation clips; that is what drew "
+    "attention to the key evidence rules.",
+    "The pitchless controls drawn at 30 seeds each (two drum kits, noise with a beat, a siren "
+    "over drums, clicks) were added after the drum track above was found. No value had "
+    "been set on them; the choice sees them like the other controls.",
+)
 
 
 def count_p_values(doc: dict) -> int:
@@ -99,28 +124,30 @@ def section(doc: dict) -> list[str]:
         "the annotated clips of the calibration runs below and on generated controls whose "
         "truth is known by construction. Each selected clip is a **calibration** clip or an "
         "**evaluation** clip, fixed by a SHA-256 of the dataset and its track id (about half "
-        "each). Values were chosen on the calibration clips only; the evaluation clips are "
-        "scored once, below, and took no part in a choice. The choice is made again here from "
-        "the recorded clips (`evals_audio.calibration.select`), so it can be checked against "
-        "the values the service has.",
+        "each). Values are chosen on the calibration clips and the controls; the evaluation "
+        "clips judge each change once more. The choice is made again here from the recorded "
+        "clips (`evals_audio.calibration.select`), so it can be checked against the values the "
+        "service has.",
         "",
-        f"- Acceptance, fixed before any evaluation clip was scored. A **loosening** (answers "
-        f"the old value withheld) is kept only when its extra answers are right ({KIND_RIGHT['tempo']} "
-        f"for tempo, exact for key) with a Wilson 95 % lower bound of at least "
-        f"{100 * cal.L1_MIN_LOWER:g} % (L1), at most {100 * cal.L2_MAX_DROP:g} points less often "
-        f"than the old answers (L2), and wrong even forgiving octave and meter (key: unrelated) "
-        f"at most {100 * cal.L3_MAX_GROSS_RISE:g} points more often (L3). A **tightening** is "
-        f"kept only when it removes a value a control shows wrongly (T1), lowers correct / n by "
-        f"at most {100 * cal.T2_MAX_DROP:g} points on each dataset and withholds answers that "
-        "are right less often than those it keeps (T2). Either way no control may go from right "
-        "to wrong. Among accepted loosenings the one answering most clips is taken; among "
-        "accepted tightenings the one fixing most controls, then withholding fewest answers, "
-        "then the least strict. Rules the service keeps per estimator are decided on that "
-        "estimator's clips; a shared rule must pass for both; beat-this is shown under the "
-        "service's rules and decides nothing.",
-        "- Each change chosen this way is then judged again, with the same criteria, on the "
-        "evaluation clips and the controls; a change that fails there is reverted to the value "
-        "before it, and the service is to hold what remains.",
+        f"- The procedure was written down before the calibration runs. A **loosening** "
+        f"(answers the old value withheld) is accepted when its extra answers are right "
+        f"({KIND_RIGHT['tempo']} for tempo, exact for key) with a Wilson 95 % lower bound of at "
+        f"least {100 * cal.L1_MIN_LOWER:g} % (L1), at most {100 * cal.L2_MAX_DROP:g} points less "
+        f"often than the old answers (L2), wrong even forgiving octave and meter (key: "
+        f"unrelated) at most {100 * cal.L3_MAX_GROSS_RISE:g} points more often (L3), and no "
+        f"control goes from right to wrong (L4); the loosest value that passes is taken. A "
+        f"**tightening** is accepted when it removes a value a control shows wrongly (T1), "
+        f"lowers correct / n by at most {100 * cal.T2_MAX_DROP:g} points on each dataset and "
+        "withholds answers that are right less often than those it keeps (T2); the least "
+        "strict value that passes is taken. A rule the service keeps per estimator (the "
+        "confidence and strength minimums) is decided on that estimator's clips; a shared rule "
+        "on Essentia's (the default), with librosa's shown next to it; beat-this is shown under "
+        "the service's rules and decides nothing.",
+        "- Each change is then judged on the evaluation clips: a loosening that fails L1-L3 or "
+        "a tightening that fails T2 there is reverted to the value before it. The controls are "
+        "the ones the choice saw, so a change made for a control is not tested on new controls "
+        "there; a change that alters no evaluation clip stays.",
+        *(f"- {note}" for note in PROTOCOL_NOTES),
         "- The families are taken in turn, each with the earlier choices in place: "
         + "; ".join(f"{f['title']}" for f in choice["families"])
         + ".",
@@ -204,7 +231,18 @@ def mismatch_lines(runs: list[dict], controls: dict) -> list[str]:
         f"values, the decision differs from what the service served on {total} of {pairs} "
         "clip and estimator pairs"
     )
-    return [line + (": " + "; ".join(parts) if parts else "."), ""]
+    failed = [
+        f"{run['dataset']['name']} {clip.get('trackId') or clip.get('name')} `{name}`"
+        for run in [*runs, controls]
+        for clip in run.get("clips") or run.get("controls") or []
+        for name, entry in clip["estimators"].items()
+        if entry.get("error")
+    ]
+    out = line + (": " + "; ".join(parts) if parts else ".")
+    out += f" Records that failed and are left out of every table: {len(failed)}" + (
+        f" ({'; '.join(failed)})." if failed else "."
+    )
+    return [out, ""]
 
 
 def candidate_cells(family: str, kind: str, row: dict) -> list[str]:
@@ -247,21 +285,18 @@ def choice_section(choice: dict) -> list[str]:
                 "controls broken",
                 "verdict",
             ]
-            rows = []
-            for cand in group["candidates"]:
-                if name is None:
-                    for est, row in cand["rows"].items():
-                        rows.append(
-                            [f"{value_label(family, cand['value'])} (`{est}`)"]
-                            + candidate_cells(family, kind, row)
-                        )
-                else:
-                    rows.append(
-                        [value_label(family, cand["value"])] + candidate_cells(family, kind, cand)
-                    )
-            who = "shared by both estimators" if name is None else f"`{name}`"
-            if group.get("shown"):
-                who += " (shown under the service's rules; it decides nothing)"
+            rows = [
+                [value_label(family, cand["value"])] + candidate_cells(family, kind, cand)
+                for cand in group["candidates"]
+            ]
+            if group.get("shown") and group.get("shared"):
+                who = f"`{name}` (shown: the shared value is decided on Essentia's clips)"
+            elif group.get("shown"):
+                who = f"`{name}` (shown under the service's rules; it decides nothing)"
+            elif group.get("shared"):
+                who = f"`{name}` decides (one value for every estimator)"
+            else:
+                who = f"`{name}`"
             out += [f"{who}:", "", *table(head, rows), ""]
             if group.get("shown"):
                 continue
@@ -277,7 +312,8 @@ def choice_section(choice: dict) -> list[str]:
     out += [
         "In each table *answered* and *correct* are over all calibration clips of the rule's "
         "datasets, with the value in place; *extra answers* are those the value gives and the "
-        "previous one withheld, *answers withheld* the reverse. Gross errors: "
+        "previous one withheld, *answers withheld* the reverse. *Controls broken* is a criterion "
+        "for a loosening (L4) only. Gross errors: "
         f"tempo {KIND_GROSS['tempo']}, key {KIND_GROSS['key']}.",
         "",
     ]
@@ -292,7 +328,7 @@ FIELDS = (
     ("min_confidence", "tempo confidence minimum", BOTH, "tempo"),
     ("min_periodicity", "onset periodicity minimum", None, "tempo"),
     ("min_strength", "key strength minimum", BOTH, "key"),
-    ("line_rules_with_beat", "key evidence over a beat: spectral-line rules", BOTH, "key"),
+    ("tonal_source", "key evidence: spectral-line share of", None, "key"),
     ("min_tonal_ratio", "key evidence: spectral-line share", None, "key"),
     ("class_vector", "key evidence: pitch classes from", None, "key"),
     ("class_level", "key evidence: pitch-class level", None, "key"),
@@ -300,7 +336,6 @@ FIELDS = (
 FIELD_FAMILY = {
     "onset_check": "onset",
     "drift": "drift",
-    "line_rules_with_beat": "lines",
     "min_confidence": "confidence",
 }
 
@@ -321,21 +356,26 @@ def confirmation_section(confirmation: dict) -> list[str]:
         "extra answers right",
         "extra answers: gross errors",
         "answers withheld",
-        "controls fixed",
-        "controls broken",
         "verdict",
     ]
     rows = []
     for change in confirmation["changes"]:
         family = change["family"]
         for name, row in change["rows"].items():
-            p, c = row["pooled"], row["controls"]
-            failed = row["verdict"]["failed"]
+            p, verdict = row["pooled"], row["verdict"]
             withheld = (
                 f"{p['lost']} ({p['lostRight']} right; kept: {share(p['keptRight'], p['kept'])})"
                 if p["lost"]
                 else "–"
             )
+            if name != change["estimator"]:
+                status = "shown (the shared value is judged on Essentia's clips)"
+            elif not verdict["changed"]:
+                status = "no evaluation clip changed: kept"
+            elif verdict["failed"]:
+                status = "fails " + ", ".join(verdict["failed"]) + ": reverted"
+            else:
+                status = "passes"
             rows.append(
                 [
                     change["title"],
@@ -345,17 +385,15 @@ def confirmation_section(confirmation: dict) -> list[str]:
                     share(p["extraRight"], p["extra"]),
                     str(p["extraGross"]) if p["extra"] else "–",
                     withheld,
-                    ", ".join(c["fixed"]) or "–",
-                    ", ".join(c["broken"]) or "–",
-                    ("passes" if not failed else "fails " + ", ".join(failed))
-                    + ("" if change["confirmed"] else "; reverted"),
+                    status,
                 ]
             )
     return [
         "### Each change on the evaluation clips",
         "",
         f"Each change judged again on the evaluation clips ({KIND_RIGHT['tempo']} for tempo, "
-        "exact for key), pooled over the rule's datasets, with the same criteria and controls.",
+        "exact for key), pooled over the rule's datasets: L1-L3 for a loosening, T2 for a "
+        "tightening.",
         "",
         *table(head, rows),
         "",
@@ -599,3 +637,46 @@ def gate_section(runs: list[dict], controls: dict) -> list[str]:
         "not changed by this calibration.",
         "",
     ]
+
+
+def default_halves(doc: dict, default: str, candidates: list[str]) -> list[dict]:
+    """
+    Each candidate against the default tempo estimator as served, from the tempo calibration
+    runs: on the calibration clips, the evaluation clips and all of them (none of the tempo
+    rules these estimators use changed, so both halves are as valid for this comparison).
+    Datasets a candidate was trained on are left out.
+    """
+    runs, _ = runs_of(doc)
+    out = []
+    for run in runs:
+        if run["kind"] != "tempo" or default not in run["estimators"]:
+            continue
+        rules = cal.Rules.from_dict(run["rules"])
+        for name in candidates:
+            if name not in run["estimators"] or name in run.get("trainedOn", []):
+                continue
+            for split in ("calibration", "evaluation", None):
+                clips = [c for c in run["clips"] if split is None or c["split"] == split]
+                pairs = [
+                    (cal.outcome(c, name, "tempo", rules), cal.outcome(c, default, "tempo", rules))
+                    for c in clips
+                    if cal.usable(c, name, "tempo") and cal.usable(c, default, "tempo")
+                ]
+                a = [bool(x and x["acc1"]) for x, _ in pairs]
+                b = [bool(y and y["acc1"]) for _, y in pairs]
+                only_a = sum(x and not y for x, y in zip(a, b, strict=True))
+                only_b = sum(y and not x for x, y in zip(a, b, strict=True))
+                out.append(
+                    {
+                        "data": run["dataset"]["name"],
+                        "clips": split or "all",
+                        "name": name,
+                        "n": len(pairs),
+                        "candidate": sum(a),
+                        "default": sum(b),
+                        "onlyCandidate": only_a,
+                        "onlyDefault": only_b,
+                        "p": mcnemar_exact(only_a, only_b),
+                    }
+                )
+    return out

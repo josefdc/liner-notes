@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState, useReducer, useRef, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useState, useReducer, useRef, useCallback } from 'react';
 import type { TrackData, AgentLog } from '../types';
 import {
   Network,
@@ -14,8 +14,13 @@ import {
 } from 'lucide-react';
 import type { SearchCandidate, AgentStatus } from '../hooks/agent/types';
 import SystemConsole from './SystemConsole';
+import { isLiveUnavailable } from './liveUnavailable';
+import type { ReplayTrack } from '../hooks/agent/apiClient';
 import { Button } from './ui/Button';
 import { inputVisualStyles } from './ui/Input';
+
+// Loaded only when live analysis turns out to be unavailable.
+const BudgetBanner = lazy(() => import('./BudgetBanner'));
 
 // ─── Status Messages (P0:1) ────────────────────────────────────────────────
 const STATUS_MESSAGES: Record<AgentStatus, string> = {
@@ -463,6 +468,18 @@ const Onboarding: React.FC<OnboardingProps> = ({
     [candidates, hitlSelectedIndex, handleHitlSelect],
   );
 
+  // A recorded track offered while live analysis is unavailable: its title and artist name its
+  // recording, which the API replays (labelled as a recording).
+  const handleAnalyzeRecorded = useCallback(
+    (track: ReplayTrack) => {
+      const query = `${track.title} ${track.artist}`;
+      setSearchQuery(query);
+      setPreviewTrack({ title: track.title, artist: track.artist, coverUrl: '' });
+      analyze(query);
+    },
+    [analyze],
+  );
+
   // ─── P0:2 Error retry handlers ────────────────────────────────────────────
   const handleReset = useCallback(() => {
     setSearchQuery('');
@@ -630,8 +647,31 @@ const Onboarding: React.FC<OnboardingProps> = ({
             </Button>
           </form>
 
+          {/* Live analysis paused (budget) or off (recordings only): say so and offer the
+              recorded tracks; never a result in place of the analysis */}
+          {status === 'error' && isLiveUnavailable(errorCode) && (
+            <div className="space-y-3">
+              <Suspense
+                fallback={
+                  <p role="status" className="text-text-tertiary text-xs font-mono">
+                    Live analysis is unavailable. Loading the recorded tracks...
+                  </p>
+                }
+              >
+                <BudgetBanner code={errorCode} onPick={handleAnalyzeRecorded} />
+              </Suspense>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors focus-visible:underline focus-visible:outline-none"
+              >
+                or try a different song
+              </button>
+            </div>
+          )}
+
           {/* Error State (Item 10 — in-character error copy) */}
-          {status === 'error' && (
+          {status === 'error' && !isLiveUnavailable(errorCode) && (
             <div className="bg-status-error/5 border border-status-error/20 rounded-md p-6 space-y-4">
               <div className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
                 <CircleAlert size={16} />

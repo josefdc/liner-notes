@@ -116,9 +116,22 @@ export type AudioUnavailableReason =
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
 /**
  * Why the "more facts" stream could not write a fact, when the user should know: the model's
- * rate limit, or live model calls paused by the budget.
+ * rate limit, live model calls paused by the budget, or live calls switched off on this server
+ * (it replays recorded runs only).
  */
-export type FactoidUnavailableCode = 'rate_limited' | 'budget_exhausted';
+export type FactoidUnavailableCode = 'rate_limited' | 'budget_exhausted' | 'live_disabled';
+
+/**
+ * The run that produced a result, as the API sends it with the result. A replay ("replay")
+ * is a recorded run served again: it says when it was recorded and from which commit.
+ * Results from older servers have no run.
+ */
+export interface ResultRun {
+  id?: string;
+  mode?: string;
+  recordedAt?: string | null;
+  commit?: string | null;
+}
 
 export type ModelUnavailableReason =
   | 'no_output'
@@ -173,6 +186,8 @@ export interface TrackData {
   // Model provenance: true when the result was built from source data without the model
   modelUnavailable?: boolean;
   modelUnavailableReason?: ModelUnavailableReason;
+  // How the result was produced: live, or a recorded run replayed
+  run?: ResultRun;
 }
 
 export interface AgentLog {

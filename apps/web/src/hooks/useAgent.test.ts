@@ -390,6 +390,25 @@ describe('useAgent factoid stream', () => {
     expect(onFactoid).toHaveBeenCalledTimes(1);
   });
 
+  it('reports live calls switched off (a server that replays recordings only)', async () => {
+    const { result } = renderHook(() => useAgent());
+    const onUnavailable = vi.fn();
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      [],
+      () => {},
+      undefined,
+      onUnavailable,
+    );
+    const decrypt = lastStream();
+    decrypt.send({ type: 'error', code: 'live_disabled', error: 'off' });
+    decrypt.send({ type: 'done' });
+
+    await pending;
+    expect(onUnavailable.mock.calls).toEqual([['live_disabled']]);
+  });
+
   it('resolves on done', async () => {
     const { result } = renderHook(() => useAgent());
     const pending = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], () => {});

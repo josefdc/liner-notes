@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TriangleAlert, Disc, Heart, Sparkles, Zap } from 'lucide-react';
+import { TriangleAlert, Disc, Heart, History, Sparkles, Zap } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
@@ -13,7 +13,9 @@ import {
   missingModelOutput,
   modelUnavailableText,
   moodLabel,
+  recordingOf,
 } from '../constants';
+import { recordedDate } from '../utils/recordedDate';
 
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
@@ -217,6 +219,37 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
           {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
         </Notice>
       )}
+    </section>
+  );
+};
+
+/**
+ * Says that a result is a recorded run served again, with when (and from which commit) it was
+ * recorded, so a replay never reads as a live analysis. Renders nothing for a live result.
+ */
+export const RecordedRunNotice: React.FC<{ track: TrackData; className?: string }> = ({
+  track,
+  className = '',
+}) => {
+  const recording = recordingOf(track);
+  if (!recording) return null;
+  const date = recordedDate(recording.recordedAt);
+  return (
+    <section
+      aria-label="Recorded run"
+      className={`flex gap-3 items-start px-4 py-3 border border-cyber/30 bg-cyber/5 rounded-md ${className}`}
+    >
+      <History size={16} className="text-cyber flex-shrink-0 mt-0.5" aria-hidden="true" />
+      <div className="text-xs font-mono text-text-secondary space-y-1">
+        <p className="text-cyber uppercase tracking-widest">
+          Recorded run · {date ?? 'date not recorded'} · replayed
+        </p>
+        <p>
+          This result was recorded {date ? `on ${date}` : 'earlier'}
+          {recording.commit ? ` (commit ${recording.commit})` : ''} and is shown again as it was
+          then. Nothing was analysed live for it.
+        </p>
+      </div>
     </section>
   );
 };

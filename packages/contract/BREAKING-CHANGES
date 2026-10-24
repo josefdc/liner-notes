@@ -6,3 +6,4 @@
 # lines here must own the contract and say why in its description. Lines already on the base
 # branch never excuse a new change.
 engine changed: zod 4.6.5 replaces zod 3.25's zod/v4; imports move from "zod/v4" to "zod", the JSON Schema export keeps a valid .catch() fallback as the input default (the snapshots differ only in spelling), and the check now counts a zod version change as an engine change and compares default values
+engine changed: schemas.ts registers ReplaysResponse (GET /api/replays) so it gets a snapshot like the other responses; no comparison code changes

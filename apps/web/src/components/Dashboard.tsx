@@ -4,7 +4,7 @@ import ActivityLog from './ActivityLog';
 import { Music, ArrowRight, ExternalLink, Search } from 'lucide-react';
 import { AppPhase, type TrackData, type AgentLog } from '../types';
 import TargetScanOverlay from './TargetScanOverlay';
-import { AudioStats, InferenceLabel, ResultNotices } from './EstimatedWarning';
+import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
@@ -222,6 +222,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </Button>
         )}
       </header>
+
+      {/* A replayed result says it is a recording, before anything else about it */}
+      {trackData && <RecordedRunNotice track={trackData} />}
 
       {/* What this result is missing, named (model unavailable, audio not measured) */}
       {trackData && <ResultNotices track={trackData} />}

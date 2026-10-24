@@ -137,6 +137,26 @@ export const RunResponse = z.object({
 });
 export type RunResponse = z.infer<typeof RunResponse>;
 
+/**
+ * A recorded run the API can replay (a showcase track): the track, and when its run was
+ * recorded. Analysing `"<title> <artist>"` replays it whenever live analysis is unavailable.
+ */
+export const ReplayTrack = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  artist: z.string(),
+  album: z.string(),
+  recordedAt: Timestamp,
+});
+export type ReplayTrack = z.infer<typeof ReplayTrack>;
+
+/** 200 answer of GET /api/replays: every recorded run the API serves (possibly none). */
+export const ReplaysResponse = z.object({
+  success: z.literal(true),
+  replays: z.array(ReplayTrack),
+});
+export type ReplaysResponse = z.infer<typeof ReplaysResponse>;
+
 /** POST /api/runs: a Turnstile-verified request for a run token. */
 export const RunTokenRequest = z.object({
   turnstileToken: z.string().min(1),

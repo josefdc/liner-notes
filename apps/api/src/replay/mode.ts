@@ -3,7 +3,9 @@
  *
  *   off       always live.
  *   fallback  live while live analysis is available; when it is not, a recorded run when the
- *             request names a recorded track, else refused.
+ *             request names a recorded track, else refused. Live analysis is unavailable when
+ *             the Spotify keys are not set (live_disabled) or when the model budget is spent
+ *             (budget_exhausted: a cap would be passed, or the spend log cannot be read).
  *   only      a recorded run when the request names a recorded track, else refused. Nothing
  *             live is ever called, so this is decided before any client is built.
  *
@@ -12,6 +14,7 @@
  */
 
 import { parseReplayMode, REQUIRED_KEYS, type ReplayMode } from "../config/settings.js";
+import { liveBudgetState } from "../llm/budgetState.js";
 import { replays } from "./records.js";
 import type { ReplayRecord } from "@liner-notes/contract";
 
@@ -28,27 +31,39 @@ export function liveUnavailableReason(env: NodeJS.ProcessEnv = process.env): str
   return missing.length > 0 ? `${missing.join(", ")} not set` : null;
 }
 
-/** True when this request must not use live services: only mode, or fallback without them. */
-export function liveRefused(env: NodeJS.ProcessEnv = process.env): boolean {
+/** The error code of a request refused live services: switched off, or the budget is spent. */
+export type LiveRefusal = "live_disabled" | "budget_exhausted";
+
+/**
+ * Why this request must not use live services, or null when it may: only mode or fallback
+ * without the Spotify keys (live_disabled), or fallback once the model budget is spent
+ * (budget_exhausted). The one place every route decides between live and recorded.
+ */
+export async function liveRefused(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<LiveRefusal | null> {
   const mode = currentReplayMode(env);
-  if (mode === "only") return true;
-  return mode === "fallback" && liveUnavailableReason(env) !== null;
+  if (mode === "off") return null;
+  if (mode === "only" || liveUnavailableReason(env) !== null) return "live_disabled";
+  return (await liveBudgetState(env)).state === "exhausted" ? "budget_exhausted" : null;
 }
 
 export type ReplayChoice =
   | { kind: "live" }
   | { kind: "replay"; record: ReplayRecord }
-  | { kind: "refused" };
+  | { kind: "refused"; code: LiveRefusal };
 
 /**
  * How to answer a request for the track `find` looks up among the records: live when live
- * services may be used, else that track's recording, else refused (`live_disabled`).
+ * services may be used, else that track's recording, else refused with the reason live
+ * services may not be used (live_disabled or budget_exhausted).
  */
-export function chooseReplay(
+export async function chooseReplay(
   find: (records: ReturnType<typeof replays>) => ReplayRecord | null,
   env: NodeJS.ProcessEnv = process.env,
-): ReplayChoice {
-  if (!liveRefused(env)) return { kind: "live" };
+): Promise<ReplayChoice> {
+  const refused = await liveRefused(env);
+  if (!refused) return { kind: "live" };
   const record = find(replays(env));
-  return record ? { kind: "replay", record } : { kind: "refused" };
+  return record ? { kind: "replay", record } : { kind: "refused", code: refused };
 }

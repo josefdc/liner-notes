@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AUDIO_UNAVAILABLE_TEXT } from '../constants';
 import type { AudioUnavailableReason, TrackData } from '../types';
-import { AudioStats, ResultNotices } from './EstimatedWarning';
+import { AudioStats, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 
 afterEach(cleanup);
 
@@ -241,5 +241,36 @@ describe('model unavailable reason', () => {
     const { container } = render(<ResultNotices track={unavailable(providerText)} />);
     expect(container.textContent).not.toContain('Upstream provider said');
     expect(container.textContent).toContain('(the model did not respond)');
+  });
+});
+
+describe('RecordedRunNotice', () => {
+  const run = { id: 'r1', recordedAt: '2026-10-22T14:03:00.000Z', commit: 'abc1234' };
+
+  it('labels a replayed result as a recording, with its date and commit', () => {
+    render(<RecordedRunNotice track={{ ...base, run: { ...run, mode: 'replay' } }} />);
+    const notice = screen.getByRole('region', { name: 'Recorded run' });
+    expect(notice.textContent).toContain('Recorded run · 22 Oct 2026 · replayed');
+    expect(notice.textContent).toContain('recorded on 22 Oct 2026 (commit abc1234)');
+    expect(notice.textContent).toContain('Nothing was analysed live for it.');
+  });
+
+  it('says the date is missing rather than inventing one', () => {
+    render(
+      <RecordedRunNotice
+        track={{ ...base, run: { mode: 'replay', recordedAt: null, commit: null } }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Recorded run' });
+    expect(notice.textContent).toContain('Recorded run · date not recorded · replayed');
+    expect(notice.textContent).not.toContain('commit');
+  });
+
+  it('renders nothing for a live result or one that does not say', () => {
+    const live = render(<RecordedRunNotice track={{ ...base, run: { ...run, mode: 'live' } }} />);
+    expect(live.container.textContent).toBe('');
+    live.unmount();
+    const older = render(<RecordedRunNotice track={base} />);
+    expect(older.container.textContent).toBe('');
   });
 });

@@ -14,13 +14,13 @@ import {
 import {
   audioValues,
   displayableFactoids,
-  MODEL_UNAVAILABLE_TEXT,
+  FACTOID_UNAVAILABLE_TEXT,
   normalizeTrack,
 } from '../constants';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
-import { AudioStats, InferenceLabel, ResultNotices } from './EstimatedWarning';
+import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import type {
   TrackData,
@@ -390,7 +390,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               )}
               {decryptUnavailable && (
                 <p role="status" className="text-xs font-mono text-text-tertiary">
-                  More facts unavailable: {MODEL_UNAVAILABLE_TEXT[decryptUnavailable]}
+                  More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
                 </p>
               )}
 
@@ -440,6 +440,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
         `}
         >
+          <RecordedRunNotice track={track} className="w-full max-w-lg mb-4" />
           <ResultNotices track={track} className="w-full max-w-lg mb-4" />
 
           {/* Album Art Container */}

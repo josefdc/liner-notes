@@ -26,7 +26,8 @@ const SuggestQuerySchema = z.object({
  * limit 1-10 (default 5); anything else is a 400 `invalid_input`. A Spotify failure is a 502
  * `upstream_unavailable` with a generic message.
  *
- * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) Spotify is not called:
+ * Under REPLAY_MODE=only (or fallback while live analysis is unavailable: no Spotify keys, or the
+ * model budget spent) Spotify is not called:
  * the suggestions are the recorded tracks whose title, artist or album has a word starting with
  * each word of the query (often none).
  */
@@ -43,7 +44,7 @@ router.get(
     }
     const { query, limit = 5 } = parsed.data;
 
-    if (liveRefused()) {
+    if (await liveRefused()) {
       const suggestions = replays().suggestions(query, limit);
       res.json({
         success: true,

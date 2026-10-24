@@ -1,5 +1,6 @@
 import {
   RESOURCE_ID_PATTERN,
+  ReplaysResponse,
   RunResponse,
   SPOTIFY_ID_PATTERN,
   type StoredRun,
@@ -120,6 +121,29 @@ router.get("/api/runs/by-track/:spotifyId", (req, res) => {
     if (!body) broken = true;
   }
   sendError(res, broken ? "failed" : "not_found");
+});
+
+/**
+ * The recorded runs the API can replay
+ *
+ * GET /api/replays
+ * Returns ReplaysResponse: one entry per recording served from the replay directory (the
+ * showcase tracks), with its track and when it was recorded; an empty list when there are none.
+ * The web offers these while live analysis is paused or switched off. The list does not depend
+ * on REPLAY_MODE: under `off` the same tracks are analysed live.
+ */
+router.get("/api/replays", (_req, res) => {
+  const body: ReplaysResponse = {
+    success: true,
+    replays: replays().records.map((record) => ({
+      id: record.analysis.id,
+      title: record.analysis.title,
+      artist: record.analysis.artist,
+      album: record.analysis.album,
+      recordedAt: record.recordedAt,
+    })),
+  };
+  res.json(ReplaysResponse.parse(body));
 });
 
 export default router;

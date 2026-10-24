@@ -509,11 +509,17 @@ export function useAgent(): UseAgentReturn {
                 break;
 
               case 'error':
-                console.warn('[useAgent] Factoid stream error:', data.error);
-                // The rate limit and a paused budget are reported to the caller; the stream
-                // goes on (one failed fact does not fail the others).
-                if (data.code === 'rate_limited' || data.code === 'budget_exhausted') {
+                // The rate limit, a paused budget and live calls switched off are reported to
+                // the caller, which shows them; other failures are logged. Either way the
+                // stream goes on (one failed fact does not fail the others).
+                if (
+                  data.code === 'rate_limited' ||
+                  data.code === 'budget_exhausted' ||
+                  data.code === 'live_disabled'
+                ) {
                   onUnavailable?.(data.code);
+                } else {
+                  console.warn('[useAgent] Factoid stream error:', data.error);
                 }
                 break;
             }

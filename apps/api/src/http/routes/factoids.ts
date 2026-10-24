@@ -10,7 +10,8 @@
  *
  * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) no model is called:
  * a recorded track's "more facts" are the recorded factoids the client does not have yet (often
- * none), and any other track gets live_disabled.
+ * none), and any other track gets live_disabled, or budget_exhausted when fallback paused live
+ * calls because the budget is spent.
  */
 
 import { randomUUID } from "node:crypto";
@@ -240,7 +241,8 @@ export function createFactoidsRouter({
    * knows fewer), numbered after the existing ids
    * A malformed body is a 400 `invalid_input`; the model's rate limit a 429 `rate_limited`; the
    * budget or the call cap a 503 `budget_exhausted`; any other failed generation a 500 `failed`;
-   * a track with no recording while live calls may not be made (REPLAY_MODE) a 503 `live_disabled`.
+   * a track with no recording while live calls may not be made (REPLAY_MODE) a 503 `live_disabled`
+   * (or `budget_exhausted` when fallback paused them because the budget is spent).
    * An empty list is a valid answer (nothing documented the model is sure of).
    */
   router.post(
@@ -258,13 +260,13 @@ export function createFactoidsRouter({
       const track = describeTrack(trackTitle, trackArtist);
 
       // A Spotify track id names the track: title and artist are used only without one.
-      const replay = chooseReplay((records) =>
+      const replay = await chooseReplay((records) =>
         SPOTIFY_ID_PATTERN.test(parsed.data.trackId)
           ? records.forTrack(parsed.data.trackId)
           : records.forTitle(trackTitle, trackArtist),
       );
       if (replay.kind === "refused") {
-        sendError(res, "live_disabled");
+        sendError(res, replay.code);
         return;
       }
       if (replay.kind === "replay") {
@@ -339,7 +341,8 @@ export function createFactoidsRouter({
    * - { type: "heartbeat" }: every 15 s while the stream is open
    * - { type: "done" }: always last
    *
-   * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled.
+   * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled (or
+   * budget_exhausted, see above).
    *
    * Invalid input is reported in the stream (an EventSource cannot read an error status). When
    * the client disconnects, no further factoid is requested and nothing more is written.
@@ -359,9 +362,9 @@ export function createFactoidsRouter({
       const { trackTitle, trackArtist, existingIds } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
 
-      const replay = chooseReplay((records) => records.forTitle(trackTitle, trackArtist));
+      const replay = await chooseReplay((records) => records.forTitle(trackTitle, trackArtist));
       if (replay.kind === "refused") {
-        error("live_disabled");
+        error(replay.code);
         stream.done();
         return;
       }

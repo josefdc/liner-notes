@@ -20,6 +20,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   AnalyzeStreamEvent,
   type ReplayRecord,
+  ReplaysResponse,
   RunResponse,
   runIssues,
   TrackAnalysis,
@@ -29,6 +30,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { SonicAgentStateType } from "../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
 import { createApp } from "../http/app.js";
+import { resetBudgetStateForTests } from "../llm/budgetState.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
@@ -600,18 +602,21 @@ describe("REPLAY_MODE", () => {
     live.model = 0;
   });
 
-  it("reads the mode: off, fallback without keys, only; anything else as only", () => {
+  it("reads the mode: off, fallback without keys, only; anything else as only", async () => {
     vi.stubEnv("REPLAY_MODE", "off");
-    expect(liveRefused()).toBe(false);
+    expect(await liveRefused()).toBeNull();
     vi.stubEnv("REPLAY_MODE", "fallback");
-    expect(liveRefused()).toBe(false);
+    expect(await liveRefused()).toBeNull();
     vi.stubEnv("SPOTIFY_CLIENT_SECRET", "");
-    expect(liveRefused()).toBe(true);
+    expect(await liveRefused()).toBe("live_disabled");
     vi.stubEnv("REPLAY_MODE", "only");
-    expect(liveRefused()).toBe(true);
+    expect(await liveRefused()).toBe("live_disabled");
     vi.stubEnv("REPLAY_MODE", "sometimes");
     expect(currentReplayMode()).toBe("only");
-    expect(chooseReplay((set) => set.forQuery("nothing recorded"))).toEqual({ kind: "refused" });
+    expect(await chooseReplay((set) => set.forQuery("nothing recorded"))).toEqual({
+      kind: "refused",
+      code: "live_disabled",
+    });
   });
 
   it("only: replays a recorded track as a new run, stored as a replay, with no live call", async () => {
@@ -945,6 +950,182 @@ describe("REPLAY_MODE", () => {
     const refused = await sse(streamPath("Something else"));
     expect(refused.map((e) => e.code ?? e.type)).toEqual(["live_disabled", "done"]);
     expect(live.scout).toBe(1);
+  });
+});
+
+describe("REPLAY_MODE=fallback once the model budget is spent", () => {
+  let fixture: ReplayRecord;
+  let spendLog: string;
+
+  /** A spend log holding one settled call of `usd`, made at `ts`. */
+  const spent = (usd: number, ts = new Date().toISOString()) =>
+    writeFileSync(
+      spendLog,
+      `${JSON.stringify({ ts, deployment: "gpt", in: 0, out: 0, usd_est: usd, unit: "dev" })}\n`,
+    );
+
+  beforeEach(async () => {
+    const runId = await liveRun("source run");
+    fixture = record(runId).record;
+    writeFileSync(join(replayDir, `${fixture.slug}.json`), JSON.stringify(fixture));
+    resetReplaysForTests();
+    getDb().exec("DELETE FROM runs; DELETE FROM run_events;");
+    live.scout = 0;
+    live.search = 0;
+    live.model = 0;
+
+    // A paid provider configured (dummy key, never called: the model layer is a stub here),
+    // with its spend log in the scratch directory and the default caps (USD 25 in total).
+    spendLog = join(dir, "spend.jsonl");
+    spent(0);
+    vi.stubEnv("REPLAY_MODE", "fallback");
+    vi.stubEnv("LLM_CASSETTE", "off");
+    vi.stubEnv("AZURE_OPENAI_API_KEY", "dummy-key");
+    vi.stubEnv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/");
+    vi.stubEnv("LLM_SPEND_LOG", spendLog);
+    vi.stubEnv("BUDGET_TOTAL_USD", "");
+    vi.stubEnv("BUDGET_DAILY_USD", "");
+    vi.stubEnv("BUDGET_EVAL_FLOOR_USD", "");
+    resetBudgetStateForTests();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => resetBudgetStateForTests());
+
+  it("replays a recorded track and answers any other query budget_exhausted, never a result", async () => {
+    spent(30);
+    const replayed = await sse(streamPath("Recorded Song The Recorders"));
+    const complete = replayed.find((event) => event.type === "complete") as Event;
+    expect(TrackAnalysis.parse(complete.data).run).toMatchObject({
+      mode: "replay",
+      recordedAt: fixture.recordedAt,
+      commit: "abc1234",
+    });
+    expect(replayed[1]).toMatchObject({ type: "status", node: "replay" });
+
+    const refused = await sse(streamPath("Something else"));
+    expect(refused.map((e) => [e.type, e.code])).toEqual([
+      ["error", "budget_exhausted"],
+      ["done", undefined],
+    ]);
+    expect(String(refused[0].error)).toMatch(/paused/i);
+    expect(refused.some((e) => e.type === "complete")).toBe(false);
+
+    const post = await request(app).post("/api/analyze").send({ query: "Something else" });
+    expect(post.status).toBe(503);
+    expect(post.body).toMatchObject({ success: false, code: "budget_exhausted" });
+    const postReplay = await request(app)
+      .post("/api/analyze")
+      .send({ query: "Recorded Song The Recorders" });
+    expect(postReplay.status).toBe(200);
+    expect(postReplay.body.data.run).toMatchObject({ mode: "replay" });
+
+    // A paused run cannot go on either.
+    const resume = await request(app)
+      .post("/api/analyze/resume")
+      .send({ threadId: "some-thread", selectedTrackId: CHOICE_A });
+    expect(resume.body.code).toBe("budget_exhausted");
+    const resumed = await sse(
+      `/api/analyze/stream/resume?threadId=some-thread&selectedTrackId=${CHOICE_A}`,
+    );
+    expect(resumed.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
+
+    // Suggestions are the recordings; "more facts" the recorded ones, or budget_exhausted.
+    const suggest = await request(app).get("/api/search/suggest?query=recorded");
+    expect(suggest.body.suggestions.map((c: { id: string }) => c.id)).toEqual([TRACK_ID]);
+    const facts = await request(app)
+      .post("/api/factoids/decrypt")
+      .send({ trackId: TRACK_ID, trackTitle: "Recorded Song", existingFactoidIds: [] });
+    expect(facts.status).toBe(200);
+    expect(facts.body.meta).toMatchObject({ mode: "replay" });
+    const otherFacts = await request(app)
+      .post("/api/factoids/decrypt")
+      .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
+    expect(otherFacts.status).toBe(503);
+    expect(otherFacts.body.code).toBe("budget_exhausted");
+    const streamedFacts = await sse("/api/factoids/decrypt/stream?trackTitle=Other");
+    expect(streamedFacts.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
+    noLiveCalls();
+
+    // REPLAY_MODE=off never switches to recordings: the run is live (and its model calls meet
+    // the budget guard one by one).
+    vi.stubEnv("REPLAY_MODE", "off");
+    const offEvents = await sse(streamPath("Recorded Song The Recorders"));
+    expect(live.scout).toBe(1);
+    const offComplete = offEvents.find((event) => event.type === "complete") as Event;
+    expect((offComplete.data as TrackAnalysis).run?.mode).toBe("live");
+  });
+
+  it("pauses at the daily cap and once a full run no longer fits; runs live with budget left", async () => {
+    // Spent yesterday only: today's cap is untouched.
+    vi.stubEnv("BUDGET_DAILY_USD", "2");
+    spent(2, new Date(Date.now() - 36 * 3600_000).toISOString());
+    const liveEvents = await sse(streamPath("Something else"));
+    expect(live.scout).toBe(1);
+    expect(liveEvents.some((event) => event.type === "complete")).toBe(true);
+
+    // The same spending today reaches the daily cap.
+    spent(2);
+    resetBudgetStateForTests();
+    expect((await sse(streamPath("Something else"))).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+
+    // Below the cap, but a run of the design-target size (USD 0.54) would pass it.
+    spent(1.6);
+    resetBudgetStateForTests();
+    expect((await sse(streamPath("Something else"))).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+    spent(1.4);
+    resetBudgetStateForTests();
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(2);
+  });
+
+  it("pauses when the spend log cannot be read: the guard would refuse every model call", async () => {
+    vi.stubEnv("LLM_SPEND_LOG", join(dir, "no-such-spend-log.jsonl"));
+    const events = await sse(streamPath("Something else"));
+    expect(events.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
+    // Without a paid provider (cassettes) nothing can be spent: the budget stops nothing.
+    vi.stubEnv("LLM_CASSETTE", "replay");
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(1);
+  });
+});
+
+describe("GET /api/replays", () => {
+  it("lists the recorded tracks with when they were recorded, or none", async () => {
+    rmSync(replayDir, { recursive: true, force: true });
+    mkdirSync(replayDir);
+    resetReplaysForTests();
+    const empty = await request(app).get("/api/replays");
+    expect(empty.status).toBe(200);
+    expect(empty.body).toEqual({ success: true, replays: [] });
+
+    const runId = await liveRun("source run");
+    const fixture = record(runId).record;
+    writeFileSync(join(replayDir, `${fixture.slug}.json`), JSON.stringify(fixture));
+    resetReplaysForTests();
+    const res = await request(app).get("/api/replays");
+    expect(res.status).toBe(200);
+    expect(ReplaysResponse.parse(res.body)).toEqual({
+      success: true,
+      replays: [
+        {
+          id: TRACK_ID,
+          title: "Recorded Song",
+          artist: "The Recorders",
+          album: "Tapes",
+          recordedAt: fixture.recordedAt,
+        },
+      ],
+    });
+    // Nothing of the recorded request (the curated query) or the result beyond the track.
+    expect(Object.keys(res.body.replays[0]).sort()).toEqual(
+      ["album", "artist", "id", "recordedAt", "title"].sort(),
+    );
   });
 });
 

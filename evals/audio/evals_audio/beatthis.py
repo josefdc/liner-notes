@@ -149,10 +149,13 @@ def ensure_checkpoint(root: Path, budget: DiskBudget, client: httpx.Client | Non
             client.close()
 
 
-def tempo_from_beats(beats: np.ndarray, signals):
+def tempo_from_beats(
+    beats: np.ndarray, signals, onset_check: bool = True, drift_tolerance: float | None = None
+):
     """
     The service's rules applied to a list of beat times: None when there are too few beats or
-    the median interval is out of range; otherwise the refined tempo and whether it holds.
+    the median interval is out of range; otherwise the refined tempo and whether it holds
+    (the steadiness check, with or without its onset-tempo part, and its beat-drift test).
     """
     from . import service
 
@@ -164,14 +167,16 @@ def tempo_from_beats(beats: np.ndarray, signals):
     if not estimators.MIN_BPM <= start <= estimators.MAX_BPM:
         return None
     bpm = estimators.refine_bpm(estimators.onset_beats(beats, signals), start)
+    measured = estimators.steadiness(beats, bpm, signals)
     return estimators.TempoEstimate(
         bpm=bpm,
         confidence=None,
         raw_confidence=None,
         beats=beats,
         method=METHOD,
-        steady=bool(estimators.steady_tempo(beats, bpm, signals)),
+        steady=bool(measured.holds(onset_check=onset_check, drift_tolerance=drift_tolerance)),
         beats_follow_changes=True,
+        steadiness=measured,
     )
 
 
@@ -180,6 +185,10 @@ class BeatThisEstimator:
     # beat-this gives no confidence, so there is no minimum to apply (the harness lifts this
     # attribute for calibration as it does for the others; 0 changes nothing).
     min_tempo_confidence = 0.0
+    # Its beats follow tempo changes, as Essentia's do: it takes the service's Essentia settings
+    # for the steadiness check (the onset-tempo part; no beat-drift test).
+    steady_onset_check = True
+    steady_drift_tolerance: float | None = None
 
     def __init__(self, checkpoint: str):
         import torch
@@ -203,7 +212,9 @@ class BeatThisEstimator:
         _, estimators = service.load()
         if signals.onset_periodicity < estimators.MIN_TEMPO_PERIODICITY:
             return None
-        return tempo_from_beats(self.beats(signals), signals)
+        return tempo_from_beats(
+            self.beats(signals), signals, self.steady_onset_check, self.steady_drift_tolerance
+        )
 
     def key(self, signals):
         return None

@@ -1,0 +1,432 @@
+"""
+The calibration: the split, the derivation of the service's decisions from recorded
+measurements, the acceptance criteria, the choice and the report section, on hand-built
+records (no audio). The real service's agreement with the derivation is in test_service_smoke.
+"""
+
+import json
+import re
+
+import pytest
+
+from evals_audio import calibration as cal
+from evals_audio import calibration_report
+from evals_audio.controls import ANY, NOT_SCORED, controls
+from evals_audio.datasets import DATASETS, split_of
+from evals_audio.report import SCHEMA_VERSION, count_p_values, render
+
+FRAMES_PER_MINUTE = 60.0 * 22050 / 512
+
+
+def tempo_raw(
+    bpm=120.0, confidence=0.6, onset_off=False, drift=0.0, acc1=1.0, acc2=1.0, beats_off=False
+):
+    """
+    A recorded estimate: steady in all three thirds unless the onset tempo (or the beats' own
+    tempo) is off by 30 %.
+    """
+    period = FRAMES_PER_MINUTE / bpm
+    onset = period * (1.3 if onset_off else 1.0)
+    beat_bpm = bpm * (1.3 if beats_off else 1.0)
+    return {
+        "bpm": bpm,
+        "confidence": confidence,
+        "steadiness": {
+            "enoughBeats": True,
+            "period": period,
+            "byCount": False,
+            "parts": [[0.5, beat_bpm, onset]] * 3,
+        },
+        "drift": {"4": [drift] * 3, "6": [drift] * 3},
+        "scores": {"acc1": acc1, "acc2": acc2},
+    }
+
+
+def tempo_clip(tid, split="calibration", periodicity=0.5, served=120.0, raw=None, name="essentia"):
+    raw = tempo_raw() if raw is None else raw
+    return {
+        "trackId": tid,
+        "split": split,
+        "gate": {"periodicity": periodicity},
+        "estimators": {name: {"gatePassed": True, "tempo": {"served": served, "raw": raw}}},
+    }
+
+
+def evidence(periodicity=0.5, ratio=0.5, classes=(0, 4, 7), voice=None):
+    vector = [1.0 if i in classes else 0.0 for i in range(12)]
+    return {
+        "periodicity": periodicity,
+        "tonalRatio": ratio,
+        "harmonicTonalRatio": ratio,
+        "series": False,
+        "movement": 0.3,
+        "classes": {
+            "lines": vector,
+            "fundamental": vector,
+            "upper130": vector,
+            "upper260": vector,
+        },
+        "voice": voice,
+    }
+
+
+def key_clip(tid, ev, strength=0.8, exact=1.0, served=None, split="calibration", name="essentia"):
+    raw = {
+        "tonic": "C",
+        "mode": "major",
+        "strength": strength,
+        "scores": {"mirex": exact, "exact": exact},
+    }
+    return {
+        "trackId": tid,
+        "split": split,
+        "gate": {"periodicity": ev["periodicity"]},
+        "evidence": ev,
+        "estimators": {name: {"gatePassed": True, "key": {"served": served, "raw": raw}}},
+    }
+
+
+# --- the split ---------------------------------------------------------------------------------
+
+
+def test_the_split_is_fixed_by_dataset_and_track_id_and_about_half_each():
+    spec = DATASETS["giantsteps-tempo"]
+    ids = [str(i) for i in range(2000)]
+    splits = [split_of(spec, i) for i in ids]
+    assert set(splits) == {"calibration", "evaluation"}
+    assert 0.45 < splits.count("calibration") / len(ids) < 0.55
+    assert splits == [split_of(spec, i) for i in ids]  # the same every time
+    other = [split_of(DATASETS["ballroom"], i) for i in ids]
+    assert other != splits  # each dataset has its own
+
+
+# --- the derivation --------------------------------------------------------------------------------
+
+
+def test_the_tempo_rules_are_applied_to_the_recorded_estimate():
+    rules = cal.BASELINE
+    name = "essentia"
+    assert cal.derive_tempo(True, 0.5, tempo_raw(), name, rules) == 120.0
+    assert cal.derive_tempo(False, 0.5, tempo_raw(), name, rules) is None  # gated
+    assert cal.derive_tempo(True, 0.19, tempo_raw(), name, rules) is None  # periodicity
+    assert cal.derive_tempo(True, 0.5, tempo_raw(confidence=0.2), name, rules) is None
+    assert cal.derive_tempo(True, 0.5, None, name, rules) is None
+    # The onset-tempo part of the steadiness check, on and off.
+    off = tempo_raw(onset_off=True)
+    assert cal.derive_tempo(True, 0.5, off, name, rules) is None
+    assert cal.derive_tempo(True, 0.5, off, name, rules.set("onset_check", False, name)) == 120.0
+    # The drift check, for one estimator only.
+    drifting = tempo_raw(drift=0.13)
+    with_drift = rules.set("drift", [6.0, 0.12], name)
+    assert cal.derive_tempo(True, 0.5, drifting, name, rules) == 120.0
+    assert cal.derive_tempo(True, 0.5, drifting, name, with_drift) is None
+    assert cal.derive_tempo(True, 0.5, drifting, "librosa", with_drift) == 120.0
+
+
+def test_the_key_evidence_and_strength_are_applied_to_the_recorded_key():
+    rules = cal.BASELINE
+    name = "essentia"
+    stats = {"tonic": "C", "mode": "major", "strength": 0.8}
+    assert cal.derive_key(True, evidence(), stats, name, rules) == ["C", "major"]
+    # No sustained pitch over a beat: the line rules withhold, unless they are off.
+    weak = evidence(ratio=0.01)
+    assert cal.evidence_withheld(weak, rules, name) == "no sustained pitch"
+    assert cal.derive_key(True, weak, stats, name, rules) is None
+    lines_off = rules.set("line_rules_with_beat", False, name)
+    assert cal.derive_key(True, weak, stats, name, lines_off) == ["C", "major"]
+    # ...but the one-source rules still apply over a beat.
+    speech = evidence(ratio=0.01, voice={"withoutNotes": True, "onePitch": False})
+    assert cal.evidence_withheld(speech, lines_off, name) is not None
+    # Fewer than three pitch classes, at the level and with the vector chosen.
+    two = evidence(classes=(0, 7))
+    assert cal.evidence_withheld(two, rules, name) == "fewer than three pitch classes"
+    # The minimum strength, per estimator.
+    strict = rules.set("min_strength", 0.9, name)
+    assert cal.derive_key(True, evidence(), stats, name, strict) is None
+    assert cal.derive_key(True, evidence(), stats, "librosa", strict) == ["C", "major"]
+
+
+def test_a_derivation_that_disagrees_with_the_service_is_reported():
+    clips = [tempo_clip("a"), tempo_clip("b", served=None)]
+    bad = cal.mismatches(clips, ["essentia"], "tempo", cal.BASELINE)
+    assert bad == {"essentia": ["b"]}
+
+
+# --- the criteria and the choice ---------------------------------------------------------------------
+
+
+def comparison(**counts):
+    base = {k: 0 for k in ("n", "old", "new", "oldRight", "newRight", "oldGross", "extra")}
+    base |= {k: 0 for k in ("extraRight", "extraGross", "lost", "lostRight", "kept", "keptRight")}
+    return base | counts
+
+
+NO_CHANGE = {"fixed": [], "broken": []}
+
+
+def test_a_loosening_needs_right_extra_answers_at_every_criterion():
+    old = {"n": 100, "old": 40, "oldRight": 32, "oldGross": 2}  # 80 % right, 5 % gross
+    passing = comparison(**old, extra=37, extraRight=29, extraGross=4)  # 78.4 % [62.8, 88.6]
+    verdict = cal.judge(passing, {"d": passing}, NO_CHANGE, "key")
+    assert verdict["accepted"] and verdict["loosens"]
+    few = comparison(**old, extra=1, extraRight=1)
+    assert cal.judge(few, {"d": few}, NO_CHANGE, "key")["failed"] == ["L1"]
+    diluting = comparison(**old, extra=200, extraRight=130)  # 65 %: 15 points under 80 %
+    assert cal.judge(diluting, {"d": diluting}, NO_CHANGE, "key")["failed"] == ["L2"]
+    gross = comparison(**old, extra=40, extraRight=32, extraGross=8)  # 20 % against 5 %
+    assert cal.judge(gross, {"d": gross}, NO_CHANGE, "key")["failed"] == ["L3"]
+    broken = {"fixed": [], "broken": ["a control"]}
+    assert cal.judge(passing, {"d": passing}, broken, "key")["failed"] == ["controls"]
+
+
+def test_a_tightening_needs_a_fixed_control_and_a_small_cost():
+    old = {"n": 100, "old": 40, "oldRight": 30}
+    cheap = comparison(**old, newRight=30, lost=1, lostRight=0, kept=39, keptRight=30)
+    fixed = {"fixed": ["random-notes"], "broken": []}
+    assert cal.judge(cheap, {"d": cheap}, fixed, "key")["accepted"]
+    assert cal.judge(cheap, {"d": cheap}, NO_CHANGE, "key")["failed"] == ["T1"]
+    costly = comparison(**old, newRight=27, lost=3, lostRight=3, kept=37, keptRight=27)
+    assert cal.judge(costly, {"d": costly}, fixed, "key")["failed"] == ["T2"]
+    # Withholding only right answers fails even when correct / n hardly moves.
+    right_only = comparison(**old, newRight=29, lost=1, lostRight=1, kept=39, keptRight=29)
+    assert cal.judge(right_only, {"d": right_only}, fixed, "key")["failed"] == ["T2"]
+    # A change on the controls only, at no cost on the clips, is a tightening that passes.
+    free = comparison(**old, newRight=30, kept=40, keptRight=30)
+    assert cal.judge(free, {"d": free}, fixed, "tempo")["accepted"]
+
+
+def row(new, accepted=True, loosens=False, fixed=0, lost=0, value=0.5):
+    return {
+        "value": value,
+        "verdict": {"accepted": accepted, "loosens": loosens},
+        "pooled": {"new": new, "lost": lost},
+        "controls": {"fixed": ["c"] * fixed},
+    }
+
+
+def test_the_choice_takes_the_loosest_loosening_or_the_most_useful_tightening():
+    assert cal.choose([row(10, False), row(12, loosens=True), row(15, loosens=True)]) == 2
+    assert cal.choose([row(10, False), row(9, fixed=1), row(8, fixed=2, lost=1)]) == 2
+    # Equal fixes: fewest answers withheld, then the least strict (a lower minimum, a higher
+    # tolerance), whatever the order of the grid.
+    rows = [row(9, fixed=1, lost=1, value=0.3), row(10, fixed=1, value=0.5)]
+    assert cal.choose([*rows, row(10, fixed=1, value=0.4)], "strength") == 2
+    drifts = [row(10, fixed=1, value=[6.0, 0.1]), row(10, fixed=1, value=[6.0, 0.12])]
+    assert cal.choose(drifts, "drift") == 1
+    assert cal.choose([row(10, False), row(9, False)]) is None
+
+
+def test_the_baseline_holds_the_values_before_this_calibration():
+    """Pinned: the values of commit ec7d24b, against which "before" is reported."""
+    b = cal.BASELINE
+    assert b.min_periodicity == 0.2
+    assert b.min_confidence == {"librosa": 0.3, "essentia": 1.5 / 5.32, "beat-this": 0.0}
+    assert (b.steady_tolerance, b.steady_lag_frames) == (0.05, 2.0)
+    assert set(b.onset_check.values()) == {True}
+    assert set(b.drift.values()) == {None}
+    assert set(b.line_rules_with_beat.values()) == {True}
+    assert (b.min_tonal_ratio, b.class_vector, b.class_level, b.min_classes) == (
+        0.1,
+        "lines",
+        0.28,
+        3,
+    )
+    assert b.min_strength == {"librosa": 0.3, "essentia": 0.3}
+
+
+def test_the_service_values_are_read_from_the_service():
+    """Pinned: the values this calibration chose, as the service holds them."""
+    rules = cal.service_rules()
+    assert rules.min_strength == {"librosa": 0.3, "essentia": 0.7}
+    assert rules.line_rules_with_beat == {"librosa": True, "essentia": False}
+    assert rules.drift == {"librosa": [6.0, 0.12], "essentia": None, "beat-this": None}
+    assert rules.onset_check == {"librosa": True, "essentia": True, "beat-this": True}
+    unchanged = ("min_periodicity", "min_confidence", "steady_tolerance", "steady_lag_frames")
+    unchanged += ("min_tonal_ratio",)
+    for field in (*unchanged, "class_level", "min_classes"):
+        assert getattr(rules, field) == getattr(cal.BASELINE, field), field
+
+
+# --- the choice on recorded runs, and the report section -----------------------------------------------
+
+
+def tempo_run(clips):
+    return {
+        "suite": "calibration",
+        "kind": "tempo",
+        "command": "uv run python -m evals_audio --suite calibration --dataset ballroom",
+        "gitCommit": "abc1234",
+        "dataset": {"name": "ballroom", "title": "Ballroom"},
+        "estimators": ["essentia"],
+        "seeds": {"selection": 1, "clips": 1, "bootstrap": 1},
+        "limit": None,
+        "splits": {"calibration": sum(c["split"] == "calibration" for c in clips)}
+        | {"evaluation": sum(c["split"] == "evaluation" for c in clips)},
+        "rules": cal.BASELINE.as_dict(),
+        "baseline": cal.BASELINE.as_dict(),
+        "clips": clips,
+    }
+
+
+def controls_run(items):
+    return {
+        "suite": "controls",
+        "command": "uv run python -m evals_audio --suite controls",
+        "gitCommit": "abc1234",
+        "dataset": {"name": "controls", "title": "generated controls"},
+        "estimators": ["essentia"],
+        "seeds": {"selection": 1, "clips": 1, "bootstrap": 1},
+        "limit": None,
+        "rules": cal.BASELINE.as_dict(),
+        "controls": items,
+    }
+
+
+def onset_runs(control_raw=None, evaluation_right=36):
+    """
+    Essentia withholds 40 tempos for the onset-tempo part alone, 36 of them right: lifting the
+    part passes every criterion. One control changes tempo (truth: none): its beats show it.
+    """
+    clips = []
+    for split in ("calibration", "evaluation"):
+        for k in range(50):
+            clips.append(tempo_clip(f"{split}-steady-{k}", split, served=120.0))
+        right = 36 if split == "calibration" else evaluation_right
+        for k in range(40):
+            raw = tempo_raw(onset_off=True, acc1=float(k < right), acc2=1.0)
+            clips.append(tempo_clip(f"{split}-onset-{k}", split, served=None, raw=raw))
+    raw = control_raw or tempo_raw(onset_off=True, beats_off=True)
+    swing = tempo_clip("swing", served=None, raw=raw)
+    swing |= {"name": "swing", "group": "no-tempo", "truth": {"tempo": None, "key": NOT_SCORED}}
+    swing["truth"]["gate"] = "pass"
+    swing["servedGate"] = {"essentia": {"passed": True, "reason": None}}
+    return [tempo_run(clips)], controls_run([swing])
+
+
+def test_the_choice_is_made_again_from_the_recorded_runs():
+    runs, ctl = onset_runs()
+    choice = cal.select(runs, ctl["controls"])
+    onset = next(f for f in choice["families"] if f["family"] == "onset")
+    group = onset["groups"][0]
+    assert group["estimator"] == "essentia"
+    assert (group["before"], group["chosen"]) == (True, False)
+    lifted = group["candidates"][1]
+    assert lifted["pooled"]["extra"] == 40 and lifted["pooled"]["extraRight"] == 36
+    assert lifted["controls"]["broken"] == []
+    assert cal.Rules.from_dict(choice["rules"]).onset_check["essentia"] is False
+
+
+def test_a_change_that_gives_a_control_a_value_it_should_not_have_is_refused():
+    runs, ctl = onset_runs(control_raw=tempo_raw(onset_off=True))  # only the onset part stops it
+    choice = cal.select(runs, ctl["controls"])
+    group = next(f for f in choice["families"] if f["family"] == "onset")["groups"][0]
+    assert group["candidates"][1]["controls"]["broken"] == ["swing"]
+    assert group["candidates"][1]["verdict"]["failed"] == ["controls"]
+    assert group["chosen"] is True
+
+
+def test_the_held_out_comparison_uses_only_the_evaluation_clips():
+    runs, _ = onset_runs()
+    after = cal.BASELINE.set("onset_check", False, "essentia")
+    (row_,) = cal.evaluate(runs, cal.BASELINE, after)
+    assert row_["n"] == 90
+    assert (row_["oldRight"], row_["newRight"]) == (50, 86)
+    assert (row_["extra"], row_["extraRight"]) == (40, 36)
+    assert row_["discordantNew"] == 36 and row_["mcnemarP"] < 0.001
+
+
+def calibration_doc():
+    runs, ctl = onset_runs()
+    after = cal.BASELINE.set("onset_check", False, "essentia").as_dict()
+    for run in [*runs, ctl]:
+        run["rules"] = after
+    return {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
+
+
+def test_the_section_renders_the_choice_the_evaluation_and_the_controls():
+    doc = calibration_doc()
+    text = render(doc)
+    assert "## Calibration of the withholding rules" in text
+    assert "Derivation check: " in text
+    assert "Chosen: off (before: on)." in text
+    assert "The service holds the values that remain after the evaluation check." in text
+    assert "### Held-out evaluation (evaluation clips)" in text
+    assert "| ballroom | `essentia` | 90 | 50/90 = 55.6 %" in text
+    assert "| swing | no-tempo | none |" in text
+
+
+def test_a_service_value_that_differs_from_the_choice_is_flagged():
+    doc = calibration_doc()
+    for run in doc["runs"]:
+        run["rules"] = cal.BASELINE.as_dict()  # the service kept the onset part
+    text = render(doc)
+    assert "**no**" in text
+    assert "The service's values differ from those that remain in 1 rows" in text
+
+
+def test_the_section_counts_every_p_value_it_prints():
+    doc = calibration_doc()
+    text = render(doc)
+    section = text.split("## Calibration of the withholding rules", 1)[1]
+    printed = len(re.findall(r"p [=<] ", section))
+    assert calibration_report.count_p_values(doc) == printed
+    assert count_p_values(doc) == printed
+
+
+def test_the_section_is_rendered_from_the_json_alone():
+    doc = calibration_doc()
+    assert render(json.loads(json.dumps(doc))) == render(doc)
+
+
+# --- controls --------------------------------------------------------------------------------------
+
+
+def test_controls_have_unique_names_known_groups_and_truths():
+    from evals_audio.controls import GROUPS
+
+    items = controls()
+    names = [c.name for c in items]
+    assert len(names) == len(set(names))
+    assert {c.group for c in items} <= set(GROUPS)
+    for c in items:
+        assert c.gate in ("pass", "noise")
+        assert c.tempo is None or c.tempo == NOT_SCORED or isinstance(c.tempo, float)
+        assert c.key in (None, NOT_SCORED, ANY) or len(c.key) == 2
+
+
+@pytest.mark.parametrize(
+    ("truth", "value", "kind", "ok"),
+    [
+        (None, None, "tempo", True),
+        (None, 120.0, "tempo", False),
+        (120.0, 121.0, "tempo", True),
+        (120.0, 60.0, "tempo", False),
+        (120.0, None, "tempo", False),
+        (["C", "major"], ["C", "major"], "key", True),
+        (["C", "major"], ["A", "minor"], "key", False),
+        (ANY, ["A", "minor"], "key", True),
+        (ANY, None, "key", False),
+        (NOT_SCORED, 120.0, "tempo", None),
+    ],
+)
+def test_a_control_value_is_judged_against_its_truth(truth, value, kind, ok):
+    assert cal.control_ok(truth, value, kind) == ok
+
+
+def test_a_change_that_fails_on_the_evaluation_clips_is_reverted():
+    runs, ctl = onset_runs()
+    choice = cal.select(runs, ctl["controls"])
+    kept = cal.confirm(runs, ctl["controls"], choice)
+    (change,) = kept["changes"]
+    assert change["confirmed"] and kept["rules"]["onset_check"]["essentia"] is False
+    # The same choice (made on the calibration clips) when the evaluation clips' extra answers
+    # are mostly wrong: it is reverted.
+    runs, ctl = onset_runs(evaluation_right=10)
+    choice = cal.select(runs, ctl["controls"])
+    reverted = cal.confirm(runs, ctl["controls"], choice)
+    (change,) = reverted["changes"]
+    assert not change["confirmed"]
+    assert change["rows"]["essentia"]["verdict"]["failed"] == ["L1", "L2"]
+    assert reverted["rules"]["onset_check"]["essentia"] is True
+    doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
+    assert "fails L1, L2; reverted" in render(doc)

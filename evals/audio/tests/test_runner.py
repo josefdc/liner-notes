@@ -280,14 +280,14 @@ class FakeSignals:
     def __init__(self, reason):
         self._reason = reason
 
-    def key_withheld(self):
+    def key_withheld(self, lines_with_beat=True):
         return self._reason
 
 
 def test_key_withholding_records_the_key_under_both_rules(monkeypatch):
     from evals_audio import service
 
-    monkeypatch.setattr(service, "key_min_strength", lambda: 0.3)
+    monkeypatch.setattr(service, "key_min_strength", lambda est: 0.3)
     monkeypatch.setattr(service, "key_without_withholding", lambda s, e: FakeKey(0.2))
     # Under the minimum strength only.
     out = key_withheld(FakeSignals(None), None)

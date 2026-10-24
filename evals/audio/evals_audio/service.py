@@ -34,6 +34,8 @@ SUITE_ESTIMATORS = {
     "key": ("librosa", "essentia"),
     "golden": ESTIMATOR_NAMES,
     "cost": ESTIMATOR_NAMES,
+    "calibration": ESTIMATOR_NAMES,  # beat-this on the tempo datasets only
+    "controls": ESTIMATOR_NAMES,
 }
 
 
@@ -197,21 +199,23 @@ def tempo_periodicity_minimum() -> float:
 def key_without_withholding(signals, est):
     """
     The key the estimator would give if neither the service's evidence rule
-    (Signals.key_withheld) nor the minimum strength (KEY_MIN_STRENGTH) stopped it: the
+    (Signals.key_withheld) nor its minimum strength (`min_key_strength`) stopped it: the
     estimator's own code, with both lifted for this one call. Used only to show what they
     withhold; never scored as the service's answer.
     """
-    _, estimators = load()
-    minimum = estimators.KEY_MIN_STRENGTH
-    signals.key_withheld = lambda: None
-    estimators.KEY_MIN_STRENGTH = 0.0
+    signals.key_withheld = lambda *args, **kwargs: None
+    est.min_key_strength = 0.0
     try:
         return est.key(signals)
     finally:
-        estimators.KEY_MIN_STRENGTH = minimum
+        del est.min_key_strength  # back to the class value
         del signals.key_withheld
 
 
-def key_min_strength() -> float:
-    _, estimators = load()
-    return estimators.KEY_MIN_STRENGTH
+def key_evidence(signals, est):
+    """Why the evidence rule withholds a key for this estimator (Signals.key_withheld), or None."""
+    return signals.key_withheld(getattr(est, "key_lines_with_beat", True))
+
+
+def key_min_strength(est) -> float:
+    return est.min_key_strength

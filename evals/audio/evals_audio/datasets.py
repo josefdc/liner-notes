@@ -209,7 +209,13 @@ SUITE_DATASETS = {
     "golden": ("golden",),
     # What each tempo estimator costs, measured on clips of a tempo dataset (evals_audio.costs).
     "cost": ("giantsteps-tempo", "ballroom"),
+    # What the service's withholding rules compare, on every clip (evals_audio.calibration).
+    "calibration": ("ballroom", "giantsteps-tempo", "giantsteps-key"),
+    # The generated controls (evals_audio.controls), not a dataset.
+    "controls": ("controls",),
 }
+# What a dataset measures, for the calibration suite.
+DATASET_KIND = {"ballroom": "tempo", "giantsteps-tempo": "tempo", "giantsteps-key": "key"}
 
 
 # --- references ------------------------------------------------------------------------------
@@ -355,6 +361,19 @@ def public_ids(dataset: Dataset, refs: Iterable[Reference]) -> dict[str, str]:
 def lookup(dataset: Dataset, refs: Iterable[Reference], pid: str) -> list[str]:
     """The dataset's track ids whose public id is `pid` (local only: it needs the index)."""
     return [r.track_id for r in refs if public_id(dataset, r.track_id) == pid]
+
+
+SPLITS = ("calibration", "evaluation")
+
+
+def split_of(dataset: Dataset, track_id: str) -> str:
+    """
+    Whether a track is a calibration clip (thresholds may be chosen on it) or an evaluation
+    clip (held out: only scored). Fixed by a SHA-256 of the dataset name and the dataset's own
+    track id, about half each, whatever the selection, its order or its size.
+    """
+    digest = hashlib.sha256(f"split\x1f{dataset.name}\x1f{track_id}".encode()).digest()
+    return SPLITS[digest[0] & 1]
 
 
 def select(refs: list[Reference], limit: int | None, seed: int) -> list[Reference]:

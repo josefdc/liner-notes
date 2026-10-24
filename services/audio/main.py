@@ -263,7 +263,8 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
 
     tempo = _estimate(estimator.tempo, signals, "tempo")
     key = _estimate(estimator.key, signals, "key")
-    if key is None and (reason := signals.key_withheld()):
+    lines_with_beat = getattr(estimator, "key_lines_with_beat", True)
+    if key is None and (reason := signals.key_withheld(lines_with_beat)):
         logger.info("No key: %s", reason)
 
     # A beat grid is trusted when the tempo holds, or when the tracker follows tempo changes;

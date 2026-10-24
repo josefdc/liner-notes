@@ -18,15 +18,18 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from . import calibration_report
 from .metrics import MIN_CURVE_ANSWERED, mcnemar_exact
 from .runner import METRIC_LABELS, METRICS, SEVERAL_RULES
 from .storage import human
 
-SCHEMA_VERSION = 6
+# Schema 7 adds the calibration and controls suites and the tempo and key runs' split; a
+# schema 6 report (without them) renders as it was written.
+SCHEMA_VERSION = 7
 # The last schema before the bake-off, the golden suite and the cost suite; its reports keep
 # their original wording. (Schema 5 was a draft of 6 and was never merged.)
 LEGACY_SCHEMA = 4
-SUITE_ORDER = {"tempo": 0, "key": 1, "golden": 2, "cost": 3}
+SUITE_ORDER = {"tempo": 0, "key": 1, "golden": 2, "cost": 3, "calibration": 4, "controls": 5}
 
 
 class OlderResults(RuntimeError):
@@ -61,6 +64,7 @@ def run_key(run: dict) -> tuple:
         seeds["bootstrap"],
         run["limit"],
         tuple(sorted(run.get("estimators") or run["summaries"])),
+        run.get("split", "all"),
     )
 
 
@@ -510,7 +514,7 @@ def count_p_values(doc: dict) -> int:
         for curve in (run.get("coverage") or {}).values():
             count += sum(1 for r in (curve.get("ranking") or {}).values() if r["p"] is not None)
         count += len((run.get("styles") or {}).get("versusBaseline") or {})
-    return count + default_test_count(doc)
+    return count + default_test_count(doc) + calibration_report.count_p_values(doc)
 
 
 def default_test_count(doc: dict) -> int:
@@ -671,7 +675,11 @@ def scope(doc: dict) -> str:
             "key": f"key on {run['dataset']['title']}",
             "golden": "the golden set's Deezer previews",
             "cost": f"costs on {run['dataset']['title']} clips",
+            "calibration": f"what the {run.get('kind')} rules compare on {run['dataset']['title']}",
+            "controls": "the generated controls",
         }[run["suite"]]
+        if run.get("split", "all") != "all":
+            what += f", {run['split']} clips only"
         parts.append(f"{what} ({names})")
     return (
         "Runs in this report: " + "; ".join(parts) + ". beat-this is measured here only: the "
@@ -994,7 +1002,7 @@ def default_section(doc: dict) -> list[str]:
     ]
     if cost:
         out += cost_lines(cost, default, candidates) + [""]
-    out += decision_lines(evidence)
+    out += decision_lines(evidence, calibrated=bool(calibration_report.runs_of(doc)[0]))
     return out
 
 
@@ -1032,7 +1040,7 @@ def cost_lines(cost: dict, default: str, candidates: list[str]) -> list[str]:
     return out
 
 
-def decision_lines(evidence: dict) -> list[str]:
+def decision_lines(evidence: dict, calibrated: bool = False) -> list[str]:
     default, cost = evidence["default"], evidence["cost"]
     annotated = [r for r in evidence["rows"] if not r.get("golden")]
     served_wins = [r for r in annotated if significant(r["served1"], more=True)]
@@ -1103,10 +1111,16 @@ def decision_lines(evidence: dict) -> list[str]:
                     f"with every rule lifted, {e['candidate']} vs {e['default']} of {e['n']}, "
                     f"p {pval(e['p'])}"
                 )
+            then = (
+                "; the calibration section sets those rules from measured results and says "
+                "which ones changed."
+                if calibrated
+                else ", so the default is to be revisited once those rules, the steadiness "
+                "check first, are recalibrated."
+            )
             parts.append(
                 f"With the withholding rules lifted, `{r['name']}` is ahead on {r['data']} "
-                f"(Acc1 correct / n {'; '.join(views)}), so the default is to be revisited once "
-                "those rules, the steadiness check first, are recalibrated."
+                f"(Acc1 correct / n {'; '.join(views)}){then}"
             )
             break
     return [" ".join(parts), ""]
@@ -1465,13 +1479,13 @@ def render(doc: dict) -> str:
     legacy = is_legacy(doc)
     out = [f"# Audio accuracy, {doc['date']}", "", *intro(doc), *guide(doc)]
     if not legacy:
-        out += bakeoff_section(doc) + default_section(doc)
+        out += bakeoff_section(doc) + default_section(doc) + calibration_report.section(doc)
     for run in doc["runs"]:
         if run["suite"] == "golden":
             out += golden_sections(run)
         elif run["suite"] == "cost":
             out += cost_section(run)
-        else:
+        elif run["suite"] in ("tempo", "key"):
             out += tempo_key_sections(run, legacy)
     out += [
         "## Reproducing",

@@ -342,6 +342,54 @@ def chord_blocks(chords, block_seconds: float = 10.0, bpm: float = 120) -> np.nd
     return normalise(y)
 
 
+def random_notes(seed: int = 83, count: int = 83, beat: bool = False) -> np.ndarray:
+    """
+    `count` piano notes whose pitch classes are drawn uniformly (C3-B5) at irregular onsets:
+    atonal, no key. With `beat`, over drums at 120 BPM at the same level (RMS).
+    """
+    rng = np.random.default_rng(seed)
+    y = np.zeros(30 * SR)
+    starts, notes = np.sort(rng.uniform(0.0, 29.0, count)), rng.integers(48, 84, count)
+    for start, note in zip(starts, notes, strict=True):
+        place(y, float(start), piano_note(hz(int(note)), 1.5))
+    if not beat:
+        return normalise(y)
+    drums = drums_only(120, seed=2)
+    return normalise(y / np.sqrt(np.mean(y**2)) + drums / np.sqrt(np.mean(drums**2)))
+
+
+def chromatic_cluster() -> np.ndarray:
+    """All twelve semitones C4-B4 held together, struck again every 3 s: no key."""
+    y = np.zeros(30 * SR)
+    for start in np.arange(0.0, 30.0, 3.0):
+        place(y, float(start), pad([hz(m) for m in range(60, 72)], 3.0))
+    return normalise(y)
+
+
+TONE_ROW = (0, 11, 7, 8, 3, 1, 2, 10, 6, 5, 4, 9)  # each pitch class once
+
+
+def twelve_tone_row(seed: int = 12) -> np.ndarray:
+    """A twelve-tone row and its transpositions, 0.6 s per note, octaves 3-5 drawn at `seed`."""
+    y = np.zeros(30 * SR)
+    rng = np.random.default_rng(seed)
+    t, k = 0.0, 0
+    while t < 29.0:
+        row = (np.array(TONE_ROW) + 5 * (k // 12)) % 12
+        place(y, t, piano_note(hz(48 + int(row[k % 12]) + 12 * int(rng.integers(0, 3))), 1.2))
+        t, k = t + 0.6, k + 1
+    return normalise(y)
+
+
+def tempo_swing(bpm: float = 100.0, swing: float = 0.1, period: float = 12.0) -> np.ndarray:
+    """A band whose tempo swings +-`swing` around `bpm`, once every `period` seconds."""
+    beats, t = [], 0.0
+    while t < 30.0:
+        beats.append(t)
+        t += 60.0 / (bpm * (1 + swing * np.sin(2 * np.pi * t / period)))
+    return band(beats)
+
+
 def probes() -> dict[str, np.ndarray]:
     """Named probe signals used across the tests (and for threshold measurements)."""
     return {

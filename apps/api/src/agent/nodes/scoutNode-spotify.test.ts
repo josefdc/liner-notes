@@ -56,12 +56,12 @@ function spotifySearch(items: unknown[]) {
   });
 }
 
-function scout(songQuery: string) {
+function scout(songQuery: string, store = new InMemoryStore()) {
   const graph = new StateGraph(SonicAgentState)
     .addNode("scout", scoutNode)
     .addEdge(START, "scout")
     .addEdge("scout", END)
-    .compile({ store: new InMemoryStore() });
+    .compile({ store });
   return graph.invoke({ songQuery });
 }
 
@@ -200,5 +200,120 @@ describe("scoutNode with Spotify results that carry no popularity", () => {
     expect(out.spotifyData ?? null).toBeNull();
     expect(ids(out.candidates)).toEqual([unrelated.id]);
     expect(out.queryMatch).toBe("none");
+  });
+});
+
+describe("scoutNode never selects another recording on its own", () => {
+  it("offers YOASOBI's song instead of selecting a piano cover with the romanised title", async () => {
+    const original = spotifyTrack("夜に駆ける", ["YOASOBI"], {
+      external_ids: { isrc: "JPP302000245" },
+    });
+    spotifySearch([
+      original,
+      spotifyTrack("Yoru ni Kakeru (Piano Cover)", ["Animenz"], {
+        external_ids: { isrc: "QZFZ32012345" },
+      }),
+      spotifyTrack("Yoru ni Kakeru - Piano Cover", ["Pianella Piano"]),
+      spotifyTrack("群青", ["YOASOBI"]),
+    ]);
+
+    const out = await scout("Yoru ni Kakeru YOASOBI");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+    expect(ids(out.candidates)[0]).toBe(original.id);
+  });
+
+  it("offers Journey's song instead of selecting a karaoke track spelt like the query", async () => {
+    const original = spotifyTrack("Don't Stop Believin'", ["Journey"]);
+    spotifySearch([
+      original,
+      spotifyTrack("Don't Stop Believing (Karaoke Version)", ["Ameritz Karaoke"], {
+        external_ids: { isrc: "GBTVB1100001" },
+      }),
+      spotifyTrack("Any Way You Want It", ["Journey"]),
+    ]);
+
+    const out = await scout("Dont Stop Believing Journey");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+    expect(ids(out.candidates)[0]).toBe(original.id);
+  });
+
+  it("asks for an artist-only query instead of selecting another artist's song named after them", async () => {
+    spotifySearch([
+      spotifyTrack("Umbrella", ["Rihanna", "JAY-Z"]),
+      spotifyTrack("Diamonds", ["Rihanna"]),
+      spotifyTrack("Rihanna", ["Yxng Bane"]),
+    ]);
+
+    const out = await scout("Rihanna");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.candidates).toHaveLength(3);
+    expect(out.queryMatch).toBe("artist");
+  });
+
+  it("selects PSY's song for the Korean title, as an exact match", async () => {
+    const psy = spotifyTrack("Gangnam Style (강남스타일)", ["PSY"], {
+      external_ids: { isrc: "KRA381200450" },
+    });
+    spotifySearch([psy]);
+
+    const out = await scout("강남스타일");
+
+    expect(out.spotifyData?.id).toBe(psy.id);
+    expect(out.isrc).toBe("KRA381200450");
+    expect(out.queryMatch).toBe("exact");
+  });
+
+  it("reads the web's query with every credited artist as an exact match", async () => {
+    const hit = spotifyTrack("Gangsta's Paradise", ["Coolio", "L.V."], {
+      external_ids: { isrc: "usto10500102" },
+    });
+    spotifySearch([hit, spotifyTrack("Gangsta's Paradise", ["Postmodern Jukebox"])]);
+
+    const out = await scout("Gangsta's Paradise Coolio, L.V.");
+
+    expect(out.spotifyData?.id).toBe(hit.id);
+    expect(out.isrc).toBe("USTO10500102");
+    expect(out.queryMatch).toBe("exact");
+  });
+});
+
+describe("scoutNode's remembered choice", () => {
+  const remember = async (query: string, picked: string, offered: string[]) => {
+    const store = new InMemoryStore();
+    await store.put(["disambiguation"], query, {
+      selectedTrackId: picked,
+      candidateIds: [...offered].sort().join(","),
+    });
+    return store;
+  };
+
+  it("records the ISRC of the remembered track", async () => {
+    const cash = spotifyTrack("Hurt", ["Johnny Cash"], { external_ids: { isrc: "USUM70207211" } });
+    const nin = spotifyTrack("Hurt", ["Nine Inch Nails"]);
+    spotifySearch([cash, nin]);
+
+    const out = await scout("Hurt", await remember("hurt", cash.id, [cash.id, nin.id]));
+
+    expect(out.spotifyData?.id).toBe(cash.id);
+    expect(out.isrc).toBe("USUM70207211");
+    expect(out.queryMatch).toBe("exact");
+  });
+
+  it("is not used when nothing matches the query", async () => {
+    const unrelated = spotifyTrack("xStep", ["DJVI"]);
+    spotifySearch([unrelated]);
+
+    const out = await scout(
+      "qwzx vlorp blenk",
+      await remember("qwzx vlorp blenk", unrelated.id, [unrelated.id]),
+    );
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(ids(out.candidates)).toEqual([unrelated.id]);
   });
 });

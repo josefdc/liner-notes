@@ -95,7 +95,6 @@ const CANDIDATES = ["track-a", "track-b"].map((id) => ({
   artist: "Artist",
   album: "Album",
   coverUrl: "",
-  popularity: 40,
 }));
 
 const status = (node: string, message: unknown, extra: Record<string, unknown> = {}): Chunk => [

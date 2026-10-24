@@ -64,6 +64,19 @@ describe("GET /api/search/suggest", () => {
     expect(spotify.invoke).toHaveBeenCalledWith({ query, limit: 3 });
   });
 
+  it("sends no preview link with the suggestions", async () => {
+    spotify.invoke.mockResolvedValue(
+      JSON.stringify([
+        { id: "t1", isrc: "USAT29900609", previewUrl: "https://p.scdn.co/mp3-preview/abc" },
+      ]),
+    );
+
+    const res = await request(app()).get("/api/search/suggest?query=ice%20ice%20baby");
+
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions).toEqual([{ id: "t1", isrc: "USAT29900609" }]);
+  });
+
   it("answers a Spotify failure with a generic message, not the upstream one", async () => {
     spotify.invoke.mockResolvedValue(
       "Error searching for tracks: Spotify API error: 401 token xyz",

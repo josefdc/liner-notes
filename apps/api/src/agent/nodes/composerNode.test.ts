@@ -135,7 +135,6 @@ function stateWith(
       album: "To the Extreme",
       releaseDate: "1990-09-10",
       coverUrl: "https://i.scdn.co/image/x",
-      popularity: 70,
       duration: "4:30",
       durationMs: 270000,
       explicit: false,
@@ -550,6 +549,36 @@ describe("composerNode", () => {
         '"mbid":"0f1e2d3c-0000-4000-8000-000000000001","title":"Ice Ice Baby","artistCredit":"Vanilla Ice"',
       );
       expect(out.trackData?.isrc).toBe("USSM19000001");
+    });
+
+    it("matches a recording credited to two artists against each of them", async () => {
+      mb.lookupIsrc.mockResolvedValue([
+        {
+          id: "0f1e2d3c-0000-4000-8000-000000000002",
+          title: "Gangsta's Paradise",
+          length: 240_000,
+          "artist-credit": [
+            { name: "Coolio", joinphrase: " feat. ", artist: { id: "a1", name: "Coolio" } },
+            { name: "L.V.", artist: { id: "a2", name: "L.V." } },
+          ],
+        },
+      ]);
+      const llm = succeeding();
+      const state = {
+        ...stateWith(null, {
+          title: "Gangsta's Paradise",
+          artist: "Coolio, L.V.",
+          artistNames: ["Coolio", "L.V."],
+          durationMs: 240_000,
+        }),
+        isrc: "USTO10500102",
+      } as SonicAgentStateType;
+
+      await createComposerNode(testRuntime(llm))(state, config());
+
+      expect(messagesOf(llm.calls[0]).user).toContain(
+        '"mbid":"0f1e2d3c-0000-4000-8000-000000000002"',
+      );
     });
 
     it("records a failed lookup as a source error and composes without it", async () => {

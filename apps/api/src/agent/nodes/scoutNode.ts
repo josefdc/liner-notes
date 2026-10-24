@@ -12,7 +12,7 @@ import { isAbortError, withRetry, TransientError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
-import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
+import { needsChoice, rankTracks } from "../trackMatch.js";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -107,8 +107,8 @@ export async function scoutNode(
     }
 
     // Spotify gives this app no popularity, so the results are judged on how their title and
-    // artists match the query: the best match first, and a choice only when another song
-    // matches as well, or when nothing matches at all.
+    // artists match the query (trackMatch.ts): the best match first, selected without asking
+    // only when it is clearly the song the query names.
     const ranked = rankTracks(state.songQuery, tracks);
     const best = ranked[0];
     const topTrack = best.track;
@@ -146,8 +146,9 @@ export async function scoutNode(
           }
           return checked.success;
         });
-      // Check stored disambiguation preference before interrupting
-      if (store) {
+      // Check stored disambiguation preference before interrupting. A query nothing matches
+      // always asks: a remembered pick is not a match.
+      if (store && queryMatch !== "none") {
         try {
           const pref = await store.get(["disambiguation"], normalizedQuery);
           if (pref?.value?.selectedTrackId) {
@@ -158,8 +159,9 @@ export async function scoutNode(
               .join(",");
             if (pref.value.candidateIds === currentIds) {
               // Same candidate set — auto-select the remembered preference
-              const remembered = tracks.find((t) => t.id === pref.value.selectedTrackId);
-              if (remembered) {
+              const rememberedRank = ranked.find((r) => r.track.id === pref.value.selectedTrackId);
+              const remembered = rememberedRank?.track;
+              if (rememberedRank && remembered) {
                 console.log(
                   "📦 [Scout] Auto-selecting from disambiguation memory:",
                   remembered.title,
@@ -175,7 +177,7 @@ export async function scoutNode(
                   spotifyData: remembered,
                   selectedTrackId: remembered.id,
                   isrc: remembered.isrc ?? null,
-                  queryMatch: matchTrack(state.songQuery, remembered).match,
+                  queryMatch: rememberedRank.match,
                   statusMessages: [`✅ Remembered: "${remembered.title}" by ${remembered.artist}`],
                 };
               }

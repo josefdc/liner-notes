@@ -138,7 +138,8 @@ export async function musicBrainzRecording(
       {
         isrc,
         title: spotify.title,
-        artists: [spotify.artist],
+        // The credited artists one by one: the joined name ("Coolio, L.V.") matches no credit.
+        artists: spotify.artistNames?.length ? spotify.artistNames : [spotify.artist],
         durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
       },
       candidates,

@@ -53,7 +53,7 @@ import { assertAzureStrict, LLM_SCHEMAS, toJsonSchema } from "@liner-notes/contr
 import type { BaseMessage } from "@langchain/core/messages";
 import type OpenAI from "openai";
 import type { z } from "zod";
-import { checkoutCommitOrNull } from "../config/checkoutCommit.js";
+import { checkoutCommitOrNull, DEFAULT_RECORDING_DIRS } from "../config/checkoutCommit.js";
 import {
   LLM_PURPOSES,
   type LlmPurpose,
@@ -164,7 +164,7 @@ export interface LlmDependencies {
   env?: NodeJS.ProcessEnv;
   /**
    * The commit recorded with each cassette (LLM_CASSETTE=record); default: the checkout's, read
-   * once. Null when it cannot be read.
+   * once when the layer is created. Null when it cannot be read.
    */
   commit?: () => string | null;
 }
@@ -689,12 +689,19 @@ export function createLlm(deps: LlmDependencies): Llm {
     now,
   });
   const semaphore = new Semaphore(settings.concurrency);
-  // Read once, at the first recording: every cassette of a session names the same commit.
-  let commit: { value: string | null } | null = null;
-  const recordingCommit = () => {
-    commit ??= { value: (deps.commit ?? checkoutCommitOrNull)() };
-    return commit.value;
-  };
+  // Read once, when the layer is created in record mode (the code the process started with):
+  // every cassette of a session names the same commit. Cassettes themselves are not code.
+  const sessionCommit =
+    settings.cassette === "record"
+      ? (
+          deps.commit ??
+          (() =>
+            checkoutCommitOrNull(undefined, {
+              exclude: [...DEFAULT_RECORDING_DIRS, cassetteDir],
+            }))
+        )()
+      : null;
+  const recordingCommit = () => sessionCommit;
   const runCalls = new Map<string, number>();
   const secrets = knownSecrets(deps.env ?? process.env, [
     settings.azureApiKey,

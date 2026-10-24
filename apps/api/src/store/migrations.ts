@@ -289,6 +289,17 @@ export const MIGRATIONS: readonly Migration[] = [
       ).run(JSON.stringify(["tracks"]), '["tracks",%', JSON.stringify(["tracks", "v4"]));
     },
   },
+  {
+    version: 7,
+    name: "run_commit",
+    up(db) {
+      // A run keeps the commit of the code that ran it, read by the server when it started, so a
+      // recording of the run names that commit rather than whatever is checked out when it is
+      // recorded. Runs stored before this migration, and runs of a server that could not read
+      // its commit (no repository), have none.
+      db.exec("ALTER TABLE runs ADD COLUMN code_commit TEXT");
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

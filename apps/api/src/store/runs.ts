@@ -1,6 +1,6 @@
 /**
- * Run records: one row per analysis run in the `runs` table (migration 2, extended by 5), and
- * the events each run's streams sent in `run_events` (migration 5).
+ * Run records: one row per analysis run in the `runs` table (migration 2, extended by 5 and 7),
+ * and the events each run's streams sent in `run_events` (migration 5).
  *
  * Columns of `runs`:
  *   run_id          unique id of the run
@@ -26,6 +26,9 @@
  *                   column's default, which then says nothing about how a result was produced
  *   analysis        JSON of the run's own result (a TrackAnalysis, as the contract reads it,
  *                   without preview URLs); null when it has none
+ *   code_commit     the commit of the code that ran the run (the checkout's, "-dirty" when it had
+ *                   uncommitted changes), read when the server started; null when it could not
+ *                   be read or the run was stored before commits were kept (migration 7)
  *
  * Columns of `run_events`:
  *   run_id          the run that sent the event
@@ -73,6 +76,8 @@ export interface RunRecord {
    * completed before results were stored.
    */
   analysis: unknown;
+  /** The commit of the code that ran it; null when unknown (see code_commit). */
+  commit: string | null;
 }
 
 interface RunRow {
@@ -88,6 +93,7 @@ interface RunRow {
   spotify_id: string | null;
   mode: RunMode;
   analysis: string | null;
+  code_commit: string | null;
 }
 
 const toFlag = (value: boolean | null | undefined): number | null =>
@@ -96,7 +102,7 @@ const fromFlag = (value: number | null): boolean | null => (value == null ? null
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 const RUN_COLUMNS = `run_id, thread_id, query, status, created_at, finished_at, model_available,
-  audio_available, payload, spotify_id, mode, analysis`;
+  audio_available, payload, spotify_id, mode, analysis, code_commit`;
 
 function toRecord(row: RunRow): RunRecord {
   return {
@@ -112,16 +118,25 @@ function toRecord(row: RunRow): RunRecord {
     spotifyId: row.spotify_id,
     mode: row.mode,
     analysis: row.analysis == null ? null : JSON.parse(row.analysis),
+    commit: row.code_commit ?? null,
   };
 }
 
+/** Starts a run; `commit` is the commit of the code running it, when known. */
 export function startRun(
   db: Database.Database,
-  run: { runId: string; threadId: string; query: string; status?: RunStatus },
+  run: {
+    runId: string;
+    threadId: string;
+    query: string;
+    status?: RunStatus;
+    commit?: string | null;
+  },
 ): void {
   db.prepare(
-    "INSERT INTO runs (run_id, thread_id, query, status, created_at) VALUES (?, ?, ?, ?, ?)",
-  ).run(run.runId, run.threadId, run.query, run.status ?? "running", nowSec());
+    `INSERT INTO runs (run_id, thread_id, query, status, created_at, code_commit)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(run.runId, run.threadId, run.query, run.status ?? "running", nowSec(), run.commit ?? null);
 }
 
 /**

@@ -4,6 +4,7 @@ import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
+import { runningCommit } from "../../config/checkoutCommit.js";
 import { llm } from "../../llm/invoke.js";
 import { chooseReplay, liveRefused } from "../../replay/mode.js";
 import { playRecord, replayedAnalysis } from "../../replay/player.js";
@@ -26,6 +27,12 @@ import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middlew
 import { nodeEvent, openAnalysisStream } from "../sse.js";
 
 const router = Router();
+
+/**
+ * The commit of the code this server runs, read when the routes are loaded and stored with each
+ * run, so a recording of a run names the code it ran with (null when it cannot be read).
+ */
+const SERVER_COMMIT = runningCommit();
 
 // =============================================================================
 // Limits and errors
@@ -139,7 +146,9 @@ function recordRun(action: string, write: (db: ReturnType<typeof getDb>) => void
 function startAnalysis(query: string): string {
   const threadId = randomUUID();
   activeThreads.add(threadId);
-  recordRun("record a run", (db) => startRun(db, { runId: threadId, threadId, query }));
+  recordRun("record a run", (db) =>
+    startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT }),
+  );
   return threadId;
 }
 
@@ -147,7 +156,7 @@ function startAnalysis(query: string): string {
 function reopenRun(threadId: string, query: string): void {
   recordRun("reopen a run", (db) => {
     if (!updateRun(db, threadId, { status: "running" })) {
-      startRun(db, { runId: threadId, threadId, query });
+      startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT });
     }
   });
 }
@@ -708,7 +717,7 @@ function startReplay(query: string, record: ReplayRecord): string {
   activeThreads.add(runId);
   recordRun("record a replay", (db) =>
     db.transaction(() => {
-      startRun(db, { runId, threadId: runId, query });
+      startRun(db, { runId, threadId: runId, query, commit: SERVER_COMMIT });
       storeReplayOf(db, runId, replayOf(record));
     })(),
   );

@@ -210,10 +210,20 @@ describe("recording provenance", () => {
     expect((await replayer.invoke("scout", "main", "classify", Schema, OPTIONS)).recording).toEqual(
       { recordedAt: null, commit: null },
     );
-    writeFileSync(path, JSON.stringify({ ...older, recordedAt: "yesterday", commit: " " }));
-    expect((await replayer.invoke("scout", "main", "classify", Schema, OPTIONS)).recording).toEqual(
-      { recordedAt: null, commit: null },
-    );
+    // Not full UTC date-times: a lenient parser would invent the year or the time of day.
+    for (const recordedAt of [
+      "yesterday",
+      "March 1",
+      "12",
+      "2026-03-01",
+      "2026-03-01T10:00:00+02:00",
+    ]) {
+      writeFileSync(path, JSON.stringify({ ...older, recordedAt, commit: " " }));
+      expect(
+        (await replayer.invoke("scout", "main", "classify", Schema, OPTIONS)).recording,
+        recordedAt,
+      ).toEqual({ recordedAt: null, commit: null });
+    }
   });
 
   it("records a null commit when the checkout's cannot be read", async () => {

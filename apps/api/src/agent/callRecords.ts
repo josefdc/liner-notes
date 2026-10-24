@@ -77,7 +77,8 @@ export function runUsage(records: readonly LlmCallRecord[], llmCalls: number): R
  *   recordedAt  the earliest recording time of its replayed answers (when the run's recording
  *               began); null when any of them does not say
  *   commit      the commit that recorded them; when they were recorded at different commits,
- *               each one, in recording order, separated by ", "; null when any does not say
+ *               each one, in recording order (in the order of the run's calls when a time is
+ *               missing), separated by ", "; null when any does not say
  * Null for both when no answer was replayed. Nothing is filled in: an answer whose cassette does
  * not say leaves the run unable to say either.
  */
@@ -97,8 +98,17 @@ export function replayedRecording(records: readonly LlmCallRecord[]): {
   const commits = recordings.map((recording) => recording.commit);
   if (!commits.every((value): value is string => value !== null))
     return { recordedAt, commit: null };
-  const ordered = recordings
-    .map((recording, index) => ({ commit: commits[index], at: recording.recordedAt }))
-    .sort((a, b) => (a.at === null || b.at === null ? 0 : Date.parse(a.at) - Date.parse(b.at)));
-  return { recordedAt, commit: [...new Set(ordered.map((item) => item.commit))].join(", ") };
+  // In recording order when every answer says when it was recorded; otherwise there is no
+  // order to give, and the commits are listed as the run's calls were made.
+  const ordered =
+    recordedAt === null
+      ? commits
+      : recordings
+          .map((recording, index) => ({
+            commit: commits[index],
+            at: Date.parse(recording.recordedAt as string),
+          }))
+          .sort((a, b) => a.at - b.at)
+          .map((item) => item.commit);
+  return { recordedAt, commit: [...new Set(ordered)].join(", ") };
 }

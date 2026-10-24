@@ -10,8 +10,8 @@
  * recorded or the record still holds anything it must not; an existing file is kept unless
  * --force is given.
  *
- * --commit is the commit of the code the run was made with; by default the checkout's HEAD, with
- * "-dirty" when the working tree has uncommitted changes.
+ * The record names the commit the run ran at, which the server stored with the run (see
+ * recordCommit). --commit is needed only for a run stored without one, and must match otherwise.
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
@@ -23,7 +23,7 @@ import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
-import { checkoutCommit } from "../config/checkoutCommit.js";
+import { checkoutCommitOrNull } from "../config/checkoutCommit.js";
 import { knownSecrets } from "../llm/cassette.js";
 import { getDefaultDbPath } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
@@ -39,6 +39,47 @@ function settingsFileValues(): NodeJS.ProcessEnv {
   } catch {
     return {};
   }
+}
+
+/**
+ * The commit a record names: the one the run ran at, as the server stored it with the run.
+ *   - stored: that commit. A checkout now at another commit gets a warning (the record still
+ *     names the run's); a --commit that differs is refused, since it would contradict it.
+ *   - none stored (a run from before commits were kept, or a server that could not read its
+ *     own): only an explicit --commit, which the person recording vouches for; never the
+ *     checkout's, which may hold other code than the run did.
+ */
+export function recordCommit({
+  stored,
+  given,
+  checkout,
+}: {
+  stored: string | null;
+  given: string | null;
+  checkout: string | null;
+}): { commit: string; warning?: string } | { refused: string } {
+  if (stored) {
+    if (given && given !== stored) {
+      return {
+        refused:
+          `--commit ${given} differs from the commit the run ran at (${stored}), which the ` +
+          "server stored with it; leave --commit out",
+      };
+    }
+    if (checkout && checkout !== stored) {
+      return {
+        commit: stored,
+        warning: `the checkout is at ${checkout}; the record names ${stored}, the commit the run ran at`,
+      };
+    }
+    return { commit: stored };
+  }
+  if (given) return { commit: given };
+  return {
+    refused:
+      "The run has no stored commit (it ran before commits were kept, or its server could not " +
+      "read one); pass --commit with the commit it ran at",
+  };
 }
 
 export function main(argv: string[]): number {
@@ -87,15 +128,17 @@ export function main(argv: string[]): number {
     return 1;
   }
 
-  let commit = values.commit ?? "";
-  if (!commit) {
-    try {
-      commit = checkoutCommit();
-    } catch {
-      console.error("Could not read the checkout's commit; pass --commit");
-      return 1;
-    }
+  const chosen = recordCommit({
+    stored: run.commit,
+    given: values.commit || null,
+    checkout: checkoutCommitOrNull(),
+  });
+  if ("refused" in chosen) {
+    console.error(chosen.refused);
+    return 1;
   }
+  if (chosen.warning) console.warn(`Warning: ${chosen.warning}`);
+  const { commit } = chosen;
 
   const secrets = knownSecrets({ ...settingsFileValues(), ...process.env });
   let record: ReturnType<typeof buildRecord>["record"];

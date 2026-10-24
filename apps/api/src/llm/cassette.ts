@@ -30,6 +30,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { Timestamp } from "@liner-notes/contract";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { API_ROOT } from "../config/apiPackage.js";
@@ -72,13 +73,15 @@ export interface CassetteRecording {
   commit: string | null;
 }
 
-/** The recording an entry says it comes from; a value that is not one reads as unknown. */
+/**
+ * The recording an entry says it comes from. Only a full UTC date-time, as the recorder writes
+ * it (the contract's Timestamp), is a recording time: anything else ("March 1", a bare date,
+ * which a lenient parser would complete with a time nobody recorded) reads as unknown.
+ */
 export function cassetteRecording(entry: CassetteEntry): CassetteRecording {
   const { recordedAt, commit } = entry;
-  const validDate =
-    typeof recordedAt === "string" && !Number.isNaN(Date.parse(recordedAt)) ? recordedAt : null;
   return {
-    recordedAt: validDate === null ? null : new Date(validDate).toISOString(),
+    recordedAt: Timestamp.safeParse(recordedAt).success ? (recordedAt as string) : null,
     commit: typeof commit === "string" && commit.trim() !== "" ? commit.trim() : null,
   };
 }

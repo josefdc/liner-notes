@@ -19,7 +19,7 @@ import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   AnalyzeStreamEvent,
-  type ReplayRecord,
+  ReplayRecord,
   ReplaysResponse,
   RunResponse,
   runIssues,
@@ -29,6 +29,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SonicAgentStateType } from "../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
+import { runningCommit } from "../config/checkoutCommit.js";
 import { createApp } from "../http/app.js";
 import { resolveSpendLogPath } from "../llm/budget.js";
 import { resetBudgetStateForTests } from "../llm/budgetState.js";
@@ -326,6 +327,7 @@ function fixtureAsLiveRun(fixture: ReplayRecord, typed: string) {
     spotifyId: fixture.analysis.id,
     mode: "live" as const,
     analysis,
+    commit: "abc1234",
   };
   return { run, events };
 }
@@ -340,11 +342,31 @@ describe("the recorder", () => {
     expect(built.analysis.run).toMatchObject({
       id: recordedRunId("recorded-song"),
       mode: "replay",
+      replayed: "run",
       recordedAt: built.recordedAt,
       commit: "abc1234",
       analyzerVersion: null,
     });
     expect(runIssues(built.analysis.run!, built.analysis.audio)).toEqual([]);
+    const complete = built.events.find((e) => (e.event as Event).type === "complete");
+    expect((complete?.event as { data?: TrackAnalysis } | undefined)?.data?.run?.replayed).toBe(
+      "run",
+    );
+    // The server stored the commit it runs with on the run, which a recording names.
+    expect(stored(runId).run.commit).toBe(runningCommit());
+
+    // A record is a whole run: one that says only its model answers were replayed is refused.
+    const modelOnly = structuredClone(built);
+    modelOnly.analysis.run = { ...modelOnly.analysis.run!, replayed: "model_answers" };
+    expect(
+      ReplayRecord.safeParse(modelOnly).error?.issues.map((issue) => issue.path.join(".")),
+    ).toEqual(["analysis.run.replayed"]);
+    for (const item of modelOnly.events) {
+      if (item.event.type === "complete") item.event.data = modelOnly.analysis;
+    }
+    expect(
+      ReplayRecord.safeParse(modelOnly).error?.issues.map((issue) => issue.path.join(".")),
+    ).toEqual(["analysis.run.replayed", "events.3.event.data.run.replayed"]);
     expect(built.analysis.coverUrl).toBe("");
     expect(built.analysis).not.toHaveProperty("previewUrl");
     expect(built.analysis.preview).toEqual({ provider: "deezer", method: "isrc", score: null });

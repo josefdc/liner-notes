@@ -41,6 +41,16 @@ describe("replayedRecording", () => {
     ).toBe("aaa, ccc");
   });
 
+  it("lists the commits in call order when some answer does not say when it was recorded", () => {
+    const calls = [
+      call("replay", { recordedAt: "2026-03-03T10:00:00.000Z", commit: "ccc" }),
+      call("replay", { recordedAt: null, commit: "bbb" }),
+      call("replay", { recordedAt: "2026-03-01T10:00:00.000Z", commit: "aaa" }),
+    ];
+    expect(replayedRecording(calls)).toEqual({ recordedAt: null, commit: "ccc, bbb, aaa" });
+    expect(replayedRecording([...calls].reverse()).commit).toBe("aaa, bbb, ccc");
+  });
+
   it("says nothing it does not know: one answer without a time or a commit leaves it null", () => {
     expect(
       replayedRecording([

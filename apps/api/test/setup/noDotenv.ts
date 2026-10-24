@@ -10,3 +10,9 @@ vi.mock("dotenv", () => {
   const config = () => ({ parsed: {} });
   return { default: { config }, config };
 });
+
+// The routes read REPLAY_MODE and REPLAY_DIR on every request, so a value exported in the shell
+// (such as the public default "fallback") would change what the route tests check. A test that
+// needs replay mode sets it itself.
+delete process.env.REPLAY_MODE;
+delete process.env.REPLAY_DIR;

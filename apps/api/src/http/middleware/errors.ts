@@ -24,6 +24,10 @@ export const HTTP_ERRORS = {
     status: 502,
     message: "A music service is not responding right now. Please try again later.",
   },
+  live_disabled: {
+    status: 503,
+    message: "Live analysis is not available here. Only the recorded showcase tracks can be shown.",
+  },
 } as const;
 
 export type HttpErrorCode = keyof typeof HTTP_ERRORS;

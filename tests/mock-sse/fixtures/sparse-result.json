@@ -4,16 +4,22 @@
     "/api/analyze/stream": [
       {
         "type": "connected",
+        "runId": "thread-sparse",
+        "seq": 0,
         "threadId": "thread-sparse"
       },
       {
         "type": "status",
+        "runId": "thread-sparse",
+        "seq": 1,
         "node": "scout",
         "message": "Searching for the track",
         "code": "SPOTIFY-SEARCH"
       },
       {
         "type": "complete",
+        "runId": "thread-sparse",
+        "seq": 2,
         "data": {
           "id": "t-sparse",
           "title": "Sparse Result",
@@ -45,6 +51,8 @@
       },
       {
         "type": "done",
+        "runId": "thread-sparse",
+        "seq": 3,
         "timestamp": "2026-10-16T00:00:00.000Z"
       }
     ]

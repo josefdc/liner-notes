@@ -138,8 +138,13 @@ test("two candidates show the picker instead of choosing one silently", async ({
     streams: {
       [ANALYZE]: [
         { type: "connected", threadId: "thread-hitl" },
-        { type: "candidates", candidates: two },
-        { type: "interrupt", reason: "disambiguation", threadId: "thread-hitl", candidates: two },
+        {
+          type: "interrupt",
+          reason: "disambiguation",
+          threadId: "thread-hitl",
+          candidates: two,
+          message: "Multiple songs found. Please select the correct one.",
+        },
         { type: "done" },
       ],
       [RESUME]: hitl.streams[RESUME],

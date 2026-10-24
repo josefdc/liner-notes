@@ -17,10 +17,8 @@ import { isLlmError } from "../../llm/errors.js";
 import type { LlmPurpose } from "../../config/settings.js";
 import { type Llm, type LlmMessage, llm } from "../../llm/invoke.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
+import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
-
-/** Interval between heartbeat messages on the factoid stream. */
-export const HEARTBEAT_INTERVAL_MS = 15_000;
 
 // =============================================================================
 // Input
@@ -144,55 +142,24 @@ const STREAM_ERRORS = {
   failed: "This fact could not be generated.",
 } as const;
 
-type StreamEvent = Record<string, unknown> & { type: string };
-
 const CLOSED = Symbol("closed");
 
 /**
- * A server-sent event stream: status 200 with headers flushed at once, a heartbeat every
- * HEARTBEAT_INTERVAL_MS, and `closed` once the client has gone (the response closed before it
- * was ended). Nothing is written after that.
+ * The factoid stream (events built and checked by the stream adapter, ../sse.ts), with
+ * `untilClosed`: the work's result, or CLOSED as soon as the client goes away.
  */
 function openEventStream(res: Response) {
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
-  const disconnect = new AbortController();
-  const send = (event: StreamEvent) => {
-    if (!res.writableEnded && !res.destroyed) res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-  const heartbeat = setInterval(() => send({ type: "heartbeat" }), HEARTBEAT_INTERVAL_MS);
-  // Listen on the response: the request's own "close" also fires once its body has been read.
-  res.on("close", () => {
-    clearInterval(heartbeat);
-    if (!res.writableEnded) disconnect.abort();
-  });
+  const stream: EventStream = openFactoidStream(res);
   const disconnected = new Promise<typeof CLOSED>((resolve) => {
-    disconnect.signal.addEventListener("abort", () => resolve(CLOSED), { once: true });
+    stream.signal.addEventListener("abort", () => resolve(CLOSED), { once: true });
   });
-
   return {
-    send,
-    get closed() {
-      return disconnect.signal.aborted;
-    },
-    /** Aborts when the client goes away. */
-    signal: disconnect.signal,
-    /** Resolves with the work's result, or with CLOSED as soon as the client goes away. */
+    stream,
     untilClosed<T>(work: Promise<T>): Promise<T | typeof CLOSED> {
       return Promise.race([work, disconnected]);
     },
     error(code: keyof typeof STREAM_ERRORS, detail?: Record<string, unknown>) {
-      send({ type: "error", code, error: STREAM_ERRORS[code], ...detail });
-    },
-    done() {
-      send({ type: "done", timestamp: new Date().toISOString() });
-      clearInterval(heartbeat);
-      if (!res.writableEnded) res.end();
+      stream.error(code, STREAM_ERRORS[code], detail);
     },
   };
 }
@@ -305,7 +272,8 @@ export function createFactoidsRouter({
    * Stream factoids one-by-one via SSE for faster perceived speed
    *
    * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2
-   * Messages (all on the default `message` event):
+   * Messages (all on the default `message` event), each one FactoidStreamEvent of
+   * @liner-notes/contract with `runId` (null: the analysis run is not known here) and `seq`:
    * - { type: "connected" }
    * - { type: "factoid", data: Factoid }
    * - { type: "error", code, error, index? }: invalid input, or one factoid that failed
@@ -320,12 +288,12 @@ export function createFactoidsRouter({
   router.get(
     "/api/factoids/decrypt/stream",
     asyncRoute(async (req, res) => {
-      const stream = openEventStream(res);
+      const { stream, untilClosed, error } = openEventStream(res);
 
       const parsed = StreamQuerySchema.safeParse(req.query);
       if (!parsed.success) {
         markFailed(res);
-        stream.error("invalid_input", { issues: describeIssues(parsed.error) });
+        error("invalid_input", { issues: describeIssues(parsed.error) });
         stream.done();
         return;
       }
@@ -343,22 +311,25 @@ export function createFactoidsRouter({
           // stops waiting for it at once.
           let card: ComposerFactoid | undefined;
           try {
-            const outcome = await stream.untilClosed(
+            const outcome = await untilClosed(
               run.generate(
                 factoidMessages({ title: trackTitle, artist: trackArtist }, [STREAM_CATEGORIES[i]]),
               ),
             );
             if (outcome === CLOSED) break;
             card = outcome.output.factoids[0];
-          } catch (error) {
+          } catch (failed) {
             if (stream.closed) break;
-            console.error(`[Factoids] Factoid ${i + 1} failed (${failure(error)})`);
-            stream.error(failureCode(error), { index: i });
+            console.error(`[Factoids] Factoid ${i + 1} failed (${failure(failed)})`);
+            error(failureCode(failed), { index: i });
             continue;
           }
 
           // An empty answer is valid (nothing documented the model is sure of): no card, no error.
-          if (card) stream.send({ type: "factoid", data: toFactoid(card, factoidId) });
+          // A card that fails the contract is not sent; the adapter sends an error for its
+          // index instead.
+          if (card)
+            stream.send({ type: "factoid", data: toFactoid(card, factoidId) }, { index: i });
           else console.log(`[Factoids] Factoid ${i + 1}: nothing documented`);
         }
       } finally {

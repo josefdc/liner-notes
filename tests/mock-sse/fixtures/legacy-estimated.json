@@ -4,16 +4,22 @@
     "/api/analyze/stream": [
       {
         "type": "connected",
+        "runId": "thread-legacy",
+        "seq": 0,
         "threadId": "thread-legacy"
       },
       {
         "type": "status",
+        "runId": "thread-legacy",
+        "seq": 1,
         "node": "scout",
         "message": "Searching for the track",
         "code": "SPOTIFY-SEARCH"
       },
       {
         "type": "complete",
+        "runId": "thread-legacy",
+        "seq": 2,
         "data": {
           "id": "t-legacy",
           "title": "Old Estimate",
@@ -100,6 +106,8 @@
       },
       {
         "type": "done",
+        "runId": "thread-legacy",
+        "seq": 3,
         "timestamp": "2026-10-16T00:00:00.000Z"
       }
     ]

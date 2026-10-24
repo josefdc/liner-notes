@@ -25,6 +25,7 @@ import {
   type LinkType,
   type RunInfo,
   type SourceError,
+  TrackAnalysis,
 } from "@liner-notes/contract";
 import { isLlmError, LlmError } from "../../llm/errors.js";
 import type { InvokeResult } from "../../llm/invoke.js";
@@ -388,6 +389,20 @@ function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
   };
 }
 
+/**
+ * Why a result does not fit the contract's TrackAnalysis, or null when it fits. Such a result
+ * is a bug: it is neither sent nor stored, since the stream would refuse it and a stored copy
+ * would be served for every later search of the song.
+ */
+function contractProblems(trackData: TrackData): string | null {
+  const checked = TrackAnalysis.safeParse(trackData);
+  if (checked.success) return null;
+  return checked.error.issues
+    .slice(0, 3)
+    .map((issue) => `${issue.path.join(".") || "(result)"}: ${issue.message}`)
+    .join("; ");
+}
+
 // =============================================================================
 // The node
 // =============================================================================
@@ -494,6 +509,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     // A cancelled run reports nothing and stores nothing.
     signal?.throwIfAborted();
+    const problems = contractProblems(trackData);
+    if (problems) return unusable(problems, [call]);
     writer?.({ type: "complete", data: trackData });
 
     // Cache the result in long-term memory, unless a later run may do better: the audio may be
@@ -530,6 +547,17 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       statusMessages: ["🎼 Analysis complete!"],
     };
 
+    /** A result that does not fit the contract: the run fails, its calls still count. */
+    function unusable(problems: string, calls: LlmCallRecord[]): Partial<SonicAgentStateType> {
+      console.error(`❌ [Composer] The result does not fit the contract: ${problems}`);
+      return {
+        error: `Composer result does not fit the contract: ${problems}`,
+        usage: calls,
+        sourceErrors,
+        statusMessages: ["❌ The analysis could not be completed"],
+      };
+    }
+
     /** The honest fallback: measured and sourced data only, no model text. */
     async function composeFallback(
       error: unknown,
@@ -556,6 +584,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         run: runInfo(true, [failed], sourceErrors),
       };
       signal?.throwIfAborted();
+      const problems = contractProblems(trackData);
+      if (problems) return unusable(problems, [failed]);
       writer?.({ type: "complete", data: trackData });
       return {
         trackData,

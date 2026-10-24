@@ -7,6 +7,7 @@ import { llm } from "../../llm/invoke.js";
 import { getDb } from "../../store/database.js";
 import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
 import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
+import { nodeEvent, openAnalysisStream } from "../sse.js";
 
 const router = Router();
 
@@ -17,9 +18,6 @@ const router = Router();
 /** Longest accepted query, in characters (code points). */
 export const MAX_QUERY_LENGTH = 200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
-
-/** Interval between heartbeat messages on an open event stream. */
-export const HEARTBEAT_INTERVAL_MS = 15_000;
 
 /** Longest a run may take; past it the route aborts the run and reports a timeout. */
 export const RUN_DEADLINE_MS = 3 * 60_000;
@@ -190,7 +188,15 @@ class RunControl {
 // Graph runner
 // =============================================================================
 
-type AgentEvent = Record<string, unknown> & { type: string };
+/** A graph node's writer payload, or the result the route reports once (`complete`). */
+type AgentEvent = { type: string; [field: string]: unknown };
+
+/**
+ * Where a run's events go. It returns false only for a result the client was not sent because
+ * it fails the contract (the client got an error instead), so the run is not recorded as
+ * completed.
+ */
+type Emit = (event: AgentEvent) => boolean;
 
 /** A new run's initial state, or a Command({ resume }) that continues a paused one. */
 type GraphInput = Parameters<ReturnType<typeof createSonicAgentGraph>["stream"]>[0];
@@ -227,28 +233,29 @@ export function classifyNodeError(node: string, error: string): FailureCode {
 }
 
 /**
- * Runs the graph on one thread until it ends or pauses at an interrupt. Progress events go to
- * `emit`. `complete` is emitted exactly once, from here, whichever node produced the result:
- * nodes report it both through the writer and in their state update. Candidates are not
- * forwarded; the caller sends them once, with the interrupt. A result that was already sent
- * counts as complete even if the run is aborted afterwards.
+ * Runs the graph on one thread until it ends or pauses at an interrupt. The nodes' writer
+ * payloads go to `emit` as they are (the stream adapter translates them). `complete` is emitted
+ * exactly once, from here, whichever node produced the result: nodes report it both through the
+ * writer and in their state update. A result that was already sent counts as complete even if
+ * the run is aborted afterwards; one refused by the contract check is a failure.
  */
 async function runGraph(
   input: GraphInput,
   threadId: string,
   signal: AbortSignal,
-  emit: (event: AgentEvent) => void,
+  emit: Emit,
 ): Promise<RunOutcome> {
   const seen: {
     trackData: TrackData | null;
+    refused: boolean;
     interrupt: DisambiguationPayload | null;
     failure: FailureCode | null;
-  } = { trackData: null, interrupt: null, failure: null };
+  } = { trackData: null, refused: false, interrupt: null, failure: null };
 
   const completeWith = (data: TrackData) => {
     if (seen.trackData) return;
     seen.trackData = data;
-    emit({ type: "complete", data });
+    if (!emit({ type: "complete", data })) seen.refused = true;
   };
 
   let threw: unknown = null;
@@ -264,11 +271,11 @@ async function runGraph(
       const [mode, data] = chunk as unknown as [string, unknown];
 
       if (mode === "custom") {
-        const event = data as AgentEvent;
-        if (event.type === "complete") {
+        const event = data as Partial<AgentEvent> | null;
+        if (event?.type === "complete") {
           if (event.data) completeWith(event.data as TrackData);
-        } else if (event.type !== "candidates") {
-          emit(event);
+        } else {
+          emit(data as AgentEvent);
         }
         continue;
       }
@@ -293,6 +300,10 @@ async function runGraph(
     threw = err;
   }
 
+  if (seen.refused) {
+    console.error(`[Run ${threadId}] The result fails the contract; run failed`);
+    return { kind: "failed", code: "failed" };
+  }
   if (seen.trackData) return { kind: "complete", trackData: seen.trackData };
   if (seen.interrupt) return { kind: "interrupted", candidates: seen.interrupt.candidates ?? [] };
   if (signal.aborted) return { kind: "cancelled" };
@@ -321,7 +332,7 @@ async function executeRun(
   input: GraphInput,
   threadId: string,
   control: RunControl,
-  emit: (event: AgentEvent) => void = () => {},
+  emit: Emit = () => true,
 ): Promise<RunOutcome> {
   control.startDeadline();
   let outcome = await runGraph(input, threadId, control.signal, emit);
@@ -408,7 +419,7 @@ async function claimResume(threadId: string, selectedTrackId: string): Promise<R
 interface ResumeReply {
   refuse(code: ErrorCode): void;
   started(): void;
-  emit?: (event: AgentEvent) => void;
+  emit?: Emit;
   finish(outcome: RunOutcome): void;
 }
 
@@ -458,51 +469,48 @@ async function resumeThread(
 // Responses
 // =============================================================================
 
-interface EventStream {
-  send(event: AgentEvent): void;
-  error(code: ErrorCode): void;
-  done(): void;
-}
-
 const timestamp = () => new Date().toISOString();
 
 /**
- * Starts a server-sent event stream with status 200. Every message is a plain `data:` line, so
- * EventSource delivers it to `onmessage`: progress, errors (EventSource cannot read the body of
- * any other status) and a heartbeat every HEARTBEAT_INTERVAL_MS that keeps proxies from closing
- * an idle connection. Headers are flushed at once, before the first message.
+ * The analysis stream of run `runId`: status 200 with the headers flushed at once (EventSource
+ * cannot read any other status, so errors are sent in the stream), a heartbeat every
+ * HEARTBEAT_INTERVAL_MS that keeps proxies from closing an idle connection, and every event
+ * built and checked by the stream adapter (../sse.ts).
  */
-function openEventStream(res: Response): EventStream {
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
-  const send = (event: AgentEvent) => {
-    if (!res.writableEnded && !res.destroyed) res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-  const heartbeat = setInterval(() => send({ type: "heartbeat" }), HEARTBEAT_INTERVAL_MS);
-  const stop = () => clearInterval(heartbeat);
-  res.on("close", stop);
-
+function openEventStream(res: Response, runId?: string) {
+  const stream = openAnalysisStream(res, runId);
   return {
-    send,
-    error: (code) => send({ type: "error", code, error: ERRORS[code].message }),
-    done() {
-      send({ type: "done", timestamp: timestamp() });
-      stop();
-      if (!res.writableEnded) res.end();
+    stream,
+    /**
+     * Sends a graph node's writer payload, translated to a contract event. False when the
+     * result (`complete`) failed the contract and the client was sent an error in its place; a
+     * result not written because the client has gone is not a failure.
+     */
+    emit(payload: AgentEvent): boolean {
+      if (payload?.type === "complete") {
+        stream.send(payload);
+        return stream.outcome !== "error";
+      }
+      const event = nodeEvent(payload);
+      if (event) stream.send(event);
+      return true;
     },
+    error: (code: ErrorCode) => stream.error(code, ERRORS[code].message),
+    done: () => stream.done(),
   };
 }
+
+type AnalysisStream = ReturnType<typeof openEventStream>;
 
 /**
  * Sends a run's last messages (`complete` was sent as it happened). A cancelled run's client is
  * gone, so it only closes the stream.
  */
-function sendStreamOutcome(stream: EventStream, outcome: RunOutcome, threadId: string): void {
+function sendStreamOutcome(
+  { stream, error, done }: AnalysisStream,
+  outcome: RunOutcome,
+  threadId: string,
+): void {
   if (outcome.kind === "interrupted") {
     stream.send({
       type: "interrupt",
@@ -512,9 +520,23 @@ function sendStreamOutcome(stream: EventStream, outcome: RunOutcome, threadId: s
       message: DISAMBIGUATION_MESSAGE,
     });
   } else if (outcome.kind === "failed") {
-    stream.error(outcome.code);
+    error(outcome.code);
   }
-  stream.done();
+  done();
+}
+
+/**
+ * Runs a stream route's body; an unexpected error ends the stream with a typed `error` and
+ * `done` instead of cutting the response off.
+ */
+async function guardStream(stream: AnalysisStream, body: () => Promise<void>): Promise<void> {
+  try {
+    await body();
+  } catch (err) {
+    console.error(`[Run ${stream.stream.runId}] Stream route failed:`, err);
+    stream.error("failed");
+    stream.done();
+  }
 }
 
 function sendJsonError(res: Response, code: ErrorCode, detail?: Record<string, unknown>): void {
@@ -607,11 +629,13 @@ router.post(
  *
  * GET /api/analyze/stream?query=Song+Name
  *
- * Always answers 200. Messages (each a `data:` line with a `type`):
+ * Always answers 200. Messages: each a `data:` line holding one AnalyzeStreamEvent of
+ * @liner-notes/contract, with the run id (the thread id) and `seq` (0, 1, 2…; heartbeats have none):
  * - connected { threadId }
  * - status: agent progress
  * - heartbeat: keeps the connection open; ignore it
- * - interrupt { threadId, candidates }: the user must pick a track; resume with the routes below
+ * - interrupt { threadId, candidates }: the user must pick a track (the candidates are sent here
+ *   only); resume with the routes below
  * - complete { data }: the result, exactly once per finished run
  * - error { code, error }: a code from ERRORS and a short message
  * - done: the stream is over
@@ -619,26 +643,30 @@ router.post(
 router.get(
   "/api/analyze/stream",
   asyncRoute(async (req: Request, res: Response) => {
-    const stream = openEventStream(res);
     const query = parseQuery(req.query.query);
     if (!query) {
+      const stream = openEventStream(res);
       markFailed(res);
       stream.error("invalid_input");
       stream.done();
       return;
     }
 
+    // The run id is the thread id.
     const threadId = startAnalysis(query);
+    const stream = openEventStream(res, threadId);
     console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
     const control = new RunControl(req, res, threadId);
-    stream.send({ type: "connected", threadId, timestamp: timestamp() });
-    try {
-      const outcome = await executeRun({ songQuery: query }, threadId, control, stream.send);
-      sendStreamOutcome(stream, outcome, threadId);
-    } finally {
-      control.dispose();
-      activeThreads.delete(threadId);
-    }
+    await guardStream(stream, async () => {
+      try {
+        stream.stream.send({ type: "connected", threadId, timestamp: timestamp() });
+        const outcome = await executeRun({ songQuery: query }, threadId, control, stream.emit);
+        sendStreamOutcome(stream, outcome, threadId);
+      } finally {
+        control.dispose();
+        activeThreads.delete(threadId);
+      }
+    });
   }),
 );
 
@@ -682,9 +710,10 @@ router.post(
 router.get(
   "/api/analyze/stream/resume",
   asyncRoute(async (req: Request, res: Response) => {
-    const stream = openEventStream(res);
     const threadId = parseId(req.query.threadId);
     const selectedTrackId = parseId(req.query.selectedTrackId);
+    // A resume continues the thread's run, under the same run id.
+    const stream = openEventStream(res, threadId ?? undefined);
     if (!threadId || !selectedTrackId) {
       markFailed(res);
       stream.error("invalid_input");
@@ -692,17 +721,19 @@ router.get(
       return;
     }
 
-    await resumeThread(req, res, threadId, selectedTrackId, {
-      refuse: (code) => {
-        stream.error(code);
-        stream.done();
-      },
-      started: () => stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
-      emit: stream.send,
-      finish: (outcome) => {
-        sendStreamOutcome(stream, outcome, threadId);
-      },
-    });
+    await guardStream(stream, () =>
+      resumeThread(req, res, threadId, selectedTrackId, {
+        refuse: (code) => {
+          stream.error(code);
+          stream.done();
+        },
+        started: () => stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
+        emit: stream.emit,
+        finish: (outcome) => {
+          sendStreamOutcome(stream, outcome, threadId);
+        },
+      }),
+    );
   }),
 );
 

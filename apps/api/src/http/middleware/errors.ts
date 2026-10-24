@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
+import { refuseStream } from "../sse.js";
 
 /**
  * Errors the client can see: a code, a status and a short generic message. Details (stack,
@@ -81,21 +82,23 @@ export const eventStreamHead: RequestHandler = (_req, res) => {
   res.end();
 };
 
-/** Answers with a 200 event stream that carries one error message, then `done`. */
-export function sendStreamError(res: Response, code: HttpErrorCode): void {
+const STREAM_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+/**
+ * Answers with a 200 event stream that carries one typed `error` event, then `done` (see
+ * ../sse.ts). A refused resume names its run (the thread id), so the refusal carries that id.
+ */
+export function sendStreamError(req: Request, res: Response, code: HttpErrorCode): void {
   if (res.headersSent || res.destroyed) return;
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("X-Accel-Buffering", "no");
-  const message = (event: Record<string, unknown>) => `data: ${JSON.stringify(event)}\n\n`;
-  res.write(message({ type: "error", code, error: HTTP_ERRORS[code].message }));
-  res.end(message({ type: "done", timestamp: new Date().toISOString() }));
+  const path = req.originalUrl.split("?")[0].toLowerCase();
+  const threadId = req.query?.threadId;
+  const runId = typeof threadId === "string" && STREAM_ID.test(threadId) ? threadId : undefined;
+  refuseStream(res, path, code, HTTP_ERRORS[code].message, runId);
 }
 
 /** Refuses a request: in the stream for event-stream requests, as a JSON error otherwise. */
 export function refuse(req: Request, res: Response, code: HttpErrorCode): void {
-  if (isEventStreamRequest(req)) sendStreamError(res, code);
+  if (isEventStreamRequest(req)) sendStreamError(req, res, code);
   else sendError(res, code);
 }
 

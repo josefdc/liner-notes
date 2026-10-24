@@ -7,7 +7,8 @@ export interface SearchCandidate {
   album: string;
   coverUrl: string;
   releaseYear?: string;
-  popularity: number;
+  /** Optional in the contract: the API may stop sending it. */
+  popularity?: number;
 }
 
 export type AgentStatus =
@@ -58,19 +59,6 @@ export interface UseAgentReturn extends AgentState {
   /** Rejects when the request fails. */
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
   reset: () => void;
-}
-
-/** An event of the analysis streams (`data:` lines, delivered through `onmessage`). */
-export interface AgentStreamEvent {
-  type: string;
-  message?: string;
-  /** A log code on `status` events, a failure code on `error` events. */
-  code?: string;
-  node?: string;
-  threadId?: string;
-  candidates?: SearchCandidate[];
-  data?: TrackData;
-  error?: string;
 }
 
 /**

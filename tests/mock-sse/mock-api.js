@@ -10,11 +10,16 @@
 //                stream ends like a server response does (onerror unless the app closed it).
 //                `{ "<path>": { opens: [[event, ...], [event, ...]] } }` gives each opening of
 //                the path its own events (the last list repeats for later openings).
-// Besides plain events, a list may hold two directives:
+// The events are replayed as given: tests install the mock with useMockApi (tests/web/mock.ts),
+// which first adds the run id and `seq` the API sends and checks every event against the
+// contract (tests/mock-sse/envelope.ts).
+// Besides plain events, a list may hold three directives:
 //   { "$wait": "<name>" }              pauses the stream until the test calls
 //                                      `window.__mockApi.release("<name>")` (or already has)
 //   { "$event": "<name>", "data": {} } sends a named SSE event (`event: <name>`), seen only
 //                                      by listeners added with addEventListener(name)
+//   { "$unchecked": {event} }          sends an event the contract does not accept (an
+//                                      unknown type, an older server's event) as a data message
 // Every API request (any URL whose path starts with /api/) is recorded in
 // `window.__mockApi.log`. What each stream does is recorded in `window.__mockApi.streamLog`
 // as "<path> open", "<path> <event type>", "<path> closed" (by the app), "<path> ended"
@@ -137,7 +142,13 @@
             whenReleased(event.$wait, () => setTimeout(next, 0));
             return;
           }
-          if (event.$event) {
+          if (event.$unchecked) {
+            config.streamLog.push(`${path} ${event.$unchecked.type}`);
+            this.dispatch(
+              "message",
+              new MessageEvent("message", { data: JSON.stringify(event.$unchecked) }),
+            );
+          } else if (event.$event) {
             config.streamLog.push(`${path} ${event.$event}`);
             this.dispatch(
               event.$event,

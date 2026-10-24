@@ -10,6 +10,9 @@
  * Every analysis is a "run": its first stream, the track picker and the resume stream all
  * belong to it. Events are handled only while their stream is the run's current stream and
  * the run is the latest one, so a stale stream can never close or overwrite a newer one.
+ * Each message is parsed with the contract's schema (agent/events.ts): unknown types, invalid
+ * progress events, repeats, events of another run and a second `complete` of the run are
+ * skipped; an outcome this page cannot read ends the run with a hint to reload the page.
  * A broken stream ends the run with an error the user can retry; it never starts the
  * analysis again by itself.
  */
@@ -17,20 +20,46 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
-import type { AgentState, AgentStreamEvent, UseAgentReturn, SearchCandidate } from './agent/types';
+import type { AgentState, UseAgentReturn, SearchCandidate } from './agent/types';
 import { API_BASE_URL } from './agent/types';
 import { fetchSuggestions } from './agent/apiClient';
+import {
+  type AnalysisEvent,
+  eventSchemasLoaded,
+  loadEventSchemas,
+  newRunEvents,
+  parseAnalysisEvent,
+  parseFactoidEvent,
+  type RunEvents,
+  streamGuard,
+} from './agent/events';
 
 // Re-export types for consumers that import from this file
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
 
 /**
  * How long a stream may stay silent once its server has sent a heartbeat (every 15 s). A
- * heartbeat arrives either as a data message `{"type":"heartbeat"}` (what the API sends) or
- * as a named `heartbeat` event; both count. The watchdog arms only on the first heartbeat:
+ * heartbeat arrives either as a data message `{"type":"heartbeat","runId":…}` (what the API
+ * sends) or as a named `heartbeat` event; both count. The watchdog arms only on the first heartbeat:
  * a server that sends none is never timed out, so a slow step is not cut off.
  */
 export const STREAM_INACTIVITY_TIMEOUT_MS = 45_000;
+
+/**
+ * The error of a run this page cannot follow: the API sent an outcome it cannot read, or the
+ * code that reads the streams could not be loaded (both happen after a newer version was
+ * deployed). The code is the app's own, not one the API sends.
+ */
+export const OUTDATED_ERROR = {
+  code: 'outdated_client',
+  message:
+    'This page is out of date and cannot show the analysis. Reload the page, then search again.',
+} as const;
+
+/** Loads the code that reads the streams, unless it is loaded already. */
+function readersReady(): Promise<void> | null {
+  return eventSchemasLoaded() ? null : loadEventSchemas();
+}
 
 const INITIAL_STATE: AgentState = {
   status: 'idle',
@@ -52,6 +81,8 @@ interface Run {
   phase: 'running' | 'awaiting-selection' | 'complete' | 'failed';
   /** Aborted when the run is replaced, on reset and on unmount; closes its streams. */
   controller: AbortController;
+  /** The run's id and whether its result was taken, across its streams. */
+  events: RunEvents;
 }
 
 function newRun(query: string): Run {
@@ -61,6 +92,7 @@ function newRun(query: string): Run {
     candidates: null,
     phase: 'running',
     controller: new AbortController(),
+    events: newRunEvents(),
   };
 }
 
@@ -107,6 +139,12 @@ export function useAgent(): UseAgentReturn {
   const runRef = useRef<Run>(initialRun);
   // The run's open stream and the function that closes it (and stops its watchdog).
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
+
+  // Fetch the stream reader as soon as the app is up, so the first search does not wait for it.
+  // A failure is reported by the search that needs it, which tries again.
+  useEffect(() => {
+    if (!eventSchemasLoaded()) loadEventSchemas().catch(() => {});
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -164,9 +202,9 @@ export function useAgent(): UseAgentReturn {
    * Handle one event of the run's current stream. `close` closes that stream.
    */
   const handleStreamEvent = useCallback(
-    (run: Run, data: AgentStreamEvent, close: () => void) => {
-      // A result or an error is final. Later events (the server repeats `complete` for
-      // the thread) change nothing; the stream is closed when it ends.
+    (run: Run, data: AnalysisEvent, close: () => void) => {
+      // A result or an error is final. Later events change nothing; the stream is closed
+      // when it ends.
       if (run.phase === 'complete' || run.phase === 'failed') {
         if (data.type === 'done' || data.type === 'error') close();
         return;
@@ -197,18 +235,16 @@ export function useAgent(): UseAgentReturn {
           }
           break;
 
-        // `interrupt` (with the thread and the candidates) opens the picker once the run is
-        // paused. Servers from before the interrupt-only protocol also send `candidates`
-        // first; both describe the same choice.
-        case 'candidates':
+        // `interrupt` (with the thread and the candidates, sent only here) opens the picker
+        // once the run is paused.
         case 'interrupt': {
-          const candidates = data.candidates ?? run.candidates ?? [];
+          const { candidates } = data;
           if (candidates.length === 0) {
             close();
             fail(run, 'No matching songs were found.');
             break;
           }
-          if (data.threadId) run.threadId = data.threadId;
+          run.threadId = data.threadId || run.threadId;
           // Keep the same list object when nothing changed, so the picker is not reset.
           if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
           run.phase = 'awaiting-selection';
@@ -219,26 +255,16 @@ export function useAgent(): UseAgentReturn {
             candidates: run.candidates,
             isLoading: false,
           }));
-          addLog(
-            data.type === 'candidates'
-              ? `Found ${candidates.length} matching songs`
-              : 'Awaiting user selection...',
-            'SYS-WARN',
-          );
+          addLog('Awaiting user selection...', 'SYS-WARN');
           break;
         }
 
         case 'complete':
-          if (!data.data) {
-            close();
-            fail(run, 'The analysis finished without a result.');
-            break;
-          }
           run.phase = 'complete';
           setState((prev) => ({
             ...prev,
             status: 'complete',
-            trackData: data.data ?? null,
+            trackData: data.data,
             candidates: null,
             isLoading: false,
             isComplete: true,
@@ -249,6 +275,11 @@ export function useAgent(): UseAgentReturn {
         case 'error':
           close();
           fail(run, data.error || 'The analysis failed.', data.code);
+          break;
+
+        case 'unreadable':
+          close();
+          fail(run, OUTDATED_ERROR.message, OUTDATED_ERROR.code);
           break;
 
         case 'done':
@@ -268,6 +299,8 @@ export function useAgent(): UseAgentReturn {
     (url: string, run: Run, onOpen?: () => void) => {
       const source = new EventSource(url);
       const isCurrent = () => runRef.current === run && streamRef.current?.source === source;
+      // `seq` restarts on each stream; the run's id and result are shared by its streams.
+      const accept = streamGuard(run.events);
 
       const close = () => {
         watchdog.stop();
@@ -300,13 +333,8 @@ export function useAgent(): UseAgentReturn {
           return;
         }
         watchdog.activity();
-        let data: AgentStreamEvent;
-        try {
-          data = JSON.parse(event.data);
-        } catch (e) {
-          console.error('[useAgent] Failed to parse SSE event:', e);
-          return;
-        }
+        const data = parseAnalysisEvent(event.data);
+        if (!data || !accept(data)) return;
         if (data.type === 'heartbeat') {
           watchdog.heartbeat();
           return;
@@ -331,6 +359,20 @@ export function useAgent(): UseAgentReturn {
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
       addLog(`🔍 Searching for "${query}"...`);
+
+      // Waits only on the first search: once the reader is loaded the stream opens at once.
+      const ready = readersReady();
+      if (ready) {
+        try {
+          await ready;
+        } catch (error) {
+          console.error('[useAgent] Could not load the stream reader:', error);
+          fail(run, OUTDATED_ERROR.message, OUTDATED_ERROR.code);
+          return;
+        }
+        // A newer analysis may have started while the reader loaded.
+        if (runRef.current !== run) return;
+      }
 
       try {
         const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}`;
@@ -413,41 +455,43 @@ export function useAgent(): UseAgentReturn {
           return;
         }
 
-        const params = new URLSearchParams({
-          trackTitle,
-          trackArtist: trackArtist || '',
-          existingIds: existingIds.join(','),
-        });
+        const open = () => {
+          const params = new URLSearchParams({
+            trackTitle,
+            trackArtist: trackArtist || '',
+            existingIds: existingIds.join(','),
+          });
 
-        const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;
-        const eventSource = new EventSource(url);
-        let active = true;
+          const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;
+          const eventSource = new EventSource(url);
+          const accept = streamGuard(newRunEvents());
+          let active = true;
 
-        const stop = () => {
-          active = false;
-          watchdog.stop();
-          eventSource.close();
-          runSignal.removeEventListener('abort', onAbort);
-          signal?.removeEventListener('abort', onAbort);
-        };
-        const onAbort = () => {
-          stop();
-          reject(abortError());
-        };
-        const watchdog = inactivityWatchdog(() => {
-          stop();
-          reject(new Error('Factoid stream stopped responding'));
-        });
-        runSignal.addEventListener('abort', onAbort, { once: true });
-        signal?.addEventListener('abort', onAbort, { once: true });
+          const stop = () => {
+            active = false;
+            watchdog.stop();
+            eventSource.close();
+            runSignal.removeEventListener('abort', onAbort);
+            signal?.removeEventListener('abort', onAbort);
+          };
+          const onAbort = () => {
+            stop();
+            reject(abortError());
+          };
+          const watchdog = inactivityWatchdog(() => {
+            stop();
+            reject(new Error('Factoid stream stopped responding'));
+          });
+          runSignal.addEventListener('abort', onAbort, { once: true });
+          signal?.addEventListener('abort', onAbort, { once: true });
 
-        eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
-        eventSource.onmessage = (event) => {
-          // Nothing reaches the caller once the stream is closed or aborted.
-          if (!active) return;
-          watchdog.activity();
-          try {
-            const data = JSON.parse(event.data);
+          eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
+          eventSource.onmessage = (event) => {
+            // Nothing reaches the caller once the stream is closed or aborted.
+            if (!active) return;
+            watchdog.activity();
+            const data = parseFactoidEvent(event.data);
+            if (!data || !accept(data)) return;
 
             switch (data.type) {
               case 'factoid':
@@ -473,15 +517,27 @@ export function useAgent(): UseAgentReturn {
                 }
                 break;
             }
-          } catch (e) {
-            console.error('[useAgent] Failed to parse factoid event:', e);
-          }
+          };
+
+          eventSource.onerror = () => {
+            stop();
+            reject(new Error('Factoid stream connection failed'));
+          };
         };
 
-        eventSource.onerror = () => {
-          stop();
-          reject(new Error('Factoid stream connection failed'));
-        };
+        // The stream is opened once the code that reads it is loaded.
+        const ready = readersReady();
+        if (!ready) {
+          open();
+          return;
+        }
+        ready.then(
+          () => {
+            if (runSignal.aborted || signal?.aborted) reject(abortError());
+            else open();
+          },
+          (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
+        );
       });
     },
     [],

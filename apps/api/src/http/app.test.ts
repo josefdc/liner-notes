@@ -515,14 +515,21 @@ describe("rate limits", () => {
 
     const stream = await request(server).get("/api/factoids/decrypt/stream?trackTitle=x");
     const resume = await request(server).get("/api/analyze/stream/resume");
-    for (const res of [stream, resume]) {
+    // Typed events (see sse.ts): a factoid stream has no analysis run; a refused analysis
+    // stream gets a run id of its own.
+    for (const [res, runId] of [
+      [stream, null],
+      [resume, expect.any(String)],
+    ] as const) {
       expect(messages(res)).toEqual([
         {
           type: "error",
+          runId,
+          seq: 0,
           code: "rate_limited",
           error: "Too many requests. Please try again later.",
         },
-        { type: "done", timestamp: expect.any(String) },
+        { type: "done", runId, seq: 1, timestamp: expect.any(String) },
       ]);
     }
   });

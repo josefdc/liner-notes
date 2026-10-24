@@ -145,6 +145,12 @@ export type ModelUnavailableReason =
   | 'error'
   | 'budget_exhausted';
 
+/**
+ * How the search text matched the analysed track by title and artist: anything but "exact"
+ * means the track may not be the song searched for.
+ */
+export type QueryMatch = 'exact' | 'partial' | 'artist' | 'none';
+
 export interface TrackData {
   id: string;
   title: string;
@@ -192,6 +198,8 @@ export interface TrackData {
   modelUnavailableReason?: ModelUnavailableReason;
   // How the result was produced: live, or a recorded run replayed
   run?: ResultRun;
+  // How this run's search text matched the track; absent in older results
+  queryMatch?: QueryMatch | null;
 }
 
 export interface AgentLog {

@@ -293,3 +293,50 @@ describe('RecordedRunNotice', () => {
     expect(older.container.textContent).toBe('');
   });
 });
+
+describe('ResultNotices search match', () => {
+  it.each([
+    ['partial', 'Its title matches your search only in part.'],
+    ['artist', 'Only the artist matches your search, not the title.'],
+    ['none', 'Neither its title nor its artist matches your search.'],
+  ] as const)(
+    'says the track may not be the song searched for when the match is %s',
+    (match, reason) => {
+      render(<ResultNotices track={{ ...base, queryMatch: match }} />);
+      const notice = screen.getByRole('region', { name: 'Search match' }).textContent;
+      expect(notice).toContain('This may not be the song you searched for');
+      expect(notice).toContain(reason);
+      expect(notice).toContain('“Song” by Artist');
+      expect(screen.queryByRole('region', { name: 'Missing data' })).toBeNull();
+    },
+  );
+
+  it.each([
+    ['exact', 'exact'],
+    ['absent (older results)', undefined],
+    ['null', null],
+    ['a value this page does not know', 'close'],
+  ])('shows no search-match note when the match is %s', (_label, match) => {
+    const { container } = render(
+      <ResultNotices track={{ ...base, queryMatch: match as TrackData['queryMatch'] }} />,
+    );
+    expect(container.textContent).toBe('');
+  });
+
+  it('shows the search-match note with the missing-data notices', () => {
+    render(
+      <ResultNotices
+        track={{
+          ...base,
+          queryMatch: 'none',
+          modelUnavailable: true,
+          modelUnavailableReason: 'timeout',
+        }}
+      />,
+    );
+    expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Missing data' }).textContent).toContain(
+      'Model unavailable',
+    );
+  });
+});

@@ -1,15 +1,17 @@
 /**
  * Clarification Node — Human-in-the-loop
- * Pauses execution until user selects a track
+ * Pauses execution until user selects a track. A result stored for the picked track is served
+ * without composing it again.
  */
 
-import { interrupt } from "@langchain/langgraph";
+import { getStore, interrupt } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getTrackDetails } from "../../sources/spotify.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
 import { isAbortError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
+import { readStoredResult, servedResult } from "../storedResults.js";
 import { matchTrack } from "../trackMatch.js";
 
 interface DisambiguationInterrupt {
@@ -66,31 +68,23 @@ export async function clarificationNode(
   // search of the same text asks again.
 
   // Fetch full Spotify data for selected track
+  let spotifyData: SpotifyData;
+  let detailed = true;
   try {
     config.signal?.throwIfAborted();
     const detailsResult = await getTrackDetails.invoke(
       { trackId: selectedId },
       { signal: config.signal },
     );
-    const spotifyData = JSON.parse(detailsResult) as SpotifyData;
-
+    spotifyData = JSON.parse(detailsResult) as SpotifyData;
     console.log("✅ [Clarification] User selected:", spotifyData.title);
-
-    return {
-      spotifyData,
-      selectedTrackId: selectedId,
-      isrc: spotifyData.isrc ?? null,
-      selectedBy: "user",
-      queryMatch: matchTrack(state.songQuery, spotifyData).match,
-      candidates: null, // Clear candidates
-      statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
-    };
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     // Fallback: minimal SpotifyData from the candidate. What the candidate does not carry is
     // left unknown rather than guessed: the duration (0, shown as missing), whether the track
     // is explicit (null), its ISRC and its popularity.
-    const spotifyData: SpotifyData = {
+    detailed = false;
+    spotifyData = {
       id: selected.id,
       title: selected.title,
       artist: selected.artist,
@@ -109,14 +103,41 @@ export async function clarificationNode(
       spotifyUrl: `https://open.spotify.com/track/${selected.id}`,
       previewUrl: null,
     };
-    return {
-      spotifyData,
-      selectedTrackId: selectedId,
-      isrc: null,
-      selectedBy: "user",
-      queryMatch: matchTrack(state.songQuery, spotifyData).match,
-      candidates: null,
-      statusMessages: [`✅ Selected: "${selected.title}"`],
-    };
   }
+
+  const picked = {
+    spotifyData,
+    selectedTrackId: selectedId,
+    isrc: spotifyData.isrc ?? null,
+    selectedBy: "user" as const,
+    queryMatch: matchTrack(state.songQuery, spotifyData).match,
+    candidates: null, // Clear candidates
+  };
+
+  // A result stored for the picked track is served as it is: it is about this track, whatever
+  // text led to it (the store is keyed by track, see storedResults.ts).
+  const stored = await readStoredResult(getStore(), selectedId, runtime.now());
+  config.signal?.throwIfAborted();
+  if (stored) {
+    console.log("📦 [Clarification] Stored result for:", selectedId);
+    const trackData = servedResult(stored, picked.queryMatch);
+    writer?.({
+      type: "status",
+      code: "NET-200",
+      message: "Cache hit — returning stored analysis",
+      node: "clarification",
+      timestamp: timestampOf(runtime),
+    });
+    writer?.({ type: "complete", data: trackData });
+    return { ...picked, trackData };
+  }
+
+  return {
+    ...picked,
+    statusMessages: [
+      detailed
+        ? `✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`
+        : `✅ Selected: "${selected.title}"`,
+    ],
+  };
 }

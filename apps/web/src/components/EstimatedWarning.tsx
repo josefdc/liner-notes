@@ -13,6 +13,8 @@ import {
   missingModelOutput,
   modelUnavailableText,
   moodLabel,
+  QUERY_MATCH_TITLE,
+  queryMatchText,
   recordingOf,
 } from '../constants';
 import { isWholeRecording, recordedDate } from '../utils/recording';
@@ -194,35 +196,51 @@ const Notice: React.FC<{ title: string; children: React.ReactNode }> = ({ title,
 );
 
 /**
- * Notices naming what a result is missing: the model's output when the model was unavailable,
- * and the audio values that were not measured (with the reason). Renders nothing otherwise.
+ * Notices about a result: that the track may not be the song searched for (the search text did
+ * not match it exactly), the model's output when the model was unavailable, and the audio
+ * values that were not measured (with the reason). Renders nothing otherwise.
  */
 export const ResultNotices: React.FC<{ track: TrackData; className?: string }> = ({
   track,
   className = '',
 }) => {
+  const match = queryMatchText(track.queryMatch);
   const audio = audioNotice(track);
   const modelMissing = track.modelUnavailable ? missingModelOutput(track) : [];
-  if (!track.modelUnavailable && !audio) return null;
+  const missing = Boolean(track.modelUnavailable || audio);
+  if (!match && !missing) return null;
 
   return (
-    <section aria-label="Missing data" className={`flex flex-col gap-2 ${className}`}>
-      {track.modelUnavailable && (
-        <Notice title="Model unavailable">
-          <p>
-            This result was built from source data only
-            {` (${modelUnavailableText(track.modelUnavailableReason)})`}.
-          </p>
-          {modelMissing.length > 0 && <p>Missing: {modelMissing.join(', ')}.</p>}
-        </Notice>
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {match && (
+        <section aria-label="Search match">
+          <Notice title={QUERY_MATCH_TITLE}>
+            <p>
+              {match} The analysis below is of “{track.title}” by {track.artist}.
+            </p>
+          </Notice>
+        </section>
       )}
-      {audio && (
-        <Notice title={audio.title}>
-          <p>{audio.reason}</p>
-          {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
-        </Notice>
+      {missing && (
+        <section aria-label="Missing data" className="flex flex-col gap-2">
+          {track.modelUnavailable && (
+            <Notice title="Model unavailable">
+              <p>
+                This result was built from source data only
+                {` (${modelUnavailableText(track.modelUnavailableReason)})`}.
+              </p>
+              {modelMissing.length > 0 && <p>Missing: {modelMissing.join(', ')}.</p>}
+            </Notice>
+          )}
+          {audio && (
+            <Notice title={audio.title}>
+              <p>{audio.reason}</p>
+              {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
+            </Notice>
+          )}
+        </section>
       )}
-    </section>
+    </div>
   );
 };
 

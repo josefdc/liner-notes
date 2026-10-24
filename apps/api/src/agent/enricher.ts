@@ -9,23 +9,23 @@
  * Solution: After the Composer generates the genealogy, we search Spotify
  *           for each referenced song and fetch the actual album artwork.
  *
+ * The search goes through the Spotify source (sources/spotify.ts): every request has a timeout
+ * and fails with a typed error, and a failed search leaves the node without artwork. Artwork is
+ * cached for a week by the node's label; a preview is never cached, and a node gets one only
+ * when the track found is strictly the one the model named (see `strictlyMatches`).
+ *
  * Features:
  * - Parallel batch search for performance
  * - Caching to avoid repeated API calls
  * - Graceful fallback when songs aren't found
- * - Rate limit handling
  */
 
-import type { Genealogy, GenealogyNode } from "./schema.js";
+import { describeError } from "../sources/http.js";
+import { searchTracks, type SpotifyTrackSummary } from "../sources/spotify.js";
 import { getCache, type SpotifySearchResult } from "../store/cache.js";
-
-// =============================================================================
-// Types
-// =============================================================================
-
-interface SpotifySearchResultWithArtist extends SpotifySearchResult {
-  artist: string | null;
-}
+import { isAbortError } from "./errors.js";
+import type { Genealogy, GenealogyNode } from "./schema.js";
+import { recordingTitleDifference, sameArtistName } from "./trackMatch.js";
 
 // =============================================================================
 // Persistent Artwork Cache (backed by SQLite)
@@ -35,25 +35,22 @@ function getCacheKey(label: string): string {
   return label.toLowerCase().trim();
 }
 
-function getCachedArtwork(label: string): SpotifySearchResultWithArtist | undefined {
+function getCachedArtwork(label: string): SpotifySearchResult | undefined {
   try {
-    const result = getCache().getArtwork(getCacheKey(label));
-    if (!result) return undefined;
-    return { ...result, artist: result.trackArtist };
+    return getCache().getArtwork(getCacheKey(label)) ?? undefined;
   } catch {
     return undefined;
   }
 }
 
-function setCachedArtwork(label: string, result: SpotifySearchResultWithArtist): void {
+function setCachedArtwork(label: string, result: SpotifySearchResult): void {
   try {
     getCache().putArtwork(getCacheKey(label), {
       coverUrl: result.coverUrl,
       spotifyUrl: result.spotifyUrl,
-      previewUrl: result.previewUrl,
       spotifyId: result.spotifyId,
       trackTitle: result.trackTitle,
-      trackArtist: result.trackArtist ?? result.artist,
+      trackArtist: result.trackArtist,
     });
   } catch {
     // Non-critical
@@ -61,136 +58,72 @@ function setCachedArtwork(label: string, result: SpotifySearchResultWithArtist):
 }
 
 // =============================================================================
-// Spotify API Integration
+// Spotify search
 // =============================================================================
 
-/**
- * Get Spotify access token using Client Credentials flow
- */
-async function getSpotifyToken(signal?: AbortSignal): Promise<string> {
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+const NO_ARTWORK: SpotifySearchResult = {
+  coverUrl: null,
+  spotifyUrl: null,
+  spotifyId: null,
+  trackTitle: null,
+  trackArtist: null,
+};
 
-  if (!clientId || !clientSecret) {
-    throw new Error("Missing Spotify credentials");
-  }
-
-  const params = new URLSearchParams();
-  params.append("grant_type", "client_credentials");
-
-  const response = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
-    },
-    body: params,
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Spotify auth failed: ${response.status}`);
-  }
-
-  const data = (await response.json()) as { access_token: string };
-  return data.access_token;
+/** What a node gets from Spotify: artwork, and a preview of a strictly matched track or none. */
+interface NodeLookup {
+  artwork: SpotifySearchResult;
+  previewUrl: string | null;
 }
 
 /**
- * Search Spotify for a song and get its album artwork
+ * Whether the track found is strictly the one the model named: the node names both a title and
+ * an artist, the track's lead artist (or its whole credit) is that artist, and nothing in the
+ * titles tells them apart as recordings (no other title, version or take; see trackMatch.ts).
+ * A label alone is never enough: a search for it can find a cover, a remix or another song.
  */
-async function searchSpotifyForArtwork(
-  query: string,
-  token: string,
-  signal?: AbortSignal,
-): Promise<SpotifySearchResultWithArtist> {
-  // Check cache first
-  const cached = getCachedArtwork(query);
-  if (cached) {
-    return cached;
-  }
+export function strictlyMatches(
+  node: Pick<GenealogyNode, "trackTitle" | "trackArtist">,
+  found: Pick<SpotifyTrackSummary, "title" | "artist" | "artistNames">,
+): boolean {
+  const title = node.trackTitle?.trim();
+  const artist = node.trackArtist?.trim();
+  if (!title || !artist) return false;
+  const lead = found.artistNames[0] ?? found.artist;
+  const sameArtist = sameArtistName(artist, lead) || sameArtistName(artist, found.artist);
+  return sameArtist && recordingTitleDifference({ title }, { title: found.title }) === null;
+}
 
+/**
+ * Artwork for a node, from the cache or a Spotify search, and the preview of the track found
+ * when it strictly matches the node. A cached entry gives no preview (none is stored). A failed
+ * search gives nothing and caches nothing, so a later run tries again; a cancelled run rejects.
+ */
+async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<NodeLookup> {
+  const cached = getCachedArtwork(node.label);
+  if (cached) return { artwork: cached, previewUrl: null };
+
+  let found: SpotifyTrackSummary | undefined;
   try {
-    const searchUrl = new URL("https://api.spotify.com/v1/search");
-    searchUrl.searchParams.set("q", query);
-    searchUrl.searchParams.set("type", "track");
-    searchUrl.searchParams.set("limit", "1");
-
-    const response = await fetch(searchUrl.toString(), {
-      headers: { Authorization: `Bearer ${token}` },
-      signal,
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        console.warn("⚠️ [Enricher] Spotify rate limit hit");
-        return {
-          coverUrl: null,
-          spotifyUrl: null,
-          artist: null,
-          previewUrl: null,
-          spotifyId: null,
-          trackTitle: null,
-          trackArtist: null,
-        };
-      }
-      throw new Error(`Spotify search failed: ${response.status}`);
-    }
-
-    const data = (await response.json()) as {
-      tracks?: {
-        items?: Array<{
-          id?: string;
-          name?: string;
-          preview_url?: string | null;
-          album?: { images?: Array<{ url: string }> };
-          external_urls?: { spotify: string };
-          artists?: Array<{ name: string }>;
-        }>;
-      };
-    };
-    const track = data.tracks?.items?.[0];
-
-    if (!track) {
-      const result: SpotifySearchResultWithArtist = {
-        coverUrl: null,
-        spotifyUrl: null,
-        artist: null,
-        previewUrl: null,
-        spotifyId: null,
-        trackTitle: null,
-        trackArtist: null,
-      };
-      signal?.throwIfAborted();
-      setCachedArtwork(query, result);
-      return result;
-    }
-
-    const result: SpotifySearchResultWithArtist = {
-      coverUrl: track.album?.images?.[0]?.url || null,
-      spotifyUrl: track.external_urls?.spotify || null,
-      artist: track.artists?.map((a: any) => a.name).join(", ") || null,
-      previewUrl: track.preview_url || null,
-      spotifyId: track.id || null,
-      trackTitle: track.name || null,
-      trackArtist: track.artists?.[0]?.name || null,
-    };
-
-    signal?.throwIfAborted();
-    setCachedArtwork(query, result);
-    return result;
+    [found] = await searchTracks(node.label, 1, signal);
   } catch (error) {
-    console.error(`❌ [Enricher] Error searching for "${query}":`, error);
-    return {
-      coverUrl: null,
-      spotifyUrl: null,
-      artist: null,
-      previewUrl: null,
-      spotifyId: null,
-      trackTitle: null,
-      trackArtist: null,
-    };
+    if (signal?.aborted || isAbortError(error)) throw error;
+    console.warn(`⚠️ [Enricher] Spotify search for "${node.label}" failed: ${describeError(error)}`);
+    return { artwork: NO_ARTWORK, previewUrl: null };
   }
+
+  const artwork: SpotifySearchResult = found
+    ? {
+        coverUrl: found.coverUrl || null,
+        spotifyUrl: found.spotifyUrl || null,
+        spotifyId: found.id || null,
+        trackTitle: found.title || null,
+        trackArtist: found.artistNames[0] || found.artist || null,
+      }
+    : NO_ARTWORK;
+  signal?.throwIfAborted();
+  setCachedArtwork(node.label, artwork);
+  const previewUrl = found?.previewUrl && strictlyMatches(node, found) ? found.previewUrl : null;
+  return { artwork, previewUrl };
 }
 
 // =============================================================================
@@ -229,8 +162,6 @@ export async function enrichGenealogyWithArtwork(
   console.log(`🎨 [Enricher] Enriching ${genealogy.nodes.length} genealogy nodes with artwork...`);
 
   try {
-    const token = await getSpotifyToken(signal);
-
     // Process nodes in parallel (with concurrency limit to avoid rate limits)
     const BATCH_SIZE = 5;
     const enrichedNodes: GenealogyNode[] = [];
@@ -262,17 +193,19 @@ export async function enrichGenealogyWithArtwork(
             return safeNode;
           }
 
-          // Search Spotify for this song
-          const result = await searchSpotifyForArtwork(safeNode.label, token, signal);
+          // Search Spotify for this song; the model's title and artist decide the preview
+          const { artwork, previewUrl } = await lookUpNode(
+            { ...safeNode, trackTitle: node.trackTitle, trackArtist: node.trackArtist },
+            signal,
+          );
 
           return {
             ...safeNode,
-            img: result.coverUrl || undefined,
-            // NEW: Inject audio preview and navigation metadata
-            previewUrl: result.previewUrl || undefined,
-            spotifyId: result.spotifyId || undefined,
-            trackTitle: result.trackTitle || undefined,
-            trackArtist: result.trackArtist || undefined,
+            img: artwork.coverUrl || undefined,
+            previewUrl: previewUrl || undefined,
+            spotifyId: artwork.spotifyId || undefined,
+            trackTitle: artwork.trackTitle || undefined,
+            trackArtist: artwork.trackArtist || undefined,
           };
         }),
       );

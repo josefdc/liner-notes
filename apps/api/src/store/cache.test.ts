@@ -175,12 +175,52 @@ describe("SonicCache write errors", () => {
       cache.putArtwork("k", {
         coverUrl: null,
         spotifyUrl: null,
-        previewUrl: null,
         spotifyId: null,
         trackTitle: null,
         trackArtist: null,
       }),
     ).toThrow("write failed");
+  });
+});
+
+describe("SonicCache artwork", () => {
+  let db: Database.Database;
+  let cache: SonicCache;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    runMigrations(db);
+    cache = new SonicCache(db);
+  });
+  afterEach(() => db.close());
+
+  const storedPreview = (key: string) =>
+    db.prepare("SELECT preview_url FROM artwork_cache WHERE search_key = ?").pluck().get(key);
+
+  const artwork = {
+    coverUrl: "https://i.scdn.co/image/c",
+    spotifyUrl: "https://open.spotify.com/track/u",
+    spotifyId: "u",
+    trackTitle: "Under Pressure",
+    trackArtist: "Queen",
+  };
+
+  it("stores no preview URL, even when the caller passes one", () => {
+    cache.putArtwork("k", { ...artwork, previewUrl: "https://p.scdn.co/mp3-preview/u" } as never);
+
+    expect(storedPreview("k")).toBeNull();
+    expect(cache.getArtwork("k")).toEqual(artwork);
+  });
+
+  it("clears a preview URL stored for the key by older code when it writes the row again", () => {
+    db.prepare(
+      "INSERT INTO artwork_cache (search_key, preview_url, expires_at) VALUES ('k', 'https://p.scdn.co/mp3-preview/old', unixepoch() + 60)",
+    ).run();
+
+    cache.putArtwork("k", artwork);
+
+    expect(storedPreview("k")).toBeNull();
+    expect(cache.getArtwork("k")).not.toHaveProperty("previewUrl");
   });
 });
 

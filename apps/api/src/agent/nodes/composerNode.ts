@@ -32,14 +32,13 @@ import type { InvokeResult } from "../../llm/invoke.js";
 import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
 import { pickRecording } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
-import { withoutPreviewUrls } from "../../store/runs.js";
-import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { answeredCall, failedCall, refusedAnswer, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
 import { composerMessages, type PromptRecording, type PromptTrack } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
+import { storeResult } from "../storedResults.js";
 import {
   type Factoid,
   type Genealogy,
@@ -375,6 +374,8 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // evidence yet (#27): it is empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
+    // How this run's search text matched the track; the web says so when it is not exact.
+    ...(state.queryMatch ? { queryMatch: state.queryMatch } : {}),
     evidence: state.evidence,
   };
 }
@@ -393,6 +394,7 @@ function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
     isrc: state.isrc ?? null,
     preview: state.preview ?? null,
     previewUrl: state.previewUrl ?? null,
+    queryMatch: state.queryMatch ?? null,
   };
 }
 
@@ -520,30 +522,25 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     if (problems) return unusable(problems, [call]);
     writer?.({ type: "complete", data: trackData });
 
-    // Cache the result in long-term memory, unless a later run may do better: the audio may be
-    // measurable later, a source failed for a passing reason (an outage, a timeout, a rate
-    // limit, a rejected key), or a research planner call failed. A source that is only not
-    // configured does not block it: the key names the configured sources. The run information
-    // belongs to this run, not to a later one served from the cache.
+    // Cache the result in long-term memory under its track (storedResults.ts), unless a later
+    // run may do better: the audio may be measurable later, a source failed for a passing reason
+    // (an outage, a timeout, a rate limit, a rejected key), or a research planner call failed. A
+    // source that is only not configured does not block it: the key names the configured
+    // sources. The run information, the preview links and the search match belong to this run,
+    // not to a later one served from the cache.
     const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
     const transientSources = [...state.sourceErrors, ...sourceErrors].some(
       (e) => e.code !== "not_configured",
     );
     const plannerFailed = state.usage.some((u) => u.status !== "ok");
-    // Only a track the scout selected as the query's clear match is stored under the query's
-    // text: a pick from the track picker is one user's choice, not the answer to the text.
-    const clearMatch = state.selectedBy === "match";
-    if (store && clearMatch && !transientAudio && !transientSources && !plannerFailed) {
-      const normalizedQuery = state.songQuery.toLowerCase().trim();
-      const { run: _run, ...cached } = trackData;
+    // The result is about the track the run chose, by the scout's match or the user's pick: it
+    // is stored under that track, never under the text, so it is served only for that track.
+    const chosen = state.selectedBy === "match" || state.selectedBy === "user";
+    if (store && chosen && !transientAudio && !transientSources && !plannerFailed) {
       try {
         signal?.throwIfAborted();
-        await store.put(TRACKS_NAMESPACE, resultCacheKey(normalizedQuery, configuredSources()), {
-          // Preview links are handed out for one run: a result served later shows none.
-          trackData: withoutPreviewUrls(cached),
-          timestamp: runtime.now().getTime(),
-        });
+        await storeResult(store, trackData, runtime.now());
       } catch (e) {
         if (signal?.aborted) throw e;
         console.warn("⚠️ [Composer] Store write error:", e);

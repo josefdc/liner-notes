@@ -3,6 +3,7 @@ import type {
   Factoid,
   FactoidUnavailableCode,
   ModelUnavailableReason,
+  QueryMatch,
   TrackData,
 } from './types';
 
@@ -80,6 +81,25 @@ export function recordingOf(track: TrackData): Recording | null {
     recordedAt: recordedAt && !Number.isNaN(Date.parse(recordedAt)) ? recordedAt : null,
     commit: measuredText(run.commit),
   };
+}
+
+/** Title of the note shown when the search text did not match the analysed track exactly. */
+export const QUERY_MATCH_TITLE = 'This may not be the song you searched for';
+
+/** How the search text matched the track, in words, for each match that is not exact. */
+export const QUERY_MATCH_TEXT: Record<Exclude<QueryMatch, 'exact'>, string> = {
+  partial: 'Its title matches your search only in part.',
+  artist: 'Only the artist matches your search, not the title.',
+  none: 'Neither its title nor its artist matches your search.',
+};
+
+/**
+ * Why the analysed track may not be the song searched for, or null: the match was exact, is
+ * unknown (older results do not say), or is a value this page does not know.
+ */
+export function queryMatchText(match: string | null | undefined): string | null {
+  if (!match || match === 'exact' || !Object.hasOwn(QUERY_MATCH_TEXT, match)) return null;
+  return QUERY_MATCH_TEXT[match as Exclude<QueryMatch, 'exact'>];
 }
 
 /** The value when it was measured (a finite number), otherwise null. */

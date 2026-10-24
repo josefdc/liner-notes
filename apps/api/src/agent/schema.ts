@@ -6,7 +6,7 @@
  * the audio measurement. Measured values come from the measurement only.
  */
 
-import { Claim, Evidence, PreviewMatch, RunInfo } from "@liner-notes/contract";
+import { Claim, Evidence, PreviewMatch, QueryMatch, RunInfo } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures } from "./state.js";
 
@@ -378,6 +378,9 @@ export const TrackDataSchema = z.object({
   // The evidence model (see @liner-notes/contract TrackAnalysis)
   isrc: z.string().nullable().optional(),
   preview: PreviewMatch.nullable().optional(),
+  queryMatch: QueryMatch.nullable()
+    .optional()
+    .describe("How this run's search text matched the track; set by code, never by a model"),
   evidence: z.array(Evidence).optional(),
   claims: z.array(Claim).optional(),
   run: RunInfo.optional().describe("The run that produced the result; `fallback` says how"),

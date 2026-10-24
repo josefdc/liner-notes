@@ -5,6 +5,9 @@
  *                  ↑
  *            (interrupt if ambiguous)
  *
+ * The scout (for a track it selects) and the clarification (for a picked one) end the run with
+ * the result stored for that track, when there is one.
+ *
  * The engineer and the historian run in parallel and meet at the composer through one
  * list-form edge, so the composer runs once, after both, however many steps either branch
  * takes. No node has a retry policy: every node handles its own failures (the scout and the
@@ -48,6 +51,7 @@ function routeAfterScout(state: SonicAgentStateType): string[] | string {
 }
 
 function routeAfterClarification(state: SonicAgentStateType): string[] | string {
+  if (state.trackData) return END; // A stored result for the picked track
   if (state.error) return END;
   return ["engineer", "historian"];
 }

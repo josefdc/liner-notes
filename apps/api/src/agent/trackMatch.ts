@@ -20,9 +20,11 @@
  * its own.
  */
 
+import type { QueryMatch } from "@liner-notes/contract";
 import type { SpotifyData } from "./state.js";
 
 /**
+ * How a query matches a track; the result carries it (TrackAnalysis.queryMatch).
  * - `exact`: the query is the title (the whole title, the title without its bracketed or dashed
  *   suffix, or a bracketed alternative title such as the Korean one in "Gangnam Style
  *   (강남스타일)"), with any of the credited artists and joining words such as "feat." around it.
@@ -31,7 +33,7 @@ import type { SpotifyData } from "./state.js";
  * - `artist`: only a credited artist is named in the query; the title does not match.
  * - `none`: neither the title nor an artist matches.
  */
-export type QueryMatch = "exact" | "partial" | "artist" | "none";
+export type { QueryMatch };
 
 /** A search result with how it matches the query. */
 export interface RankedTrack {

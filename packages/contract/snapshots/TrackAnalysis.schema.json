@@ -238,6 +238,14 @@
           { "type": "null" }
         ]
       },
+      "queryMatch": {
+        "default": null,
+        "description": "How this run's search text matched the track; null or absent when unknown",
+        "anyOf": [
+          { "type": "string", "enum": ["exact", "partial", "artist", "none"] },
+          { "type": "null" }
+        ]
+      },
       "evidence": { "type": "array", "items": { "$ref": "Evidence.schema.json" } },
       "claims": { "type": "array", "items": { "$ref": "Claim.schema.json" } },
       "run": {
@@ -614,6 +622,14 @@
           { "type": "null" }
         ]
       },
+      "queryMatch": {
+        "default": null,
+        "description": "How this run's search text matched the track; null or absent when unknown",
+        "anyOf": [
+          { "type": "string", "enum": ["exact", "partial", "artist", "none"] },
+          { "type": "null" }
+        ]
+      },
       "evidence": { "type": "array", "items": { "$ref": "Evidence.schema.json" } },
       "claims": { "type": "array", "items": { "$ref": "Claim.schema.json" } },
       "run": {
@@ -789,6 +805,7 @@
     "$.keyMoments: drops unreadable items",
     "$.modelUnavailableReason: absent when unreadable",
     "$.preview: absent when unreadable",
+    "$.queryMatch: absent when unreadable",
     "$.run.sourceErrors: drops unreadable items",
     "$.run.usage: absent when unreadable",
     "$.run.verifier: absent when unreadable",

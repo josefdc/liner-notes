@@ -1,7 +1,8 @@
 /**
  * Clarification: a pick is not remembered for the query's text; a run cancelled after the user
  * picked a track does not turn the cancelled track lookup into the candidate fallback. The
- * candidate fallback keeps the separate artists and their Spotify ids.
+ * candidate fallback keeps the separate artists and their Spotify ids. A result stored for the
+ * picked track (and only for it) is served.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +24,9 @@ import {
   START,
   StateGraph,
 } from "@langchain/langgraph";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { SonicAgentState, type SonicAgentStateType } from "../state.js";
 import { clarificationNode } from "./clarificationNode.js";
 
@@ -40,8 +44,7 @@ const candidates = ["a", "b"].map((id) => ({
  * The clarification node alone in a graph, paused at its choice. `onStatus` runs when the node
  * reports the user's choice (before it writes the memory).
  */
-async function pausedAtChoice(onStatus: () => void) {
-  const store = new InMemoryStore();
+async function pausedAtChoice(onStatus: (event?: unknown) => void, store = new InMemoryStore()) {
   const node = { settled: "pending", update: null as unknown };
   const graph = new StateGraph(SonicAgentState)
     .addNode(
@@ -203,5 +206,50 @@ describe("clarificationNode's chosen track", () => {
     expect(update.spotifyData).not.toHaveProperty("popularity");
     expect(update.spotifyData?.isrc ?? null).toBeNull();
     expect(update.isrc ?? null).toBeNull();
+  });
+});
+
+describe("clarificationNode's stored results", () => {
+  const { run: _run, ...analysis } = JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        "../../../../../packages/contract/fixtures/api-payloads/composed-measured.json",
+      ),
+      "utf8",
+    ),
+  );
+  const storedFor = (id: string) => ({
+    trackData: { ...analysis, id, title: "Title b", artist: "Ramsey Lewis" },
+    timestamp: Date.now(),
+  });
+  const keyOf = (id: string) => resultCacheKey(id, configuredSources());
+
+  it("serves the result stored for the picked track, with how the query matches it", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf("track-b"), storedFor("track-b"));
+    const events: unknown[] = [];
+    const { graph, node, thread } = await pausedAtChoice((event) => events.push(event), store);
+    spotify.details.mockResolvedValue("not a track");
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.trackData).toMatchObject({ id: "track-b", queryMatch: "none" });
+    expect(update.selectedBy).toBe("user");
+    expect(events).toContainEqual({ type: "complete", data: update.trackData });
+  });
+
+  it("does not serve a result stored for another candidate", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf("track-a"), storedFor("track-a"));
+    const { graph, node, thread } = await pausedAtChoice(() => {}, store);
+    spotify.details.mockResolvedValue("not a track");
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.trackData ?? null).toBeNull();
+    expect(update.selectedTrackId).toBe("track-b");
   });
 });

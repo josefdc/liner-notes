@@ -42,6 +42,28 @@ const CHOICE_B = "0RunsRouteTestTrackB01";
 const hooks = vi.hoisted(() => ({ dropTable: null as null | (() => void) }));
 
 vi.mock("../../sources/spotify.js", () => ({
+  // The real scout's search ("cachehit …" queries): it finds TRACK_ID, by the artist and title
+  // the query names, so the scout selects it and serves the result stored for it.
+  searchMultipleTracks: {
+    invoke: async () =>
+      JSON.stringify([
+        {
+          id: "0RunsRouteTestTrack001",
+          title: "Someone Else Typed",
+          artist: "Cachehit",
+          artistIds: [],
+          album: "Album",
+          releaseDate: "1994",
+          coverUrl: "",
+          isrc: null,
+          duration: "3:38",
+          durationMs: 218000,
+          explicit: false,
+          spotifyUrl: "https://open.spotify.com/track/0RunsRouteTestTrack001",
+          previewUrl: null,
+        },
+      ]),
+  },
   getTrackDetails: {
     invoke: async ({ trackId }: { trackId: string }) =>
       JSON.stringify({
@@ -439,12 +461,18 @@ describe("runs routes", () => {
     const query = "cachehit someone else typed";
     await new SqliteStore(getDb()).put(
       TRACKS_NAMESPACE,
-      resultCacheKey(query, configuredSources()),
+      resultCacheKey(TRACK_ID, configuredSources()),
       { trackData: cached, timestamp: Date.now() },
     );
 
     const hit = await analyze(query);
-    expect(hit.events.map((e) => e.type)).toEqual(["connected", "status", "complete", "done"]);
+    expect(hit.events.map((e) => e.type)).toEqual([
+      "connected",
+      "status",
+      "status",
+      "complete",
+      "done",
+    ]);
     expect(getRun(getDb(), hit.runId)).toMatchObject({
       status: "completed",
       mode: "replay",

@@ -270,6 +270,22 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: "no_stored_previews",
+    up(db) {
+      // Preview URLs are looked up for each run and never stored: they are signed links that
+      // expire, handed out for preview use only. The artwork cache kept Spotify's for 7 days;
+      // the column stays (always null) and the values are cleared.
+      db.exec("UPDATE artwork_cache SET preview_url = NULL WHERE preview_url IS NOT NULL");
+
+      // Results stored by the scout under the search text (["tracks", "v2"] and ["tracks",
+      // "v3"]) are never served again: results are now keyed by track. Some were written before
+      // results were stored without preview URLs. They are dropped.
+      const byText = db.prepare("DELETE FROM store_items WHERE namespace = ?");
+      for (const version of ["v2", "v3"]) byText.run(JSON.stringify(["tracks", version]));
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

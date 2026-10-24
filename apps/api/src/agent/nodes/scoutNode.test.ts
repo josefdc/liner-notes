@@ -1,8 +1,9 @@
 /**
  * Scout: a cancelled run sends no further Spotify search, cuts its retry wait short and
- * rejects (never reports the cancel as a Spotify error). A stored result is served only under
- * the key of the sources configured now. Spotify is a real LangChain tool over a
- * stub, so the tool's own handling of the signal is part of the test.
+ * rejects (never reports the cancel as a Spotify error). A stored result is looked up only after
+ * the search, by the track it selects, and served only under the key of the sources configured
+ * now. Spotify is a real LangChain tool over a stub, so the tool's own handling of the signal is
+ * part of the test.
  */
 
 import { tool } from "@langchain/core/tools";
@@ -124,7 +125,8 @@ describe("scoutNode when the run is cancelled", () => {
 });
 
 describe("scoutNode's stored results", () => {
-  // A stored result as the composer writes it: a TrackAnalysis without this run's information.
+  // A stored result as the composer writes it: a TrackAnalysis without this run's information,
+  // about the track the search finds (t1).
   const { run: _run, ...analysis } = JSON.parse(
     readFileSync(
       join(
@@ -134,29 +136,79 @@ describe("scoutNode's stored results", () => {
       "utf8",
     ),
   );
-  const stored = { trackData: { ...analysis, title: "Stored" }, timestamp: Date.now() };
+  const stored = {
+    trackData: { ...analysis, id: track.id, title: "Stored" },
+    timestamp: Date.now(),
+  };
+  const keyOf = (id: string) => resultCacheKey(id, configuredSources());
 
-  it("serves a result stored for the sources configured now", async () => {
-    const store = new InMemoryStore();
-    await store.put(TRACKS_NAMESPACE, resultCacheKey("song", configuredSources()), stored);
-    const { graph } = scoutGraph(store);
-
-    const out = await graph.invoke({ songQuery: "Song" });
-
-    expect(out.trackData).toEqual(stored.trackData);
-    expect(spotify.calls).toBe(0);
+  beforeEach(() => {
+    spotify.answer = async () => JSON.stringify([track]);
   });
 
-  it("composes again instead of serving a stored result the contract does not accept", async () => {
-    spotify.answer = async () => JSON.stringify([track]);
+  it("searches first and serves the result stored for the track it selects", async () => {
     const store = new InMemoryStore();
-    await store.put(TRACKS_NAMESPACE, resultCacheKey("song a", configuredSources()), {
-      ...stored,
-      trackData: { title: "Stored, but no id, artist or genealogy" },
-    });
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), stored);
     const { graph } = scoutGraph(store);
 
     // The query names the artist, so the one match is selected without asking.
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(spotify.calls).toBe(1);
+    expect(out.trackData).toEqual({ ...stored.trackData, queryMatch: "exact" });
+    expect(out.selectedTrackId).toBe(track.id);
+  });
+
+  it("does not serve a result stored under the search text for a track it no longer finds", async () => {
+    const store = new InMemoryStore();
+    // What the text found before (another track), stored under the text and under that track.
+    const before = { ...stored, trackData: { ...stored.trackData, id: "t0" } };
+    await store.put(TRACKS_NAMESPACE, keyOf("song a"), before);
+    await store.put(TRACKS_NAMESPACE, keyOf("t0"), before);
+    await store.put(["tracks", "v3"], "song a|lastfm=0:tavily=0", before);
+    await store.put(["tracks", "v3"], "song a|lastfm=1:tavily=1", before);
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData ?? null).toBeNull();
+    expect(out.spotifyData).toMatchObject({ id: "t1" });
+  });
+
+  it("does not serve a result stored under the track's key that is about another track", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+      ...stored,
+      trackData: { ...stored.trackData, id: "t0" },
+    });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData ?? null).toBeNull();
+    expect(out.spotifyData).toMatchObject({ id: "t1" });
+  });
+
+  it("does not look a result up when the user has to choose", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), stored);
+    const { graph } = scoutGraph(store);
+
+    // A title alone always asks which recording is meant.
+    const out = await graph.invoke({ songQuery: "Song" });
+
+    expect(out.trackData ?? null).toBeNull();
+    expect(out.candidates?.map((candidate: { id: string }) => candidate.id)).toEqual(["t1"]);
+  });
+
+  it("composes again instead of serving a stored result the contract does not accept", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+      ...stored,
+      trackData: { id: track.id, title: "Stored, but no artist or genealogy" },
+    });
+    const { graph } = scoutGraph(store);
+
     const out = await graph.invoke({ songQuery: "Song A" });
 
     expect(out.trackData).toBeFalsy();
@@ -164,22 +216,32 @@ describe("scoutNode's stored results", () => {
     expect(spotify.calls).toBe(1);
   });
 
+  it("does not serve an expired result", async () => {
+    const store = new InMemoryStore();
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000 - 1;
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), { ...stored, timestamp: dayAgo });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData ?? null).toBeNull();
+  });
+
   it("does not serve a result stored when another set of sources was configured", async () => {
     const store = new InMemoryStore();
     const now = configuredSources();
     await store.put(
       TRACKS_NAMESPACE,
-      resultCacheKey("song", { ...now, lastfm: !now.lastfm }),
+      resultCacheKey(track.id, { ...now, lastfm: !now.lastfm }),
       stored,
     );
-    await store.put(TRACKS_NAMESPACE, "song", stored);
-    spotify.answer = async () => "[]";
+    await store.put(TRACKS_NAMESPACE, track.id, stored);
     const { graph } = scoutGraph(store);
 
-    const out = await graph.invoke({ songQuery: "Song" });
+    const out = await graph.invoke({ songQuery: "Song A" });
 
     expect(out.trackData ?? null).toBeNull();
-    expect(spotify.calls).toBeGreaterThan(0);
+    expect(spotify.calls).toBe(1);
   });
 });
 

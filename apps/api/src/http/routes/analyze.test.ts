@@ -76,7 +76,6 @@ vi.mock("../../sources/spotify.js", () => ({
         album: "Album",
         releaseDate: "1994",
         coverUrl: "",
-        popularity: 50,
         duration: "3:38",
         durationMs: 218000,
         explicit: false,
@@ -122,7 +121,6 @@ vi.mock("../../agent/nodes/index.js", async () => {
           artist: "Artist",
           album: "Album",
           coverUrl: "",
-          popularity: 40,
         }));
         config.writer?.({ type: "candidates", candidates, message: "pick one" });
         return { candidates };

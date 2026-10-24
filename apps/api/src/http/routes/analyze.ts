@@ -1,11 +1,23 @@
 import { randomUUID } from "node:crypto";
+import { TrackAnalysis } from "@liner-notes/contract";
 import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { llm } from "../../llm/invoke.js";
 import { getDb } from "../../store/database.js";
-import { getRun, type RunStatus, startRun, updateRun } from "../../store/runs.js";
+import {
+  appendRunEvent,
+  deleteRunEvents,
+  getRun,
+  nextEventStream,
+  type RunStatus,
+  runExists,
+  type StoreResultOutcome,
+  startRun,
+  storeRunResult,
+  updateRun,
+} from "../../store/runs.js";
 import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middleware/errors.js";
 import { nodeEvent, openAnalysisStream } from "../sse.js";
 
@@ -202,7 +214,8 @@ type Emit = (event: AgentEvent) => boolean;
 type GraphInput = Parameters<ReturnType<typeof createSonicAgentGraph>["stream"]>[0];
 
 type RunOutcome =
-  | { kind: "complete"; trackData: TrackData }
+  /** `fromAnotherRun`: the result was composed by an earlier run (a cached one). */
+  | { kind: "complete"; trackData: TrackData; fromAnotherRun?: boolean }
   | { kind: "interrupted"; candidates: SearchCandidate[] }
   | { kind: "failed"; code: FailureCode }
   | { kind: "cancelled" };
@@ -325,8 +338,10 @@ async function pendingChoice(threadId: string) {
 
 /**
  * Runs the graph under `control` and records the outcome. A deadline abort is reported as a
- * timeout. A run that failed or was cancelled before the choice was applied leaves the thread
- * waiting for it, so it is recorded as interrupted: retention keeps it and it can be resumed.
+ * timeout. A result that fails the contract is a failed run on every route (the stream refuses
+ * it as it is sent; here POST /api/analyze does too). A run that failed or was cancelled before
+ * the choice was applied leaves the thread waiting for it, so it is recorded as interrupted:
+ * retention keeps it and it can be resumed.
  */
 async function executeRun(
   input: GraphInput,
@@ -338,6 +353,10 @@ async function executeRun(
   let outcome = await runGraph(input, threadId, control.signal, emit);
   if (outcome.kind === "cancelled" && control.timedOut)
     outcome = { kind: "failed", code: "timeout" };
+  if (outcome.kind === "complete" && !TrackAnalysis.safeParse(outcome.trackData).success) {
+    console.error(`[Run ${threadId}] The result fails the contract; run failed`);
+    outcome = { kind: "failed", code: "failed" };
+  }
 
   let status = OUTCOME_STATUS[outcome.kind];
   if (outcome.kind === "failed" || outcome.kind === "cancelled") {
@@ -347,12 +366,44 @@ async function executeRun(
       console.error(`[Run ${threadId}] Could not read the thread:`, err);
     }
   }
-  recordRun("update a run", (db) => updateRun(db, threadId, { status }));
+  if (recordOutcome(threadId, status, outcome) && outcome.kind === "complete") {
+    outcome = { ...outcome, fromAnotherRun: true };
+  }
   // A finished run's model calls are no longer counted; a paused one keeps its count, so the
   // per-run cap still covers it when it is resumed.
   if (status !== "interrupted") endModelRun(threadId);
   console.log(`[Run ${threadId}] ${outcome.kind}; recorded ${status}`);
   return outcome;
+}
+
+/**
+ * Records a run's status and, for a completed run, its result, in one transaction, so GET
+ * /api/runs can serve the result again. When the result cannot be written the status is
+ * recorded on its own: the client has the result, and the run must not stay open. A run that
+ * sent a result another run composed keeps no events (deleteRunEvents). Returns true for such a
+ * run.
+ */
+function recordOutcome(runId: string, status: RunStatus, outcome: RunOutcome): boolean {
+  const trackData = outcome.kind === "complete" ? outcome.trackData : null;
+  let stored: StoreResultOutcome | null = null;
+  try {
+    getDb().transaction(() => {
+      const db = getDb();
+      updateRun(db, runId, { status });
+      if (trackData) stored = storeRunResult(db, runId, trackData);
+      if (stored === "another_run") deleteRunEvents(db, runId);
+    })();
+  } catch (err) {
+    console.error(`[Runs] Could not record the outcome of run ${runId}:`, err);
+    recordRun("update a run", (db) => updateRun(db, runId, { status }));
+    return false;
+  }
+  if (stored === "another_run") {
+    console.log(`[Run ${runId}] Sent a result composed by another run; not stored as its own`);
+    return true;
+  }
+  if (stored && stored !== "stored") console.error(`[Run ${runId}] Result not stored: ${stored}`);
+  return false;
 }
 
 /** Forgets a finished run's call count in the provider layer. Never fails the run. */
@@ -450,8 +501,9 @@ async function resumeThread(
       console.warn(`[Run ${threadId}] Client left before the resume started; choice kept`);
       return;
     }
-    reply.started();
+    // Reopened first, so a run paused before runs were recorded has a record to store events in.
     reopenRun(threadId, check.query);
+    reply.started();
     const outcome = await executeRun(
       new Command({ resume: selectedTrackId }),
       threadId,
@@ -471,16 +523,58 @@ async function resumeThread(
 
 const timestamp = () => new Date().toISOString();
 
+/** Streams whose events stopped being stored because a write failed. */
+let unstoredStreams = 0;
+
+/** How many streams this process stopped storing because an event write failed; for tests. */
+export function unstoredStreamCount(): number {
+  return unstoredStreams;
+}
+
 /**
  * The analysis stream of run `runId`: status 200 with the headers flushed at once (EventSource
  * cannot read any other status, so errors are sent in the stream), a heartbeat every
  * HEARTBEAT_INTERVAL_MS that keeps proxies from closing an idle connection, and every event
  * built and checked by the stream adapter (../sse.ts).
+ *
+ * Once `storeEvents` is called (when the request has claimed the run, and the run has a
+ * record) the events it sends are stored with the run, as the run's next stream: a resume's
+ * events follow the earlier stream's instead of clashing with them, since each stream numbers
+ * its events from 0. The events of a request that was refused before it claimed the run are not
+ * stored. When an event cannot be stored, the stream stops storing: what is stored is always the
+ * stream as it was sent up to some point, never a stream with an event missing.
  */
 function openEventStream(res: Response, runId?: string) {
-  const stream = openAnalysisStream(res, runId);
+  let storedAs: number | null = null;
+  const stream = openAnalysisStream(res, runId, {
+    onSent: (event) => {
+      const streamNumber = storedAs;
+      if (!runId || streamNumber === null) return;
+      try {
+        appendRunEvent(getDb(), runId, streamNumber, event);
+      } catch (err) {
+        storedAs = null;
+        unstoredStreams += 1;
+        console.error(
+          `[Runs] Could not store event ${event.seq} of run ${runId}; the rest of this stream ` +
+            `is not stored (${unstoredStreams} streams cut short since start):`,
+          err,
+        );
+      }
+    },
+  });
   return {
     stream,
+    /** Stores no more of this stream's events. */
+    stopStoringEvents(): void {
+      storedAs = null;
+    },
+    storeEvents(): void {
+      if (!runId) return;
+      recordRun("number a stream", (db) => {
+        if (runExists(db, runId)) storedAs = nextEventStream(db, runId);
+      });
+    },
     /**
      * Sends a graph node's writer payload, translated to a contract event. False when the
      * result (`complete`) failed the contract and the client was sent an error in its place; a
@@ -507,10 +601,12 @@ type AnalysisStream = ReturnType<typeof openEventStream>;
  * gone, so it only closes the stream.
  */
 function sendStreamOutcome(
-  { stream, error, done }: AnalysisStream,
+  { stream, error, done, stopStoringEvents }: AnalysisStream,
   outcome: RunOutcome,
   threadId: string,
 ): void {
+  // Its events were deleted with the outcome; the closing `done` is not stored either.
+  if (outcome.kind === "complete" && outcome.fromAnotherRun) stopStoringEvents();
   if (outcome.kind === "interrupted") {
     stream.send({
       type: "interrupt",
@@ -639,6 +735,9 @@ router.post(
  * - complete { data }: the result, exactly once per finished run
  * - error { code, error }: a code from ERRORS and a short message
  * - done: the stream is over
+ *
+ * The run's result is stored with it and served by GET /api/runs/:id; the events sent are stored
+ * for recording the run as a replay (not for a run that sent another run's result).
  */
 router.get(
   "/api/analyze/stream",
@@ -655,6 +754,7 @@ router.get(
     // The run id is the thread id.
     const threadId = startAnalysis(query);
     const stream = openEventStream(res, threadId);
+    stream.storeEvents();
     console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
     const control = new RunControl(req, res, threadId);
     await guardStream(stream, async () => {
@@ -727,7 +827,10 @@ router.get(
           stream.error(code);
           stream.done();
         },
-        started: () => stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() }),
+        started: () => {
+          stream.storeEvents();
+          stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() });
+        },
         emit: stream.emit,
         finish: (outcome) => {
           sendStreamOutcome(stream, outcome, threadId);

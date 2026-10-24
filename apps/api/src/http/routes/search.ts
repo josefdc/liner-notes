@@ -47,7 +47,11 @@ router.get(
         return;
       }
 
-      const suggestions = JSON.parse(result as string);
+      // Suggestions carry no preview link: the contract's SearchCandidate has none, and a
+      // preview is looked up for the track that is analysed.
+      const suggestions = (JSON.parse(result as string) as Record<string, unknown>[]).map(
+        ({ previewUrl: _previewUrl, ...suggestion }) => suggestion,
+      );
 
       res.json({
         success: true,

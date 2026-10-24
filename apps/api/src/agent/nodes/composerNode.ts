@@ -32,6 +32,7 @@ import type { InvokeResult } from "../../llm/invoke.js";
 import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
 import { pickRecording } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
+import { withoutPreviewUrls } from "../../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { answeredCall, failedCall, refusedAnswer, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
@@ -138,7 +139,8 @@ export async function musicBrainzRecording(
       {
         isrc,
         title: spotify.title,
-        artists: [spotify.artist],
+        // The credited artists one by one: the joined name ("Coolio, L.V.") matches no credit.
+        artists: spotify.artistNames?.length ? spotify.artistNames : [spotify.artist],
         durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
       },
       candidates,
@@ -366,7 +368,8 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     ...measuredAudioFields(state.audioFeatures),
-    // No node writes isrc, preview or evidence yet (#24, #27): they are null and empty today.
+    // The ISRC is the one Spotify gave for the chosen track. No node writes preview or
+    // evidence yet (#24, #27): they are null and empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
     evidence: state.evidence,
@@ -452,7 +455,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     status("LLM-CONNECT", "Composing the liner notes...");
     console.log("🎼 [Composer] Synthesizing data for:", spotify.title);
 
-    // state.isrc is null until the scout records the ISRC (#24): no lookup is made then.
+    // state.isrc is null when Spotify gave no ISRC: no lookup is made then.
     const { recording, errors: sourceErrors } = await musicBrainzRecording(
       spotify,
       state.isrc,
@@ -524,13 +527,17 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       (e) => e.code !== "not_configured",
     );
     const plannerFailed = state.usage.some((u) => u.status !== "ok");
-    if (store && !transientAudio && !transientSources && !plannerFailed) {
+    // Only a track the scout selected as the query's clear match is stored under the query's
+    // text: a pick from the track picker is one user's choice, not the answer to the text.
+    const clearMatch = state.selectedBy === "match";
+    if (store && clearMatch && !transientAudio && !transientSources && !plannerFailed) {
       const normalizedQuery = state.songQuery.toLowerCase().trim();
       const { run: _run, ...cached } = trackData;
       try {
         signal?.throwIfAborted();
         await store.put(TRACKS_NAMESPACE, resultCacheKey(normalizedQuery, configuredSources()), {
-          trackData: cached,
+          // Preview links are handed out for one run: a result served later shows none.
+          trackData: withoutPreviewUrls(cached),
           timestamp: runtime.now().getTime(),
         });
       } catch (e) {

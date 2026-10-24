@@ -110,6 +110,107 @@ describe("Spotify client", () => {
     });
   });
 
+  describe("identity", () => {
+    const withIdentity = () => ({
+      ...track(),
+      external_ids: { isrc: "USAT29900609" },
+      preview_url: "https://p.scdn.co/mp3-preview/abc",
+    });
+
+    it("a search keeps the ISRC and the preview Spotify gave", async () => {
+      spotify((call) =>
+        call.url.startsWith(`${API}/search?`) ? json(searchAnswer([withIdentity()])) : undefined,
+      );
+
+      const [result] = JSON.parse(await searchMultipleTracks.invoke({ query: "ice ice baby" }));
+
+      expect(result).toMatchObject({
+        id: TRACK_ID,
+        isrc: "USAT29900609",
+        previewUrl: "https://p.scdn.co/mp3-preview/abc",
+      });
+    });
+
+    it("the track details keep the ISRC", async () => {
+      spotify((call) =>
+        call.url === `${API}/tracks/${TRACK_ID}` ? json(withIdentity()) : undefined,
+      );
+
+      const data = JSON.parse(await getTrackDetails.invoke({ trackId: TRACK_ID }));
+
+      expect(data).toMatchObject({ id: TRACK_ID, isrc: "USAT29900609" });
+    });
+
+    it("an ISRC that is missing or malformed is null, never guessed", async () => {
+      spotify((call) =>
+        call.url.startsWith(`${API}/search?`)
+          ? json(
+              searchAnswer([
+                track("0000000000000000000001"),
+                { ...track("0000000000000000000002"), external_ids: { isrc: "not an isrc" } },
+                { ...track("0000000000000000000003"), external_ids: { isrc: "us-at2-99-00609" } },
+              ]),
+            )
+          : undefined,
+      );
+
+      const results = JSON.parse(await searchMultipleTracks.invoke({ query: "ice ice baby" }));
+
+      expect(results.map((r: { isrc: unknown }) => r.isrc)).toEqual([null, null, "USAT29900609"]);
+    });
+
+    it.each([
+      ["null", { popularity: null }],
+      ["missing", {}],
+      ["a number", { popularity: 70 }],
+    ])(
+      "a search whose results have popularity %s keeps every result and reports no popularity",
+      async (_label, popularity) => {
+        const { popularity: _given, ...base } = track();
+        spotify((call) =>
+          call.url.startsWith(`${API}/search?`)
+            ? json(
+                searchAnswer([
+                  { ...base, ...popularity },
+                  { ...base, ...popularity, id: "0000000000000000000002" },
+                ]),
+              )
+            : undefined,
+        );
+
+        const result = await searchMultipleTracks.invoke({ query: "ice ice baby" });
+
+        const tracks = JSON.parse(result);
+        expect(tracks).toHaveLength(2);
+        for (const t of tracks) expect(t).not.toHaveProperty("popularity");
+      },
+    );
+
+    it("a recorded search keeps the ISRC but neither the preview nor the popularity", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "spotify-cassette-"));
+      process.env.SOURCE_CASSETTE = "record";
+      process.env.SOURCE_CASSETTE_DIR = dir;
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      spotify((call) =>
+        call.url.startsWith(`${API}/search?`) ? json(searchAnswer([withIdentity()])) : undefined,
+      );
+      try {
+        await searchMultipleTracks.invoke({ query: "ice ice baby" });
+
+        const recorded = readdirSync(dir)
+          .map((f) => readFileSync(join(dir, f), "utf8"))
+          .join("\n");
+        expect(recorded).toContain("USAT29900609");
+        expect(recorded).not.toContain("mp3-preview");
+        expect(recorded).not.toContain("popularity");
+      } finally {
+        delete process.env.SOURCE_CASSETTE;
+        delete process.env.SOURCE_CASSETTE_DIR;
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it("an empty search returns [] as JSON", async () => {
     spotify((call) => (call.url.startsWith(`${API}/search?`) ? json(searchAnswer([])) : undefined));
 

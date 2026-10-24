@@ -44,12 +44,11 @@ import { scoutNode } from "./scoutNode.js";
 
 const track = {
   id: "t1",
-  title: "T",
+  title: "Song",
   artist: "A",
   album: "",
   releaseDate: "",
   coverUrl: "",
-  popularity: 90,
   duration: "",
   durationMs: 1,
   explicit: false,
@@ -151,13 +150,14 @@ describe("scoutNode's stored results", () => {
   it("composes again instead of serving a stored result the contract does not accept", async () => {
     spotify.answer = async () => JSON.stringify([track]);
     const store = new InMemoryStore();
-    await store.put(TRACKS_NAMESPACE, resultCacheKey("song", configuredSources()), {
+    await store.put(TRACKS_NAMESPACE, resultCacheKey("song a", configuredSources()), {
       ...stored,
       trackData: { title: "Stored, but no id, artist or genealogy" },
     });
     const { graph } = scoutGraph(store);
 
-    const out = await graph.invoke({ songQuery: "Song" });
+    // The query names the artist, so the one match is selected without asking.
+    const out = await graph.invoke({ songQuery: "Song A" });
 
     expect(out.trackData).toBeFalsy();
     expect(out.spotifyData).toMatchObject({ id: "t1" });
@@ -184,11 +184,12 @@ describe("scoutNode's stored results", () => {
 });
 
 describe("scoutNode's track picker", () => {
+  // Three songs with the query's title by different artists: the user has to choose.
   const ambiguous = [
-    { ...track, id: "a", popularity: 50 },
+    { ...track, id: "a", artist: "A" },
     // A candidate the contract does not accept (the cover URL is a string, empty when unknown).
-    { ...track, id: "b", popularity: 49, coverUrl: null },
-    { ...track, id: "c", popularity: 48 },
+    { ...track, id: "b", artist: "B", coverUrl: null },
+    { ...track, id: "c", artist: "C" },
   ];
 
   it("leaves out a candidate the contract does not accept and offers the others", async () => {
@@ -201,17 +202,17 @@ describe("scoutNode's track picker", () => {
     expect(out.error ?? null).toBeNull();
   });
 
-  it("matches a remembered choice against the candidates that were offered", async () => {
+  it("does not reuse a pick stored for the same text by an earlier version", async () => {
     spotify.answer = async () => JSON.stringify(ambiguous);
     const store = new InMemoryStore();
-    // What the clarification node saves after a pick from the offered rows (b was left out).
+    // What the clarification node used to save after a pick from the offered rows.
     await store.put(["disambiguation"], "song", { selectedTrackId: "c", candidateIds: "a,c" });
     const { graph } = scoutGraph(store);
 
     const out = await graph.invoke({ songQuery: "Song" });
 
-    expect(out.selectedTrackId).toBe("c");
-    expect(out.candidates ?? null).toBeNull();
+    expect(out.selectedTrackId ?? null).toBeNull();
+    expect(out.candidates?.map((candidate: { id: string }) => candidate.id)).toEqual(["a", "c"]);
   });
 
   it("fails the search when no candidate fits the contract", async () => {

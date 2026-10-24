@@ -18,6 +18,7 @@ import type { z } from "zod";
 import type { LlmTier } from "../config/settings.js";
 import type { LlmErrorKind } from "../llm/errors.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
+import type { QueryMatch } from "./trackMatch.js";
 
 // =============================================================================
 // TypeScript Interfaces (matching frontend types)
@@ -97,7 +98,13 @@ export interface SpotifyData {
   album: string;
   releaseDate: string;
   coverUrl: string;
-  popularity: number;
+  /**
+   * Spotify's popularity score (0-100). Spotify no longer gives it to this app, so it is
+   * missing on new data; never filled with a default.
+   */
+  popularity?: number;
+  /** The recording's ISRC from Spotify; null or missing when Spotify gave none. */
+  isrc?: string | null;
   duration: string;
   /** 0 when Spotify did not give a duration. */
   durationMs: number;
@@ -249,13 +256,10 @@ export function mergeResearch(prev: ResearchData, next: Partial<ResearchData>): 
 // =============================================================================
 
 /**
- * Configuration for Human-in-the-Loop disambiguation behavior
+ * Configuration for Human-in-the-Loop disambiguation behavior. When a choice is needed is
+ * decided by how the results match the query (trackMatch.ts), not by a threshold.
  */
 export interface HITLConfig {
-  /** Popularity threshold for auto-selection (0-100, default: 85) */
-  disambiguationThreshold: number;
-  /** Minimum popularity gap ratio to skip disambiguation (0-1, default: 0.3) */
-  popularityGap: number;
   /** Maximum candidates to show user (default: 5) */
   maxCandidates: number;
 }
@@ -264,8 +268,6 @@ export interface HITLConfig {
  * Default HITL configuration values
  */
 export const DEFAULT_HITL_CONFIG: HITLConfig = {
-  disambiguationThreshold: 85,
-  popularityGap: 0.3,
   maxCandidates: 5,
 };
 
@@ -354,6 +356,14 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
+  // Who chose the track: "match" when the scout selected it as the query's clear match, "user"
+  // when it came from the track picker (a click or the picker's countdown). Only a clear match
+  // may be served to the next search of the same text.
+  selectedBy: Annotation<"match" | "user" | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
   // Spotify metadata
   spotifyData: Annotation<SpotifyData | null>({
     reducer: (_, next) => next,
@@ -405,6 +415,14 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
+  // How the query matched the chosen track by title and artist (trackMatch.ts); while the user
+  // is choosing, how it matched the best result. "none" is a low match: nothing Spotify
+  // returned carries the query's title or artist. null before the scout has searched.
+  queryMatch: Annotation<QueryMatch | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
   // Where the analysed preview came from and how it was matched; null when unknown.
   preview: Annotation<PreviewMatchValue | null>({
     reducer: (_, next) => next,
@@ -439,7 +457,7 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
-  // HITL configuration (configurable thresholds for disambiguation)
+  // HITL configuration (how many candidates the track picker offers)
   hitlConfig: Annotation<HITLConfig>({
     reducer: (_, next) => next,
     default: () => DEFAULT_HITL_CONFIG,

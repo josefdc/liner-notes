@@ -4,7 +4,8 @@
 The service analyses 30-second previews, so every track is cut to one 30 s window before it is
 analysed. The window's start depends only on the seed, the dataset and the track id (a SHA-256
 of the three), never on the order or the number of tracks in a run, so a track gets the same
-clip in every run with the same seed. A recording of 30 s or less is used whole.
+clip in every run with the same seed. A recording of 30 s or less is used whole. The golden
+suite's Deezer previews are already 30 s and are analysed whole (whole_window).
 """
 
 from __future__ import annotations
@@ -56,3 +57,15 @@ def read_clip(
         "sampleRate": int(sr),
     }
     return buffer.getvalue(), window
+
+
+def whole_window(path: str) -> dict:
+    """The window record of a file analysed whole (a preview, as the service gets it)."""
+    info = sf.info(path)
+    seconds = info.frames / info.samplerate if info.samplerate else 0.0
+    return {
+        "offsetSeconds": 0.0,
+        "durationSeconds": round(seconds, 3),
+        "sourceSeconds": round(seconds, 3),
+        "sampleRate": int(info.samplerate),
+    }

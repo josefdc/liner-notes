@@ -5,13 +5,32 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  type Dirent,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { packageDir, repoDir } from "./testing/samples.js";
 
-const script = join(packageDir, "scripts", "contract-check.mjs");
+// The script runs on the built package, which it finds at ../dist from its own location. The
+// tests build into a directory of their own and run a copy of the script there, so they never
+// rewrite packages/contract/dist while other test files import it. That directory sits under
+// the package's node_modules, so the build resolves the same zod as packages/contract/dist does.
+const builds = join(packageDir, "node_modules", ".cache");
+let build = "";
+let distBefore = "";
+let script = "";
 let repo = "";
 
 // Git in these repositories ignores the user's and the machine's configuration, so settings
@@ -53,21 +72,58 @@ function withExtraField() {
   writeFileSync(file, JSON.stringify(snapshot));
 }
 
+/** Every file under packages/contract/dist with its modification time ("" when there is none). */
+function distStamp(): string {
+  const dist = join(packageDir, "dist");
+  return (readdirSync(dist, { recursive: true, withFileTypes: true }) as Dirent[])
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const file = join(entry.parentPath, entry.name);
+      return `${file}:${statSync(file).mtimeMs}`;
+    })
+    .sort()
+    .join("\n");
+}
+
 beforeAll(() => {
-  // The script runs on the built package.
-  execFileSync(join(repoDir, "node_modules", ".bin", "tsc"), ["-p", "tsconfig.build.json"], {
-    cwd: packageDir,
-  });
+  distBefore = existsSync(join(packageDir, "dist")) ? distStamp() : "";
+  mkdirSync(builds, { recursive: true });
+  // A run that was killed leaves its build behind; remove those, but not ones a run in
+  // progress may still be using.
+  for (const name of readdirSync(builds)) {
+    const old = join(builds, name);
+    // Another run starting at the same time may already have removed it.
+    const modified = statSync(old, { throwIfNoEntry: false })?.mtimeMs;
+    if (name.startsWith("contract-check-") && modified && Date.now() - modified > 3_600_000) {
+      rmSync(old, { recursive: true, force: true });
+    }
+  }
+  build = mkdtempSync(join(builds, "contract-check-"));
+  execFileSync(
+    join(repoDir, "node_modules", ".bin", "tsc"),
+    ["-p", "tsconfig.build.json", "--outDir", join(build, "dist")],
+    { cwd: packageDir },
+  );
+  // Under node_modules Node does not see the package's own package.json, so say the build is ESM.
+  writeFileSync(join(build, "package.json"), '{ "type": "module" }\n');
+  script = join(build, "scripts", "contract-check.mjs");
+  mkdirSync(dirname(script));
+  copyFileSync(join(packageDir, "scripts", "contract-check.mjs"), script);
   repo = mkdtempSync(join(tmpdir(), "contract-check-"));
   git("init", "-q");
 }, 60_000);
 
 afterAll(() => {
   if (repo) rmSync(repo, { recursive: true, force: true });
+  if (build) rmSync(build, { recursive: true, force: true });
 });
 
 // Each test spawns node and git several times: allow well beyond the 5 s default.
 describe("contract-check", { timeout: 30_000 }, () => {
+  it("builds without touching packages/contract/dist, which other test files import", () => {
+    expect(existsSync(join(packageDir, "dist")) ? distStamp() : "").toBe(distBefore);
+  });
+
   it("passes when the base has no snapshots yet, and fails on an unknown base", () => {
     const empty = commit("empty");
     expect(check(empty)).toMatchObject({ status: 0 });

@@ -11,7 +11,9 @@ evals/
   scripts/summary.mjs           prints the counts that describe the set
   scripts/coverage.mjs          Deezer preview coverage check (Node >= 20, no dependencies)
   scripts/coverage.test.mjs     tests for the coverage matcher and input checks
-  reports/                      dated coverage reports produced by the script
+  reports/                      dated reports: preview coverage, audio accuracy
+  audio/                        audio accuracy harness (Python, uv): tempo and key
+                                on annotated datasets, see audio/README.md
 ```
 
 Counts (rows, strata sizes, live subset, edges, held-out domains) change as

@@ -669,6 +669,7 @@ describe("REPLAY_MODE", () => {
     expect(result.run).toMatchObject({
       id: runId,
       mode: "replay",
+      replayed: "run",
       recordedAt: fixture.recordedAt,
       commit: "abc1234",
     });

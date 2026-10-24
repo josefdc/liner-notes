@@ -361,6 +361,28 @@ describe('useAgent track picker', () => {
     });
     expect(result.current.isReplay).toBe(false);
     expect(completeLogs(result.current.logs)).toBe(1);
+
+    // Stored answers that say when and where they were recorded: still not a recording.
+    act(() => {
+      result.current.analyze('Hurt Nine Inch Nails');
+    });
+    const again = lastStream();
+    again.send({ type: 'connected', threadId: 't1' });
+    again.send({
+      type: 'complete',
+      data: {
+        ...track,
+        run: {
+          id: 't1',
+          mode: 'replay',
+          replayed: 'model_answers',
+          recordedAt: '2026-03-01T10:00:00.000Z',
+          commit: 'abc123def456',
+          analyzerVersion: null,
+        },
+      },
+    });
+    expect(result.current.isReplay).toBe(false);
   });
 
   it("does not let the analysis stream's late done close the resume stream", async () => {

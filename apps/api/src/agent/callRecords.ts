@@ -21,6 +21,7 @@ export function answeredCall(callSite: string, result: InvokeResult<unknown>): L
     outputTokens: result.usage.outputTokens,
     reasoningTokens: result.usage.reasoningTokens,
     usdEst: result.usage.usdEst,
+    ...(result.mode === "replay" && result.recording && { recording: result.recording }),
   };
 }
 
@@ -69,4 +70,35 @@ export function runUsage(records: readonly LlmCallRecord[], llmCalls: number): R
     reasoningTokens: sum((r) => r.reasoningTokens),
     usd: sum((r) => r.usdEst),
   };
+}
+
+/**
+ * When and from which code a run's replayed model answers were recorded, for its run info:
+ *   recordedAt  the earliest recording time of its replayed answers (when the run's recording
+ *               began); null when any of them does not say
+ *   commit      the commit that recorded them; when they were recorded at different commits,
+ *               each one, in recording order, separated by ", "; null when any does not say
+ * Null for both when no answer was replayed. Nothing is filled in: an answer whose cassette does
+ * not say leaves the run unable to say either.
+ */
+export function replayedRecording(records: readonly LlmCallRecord[]): {
+  recordedAt: string | null;
+  commit: string | null;
+} {
+  const replayed = records.filter((record) => record.mode === "replay");
+  if (replayed.length === 0) return { recordedAt: null, commit: null };
+  const recordings = replayed.map(
+    (record) => record.recording ?? { recordedAt: null, commit: null },
+  );
+  const times = recordings.map((recording) => recording.recordedAt);
+  const recordedAt = times.every((time): time is string => time !== null)
+    ? times.reduce((earliest, time) => (Date.parse(time) < Date.parse(earliest) ? time : earliest))
+    : null;
+  const commits = recordings.map((recording) => recording.commit);
+  if (!commits.every((value): value is string => value !== null))
+    return { recordedAt, commit: null };
+  const ordered = recordings
+    .map((recording, index) => ({ commit: commits[index], at: recording.recordedAt }))
+    .sort((a, b) => (a.at === null || b.at === null ? 0 : Date.parse(a.at) - Date.parse(b.at)));
+  return { recordedAt, commit: [...new Set(ordered.map((item) => item.commit))].join(", ") };
 }

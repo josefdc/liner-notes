@@ -135,6 +135,12 @@ export interface ResultRun {
   mode?: string;
   recordedAt?: string | null;
   commit?: string | null;
+  /**
+   * What a replay replayed: "run", the whole recorded run, or "model_answers", only the model's
+   * answers (stored answers, in development and evaluation; the rest ran live). Older results
+   * do not say.
+   */
+  replayed?: string;
 }
 
 export type ModelUnavailableReason =

@@ -272,6 +272,11 @@
             "description": "AudioFeatures analyzerVersion; null if none",
             "type": ["string", "null"]
           },
+          "replayed": {
+            "description": "What a replay replayed: the whole recorded run, or only the model's answers (stored answers, used in development and evaluation; the rest of the run was live). Absent on live runs and on results from before it was sent",
+            "type": "string",
+            "enum": ["run", "model_answers"]
+          },
           "startedAt": {
             "type": "string",
             "format": "date-time",
@@ -655,6 +660,11 @@
           "analyzerVersion": {
             "description": "AudioFeatures analyzerVersion; null if none",
             "type": ["string", "null"]
+          },
+          "replayed": {
+            "description": "What a replay replayed: the whole recorded run, or only the model's answers (stored answers, used in development and evaluation; the rest of the run was live). Absent on live runs and on results from before it was sent",
+            "type": "string",
+            "enum": ["run", "model_answers"]
           },
           "startedAt": {
             "type": "string",

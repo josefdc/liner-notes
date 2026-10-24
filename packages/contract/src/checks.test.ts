@@ -239,6 +239,14 @@ describe("runIssues", () => {
     ]);
   });
 
+  it("says what a replay replayed, and never on a live run", () => {
+    expect(runIssues({ ...replay, replayed: "model_answers" }, sampleAudio())).toEqual([]);
+    expect(runIssues({ ...replay, replayed: "run" }, sampleAudio())).toEqual([]);
+    expect(runIssues({ ...sampleRun(), replayed: "model_answers" }, sampleAudio())).toEqual([
+      "run.replayed: set on a live run",
+    ]);
+  });
+
   it("allows a null analyzer version on a replay only when nothing was measured", () => {
     const run = { ...replay, analyzerVersion: null };
     expect(runIssues(run, null)).toEqual([]);

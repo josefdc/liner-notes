@@ -55,6 +55,7 @@ export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnal
       ...run,
       id: runId,
       mode: "replay",
+      replayed: "run",
       recordedAt: record.recordedAt,
       commit: record.commit,
       analyzerVersion: record.analyzerVersion,

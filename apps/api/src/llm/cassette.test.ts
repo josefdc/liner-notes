@@ -181,6 +181,62 @@ describe("record and replay with the same deployment map", () => {
   });
 });
 
+describe("recording provenance", () => {
+  it("records when and from which commit, and replays it; an older entry says neither", async () => {
+    const net = answer({ summary: "s", count: 1 });
+    const recorder = createLlm({
+      settings: settings("record"),
+      fetch: net.fetch,
+      recordUsage: () => {},
+      now: () => new Date("2026-03-01T10:00:00.000Z"),
+      commit: () => "abc123def456",
+    });
+    await recorder.invoke("scout", "main", "classify", Schema, OPTIONS);
+    const [file] = readdirSync(join(dir, "cassettes"));
+    const path = join(dir, "cassettes", file);
+    const entry = JSON.parse(readFileSync(path, "utf8"));
+    expect(entry).toMatchObject({ recordedAt: "2026-03-01T10:00:00.000Z", commit: "abc123def456" });
+
+    const replayer = createLlm({ settings: settings("replay"), recordUsage: () => {} });
+    const replayed = await replayer.invoke("scout", "main", "classify", Schema, OPTIONS);
+    expect(replayed.recording).toEqual({
+      recordedAt: "2026-03-01T10:00:00.000Z",
+      commit: "abc123def456",
+    });
+
+    // Written before provenance was kept, or with values that are not one: unknown, not made up.
+    const { recordedAt: _at, commit: _commit, ...older } = entry;
+    writeFileSync(path, JSON.stringify(older));
+    expect((await replayer.invoke("scout", "main", "classify", Schema, OPTIONS)).recording).toEqual(
+      { recordedAt: null, commit: null },
+    );
+    writeFileSync(path, JSON.stringify({ ...older, recordedAt: "yesterday", commit: " " }));
+    expect((await replayer.invoke("scout", "main", "classify", Schema, OPTIONS)).recording).toEqual(
+      { recordedAt: null, commit: null },
+    );
+  });
+
+  it("records a null commit when the checkout's cannot be read", async () => {
+    const net = answer({ summary: "s", count: 1 });
+    const commit = vi.fn(() => null);
+    const recorder = createLlm({
+      settings: settings("record"),
+      fetch: net.fetch,
+      recordUsage: () => {},
+      commit,
+    });
+    await recorder.invoke("scout", "main", "classify", Schema, OPTIONS);
+    await recorder.invoke("scout", "fast", "classify", Schema, OPTIONS);
+    for (const file of readdirSync(join(dir, "cassettes"))) {
+      const entry = JSON.parse(readFileSync(join(dir, "cassettes", file), "utf8"));
+      expect(entry.commit).toBeNull();
+      expect(Number.isNaN(Date.parse(entry.recordedAt))).toBe(false);
+    }
+    // Read once per session.
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("cassette key", () => {
   const base = {
     tier: "main" as const,

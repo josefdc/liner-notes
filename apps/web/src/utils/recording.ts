@@ -6,13 +6,15 @@ import type { ResultRun } from '../types';
 const text = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 
 /**
- * True when a result is a whole recorded run played again: its run says "replay" and when or
- * from which commit it was recorded. A run that says "replay" without either is a live run whose
- * model answers came from stored test answers (development and evaluation only), not a
- * recording.
+ * True when a result is a whole recorded run played again. A run that says it replayed only the
+ * model's answers ("model_answers") is a live run whose model answers came from stored test
+ * answers (development and evaluation only), not a recording; so is, from servers that do not
+ * say what was replayed, a "replay" that says neither when nor from which commit it was
+ * recorded.
  */
 export function isWholeRecording(run: ResultRun | null | undefined): boolean {
-  return run?.mode === 'replay' && (text(run.recordedAt) || text(run.commit));
+  if (run?.mode !== 'replay' || run.replayed === 'model_answers') return false;
+  return run.replayed === 'run' || text(run.recordedAt) || text(run.commit);
 }
 
 /**

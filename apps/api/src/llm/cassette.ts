@@ -21,6 +21,12 @@
  * A recorded cassette holds the normalised messages, the parsed answer and the token usage,
  * with every known credential value and token-shaped secret removed; request headers are never
  * recorded, and a cassette that would still contain the API key is not written.
+ *
+ * It also says when it was recorded and from which commit (the checkout's, with "-dirty" for
+ * uncommitted changes; null when it could not be read), so a run replayed from cassettes can say
+ * when and where its answers were recorded. Entries written before these were kept have
+ * neither: they replay as answers whose recording time and commit are unknown, never with a
+ * date filled in.
  */
 
 import { createHash } from "node:crypto";
@@ -51,6 +57,30 @@ export interface CassetteEntry {
   messages: LlmMessage[];
   output: unknown;
   usage: CassetteUsage;
+  /** When the answer was recorded (ISO time). Missing in entries written before it was kept. */
+  recordedAt?: string;
+  /**
+   * The commit of the code that recorded it, or null when it could not be read. Missing in
+   * entries written before it was kept.
+   */
+  commit?: string | null;
+}
+
+/** When and from which commit a replayed answer was recorded; null where the entry does not say. */
+export interface CassetteRecording {
+  recordedAt: string | null;
+  commit: string | null;
+}
+
+/** The recording an entry says it comes from; a value that is not one reads as unknown. */
+export function cassetteRecording(entry: CassetteEntry): CassetteRecording {
+  const { recordedAt, commit } = entry;
+  const validDate =
+    typeof recordedAt === "string" && !Number.isNaN(Date.parse(recordedAt)) ? recordedAt : null;
+  return {
+    recordedAt: validDate === null ? null : new Date(validDate).toISOString(),
+    commit: typeof commit === "string" && commit.trim() !== "" ? commit.trim() : null,
+  };
 }
 
 export interface CassetteKeyInput {

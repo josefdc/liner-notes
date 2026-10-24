@@ -11,6 +11,10 @@ describe('recording', () => {
     expect(isWholeRecording({ mode: 'replay', recordedAt: null, commit: null })).toBe(false);
     expect(isWholeRecording({ mode: 'live', recordedAt: null, commit: null })).toBe(false);
     expect(isWholeRecording(undefined)).toBe(false);
+    // Said by the API: model answers only, even when they say when and where.
+    expect(isWholeRecording({ ...recorded, replayed: 'model_answers' })).toBe(false);
+    expect(isWholeRecording({ ...recorded, replayed: 'run' })).toBe(true);
+    expect(resultModeOf({ ...recorded, replayed: 'model_answers' })).toBe('live');
   });
 
   it('keeps more facts of a run whose model answers were stored on the live side', () => {

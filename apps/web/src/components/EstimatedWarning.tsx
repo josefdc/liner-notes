@@ -265,14 +265,15 @@ export const RecordedRunNotice: React.FC<{
   if (!recording) return null;
   const date = recordedDate(recording.recordedAt);
   const modelOnly = !isWholeRecording(track.run);
+  const known = date ? `on ${date}` : null;
+  const commit = recording.commit ? ` (commit ${recording.commit})` : '';
   const title = modelOnly
-    ? 'Model answers replayed · not a live model call'
+    ? `Model answers replayed · ${date ? `recorded ${date}` : 'recording date not stored'}`
     : `Recorded run · ${date ?? 'date not recorded'} · replayed`;
   const text = modelOnly
-    ? "The model's answers in this result were replayed from stored answers that do not say " +
-      'when they were recorded. Other parts of it may have run live.'
-    : `This result was recorded ${date ? `on ${date}` : 'earlier'}` +
-      `${recording.commit ? ` (commit ${recording.commit})` : ''} and is shown again as it was ` +
+    ? `The model's answers in this result were replayed from answers recorded ${known ?? 'at a time that was not stored'}${commit}. ` +
+      'The rest of it may have run live; it is not a live model call.'
+    : `This result was recorded ${known ?? 'earlier'}${commit} and is shown again as it was ` +
       'then. Nothing was analysed live for it.';
   return (
     <section

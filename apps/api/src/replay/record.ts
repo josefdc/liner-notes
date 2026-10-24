@@ -16,7 +16,6 @@
  * apps/api/.env, read here only for that check and never printed.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -24,6 +23,7 @@ import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
+import { checkoutCommit } from "../config/checkoutCommit.js";
 import { knownSecrets } from "../llm/cassette.js";
 import { getDefaultDbPath } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
@@ -39,17 +39,6 @@ function settingsFileValues(): NodeJS.ProcessEnv {
   } catch {
     return {};
   }
-}
-
-/**
- * The checkout's HEAD, with "-dirty" when the working tree has changes: a recording then names
- * no commit that holds exactly the code it ran with.
- */
-function headCommit(): string {
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd: API_ROOT, encoding: "utf8" }).trim();
-  const head = git("rev-parse", "--short=12", "HEAD");
-  return git("status", "--porcelain") === "" ? head : `${head}-dirty`;
 }
 
 export function main(argv: string[]): number {
@@ -101,7 +90,7 @@ export function main(argv: string[]): number {
   let commit = values.commit ?? "";
   if (!commit) {
     try {
-      commit = headCommit();
+      commit = checkoutCommit();
     } catch {
       console.error("Could not read the checkout's commit; pass --commit");
       return 1;

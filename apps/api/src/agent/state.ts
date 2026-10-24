@@ -313,6 +313,11 @@ export interface LlmCallRecord {
    * (otherwise 0: what it may have cost is settled in the spend log).
    */
   usdEst: number;
+  /**
+   * For an answer replayed from a cassette: when and from which commit it was recorded (null
+   * where the cassette does not say). Absent for other calls.
+   */
+  recording?: { recordedAt: string | null; commit: string | null };
 }
 
 type PreviewMatchValue = z.infer<typeof PreviewMatch>;

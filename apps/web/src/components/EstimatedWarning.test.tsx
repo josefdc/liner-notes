@@ -273,8 +273,32 @@ describe('RecordedRunNotice', () => {
       />,
     );
     const notice = screen.getByRole('region', { name: 'Recorded run' });
-    expect(notice.textContent).toContain('Model answers replayed');
-    expect(notice.textContent).toContain('Other parts of it may have run live.');
+    expect(notice.textContent).toContain('Model answers replayed · recording date not stored');
+    expect(notice.textContent).toContain('at a time that was not stored');
+    expect(notice.textContent).toContain('The rest of it may have run live');
+    expect(notice.textContent).not.toContain('Nothing was analysed live');
+  });
+
+  it('shows when and from which commit replayed model answers were recorded', () => {
+    render(
+      <RecordedRunNotice
+        track={{
+          ...base,
+          run: {
+            mode: 'replay',
+            replayed: 'model_answers',
+            recordedAt: '2026-03-01T10:00:00.000Z',
+            commit: 'abc123def456',
+          },
+        }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Recorded run' });
+    expect(notice.textContent).toContain('Model answers replayed · recorded 1 Mar 2026');
+    expect(notice.textContent).toContain(
+      'replayed from answers recorded on 1 Mar 2026 (commit abc123def456)',
+    );
+    expect(notice.textContent).not.toContain('Recorded run ·');
     expect(notice.textContent).not.toContain('Nothing was analysed live');
   });
 

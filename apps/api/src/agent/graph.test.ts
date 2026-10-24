@@ -14,6 +14,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
+import { runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tools = vi.hoisted(() => {
@@ -268,7 +269,11 @@ describe("the analysis graph", () => {
     const provider = providerFetch(answering);
     const recorder = llmWith(
       { LLM_CASSETTE: "record", LLM_CASSETTE_DIR: join(dir, "cassettes") },
-      { fetch: provider.fetch },
+      {
+        fetch: provider.fetch,
+        now: () => new Date("2026-03-01T10:00:00.000Z"),
+        commit: () => "abc123def456",
+      },
     );
     const recorded = await run(recorder, { threadId: "thread-a", at: "2026-03-01T10:00:00.000Z" });
 
@@ -309,6 +314,37 @@ describe("the analysis graph", () => {
     // Answers from cassettes make a replayed run; the recording run called the provider.
     expect(replayedRun).toMatchObject({ id: "thread-b", fallback: false, mode: "replay" });
     expect(recordedRun).toMatchObject({ id: "thread-a", fallback: false, mode: "live" });
+    // The replay says when and from which commit its answers were recorded, and that only the
+    // model's answers were replayed: it passes the contract's run rules, as the live run does.
+    expect(replayedRun).toMatchObject({
+      replayed: "model_answers",
+      recordedAt: "2026-03-01T10:00:00.000Z",
+      commit: "abc123def456",
+    });
+    expect(runIssues(replayedRun!, undefined)).toEqual([]);
+    expect(recordedRun).toMatchObject({ recordedAt: null, commit: null });
+    expect(recordedRun).not.toHaveProperty("replayed");
+    expect(runIssues(recordedRun!, undefined)).toEqual([]);
+    expect(TrackAnalysis.safeParse(replayed.trackData).success).toBe(true);
+
+    // Cassettes written before they kept when and where: the run cannot say either, and says
+    // nothing in their place.
+    for (const file of readdirSync(join(dir, "cassettes"))) {
+      const path = join(dir, "cassettes", file);
+      const { recordedAt: _at, commit: _commit, ...older } = JSON.parse(readFileSync(path, "utf8"));
+      writeFileSync(path, JSON.stringify(older));
+    }
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unknown = await run(replayer, { threadId: "thread-c", at: "2026-09-09T22:22:22.000Z" });
+    expect(unknown.trackData?.run).toMatchObject({
+      mode: "replay",
+      replayed: "model_answers",
+      recordedAt: null,
+      commit: null,
+    });
+    expect(warn.mock.calls.map(([message]) => String(message)).join("\n")).toMatch(
+      /run information breaks the contract's run rules/,
+    );
     expect(replayedData.factoids[0]).toMatchObject({ title: "Borrowed bass" });
     // The research the planner chose ran: Last.fm tags reached the composer.
     expect(tools.getLastfmTrackTags.invoke).toHaveBeenCalled();

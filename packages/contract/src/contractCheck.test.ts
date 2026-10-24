@@ -10,8 +10,10 @@ import {
   cpSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,6 +71,14 @@ function withExtraField() {
 
 beforeAll(() => {
   mkdirSync(builds, { recursive: true });
+  // A run that was killed leaves its build behind; remove those, but not ones a run in
+  // progress may still be using.
+  for (const name of readdirSync(builds)) {
+    const old = join(builds, name);
+    if (name.startsWith("contract-check-") && Date.now() - statSync(old).mtimeMs > 3_600_000) {
+      rmSync(old, { recursive: true, force: true });
+    }
+  }
   build = mkdtempSync(join(builds, "contract-check-"));
   execFileSync(
     join(repoDir, "node_modules", ".bin", "tsc"),

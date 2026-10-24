@@ -5,6 +5,7 @@ import {
   collectProblems,
   loadFixture,
   openPlayer,
+  releaseStream,
   useMockApi,
 } from "./mock";
 
@@ -52,6 +53,10 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   await expect(tracks).toContainText("Test Artist • recorded 22 Oct 2026");
   expect(await apiRequests(page)).toContain("fetch /api/replays");
 
+  // The banner is announced and takes the focus from the search form it replaces.
+  await expect(banner.getByRole("alert")).toContainText("Live analysis paused");
+  await expect(banner.getByRole("heading", { name: "Live analysis paused" })).toBeFocused();
+
   // Picking it analyses its title and artist, which the API answers with the recording.
   await tracks.getByRole("button", { name: /Bright Lines/ }).click();
   await expect(page.getByRole("log")).toContainText(
@@ -73,12 +78,16 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   const playerLabel = page.getByRole("region", { name: "Recorded run" });
   await expect(playerLabel).toContainText("Recorded run · 22 Oct 2026 · replayed");
 
-  // "More facts" from a server that only replays: said, not shown as a failure.
+  // "More facts" of a replayed result ask for its recording only; every recorded fact is
+  // already shown, so the API sends none, and the Player says why.
   const insights = page.locator("#panel-context");
   await insights.getByRole("button", { name: /DECRYPT MORE/ }).click();
   await expect(insights).toContainText(
-    "More facts unavailable: live model calls are off on this server",
+    "No more facts: this result is a recording, and every fact recorded with it is shown.",
   );
+  expect((await apiRequests(page)).filter((r) => r.includes("/factoids/"))).toEqual([
+    expect.stringMatching(/^stream \/api\/factoids\/decrypt\/stream\?.*&mode=replay$/),
+  ]);
   expect(problems).toEqual([]);
 });
 
@@ -88,13 +97,22 @@ test("live_disabled is explained, and a live result carries no recording label",
   const problems = collectProblems(page);
   await useMockApi(page, {
     replays: fixture.replays,
-    streams: { "/api/analyze/stream": { opens: [liveDisabled, fullResult] } },
+    streams: {
+      "/api/analyze/stream": { opens: [liveDisabled, fullResult] },
+      // A live result while the budget is spent: the refusal, never recorded facts.
+      "/api/factoids/decrypt/stream": [
+        { type: "error", code: "budget_exhausted", error: "Live model calls are paused for now." },
+        { type: "done" },
+      ],
+    },
   });
   await page.goto("/");
   await search(page, "Some Other Song");
 
   const banner = page.getByRole("region", { name: "Live analysis is off here" });
-  await expect(banner).toContainText("does not analyse songs live: it only replays recorded runs");
+  await expect(banner).toContainText(
+    "does not analyse songs live right now: it only replays recorded runs",
+  );
   await expect(banner.getByRole("list", { name: "Recorded tracks" })).toContainText("Bright Lines");
 
   // Another song, on a server that analyses it live this time: no recording label.
@@ -103,5 +121,93 @@ test("live_disabled is explained, and a live result carries no recording label",
   await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
+  await openPlayer(page);
+  await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
+  const insights = page.locator("#panel-context");
+  await insights.getByRole("button", { name: /DECRYPT MORE/ }).click();
+  await expect(insights).toContainText(
+    "More facts unavailable: live model calls are paused, budget reached",
+  );
+  expect(problems).toEqual([]);
+});
+
+test("while a recording plays, the progress screen says it is a replay, not a live analysis", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  const [refusal, replay] = fixture.streams["/api/analyze/stream"].opens;
+  // Held right after the recorded scout step, which a live run shows as a Spotify search.
+  const held = [...replay.slice(0, 3), { $wait: "rest" }, ...replay.slice(3)];
+  await useMockApi(page, {
+    ...fixture,
+    streams: { ...fixture.streams, "/api/analyze/stream": { opens: [refusal, held] } },
+  });
+  await page.goto("/");
+  await search(page, "Some Other Song");
+  await page.getByRole("button", { name: /Bright Lines/ }).click();
+
+  const replaying = "Replaying a recorded analysis — nothing runs live...";
+  await expect(page.getByText(replaying, { exact: true })).toBeVisible();
+  await expect(page.locator('div.sr-only[aria-live="polite"]')).toHaveText(replaying);
+  await expect(page.getByText(/Scanning Spotify catalog/)).toHaveCount(0);
+
+  await releaseStream(page, "rest");
+  await expect(page.getByText("RECORDING READY // ENTERING COMMAND CENTER")).toBeAttached();
+  await expect(page.getByText("INTEL READY", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("log")).toContainText(
+    "Recorded analysis replayed. Nothing was analysed live.",
+  );
+  await expect(page.getByRole("log")).not.toContainText("Analysis complete");
+  expect(problems).toEqual([]);
+});
+
+test("the paused state still explains itself when the banner's code cannot be loaded", async ({
+  page,
+}) => {
+  await useMockApi(page, fixture);
+  await page.goto("/");
+  // A page older than the deployed version, or a dropped connection: the chunk is gone.
+  await page.route(/BudgetBanner/, (route) => route.abort());
+  await search(page, "Some Other Song");
+
+  const paused = page.getByRole("region", { name: "Live analysis paused" });
+  await expect(paused).toContainText("The budget for live analysis is spent");
+  await expect(paused).toContainText("The recorded tracks could not be loaded. Reload the page");
+  await expect(page.getByRole("button", { name: "or try a different song" })).toBeVisible();
+});
+
+test("on a phone, the recording label stays visible on every Player tab", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await useMockApi(page, fixture);
+  await page.goto("/");
+  await search(page, "Some Other Song");
+  await page.getByRole("button", { name: /Bright Lines/ }).click();
+  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await openPlayer(page);
+  for (const tab of ["Analysis", "Player", "Network"]) {
+    await page.getByRole("tab", { name: tab }).click();
+    await expect(page.getByRole("region", { name: "Recorded run" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
+      "Recorded run · 22 Oct 2026 · replayed",
+    );
+  }
+});
+
+test("a track picked after the budget tripped replays its recording", async ({ page }) => {
+  const problems = collectProblems(page);
+  await useMockApi(page, loadFixture("budget-paused-picker"));
+  await page.goto("/");
+  await search(page, "Bright Lines");
+  await page.getByRole("button", { name: /Test Artist/ }).click();
+
+  // The resume is refused (budget spent); the picked track itself is asked for, and replays.
+  await expect(page.getByRole("log")).toContainText("Replaying an analysis recorded on");
+  expect(await apiRequests(page)).toContain(
+    "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
+  );
+  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
+    "Recorded run · 22 Oct 2026 · replayed",
+  );
   expect(problems).toEqual([]);
 });

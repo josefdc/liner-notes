@@ -30,7 +30,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { SonicAgentStateType } from "../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
 import { createApp } from "../http/app.js";
+import { resolveSpendLogPath } from "../llm/budget.js";
 import { resetBudgetStateForTests } from "../llm/budgetState.js";
+import { acquireLock } from "../llm/fileLock.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
@@ -1084,14 +1086,90 @@ describe("REPLAY_MODE=fallback once the model budget is spent", () => {
     expect(live.scout).toBe(2);
   });
 
-  it("pauses when the spend log cannot be read: the guard would refuse every model call", async () => {
-    vi.stubEnv("LLM_SPEND_LOG", join(dir, "no-such-spend-log.jsonl"));
-    const events = await sse(streamPath("Something else"));
-    expect(events.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
-    // Without a paid provider (cassettes) nothing can be spent: the budget stops nothing.
-    vi.stubEnv("LLM_CASSETTE", "replay");
+  it("pauses at the floor kept for evaluations, with the analysis runtime's purpose", async () => {
+    // Default caps: USD 25 in total, 20 kept for evaluations, so dev work stops at 5. A run of
+    // USD 0.54 still fits on 4.4 spent, not on 4.6.
+    spent(4.4);
     await sse(streamPath("Something else"));
     expect(live.scout).toBe(1);
+    spent(4.6);
+    resetBudgetStateForTests();
+    expect((await sse(streamPath("Something else"))).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+    const facts = await request(app)
+      .post("/api/factoids/decrypt")
+      .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
+    expect(facts.body.code).toBe("budget_exhausted");
+    expect(live.scout).toBe(1);
+  });
+
+  it("says live analysis is off, not that the budget is spent, when the spend log cannot be used", async () => {
+    const refusal = async () =>
+      (await sse(streamPath("Something else"))).map((e) => e.code ?? e.type);
+
+    // Unset, missing, malformed.
+    vi.stubEnv("LLM_SPEND_LOG", "");
+    expect(await refusal()).toEqual(["live_disabled", "done"]);
+    vi.stubEnv("LLM_SPEND_LOG", join(dir, "no-such-spend-log.jsonl"));
+    expect(await refusal()).toEqual(["live_disabled", "done"]);
+    vi.stubEnv("LLM_SPEND_LOG", spendLog);
+    writeFileSync(spendLog, "not a spend record\n");
+    expect(await refusal()).toEqual(["live_disabled", "done"]);
+    // A recorded track still replays.
+    const replayed = await sse(streamPath("Recorded Song The Recorders"));
+    expect(replayed.some((e) => e.type === "complete")).toBe(true);
+
+    // Its lock held past the wait: refused, and the answer is not kept once the lock is free.
+    spent(0);
+    const release = await acquireLock(await resolveSpendLogPath(spendLog));
+    try {
+      expect(await refusal()).toEqual(["live_disabled", "done"]);
+    } finally {
+      await release();
+    }
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(1);
+
+    // Without a paid provider (cassettes) nothing can be spent: the budget stops nothing.
+    vi.stubEnv("LLM_SPEND_LOG", join(dir, "no-such-spend-log.jsonl"));
+    vi.stubEnv("LLM_CASSETTE", "replay");
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(2);
+  }, 15_000);
+
+  it("keeps more facts on the side of the result: recorded for a replay, never for a live one", async () => {
+    const stream = (mode: string) =>
+      sse(
+        `/api/factoids/decrypt/stream?trackTitle=Recorded%20Song&trackArtist=The%20Recorders&existingIds=fa&mode=${mode}`,
+      );
+    // Budget spent: a live result of a recorded track gets the refusal, not recorded facts.
+    spent(30);
+    expect((await stream("live")).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+    // Budget available: a replayed result still gets only its recorded facts, no model call.
+    spent(0);
+    resetBudgetStateForTests();
+    const recorded = await stream("replay");
+    expect(recorded.map((e) => e.type)).toEqual(["connected", "factoid", "done"]);
+    expect((recorded[1].data as { id: string }).id).toBe("fb");
+    // Its recording no longer served: refused, never live facts.
+    rmSync(join(replayDir, `${fixture.slug}.json`));
+    resetReplaysForTests();
+    expect((await stream("replay")).map((e) => e.code ?? e.type)).toEqual([
+      "live_disabled",
+      "done",
+    ]);
+    // Even with REPLAY_MODE=off.
+    vi.stubEnv("REPLAY_MODE", "off");
+    expect((await stream("replay")).map((e) => e.code ?? e.type)).toEqual([
+      "live_disabled",
+      "done",
+    ]);
+    noLiveCalls();
   });
 });
 

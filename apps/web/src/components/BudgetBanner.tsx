@@ -1,25 +1,9 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CirclePause, Disc3 } from 'lucide-react';
 import { fetchReplays, type ReplayTrack } from '../hooks/agent/apiClient';
 import { recordedDate } from '../utils/recordedDate';
-import type { LiveUnavailableCode } from './liveUnavailable';
-
-const COPY: Record<LiveUnavailableCode, { title: string; text: string }> = {
-  budget_exhausted: {
-    title: 'Live analysis paused',
-    text:
-      'The budget for live analysis is spent for now, so no new song is analysed. ' +
-      'The recorded runs below can still be shown. Each one is labelled as a recording, ' +
-      'not a live analysis.',
-  },
-  live_disabled: {
-    title: 'Live analysis is off here',
-    text:
-      'This server does not analyse songs live: it only replays recorded runs. ' +
-      'Pick a recorded track below. It is shown as a recording, not a live analysis.',
-  },
-};
+import { LIVE_UNAVAILABLE_COPY, type LiveUnavailableCode } from '../liveUnavailable';
 
 interface BudgetBannerProps {
   code: LiveUnavailableCode;
@@ -45,7 +29,14 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
   loadReplays = fetchReplays,
 }) => {
   const [listing, setListing] = useState<Listing>({ state: 'loading' });
-  const { title, text } = COPY[code];
+  const { title, text } = LIVE_UNAVAILABLE_COPY[code];
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // The search form the user just submitted is gone: the banner takes the focus, so keyboard
+  // and screen-reader users land on the explanation and the recorded tracks after it.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -67,11 +58,17 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
       aria-label={title}
       className="bg-analog/5 border border-analog/30 rounded-md p-6 space-y-4 text-left"
     >
-      <h2 className="text-analog text-sm font-mono uppercase tracking-widest flex items-center justify-center gap-2">
-        <CirclePause size={16} aria-hidden="true" />
-        {title}
-      </h2>
-      <p className="text-text-secondary text-xs font-mono leading-relaxed">{text}</p>
+      <div role="alert" className="space-y-4">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-analog text-sm font-mono uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+        >
+          <CirclePause size={16} aria-hidden="true" />
+          {title}
+        </h2>
+        <p className="text-text-secondary text-xs font-mono leading-relaxed">{text}</p>
+      </div>
 
       {listing.state === 'loading' && (
         <p role="status" className="text-text-tertiary text-xs font-mono">

@@ -258,12 +258,31 @@ describe('RecordedRunNotice', () => {
   it('says the date is missing rather than inventing one', () => {
     render(
       <RecordedRunNotice
-        track={{ ...base, run: { mode: 'replay', recordedAt: null, commit: null } }}
+        track={{ ...base, run: { mode: 'replay', recordedAt: null, commit: 'abc1234' } }}
       />,
     );
     const notice = screen.getByRole('region', { name: 'Recorded run' });
     expect(notice.textContent).toContain('Recorded run · date not recorded · replayed');
-    expect(notice.textContent).not.toContain('commit');
+    expect(notice.textContent).toContain('recorded earlier (commit abc1234)');
+  });
+
+  it('labels replayed model answers as that, not as a whole recording', () => {
+    render(
+      <RecordedRunNotice
+        track={{ ...base, run: { mode: 'replay', recordedAt: null, commit: null } }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Recorded run' });
+    expect(notice.textContent).toContain('Model answers replayed');
+    expect(notice.textContent).toContain('Other parts of it may have run live.');
+    expect(notice.textContent).not.toContain('Nothing was analysed live');
+  });
+
+  it('says on a replay that its measured values were measured when it was recorded', () => {
+    render(<AudioStats track={{ ...base, run: { ...run, mode: 'replay' } }} />);
+    expect(screen.getByText('BPM').closest('[title]')?.getAttribute('title')).toBe(
+      'Measured from the audio preview when this run was recorded',
+    );
   });
 
   it('renders nothing for a live result or one that does not say', () => {

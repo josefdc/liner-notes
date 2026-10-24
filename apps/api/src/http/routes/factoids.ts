@@ -19,10 +19,12 @@ import {
   type ComposerFactoid,
   FactoidsOutput,
   type ReplayRecord,
+  RunMode,
   SPOTIFY_ID_PATTERN,
 } from "@liner-notes/contract";
 import { type Response, Router } from "express";
 import { z } from "zod";
+import { defaultAgentRuntime } from "../../agent/runtime.js";
 import { isLlmError } from "../../llm/errors.js";
 import type { LlmPurpose } from "../../config/settings.js";
 import { type Llm, type LlmMessage, llm } from "../../llm/invoke.js";
@@ -54,6 +56,8 @@ const StreamQuerySchema = z.object({
     .optional()
     .transform((value) => (value ? value.split(",").filter(Boolean) : []))
     .pipe(z.array(factoidId)),
+  // How the result these facts add to was produced (its run.mode), when the client says so.
+  mode: RunMode.optional(),
 });
 
 const DECRYPT_EXAMPLE = {
@@ -208,7 +212,7 @@ export interface FactoidsRouterOptions {
  * at most MAX_LLM_CALLS_PER_RUN calls, and the run is ended when the request is.
  */
 export function createFactoidsRouter({
-  purpose = "dev",
+  purpose = defaultAgentRuntime.purpose,
   llm: layer = llm,
 }: FactoidsRouterOptions = {}): Router {
   const router = Router();
@@ -260,10 +264,12 @@ export function createFactoidsRouter({
       const track = describeTrack(trackTitle, trackArtist);
 
       // A Spotify track id names the track: title and artist are used only without one.
-      const replay = await chooseReplay((records) =>
-        SPOTIFY_ID_PATTERN.test(parsed.data.trackId)
-          ? records.forTrack(parsed.data.trackId)
-          : records.forTitle(trackTitle, trackArtist),
+      const replay = await chooseReplay(
+        (records) =>
+          SPOTIFY_ID_PATTERN.test(parsed.data.trackId)
+            ? records.forTrack(parsed.data.trackId)
+            : records.forTitle(trackTitle, trackArtist),
+        { purpose },
       );
       if (replay.kind === "refused") {
         sendError(res, replay.code);
@@ -330,7 +336,7 @@ export function createFactoidsRouter({
   /**
    * Stream factoids one-by-one via SSE for faster perceived speed
    *
-   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2
+   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live
    * Messages (all on the default `message` event), each one FactoidStreamEvent of
    * @liner-notes/contract with `runId` (null: the analysis run is not known here) and `seq`:
    * - { type: "connected" }
@@ -342,7 +348,10 @@ export function createFactoidsRouter({
    * - { type: "done" }: always last
    *
    * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled (or
-   * budget_exhausted, see above).
+   * budget_exhausted, see above). `mode` (optional: the run.mode of the result the facts add to)
+   * keeps them on the result's side whatever live services allow now: a replayed result only
+   * gets facts from its recording (none left, or live_disabled when it is no longer served), and
+   * a live result never gets recorded facts (the refusal instead).
    *
    * Invalid input is reported in the stream (an EventSource cannot read an error status). When
    * the client disconnects, no further factoid is requested and nothing more is written.
@@ -359,10 +368,13 @@ export function createFactoidsRouter({
         stream.done();
         return;
       }
-      const { trackTitle, trackArtist, existingIds } = parsed.data;
+      const { trackTitle, trackArtist, existingIds, mode } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
 
-      const replay = await chooseReplay((records) => records.forTitle(trackTitle, trackArtist));
+      const replay = await chooseReplay((records) => records.forTitle(trackTitle, trackArtist), {
+        purpose,
+        resultMode: mode,
+      });
       if (replay.kind === "refused") {
         error(replay.code);
         stream.done();

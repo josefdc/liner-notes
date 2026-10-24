@@ -97,17 +97,17 @@ describe("readBudgetState", () => {
     });
   });
 
-  it("counts a spend log that cannot be used as exhausted, and nothing without a paid provider", async () => {
+  it("says a spend log that cannot be used cannot be checked, and nothing without a paid provider", async () => {
     const missing = await readBudgetState(testSettings({ LLM_SPEND_LOG: log }), "dev");
     expect(missing).toMatchObject({
-      state: "exhausted",
+      state: "unverifiable",
       reason: expect.stringMatching(/spend log cannot be used/),
     });
     writeFileSync(log, "not json\n");
     expect((await readBudgetState(testSettings({ LLM_SPEND_LOG: log }), "dev")).state).toBe(
-      "exhausted",
+      "unverifiable",
     );
-    expect((await readBudgetState(testSettings(), "dev")).state).toBe("exhausted");
+    expect((await readBudgetState(testSettings(), "dev")).state).toBe("unverifiable");
 
     writeFileSync(log, line(30));
     const cassettes = testSettings({ LLM_SPEND_LOG: log, LLM_CASSETTE: "replay" });
@@ -125,21 +125,38 @@ describe("liveBudgetState", () => {
     LLM_SPEND_LOG: log,
   });
 
-  it("reuses a state for a few seconds, and reads again when the settings change", async () => {
+  it("reuses a state for a few seconds, then reads the log again", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     writeFileSync(log, line(1));
-    expect((await liveBudgetState(env())).state).toBe("available");
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
     writeFileSync(log, line(30));
-    expect((await liveBudgetState(env())).state).toBe("available");
-    // Other caps are other settings: read again.
-    expect((await liveBudgetState({ ...env(), BUDGET_TOTAL_USD: "40" })).state).toBe("exhausted");
-    vi.setSystemTime(Date.now() + BUDGET_STATE_TTL_MS + 1);
-    expect((await liveBudgetState(env())).state).toBe("exhausted");
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
+    vi.setSystemTime(Date.now() + BUDGET_STATE_TTL_MS - 10);
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
+    // Same settings, same purpose: only the time has passed.
+    vi.setSystemTime(Date.now() + 20);
+    expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
+  });
+
+  it("reads again when the settings or the purpose change", async () => {
+    writeFileSync(log, line(4.6));
+    expect((await liveBudgetState(env(), "eval")).state).toBe("available");
+    // dev work stops at 25 − 20 = 5.
+    expect((await liveBudgetState(env(), "dev")).state).toBe("exhausted");
+    expect((await liveBudgetState({ ...env(), BUDGET_EVAL_FLOOR_USD: "10" }, "dev")).state).toBe(
+      "available",
+    );
+  });
+
+  it("does not keep an answer when the log cannot be used", async () => {
+    expect((await liveBudgetState(env(), "dev")).state).toBe("unverifiable");
+    writeFileSync(log, line(1));
+    expect((await liveBudgetState(env(), "dev")).state).toBe("available");
   });
 
   it("stops nothing when the model settings are invalid (every call is refused anyway)", async () => {
     writeFileSync(log, line(30));
-    expect(await liveBudgetState({ ...env(), LLM_SPEND_LOG: "relative/path" })).toEqual({
+    expect(await liveBudgetState({ ...env(), LLM_SPEND_LOG: "relative/path" }, "dev")).toEqual({
       state: "not_live",
     });
   });

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReplayTrack } from '../hooks/agent/apiClient';
 import BudgetBanner from './BudgetBanner';
-import { isLiveUnavailable } from './liveUnavailable';
+import { isLiveUnavailable } from '../liveUnavailable';
 
 afterEach(cleanup);
 
@@ -44,7 +44,7 @@ describe('BudgetBanner', () => {
     );
     expect(screen.getByRole('heading', { name: 'Live analysis is off here' })).toBeTruthy();
     expect(
-      screen.getByText(/does not analyse songs live: it only replays recorded runs/),
+      screen.getByText(/does not analyse songs live right now: it only replays recorded runs/),
     ).toBeTruthy();
     expect(await screen.findByRole('list', { name: 'Recorded tracks' })).toBeTruthy();
   });
@@ -70,6 +70,21 @@ describe('BudgetBanner', () => {
     );
     expect(await screen.findByText(/recorded tracks could not be loaded/)).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('BudgetBanner announcement', () => {
+  it('is an alert and takes the focus, since the search form it replaces is gone', () => {
+    render(
+      <BudgetBanner
+        code="budget_exhausted"
+        onPick={() => {}}
+        loadReplays={() => new Promise(() => {})}
+      />,
+    );
+    const heading = screen.getByRole('heading', { name: 'Live analysis paused' });
+    expect(screen.getByRole('alert').contains(heading)).toBe(true);
+    expect(document.activeElement).toBe(heading);
   });
 });
 

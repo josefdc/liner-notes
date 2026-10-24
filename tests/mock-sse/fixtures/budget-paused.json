@@ -202,11 +202,9 @@
     },
     "/api/factoids/decrypt/stream": [
       {
-        "type": "error",
+        "type": "connected",
         "runId": null,
-        "seq": 0,
-        "code": "live_disabled",
-        "error": "Live facts are not available here. Only recorded tracks have facts."
+        "seq": 0
       },
       {
         "type": "done",

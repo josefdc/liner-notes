@@ -242,6 +242,55 @@ describe('useAgent track picker', () => {
     expect(analysis.closed).toBe(true);
   });
 
+  it('asks for the picked track itself when its resume is refused because live analysis is unavailable', async () => {
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    const resume = lastStream();
+    resume.send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+
+    const search = lastStream();
+    expect(search).not.toBe(resume);
+    expect(search.url).toContain('/analyze/stream?query=Hurt%20Nine%20Inch%20Nails');
+    expect(hook.result.current.status).not.toBe('error');
+    // That search refused too (no recording): the paused state, with its code.
+    search.send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    expect(hook.result.current.errorCode).toBe('budget_exhausted');
+    expect(streams()).toHaveLength(3);
+  });
+
+  it('says a run is a replay from the replay notice on, and ends it as a replay', () => {
+    const { result } = startAnalysis('Hurt Nine Inch Nails');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    expect(result.current.isReplay).toBe(false);
+    analysis.send({ type: 'status', node: 'replay', code: 'SYS-INIT', message: 'Replaying' });
+    expect(result.current.isReplay).toBe(true);
+    analysis.send({
+      type: 'complete',
+      data: {
+        ...track,
+        run: {
+          id: 't1',
+          mode: 'replay',
+          recordedAt: '2026-10-22T14:03:00.000Z',
+          commit: 'abc1234',
+          analyzerVersion: null,
+        },
+      },
+    });
+    expect(result.current.isReplay).toBe(true);
+    expect(result.current.logs.at(-1)?.message).toBe(
+      'Recorded analysis replayed. Nothing was analysed live.',
+    );
+    expect(completeLogs(result.current.logs)).toBe(0);
+    act(() => {
+      result.current.analyze('Another');
+    });
+    expect(result.current.isReplay).toBe(false);
+  });
+
   it("does not let the analysis stream's late done close the resume stream", async () => {
     const { hook, analysis } = openPicker();
     await act(async () => {
@@ -388,6 +437,27 @@ describe('useAgent factoid stream', () => {
     await pending;
     expect(onUnavailable.mock.calls).toEqual([['rate_limited'], ['budget_exhausted']]);
     expect(onFactoid).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the result's run mode, so more facts stay on its side", async () => {
+    const { result } = renderHook(() => useAgent());
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      ['f1'],
+      () => {},
+      undefined,
+      undefined,
+      'replay',
+    );
+    const decrypt = lastStream();
+    expect(new URL(decrypt.url, 'http://x').searchParams.get('mode')).toBe('replay');
+    decrypt.send({ type: 'done' });
+    await pending;
+    const older = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], () => {});
+    expect(new URL(lastStream().url, 'http://x').searchParams.has('mode')).toBe(false);
+    lastStream().send({ type: 'done' });
+    await older;
   });
 
   it('reports live calls switched off (a server that replays recordings only)', async () => {

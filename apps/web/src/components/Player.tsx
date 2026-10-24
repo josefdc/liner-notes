@@ -16,12 +16,14 @@ import {
   displayableFactoids,
   FACTOID_UNAVAILABLE_TEXT,
   normalizeTrack,
+  recordingOf,
 } from '../constants';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
+import type { ResultMode } from '../hooks/agent/types';
 import type {
   TrackData,
   FactoidEntity,
@@ -44,6 +46,7 @@ interface PlayerProps {
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
     onUnavailable?: (code: FactoidUnavailableCode) => void,
+    resultMode?: ResultMode,
   ) => Promise<void>;
   // Callback for navigating to a new track from genealogy graph
   onAnalyzeTrack?: (trackId: string, title: string, artist: string) => void;
@@ -121,6 +124,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const { bpm, key } = audioValues(track);
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
+  // How the result was produced: more facts stay on that side (recorded, or live).
+  const resultMode: ResultMode | undefined =
+    track.run?.mode === 'replay' || track.run?.mode === 'live' ? track.run.mode : undefined;
+  const recorded = recordingOf(track) !== null;
+  // DECRYPT MORE on a replayed result found no recorded fact that is not shown yet.
+  const [noMoreRecorded, setNoMoreRecorded] = useState(false);
   // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
   const allFactoids = useMemo(
     () => [...track.factoids, ...additionalFactoids],
@@ -213,6 +222,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     isDecryptingRef.current = true;
     setIsDecrypting(true);
     setDecryptUnavailable(null);
+    setNoMoreRecorded(false);
+    let unavailable = false;
     const controller = new AbortController();
     decryptControllerRef.current = controller;
     let newCount = 0;
@@ -232,8 +243,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           newCount++;
         },
         controller.signal,
-        (code) => setDecryptUnavailable(code),
+        (code) => {
+          unavailable = true;
+          setDecryptUnavailable(code);
+        },
+        resultMode,
       );
+      if (resultMode === 'replay' && newCount === 0 && !unavailable) setNoMoreRecorded(true);
 
       // P3:25 — Show completion toast
       if (newCount > 0) {
@@ -253,7 +269,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         setIsDecrypting(false);
       }
     }
-  }, [onDecryptMoreStream, track.title, track.artist, track.factoids]);
+  }, [onDecryptMoreStream, track.title, track.artist, track.factoids, resultMode]);
 
   // Extract onNodeClick handler for GenealogyGraph (stable ref for React.memo)
   const handleNodeClick = useCallback(
@@ -305,6 +321,13 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           </span>
         </div>
       </div>
+
+      {/* On phones only one panel shows at a time: the recording label stays above all of them */}
+      {recorded && (
+        <div className="md:hidden z-20 mx-4 mt-2">
+          <RecordedRunNotice track={track} compact />
+        </div>
+      )}
 
       {/* Main Content Triptych */}
       <div className="flex-1 relative z-10 flex flex-col md:flex-row overflow-hidden">
@@ -393,6 +416,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   More facts unavailable: {FACTOID_UNAVAILABLE_TEXT[decryptUnavailable]}
                 </p>
               )}
+              {noMoreRecorded && (
+                <p role="status" className="text-xs font-mono text-text-tertiary">
+                  No more facts: this result is a recording, and every fact recorded with it is
+                  shown.
+                </p>
+              )}
 
               {/* Show more / collapse toggle */}
               {hiddenCount > 0 && !showAllFactoids && (
@@ -440,7 +469,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'player' ? 'block h-full' : 'hidden md:flex'}
         `}
         >
-          <RecordedRunNotice track={track} className="w-full max-w-lg mb-4" />
+          {recorded && (
+            <div className="hidden md:block w-full max-w-lg mb-4">
+              <RecordedRunNotice track={track} />
+            </div>
+          )}
           <ResultNotices track={track} className="w-full max-w-lg mb-4" />
 
           {/* Album Art Container */}

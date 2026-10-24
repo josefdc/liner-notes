@@ -20,7 +20,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
-import type { AgentState, UseAgentReturn, SearchCandidate } from './agent/types';
+import type { AgentState, ResultMode, UseAgentReturn, SearchCandidate } from './agent/types';
+import { isLiveUnavailable } from '../liveUnavailable';
 import { API_BASE_URL } from './agent/types';
 import { fetchSuggestions } from './agent/apiClient';
 import {
@@ -71,6 +72,7 @@ const INITIAL_STATE: AgentState = {
   errorCode: null,
   isLoading: false,
   isComplete: false,
+  isReplay: false,
 };
 
 interface Run {
@@ -83,6 +85,10 @@ interface Run {
   controller: AbortController;
   /** The run's id and whether its result was taken, across its streams. */
   events: RunEvents;
+  /** The candidate picked in the track picker, once the run resumes with it. */
+  picked: SearchCandidate | null;
+  /** The API said this run is a replay of a recorded run. */
+  replay: boolean;
 }
 
 function newRun(query: string): Run {
@@ -93,6 +99,8 @@ function newRun(query: string): Run {
     phase: 'running',
     controller: new AbortController(),
     events: newRunEvents(),
+    picked: null,
+    replay: false,
   };
 }
 
@@ -137,6 +145,8 @@ export function useAgent(): UseAgentReturn {
   // Built once: a fresh run (and AbortController) per render would be wasted.
   const [initialRun] = useState(() => newRun(''));
   const runRef = useRef<Run>(initialRun);
+  // `analyze`, for the stream handlers defined before it.
+  const analyzeRef = useRef<((query: string) => Promise<void>) | null>(null);
   // The run's open stream and the function that closes it (and stops its watchdog).
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
 
@@ -221,6 +231,12 @@ export function useAgent(): UseAgentReturn {
           break;
 
         case 'status':
+          // The API's notice that this run replays a recording: the progress that follows
+          // was recorded, and the screens say so.
+          if (data.node === 'replay' && !run.replay) {
+            run.replay = true;
+            setState((prev) => ({ ...prev, isReplay: true }));
+          }
           // Pass the code from the backend event
           addLog(data.message || 'Processing...', data.code as LogCode | undefined, data.node);
           // Update status based on node
@@ -259,8 +275,10 @@ export function useAgent(): UseAgentReturn {
           break;
         }
 
-        case 'complete':
+        case 'complete': {
           run.phase = 'complete';
+          run.replay ||= data.data?.run?.mode === 'replay';
+          const replay = run.replay;
           setState((prev) => ({
             ...prev,
             status: 'complete',
@@ -268,14 +286,34 @@ export function useAgent(): UseAgentReturn {
             candidates: null,
             isLoading: false,
             isComplete: true,
+            isReplay: replay,
           }));
-          addLog('Analysis complete. Ready for deployment.', 'SYS-READY');
+          addLog(
+            replay
+              ? 'Recorded analysis replayed. Nothing was analysed live.'
+              : 'Analysis complete. Ready for deployment.',
+            'SYS-READY',
+          );
           break;
+        }
 
-        case 'error':
+        case 'error': {
           close();
+          // The pick could not resume live (the budget tripped while the picker was open, or
+          // live analysis is off): ask for the picked track itself, which replays its
+          // recording when there is one, and otherwise says why nothing runs.
+          const picked = run.picked;
+          if (picked && isLiveUnavailable(data.code) && runRef.current === run) {
+            addLog(
+              'Live analysis is unavailable; looking for a recording of this track...',
+              'SYS-WARN',
+            );
+            void analyzeRef.current?.(`${picked.title} ${picked.artist}`);
+            break;
+          }
           fail(run, data.error || 'The analysis failed.', data.code);
           break;
+        }
 
         case 'unreadable':
           close();
@@ -388,6 +426,10 @@ export function useAgent(): UseAgentReturn {
     [addLog, fail, openRunStream],
   );
 
+  useEffect(() => {
+    analyzeRef.current = analyze;
+  }, [analyze]);
+
   /**
    * Select a candidate after disambiguation. Only the first selection for a picker counts.
    */
@@ -408,6 +450,7 @@ export function useAgent(): UseAgentReturn {
         return;
       }
 
+      run.picked = candidate;
       addLog(`🎵 Resuming with selected track...`);
       setState((prev) => ({
         ...prev,
@@ -446,6 +489,7 @@ export function useAgent(): UseAgentReturn {
       onFactoid: (factoid: Factoid) => void,
       signal?: AbortSignal,
       onUnavailable?: (code: FactoidUnavailableCode) => void,
+      resultMode?: ResultMode,
     ): Promise<void> => {
       return new Promise((resolve, reject) => {
         // A new analysis or a reset ends the stream, as does the caller's signal.
@@ -460,6 +504,9 @@ export function useAgent(): UseAgentReturn {
             trackTitle,
             trackArtist: trackArtist || '',
             existingIds: existingIds.join(','),
+            // More of a replayed result comes only from its recording, and more of a live
+            // result never does (the API decides by this, not by what it allows right now).
+            ...(resultMode ? { mode: resultMode } : {}),
           });
 
           const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;

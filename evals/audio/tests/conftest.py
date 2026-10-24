@@ -2,16 +2,32 @@ import socket
 
 import pytest
 
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """The unit tests never reach the network (datasets are fetched only by real runs)."""
+    """
+    The unit tests never reach the network (datasets are fetched only by real runs); a local
+    server on the loopback interface, started by a test, is allowed.
+    """
+    connect, create_connection = socket.socket.connect, socket.create_connection
 
-    def refuse(*args, **kwargs):
-        raise OSError("network access is disabled in the unit tests")
+    def host_of(address):
+        return address[0] if isinstance(address, tuple) else address
 
-    monkeypatch.setattr(socket.socket, "connect", refuse)
-    monkeypatch.setattr(socket, "create_connection", refuse)
+    def guarded_connect(self, address):
+        if host_of(address) not in LOOPBACK:
+            raise OSError("network access is disabled in the unit tests")
+        return connect(self, address)
+
+    def guarded_create_connection(address, *args, **kwargs):
+        if host_of(address) not in LOOPBACK:
+            raise OSError("network access is disabled in the unit tests")
+        return create_connection(address, *args, **kwargs)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket, "create_connection", guarded_create_connection)
 
 
 @pytest.fixture(scope="session", autouse=True)

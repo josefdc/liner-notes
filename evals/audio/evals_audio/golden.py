@@ -50,7 +50,8 @@ from .metrics import Key, parse_key
 logger = logging.getLogger("evals_audio")
 
 GOLDEN_FILE = Path(__file__).resolve().parents[2] / "golden.jsonl"
-USER_AGENT = "liner-notes-evals/0.0 (https://github.com/josefdc/liner-notes)"
+# MusicBrainz asks for a User-Agent with a working contact.
+USER_AGENT = "liner-notes-evals/0.0 (77589315+josefdc@users.noreply.github.com)"
 HTTP_TIMEOUT = httpx.Timeout(30.0, connect=15.0)
 DEEZER_TRACK = "https://api.deezer.com/track/{}"
 MB_RELEASES = "https://musicbrainz.org/ws/2/release"
@@ -90,7 +91,7 @@ DATASET = {
         "Deezer `bpm` values are Deezer's (the preview coverage report already lists them). "
         "MusicBrainz core data is CC0. Discogs publishes its release data under CC0 (its data "
         "dumps) and its API terms ask for the credit 'Data provided by Discogs'; the results "
-        "keep the Discogs ids, not the styles."
+        "keep the Discogs ids and the model's hit ranks, not the releases' style lists."
     ),
     "credits": [
         "Deezer API (https://developers.deezer.com/api)",
@@ -150,31 +151,79 @@ def select(rows: list[Row], limit: int | None, seed: int) -> list[Row]:
 
 
 class Paced:
-    """An httpx client that keeps a minimum pause between requests to each service."""
+    """
+    An httpx client that keeps a minimum pause between requests to each service and retries a
+    429 or 503 answer (after its Retry-After, or 5 s, 10 s) up to RETRIES times in all.
+    """
 
-    def __init__(self, client: httpx.Client, pauses: dict[str, float] = PAUSES, sleep=time.sleep):
+    def __init__(
+        self,
+        client: httpx.Client,
+        pauses: dict[str, float] = PAUSES,
+        sleep=time.sleep,
+        clock=time.monotonic,
+    ):
         self.client = client
         self.pauses = pauses
         self.sleep = sleep
+        self.clock = clock
         self._last: dict[str, float] = {}
 
+    def _pace(self, service: str) -> None:
+        wait = self._last.get(service, -1e9) + self.pauses[service] - self.clock()
+        if wait > 0:
+            self.sleep(wait)
+
     def get(self, service: str, url: str, **kwargs) -> httpx.Response:
-        for attempt in range(3):
-            wait = self._last.get(service, -1e9) + self.pauses[service] - time.monotonic()
-            if wait > 0:
-                self.sleep(wait)
+        for attempt in range(RETRIES):
+            self._pace(service)
             response = self.client.get(url, **kwargs)
-            self._last[service] = time.monotonic()
-            if response.status_code not in (429, 503):
+            self._last[service] = self.clock()
+            if response.status_code not in (429, 503) or attempt == RETRIES - 1:
                 return response
             retry = response.headers.get("retry-after", "")
             self.sleep(float(retry) if retry.isdigit() else 5.0 * (attempt + 1))
-        return response
+        raise AssertionError("unreachable")
+
+    def download(self, service: str, url: str, limit: int) -> tuple[int, bytes | None]:
+        """
+        (status, body) of a GET read as a stream; body None when the answer is not 200 or
+        would pass `limit` bytes (reading stops there).
+        """
+        self._pace(service)
+        try:
+            with self.client.stream("GET", url) as response:
+                if response.status_code != 200:
+                    return response.status_code, None
+                body = bytearray()
+                for chunk in response.iter_bytes(1 << 16):
+                    body += chunk
+                    if len(body) > limit:
+                        return response.status_code, None
+                return response.status_code, bytes(body)
+        finally:
+            self._last[service] = self.clock()
 
 
-def client() -> httpx.Client:
+RETRIES = 3
+
+
+def quiet_http_logs() -> None:
+    """
+    httpx logs every request with its full URL at INFO, and the service's import sets the root
+    logger to INFO: a signed preview URL would end up on stderr. Its loggers stay at WARNING.
+    """
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
+    quiet_http_logs()
     return httpx.Client(
-        timeout=HTTP_TIMEOUT, follow_redirects=True, headers={"User-Agent": USER_AGENT}
+        timeout=HTTP_TIMEOUT,
+        follow_redirects=True,
+        headers={"User-Agent": USER_AGENT},
+        transport=transport,
     )
 
 
@@ -184,12 +233,23 @@ def client() -> httpx.Client:
 def fetch_preview(paced: Paced, row: Row, directory: Path) -> dict:
     """
     Deezer's view of the row's `deezerId`: its `bpm` (None when 0 or absent) and, when it has a
-    preview, the preview downloaded into `directory` (path in "path"). The URL is not kept.
+    preview, the preview downloaded into `directory` (path in "path"). The URL is not kept,
+    and a network error marks this row unavailable (by the error's type only: its message can
+    carry the URL) without stopping the others.
     """
     out: dict = {"deezerId": row.deezer_id, "bpm": None, "path": None, "unavailable": None}
     if row.deezer_id is None:
         out["unavailable"] = "no deezerId"
         return out
+    try:
+        return _fetch_preview(paced, row, directory, out)
+    except httpx.HTTPError as e:
+        out["path"] = None
+        out["unavailable"] = f"network error ({type(e).__name__})"
+        return out
+
+
+def _fetch_preview(paced: Paced, row: Row, directory: Path, out: dict) -> dict:
     response = paced.get("deezer", DEEZER_TRACK.format(row.deezer_id))
     if response.status_code != 200:
         out["unavailable"] = f"track lookup returned {response.status_code}"
@@ -204,15 +264,18 @@ def fetch_preview(paced: Paced, row: Row, directory: Path) -> dict:
     if not url or doc.get("readable") is False:
         out["unavailable"] = "no preview"
         return out
-    preview = paced.get("deezer", url)
-    if preview.status_code != 200 or not preview.content:
-        out["unavailable"] = f"preview download returned {preview.status_code}"
+    status, body = paced.download("deezer", url, MAX_PREVIEW_BYTES)
+    if status != 200:
+        out["unavailable"] = f"preview download returned {status}"
         return out
-    if len(preview.content) > MAX_PREVIEW_BYTES:
+    if body is None:
         out["unavailable"] = "preview larger than expected"
         return out
+    if not body:
+        out["unavailable"] = "empty preview"
+        return out
     path = directory / f"{row.isrc}.mp3"
-    path.write_bytes(preview.content)
+    path.write_bytes(body)
     out["path"] = str(path)
     return out
 
@@ -315,9 +378,15 @@ def resolve_discogs(paced: Paced, mbid: str) -> dict:
 
 
 def discogs_styles(paced: Paced, kind: str, discogs_id: int) -> dict:
+    """
+    The genres and styles of a Discogs master or release. Only a 404 is a definitive miss; any
+    other failure (429 after the retries, 5xx) raises, so the row is not cached and the next
+    run asks again.
+    """
     response = paced.get("discogs", DISCOGS_API.format(kind, discogs_id))
-    if response.status_code != 200:
-        return {"missing": f"Discogs returned {response.status_code}"}
+    if response.status_code == 404:
+        return {"missing": "not on Discogs (404)"}
+    response.raise_for_status()
     doc = response.json()
     return {"genres": sorted(doc.get("genres") or []), "styles": sorted(doc.get("styles") or [])}
 
@@ -327,8 +396,9 @@ def ensure_labels(
 ) -> dict[str, dict]:
     """
     The Discogs label of every row, from the cache in `home` or fetched (and cached) for the
-    rows it lacks. A row whose lookup failed on the network is not cached, so the next run
-    tries again; a row without a link or without styles is cached as missing.
+    rows it lacks. A row whose lookup failed (a network error, a 429 or 5xx answer) is not
+    cached, so the next run tries again; a definitive miss (no link, a Discogs 404, no styles)
+    is cached as missing.
     """
     path = home / LABELS_FILE
     cache = json.loads(path.read_text()) if path.exists() else {}
@@ -340,7 +410,7 @@ def ensure_labels(
             try:
                 label = _label(paced, row)
             except httpx.HTTPError as e:
-                logger.warning("Discogs label for %s failed: %s", row.isrc, e)
+                logger.warning("Discogs label for %s failed (%s)", row.isrc, type(e).__name__)
                 continue
             cache[row.isrc] = {**label, "retrieved": today}
             tmp = path.with_name(path.name + ".tmp")
@@ -392,15 +462,38 @@ def in_taxonomy(genres: list[str], styles: list[str], taxonomy) -> int:
 
 def constant_top(tops: list[list[dict]], k: int) -> list[str]:
     """
-    The baseline: one top-k for every track, the labels with the highest summed score over
-    the tracks' top lists (absent counts as 0; ties by label). Built from the model's outputs
-    alone, never from the Discogs labels.
+    The baseline: one top-k for every track, the model's average output: the labels with the
+    highest summed score over the top-10 lists of the scored previews (absent counts as 0;
+    ties by label). Built from the model's outputs alone, never from the Discogs labels.
     """
     totals: dict[str, float] = {}
     for top in tops:
         for entry in top:
             totals[entry["label"]] = totals.get(entry["label"], 0.0) + float(entry["score"])
     return [label for label, _ in sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))][:k]
+
+
+def best_constant(labels: list[tuple[list[str], list[str]]], taxonomy, k: int) -> list[str]:
+    """
+    An optimistic reference, not a baseline: one top-k for every track chosen *with* the
+    labels, by greedy cover (each step adds the taxonomy label that hits the most tracks not
+    hit yet; ties by label). It is at least (1 - 1/e) of the best possible constant and shows
+    how far a fixed answer can go on these tracks.
+    """
+    hits = {
+        label: {i for i, (genres, styles) in enumerate(labels) if hit_rank([label], genres, styles)}
+        for label in sorted(taxonomy)
+    }
+    chosen: list[str] = []
+    covered: set[int] = set()
+    for _ in range(min(k, len(hits))):
+        best = min(
+            (label for label in hits if label not in chosen),
+            key=lambda label: (-len(hits[label] - covered), label),
+        )
+        chosen.append(best)
+        covered |= hits[best]
+    return chosen
 
 
 # --- the service's fingerprint models --------------------------------------------------------
@@ -470,8 +563,10 @@ def styles_table(analysed: list[dict], labels: dict[str, dict], taxonomy) -> dic
     """
     hit@k of the fingerprint's styles against the Discogs styles, over the analysed tracks
     whose release has styles, next to the constant baseline (constant_top), with exact
-    McNemar p-values for the difference on the same tracks. A track without a fingerprint
-    counts as no hit over n.
+    McNemar p-values for the difference on the same tracks, and the best constant found with
+    the labels (best_constant, a reference). A track without a fingerprint counts as no hit
+    over n. The rows keep the model's hit rank, not its top list, and no rank against the
+    constant lists: either pairing would name a style the release carries.
     """
     from .metrics import mcnemar_exact, wilson
 
@@ -485,7 +580,8 @@ def styles_table(analysed: list[dict], labels: dict[str, dict], taxonomy) -> dic
         scored.append((record, label))
     tops = [r.get("styles") for r, _ in scored if r.get("styles")]
     baseline = constant_top(tops, max(HIT_KS))
-    rows = []
+    best = best_constant([(lb["genres"], lb["styles"]) for _, lb in scored], taxonomy, max(HIT_KS))
+    rows, constant_ranks = [], []
     for record, label in scored:
         top = record.get("styles")
         labels_top = [e["label"] for e in top] if top else None
@@ -497,20 +593,28 @@ def styles_table(analysed: list[dict], labels: dict[str, dict], taxonomy) -> dic
                 "retrieved": label["retrieved"],
                 "stylesOnRelease": len(label["styles"]),
                 "pairsInTaxonomy": in_taxonomy(label["genres"], label["styles"], taxonomy),
-                "top": top,
+                "fingerprint": top is not None,
                 "hitRank": None
                 if labels_top is None
                 else hit_rank(labels_top, label["genres"], label["styles"]),
-                "baselineHitRank": hit_rank(baseline, label["genres"], label["styles"]),
                 "stylesDiffer": bool(record.get("stylesDiffer")),
             }
         )
+        # Kept apart from the rows: with the published constant lists, a per-track rank would
+        # name a style the release carries.
+        constant_ranks.append(
+            (
+                hit_rank(baseline, label["genres"], label["styles"]),
+                hit_rank(best, label["genres"], label["styles"]),
+            )
+        )
     n = len(rows)
-    answered = [r for r in rows if r["top"] is not None]
+    answered = [r for r in rows if r["fingerprint"]]
     hits, comparison = {}, {}
     for k in HIT_KS:
         model = [r["hitRank"] is not None and r["hitRank"] <= k for r in rows]
-        base = [r["baselineHitRank"] is not None and r["baselineHitRank"] <= k for r in rows]
+        base = [b is not None and b <= k for b, _ in constant_ranks]
+        best_hits = sum(1 for _, b in constant_ranks if b is not None and b <= k)
         only_model = sum(1 for m, b in zip(model, base, strict=True) if m and not b)
         only_base = sum(1 for m, b in zip(model, base, strict=True) if b and not m)
         hits[str(k)] = {
@@ -520,6 +624,7 @@ def styles_table(analysed: list[dict], labels: dict[str, dict], taxonomy) -> dic
                 len(answered),
             ).as_dict(),
             "baselineOverN": wilson(sum(base), n).as_dict(),
+            "bestConstantOverN": wilson(best_hits, n).as_dict(),
         }
         comparison[str(k)] = {
             "onlyModel": only_model,
@@ -533,6 +638,7 @@ def styles_table(analysed: list[dict], labels: dict[str, dict], taxonomy) -> dic
         "noLabel": dict(sorted(no_label.items())),
         "outsideTaxonomy": sum(1 for r in rows if r["pairsInTaxonomy"] == 0),
         "baseline": baseline,
+        "bestConstant": best,
         "hits": hits,
         "versusBaseline": comparison,
         "tracks": rows,

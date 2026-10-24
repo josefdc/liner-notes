@@ -247,3 +247,168 @@ def test_agreement_counts_a_withheld_tempo_as_not_agreeing():
     assert block["n"] == 2 and s["answered"] == 1
     assert s["overN"]["acc1"]["total"] == 0 and s["overN"]["acc2"]["total"] == 1
     assert block["paired"] == []
+
+
+# --- pacing, retries, headers and caps ------------------------------------------------------
+
+
+class Clock:
+    """A fake monotonic clock that sleeping moves forward."""
+
+    def __init__(self):
+        self.t = 100.0
+        self.slept = []
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.slept.append(round(seconds, 3))
+        self.t += seconds
+
+
+def test_each_service_keeps_its_own_pause():
+    clock = Clock()
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200)))
+    paced = golden.Paced(client, golden.PAUSES, sleep=clock.sleep, clock=clock)
+    paced.get("musicbrainz", "https://mb/1")
+    clock.t += 0.2
+    paced.get("musicbrainz", "https://mb/2")
+    paced.get("discogs", "https://dc/1")  # another service: no wait
+    paced.get("discogs", "https://dc/2")
+    assert clock.slept == [round(golden.PAUSES["musicbrainz"] - 0.2, 3), golden.PAUSES["discogs"]]
+    assert golden.PAUSES["musicbrainz"] >= 1.0  # MusicBrainz allows one request a second
+
+
+def test_429_and_503_are_retried_after_retry_after_up_to_three_attempts():
+    clock = Clock()
+    answers = iter(
+        [
+            httpx.Response(429, headers={"retry-after": "7"}),
+            httpx.Response(503),
+            httpx.Response(200),
+        ]
+    )
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: next(answers)))
+    paced = golden.Paced(client, NO_PAUSE, sleep=clock.sleep, clock=clock)
+    assert paced.get("discogs", "https://dc/1").status_code == 200
+    assert clock.slept == [7.0, 10.0]
+
+    calls = []
+
+    def always_busy(request):
+        calls.append(request)
+        return httpx.Response(503)
+
+    client = httpx.Client(transport=httpx.MockTransport(always_busy))
+    paced = golden.Paced(client, NO_PAUSE, sleep=lambda s: None)
+    assert paced.get("discogs", "https://dc/1").status_code == 503
+    assert len(calls) == golden.RETRIES == 3
+
+
+def test_requests_carry_a_user_agent_with_a_contact():
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("user-agent"))
+        return httpx.Response(200, json={})
+
+    with golden.client(httpx.MockTransport(handler)) as http:
+        http.get("https://musicbrainz.org/ws/2/release")
+    assert seen == [golden.USER_AGENT]
+    assert "@users.noreply.github.com" in golden.USER_AGENT
+
+
+def test_a_preview_over_the_size_cap_is_stopped_while_streaming(tmp_path, monkeypatch):
+    monkeypatch.setattr(golden, "MAX_PREVIEW_BYTES", 10)
+
+    def handler(request):
+        if request.url.host == "api.deezer.com":
+            return httpx.Response(200, json={"bpm": 120, "preview": "https://cdn/p.mp3"})
+        return httpx.Response(200, content=b"x" * 11)
+
+    out = golden.fetch_preview(paced(handler), row(), tmp_path)
+    assert out["unavailable"] == "preview larger than expected" and out["path"] is None
+    assert not list(tmp_path.iterdir())
+
+
+def test_a_failed_track_lookup_or_a_network_error_marks_only_that_row(tmp_path):
+    out = golden.fetch_preview(paced(lambda r: httpx.Response(500)), row(), tmp_path)
+    assert out["unavailable"] == "track lookup returned 500"
+
+    def down(request):
+        raise httpx.ConnectError(f"cannot reach {request.url}")
+
+    out = golden.fetch_preview(paced(down), row(), tmp_path)
+    assert out["unavailable"] == "network error (ConnectError)"  # the type only, never the URL
+
+
+def test_musicbrainz_releases_are_read_page_by_page():
+    offsets = []
+    releases = [mb_release(f"r{i}", f"g{i}", "Album", f"20{i:02d}") for i in range(150)]
+
+    def handler(request):
+        offset = int(request.url.params["offset"])
+        offsets.append(offset)
+        return httpx.Response(
+            200, json={"release-count": 150, "releases": releases[offset : offset + 100]}
+        )
+
+    groups, _ = golden.release_groups(paced(handler), "rec-1")
+    assert offsets == [0, 100] and len(groups) == 150
+
+
+def test_a_release_link_is_used_when_the_group_has_no_master():
+    def handler(request):
+        path = request.url.path
+        if path == "/ws/2/release":
+            return httpx.Response(
+                200,
+                json={"release-count": 1, "releases": [mb_release("r1", "g1", "Single", "1985")]},
+            )
+        if path == "/ws/2/release-group/g1":
+            return httpx.Response(200, json={"relations": []})
+        if path == "/ws/2/release/r1":
+            discogs = {"type": "discogs", "url": {"resource": "https://www.discogs.com/release/77"}}
+            return httpx.Response(200, json={"relations": [discogs]})
+        return httpx.Response(404)
+
+    found = golden.resolve_discogs(paced(handler), "rec-1")
+    assert found["discogs"] == {"kind": "release", "id": 77}
+
+
+def discogs_answer(status):
+    def handler(request):
+        if request.url.host == "api.discogs.com":
+            if status == 200:
+                return httpx.Response(200, json={"genres": ["Rock"], "styles": ["Pop Rock"]})
+            return httpx.Response(status)
+        return labels_handler([])(request)
+
+    return handler
+
+
+@pytest.mark.parametrize("status", [429, 500, 503])
+def test_a_transient_discogs_failure_is_not_cached_and_is_asked_again(tmp_path, status):
+    rows = [row()]
+    assert golden.ensure_labels(rows, tmp_path, lambda: paced(discogs_answer(status)), "d1") == {}
+    labels = golden.ensure_labels(rows, tmp_path, lambda: paced(discogs_answer(200)), "d2")
+    assert labels["GBAAA0000001"]["styles"] == ["Pop Rock"]
+
+
+def test_a_discogs_404_is_a_definitive_miss_and_is_cached(tmp_path):
+    labels = golden.ensure_labels([row()], tmp_path, lambda: paced(discogs_answer(404)), "d1")
+    assert labels["GBAAA0000001"]["missing"] == "not on Discogs (404)"
+    cached = json.loads((tmp_path / golden.LABELS_FILE).read_text())
+    assert cached["GBAAA0000001"]["missing"] == "not on Discogs (404)"
+
+
+def test_the_best_constant_covers_greedily_and_breaks_ties_by_label():
+    taxonomy = ["Rock---Pop Rock", "Pop---Ballad", "Electronic---House"]
+    labels = [
+        (["Rock"], ["Pop Rock"]),
+        (["Rock"], ["Pop Rock"]),
+        (["Pop"], ["Ballad"]),
+        (["Electronic"], ["House"]),
+    ]
+    assert golden.best_constant(labels, taxonomy, 2) == ["Rock---Pop Rock", "Electronic---House"]

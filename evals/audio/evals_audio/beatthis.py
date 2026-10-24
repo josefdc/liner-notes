@@ -48,20 +48,37 @@ TRACKER_RATE = 22050
 METHOD = f"beat-this {CHECKPOINT_NAME} (CPU, no DBN)+beat-regression"
 REFERENCE = (
     "Foscarin, F., Schlüter, J., Widmer, G. (2024). Beat this! Accurate beat tracking without "
-    "DBN postprocessing. Proc. ISMIR 2024. arXiv:2407.21658. Code: "
-    "https://github.com/CPJKU/beat_this (MIT); checkpoint "
-    f"{CHECKPOINT_NAME} from the authors' cloud space (no licence stated for the weights)"
+    "DBN postprocessing. Proc. ISMIR 2024. arXiv:2407.21658. "
+    "https://github.com/CPJKU/beat_this: the code and the published model weights (checkpoint "
+    f"{CHECKPOINT_NAME}, from the authors' cloud space) are under the MIT licence"
+)
+HARMONIX_REFERENCE = (
+    "Nieto, O., McCallum, M., Davies, M., Robertson, A., Stark, A., Egozy, E. (2019). The "
+    "Harmonix Set: beats, downbeats, and functional segment annotations of Western popular "
+    "music. Proc. ISMIR 2019. https://github.com/urinieto/harmonixset (MIT); its metadata was "
+    "used to find golden songs in beat-this's training data"
 )
 # The authors' statement on their training data, and where it is listed.
 TRAINING_DATA_NOTE = (
     "beat-this's checkpoint was trained on every dataset its authors used except GTZAN, "
     "Ballroom included (CPJKU/beat_this_annotations lists ballroom; the authors warn that "
     "results on training data are unfairly good). Its Ballroom numbers are on its own "
-    "training data: they are shown, but they say nothing about new music and are left out of "
-    "any comparison."
+    "training data: they are shown, marked, but they say nothing about new music and are kept "
+    "out of the bake-off conclusion (its pair tables on this dataset are not printed)."
 )
 # Datasets the checkpoint was trained on, among those the harness measures.
 TRAINED_ON = frozenset({"ballroom"})
+# What GOLDEN_IN_TRAINING rests on, for the report: a lower bound.
+GOLDEN_TRAINING_NOTE = (
+    "A lower bound: the golden songs were matched by title and artist against the Harmonix Set's "
+    "metadata. The track names of the other training sets (8-folds.split in "
+    "CPJKU/beat_this_annotations) hold no golden song where they name one (ASAP, Beatles, "
+    "Candombe, Filosax, Groove MIDI, GuitarSet, HJDB, JAAH, RWC, SIMAC), but Hainsworth, SMC "
+    "and part of SIMAC give numbers only and TapCorrect gives YouTube ids, so a golden song "
+    "there would not be found. "
+    'Harmonix also has a remix edit of "Alors on danse" (Stromae\'s production, another '
+    'recording) and Lionel Richie\'s 2012 duet of "Hello"; neither is counted.'
+)
 # Golden rows whose song is in the Harmonix Set, one of the checkpoint's training datasets
 # (CPJKU/beat_this_annotations harmonix/8-folds.split, matched by title and artist against the
 # Harmonix Set's metadata.csv, github.com/urinieto/harmonixset; checked 2026-10-24). Two more

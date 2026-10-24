@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -13,7 +14,7 @@ from evals_audio.report import (
     load,
     render,
 )
-from evals_audio.runner import compare_pairs, withheld_cost
+from evals_audio.runner import compare_pairs, lifted_views, withheld_cost
 from evals_audio.service import REPO_ROOT
 
 ITEMS = {
@@ -159,7 +160,7 @@ def test_the_guide_counts_the_p_values_it_prints():
     # 2 metrics x 2 paired blocks, and one AUC per binary metric and estimator when defined.
     ranking = [r for c in run()["coverage"].values() for r in c["ranking"].values()]
     assert n == 4 + sum(1 for r in ranking if r["p"] is not None)
-    assert f"This report prints {n};" in render(doc)
+    assert f"This report gives {n} distinct ones" in render(doc)
 
 
 def test_render_gives_coverage_over_n_and_over_answered_with_intervals():
@@ -258,6 +259,9 @@ def three_estimator_run(dataset="ballroom"):
         "ranking": {m: ranking_auc(items["beat-this"], m) for m in metrics},
     }
     r["tracks"]["beat-this"] = r["tracks"]["librosa"]
+    r["serviceDefault"] = "essentia"
+    r["estimatorCredits"] = ["beat-this credit"]
+    r["lifted"] = lifted_views(r["tracks"], list(items), metrics, 1)
     return r
 
 
@@ -333,62 +337,88 @@ def golden_run():
     }
 
 
-def cost_run():
-    memory = {
-        "clips": 2,
+def memory(per_clip_cpu, peak):
+    return {
+        "clips": 3,
+        "stoppedByPeriodicity": 1,
         "rssServiceBytes": 300_000_000,
         "rssReadyBytes": 600_000_000,
-        "peakRssBytes": 900_000_000,
+        "rssAfterFirstBytes": 700_000_000,
+        "peakRssBytes": peak,
         "readySeconds": 1.0,
-        "firstCall": {"wallSeconds": 4.0, "cpuSeconds": 4.0},
+        "firstAnalysed": {"trackId": "24", "wallSeconds": 4.0, "cpuSeconds": 4.0},
         "perClip": {
             "n": 1,
-            "medianWallSeconds": 3.4,
-            "medianCpuSeconds": 3.4,
-            "maxWallSeconds": 3.4,
+            "medianWallSeconds": per_clip_cpu,
+            "medianCpuSeconds": per_clip_cpu,
+            "maxWallSeconds": per_clip_cpu,
         },
         "tempoEstimates": 2,
     }
+
+
+def install(packages, image):
+    def sized(pkgs):
+        return {
+            "packages": pkgs,
+            "installedBytes": sum(p["installedBytes"] for p in pkgs),
+            "wheelBytes": sum(p["wheelBytes"] for p in pkgs),
+        }
+
+    return {**sized(packages), "serviceImage": sized(image)}
+
+
+TORCH = {
+    "name": "torch",
+    "version": "2.11.0+cpu",
+    "installedBytes": 700_000_000,
+    "wheelBytes": 190_000_000,
+}
+ESSENTIA = {
+    "name": "essentia-tensorflow",
+    "version": "2.1b6",
+    "installedBytes": 600_000_000,
+    "wheelBytes": 290_000_000,
+}
+
+
+def cost_run():
     return {
         "suite": "cost",
-        "command": "uv run python -m evals_audio --suite cost --limit 2",
+        "command": "uv run python -m evals_audio --suite cost --limit 3",
         "startedAt": "2026-10-24T00:00:00Z",
         "wallSeconds": 10.0,
         "jobs": 1,
         "seeds": {"selection": 1, "clips": 1, "bootstrap": 1},
-        "limit": 2,
-        "selection": "2 giantsteps-tempo tracks",
+        "limit": 3,
+        "selection": "3 giantsteps-tempo tracks",
         "gitCommit": "abc1234",
         "analyzerVersion": "2.0.0",
-        "analyzerVersions": {"beat-this": "2.0.0+beat-this"},
-        "estimators": ["beat-this"],
+        "analyzerVersions": {"essentia": "2.0.0+essentia", "beat-this": "2.0.0+beat-this"},
+        "estimators": ["essentia", "beat-this"],
         "environment": {"python": "3.12.3"},
         "dataUsageBytes": 1,
         "dataCapBytes": 2,
-        "machine": {"cpu": "test cpu", "cpus": 4, "system": "Linux x86_64"},
+        "machine": {
+            "cpu": "test cpu",
+            "cpus": 4,
+            "system": "Linux x86_64",
+            "threads": {"OMP_NUM_THREADS": "1"},
+        },
+        "serviceDefault": "essentia",
+        "estimatorCredits": ["beat-this credit"],
         "dataset": {"name": "giantsteps-tempo", "title": "GiantSteps Tempo"},
-        "clips": [{"trackId": "1"}, {"trackId": "2"}],
-        "memory": {"beat-this": memory},
+        "clips": [{"trackId": "1"}, {"trackId": "2"}, {"trackId": "24"}],
+        "memory": {"essentia": memory(0.3, 560_000_000), "beat-this": memory(3.6, 900_000_000)},
         "install": {
-            "beat-this": {
-                "extra": "beat-this",
-                "packages": [
-                    {
-                        "name": "torch",
-                        "version": "2.11.0+cpu",
-                        "installedBytes": 700_000_000,
-                        "wheelBytes": 190_000_000,
-                    }
-                ],
-                "installedBytes": 700_000_000,
-                "wheelBytes": 190_000_000,
-            }
+            "essentia": {"extra": "models", **install([ESSENTIA], [])},
+            "beat-this": {"extra": "beat-this", **install([TORCH], [TORCH])},
         },
         "modelFiles": {"beat-this": {"file": "final0.ckpt", "bytes": 81_058_141}},
     }
 
 
-def v5_doc():
+def current_doc():
     doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": []}
     for r in (
         three_estimator_run(),
@@ -401,7 +431,7 @@ def v5_doc():
 
 
 def test_runs_are_ordered_tempo_key_golden_cost():
-    doc = add_run(v5_doc(), run(suite="key", dataset="giantsteps-key"))
+    doc = add_run(current_doc(), run(suite="key", dataset="giantsteps-key"))
     assert [r["suite"] for r in doc["runs"]] == ["tempo", "tempo", "key", "golden", "cost"]
 
 
@@ -409,40 +439,77 @@ def test_a_schema_4_report_keeps_its_wording_and_a_new_one_says_what_it_covers()
     legacy = render({"schemaVersion": 4, "date": "2026-10-21", "runs": [run()]})
     assert "come in the next part of this work and are not here" in legacy
     assert "## Tempo estimator bake-off" not in legacy
-    text = render(v5_doc())
+    text = render(current_doc())
     assert "come in the next part" not in text
     assert "Runs in this report: tempo on Ballroom" in text
     assert "the service's default estimator is not changed by this report" in text
 
 
 def test_the_bakeoff_table_marks_an_estimator_trained_on_the_dataset():
-    text = render(v5_doc())
+    text = render(current_doc())
     bakeoff = text.split("## Tempo estimator bake-off", 1)[1].split("\n## ", 1)[0]
     assert "| `beat-this` | 2/3 = 66.7 % [20.8, 93.9] (trained on this dataset) |" in bakeoff
     assert "agrees with Deezer `bpm` within 4 % / n" in bakeoff
-    assert "| 900.0 MB | 3.40 s | 700.0 MB installed + 81.1 MB model |" in bakeoff
-    # Only the Ballroom run marks it.
-    assert bakeoff.count("(trained on this dataset)") == 2  # Acc1 and Acc2 on Ballroom
+    assert "| 900.0 MB | 3.60 s | 700.0 MB installed + 81.1 MB model |" in bakeoff
+    assert "| 560.0 MB | 0.30 s | nothing (already in the image) |" in bakeoff
+    assert bakeoff.count("(trained on this dataset) |") == 2  # Acc1 and Acc2 on Ballroom
+    assert "with every withholding rule lifted (calibration, not served)" in bakeoff
     assert "`beat-this` (trained on this dataset)" in text
+
+
+def test_pairs_with_an_estimator_trained_on_the_dataset_are_not_printed():
+    text = render(current_doc())
+    ballroom = text.split("## Tempo: Ballroom", 1)[1].split("\n## ", 1)[0]
+    assert "`librosa` and `essentia`:" in ballroom
+    assert "and `beat-this`:" not in ballroom
+    assert "Pairs with `beat-this` are not shown: it was trained on this dataset" in ballroom
+    giantsteps = text.split("## Tempo: GiantSteps Tempo", 1)[1].split("\n## ", 1)[0]
+    assert "`essentia` and `beat-this`:" in giantsteps
+
+
+def test_the_default_estimator_section_gives_the_criterion_evidence_and_decision():
+    text = render(current_doc())
+    section = text.split("## Default estimator", 1)[1].split("\n## ", 1)[0]
+    assert "The service's default tempo and key estimator is `essentia`" in section
     assert (
-        "(`beat-this` was trained on this dataset: this pair says nothing about new music)" in text
+        "Criterion: an estimator replaces the default when, on data it was not trained on"
+        in section
     )
+    # beat-this only on the data it was not trained on.
+    assert "| `beat-this` | giantsteps-tempo |" in section
+    assert "| `beat-this` | ballroom |" not in section
+    assert "steadiness check lifted: Acc1" in section
+    assert "(12 times as much)" in section and "where `essentia` adds nothing" in section
+    assert "Decision: the service keeps `essentia` under the current withholding rules." in section
+    assert "beat-this also has no key" in section
+
+
+def test_the_decision_follows_the_numbers():
+    from evals_audio.report import decision_lines
+
+    run = {"dataset": {"name": "giantsteps-tempo"}}
+    win = ("beat-this", run, {"candidate": 39, "default": 26, "n": 50, "p": 0.011})
+    served = decision_lines("essentia", ["beat-this"], [win], [], None)
+    assert "meets the accuracy part of the criterion" in served[0]
+    lifted = decision_lines("essentia", ["beat-this"], [], [win], None)
+    assert "keeps `essentia`" in lifted[0] and "39 vs 26 of 50, p = 0.011" in lifted[0]
+    assert "revisited once those rules" in lifted[0]
+
+
+def test_p_values_under_a_thousandth_are_never_shown_as_zero():
+    from evals_audio.report import pval
+
+    assert pval(0.00024) == "< 0.001" and pval(0.125) == "= 0.125" and pval(0.001) == "= 0.001"
 
 
 def test_an_estimator_without_confidence_has_no_curve():
-    text = render(v5_doc())
+    text = render(current_doc())
     assert "`beat-this` gives no confidence: its 2 answered clips cannot be ranked" in text
 
 
-def test_every_pair_is_compared_and_every_p_value_counted():
-    doc = v5_doc()
+def test_every_printed_p_value_is_counted():
+    doc = current_doc()
     text = render(doc)
-    assert text.count("### Paired comparisons") == 2
-    assert "`librosa` and `beat-this`:" in text and "`essentia` and `beat-this`:" in text
-    tempo_pairs = 2 * 3 * 2 * 2  # two runs, three pairs, two metrics, two blocks
-    golden_pairs = 1 * 2 * 2  # deezer-bpm: one pair, two metrics, two blocks (sheet bpm empty)
-    sheet_bpm_pairs = 1 * 2 * 2  # one pair with n = 0 still prints its rows
-    styles = 3
     ranking = sum(
         1
         for r in doc["runs"]
@@ -450,12 +517,17 @@ def test_every_pair_is_compared_and_every_p_value_counted():
         for x in c["ranking"].values()
         if x["p"] is not None
     )
-    assert count_p_values(doc) == tempo_pairs + golden_pairs + sheet_bpm_pairs + styles + ranking
-    assert f"This report prints {count_p_values(doc)};" in text
+    shown_tempo_pairs = (1 + 3) * 2 * 2  # Ballroom without beat-this, GiantSteps all three
+    golden_pairs = 1 * 2 * 2  # Deezer only: the sheet-music tempo table is empty
+    styles = 3
+    lifted = (2 + 1) * 2  # librosa on both runs, beat-this on GiantSteps; two views each
+    expected = shown_tempo_pairs + golden_pairs + styles + ranking + lifted
+    assert count_p_values(doc) == expected
+    assert f"This report gives {expected} distinct ones" in text
 
 
 def test_the_golden_section_names_agreement_styles_and_sources():
-    text = render(v5_doc())
+    text = render(current_doc())
     assert "## Golden set on Deezer previews" in text
     assert "### Tempo agreement with Deezer's `bpm`" in text
     assert "| `beat-this` | 3 | 3/3 = 100.0 % [43.9, 100.0] | 0/3 = 0.0 % [0.0, 56.1]" in text
@@ -467,18 +539,23 @@ def test_the_golden_section_names_agreement_styles_and_sources():
     assert "hdnea" not in golden_part and ".mp3" not in golden_part
 
 
-def test_the_cost_section_gives_memory_time_and_install_size():
-    text = render(v5_doc())
+def test_the_cost_section_gives_memory_time_and_image_cost():
+    text = render(current_doc())
     assert "## Cost: tempo estimators on GiantSteps Tempo clips" in text
-    assert "| `beat-this` | 300.0 MB | 600.0 MB | 900.0 MB | 1.00 s | 4.00 / 4.00 s |" in text
-    assert "final0.ckpt, 81.1 MB" in text
-    assert "- `beat-this` (extra `beat-this`) adds: torch 2.11.0+cpu (700.0 MB)." in text
+    assert (
+        "| `beat-this` | 300.0 MB | 600.0 MB | 700.0 MB | 900.0 MB | 1.00 s | "
+        "4.00 / 4.00 s (24) | 3.60 / 3.60 s, max 3.60 s (n = 1) | 1 |"
+    ) in text
+    assert "| `essentia` | 0 | 0 B | 0 B | none | 600.0 MB |" in text
+    assert "| `beat-this` | 1 | 700.0 MB | 190.0 MB | final0.ckpt, 81.1 MB | 700.0 MB |" in text
+    assert "adds to the service image: torch 2.11.0+cpu (700.0 MB)." in text
+    assert "with OMP_NUM_THREADS=1" in text
 
 
-def test_a_v5_document_is_rendered_from_its_json_alone(tmp_path):
+def test_a_current_document_is_rendered_from_its_json_alone(tmp_path):
     from evals_audio.cli import main
 
-    doc = v5_doc()
+    doc = current_doc()
     path = tmp_path / "audio-2026-10-24.json"
     path.write_text(json.dumps(doc))
     assert main(["--render", str(path)]) == 0
@@ -486,7 +563,7 @@ def test_a_v5_document_is_rendered_from_its_json_alone(tmp_path):
 
 
 def test_golden_songs_beat_this_was_trained_on_are_listed_and_left_out_of_the_bakeoff():
-    doc = v5_doc()
+    doc = current_doc()
     run_ = next(r for r in doc["runs"] if r["suite"] == "golden")
     records_ids = [c["trackId"] for c in run_["clips"]]
     run_["trainedOn"] = {"beat-this": {records_ids[0]: "Harmonix Set 0000_song"}}
@@ -494,8 +571,21 @@ def test_golden_songs_beat_this_was_trained_on_are_listed_and_left_out_of_the_ba
     run_["agreement"]["deezer-bpm-unseen"] = {**block, "n": 2}
     text = render(doc)
     assert (
-        f"| selected songs in `beat-this`'s training data | 1: {records_ids[0]} (Harmonix Set 0000_song) |"
+        f"| selected songs found in `beat-this`'s training data (a lower bound) | 1: {records_ids[0]} (Harmonix Set 0000_song) |"
         in text
     )
     assert "golden previews beat-this was not trained on: agrees with Deezer `bpm`" in text
     assert "without the songs beat-this was trained on" in text
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_a_schema_4_results_file_renders_as_the_slice_1_code_rendered_it():
+    """
+    tests/fixtures/audio-schema4.json is the first report's results trimmed to six clips per
+    run; the .md next to it was rendered by the harness that wrote schema 4 (05d8838).
+    """
+    doc = json.loads((FIXTURES / "audio-schema4.json").read_text())
+    assert doc["schemaVersion"] == 4
+    assert render(doc) == (FIXTURES / "audio-schema4.md").read_text()

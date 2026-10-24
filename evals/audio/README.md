@@ -44,11 +44,17 @@ by hand.
 |---|---|---|
 | `tempo` | Ballroom, GiantSteps Tempo (30 s windows) | Acc1/Acc2 per estimator (librosa, Essentia, beat-this), paired tests, withheld cost, accuracy vs coverage |
 | `key` | GiantSteps+ Key (30 s windows) | MIREX score and exact key (librosa, Essentia) |
-| `golden` | `evals/golden.jsonl`, each row's Deezer preview | tempo agreement with Deezer's `bpm` and with the set's sheet-music tempo; key agreement with its sheet-music key; style hit@1/5/10 against Discogs, next to a constant baseline |
-| `cost` | clips of a tempo dataset | per tempo estimator: resident memory, seconds per clip, and what its extra adds to an install |
+| `golden` | `evals/golden.jsonl`, each row's Deezer preview | tempo agreement with Deezer's `bpm` and with the set's sheet-music tempo; key agreement with its sheet-music key; style hit@1/5/10 against Discogs, next to a constant baseline and the best constant found with the labels |
+| `cost` | clips of a tempo dataset | per tempo estimator: resident memory, seconds per analysed clip, and what it adds to the service image |
 
 The report opens with a bake-off table that puts every tempo estimator's figures side by side
-(correct / n per dataset, agreement with Deezer's `bpm`, peak memory, time, install size).
+(correct / n per dataset, agreement with Deezer's `bpm`, peak memory, time, what it adds to
+the service image), with the same runs' figures when the withholding rules are lifted. A
+"Default estimator" section follows: the service's default (read from the service), the
+criterion for changing it, each candidate against the default on data it was not trained on
+(as served and with the rules lifted, exact McNemar), the cost, and the decision those numbers
+support. Pair tables of an estimator on its own training data are not printed. The bake-off
+evidence is the GiantSteps Tempo run, which the committed report draws with `--limit 200`.
 
 ### beat-this
 
@@ -62,7 +68,8 @@ the PyTorch CPU index. The authors trained `final0` on every dataset they used e
 Ballroom included, so its Ballroom figures are on its own training data: the report marks
 them and they are not evidence about new music. GiantSteps Tempo is not in its training data.
 Five golden songs are in the Harmonix Set, another of its training sets
-(`beatthis.GOLDEN_IN_TRAINING`, matched by title and artist); the golden suite repeats the
+(`beatthis.GOLDEN_IN_TRAINING`, matched by title and artist; a lower bound, since some
+training sets publish numbers or video ids rather than names); the golden suite repeats the
 Deezer comparison without them, for every estimator, and the bake-off table uses that one.
 
 ### Golden set
@@ -71,30 +78,45 @@ Deezer comparison without them, for every estimator, and the bake-off table uses
 
 - asks Deezer (`api.deezer.com/track/<deezerId>`) for each row's preview and `bpm`. The preview
   is downloaded at once into a temporary directory outside the data directory, analysed whole
-  as the service would analyse it, and deleted at the end of the run; preview URLs (signed,
-  short-lived) are never written down. Deezer's `bpm` is a sourced hint, not a measurement:
-  the report calls the comparison *agreement*.
+  as the service would analyse it, and deleted at the end of the run (on an error, Ctrl-C or
+  SIGTERM too). Preview URLs (signed, short-lived) are never written down: httpx's request
+  log, which prints full URLs, is kept at WARNING, and a network error is recorded by its type
+  only. A row whose lookup fails is marked unavailable; the others go on. Previews come and go
+  by day and country, so n belongs to the run's date. Deezer's `bpm` is a sourced hint, not a
+  measurement: the report calls the comparison *agreement*.
 - finds each recording's Discogs styles: MusicBrainz release groups of the recording (official
   singles, EPs and albums with no secondary type, earliest first), their Discogs master or
   release link, and the genres and styles Discogs gives for it. They are cached with their
-  source and date in `<data dir>/golden/discogs.json`; delete it to fetch them afresh.
+  source and date in `<data dir>/golden/discogs.json`; delete it to fetch them afresh. Only a
+  definitive miss is cached (no link, a Discogs 404, no styles); a 429 or 5xx after the
+  retries leaves the row out of the cache, so the next run asks again. Requests keep the
+  services' pace (MusicBrainz one a second, Discogs 25 a minute) and send a User-Agent with a
+  contact, as MusicBrainz asks.
 - loads the service's fingerprint models (its own `download_models.py`, into
   `<data dir>/models/essentia/`) and scores hit@k: a top-k style hits when its genre and style
   are both on the Discogs release. The constant baseline gives every track the same k styles
-  (the strongest over the run's fingerprints) and uses no label.
+  (the model's average output) and uses no label; the best constant chosen with the labels
+  (greedy cover) is printed next to it as an optimistic reference.
 
 The results keep ISRCs, Deezer ids and Deezer's `bpm` (already in the preview coverage
-report), Discogs and MusicBrainz ids, the model's styles and the scores; not the Discogs
-styles, the audio or any URL.
+report), Discogs and MusicBrainz ids, the model's hit ranks and the scores; not the model's
+top lists or the releases' style lists (together with a hit rank they would name a style),
+the audio or any URL.
 
 ### Cost
 
-`--suite cost` runs each tempo estimator in its own fresh process, one thread, on the clips of a
-fetched dataset: resident memory once the service is imported, once the estimator is ready and
-at its peak, and the wall and CPU seconds of its `tempo()` per clip (the first clip apart: it
-pays one-time costs). It also adds up what the estimator's extra installs (the packages its
-requirements bring that the base install lacks: installed bytes and wheel bytes) and its
-model files. No image is built; the installed bytes are what an image layer would hold.
+`--suite cost` runs each tempo estimator in its own fresh process, on the clips of a fetched
+dataset, with every thread variable forced to 1: resident memory once the service is
+imported, once the estimator is ready, after the first analysed clip and at its peak, and the
+wall and CPU seconds of its `tempo()` per clip. Clips the onset-periodicity minimum stops never
+reach the estimator's own work and are counted, not timed; the first clip that does reach it
+pays the one-time costs (numba compilation, the first pass through a model) and is reported
+apart. The image cost is what the estimator adds to the service image as it ships: the
+packages its extra needs that `services/audio/uv.lock` (runtime and `models` extra, as the
+Dockerfile installs) does not have, with installed and wheel bytes, plus model files; Essentia
+adds nothing, the image already has it for the fingerprint. What the extra adds to this
+harness's install is shown too. No image is built; the installed bytes are what an image
+layer would hold.
 
 ## How the service is called
 

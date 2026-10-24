@@ -63,6 +63,10 @@ def load():
 
     # main logs every withheld tempo or key at INFO; the harness counts them instead.
     logging.getLogger("audio").setLevel(logging.WARNING)
+    # main sets the root logger to INFO, where httpx logs every request URL (a signed Deezer
+    # preview URL among them in the golden suite).
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     return main, estimators
 
 
@@ -108,6 +112,20 @@ def check_estimator(name: str) -> None:
             )
         return
     estimator(name)
+
+
+def default_estimator() -> str:
+    """
+    The estimator the service uses when AUDIO_ESTIMATOR is not set (estimators.select_estimator),
+    in this environment: Essentia when it is installed, as in the service's image.
+    """
+    _, estimators = load()
+    saved = os.environ.pop("AUDIO_ESTIMATOR", None)
+    try:
+        return estimators.select_estimator().name
+    finally:
+        if saved is not None:
+            os.environ["AUDIO_ESTIMATOR"] = saved
 
 
 def analyzer_versions(names) -> dict[str, str]:

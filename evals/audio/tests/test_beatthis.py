@@ -127,3 +127,24 @@ def test_a_checkpoint_is_kept_once_verified_and_not_fetched_again(tmp_path, monk
 def test_the_checkpoint_asks_the_budget_first(tmp_path):
     with pytest.raises(DataCapExceeded):
         beatthis.ensure_checkpoint(tmp_path, DiskBudget(tmp_path, 1000), client_for(b"x"))
+
+
+def test_a_checkpoint_larger_than_pinned_is_refused_while_streaming(tmp_path, monkeypatch):
+    monkeypatch.setattr(beatthis, "CHECKPOINT_BYTES", 5)
+    with pytest.raises(beatthis.Unavailable, match="larger than pinned"):
+        beatthis.ensure_checkpoint(tmp_path, DiskBudget(tmp_path, 10**9), client_for(b"x" * 6))
+    assert not list((tmp_path / "models" / "beat-this").iterdir())
+
+
+def test_a_corrupted_checkpoint_on_disk_is_fetched_again(tmp_path, monkeypatch):
+    payload = b"the right bytes"
+    monkeypatch.setattr(beatthis, "CHECKPOINT_BYTES", len(payload))
+    monkeypatch.setattr(beatthis, "CHECKPOINT_SHA256", hashlib.sha256(payload).hexdigest())
+    path = beatthis.checkpoint_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"the wrong bytes")
+    assert (
+        beatthis.ensure_checkpoint(tmp_path, DiskBudget(tmp_path, 10**9), client_for(payload))
+        == path
+    )
+    assert path.read_bytes() == payload

@@ -18,6 +18,7 @@ import logging
 import os
 import platform
 import shlex
+import signal
 import subprocess
 import sys
 import tarfile
@@ -253,8 +254,14 @@ def reference_stats(spec, by_id: dict, tracks: dict) -> dict | None:
     }
 
 
+def stop_on_sigterm(signum, frame) -> None:
+    """SIGTERM unwinds like Ctrl-C, so temporary directories (the previews) are removed."""
+    raise SystemExit(143)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
     args = parse_args(argv)
     if args.render is not None:
         print(f"report: {report.rerender(args.render)}")
@@ -412,6 +419,11 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
     print_summary(args.suite, spec.name, summaries)
     paired = runner.compare_pairs(items, names, metric_names, args.bootstrap_seed)
     trained_on = [n for n in names if n == "beat-this" and spec.name in beatthis.TRAINED_ON]
+    lifted = (
+        runner.lifted_views(tracks, names, metric_names, args.bootstrap_seed)
+        if args.suite == "tempo" and len(names) > 1
+        else {}
+    )
 
     usage = disk_usage(root)
     print(f"\ndata directory {root}: {human(usage)} (cap {human(budget.cap)})")
@@ -468,6 +480,10 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
         # Estimators whose model was trained on this dataset: shown, never compared.
         "trainedOn": trained_on,
         "estimatorNotes": [beatthis.TRAINING_DATA_NOTE] if trained_on else [],
+        "serviceDefault": service.default_estimator(),
+        "estimatorCredits": [beatthis.REFERENCE] if "beat-this" in names else [],
+        # The same comparison with withholding rules lifted (calibration, never served).
+        "lifted": lifted,
         "summaries": {name: s.as_dict() for name, s in summaries.items()},
         "paired": paired,
         "withheldCost": withheld,
@@ -541,8 +557,11 @@ def run_golden(args, argv: list[str], names: list[str], root: Path, budget: Disk
         if k == total or k % 10 == 0:
             print(f"  analysed {k}/{total}", file=sys.stderr)
 
-    # Previews live only in this temporary directory, for this run.
-    with tempfile.TemporaryDirectory(prefix="evals-audio-previews-") as tmp:
+    # Previews live only in this temporary directory (the system's, never the data
+    # directory), for this run; it is removed on success, error, Ctrl-C and SIGTERM.
+    with tempfile.TemporaryDirectory(prefix=PREVIEW_DIR_PREFIX) as tmp:
+        if Path(tmp).resolve().is_relative_to(root):
+            raise SettingError(f"the temporary directory {tmp} is inside the data directory")
         previews = {}
         try:
             with golden.client() as http:
@@ -550,7 +569,8 @@ def run_golden(args, argv: list[str], names: list[str], root: Path, budget: Disk
                 for row in selected:
                     previews[row.isrc] = golden.fetch_preview(paced, row, Path(tmp))
         except DOWNLOAD_ERRORS as e:
-            raise DownloadFailed(f"{type(e).__name__}: {e}") from e
+            # The type only: a message can carry a signed preview URL.
+            raise DownloadFailed(type(e).__name__) from e
         tasks = [
             ("golden", row.isrc, previews[row.isrc]["path"], 0, tuple(names), GOLDEN_OPTIONS)
             for row in selected
@@ -641,6 +661,11 @@ def run_golden(args, argv: list[str], names: list[str], root: Path, budget: Disk
         ],
         "agreement": blocks,
         "trainedOn": {"beat-this": seen} if "beat-this" in names else {},
+        "trainedOnNote": beatthis.GOLDEN_TRAINING_NOTE if "beat-this" in names else None,
+        "estimatorCredits": [beatthis.REFERENCE, beatthis.HARMONIX_REFERENCE]
+        if "beat-this" in names
+        else [],
+        "serviceDefault": service.default_estimator(),
         "styles": {"model": "discogs-effnet-bs64-1", "topK": len(styles["baseline"]), **styles},
         "failed": [
             {"trackId": a["trackId"], "error": a["error"]} for a in analysed if a.get("error")
@@ -651,6 +676,7 @@ def run_golden(args, argv: list[str], names: list[str], root: Path, budget: Disk
     return 0
 
 
+PREVIEW_DIR_PREFIX = "evals-audio-previews-"
 # Golden previews are analysed whole, as the service gets them, with the fingerprint's styles.
 GOLDEN_OPTIONS = {"whole": True, "styles": True}
 
@@ -678,7 +704,10 @@ def run_cost(args, argv: list[str], names: list[str], root: Path, budget: DiskBu
     if not measured:
         print(f"error: no {spec.name} audio to measure on", file=sys.stderr)
         return 3
-    tasks = [(spec.name, r.track_id, str(home / r.audio_rel), args.clip_seed) for r in measured]
+    tasks = [
+        (spec.name, r.track_id, str(home / r.audio_rel), args.clip_seed, pid[r.track_id])
+        for r in measured
+    ]
     print(f"measuring {', '.join(names)} on {len(tasks)} {spec.name} clips", file=sys.stderr)
     with tempfile.TemporaryDirectory(prefix="evals-audio-numba-") as numba_cache:
         memory = costs.measure(names, tasks, numba_cache)
@@ -691,11 +720,13 @@ def run_cost(args, argv: list[str], names: list[str], root: Path, budget: DiskBu
         }
     for name in names:
         m, i = memory[name], install[name]
+        first, per = m["firstAnalysed"], m["perClip"]
         print(
             f"{name:<9} RSS service {human(m['rssServiceBytes'])}, ready "
-            f"{human(m['rssReadyBytes'])}, peak {human(m['peakRssBytes'])}; tempo "
-            f"{m['perClip']['medianWallSeconds']:.2f} s/clip (first call "
-            f"{m['firstCall']['wallSeconds']:.2f} s); adds {human(i['installedBytes'])} installed"
+            f"{human(m['rssReadyBytes'])}, peak {human(m['peakRssBytes'])}; tempo median "
+            f"{per['medianWallSeconds']} s/clip over {per['n']} (first analysed clip "
+            f"{first and first['wallSeconds']} s); adds "
+            f"{human(i['serviceImage']['installedBytes'])} to the service image"
         )
     if args.no_report:
         return 0
@@ -707,7 +738,9 @@ def run_cost(args, argv: list[str], names: list[str], root: Path, budget: DiskBu
             f"{args.selection_seed}), 30 s windows at clip seed {args.clip_seed}"
         ),
         "analyzerVersions": service.analyzer_versions(names),
-        "machine": costs.machine(),
+        "machine": {**costs.machine(), "threads": costs.thread_settings()},
+        "estimatorCredits": [beatthis.REFERENCE] if "beat-this" in names else [],
+        "serviceDefault": service.default_estimator(),
         "dataset": {"name": spec.name, "title": spec.title},
         "clips": [{"trackId": pid[r.track_id]} for r in measured],
         "memory": memory,

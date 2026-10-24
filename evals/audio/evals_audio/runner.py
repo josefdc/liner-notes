@@ -376,3 +376,41 @@ def compare_pairs(items: dict, names: list[str], metric_names, seed: int) -> lis
         {"first": a, "second": b, **compare(items[a], items[b], metric_names, seed)}
         for a, b in combinations(names, 2)
     ]
+
+
+def lifted_items(rows: list[dict], only: str | None = None) -> list[Item]:
+    """
+    One estimator's Items with withheld estimates counted as if returned: every unreturned
+    estimate (`only` None), or only those that the rule `only` alone withholds. Calibration:
+    what the estimator would give without the rules, never what the service serves.
+    """
+    items = []
+    for r in rows:
+        if r.get("scores") is not None:
+            items.append(Item(r["trackId"], r.get("confidence"), r["scores"]))
+            continue
+        un = r.get("unreturned")
+        if un and (only is None or (un.get("rules") or [r.get("withheldReason")]) == [only]):
+            items.append(Item(r["trackId"], un.get("confidence"), un["scores"]))
+        else:
+            items.append(Item(r["trackId"], None, None, failed=bool(r.get("failed"))))
+    return items
+
+
+# The lifted views a tempo run records, by key.
+LIFTED_VIEWS = {"everyRule": None, "steadinessOnly": TEMPO_UNSTEADY}
+
+
+def lifted_views(tracks: dict, names: list[str], metric_names, seed: int) -> dict:
+    """Correct / n and the paired tests with the withholding rules lifted (LIFTED_VIEWS)."""
+    from .metrics import summarize
+
+    out = {}
+    for key, only in LIFTED_VIEWS.items():
+        items = {n: lifted_items(tracks[n], only) for n in names}
+        out[key] = {
+            "rule": only,
+            "summaries": {n: summarize(items[n], metric_names, seed).as_dict() for n in names},
+            "paired": compare_pairs(items, names, metric_names, seed),
+        }
+    return out

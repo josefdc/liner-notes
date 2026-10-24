@@ -22,9 +22,9 @@ from .metrics import MIN_CURVE_ANSWERED
 from .runner import METRIC_LABELS, METRICS, SEVERAL_RULES
 from .storage import human
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 # The last schema before the bake-off, the golden suite and the cost suite; its reports keep
-# their original wording.
+# their original wording. (Schema 5 was a draft of 6 and was never merged.)
 LEGACY_SCHEMA = 4
 SUITE_ORDER = {"tempo": 0, "key": 1, "golden": 2, "cost": 3}
 
@@ -91,6 +91,11 @@ def write(report_dir: Path, date: str, run: dict) -> tuple[Path, Path]:
 
 
 # --- cells -----------------------------------------------------------------------------------
+
+
+def pval(p: float) -> str:
+    """A p-value with three decimals; one under 0.001 is shown as "< 0.001", never 0.000."""
+    return "< 0.001" if p < 0.001 else f"= {p:.3f}"
 
 
 def pct(x: float | None) -> str:
@@ -171,7 +176,7 @@ def summary_table(run: dict) -> list[str]:
 
 
 def pair_list(paired) -> list[dict]:
-    """Schema 4 holds one pair (a dict), schema 5 a list of pairs."""
+    """Schema 4 holds one pair (a dict), later schemas a list of pairs."""
     if not paired:
         return []
     return [paired] if isinstance(paired, dict) else list(paired)
@@ -200,16 +205,31 @@ def paired_section(run: dict) -> list[str]:
         "between estimators that answer different clips; compare them here.",
         "",
     ]
+    skipped = []
     for pair in pairs:
         trained = [n for n in (pair["first"], pair["second"]) if n in run.get("trainedOn", [])]
-        heading = f"`{pair['first']}` and `{pair['second']}`"
         if trained:
-            heading += (
-                f" (`{trained[0]}` was trained on this dataset: this pair says nothing about "
-                "new music)"
-            )
-        out += [heading + ":", ""] + pair_table(run["suite"], pair)
+            skipped.append(pair)
+            continue
+        out += [f"`{pair['first']}` and `{pair['second']}`:", ""] + pair_table(run["suite"], pair)
+    if skipped:
+        names = sorted(
+            {n for p in skipped for n in (p["first"], p["second"])} & set(run["trainedOn"])
+        )
+        out += [
+            "Pairs with "
+            + ", ".join(f"`{n}`" for n in names)
+            + " are not shown: it was trained on this dataset, so a comparison here says "
+            "nothing about new music.",
+            "",
+        ]
     return out
+
+
+def shown_pairs(run: dict) -> list[dict]:
+    """The pairs a run prints (pairs with an estimator trained on the dataset are not)."""
+    trained = set(run.get("trainedOn") or [])
+    return [p for p in pair_list(run.get("paired")) if not ({p["first"], p["second"]} & trained)]
 
 
 def pair_table(suite: str, paired: dict) -> list[str]:
@@ -227,7 +247,7 @@ def pair_table(suite: str, paired: dict) -> list[str]:
                         f"{r['firstCorrect']}",
                         f"{r['secondCorrect']}",
                         f"{r['onlyFirst']} / {r['onlySecond']}",
-                        f"McNemar exact p = {r['mcnemarP']:.3f}",
+                        f"McNemar exact p {pval(r['mcnemarP'])}",
                     ]
                 )
             else:
@@ -244,7 +264,7 @@ def pair_table(suite: str, paired: dict) -> list[str]:
                         pct(r["firstMean"]),
                         pct(r["secondMean"]),
                         f"{r['firstHigher']} / {r['secondHigher']}",
-                        f"mean difference {diff}; sign-flip p = {r['signFlipP']:.3f} "
+                        f"mean difference {diff}; sign-flip p {pval(r['signFlipP'])} "
                         f"({r['signFlipMethod']})" + coverage_note(r.get("differenceCoverage")),
                     ]
                 )
@@ -391,7 +411,7 @@ def coverage_section(run: dict) -> list[str]:
                 else:
                     parts.append(
                         f"{METRIC_LABELS[m]} AUC {r['auc']:.2f} ({r['correct']} correct, "
-                        f"{r['wrong']} wrong; p = {r['p']:.3f}, {r['pMethod']})"
+                        f"{r['wrong']} wrong; p {pval(r['p'])}, {r['pMethod']})"
                     )
             out += ["", "Confidence ranking: " + "; ".join(parts) + "."]
         if curve["unranked"]:
@@ -445,7 +465,7 @@ def dataset_section(run: dict) -> list[str]:
             f"would be {v1}."
         )
     out += ["", "Credits (cite these when using the data):", ""]
-    out += [f"- {c}" for c in ds["credits"]] + [""]
+    out += [f"- {c}" for c in ds["credits"] + run.get("estimatorCredits", [])] + [""]
     return out
 
 
@@ -480,15 +500,35 @@ def count_p_values(doc: dict) -> int:
     """How many p-values the report prints: McNemar and sign-flip rows, and AUC lines."""
     count = 0
     for run in doc["runs"]:
-        pairs = pair_list(run.get("paired"))
+        pairs = shown_pairs(run)
         for block in (run.get("agreement") or {}).values():
-            pairs += pair_list(block.get("paired"))
+            if block["n"] and block["summaries"]:  # an empty table prints no pairs
+                pairs += pair_list(block.get("paired"))
         for paired in pairs:
             for key in ("bothAnswered", "allN"):
                 count += len((paired.get(key) or {}).get("metrics", {}))
         for curve in (run.get("coverage") or {}).values():
             count += sum(1 for r in (curve.get("ranking") or {}).values() if r["p"] is not None)
         count += len((run.get("styles") or {}).get("versusBaseline") or {})
+    return count + lifted_test_count(doc)
+
+
+def lifted_test_count(doc: dict) -> int:
+    """The p-values the default-estimator table adds: its lifted-rule comparisons."""
+    if is_legacy(doc):
+        return 0
+    tempo = [r for r in doc["runs"] if r["suite"] == "tempo" and r.get("serviceDefault")]
+    if not tempo:
+        return 0
+    default = tempo[0]["serviceDefault"]
+    count = 0
+    for run in tempo:
+        for name in run["summaries"]:
+            if name == default or name in run.get("trainedOn", []):
+                continue
+            for key in ("steadinessOnly", "everyRule"):
+                view = (run.get("lifted") or {}).get(key) or {}
+                count += versus(view.get("paired", []), name, default, "acc1") is not None
     return count
 
 
@@ -498,7 +538,12 @@ def p_value_note(doc: dict) -> str:
         "- **p-values** are exact where it is cheap (McNemar; sign-flip; the AUC's permutation "
         "test up to 200,000 orderings) and Monte Carlo at a fixed seed otherwise, as labelled, "
         "computed as (hits + 1) / (resamples + 1). Each is for one comparison. This report "
-        f"prints {n}; about {0.05 * n:.1f} of them are expected under 0.05 by chance alone, so "
+        + (
+            f"prints {n}"
+            if is_legacy(doc)
+            else f"gives {n} distinct ones (the default-estimator table repeats some of them)"
+        )
+        + f"; about {0.05 * n:.1f} of them are expected under 0.05 by chance alone, so "
         "none should be read as a finding without a correction for the number of tests."
     )
 
@@ -554,21 +599,31 @@ GUIDE_BAKEOFF = [
     "onsets, and the steadiness check. It gives no confidence (so no curve and no confidence "
     "minimum) and no key. Its authors trained `final0` on every dataset they used except GTZAN, "
     "Ballroom included: an estimator marked *trained on this dataset* is shown on its own "
-    "training data, and those cells and pairs are not evidence about new music.",
+    "training data: those cells are not evidence about new music and its pair tables there "
+    "are not printed.",
     "- **Agreement** (golden set) is not accuracy. Deezer's `bpm` is Deezer's own estimate, a "
     "sourced hint; the set's tempo and key labels are nominal sheet-music markings. A "
     "disagreement can be either side's error. The tolerances are Acc1/Acc2's (within 4 %; up to "
     "octave and meter) and MIREX/exact's.",
     "- **hit@k**: the fingerprint's k strongest styles (`Genre---Style`) include one whose genre "
     "and style are both on the Discogs master (or release) of the earliest single, EP or album "
-    "the recording is on. The constant baseline gives every track the same k styles, the ones "
-    "with the highest summed score over the run's fingerprints, so it uses no label. The style "
+    "the recording is on. The constant baseline gives every track the same k styles, the "
+    "model's average output (the highest summed score over the top-10 lists of the scored "
+    "previews), so it uses no label; it is not the strongest constant. The best constant found "
+    "with the labels (greedy cover) is printed as an optimistic reference. The style "
     "model was trained on Discogs styles (Discogs-4M, about 3.3 million tracks), possibly of "
     "these very releases: a hit can be recall rather than judgement.",
     "- **Costs** are measured on one machine, each estimator in its own fresh process with one "
-    "thread; times vary from run to run. Install sizes are what an extra adds to the harness's "
-    "base install (installed bytes, as an image layer would hold them uncompressed, and wheel "
-    "bytes); no image was built.",
+    "thread (forced); times vary from run to run. The image cost is what an estimator adds to "
+    "the service's image as it ships (which already holds Essentia, for the fingerprint): "
+    "installed bytes, as an image layer holds them uncompressed, and wheel bytes, plus model "
+    "files; no image was built. Peak memory includes one-time compilation (numba for librosa); "
+    "the memory after the first analysed clip is shown next to it.",
+    "- **Lifted rules**: the service withholds a tempo under its rules (the periodicity and "
+    "confidence minimums, the steadiness check). The estimate it computed is kept apart and "
+    "scored, so a comparison can be made with a rule lifted. That is calibration, never what a "
+    "user gets. The steadiness check compares each third of the window with librosa's own "
+    "tempo estimate on that third.",
 ]
 
 
@@ -679,8 +734,8 @@ def bakeoff_section(doc: dict) -> list[str]:
             )
             columns.append(("golden", golden, m))
     if cost:
-        head += ["peak RSS", "tempo per clip (median wall)", "adds to an install"]
-        columns += [("cost", cost, "rss"), ("cost", cost, "time"), ("cost", cost, "install")]
+        head += ["peak RSS", "tempo per clip (median wall)", "adds to the service image"]
+        columns += [("cost", cost, "rss"), ("cost", cost, "time"), ("cost", cost, "image")]
     rows = []
     for name in names:
         row = [f"`{name}`"]
@@ -698,7 +753,39 @@ def bakeoff_section(doc: dict) -> list[str]:
         "",
         *table(head, rows),
         "",
+        *lifted_lines(tempo),
     ]
+
+
+def lifted_lines(tempo_runs: list[dict]) -> list[str]:
+    """What the same runs give with the withholding rules lifted, from their `lifted` blocks."""
+    out = []
+    for run in tempo_runs:
+        for key, what in (
+            ("steadinessOnly", "with only the steadiness check lifted"),
+            ("everyRule", "with every withholding rule lifted"),
+        ):
+            view = (run.get("lifted") or {}).get(key)
+            if not view:
+                continue
+            cells = []
+            for name, summary in view["summaries"].items():
+                mark = " (trained on this dataset)" if name in run.get("trainedOn", []) else ""
+                cells.append(f"`{name}` {frac(summary['overN']['acc1'])}{mark}")
+            out.append(
+                f"- {run['dataset']['name']}, {what} (calibration, not served): Acc1 correct / n "
+                + "; ".join(cells)
+                + "."
+            )
+    if out:
+        out = [
+            "The figures above are as the service serves them. The withholding rules cost the "
+            "estimators unequally (see each run's Withheld table):",
+            "",
+            *out,
+            "",
+        ]
+    return out
 
 
 def bakeoff_cell(kind: str, run: dict, metric: str, name: str) -> str:
@@ -712,16 +799,193 @@ def bakeoff_cell(kind: str, run: dict, metric: str, name: str) -> str:
         block = run["agreement"].get("deezer-bpm-unseen") or run["agreement"]["deezer-bpm"]
         s = block["summaries"].get(name)
         return "not run" if s is None else frac(s["overN"][metric])
-    m, i = run["memory"].get(name), run["install"].get(name)
+    m = run["memory"].get(name)
     if m is None:
         return "not run"
     if metric == "rss":
         return human(m["peakRssBytes"])
     if metric == "time":
-        return f"{m['perClip']['medianWallSeconds']:.2f} s"
+        median = m["perClip"]["medianWallSeconds"]
+        return "–" if median is None else f"{median:.2f} s"
+    return image_cost(run, name)
+
+
+def image_cost(run: dict, name: str) -> str:
+    image = run["install"][name]["serviceImage"]
     models = (run.get("modelFiles") or {}).get(name)
+    if not image["packages"] and not models:
+        return "nothing (already in the image)"
     extra = f" + {human(models['bytes'])} model" if models else ""
-    return f"{human(i['installedBytes'])} installed{extra}"
+    return f"{human(image['installedBytes'])} installed{extra}"
+
+
+# --- the default estimator -------------------------------------------------------------------
+
+CRITERION = (
+    "an estimator replaces the default when, on data it was not trained on, it gives more "
+    "correct tempos (Acc1: within 4 %) over n than the default as the service serves them "
+    "(withholding rules included), with an exact McNemar p under 0.05 on the same clips, and its cost to the "
+    "image, the memory and the analysis time is worth that gain. The cost is weighed, not "
+    "thresholded."
+)
+
+
+def find_pair(pairs: list[dict], a: str, b: str) -> tuple[dict, bool] | None:
+    """The pair of `a` and `b` and whether it is stored as (b, a)."""
+    for pair in pairs:
+        if (pair["first"], pair["second"]) == (a, b):
+            return pair, False
+        if (pair["first"], pair["second"]) == (b, a):
+            return pair, True
+    return None
+
+
+def versus(pairs: list[dict], candidate: str, default: str, metric: str) -> dict | None:
+    """Candidate and default correct over all n, their discordant pairs and the McNemar p."""
+    found = find_pair(pairs, candidate, default)
+    if found is None:
+        return None
+    pair, flipped = found
+    r = pair["allN"]["metrics"][metric]
+    c, d = (
+        (r["secondCorrect"], r["firstCorrect"])
+        if flipped
+        else (r["firstCorrect"], r["secondCorrect"])
+    )
+    return {"candidate": c, "default": d, "n": pair["allN"]["n"], "p": r["mcnemarP"]}
+
+
+def versus_cell(v: dict | None) -> str:
+    if v is None:
+        return "–"
+    return f"{v['candidate']} vs {v['default']} of {v['n']}, p {pval(v['p'])}"
+
+
+def default_section(doc: dict) -> list[str]:
+    tempo = [r for r in doc["runs"] if r["suite"] == "tempo" and r.get("serviceDefault")]
+    if not tempo:
+        return []
+    default = tempo[0]["serviceDefault"]
+    candidates = [n for r in tempo for n in r["summaries"] if n != default]
+    candidates = list(dict.fromkeys(candidates))
+    if not candidates:
+        return []
+    golden = next((r for r in doc["runs"] if r["suite"] == "golden"), None)
+    cost = next((r for r in doc["runs"] if r["suite"] == "cost"), None)
+    rows, served_wins, lifted_wins = [], [], []
+    for name in candidates:
+        for run in tempo:
+            if name not in run["summaries"] or name in run.get("trainedOn", []):
+                continue
+            lifted = run.get("lifted") or {}
+            served = [versus(run["paired"], name, default, m) for m in ("acc1", "acc2")]
+            steady = versus(
+                (lifted.get("steadinessOnly") or {}).get("paired", []), name, default, "acc1"
+            )
+            every = versus((lifted.get("everyRule") or {}).get("paired", []), name, default, "acc1")
+            rows.append(
+                [f"`{name}`", run["dataset"]["name"]]
+                + [versus_cell(v) for v in (*served, steady, every)]
+            )
+            # The criterion is Acc1; Acc2 (octave and meter errors forgiven) is context.
+            served_wins += [
+                (name, run, v)
+                for v in served[:1]
+                if v and v["p"] < 0.05 and v["candidate"] > v["default"]
+            ]
+            lifted_wins += [
+                (name, run, v)
+                for v in (steady, every)
+                if v and v["p"] < 0.05 and v["candidate"] > v["default"]
+            ]
+        if golden:
+            block = (
+                golden["agreement"].get("deezer-bpm-unseen") or golden["agreement"]["deezer-bpm"]
+            )
+            agree = [versus(block["paired"], name, default, m) for m in ("acc1", "acc2")]
+            if name in block["summaries"] and any(agree):
+                rows.append(
+                    [f"`{name}`", "golden previews, agreement with Deezer `bpm`"]
+                    + [versus_cell(v) for v in agree]
+                    + ["–", "–"]
+                )
+    head = [
+        "candidate",
+        f"data (against `{default}`)",
+        "as served: Acc1",
+        "as served: Acc2",
+        "steadiness check lifted: Acc1",
+        "every rule lifted: Acc1",
+    ]
+    out = [
+        "## Default estimator",
+        "",
+        f"The service's default tempo and key estimator is `{default}` (what "
+        "`estimators.select_estimator()` picks when `AUDIO_ESTIMATOR` is not set, with Essentia "
+        "installed as in the service's image).",
+        "",
+        f"Criterion: {CRITERION}",
+        "",
+        f"Evidence in this report, each candidate against `{default}` on the same clips "
+        "(correct / n of each, exact McNemar p), on data the candidate was not trained on:",
+        "",
+        *table(head, rows),
+        "",
+    ]
+    if cost:
+        out += cost_lines(cost, default, candidates) + [""]
+    out += decision_lines(default, candidates, served_wins, lifted_wins, cost)
+    return out
+
+
+def cost_lines(cost: dict, default: str, candidates: list[str]) -> list[str]:
+    out = []
+    base = cost["memory"].get(default)
+    for name in candidates:
+        m = cost["memory"].get(name)
+        if m is None or base is None:
+            continue
+        a, b = m["perClip"]["medianCpuSeconds"], base["perClip"]["medianCpuSeconds"]
+        ratio = f" ({a / b:.2g} times as much)" if a and b else ""
+        out.append(
+            f"- Cost of `{name}` against `{default}`: {a} s against {b} s of CPU per analysed "
+            f"clip{ratio}; peak RSS {human(m['peakRssBytes'])} against "
+            f"{human(base['peakRssBytes'])}; it adds {image_cost(cost, name)} to the service "
+            f"image, where `{default}` adds {image_cost(cost, default)}."
+        )
+    return out
+
+
+def decision_lines(default, candidates, served_wins, lifted_wins, cost) -> list[str]:
+    if served_wins:
+        names = ", ".join(sorted({f"`{n}`" for n, _, _ in served_wins}))
+        return [
+            f"As served, {names} meets the accuracy part of the criterion on data it was not "
+            "trained on; whether its cost is worth it is the open decision.",
+            "",
+        ]
+    out = [
+        f"Decision: the service keeps `{default}` under the current withholding rules. As "
+        "served, no candidate gives significantly more correct tempos on data it was not "
+        "trained on",
+    ]
+    if cost:
+        out[0] += ", and the cost weighs against a change"
+    no_key = [n for n in candidates if n == "beat-this"]
+    if no_key:
+        out[0] += (
+            " (beat-this also has no key: the service would need it for tempo and another estimator for key)"
+        )
+    out[0] += "."
+    if lifted_wins:
+        name, run, v = lifted_wins[0]
+        out[0] += (
+            f" With the withholding rules lifted, `{name}` is ahead on {run['dataset']['name']} "
+            f"({v['candidate']} vs {v['default']} of {v['n']}, p {pval(v['p'])}), so the "
+            "default is to be revisited once those rules, the steadiness check first, are "
+            "recalibrated."
+        )
+    return out + [""]
 
 
 def agreement_table(suite: str, block: dict) -> list[str]:
@@ -801,12 +1065,20 @@ def golden_sections(run: dict) -> list[str]:
         if songs:
             rows.append(
                 [
-                    f"selected songs in `{name}`'s training data",
+                    f"selected songs found in `{name}`'s training data (a lower bound)",
                     f"{len(songs)}: " + "; ".join(f"{k} ({v})" for k, v in songs.items()),
                 ]
             )
     out += ["### Data", ""] + table(["", ""], rows) + [""]
-    out += ["Credits:", ""] + [f"- {c}" for c in ds["credits"]] + [""]
+    out += [
+        "- Deezer's previews come and go (by day and by the country of the request): a run on "
+        "another day can analyse a different set, so every n below belongs to this run's date.",
+    ]
+    if run.get("trainedOnNote"):
+        out.append(f"- {run['trainedOnNote']}")
+    out += [""]
+    credits = ds["credits"] + run.get("estimatorCredits", [])
+    out += ["Credits:", ""] + [f"- {c}" for c in credits] + [""]
     if run.get("failed"):
         out += ["Failed analyses:", ""]
         out += [f"- {f['trackId']}: {f['error']}" for f in run["failed"]] + [""]
@@ -820,11 +1092,49 @@ def golden_sections(run: dict) -> list[str]:
             out += ["Nothing to compare.", ""]
             continue
         out += agreement_table(suite, block)
+        out += training_songs_note(run, block) + octave_note(run, key, block)
         for pair in pair_list(block.get("paired")):
             out += [f"`{pair['first']}` and `{pair['second']}` on the same tracks:", ""]
             out += pair_table(suite, pair)
     out += styles_section(run["styles"])
     return out
+
+
+def training_songs_note(run: dict, block: dict) -> list[str]:
+    """Which tracks of an agreement table an estimator was trained on."""
+    tracks = {r["trackId"] for rows in block["tracks"].values() for r in rows}
+    out = []
+    for name, songs in (run.get("trainedOn") or {}).items():
+        inside = sorted(t for t in songs if t in tracks)
+        if inside and name in block["summaries"]:
+            out.append(
+                f"This table includes {len(inside)} song(s) `{name}` was trained on: "
+                + ", ".join(inside)
+                + "."
+            )
+    return out + [""] if out else []
+
+
+def octave_note(run: dict, key: str, block: dict) -> list[str]:
+    """Deezer tables: the answers that agree only up to octave or meter, with both values."""
+    if not key.startswith("deezer-bpm"):
+        return []
+    deezer = {c["trackId"]: c.get("deezerBpm") for c in run["clips"]}
+    parts = []
+    for name, rows in block["tracks"].items():
+        for r in rows:
+            scores = r.get("scores") or {}
+            if scores.get("acc1") == 0.0 and scores.get("acc2") == 1.0:
+                parts.append(
+                    f"`{name}` {r['trackId']} {r['estimate']} against {deezer.get(r['trackId'])}"
+                )
+    if not parts:
+        return []
+    return [
+        "Answers that agree with Deezer only up to octave or meter (Acc2, not Acc1), which "
+        "can be Deezer's octave as well as the estimator's: " + "; ".join(parts) + ".",
+        "",
+    ]
 
 
 def styles_section(st: dict) -> list[str]:
@@ -852,6 +1162,7 @@ def styles_section(st: dict) -> list[str]:
         "constant baseline over n",
         "tracks only the model / only the baseline hits",
         "test",
+        "best constant, chosen with the labels (reference)",
     ]
     rows = []
     for k, h in st["hits"].items():
@@ -863,13 +1174,19 @@ def styles_section(st: dict) -> list[str]:
                 frac(h["overAnswered"]),
                 frac(h["baselineOverN"]),
                 f"{v['onlyModel']} / {v['onlyBaseline']}",
-                f"McNemar exact p = {v['mcnemarP']:.3f}",
+                f"McNemar exact p {pval(v['mcnemarP'])}",
+                frac(h["bestConstantOverN"]),
             ]
         )
     out += table(head, rows) + [""]
     out += [
-        "- The constant baseline's styles, strongest first: "
+        "- The constant baseline (the model's average output over the top-10 lists of these "
+        "previews; it uses no label and is not the strongest constant), strongest first: "
         + ", ".join(f"`{s}`" for s in st["baseline"])
+        + ".",
+        "- The best constant, chosen by greedy cover with the labels of these very previews, so "
+        "an optimistic reference rather than a baseline: "
+        + ", ".join(f"`{s}`" for s in st["bestConstant"])
         + ".",
         f"- {st['outsideTaxonomy']} of the {st['n']} releases have no genre and style pair "
         "among the model's 400 styles, so no top-k can hit them.",
@@ -883,71 +1200,99 @@ def styles_section(st: dict) -> list[str]:
 def cost_section(run: dict) -> list[str]:
     ds = run["dataset"]
     machine = run["machine"]
+    threads = ", ".join(f"{k}={v}" for k, v in (machine.get("threads") or {}).items())
     out = [f"## Cost: tempo estimators on {ds['title']} clips", ""]
     out += run_header(run, "the fingerprint models were not loaded") + [
         f"- Machine: {machine['cpu']}, {machine['cpus']} CPUs, {machine['system']}; each "
-        "estimator in its own fresh process, one thread, one after the other.",
+        f"estimator in its own fresh process, one after the other, with {threads}.",
         "",
     ]
     head = [
         "estimator",
         "RSS, service imported",
         "RSS, estimator ready",
+        "RSS after the first analysed clip",
         "peak RSS",
         "ready in",
-        "first call (wall / CPU)",
-        "per clip: median wall / CPU, max wall",
-        "packages added",
-        "installed",
-        "wheels",
-        "model files",
+        "first analysed clip (wall / CPU)",
+        "later analysed clips: median wall / CPU, max wall",
+        "clips the periodicity minimum stopped",
     ]
     rows = []
     for name, m in run["memory"].items():
-        i = run["install"][name]
-        later = m["perClip"]
-        models = (run.get("modelFiles") or {}).get(name)
-        wheels = "unknown" if i["wheelBytes"] is None else human(i["wheelBytes"])
+        first, later = m["firstAnalysed"], m["perClip"]
         rows.append(
             [
                 f"`{name}`",
                 human(m["rssServiceBytes"]),
                 human(m["rssReadyBytes"]),
+                "–" if m["rssAfterFirstBytes"] is None else human(m["rssAfterFirstBytes"]),
                 human(m["peakRssBytes"]),
                 f"{m['readySeconds']:.2f} s",
-                f"{m['firstCall']['wallSeconds']:.2f} / {m['firstCall']['cpuSeconds']:.2f} s",
-                f"{later['medianWallSeconds']:.2f} / {later['medianCpuSeconds']:.2f} s, "
+                "–"
+                if first is None
+                else f"{first['wallSeconds']:.2f} / {first['cpuSeconds']:.2f} s ({first['trackId']})",
+                "–"
+                if later["n"] == 0
+                else f"{later['medianWallSeconds']:.2f} / {later['medianCpuSeconds']:.2f} s, "
                 f"max {later['maxWallSeconds']:.2f} s (n = {later['n']})",
-                str(len(i["packages"])),
-                human(i["installedBytes"]),
-                wheels,
-                f"{models['file']}, {human(models['bytes'])}" if models else "none",
+                str(m["stoppedByPeriodicity"]),
             ]
         )
     out += table(head, rows) + [""]
+    install_head = [
+        "estimator",
+        "adds to the service image: packages",
+        "installed",
+        "wheels",
+        "model files",
+        "adds to the harness's base install",
+    ]
+    install_rows = []
+    for name, i in run["install"].items():
+        image = i["serviceImage"]
+        models = (run.get("modelFiles") or {}).get(name)
+        install_rows.append(
+            [
+                f"`{name}`",
+                str(len(image["packages"])),
+                human(image["installedBytes"]),
+                "unknown" if image["wheelBytes"] is None else human(image["wheelBytes"]),
+                f"{models['file']}, {human(models['bytes'])}" if models else "none",
+                human(i["installedBytes"]),
+            ]
+        )
+    out += table(install_head, install_rows) + [""]
     out += [
         f"Measured on {len(run['clips'])} clips ({run['selection']}). Each clip's tempo is "
         "computed on freshly decoded signals, so a call includes what the estimator needs (the "
-        "onset envelope, its model). A first call on the first clip is shown apart, then every "
-        "clip is timed; one-time costs (numba compilation for librosa) fall on whichever call "
-        "first needs them, so they show in the maximum, not the median. A clip "
-        "the periodicity minimum stops never reaches the estimator's own work, which is what "
-        "the service would do too. The service's own process also holds the fingerprint "
-        "models and computes the gate, loudness and sections, which are not counted here. "
-        "RSS is the resident memory of the process; the service figure includes Essentia's "
-        "libraries when they are installed.",
+        "onset envelope, its model). A clip the onset-periodicity minimum stops never reaches "
+        "the estimator's own work (as in the service); those clips are counted and not timed. "
+        "The first clip that does reach it pays the one-time costs (numba compilation for "
+        "librosa, the first pass through a model) and is shown apart, with its id and the "
+        "memory right after it; the peak includes that one-time memory. The service's own "
+        "process also holds the fingerprint models and computes the gate, loudness and "
+        "sections, which are not counted here. RSS is the resident memory of the process; the "
+        "service figure includes Essentia's libraries when they are installed.",
+        "",
+        "The service image installs the `models` extra (essentia-tensorflow, for the "
+        "fingerprint) whatever the estimator, so Essentia adds nothing to it; an estimator's "
+        "image cost is the packages its extra needs that the service's lock does not have.",
         "",
     ]
     for name, i in run["install"].items():
-        if i["packages"]:
+        if i["serviceImage"]["packages"]:
             out.append(
-                f"- `{name}` (extra `{i['extra']}`) adds: "
+                f"- `{name}` (extra `{i['extra']}`) adds to the service image: "
                 + ", ".join(
                     f"{p['name']} {p['version']} ({human(p['installedBytes'])})"
-                    for p in i["packages"]
+                    for p in i["serviceImage"]["packages"]
                 )
                 + "."
             )
+    credits = run.get("estimatorCredits") or []
+    if credits:
+        out += ["", "Credits:", ""] + [f"- {c}" for c in credits]
     return out + [""]
 
 
@@ -996,7 +1341,7 @@ def render(doc: dict) -> str:
     legacy = is_legacy(doc)
     out = [f"# Audio accuracy, {doc['date']}", "", *intro(doc), *guide(doc)]
     if not legacy:
-        out += bakeoff_section(doc)
+        out += bakeoff_section(doc) + default_section(doc)
     for run in doc["runs"]:
         if run["suite"] == "golden":
             out += golden_sections(run)

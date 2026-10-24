@@ -14,8 +14,9 @@
 //   A3  search suggestions come from the recordings ("dyn" matches none, "daft" the dev record)
 //   A4  after a replay for a distinctive typed query, GET /api/runs/by-track/<id> serves that
 //       run with mode "replay", and the body does not contain the typed text
-//   and "more facts" for the recorded track come from the recording; another track's are
-//   refused with live_disabled.
+//   and "more facts" for the recorded track come from the recording (POST and stream); another
+//   track's are refused with live_disabled; POST /api/analyze replays or refuses the same way;
+//   both resume routes are refused; HEAD on the stream answers.
 //
 // Last, it stops the API and requires every process to report 0 outbound attempts.
 
@@ -125,7 +126,8 @@ const port = await new Promise((resolvePort, reject) => {
 }).catch((error) => {
   console.error(output);
   console.error(String(error));
-  stopAndExit(1);
+  // Never returns: the script stops here.
+  return stopAndExit(1);
 });
 
 const base = `http://127.0.0.1:${port}`;
@@ -144,6 +146,18 @@ async function stream(query) {
   return { text, events };
 }
 
+/** The event types (with error codes) of any event stream, heartbeats left out. */
+async function sseTypes(path) {
+  const text = await (await fetch(`${base}${path}`)).text();
+  return text
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => JSON.parse(line.slice(5)))
+    .filter((event) => event.type !== "heartbeat")
+    .map((event) => `${event.type}${event.code ? `:${event.code}` : ""}`)
+    .join(" ");
+}
+
 async function json(path, init) {
   const res = await fetch(`${base}${path}`, init);
   return { status: res.status, text: await res.clone().text(), body: await res.json() };
@@ -159,6 +173,11 @@ try {
   const complete = replay.events.find((event) => event.type === "complete");
   const run = complete?.data?.run;
   check(types[0] === "connected", "A1 the stream starts with connected");
+  check(
+    replay.events[1]?.type === "status" &&
+      /^Replaying an analysis recorded on /.test(replay.events[1].message),
+    "A1 the first event after connected says it is a replay",
+  );
   check(types.at(-2) === "complete" && types.at(-1) === "done", "A1 it ends with complete, done");
   check(
     replay.events.every((event) => AnalyzeStreamEvent.safeParse(event).success),
@@ -250,6 +269,54 @@ try {
     other.status === 503 && other.body.code === "live_disabled",
     "factoids of an unrecorded track are refused with live_disabled",
   );
+
+  // The other replay paths, so an outbound call added to any of them is counted below.
+  const factoidStream = await sseTypes(
+    "/api/factoids/decrypt/stream?trackTitle=One%20More%20Time&trackArtist=Daft%20Punk",
+  );
+  console.log(`factoid stream: ${factoidStream}`);
+  check(/^connected( factoid)+ done$/.test(factoidStream), "the factoid stream replays them");
+  const posted = await json("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: SHOWCASE_QUERY }),
+  });
+  console.log(`POST /api/analyze: ${posted.status} mode ${posted.body.data?.run?.mode}`);
+  check(
+    posted.status === 200 &&
+      posted.body.data?.run?.mode === "replay" &&
+      posted.body.data.run.id === posted.body.threadId,
+    "POST /api/analyze answers with the recording as a new run",
+  );
+  const postedOther = await json("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: "A song nobody recorded" }),
+  });
+  check(
+    postedOther.status === 503 && postedOther.body.code === "live_disabled",
+    "POST /api/analyze refuses a query with no recording",
+  );
+  const resumed = await json("/api/analyze/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ threadId: "some-thread", selectedTrackId: TRACK_ID }),
+  });
+  check(
+    resumed.status === 503 && resumed.body.code === "live_disabled",
+    "POST /api/analyze/resume is refused",
+  );
+  const resumeStream = await sseTypes(
+    `/api/analyze/stream/resume?threadId=some-thread&selectedTrackId=${TRACK_ID}`,
+  );
+  check(resumeStream === "error:live_disabled done", "the resume stream is refused");
+  const head = await fetch(
+    `${base}/api/analyze/stream?query=${encodeURIComponent(SHOWCASE_QUERY)}`,
+    {
+      method: "HEAD",
+    },
+  );
+  check(head.status === 200, "HEAD on the stream answers its headers only");
 } catch (error) {
   check(false, `checks ran (${error})`);
 }

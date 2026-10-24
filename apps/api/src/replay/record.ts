@@ -10,7 +10,8 @@
  * recorded or the record still holds anything it must not; an existing file is kept unless
  * --force is given.
  *
- * --commit is the commit of the code the run was made with; by default the checkout's HEAD.
+ * --commit is the commit of the code the run was made with; by default the checkout's HEAD, with
+ * "-dirty" when the working tree has uncommitted changes.
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
@@ -40,11 +41,15 @@ function settingsFileValues(): NodeJS.ProcessEnv {
   }
 }
 
+/**
+ * The checkout's HEAD, with "-dirty" when the working tree has changes: a recording then names
+ * no commit that holds exactly the code it ran with.
+ */
 function headCommit(): string {
-  return execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
-    cwd: API_ROOT,
-    encoding: "utf8",
-  }).trim();
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: API_ROOT, encoding: "utf8" }).trim();
+  const head = git("rev-parse", "--short=12", "HEAD");
+  return git("status", "--porcelain") === "" ? head : `${head}-dirty`;
 }
 
 export function main(argv: string[]): number {

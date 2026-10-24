@@ -1,27 +1,32 @@
 /**
  * Builds a replay record (fixtures/replays/<slug>.json) from a stored live run: its result and
  * the events its streams sent (store/runs.ts). The record is what the API replays under
- * REPLAY_MODE, and it is committed, so it is scrubbed and then checked; anything doubtful is a
- * refusal, never a silent fix.
+ * REPLAY_MODE, and it is committed, so it is checked strictly; anything doubtful is a refusal.
  *
- * Scrub, field by field of a TrackAnalysis (the generic source scrubber would drop required
- * fields such as `coverUrl` and the `preview` provenance):
- * - preview clips and image URLs: `previewUrl` is removed, any other string that is a preview
- *   or media URL is blanked (`coverUrl` becomes "", which the contract reads as unknown), and
- *   such URLs inside text are cut out;
- * - credentials: the configured key values and secret-shaped text are redacted;
- * - the query the user typed is replaced by the track's own "<title> <artist>";
- * - the run's id is replaced by `recorded-<slug>` (the player stamps each replay's own id).
+ * What was recorded is never rewritten: text the pipeline or the model wrote is kept as it was
+ * sent. The record changes only what describes the recording rather than the content:
+ * - fields that hold a preview clip or an image: `previewUrl` is removed, and an image field
+ *   (`coverUrl`, `img`, `image…`, …) or any field whose whole value is a preview or media URL is
+ *   blanked (`coverUrl` becomes "", which the contract reads as unknown). Preview URLs are signed
+ *   and expire; images are not ours to redistribute;
+ * - the run's id in the envelope (`runId`, `threadId`, `run.id`) becomes `recorded-<slug>` (each
+ *   replay stamps its own id);
+ * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
+ * - status messages about the user's own actions in that run ("User confirmed …",
+ *   "Remembered preference …") are left out: a viewer of the replay did neither.
  *
  * Refusals: a run that is not completed, has no stored result of its own, or was not live (a
  * replayed or cached result is not recorded again); a run whose last stream does not end with
  * `done` (a stream cut short) or has no single `complete`; a paused run whose streams are not
  * "connected … interrupt, done" then "resuming … complete, done" (a paused run's streams are
- * joined into one stream, numbered again from 0, without the pause); and a record that, after
- * the scrub, still holds a credential, a secret-shaped string, a preview or media URL or the
- * typed query, or fails the record's schema or says less than a replay must (`runIssues`).
- * The result's other producer checks (`analysisIssues`) are reported as warnings: live results
- * do not pass them all yet, and the record replays what was sent.
+ * joined into one stream, numbered again from 0, without the pause); and a record that holds a
+ * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
+ * outside the allow-listed source sites, a preview or media URL inside text, the typed query
+ * (when it is not the track's own title, artist or album; compared without case, accents,
+ * punctuation or URL encoding), an id that is none of the record's own (another run's), or that
+ * fails the record's schema or says less than a replay must (`runIssues`). The result's other
+ * producer checks (`analysisIssues`) are reported as warnings: live results do not pass them all
+ * yet, and the record replays what was sent.
  */
 
 import {
@@ -31,9 +36,9 @@ import {
   runIssues,
   TrackAnalysis,
 } from "@liner-notes/contract";
-import { scrubSecrets } from "../llm/cassette.js";
 import { isMediaUrl } from "../sources/http.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
+import { normalizeQuery } from "./records.js";
 
 export class RecordRefused extends Error {
   constructor(readonly reasons: string[]) {
@@ -56,50 +61,46 @@ const SLUG = /^[a-z0-9-]+$/;
 export const recordedRunId = (slug: string) => `recorded-${slug}`;
 
 // =============================================================================
-// Scrub
+// Fields that describe the recording, not its content
 // =============================================================================
 
 const URL_IN_TEXT = /(?:https?:)?\/\/[^\s"'<>()[\]{}]+/gi;
 
+/** Fields that hold an image, whatever their value. */
+const IMAGE_KEY = /^(?:img|images?|imageUrl|cover(?:Url|Art)?|picture|thumbnail|artwork|avatar)$/i;
+
 const isClipOrImage = (value: string) => isPreviewUrl(value) || isMediaUrl(value);
 
-/** A string without preview or media URLs: blank when it is one, else with them cut out. */
-function withoutMedia(text: string): string {
-  if (isClipOrImage(text.trim())) return "";
-  return text.replace(URL_IN_TEXT, (url) => (isClipOrImage(url) ? "" : url));
+/**
+ * A copy of `value` without preview and image fields: `previewUrl` removed, image fields and
+ * fields whose whole value is a preview or media URL blanked. Nothing else changes.
+ */
+export function withoutMediaFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutMediaFields);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "previewUrl")
+      .map(([key, inner]) => {
+        if (typeof inner === "string") {
+          return [key, IMAGE_KEY.test(key) || isClipOrImage(inner.trim()) ? "" : inner];
+        }
+        return [key, withoutMediaFields(inner)];
+      }),
+  );
 }
 
-/** Escapes text for use in a regular expression. */
-const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
- * A copy of `value` scrubbed for a record: no `previewUrl` field, no preview or media URL, the
- * run id and the typed query replaced, credentials redacted.
- */
-export function scrubForRecord(
-  value: unknown,
-  replace: ReadonlyArray<readonly [RegExp, string]>,
-  secrets: readonly string[],
-): unknown {
-  const walk = (item: unknown): unknown => {
-    if (typeof item === "string") {
-      let text = withoutMedia(item);
-      for (const [pattern, replacement] of replace) text = text.replace(pattern, replacement);
-      return text;
-    }
-    if (Array.isArray(item)) return item.map(walk);
-    if (item === null || typeof item !== "object") return item;
-    return Object.fromEntries(
-      Object.entries(item)
-        .filter(([key]) => key !== "previewUrl")
-        .map(([key, inner]) => [key, walk(inner)]),
-    );
-  };
-  return scrubSecrets(walk(value), secrets);
+/** A status message about the user's own action in the recorded run. */
+function isUserAction(event: { type: string; [field: string]: unknown }): boolean {
+  if (event.type !== "status") return false;
+  return (
+    event.node === "clarification" ||
+    /^(?:User confirmed|Remembered preference):/.test(String(event.message ?? ""))
+  );
 }
 
 // =============================================================================
-// Checks after the scrub
+// Checks
 // =============================================================================
 
 /** Text shaped like a credential, whatever its value. */
@@ -116,53 +117,126 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
     "a long token",
     /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{40,}\b/,
   ],
+  ["an e-mail address", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
 ];
 
-/** Every string in `value`, with its path. */
-function strings(value: unknown, path = "", out: Array<[string, string]> = []) {
-  if (typeof value === "string") out.push([path || "(record)", value]);
-  else if (Array.isArray(value)) {
-    for (const [i, item] of value.entries()) strings(item, `${path}[${i}]`, out);
+/**
+ * Sites a record may link to: the track's Spotify page and the sources the pipeline cites. Any
+ * other URL (an image host this list does not know, a tracker, a signed link) is a refusal.
+ */
+const ALLOWED_URL_HOSTS = new Set([
+  "open.spotify.com",
+  "musicbrainz.org",
+  "www.wikidata.org",
+  "www.discogs.com",
+  "discogs.com",
+  "genius.com",
+  "secondhandsongs.com",
+  "www.last.fm",
+  "last.fm",
+  "listenbrainz.org",
+  "www.whosampled.com",
+]);
+const WIKIPEDIA = /^[a-z-]+\.(?:m\.)?wikipedia\.org$/;
+
+function allowedUrl(url: string): boolean {
+  if (isClipOrImage(url)) return false;
+  try {
+    const { protocol, hostname } = new URL(url.startsWith("//") ? `https:${url}` : url);
+    if (protocol !== "https:" && protocol !== "http:") return false;
+    return ALLOWED_URL_HOSTS.has(hostname) || WIKIPEDIA.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const ID_KEY = /(?:^id|Id)$/;
+const IDS_KEY = /Ids$/;
+
+/** Every string in `value`, with its path, and the values of its id fields. */
+function strings(
+  value: unknown,
+  path = "",
+  out: { texts: Array<[string, string]>; ids: Set<string> } = { texts: [], ids: new Set() },
+  key = "",
+) {
+  if (typeof value === "string") {
+    out.texts.push([path || "(record)", value]);
+    if (ID_KEY.test(key) || IDS_KEY.test(key)) out.ids.add(value.toLowerCase());
+  } else if (Array.isArray(value)) {
+    for (const [i, item] of value.entries()) strings(item, `${path}[${i}]`, out, key);
   } else if (value && typeof value === "object") {
-    for (const [key, inner] of Object.entries(value)) {
-      strings(inner, path ? `${path}.${key}` : key, out);
+    for (const [name, inner] of Object.entries(value)) {
+      strings(inner, path ? `${path}.${name}` : name, out, name);
     }
   }
   return out;
 }
 
+/** `text` with its URL encoding decoded (as it is, when it is not URL-encoded). */
+function decoded(text: string): string {
+  try {
+    return decodeURIComponent(text.replace(/\+/g, " "));
+  } catch {
+    return text;
+  }
+}
+
+/** True when `phrase` (normalised) is a run of whole words of `text` (normalised). */
+function containsWords(text: string, phrase: string): boolean {
+  return ` ${normalizeQuery(text)} `.includes(` ${phrase} `);
+}
+
+export interface LeakCheck {
+  secrets: readonly string[];
+  /** What the user typed; refused unless it is part of one of `publicTexts`. */
+  typedQuery: string;
+  /** The track's own title, artist, album and their combinations. */
+  publicTexts: readonly string[];
+  /** Ids that must not appear at all (the recorded run's own). */
+  forbiddenIds?: readonly string[];
+}
+
 /**
- * What a scrubbed record must not hold, by path (values are never echoed: they may be
- * credentials). `allowed` is text the record may hold although it contains the typed query (the
- * track's own title, artist and album).
+ * What a record must not hold, by path (values are never echoed: they may be credentials).
  */
 export function leaks(
   record: unknown,
-  {
-    secrets,
-    typedQuery,
-    allowed,
-  }: { secrets: readonly string[]; typedQuery: string; allowed: string },
+  { secrets, typedQuery, publicTexts, forbiddenIds = [] }: LeakCheck,
 ): string[] {
   const found: string[] = [];
-  const typed = typedQuery.trim().toLowerCase();
-  const typedIsPublic = typed === "" || allowed.toLowerCase().includes(typed);
-  for (const [path, text] of strings(record)) {
-    if (secrets.some((secret) => secret && text.includes(secret))) {
+  const typed = normalizeQuery(typedQuery);
+  const typedIsPublic = typed === "" || publicTexts.some((text) => containsWords(text, typed));
+  const { texts, ids } = strings(record);
+  for (const [path, text] of texts) {
+    const plain = decoded(text);
+    if (
+      secrets.some(
+        (secret) => secret && (plain.includes(secret) || text.includes(encodeURIComponent(secret))),
+      )
+    ) {
       found.push(`${path}: a configured credential`);
     }
     for (const [what, pattern] of SECRET_SHAPES) {
-      if (pattern.test(text)) found.push(`${path}: ${what}`);
+      if (pattern.test(text) || pattern.test(plain)) found.push(`${path}: ${what}`);
     }
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
+      else if (!allowedUrl(url)) found.push(`${path}: a URL outside the allow-listed sites`);
     }
-    if (!typedIsPublic && text.toLowerCase().includes(typed)) {
+    if (!typedIsPublic && (containsWords(text, typed) || containsWords(plain, typed))) {
       found.push(`${path}: the query the user typed`);
     }
+    if (forbiddenIds.some((id) => id && plain.includes(id))) {
+      found.push(`${path}: the recorded run's own id`);
+    }
+    for (const uuid of plain.match(UUID) ?? []) {
+      if (!ids.has(uuid.toLowerCase())) found.push(`${path}: an id that is not the record's own`);
+    }
   }
-  return found;
+  return [...new Set(found)];
 }
 
 // =============================================================================
@@ -251,9 +325,22 @@ export interface BuiltRecord {
   warnings: string[];
 }
 
+/** The texts that are the track's own: a query made of them reveals nothing about the user. */
+export function publicTextsOf(analysis: { title: string; artist: string; album: string }) {
+  const { title, artist, album } = analysis;
+  return [
+    title,
+    artist,
+    album,
+    `${title} ${artist}`,
+    `${artist} ${title}`,
+    `${title} by ${artist}`,
+  ];
+}
+
 /**
- * The replay record of a stored run, scrubbed and checked. Throws RecordRefused with every
- * reason the run cannot be recorded.
+ * The replay record of a stored run, checked. Throws RecordRefused with every reason the run
+ * cannot be recorded.
  */
 export function buildRecord(
   run: RunRecord,
@@ -289,35 +376,27 @@ export function buildRecord(
   ).toISOString();
   const analyzerVersion = analysis.audio?.analyzerVersion ?? null;
   const placeholder = recordedRunId(slug);
-  const curatedQuery = `${analysis.title} ${analysis.artist}`;
 
-  const replace: Array<readonly [RegExp, string]> = [
-    [new RegExp(literal(run.runId), "g"), placeholder],
-    [new RegExp(literal(run.threadId), "g"), placeholder],
-  ];
-  const typed = run.query.trim();
-  if (typed) replace.push([new RegExp(literal(typed), "gi"), curatedQuery]);
+  const recordedAnalysis = withoutMediaFields({
+    ...analysis,
+    run: { ...runInfo, id: placeholder, mode: "replay", recordedAt, commit, analyzerVersion },
+  }) as TrackAnalysis;
 
-  const recordedAnalysis = scrubForRecord(
-    {
-      ...analysis,
-      run: { ...runInfo, id: placeholder, mode: "replay", recordedAt, commit, analyzerVersion },
-    },
-    replace,
-    secrets,
-  ) as TrackAnalysis;
-
-  const recordEvents = joined.map(({ atMs, event }, seq) => {
-    const scrubbed = scrubForRecord(event, replace, secrets) as Event;
-    const body = scrubbed.type === "complete" ? { ...scrubbed, data: recordedAnalysis } : scrubbed;
-    return { atMs, event: { ...body, runId: placeholder, seq } };
-  });
+  const recordEvents = joined
+    .filter(({ event }) => !isUserAction(event))
+    .map(({ atMs, event }, seq) => {
+      const body = withoutMediaFields(event) as Event;
+      const envelope: Record<string, unknown> = { runId: placeholder, seq };
+      if ("threadId" in body) envelope.threadId = placeholder;
+      if (body.type === "complete") envelope.data = recordedAnalysis;
+      return { atMs, event: { ...body, ...envelope } };
+    });
 
   const candidate = {
     version: 1,
     slug,
     request: {
-      query: curatedQuery,
+      query: `${analysis.title} ${analysis.artist}`,
       selectedTrackId: events.some((e) => e.stream > 0) ? analysis.id : null,
     },
     recordedAt,
@@ -343,8 +422,13 @@ export function buildRecord(
     ? runIssues(record.analysis.run, record.analysis.audio)
     : ["run: missing"];
   for (const issue of runInfoIssues) refuse(`result ${issue}`);
-  const allowed = `${analysis.title} ${analysis.artist} ${analysis.album} ${curatedQuery}`;
-  for (const leak of leaks(record, { secrets, typedQuery: typed, allowed })) refuse(leak);
+  const check: LeakCheck = {
+    secrets,
+    typedQuery: run.query,
+    publicTexts: publicTextsOf(analysis),
+    forbiddenIds: [run.runId, run.threadId],
+  };
+  for (const leak of leaks(record, check)) refuse(leak);
   stop();
   const warnings = analysisIssues(record.analysis).filter(
     (issue) => !runInfoIssues.includes(issue),

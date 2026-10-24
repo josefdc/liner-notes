@@ -3,10 +3,18 @@
 //   node --import /abs/path/tests/deny-network.mjs app.js
 //   NODE_OPTIONS="--import $PWD/tests/deny-network.mjs" npm start -w apps/api
 //
-// Every connection to a host that is not loopback (127.0.0.0/8, ::1, localhost) or a local
-// socket fails, and so does every DNS lookup of such a host: fetch (and undici) rejects, an
-// http(s) request or net/tls socket emits an error, a lookup calls back with an error. Each
-// attempt is counted and logged on stderr ("[deny-network] blocked ...").
+// What it enforces, in the process that loads it:
+// - connections: every socket connection (net.Socket#connect, which tls, http, https, http2 and
+//   undici use) to a host that is not loopback (127.0.0.0/8, ::1, localhost) fails, as do
+//   fetch and http(s).request/get to such a host; local (unix) sockets are allowed;
+// - DNS: dns.lookup and dns.promises.lookup of such a host fail (0.0.0.0 and :: are looked up, so
+//   a server can listen on every interface), and every DNS query function (resolve*, reverse,
+//   lookupService, on dns, dns.promises and their Resolver classes) fails whatever its argument;
+// - worker threads: starting one fails, since this file is not loaded in them.
+// Each refusal is counted and logged on stderr ("[deny-network] blocked ...").
+//
+// Not enforced: child processes are covered only when they inherit NODE_OPTIONS with this file
+// (an inherited environment does); other programs (curl, python) are not covered at all.
 //
 // On exit the process prints "[deny-network] outbound attempts: N (pid P)" on stderr, and, when
 // DENY_NETWORK_REPORT names a file, appends one JSON line {pid, argv, attempts, hosts} to it (and
@@ -21,6 +29,7 @@ import https from "node:https";
 import { isIP } from "node:net";
 import net from "node:net";
 import { syncBuiltinESMExports } from "node:module";
+import workerThreads from "node:worker_threads";
 
 const blockedHosts = [];
 
@@ -121,9 +130,13 @@ for (const [name, module] of [
 
 // --- DNS --------------------------------------------------------------------------------------
 
+// Listening on every interface looks up 0.0.0.0 or ::; connecting to them is still refused.
+const isLocalLookup = (hostname) =>
+  isLoopback(hostname) || ["0.0.0.0", "::", "[::]"].includes(String(hostname));
+
 const realLookup = dns.lookup;
 dns.lookup = function deniedLookup(hostname, ...rest) {
-  if (!isLoopback(hostname)) {
+  if (!isLocalLookup(hostname)) {
     const callback = rest.find((arg) => typeof arg === "function");
     const error = blocked("DNS lookup", hostname);
     if (callback) process.nextTick(() => callback(error));
@@ -133,16 +146,50 @@ dns.lookup = function deniedLookup(hostname, ...rest) {
 };
 const realPromiseLookup = dns.promises.lookup;
 dns.promises.lookup = function deniedPromiseLookup(hostname, ...rest) {
-  if (!isLoopback(hostname)) return Promise.reject(blocked("DNS lookup", hostname));
+  if (!isLocalLookup(hostname)) return Promise.reject(blocked("DNS lookup", hostname));
   return realPromiseLookup.call(this, hostname, ...rest);
 };
-for (const method of ["resolve", "resolve4", "resolve6", "resolveAny"]) {
-  dns[method] = function deniedResolve(hostname, ...rest) {
+
+// Every query function: callback style on dns and dns.Resolver, promises on dns.promises and
+// dns.promises.Resolver.
+const QUERY = /^(?:resolve|reverse|lookupService$)/;
+const denyCallback = (name) =>
+  function deniedQuery(target, ...rest) {
     const callback = rest.find((arg) => typeof arg === "function");
-    const error = blocked("DNS query", hostname);
+    const error = blocked(`DNS ${name}`, target);
     if (callback) process.nextTick(() => callback(error));
+    return {};
   };
+const denyPromise = (name) =>
+  function deniedQuery(target) {
+    return Promise.reject(blocked(`DNS ${name}`, target));
+  };
+for (const [target, deny] of [
+  [dns, denyCallback],
+  [dns.Resolver.prototype, denyCallback],
+  [dns.promises, denyPromise],
+  [dns.promises.Resolver.prototype, denyPromise],
+]) {
+  // The Resolver classes inherit their query methods: walk the prototype chain.
+  for (
+    let owner = target;
+    owner && owner !== Object.prototype;
+    owner = Object.getPrototypeOf(owner)
+  ) {
+    for (const name of Object.getOwnPropertyNames(owner)) {
+      if (QUERY.test(name) && typeof owner[name] === "function") target[name] = deny(name);
+    }
+  }
 }
+
+// --- worker threads ---------------------------------------------------------------------------
+
+// A worker would run without this file (--import is not applied to workers): refuse to start one.
+const RealWorker = workerThreads.Worker;
+workerThreads.Worker = function DeniedWorker(filename) {
+  throw blocked("worker thread", String(filename).slice(0, 80));
+};
+workerThreads.Worker.prototype = RealWorker.prototype;
 
 // Named imports of the built-in modules (import { request } from "node:http") see the patches.
 syncBuiltinESMExports();

@@ -5,16 +5,27 @@
  *
  * The files are read once, at first use, and each is checked strictly: the record's schema and
  * refinements, and the run rules of a replay (`runIssues`: it says when and from which commit
- * it was recorded). A file that fails is logged and left out; it is never served in part.
+ * it was recorded). A file that fails is logged and left out; it is never served in part. The
+ * result's other producer rules (`analysisIssues`) are logged for each record that breaks them,
+ * so a recording made before a producer fix stays visible until it is recorded again.
+ *
+ * Each record has a digest of its content: a stored replayed run names the digest of what it
+ * was sent, and is served again only from a record with that same content.
  *
  * A query finds a record only when it names the recorded track exactly (after normalising case,
  * accents and punctuation): its title and artist in either order, or the record's curated query.
  * There is no nearest match: any other query has no recording.
  */
 
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { ReplayRecord, runIssues, type SearchCandidate } from "@liner-notes/contract";
+import {
+  analysisIssues,
+  ReplayRecord,
+  runIssues,
+  type SearchCandidate,
+} from "@liner-notes/contract";
 import { API_ROOT } from "../config/apiPackage.js";
 
 /** fixtures/replays at the repository root. */
@@ -57,6 +68,12 @@ export interface ReplaySet {
   readonly records: readonly ReplayRecord[];
   /** Files left out, with the reason (logged when loaded). */
   readonly problems: readonly string[];
+  /** Producer rules the records' results break (logged when loaded; the records are kept). */
+  readonly warnings: readonly string[];
+  /** The sha256 of a loaded record's content. */
+  digest(record: ReplayRecord): string;
+  /** The loaded record with this slug and content digest, or null. */
+  forDigest(slug: string, digest: string): ReplayRecord | null;
   /** The record whose track the query names exactly, or null. */
   forQuery(query: string): ReplayRecord | null;
   /** The record of a Spotify track id, or null. */
@@ -88,6 +105,8 @@ function suggestion(record: ReplayRecord): SearchCandidate {
 export function loadReplays(dir: string): ReplaySet {
   const records: ReplayRecord[] = [];
   const problems: string[] = [];
+  const warnings: string[] = [];
+  const digests = new Map<ReplayRecord, string>();
   let files: string[] = [];
   try {
     files = readdirSync(dir)
@@ -141,12 +160,24 @@ export function loadReplays(dir: string): ReplaySet {
     for (const alias of aliases) byAlias.set(alias, record);
     byTrack.set(record.analysis.id, record);
     records.push(record);
+    digests.set(record, createHash("sha256").update(JSON.stringify(record)).digest("hex"));
+    for (const issue of analysisIssues(record.analysis)) {
+      if (!issues.includes(issue)) warnings.push(`${file}: the recorded result breaks ${issue}`);
+    }
   }
 
   return {
     dir,
     records,
     problems,
+    warnings,
+    digest: (record) => {
+      const digest = digests.get(record);
+      if (!digest) throw new Error(`Replay record ${record.slug} was not loaded here`);
+      return digest;
+    },
+    forDigest: (slug, digest) =>
+      records.find((record) => record.slug === slug && digests.get(record) === digest) ?? null,
     forQuery: (query) => byAlias.get(normalizeQuery(query)) ?? null,
     forTrack: (spotifyId) => byTrack.get(spotifyId) ?? null,
     forTitle(title, artist) {
@@ -183,6 +214,7 @@ export function replays(env: NodeJS.ProcessEnv = process.env): ReplaySet {
   if (loaded?.dir === dir) return loaded;
   loaded = loadReplays(dir);
   for (const problem of loaded.problems) console.error(`[Replay] Record left out: ${problem}`);
+  for (const warning of loaded.warnings) console.warn(`[Replay] ${warning}`);
   console.log(`[Replay] ${loaded.records.length} recorded runs in ${dir}`);
   return loaded;
 }

@@ -32,23 +32,11 @@
       }
     },
     {
-      "atMs": 24,
-      "event": {
-        "type": "status",
-        "runId": "recorded-one-more-time-daft-punk",
-        "seq": 2,
-        "message": "User confirmed: \"One More Time\" // Daft Punk",
-        "code": "SPOTIFY-FOUND",
-        "node": "clarification",
-        "timestamp": "2026-10-24T16:23:27.580Z"
-      }
-    },
-    {
       "atMs": 108,
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 3,
+        "seq": 2,
         "message": "Initializing audio waveform parser...",
         "code": "AUDIO-INIT",
         "node": "engineer",
@@ -60,7 +48,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 4,
+        "seq": 3,
         "message": "Activating deep-web research protocols...",
         "code": "RESEARCH-START",
         "node": "historian",
@@ -72,7 +60,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 5,
+        "seq": 4,
         "message": "🔬 Starting deep dive research...",
         "node": "research_manager",
         "timestamp": "2026-10-24T16:23:27.872Z"
@@ -83,7 +71,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 6,
+        "seq": 5,
         "message": "🔎 Searching samples...",
         "node": "research_tool",
         "timestamp": "2026-10-24T16:23:27.875Z"
@@ -94,7 +82,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 7,
+        "seq": 6,
         "message": "🧠 Planning the next research step (1/2)...",
         "node": "research_manager",
         "timestamp": "2026-10-24T16:23:29.382Z"
@@ -105,7 +93,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 8,
+        "seq": 7,
         "message": "🔍 The sample search surfaced later uses of the track, but its MusicBrainz recording relationships have not been checked. Check those relationships first for structured sample, cover, or remix credits.",
         "node": "research_manager",
         "timestamp": "2026-10-24T16:23:30.891Z"
@@ -116,7 +104,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 9,
+        "seq": 8,
         "message": "🔎 Searching musicbrainz...",
         "node": "research_tool",
         "timestamp": "2026-10-24T16:23:30.893Z"
@@ -127,7 +115,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 10,
+        "seq": 9,
         "message": "⚠️ MusicBrainz could not be read (rate_limited)",
         "node": "research_tool",
         "timestamp": "2026-10-24T16:23:32.097Z"
@@ -138,7 +126,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 11,
+        "seq": 10,
         "message": "🧠 Planning the next research step (2/2)...",
         "node": "research_manager",
         "timestamp": "2026-10-24T16:23:32.100Z"
@@ -149,7 +137,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 12,
+        "seq": 11,
         "message": "🔍 The collected result names Drake and 21 Savage’s “Circo Loco” as a track that samples or interpolates “One More Time.” I’ll check that specific lead to clarify the relationship and sample history.",
         "node": "research_manager",
         "timestamp": "2026-10-24T16:23:34.171Z"
@@ -160,7 +148,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 13,
+        "seq": 12,
         "message": "🔎 Searching samples...",
         "node": "research_tool",
         "timestamp": "2026-10-24T16:23:34.173Z"
@@ -171,7 +159,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 14,
+        "seq": 13,
         "message": "Intelligence extraction complete: 3 layers processed",
         "code": "RESEARCH-FOUND",
         "node": "historian",
@@ -183,7 +171,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 15,
+        "seq": 14,
         "message": "The analysis found no key (not_detected)",
         "code": "AUDIO-ERROR",
         "node": "engineer",
@@ -195,7 +183,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 16,
+        "seq": 15,
         "message": "Composing the liner notes...",
         "code": "LLM-CONNECT",
         "node": "composer",
@@ -207,7 +195,7 @@
       "event": {
         "type": "status",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 17,
+        "seq": 16,
         "message": "Cross-referencing visual artifacts from Spotify...",
         "code": "GRAPH-ENRICH",
         "node": "composer",
@@ -219,7 +207,7 @@
       "event": {
         "type": "complete",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 18,
+        "seq": 17,
         "data": {
           "id": "0DiWol3AO6WpXZgp0goxAV",
           "title": "One More Time",
@@ -600,7 +588,7 @@
       "event": {
         "type": "done",
         "runId": "recorded-one-more-time-daft-punk",
-        "seq": 19,
+        "seq": 18,
         "timestamp": "2026-10-24T16:23:50.583Z"
       }
     }

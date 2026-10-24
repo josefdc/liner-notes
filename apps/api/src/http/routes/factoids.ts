@@ -14,7 +14,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { type ComposerFactoid, FactoidsOutput, type ReplayRecord } from "@liner-notes/contract";
+import {
+  type ComposerFactoid,
+  FactoidsOutput,
+  type ReplayRecord,
+  SPOTIFY_ID_PATTERN,
+} from "@liner-notes/contract";
 import { type Response, Router } from "express";
 import { z } from "zod";
 import { isLlmError } from "../../llm/errors.js";
@@ -127,7 +132,7 @@ function toFactoid(card: ComposerFactoid, id: string) {
 
 /**
  * The factoids of a recording that the client does not have yet (by id), at most `count`,
- * numbered after the existing ids as the model's are.
+ * numbered after the existing ids as the model's are, each with its recorded claim link.
  */
 export function recordedFactoids(record: ReplayRecord, existingIds: string[], count: number) {
   const known = new Set(existingIds);
@@ -140,6 +145,7 @@ export function recordedFactoids(record: ReplayRecord, existingIds: string[], co
       content: factoid.content,
       type: factoid.type,
       entities: factoid.entities ?? [],
+      ...(factoid.claimId !== undefined && { claimId: factoid.claimId }),
     }));
 }
 
@@ -250,9 +256,11 @@ export function createFactoidsRouter({
       const { trackTitle, trackArtist, existingFactoidIds } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
 
-      const replay = chooseReplay(
-        (records) =>
-          records.forTrack(parsed.data.trackId) ?? records.forTitle(trackTitle, trackArtist),
+      // A Spotify track id names the track: title and artist are used only without one.
+      const replay = chooseReplay((records) =>
+        SPOTIFY_ID_PATTERN.test(parsed.data.trackId)
+          ? records.forTrack(parsed.data.trackId)
+          : records.forTitle(trackTitle, trackArtist),
       );
       if (replay.kind === "refused") {
         sendError(res, "live_disabled");

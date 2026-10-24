@@ -1,10 +1,12 @@
 /**
  * Plays a recorded run as a new run: the recorded events, in order, at accelerated timing, each
  * stamped with the new run's id (the stream adds `runId` and `seq`; `connected` names the new
- * run as its thread). The result is the recorded one with the new run's id, still saying
- * `mode: "replay"` with the recording's date, commit and analyzer version, so it is stored as
- * this run's own result and never shown as live. The recorded `done` is not sent: the stream
- * sends its own, and its own heartbeats.
+ * run as its thread). Right after `connected` a status says that this is a replay, when and from
+ * which commit it was recorded, so the progress that follows is never read as live work. The
+ * result is the recorded one with the new run's id, still saying `mode: "replay"` with the
+ * recording's date, commit and analyzer version, and with this run's own usage (none: a replay
+ * calls no model; the recording's cost stays in the record). The recorded `done` is not sent:
+ * the stream sends its own, and its own heartbeats.
  */
 
 import type { ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
@@ -35,6 +37,9 @@ export function setReplayPacingForTests(next: ReplayPacing): () => void {
   };
 }
 
+/** What a replay spends: nothing (no model is called). */
+const NO_USAGE = { llmCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, usd: 0 };
+
 /** The recorded result as the result of run `runId`. */
 export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnalysis {
   const run = record.analysis.run;
@@ -48,7 +53,21 @@ export function replayedAnalysis(record: ReplayRecord, runId: string): TrackAnal
       recordedAt: record.recordedAt,
       commit: record.commit,
       analyzerVersion: record.analyzerVersion,
+      usage: NO_USAGE,
     },
+  };
+}
+
+/** The status sent right after `connected`: this run is a replay of a recording. */
+export function replayNotice(record: ReplayRecord): EventBody {
+  return {
+    type: "status",
+    message:
+      `Replaying an analysis recorded on ${record.recordedAt} (commit ${record.commit}); ` +
+      "nothing below runs live.",
+    code: "SYS-INIT",
+    node: "replay",
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -99,12 +118,18 @@ export async function playRecord(
   { speed, maxGapMs }: ReplayPacing = replayPacing(),
 ): Promise<TrackAnalysis | null> {
   let previousAt = 0;
+  let noticed = false;
   let result: TrackAnalysis | null = null;
   for (const { atMs, event } of record.events) {
     if (event.type === "done") break;
     await wait(Math.min((atMs - previousAt) / speed, maxGapMs), signal);
     previousAt = atMs;
     if (signal.aborted) return null;
+    // The notice goes first, right after `connected` when the recording opens with it.
+    if (!noticed && event.type !== "connected") {
+      send(replayNotice(record));
+      noticed = true;
+    }
     const body = replayedEvent(event, record, runId);
     const sent = send(body);
     if (event.type === "complete") result = sent ? (body.data as TrackAnalysis) : null;

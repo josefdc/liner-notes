@@ -7,6 +7,7 @@ import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { llm } from "../../llm/invoke.js";
 import { chooseReplay, liveRefused } from "../../replay/mode.js";
 import { playRecord, replayedAnalysis } from "../../replay/player.js";
+import { replays } from "../../replay/records.js";
 import { getDb } from "../../store/database.js";
 import {
   appendRunEvent,
@@ -686,31 +687,51 @@ function sendJsonOutcome(
 // Replays (REPLAY_MODE)
 // =============================================================================
 
+/** The recording a replay of `record` serves (see storeReplayOf). */
+const replayOf = (record: ReplayRecord) => ({
+  slug: record.slug,
+  recordedAt: record.recordedAt,
+  digest: replays().digest(record),
+});
+
 /**
- * Records a replayed run's outcome: its status and, once it completed, which recording it served
- * (storeReplayOf), so GET /api/runs serves it again as a replay. Neither the result nor the
- * events are copied: the record holds them. A failure to record is logged.
+ * Starts a replay of `record`: a fresh run, claimed and recorded as a replay from the start
+ * (storeReplayOf), so it never reads as live whatever its outcome.
+ */
+function startReplay(query: string, record: ReplayRecord): string {
+  const runId = randomUUID();
+  activeThreads.add(runId);
+  recordRun("record a replay", (db) =>
+    db.transaction(() => {
+      startRun(db, { runId, threadId: runId, query });
+      storeReplayOf(db, runId, replayOf(record));
+    })(),
+  );
+  return runId;
+}
+
+/**
+ * Records a replayed run's outcome: its status and, once it completed, its track, so GET
+ * /api/runs/by-track serves it as the track's latest run. Neither the result nor the events are
+ * copied: the record holds them. A failure to record is logged.
  */
 function recordReplay(runId: string, status: RunStatus, record: ReplayRecord): void {
   recordRun("record a replay", (db) =>
     db.transaction(() => {
       updateRun(db, runId, { status });
       if (status === "completed") {
-        storeReplayOf(db, runId, record.analysis.id, {
-          slug: record.slug,
-          recordedAt: record.recordedAt,
-        });
+        storeReplayOf(db, runId, replayOf(record), record.analysis.id);
       }
     })(),
   );
 }
 
 /**
- * Serves a recorded run as a new run, with its own run id (recordReplay). The events the stream
- * sends are not stored.
+ * Serves a recorded run as a new run, with its own run id (startReplay, recordReplay). The events
+ * the stream sends are not stored.
  */
 async function replayStreamRun(res: Response, query: string, record: ReplayRecord): Promise<void> {
-  const runId = startAnalysis(query);
+  const runId = startReplay(query, record);
   const stream = openEventStream(res, runId);
   console.log(`[Run ${runId}] Replaying the recorded run ${record.slug}`);
   await guardStream(stream, async () => {
@@ -739,7 +760,7 @@ async function replayStreamRun(res: Response, query: string, record: ReplayRecor
 
 /** POST /api/analyze for a recorded track: the recorded result as a new, completed run. */
 function replayJsonRun(res: Response, query: string, record: ReplayRecord): void {
-  const runId = startAnalysis(query);
+  const runId = startReplay(query, record);
   try {
     const analysis = replayedAnalysis(record, runId);
     const outcome: RunOutcome = { kind: "complete", trackData: analysis as unknown as TrackData };

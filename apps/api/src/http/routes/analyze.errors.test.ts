@@ -13,7 +13,18 @@ import analyzeRouter from "./analyze.js";
 vi.mock("../../agent/graph.js", () => ({
   createSonicAgentGraph: () => ({
     async *stream() {
-      yield ["updates", { composer: { trackData: { id: "t1", plays: 10n } } }];
+      // A result that fits the contract, with a field JSON cannot serialise.
+      const trackData = {
+        id: "t1",
+        title: "T",
+        artist: "A",
+        album: "B",
+        coverUrl: "",
+        bpm: null,
+        genealogy: { nodes: [], links: [] },
+        plays: 10n,
+      };
+      yield ["updates", { composer: { trackData } }];
     },
     getState: async () => ({ tasks: [], config: {}, values: {} }),
   }),

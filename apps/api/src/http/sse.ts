@@ -97,9 +97,18 @@ export interface EventStream {
   done(): void;
 }
 
+/** An event the stream wrote, with its run id and seq. */
+export type SentEvent = EventBody & { runId: string | null; seq: number };
+
 export interface EventStreamOptions {
   /** Interval between heartbeat events; 0 sends none. */
   heartbeatMs?: number;
+  /**
+   * Called with each event written that carries a seq (every event but heartbeats), once it is
+   * written: the event as the contract reads it (fields the contract does not name are left
+   * out). An error it throws is logged and does not affect the stream.
+   */
+  onSent?: (event: SentEvent) => void;
 }
 
 /** Writes the headers of an event stream (status 200) and flushes them at once. */
@@ -116,9 +125,17 @@ function openStream(
   kind: StreamKind,
   res: Response,
   runId: string | null,
-  { heartbeatMs = HEARTBEAT_INTERVAL_MS }: EventStreamOptions = {},
+  { heartbeatMs = HEARTBEAT_INTERVAL_MS, onSent }: EventStreamOptions = {},
 ): EventStream {
   writeHead(res);
+
+  const sent = (event: SentEvent) => {
+    try {
+      onSent?.(event);
+    } catch (err) {
+      console.error(`[SSE ${kind.name}] ${event.type} event sent but not observed:`, err);
+    }
+  };
 
   let seq = 0;
   let outcome: string | null = null;
@@ -133,7 +150,7 @@ function openStream(
    */
   const encode = (
     event: Record<string, unknown> & { type: string },
-  ): { line: string } | { problem: string; detail: unknown } => {
+  ): { line: string; checked: SentEvent } | { problem: string; detail: unknown } => {
     const checked = kind.schema.safeParse(event);
     if (!checked.success) {
       return {
@@ -144,24 +161,30 @@ function openStream(
       };
     }
     try {
-      return { line: encodeSseEvent(event as AnalyzeStreamEvent) };
+      return {
+        line: encodeSseEvent(event as AnalyzeStreamEvent),
+        checked: checked.data as SentEvent,
+      };
     } catch (err) {
       return { problem: "it cannot be encoded", detail: err };
     }
   };
 
-  /** Writes a control event built here (`done`, `heartbeat`); false when it was not written. */
-  const write = (event: Record<string, unknown> & { type: string }): boolean => {
+  /**
+   * Writes a control event built here (`done`, `heartbeat`). Returns the event as the contract
+   * reads it, or null when it was not written.
+   */
+  const write = (event: Record<string, unknown> & { type: string }): SentEvent | null => {
     const encoded = encode(event);
     if ("problem" in encoded) {
       console.error(
         `[SSE ${kind.name}] ${event.type} event not sent: ${encoded.problem}`,
         encoded.detail,
       );
-      return false;
+      return null;
     }
     res.write(encoded.line);
-    return true;
+    return encoded.checked;
   };
 
   const sendNumbered = (body: EventBody, replacedWith?: Record<string, unknown>): boolean => {
@@ -183,6 +206,7 @@ function openStream(
     res.write(encoded.line);
     seq += 1;
     if (kind.outcomes.has(body.type)) outcome = body.type;
+    sent(encoded.checked);
     return true;
   };
 
@@ -204,7 +228,15 @@ function openStream(
   });
 
   const done = () => {
-    if (writable()) write({ type: "done", runId, seq: seq++, timestamp: new Date().toISOString() });
+    if (writable()) {
+      const written = write({
+        type: "done",
+        runId,
+        seq: seq++,
+        timestamp: new Date().toISOString(),
+      });
+      if (written) sent(written);
+    }
     ended = true;
     clearInterval(heartbeat);
     if (!res.writableEnded && !res.destroyed) res.end();

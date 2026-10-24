@@ -154,6 +154,43 @@ describe("pruneDatabase", () => {
     expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
   });
 
+  it("deletes a run's events with it, and any event older than the event retention", () => {
+    runAt("old", "t1", NOW - 40 * DAY, NOW - 31 * DAY);
+    // Finished exactly at the cutoff; its last event was sent a moment after the recorded finish.
+    runAt("edge", "t2", NOW - 31 * DAY, NOW - 30 * DAY);
+    runAt("kept-run", "t3", NOW - 10 * DAY, NOW - 8 * DAY);
+    runAt("recent", "t4", NOW - DAY, NOW - DAY);
+    const event = db.prepare(
+      "INSERT INTO run_events (run_id, stream, seq, sent_at, event) VALUES (?, 0, ?, ?, '{}')",
+    );
+    event.run("old", 0, NOW - 31 * DAY);
+    event.run("edge", 0, NOW - 30 * DAY + 2000);
+    event.run("kept-run", 0, NOW - 8 * DAY);
+    event.run("recent", 0, NOW - DAY);
+    event.run("no-record-young", 0, NOW - HOUR);
+    event.run("no-record-old", 0, NOW - 8 * DAY);
+
+    const result = pruneDatabase(db, DEFAULT_RETENTION, NOW);
+    expect(result).toMatchObject({ runs: 2, runEvents: 4 });
+    expect(db.prepare("SELECT run_id FROM run_events ORDER BY run_id").pluck().all()).toEqual([
+      "no-record-young",
+      "recent",
+    ]);
+    expect(db.prepare("SELECT run_id FROM runs ORDER BY run_id").pluck().all()).toEqual([
+      "kept-run",
+      "recent",
+    ]);
+  });
+
+  it("keeps events no longer than the runs", () => {
+    runAt("recent", "t1", NOW - 3 * DAY, NOW - DAY);
+    db.prepare(
+      "INSERT INTO run_events (run_id, stream, seq, sent_at, event) VALUES ('recent', 0, 0, ?, '{}')",
+    ).run(NOW - 3 * DAY);
+    const policy = { ...DEFAULT_RETENTION, runRetentionMs: 2 * DAY, runEventRetentionMs: 7 * DAY };
+    expect(pruneDatabase(db, policy, NOW)).toMatchObject({ runs: 0, runEvents: 1 });
+  });
+
   it("works before the checkpointer has created its tables", () => {
     const fresh = new Database(":memory:");
     runMigrations(fresh);
@@ -163,6 +200,7 @@ describe("pruneDatabase", () => {
       writes: 0,
       storeItems: 0,
       runs: 0,
+      runEvents: 0,
     });
     fresh.close();
   });
@@ -222,11 +260,12 @@ describe("startRetention", () => {
 });
 
 describe("retentionFromEnv", () => {
-  it("defaults to 24 hours for checkpoints and 30 days for store items and runs", () => {
+  it("defaults to 24 hours for checkpoints, 30 days for store items and runs, 7 for run events", () => {
     expect(retentionFromEnv({})).toEqual({
       checkpointRetentionMs: 24 * HOUR,
       storeRetentionMs: 30 * DAY,
       runRetentionMs: 30 * DAY,
+      runEventRetentionMs: 7 * DAY,
     });
   });
 
@@ -237,11 +276,13 @@ describe("retentionFromEnv", () => {
         CHECKPOINT_RETENTION_HOURS: "6",
         STORE_RETENTION_DAYS: "abc",
         RUN_RETENTION_DAYS: "7",
+        RUN_EVENT_RETENTION_DAYS: "2",
       }),
     ).toEqual({
       checkpointRetentionMs: 6 * HOUR,
       storeRetentionMs: 30 * DAY,
       runRetentionMs: 7 * DAY,
+      runEventRetentionMs: 2 * DAY,
     });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("STORE_RETENTION_DAYS"));
     warn.mockRestore();
@@ -256,9 +297,15 @@ describe("retention settings", () => {
         CHECKPOINT_RETENTION_HOURS: "0.0001",
         STORE_RETENTION_DAYS: "0.5",
         RUN_RETENTION_DAYS: "0.01",
+        RUN_EVENT_RETENTION_DAYS: "0.2",
       }),
-    ).toEqual({ checkpointRetentionMs: HOUR, storeRetentionMs: DAY, runRetentionMs: DAY });
-    expect(warn).toHaveBeenCalledTimes(3);
+    ).toEqual({
+      checkpointRetentionMs: HOUR,
+      storeRetentionMs: DAY,
+      runRetentionMs: DAY,
+      runEventRetentionMs: DAY,
+    });
+    expect(warn).toHaveBeenCalledTimes(4);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("CHECKPOINT_RETENTION_HOURS"));
     warn.mockRestore();
   });

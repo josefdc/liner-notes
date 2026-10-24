@@ -106,6 +106,12 @@ export const FactoidsResponse = z.object({
 /**
  * A stored run, as GET /api/runs/:id and GET /api/runs/by-track/:spotifyId return it. It never
  * carries the query the user typed.
+ *
+ * `mode` says how the result the run sent was produced: `live`, computed by this run, or
+ * `replay`, a recorded result served again (a replayed run, or a cached result an earlier run
+ * composed; such a run has no `analysis` of its own). A run that sent no result (open, failed,
+ * cancelled) or was stored before modes were kept reads `live`, which then says nothing about
+ * how a result was produced: show a mode only alongside a result.
  */
 export const StoredRun = z.object({
   id: z.string().min(1),
@@ -118,9 +124,11 @@ export const StoredRun = z.object({
 export type StoredRun = z.infer<typeof StoredRun>;
 
 /**
- * 200 answer of GET /api/runs/:id and GET /api/runs/by-track/:spotifyId (the latest stored
- * run of that track). `analysis` is null until the run has completed. A run or track without a
- * stored run answers 404 `not_found`.
+ * 200 answer of GET /api/runs/:id and GET /api/runs/by-track/:spotifyId (the run of that track
+ * that most recently finished with a result of its own). `analysis` is null when the run has no
+ * stored result of its own: it has not completed, it sent a result another run composed (a
+ * cached one), or it completed before results were stored. A run or track without a stored run
+ * answers 404 `not_found`.
  */
 export const RunResponse = z.object({
   success: z.literal(true),

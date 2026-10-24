@@ -10,7 +10,13 @@ import { acceptedEncodingsOnly } from "./middleware/encoding.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
 import { listedOriginsOnly } from "./middleware/origin.js";
 import { globalLimit, perIpLimit } from "./middleware/rateLimit.js";
-import { analyzeRouter, factoidsRouter, healthRouter, searchRouter } from "./routes/index.js";
+import {
+  analyzeRouter,
+  factoidsRouter,
+  healthRouter,
+  runsRouter,
+  searchRouter,
+} from "./routes/index.js";
 
 /** Largest accepted JSON body. The API's bodies are a query or a few ids. */
 export const JSON_BODY_LIMIT = "16kb";
@@ -44,7 +50,8 @@ export function createApp({ http, routers }: AppDeps): express.Express {
   app.use(acceptedEncodingsOnly);
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
-  for (const router of routers ?? [healthRouter, searchRouter, analyzeRouter, factoidsRouter]) {
+  const defaultRouters = [healthRouter, searchRouter, analyzeRouter, factoidsRouter, runsRouter];
+  for (const router of routers ?? defaultRouters) {
     app.use(router);
   }
 

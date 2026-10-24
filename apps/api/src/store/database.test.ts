@@ -33,6 +33,7 @@ import {
   getDefaultDbPath,
 } from "./database.js";
 import { LATEST_SCHEMA_VERSION, MIGRATIONS, runMigrations, type Migration } from "./migrations.js";
+import { appendRunEvent, getRun, listRunEvents, storeRunResult } from "./runs.js";
 import { SqliteStore } from "./store.js";
 import { SonicCache } from "./cache.js";
 
@@ -1079,6 +1080,52 @@ describe("migrations", () => {
     ]);
     db.close();
   }, 60_000);
+
+  it("adds run results and events to an existing database, keeping its runs", () => {
+    const resultsMigration = MIGRATIONS.findIndex((m) => m.name === "run_results");
+    expect(resultsMigration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, resultsMigration));
+    raw
+      .prepare(
+        "INSERT INTO runs (run_id, thread_id, query, status, created_at, finished_at) VALUES ('old', 'old', 'typed', 'completed', 100, 200)",
+      )
+      .run();
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(getRun(db, "old")).toMatchObject({
+      status: "completed",
+      finishedAt: 200,
+      spotifyId: null,
+      mode: "live",
+      analysis: null,
+    });
+
+    const analysis = {
+      id: "4uLU6hMCjMI75M1A2tKUQC",
+      title: "T",
+      artist: "A",
+      album: "B",
+      coverUrl: "",
+      bpm: null,
+      genealogy: { nodes: [], links: [] },
+      run: { id: "old", mode: "live", recordedAt: null, commit: null, analyzerVersion: null },
+    };
+    expect(storeRunResult(db, "old", analysis)).toBe("stored");
+    expect(getRun(db, "old")).toMatchObject({ spotifyId: analysis.id, analysis });
+
+    // A resumed run's second stream numbers its events from 0 again.
+    appendRunEvent(db, "old", 0, { seq: 0 });
+    appendRunEvent(db, "old", 1, { seq: 0 });
+    expect(() => appendRunEvent(db, "old", 1, { seq: 0 })).toThrow(/UNIQUE/);
+    expect(listRunEvents(db, "old").map((e) => [e.stream, e.seq])).toEqual([
+      [0, 0],
+      [1, 0],
+    ]);
+  });
 
   it("requires migrations numbered 1..n in order", () => {
     const db = new Database(":memory:");

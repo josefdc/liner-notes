@@ -202,7 +202,14 @@ DATASETS: dict[str, Dataset] = {
     ),
 }
 
-SUITE_DATASETS = {"tempo": ("ballroom", "giantsteps-tempo"), "key": ("giantsteps-key",)}
+SUITE_DATASETS = {
+    "tempo": ("ballroom", "giantsteps-tempo"),
+    "key": ("giantsteps-key",),
+    # The golden set's Deezer previews (evals_audio.golden), not a mirdata dataset.
+    "golden": ("golden",),
+    # What each tempo estimator costs, measured on clips of a tempo dataset (evals_audio.costs).
+    "cost": ("giantsteps-tempo", "ballroom"),
+}
 
 
 # --- references ------------------------------------------------------------------------------

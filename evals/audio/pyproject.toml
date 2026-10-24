@@ -26,6 +26,14 @@ dependencies = [
 models = [
     "essentia-tensorflow==2.1b6.dev1389",
 ]
+# The beat-this tracker (Foscarin et al. 2024), compared with the service's estimators on tempo.
+# Evaluation only: the service does not depend on it. torch comes from the CPU-only index, at
+# the version of the last torchaudio release (2.11.0), which is built against it.
+beat-this = [
+    "beat-this==1.1.0",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+]
 
 [tool.uv]
 package = true
@@ -93,6 +101,15 @@ constraint-dependencies = [
     "urllib3==2.6.2",
     "uvicorn==0.38.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
 
 [build-system]
 requires = ["hatchling"]

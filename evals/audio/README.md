@@ -1,21 +1,28 @@
 # Audio accuracy harness
 
 Measures the audio service's tempo and key estimates (`services/audio`) against annotated
-datasets and writes a dated report to `evals/reports/audio-<date>.md`, with the per-track
-results next to it in `audio-<date>.json`.
+datasets, compares its tempo estimators with beat-this, checks its agreement with sourced
+values and its style fingerprint on the golden set's Deezer previews, measures what each tempo
+estimator costs, and writes a dated report to `evals/reports/audio-<date>.md`, with the
+per-track results next to it in `audio-<date>.json`.
 
 ```sh
 cd evals/audio
 uv sync                         # ~0.6 GB: enough for --estimator librosa and the tests
 uv sync --extra models          # adds ~0.6 GB: essentia-tensorflow, for the Essentia estimator
+uv sync --extra models --extra beat-this   # adds torch (CPU) and beat-this; the cost suite measures it
 uv run python -m evals_audio --suite tempo --dataset ballroom --limit 50
 uv run python -m evals_audio --suite tempo --dataset giantsteps-tempo --limit 50
 uv run python -m evals_audio --suite key --dataset giantsteps-key --limit 50
+uv run python -m evals_audio --suite golden
+uv run python -m evals_audio --suite cost --dataset giantsteps-tempo --limit 20
 uv run pytest                   # unit tests, no network
 uv run ruff check . && uv run ruff format --check .
 ```
 
-Options: `--estimator librosa|essentia|all` (default `all`, which needs `--extra models`),
+Options: `--estimator librosa|essentia|beat-this|all` (default `all`: every estimator the suite
+runs, which needs `--extra models`, and `--extra beat-this` for the tempo, golden and cost
+suites),
 `--seed S` (default 1), `--jobs J` (worker processes, at most 4), `--data-dir`, `--report-dir`,
 `--no-report`, `--render <audio-date>.json` (renders the Markdown again from a results file
 alone) and `--lookup ID --dataset NAME` (the dataset's own track id for an id in the results;
@@ -31,6 +38,89 @@ The unit tests, ruff and the service-pin check run in CI (`.github/workflows/eva
 when `evals/audio` or `services/audio` changes. The suites themselves download data and are run
 by hand.
 
+## Suites
+
+| suite | data | what it reports |
+|---|---|---|
+| `tempo` | Ballroom, GiantSteps Tempo (30 s windows) | Acc1/Acc2 per estimator (librosa, Essentia, beat-this), paired tests, withheld cost, accuracy vs coverage |
+| `key` | GiantSteps+ Key (30 s windows) | MIREX score and exact key (librosa, Essentia) |
+| `golden` | `evals/golden.jsonl`, each row's Deezer preview | tempo agreement with Deezer's `bpm` and with the set's sheet-music tempo; key agreement with its sheet-music key; style hit@1/5/10 against Discogs, next to a constant baseline and the best constant found with the labels |
+| `cost` | clips of a tempo dataset | per tempo estimator: resident memory, seconds per analysed clip, and what it adds to the service image |
+
+The report opens with a bake-off table that puts every tempo estimator's figures side by side
+(correct / n per dataset, agreement with Deezer's `bpm`, peak memory, time, what it adds to
+the service image), with the same runs' figures when the withholding rules are lifted. A
+"Default estimator" section follows: the service's default (read from the service), the
+criterion for changing it, each candidate against the default on data it was not trained on
+(as served and with the rules lifted, exact McNemar), the tempos each shows that are wrong
+(strict 4 % and forgiving octave and meter, exact McNemar on the same clips), the cost per
+candidate, and the decision those numbers support. Everything in it is derived from the
+results file at render time. Pair tables of an estimator on its own training data are not printed. The bake-off
+evidence is the GiantSteps Tempo run, which the committed report draws with `--limit 200`.
+
+### beat-this
+
+beat-this (Foscarin, Schlüter and Widmer, ISMIR 2024; `evals_audio/beatthis.py`) is a beat
+tracker the service does not ship. The harness runs it behind the service's estimator
+interface, so its tempo goes through the service's rules: the onset-periodicity minimum, 40-208
+BPM, the tempo refined from the beats on onsets (from the median beat interval), and the
+steadiness check. It gives no confidence and no key. The checkpoint (`final0`, about 81 MB) is
+fetched into `<data dir>/models/beat-this/` and checked against its SHA-256; torch comes from
+the PyTorch CPU index. The authors trained `final0` on every dataset they used except GTZAN,
+Ballroom included, so its Ballroom figures are on its own training data: the report marks
+them and they are not evidence about new music. GiantSteps Tempo is not in its training data.
+Some golden songs are in the Harmonix Set, another of its training sets
+(`beatthis.GOLDEN_IN_TRAINING`, matched by title and artist; a lower bound, since some
+training sets publish numbers or video ids rather than names); the golden suite repeats the
+Deezer comparison without them, for every estimator, and the bake-off table uses that one.
+
+### Golden set
+
+`--suite golden` reads `evals/golden.jsonl` and, without any key or token:
+
+- asks Deezer (`api.deezer.com/track/<deezerId>`) for each row's preview and `bpm`. The preview
+  is downloaded at once into a temporary directory outside the data directory, analysed whole
+  as the service would analyse it, and deleted at the end of the run (on an error, Ctrl-C or
+  SIGTERM too). Preview URLs (signed, short-lived) are never written down: httpx's request
+  log, which prints full URLs, is kept at WARNING, and a network error is recorded by its type
+  only. A row whose lookup fails is marked unavailable; the others go on. Previews come and go
+  by day and country, so n belongs to the run's date. Deezer's `bpm` is a sourced hint, not a
+  measurement: the report calls the comparison *agreement*.
+- finds each recording's Discogs styles: MusicBrainz release groups of the recording (official
+  singles, EPs and albums with no secondary type, earliest first), their Discogs master or
+  release link, and the genres and styles Discogs gives for it. They are cached with their
+  source and date in `<data dir>/golden/discogs.json`; delete it to fetch them afresh. Only a
+  definitive miss is cached (no link, a Discogs 404, no styles); a 429 or 5xx after the
+  retries leaves the row out of the cache, so the next run asks again. Requests keep the
+  services' pace (MusicBrainz one a second, Discogs 25 a minute) and send a User-Agent that
+  names the project and its owner's GitHub noreply identity (an identifier, not a monitored
+  mailbox).
+- loads the service's fingerprint models (its own `download_models.py`, into
+  `<data dir>/models/essentia/`) and scores hit@k: a top-k style hits when its genre and style
+  are both on the Discogs release. The constant baseline gives every track the same k styles
+  (the model's average output) and uses no label; the best constant chosen with the labels
+  (greedy cover) is printed next to it as an optimistic reference.
+
+The results keep ISRCs, Deezer ids and Deezer's `bpm` (already in the preview coverage
+report), Discogs and MusicBrainz ids, the model's hit ranks and the scores; not the model's
+top lists or the releases' style lists (together with a hit rank they would name a style),
+the audio or any URL.
+
+### Cost
+
+`--suite cost` runs each tempo estimator in its own fresh process, on the clips of a fetched
+dataset, with every thread variable forced to 1: resident memory once the service is
+imported, once the estimator is ready, after the first analysed clip and at its peak, and the
+wall and CPU seconds of its `tempo()` per clip. Clips the onset-periodicity minimum stops never
+reach the estimator's own work and are counted, not timed; the first clip that does reach it
+pays the one-time costs (numba compilation, the first pass through a model) and is reported
+apart. The image cost is what the estimator adds to the service image as it ships: the
+packages its extra needs that `services/audio/uv.lock` (runtime and `models` extra, as the
+Dockerfile installs) does not have, with installed and wheel bytes, plus model files; Essentia
+adds nothing, the image already has it for the fingerprint. What the extra adds to this
+harness's install is shown too. No image is built; the installed bytes are what an image
+layer would hold.
+
 ## How the service is called
 
 `services/audio` is not an installable package (its modules are top-level), so
@@ -39,8 +129,9 @@ by hand.
 tempo and key the service would return, with its gate and withholding rules. This project
 pins every package the service's lock resolves at the service's version
 (`constraint-dependencies` in `pyproject.toml`); `tests/test_service_pins.py` fails when any
-package both locks share differs. The fingerprint models are not loaded: tempo and key do not
-use them.
+package both locks share differs. The fingerprint models are loaded only by the golden suite
+(tempo and key do not use them). The beat-this extra adds torch and its dependencies, which the
+service's lock does not have, so the pin check does not cover them.
 
 ## Data
 
@@ -52,7 +143,9 @@ while streaming, as soon as it would. The annotations are checked once, against 
 on their size, and mirdata's own download and extraction are not metered file by file. mirdata
 keeps its indexes in this project's environment (`.venv`), not in the data directory. One run
 at a time holds the directory (`.lock`); partial files left by a killed run are removed at the
-start of the next.
+start of the next. Besides the datasets it holds the model files (`models/beat-this/`,
+`models/essentia/`, each asked of the budget and checked by SHA-256) and
+the golden set's Discogs labels (`golden/discogs.json`); never the Deezer previews.
 
 mirdata 1.0.0 supplies the indexes, the annotations and the per-file MD5s; it does not fetch
 the audio. The full audio archives would not fit under the cap together (Ballroom's tar.gz is

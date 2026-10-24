@@ -1174,7 +1174,8 @@ const coverFirst: Case[] = [
 ];
 
 // A version word inside the title, the named artist featured on another recording, take
-// labels the rules do not know, and titles alone (which always ask).
+// labels (re-recordings, takes and outtakes are known markers, so the original is selected),
+// and titles alone (which always ask).
 const third: Case[] = [
   [
     "live take, studio credited to Wings",
@@ -1366,13 +1367,13 @@ const third: Case[] = [
     "Re-Recording",
     "Tainted Love Soft Cell",
     [track("Tainted Love (Re-Recording)", "Soft Cell"), track("Tainted Love", "Soft Cell")],
-    "ask",
+    "auto Tainted Love/Soft Cell (exact)",
   ],
   [
     "Re-Record",
     "Tainted Love Soft Cell",
     [track("Tainted Love - Re-Record", "Soft Cell"), track("Tainted Love", "Soft Cell")],
-    "ask",
+    "auto Tainted Love/Soft Cell (exact)",
   ],
   [
     "Spotify Studios",
@@ -1396,7 +1397,7 @@ const third: Case[] = [
       track("Strawberry Fields Forever - Take 7", "The Beatles"),
       track("Strawberry Fields Forever - Remastered 2009", "The Beatles"),
     ],
-    "ask",
+    "auto Strawberry Fields Forever - Remastered 2009/The Beatles (exact)",
   ],
   [
     "New recording",
@@ -1405,7 +1406,7 @@ const third: Case[] = [
       track("Total Eclipse of the Heart (New Recording)", "Bonnie Tyler"),
       track("Total Eclipse of the Heart", "Bonnie Tyler"),
     ],
-    "ask",
+    "auto Total Eclipse of the Heart/Bonnie Tyler (exact)",
   ],
   [
     "Home recording / outtake",
@@ -1414,7 +1415,7 @@ const third: Case[] = [
       track("Yesterday - Outtake", "The Beatles"),
       track("Yesterday - Remastered 2009", "The Beatles"),
     ],
-    "ask",
+    "auto Yesterday - Remastered 2009/The Beatles (exact)",
   ],
   [
     "Re-recording title only, artist-only list",

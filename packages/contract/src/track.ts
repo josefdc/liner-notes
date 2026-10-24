@@ -181,11 +181,19 @@ export const ModelUnavailableReason = z.enum([
 ]);
 export type ModelUnavailableReason = z.infer<typeof ModelUnavailableReason>;
 
-/** Where the analysed preview came from and how the track was matched to it. */
+/**
+ * Where the analysed preview came from and how the track was matched to it:
+ * - `isrc`: the provider's entry for the track's ISRC;
+ * - `id`: an entry read by its id: the provider's own clip of the chosen track (Spotify), or an
+ *   entry the provider offers in place of the ISRC entry (Deezer), checked like a search match;
+ * - `search`: a search result that strictly matches the track.
+ */
 export const PreviewMatch = z.object({
   provider: z.enum(["deezer", "spotify"]),
-  method: z.enum(["isrc", "search"]),
-  score: UnitInterval.nullable().describe("Match score of a search match; null for ISRC"),
+  method: z.enum(["isrc", "id", "search"]),
+  score: UnitInterval.nullable().describe(
+    "Match score of an id or search match; null for ISRC and for a provider's own clip",
+  ),
 });
 
 // =============================================================================

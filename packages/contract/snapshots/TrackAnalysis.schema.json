@@ -227,10 +227,10 @@
             "type": "object",
             "properties": {
               "provider": { "type": "string", "enum": ["deezer", "spotify"] },
-              "method": { "type": "string", "enum": ["isrc", "search"] },
+              "method": { "type": "string", "enum": ["isrc", "id", "search"] },
               "score": {
                 "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
-                "description": "Match score of a search match; null for ISRC"
+                "description": "Match score of an id or search match; null for ISRC and for a provider's own clip"
               }
             },
             "required": ["provider", "method", "score"]
@@ -602,10 +602,10 @@
             "type": "object",
             "properties": {
               "provider": { "type": "string", "enum": ["deezer", "spotify"] },
-              "method": { "type": "string", "enum": ["isrc", "search"] },
+              "method": { "type": "string", "enum": ["isrc", "id", "search"] },
               "score": {
                 "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
-                "description": "Match score of a search match; null for ISRC"
+                "description": "Match score of an id or search match; null for ISRC and for a provider's own clip"
               }
             },
             "required": ["provider", "method", "score"],

@@ -234,6 +234,12 @@ async function testSonicCacheAudio(): Promise<void> {
       keyMoments: [],
       measured: true as const,
       analyzer: "audio-service" as const,
+      previewMatch: {
+        provider: "deezer" as const,
+        method: "isrc" as const,
+        deezerId: 1,
+        score: null,
+      },
     };
 
     // Put and get

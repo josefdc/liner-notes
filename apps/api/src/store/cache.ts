@@ -17,12 +17,13 @@ import { SourceError } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
 import {
+  isMatchedMeasurement,
   isMeasuredAudio,
   LOW_CONFIDENCE_AUDIO_TTL_MS,
   parseMeasuredAudio,
 } from "./measuredAudio.js";
 
-export { isMeasuredAudio } from "./measuredAudio.js";
+export { isMatchedMeasurement, isMeasuredAudio } from "./measuredAudio.js";
 
 // =============================================================================
 // Types
@@ -179,7 +180,8 @@ export class SonicCache {
   /**
    * Caches a measurement. Throws on unmarked features and on database errors. A complete
    * (high-confidence) measurement that has not expired is not replaced by a partial one; a
-   * stored row that is not a valid measurement counts as absent and is overwritten.
+   * stored row that is not a valid measurement, or does not say how its clip was matched (see
+   * isMatchedMeasurement), counts as absent and is overwritten.
    */
   putAudio(spotifyId: string, features: AudioFeatures, ttlMs?: number): void {
     if (!isMeasuredAudio(features)) {
@@ -190,8 +192,10 @@ export class SonicCache {
     try {
       const now = nowSec();
       const row = this.stmt.getAudio.get(spotifyId);
-      const existing = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
+      const stored = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
+      const existing = isMatchedMeasurement(stored) ? stored : null;
       if (existing?.confidence === "high" && features.confidence === "low") {
+        console.log(`[SonicCache] Keeping the complete audio row for ${spotifyId}`);
         return;
       }
 

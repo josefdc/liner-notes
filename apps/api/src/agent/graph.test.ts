@@ -660,4 +660,28 @@ describe("the analysis graph under failure", () => {
     expect(runIds.size).toBe(1);
     expect(state.trackData?.run).toMatchObject({ id: [...runIds][0], usage: { llmCalls: 3 } });
   });
+
+  it("sends the engineer's clip of the chosen recording to the player with how it was matched", async () => {
+    const clip = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/c.mp3?hdnea=exp=1~hmac=x";
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async () =>
+      JSON.stringify({
+        source: "analyzed",
+        bpm: 116,
+        key: "D",
+        mode: "Minor",
+        previewUrl: clip,
+        previewMatch: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
+      }),
+    );
+
+    const { events } = await drive(stubModel(["done"]), { threadId: "t-preview" });
+
+    const request = tools.analyzeAudioPreview.invoke.mock.calls[0] as unknown[];
+    expect(request[0]).toMatchObject({ title: "Ice Ice Baby", durationMs: 271_000 });
+    const complete = events.find((event) => event.type === "complete") as
+      | { data: { previewUrl?: string; preview?: unknown } }
+      | undefined;
+    expect(complete?.data.previewUrl).toBe(clip);
+    expect(complete?.data.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+  });
 });

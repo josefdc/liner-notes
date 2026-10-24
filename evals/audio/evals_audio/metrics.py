@@ -1,5 +1,5 @@
 """
-Scores, intervals and the accuracy-vs-coverage curve.
+Scores, intervals, the accuracy-vs-coverage curve and the paired comparison.
 
 Tempo (Gouyon et al. 2006): Acc1 is an estimate within 4 % of the reference tempo; Acc2 also
 accepts the reference times 2, 3, 1/2 or 1/3 (octave and meter errors), each within 4 %.
@@ -8,8 +8,18 @@ Key (MIREX): 1 for the same key, 0.5 for the key a perfect fifth above the refer
 same mode, 0.3 for the relative key, 0.2 for the parallel key, 0 otherwise (mir_eval's
 weighted score with ascending fifths only). Exact accuracy counts only the same key.
 
-An item the service answered nothing for is *withheld*: it is counted on its own, never scored
-as wrong and never left out of n. Accuracy is over the answered items; coverage is answered / n.
+Every metric is given two ways:
+
+- **over n**: the share of all n clips for which the service returned a correct value; a clip
+  the service withheld counts as no correct value. This answers "how often does a user get a
+  right value".
+- **over answered**: the share of the returned values that are correct. This answers "how
+  often is a value the service shows right". It is conditional on the service choosing to
+  answer, so two estimators that answer different clips cannot be ranked by it.
+
+Withheld clips are counted on their own and never dropped. Intervals: Wilson score intervals
+for the binary metrics (Acc1, Acc2, exact); a BCa bootstrap for the MIREX score, which is not
+binary (no interval when every score is equal).
 """
 
 from __future__ import annotations
@@ -19,11 +29,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import stats
 
 TEMPO_TOLERANCE = 0.04
 ACC2_FACTORS = (1.0, 2.0, 3.0, 1.0 / 2.0, 1.0 / 3.0)
 BOOTSTRAP_RESAMPLES = 10_000
 CI_LEVEL = 0.95
+BINARY_METRICS = frozenset({"acc1", "acc2", "exact"})
+# Coverage-curve points resting on fewer answered clips than this are left out.
+MIN_CURVE_ANSWERED = 10
 
 PITCH_CLASS = {
     "C": 0,
@@ -110,34 +124,81 @@ def mirex_key_score(estimate: Key, reference: Key) -> float:
 
 @dataclass(frozen=True)
 class Estimate:
-    """A mean with its percentile-bootstrap interval; all None when there is nothing to score."""
+    """
+    A mean over n values with its 95 % interval. `total` is the sum of the scores (the number
+    correct for a binary metric). `method` names the interval; low/high are None when there is
+    nothing to score or no interval can be given (`note` says why).
+    """
 
     n: int
+    total: float
     mean: float | None
     low: float | None
     high: float | None
+    method: str
+    note: str | None = None
 
     def as_dict(self) -> dict:
-        return {"n": self.n, "mean": self.mean, "ciLow": self.low, "ciHigh": self.high}
+        return {
+            "n": self.n,
+            "total": self.total,
+            "mean": self.mean,
+            "ciLow": self.low,
+            "ciHigh": self.high,
+            "method": self.method,
+            "note": self.note,
+        }
 
 
-def bootstrap_mean(
+def wilson(k: int, n: int, level: float = CI_LEVEL) -> Estimate:
+    """Wilson score interval for k successes in n trials."""
+    if n == 0:
+        return Estimate(0, 0.0, None, None, None, "Wilson")
+    z = float(stats.norm.ppf(0.5 + level / 2))
+    p = k / n
+    centre = (p + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return Estimate(n, float(k), p, max(0.0, centre - half), min(1.0, centre + half), "Wilson")
+
+
+def bca_mean(
     values: Sequence[float],
     seed: int,
     resamples: int = BOOTSTRAP_RESAMPLES,
     level: float = CI_LEVEL,
 ) -> Estimate:
-    """Mean of `values` and its percentile bootstrap interval, reproducible for a seed."""
+    """
+    Mean of `values` with a bias-corrected and accelerated (BCa) bootstrap interval,
+    reproducible for a seed. When every value is equal no interval is given: resampling cannot
+    say anything about the spread then.
+    """
     data = np.asarray(values, dtype=float)
     n = int(data.size)
     if n == 0:
-        return Estimate(0, None, None, None)
+        return Estimate(0, 0.0, None, None, None, "BCa bootstrap")
+    mean = float(data.mean())
+    if np.all(data == data[0]):
+        return Estimate(n, float(data.sum()), mean, None, None, "BCa bootstrap", "all scores equal")
     rng = np.random.default_rng(seed)
-    idx = rng.integers(0, n, size=(resamples, n))
-    means = data[idx].mean(axis=1)
-    alpha = (1.0 - level) / 2.0
-    low, high = np.quantile(means, [alpha, 1.0 - alpha])
-    return Estimate(n, float(data.mean()), float(low), float(high))
+    means = data[rng.integers(0, n, size=(resamples, n))].mean(axis=1)
+    below = np.mean(means < mean) + 0.5 * np.mean(means == mean)
+    z0 = float(stats.norm.ppf(np.clip(below, 1e-9, 1 - 1e-9)))
+    jack = (data.sum() - data) / (n - 1)
+    d = jack.mean() - jack
+    denom = 6.0 * float(np.sum(d**2)) ** 1.5
+    accel = float(np.sum(d**3)) / denom if denom > 0 else 0.0
+    alphas = []
+    for q in ((1 - level) / 2, 1 - (1 - level) / 2):
+        zq = float(stats.norm.ppf(q))
+        alphas.append(float(stats.norm.cdf(z0 + (z0 + zq) / (1 - accel * (z0 + zq)))))
+    low, high = np.quantile(means, alphas)
+    return Estimate(n, float(data.sum()), mean, float(low), float(high), "BCa bootstrap")
+
+
+def estimate(metric: str, values: Sequence[float], seed: int) -> Estimate:
+    if metric in BINARY_METRICS:
+        return wilson(int(round(sum(values))), len(values))
+    return bca_mean(values, seed)
 
 
 # --- withheld accounting and coverage --------------------------------------------------------
@@ -146,7 +207,7 @@ def bootstrap_mean(
 @dataclass(frozen=True)
 class Item:
     """
-    One track for one estimator. `scores` maps a metric name to the item's score; it is None
+    One clip for one estimator. `scores` maps a metric name to the clip's score; it is None
     when the service withheld the answer (or the analysis failed: `failed` is True then).
     """
 
@@ -159,14 +220,19 @@ class Item:
     def answered(self) -> bool:
         return self.scores is not None
 
+    def score(self, metric: str) -> float:
+        """The clip's score with a withheld or failed answer counted as not correct."""
+        return 0.0 if self.scores is None else self.scores[metric]
+
 
 @dataclass(frozen=True)
 class Summary:
-    n: int  # every item with audio and a reference
+    n: int  # every clip with audio and a usable reference
     answered: int
     withheld: int
     failed: int
-    metrics: dict[str, Estimate]  # over the answered items
+    over_n: dict[str, Estimate]  # withheld and failed count as not correct
+    over_answered: dict[str, Estimate]
 
     @property
     def coverage(self) -> float | None:
@@ -178,63 +244,162 @@ class Summary:
             "answered": self.answered,
             "withheld": self.withheld,
             "failed": self.failed,
-            "coverage": self.coverage,
-            "metrics": {k: v.as_dict() for k, v in self.metrics.items()},
+            "coverage": wilson(self.answered, self.n).as_dict(),
+            "overN": {k: v.as_dict() for k, v in self.over_n.items()},
+            "overAnswered": {k: v.as_dict() for k, v in self.over_answered.items()},
         }
+
+
+def answered_seed(seed: int, k: int) -> int:
+    """The bootstrap seed for the k-th metric over answered clips (summary and curve alike)."""
+    return seed + 100 + k
 
 
 def summarize(items: Sequence[Item], metric_names: Sequence[str], seed: int) -> Summary:
     answered = [i for i in items if i.answered]
     failed = sum(1 for i in items if i.failed)
     withheld = len(items) - len(answered) - failed
-    metrics = {
-        # One seed per metric (offset by its position) so the intervals do not share draws
-        # by accident; the same seed always gives the same interval.
-        name: bootstrap_mean([i.scores[name] for i in answered], seed + k)
+    # One seed per metric and view, so bootstrap draws are not shared by accident; the same
+    # seed always gives the same interval.
+    over_n = {
+        name: estimate(name, [i.score(name) for i in items], seed + k)
         for k, name in enumerate(metric_names)
     }
-    return Summary(len(items), len(answered), withheld, failed, metrics)
+    over_answered = {
+        name: estimate(name, [i.scores[name] for i in answered], answered_seed(seed, k))
+        for k, name in enumerate(metric_names)
+    }
+    return Summary(len(items), len(answered), withheld, failed, over_n, over_answered)
+
+
+def ranking_auc(items: Sequence[Item], metric: str) -> dict:
+    """
+    Whether the service's confidence puts correct answers first: over the answered clips with
+    a confidence, the chance that a correct one has a higher confidence than a wrong one (the
+    area under the ROC curve; 0.5 is random order, ties count half), with a one-sided
+    Mann-Whitney p-value against random order. Binary metrics only.
+    """
+    ranked = [i for i in items if i.answered and i.confidence is not None]
+    right = [i.confidence for i in ranked if i.scores[metric] == 1.0]
+    wrong = [i.confidence for i in ranked if i.scores[metric] != 1.0]
+    out: dict = {"correct": len(right), "wrong": len(wrong), "auc": None, "p": None}
+    if right and wrong:
+        test = stats.mannwhitneyu(right, wrong, alternative="greater")
+        out["auc"] = float(test.statistic) / (len(right) * len(wrong))
+        out["p"] = float(test.pvalue)
+    return out
 
 
 @dataclass(frozen=True)
 class CoveragePoint:
-    coverage: float  # answered share of all n items at this threshold
+    coverage: float  # answered share of all n clips at this point
     answered: int
-    min_confidence: float  # the lowest confidence still answered
-    accuracy: dict[str, float]
+    min_confidence: float | None  # the lowest confidence kept (None: unranked clips included)
+    accuracy: dict[str, Estimate]  # over the clips kept
 
 
 def coverage_curve(
     items: Sequence[Item],
     metric_names: Sequence[str],
+    seed: int = 0,
     levels: Sequence[float] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
-) -> list[CoveragePoint]:
+    min_answered: int = MIN_CURVE_ANSWERED,
+) -> tuple[list[CoveragePoint], list[str]]:
     """
-    Accuracy when only the most confident answers are kept: answered items sorted by the
+    Accuracy when only the most confident answers are kept: answered clips sorted by the
     service's confidence (highest first, ties by track id), and for each coverage level the
-    accuracy of the top ceil(level * n) items. Coverage is a share of all n items, withheld ones
-    included, so levels above the service's own coverage are not reachable and are left out; the
-    last point is always every answered item. Items without a confidence are not ranked.
+    accuracy of the top ceil(level * n) clips, with its interval. Coverage is a share of all n
+    clips, withheld ones included, so levels above the service's own coverage are not reachable.
+    Answered clips without a confidence cannot be ranked: they come last, and their ids are
+    returned with the points. The last point is always every answered clip, with the same
+    interval as the summary over answered clips; other points resting on fewer than
+    `min_answered` clips are left out.
     """
     n = len(items)
+    answered = [i for i in items if i.answered]
     ranked = sorted(
-        (i for i in items if i.answered and i.confidence is not None),
+        (i for i in answered if i.confidence is not None),
         key=lambda i: (-i.confidence, i.track_id),
     )
-    if n == 0 or not ranked:
-        return []
-    counts = sorted({math.ceil(level * n - 1e-9) for level in levels} | {len(ranked)})
+    unranked = sorted((i for i in answered if i.confidence is None), key=lambda i: i.track_id)
+    order = ranked + unranked
+    unranked_ids = [i.track_id for i in unranked]
+    if n == 0 or not order:
+        return [], unranked_ids
+    counts = {math.ceil(level * n - 1e-9) for level in levels}
+    counts = {k for k in counts if 0 < k <= len(ranked) and k >= min_answered}
+    counts.add(len(order))
     points = []
-    for k in counts:
-        if k <= 0 or k > len(ranked):
-            continue
-        top = ranked[:k]
+    for k in sorted(counts):
+        top = order[:k]
         points.append(
             CoveragePoint(
                 coverage=k / n,
                 answered=k,
-                min_confidence=float(top[-1].confidence),
-                accuracy={m: float(np.mean([i.scores[m] for i in top])) for m in metric_names},
+                min_confidence=None if k > len(ranked) else float(top[-1].confidence),
+                accuracy={
+                    m: estimate(m, [i.scores[m] for i in top], answered_seed(seed, j))
+                    for j, m in enumerate(metric_names)
+                },
             )
         )
-    return points
+    return points, unranked_ids
+
+
+# --- paired comparison -----------------------------------------------------------------------
+
+
+def mcnemar_exact(b: int, c: int) -> float:
+    """Two-sided exact McNemar p-value for b and c discordant pairs."""
+    if b + c == 0:
+        return 1.0
+    return float(min(1.0, 2 * stats.binom.cdf(min(b, c), b + c, 0.5)))
+
+
+def compare(
+    first: Sequence[Item],
+    second: Sequence[Item],
+    metric_names: Sequence[str],
+    seed: int,
+) -> dict:
+    """
+    Two estimators on the same clips, two ways:
+
+    - "bothAnswered": only the clips both estimators answered, so each is judged on the same
+      clips;
+    - "allN": every clip, a withheld answer counted as not correct.
+
+    Binary metrics give each side's correct count, the discordant pairs (right for one only)
+    and an exact McNemar p-value; MIREX gives each side's mean and the mean paired difference
+    (first minus second) with a BCa interval.
+    """
+    a_by = {i.track_id: i for i in first}
+    b_by = {i.track_id: i for i in second}
+    if set(a_by) != set(b_by):
+        raise ValueError("the two estimators were not run on the same clips")
+    ids = sorted(a_by)
+    both = [t for t in ids if a_by[t].answered and b_by[t].answered]
+    out = {}
+    for label, subset in (("bothAnswered", both), ("allN", ids)):
+        block: dict = {"n": len(subset), "metrics": {}}
+        for j, m in enumerate(metric_names):
+            a = np.array([a_by[t].score(m) for t in subset], dtype=float)
+            b = np.array([b_by[t].score(m) for t in subset], dtype=float)
+            if m in BINARY_METRICS:
+                only_a = int(np.sum((a == 1) & (b == 0)))
+                only_b = int(np.sum((a == 0) & (b == 1)))
+                block["metrics"][m] = {
+                    "firstCorrect": int(a.sum()),
+                    "secondCorrect": int(b.sum()),
+                    "onlyFirst": only_a,
+                    "onlySecond": only_b,
+                    "mcnemarP": mcnemar_exact(only_a, only_b),
+                }
+            else:
+                block["metrics"][m] = {
+                    "firstMean": float(a.mean()) if subset else None,
+                    "secondMean": float(b.mean()) if subset else None,
+                    "difference": bca_mean(list(a - b), seed + j).as_dict(),
+                }
+        out[label] = block
+    return out

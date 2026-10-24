@@ -84,3 +84,16 @@ def analyze(signals, est) -> dict:
     """The v2 block the service would return for these signals with this estimator."""
     main, _ = load()
     return main.analyze_signals(signals, est)["v2"]
+
+
+def key_without_evidence_rule(signals, est):
+    """
+    The key the estimator would give if the service's evidence rule (Signals.key_withheld) let
+    it through: the estimator's own code, with the rule skipped for this one call. Used only to
+    show what the rule withholds; never scored as the service's answer.
+    """
+    signals.key_withheld = lambda: None
+    try:
+        return est.key(signals)
+    finally:
+        del signals.key_withheld

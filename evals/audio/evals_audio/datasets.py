@@ -1,19 +1,22 @@
 """
 The annotated datasets: what they are, where they come from, and how their audio is fetched.
 
-Annotations and track indexes come from mirdata (its loaders, indexes and per-file MD5s). The
-audio archives are larger than the data directory's cap allows for both datasets at once
-(Ballroom's tar.gz is 1.45 GB before extraction, GiantSteps+'s zip 0.86 GB), so only the
-tracks a run selects are fetched, each checked against the MD5 in mirdata's index:
+Annotations and track indexes come from mirdata (its loaders, indexes and per-file MD5s); mirdata
+fetches only the annotations. The audio archives are larger than the data directory's cap
+allows for both datasets at once (Ballroom's tar.gz is 1.45 GB before extraction, GiantSteps+'s
+zip 0.86 GB), so the harness fetches only the tracks a run selects, each checked against the
+MD5 in mirdata's index:
 
-- Ballroom: the tar.gz is streamed and only the selected members are written;
+- Ballroom: the tar.gz is streamed and only the selected members are written. The archive is
+  read until the last selected member arrives, which for a draw across all dance styles is
+  most of the 1.45 GB (network, not disk);
 - GiantSteps+ Key: the zip is read with HTTP range requests, member by member;
-- GiantSteps Tempo: mirdata cannot fetch this audio. The dataset's own download script
-  (audio_dl.sh) names two locations, the Beatport preview URL and a backup at JKU Linz; both
-  are tried in that order, per file.
+- GiantSteps Tempo: mirdata cannot fetch this audio. The dataset's download script names two
+  locations; since 2025 upstream (GiantSteps/giantsteps-tempo-dataset 2ea2180) it tries the
+  JKU Linz copy first because the Beatport URLs no longer work, and so does the harness.
 
-Every write asks the DiskBudget first (storage.py), so a run never takes the data directory
-past its cap.
+Every file's source (the URL actually used, after redirects) is recorded in SOURCES_FILE as
+soon as the file is written and verified. Writes ask the DiskBudget first (storage.py).
 """
 
 from __future__ import annotations
@@ -23,7 +26,9 @@ import io
 import json
 import logging
 import os
+import shutil
 import tarfile
+import time
 import zipfile
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -41,6 +46,15 @@ logger = logging.getLogger("evals_audio")
 SOURCES_FILE = ".audio-sources.json"
 HTTP_TIMEOUT = httpx.Timeout(60.0, connect=20.0)
 USER_AGENT = "liner-notes-evals (dataset fetch)"
+RETRY_PAUSE_S = 2.0
+
+CC_BY_SA = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)"
+CC_BY_NC_SA = "CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)"
+KNEES_2015 = (
+    "Knees, P., Faraldo, Á., Herrera, P., Vogl, R., Böck, S., Hörschläger, F., Le Goff, M. "
+    "(2015). Two data sets for tempo estimation and key detection in electronic dance music "
+    "annotated from user corrections. Proc. ISMIR 2015, 364-370. doi:10.5281/zenodo.1414996"
+)
 
 
 @dataclass(frozen=True)
@@ -49,14 +63,21 @@ class Dataset:
     mirdata_name: str
     suite: str  # "tempo" or "key"
     title: str
-    licence: str
-    licence_source: str
+    annotation_licence: str  # what covers the labels
+    audio_rights: str  # what covers the audio (none of the sources licenses it)
     sources: tuple[tuple[str, str], ...]  # (what, url)
+    credits: tuple[str, ...]  # citations to give when the data is used
     annotation_remotes: tuple[str, ...]  # mirdata remotes to download (small)
     annotation_bytes: int  # upper bound on their size once extracted (for the budget)
     reference_note: str
     notes: tuple[str, ...] = field(default_factory=tuple)
 
+
+COMMERCIAL_AUDIO = (
+    "commercial excerpts ({}); no licence is stated for the audio. Fetched into the local data "
+    "directory for evaluation only and never redistributed: the repository holds no audio, "
+    "reference labels or file names, only track ids and the service's own results."
+)
 
 DATASETS: dict[str, Dataset] = {
     "ballroom": Dataset(
@@ -64,45 +85,65 @@ DATASETS: dict[str, Dataset] = {
         mirdata_name="ballroom",
         suite="tempo",
         title="Ballroom (ISMIR 2004 tempo induction contest)",
-        licence="CC BY-NC-SA 4.0",
-        licence_source="mirdata 1.0.0, mirdata.datasets.ballroom.LICENSE_INFO; "
-        "the contest page states no licence",
+        annotation_licence=f"{CC_BY_NC_SA}, per mirdata 1.0.0 (ballroom.LICENSE_INFO); "
+        "not stated by the dataset: the contest page states no licence",
+        audio_rights=COMMERCIAL_AUDIO.format("BallroomDancers.com, credited on the contest page"),
         sources=(
             ("audio", "https://mtg.upf.edu/ismir2004/contest/tempoContest/data1.tar.gz"),
             ("tempo", "https://mtg.upf.edu/ismir2004/contest/tempoContest/data2.tar.gz"),
             ("index", "https://zenodo.org/records/13993346 (mirdata index 1.0)"),
         ),
+        credits=(
+            "Gouyon, F., Klapuri, A., Dixon, S., Alonso, M., Tzanetakis, G., Uhle, C., Cano, P. "
+            "(2006). An experimental comparison of audio tempo induction algorithms. IEEE "
+            "Transactions on Audio, Speech, and Language Processing 14(5), 1832-1844. "
+            "doi:10.1109/TSA.2005.858509",
+        ),
         annotation_remotes=("tempo",),
         annotation_bytes=20_000_000,
         reference_note="the contest's ground-truth tempo (one value per excerpt)",
-        notes=("698 excerpts of about 30 s from ballroomdancers.com, eight dance styles.",),
+        notes=(
+            "698 excerpts of about 30 s from BallroomDancers.com, eight dance styles. The "
+            "excerpts are 29.4-31.8 s long, so the 30 s window is in effect the whole excerpt.",
+            "Published Ballroom figures use all 698 excerpts; a sample of n clips is only "
+            "comparable within its interval.",
+        ),
     ),
     "giantsteps-tempo": Dataset(
         name="giantsteps-tempo",
         mirdata_name="giantsteps_tempo",
         suite="tempo",
         title="GiantSteps Tempo",
-        licence="CC BY-SA 4.0",
-        licence_source="mirdata 1.0.0, mirdata.datasets.giantsteps_tempo.LICENSE_INFO; "
-        "the annotation repository has no licence file",
+        annotation_licence=f"{CC_BY_SA}, per mirdata 1.0.0 (giantsteps_tempo.LICENSE_INFO); "
+        "not stated by the dataset: the annotation repository has no licence",
+        audio_rights=COMMERCIAL_AUDIO.format("Beatport two-minute previews"),
         sources=(
             (
                 "annotations",
                 "https://github.com/GiantSteps/giantsteps-tempo-dataset "
                 "(commit 0b7d47ba8cae59d3535a02e3db69e2cf6d0af5bb)",
             ),
-            ("audio (primary)", "http://geo-samples.beatport.com/lofi/<id>.LOFI.mp3"),
-            ("audio (backup)", "http://www.cp.jku.at/datasets/giantsteps/backup/<id>.LOFI.mp3"),
+            ("audio (first)", "https://www.cp.jku.at/datasets/giantsteps/backup/<id>.LOFI.mp3"),
+            ("audio (second)", "https://geo-samples.beatport.com/lofi/<id>.LOFI.mp3"),
             ("index", "https://zenodo.org/records/13993327 (mirdata index 2.0)"),
+        ),
+        credits=(
+            KNEES_2015,
+            "Schreiber, H., Müller, M. (2018). A crowdsourced experiment for tempo estimation "
+            "of electronic dance music. Proc. ISMIR 2018. doi:10.5281/zenodo.1492437 "
+            "(the v2 annotations used here)",
         ),
         annotation_remotes=("annotations",),
         annotation_bytes=60_000_000,
-        reference_note="annotations_v2 (Schreiber & Müller 2018): the tempo the most "
-        "participants tapped",
+        reference_note="annotations_v2 (Schreiber & Müller 2018): of the tempi the crowd "
+        "tapped, the one with the highest share",
         notes=(
             "664 two-minute Beatport previews of electronic dance music.",
-            "mirdata does not download this audio; the harness uses the two locations in the "
-            "dataset's audio_dl.sh and checks each file's MD5.",
+            "mirdata does not download this audio; the harness uses the locations in the "
+            "dataset's download script and checks each file's MD5.",
+            "Published GiantSteps Tempo figures are computed on the whole two-minute previews, "
+            "mostly against the v1 labels; here one 30 s window per preview is scored against "
+            "v2, and the window can fall on an intro, a breakdown or the fade. Not comparable.",
         ),
     ),
     "giantsteps-key": Dataset(
@@ -110,13 +151,26 @@ DATASETS: dict[str, Dataset] = {
         mirdata_name="giantsteps_key",
         suite="key",
         title="GiantSteps Key, as GiantSteps+ (Faraldo 2017 revision)",
-        licence="CC BY-SA 4.0",
-        licence_source="Zenodo record 10.5281/zenodo.1095691 metadata; mirdata 1.0.0 agrees",
+        annotation_licence=f"{CC_BY_SA}, stated in the Zenodo record "
+        "(10.5281/zenodo.1095691); mirdata 1.0.0 agrees",
+        audio_rights=COMMERCIAL_AUDIO.format(
+            "Beatport two-minute previews; the record says the audio belongs to Beatport"
+        ),
         sources=(
             ("audio", "https://zenodo.org/records/1095691/files/audio.zip"),
             ("keys", "https://zenodo.org/records/1095691/files/keys.zip"),
             ("metadata", "https://zenodo.org/records/1095691/files/original_metadata.zip"),
             ("index", "https://zenodo.org/records/13993357 (mirdata index '+')"),
+        ),
+        credits=(
+            "Faraldo, Á. (2017). GiantSteps+ EDM Key Dataset. Zenodo. doi:10.5281/zenodo.1095691",
+            "Faraldo, Á. (2017). Tonality Estimation in Electronic Dance Music: A "
+            "Computational and Musically Informed Examination. PhD thesis, Universitat Pompeu "
+            "Fabra, Barcelona",
+            KNEES_2015 + " (the original GiantSteps Key dataset)",
+            "The record's description asks for 10.5281/zenodo.1101082, but that DOI resolves "
+            "to a different record (the Beatport EDM Key Dataset, 1,486 excerpts); the record "
+            "used here is cited above",
         ),
         annotation_remotes=("keys", "metadata"),
         annotation_bytes=20_000_000,
@@ -128,6 +182,9 @@ DATASETS: dict[str, Dataset] = {
             "Labels with two keys ('E major | E minor'), 'other' modes, 'X' or a misspelt "
             "tonic are not scored and are counted as unusable; modal labels keep their "
             "major/minor word ('F minor dorian' is scored as F minor).",
+            "Published GiantSteps Key figures are computed on the whole two-minute previews, "
+            "mostly against the original 2015 labels; here one 30 s window per preview is "
+            "scored against GiantSteps+ with the ambiguous labels left out. Not comparable.",
         ),
     ),
 }
@@ -165,6 +222,9 @@ class Reference:
     excluded: str | None  # why the track has no usable reference
     audio_rel: str  # path relative to the dataset's data home, as in mirdata's index
     audio_md5: str
+    # GiantSteps Tempo: the v1 tempo (Knees et al. 2015), the number of crowd tempi in v2 and
+    # the share gap between the top two (near ties make the v2 reference fragile).
+    details: dict = field(default_factory=dict, compare=False)
 
 
 def initialize(dataset: Dataset, home: Path):
@@ -174,16 +234,24 @@ def initialize(dataset: Dataset, home: Path):
 
 
 def ensure_annotations(dataset: Dataset, home: Path, budget: DiskBudget) -> None:
-    """Download the (small) annotation remotes with mirdata when they are missing."""
+    """
+    Download the (small) annotation remotes with mirdata when they are missing. The budget is
+    asked once for an upper bound on their extracted size (mirdata's own download and
+    extraction are not metered file by file). mirdata keeps its index next to its own code, in
+    this project's environment, not in the data directory.
+    """
     ds = initialize(dataset, home)
-    # mirdata keeps its index next to its own code (in this project's environment) and the
-    # annotations under `home`; both must be there.
     marker = home / ".annotations-complete"
-    if marker.exists() and os.path.exists(ds.index_path):
+    if marker.exists():
+        if not os.path.exists(ds.index_path):
+            # A new environment: only the index is missing, the annotations are on disk.
+            ds.download(partial_download=["index"])
         return
     budget.require(dataset.annotation_bytes, f"{dataset.name} annotations")
     home.mkdir(parents=True, exist_ok=True)
     ds.download(partial_download=list(dataset.annotation_remotes), cleanup=True)
+    # macOS resource forks that come with keys.zip.
+    shutil.rmtree(home / "__MACOSX", ignore_errors=True)
     marker.write_text("downloaded with mirdata\n")
 
 
@@ -199,7 +267,8 @@ def references(dataset: Dataset, home: Path) -> list[Reference]:
         except ValueError:
             # mirdata refuses an empty annotation (GiantSteps Tempo 3041381 has none).
             value, excluded = None, "empty annotation"
-        refs.append(Reference(str(tid), value, excluded, audio_rel, audio_md5))
+        details = _details(dataset, track) if excluded is None else {}
+        refs.append(Reference(str(tid), value, excluded, audio_rel, audio_md5, details))
     return refs
 
 
@@ -222,6 +291,22 @@ def _reference(dataset: Dataset, track) -> tuple[float | Key | None, str | None]
     else:
         raise KeyError(dataset.name)
     return value, excluded
+
+
+def _details(dataset: Dataset, track) -> dict:
+    if dataset.name != "giantsteps-tempo":
+        return {}
+    shares = sorted((float(c) for c in track.tempo_v2.confidence), reverse=True)
+    try:
+        v1 = track.tempo
+        v1_tempo = None if v1 is None or len(v1.tempos) == 0 else float(v1.tempos[0])
+    except ValueError:
+        v1_tempo = None
+    return {
+        "v1": v1_tempo,
+        "crowdTempi": len(shares),
+        "topGap": shares[0] - shares[1] if len(shares) > 1 else 1.0,
+    }
 
 
 def select(refs: list[Reference], limit: int | None, seed: int) -> list[Reference]:
@@ -256,8 +341,13 @@ def has_audio(home: Path, ref: Reference) -> bool:
 def _write_checked(
     home: Path, ref: Reference, chunks: Iterable[bytes], size: int | None, budget: DiskBudget
 ) -> bool:
-    """Write one file through a .part file; keep it only when its MD5 matches the index."""
+    """
+    Write one file through a .part file; keep it only when its MD5 matches the index. A file
+    of known size is refused before anything is written when it does not fit; one of unknown
+    size is stopped as soon as the directory would pass the cap.
+    """
     target = home / ref.audio_rel
+    used = budget.used()
     budget.require(size if size is not None else 0, f"{ref.audio_rel}")
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_name(target.name + ".part")
@@ -267,12 +357,12 @@ def _write_checked(
         with open(part, "wb") as f:
             for chunk in chunks:
                 written += len(chunk)
-                if size is None and written > budget.cap:
-                    raise DataCapExceeded(f"{ref.audio_rel} is larger than the whole cap")
+                if size is None and used + written > budget.cap:
+                    raise DataCapExceeded(
+                        f"{ref.audio_rel} (size unknown) would take {budget.root} past its cap"
+                    )
                 digest.update(chunk)
                 f.write(chunk)
-        if size is None and budget.used() > budget.cap:
-            raise DataCapExceeded(f"{ref.audio_rel} took {budget.root} past its cap")
         if digest.hexdigest() != ref.audio_md5:
             logger.warning("MD5 mismatch for %s; discarded", ref.audio_rel)
             part.unlink(missing_ok=True)
@@ -284,13 +374,16 @@ def _write_checked(
         raise
 
 
-def _fetch_ballroom(home: Path, wanted: list[Reference], budget: DiskBudget, client) -> dict:
+Fetched = Callable[[str, str], None]  # (track id, URL actually used)
+
+
+def _fetch_ballroom(home, wanted, budget, client, fetched: Fetched) -> None:
     # Members are BallroomData/<style>/<file>.wav; mirdata's index has B_1.0/audio/<style>/...
     by_member = {"BallroomData/" + r.audio_rel.split("B_1.0/audio/", 1)[1]: r for r in wanted}
-    got: dict[str, str] = {}
-    url = DATASETS["ballroom"].sources[0][1]
-    with client.stream("GET", url) as response:
+    left = len(wanted)
+    with client.stream("GET", DATASETS["ballroom"].sources[0][1]) as response:
         response.raise_for_status()
+        url = str(response.url)
         stream = _ResponseStream(response.iter_bytes(1 << 20))
         with tarfile.open(fileobj=stream, mode="r|gz") as tar:
             for member in tar:
@@ -298,19 +391,16 @@ def _fetch_ballroom(home: Path, wanted: list[Reference], budget: DiskBudget, cli
                 if ref is None or not member.isfile():
                     continue
                 f = tar.extractfile(member)
-                ok = _write_checked(home, ref, _chunks(f), member.size, budget)
-                if ok:
-                    got[ref.track_id] = url
-                if len(got) == len(wanted):
+                if _write_checked(home, ref, _chunks(f), member.size, budget):
+                    fetched(ref.track_id, url)
+                left -= 1
+                if left == 0:
                     break
-    return got
 
 
-def _fetch_giantsteps_key(home: Path, wanted: list[Reference], budget: DiskBudget, client) -> dict:
-    url = DATASETS["giantsteps-key"].sources[0][1]
-    got: dict[str, str] = {}
-    remote = io.BufferedReader(_HTTPRangeFile(client, url), buffer_size=1 << 20)
-    with zipfile.ZipFile(remote) as archive:
+def _fetch_giantsteps_key(home, wanted, budget, client, fetched: Fetched) -> None:
+    raw = _HTTPRangeFile(client, DATASETS["giantsteps-key"].sources[0][1])
+    with zipfile.ZipFile(io.BufferedReader(raw, buffer_size=1 << 20)) as archive:
         by_name = {
             os.path.basename(info.filename): info
             for info in archive.infolist()
@@ -323,18 +413,17 @@ def _fetch_giantsteps_key(home: Path, wanted: list[Reference], budget: DiskBudge
                 continue
             with archive.open(info) as f:
                 if _write_checked(home, ref, _chunks(f), info.file_size, budget):
-                    got[ref.track_id] = url
-    return got
+                    fetched(ref.track_id, raw.url)
 
 
+# The order of the dataset's current download script (JKU first since 2025).
 GIANTSTEPS_TEMPO_LOCATIONS = (
-    "http://geo-samples.beatport.com/lofi/",
-    "http://www.cp.jku.at/datasets/giantsteps/backup/",
+    "https://www.cp.jku.at/datasets/giantsteps/backup/",
+    "https://geo-samples.beatport.com/lofi/",
 )
 
 
-def _fetch_giantsteps_tempo(home: Path, wanted: list[Reference], budget: DiskBudget, client):
-    got: dict[str, str] = {}
+def _fetch_giantsteps_tempo(home, wanted, budget, client, fetched: Fetched) -> None:
     for ref in wanted:
         name = os.path.basename(ref.audio_rel)
         for base in GIANTSTEPS_TEMPO_LOCATIONS:
@@ -345,11 +434,10 @@ def _fetch_giantsteps_tempo(home: Path, wanted: list[Reference], budget: DiskBud
                     size = response.headers.get("content-length")
                     chunks = response.iter_bytes(1 << 20)
                     if _write_checked(home, ref, chunks, int(size) if size else None, budget):
-                        got[ref.track_id] = base
+                        fetched(ref.track_id, str(response.url))
                         break
             except httpx.HTTPError as e:
                 logger.warning("%s from %s failed: %s", name, base, e)
-    return got
 
 
 FETCHERS: dict[str, Callable] = {
@@ -364,19 +452,27 @@ def ensure_audio(
 ) -> tuple[set[str], dict[str, str]]:
     """
     Fetch the selected tracks that are missing. Returns the ids whose audio is present and
-    verified, and where each of them was fetched from (kept in SOURCES_FILE across runs;
-    "unknown" for a file that was already there without a record).
+    verified, and where each of them was fetched from (SOURCES_FILE, written after every file,
+    so an interrupted fetch keeps what it got; "unknown" for a file without a record).
     """
+    # Partial files left by a killed run.
+    for stale in home.rglob("*.part") if home.exists() else ():
+        stale.unlink(missing_ok=True)
     record_path = home / SOURCES_FILE
     record = json.loads(record_path.read_text()) if record_path.exists() else {}
+
+    def fetched(track_id: str, url: str) -> None:
+        record[track_id] = url
+        tmp = record_path.with_name(record_path.name + ".tmp")
+        tmp.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+        os.replace(tmp, record_path)
+
     missing = [r for r in selected if not has_audio(home, r)]
     if missing:
         logger.warning("fetching %d %s tracks", len(missing), dataset.name)
         headers = {"User-Agent": USER_AGENT}
         with httpx.Client(timeout=HTTP_TIMEOUT, follow_redirects=True, headers=headers) as client:
-            fetched = FETCHERS[dataset.name](home, missing, budget, client)
-        record.update(fetched)
-        record_path.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+            FETCHERS[dataset.name](home, missing, budget, client, fetched)
     present = {r.track_id for r in selected if has_audio(home, r)}
     return present, {tid: record.get(tid, "unknown") for tid in present}
 
@@ -404,15 +500,22 @@ class _ResponseStream(io.RawIOBase):
 
 
 class _HTTPRangeFile(io.RawIOBase):
-    """A seekable read-only file over HTTP range requests (for reading a remote zip)."""
+    """
+    A seekable read-only file over HTTP range requests (for reading a remote zip). A failed
+    range read is retried once, after resolving the URL again (redirect targets can expire).
+    """
 
     def __init__(self, client: httpx.Client, url: str):
         self._client = client
-        head = client.head(url)
-        head.raise_for_status()
-        self._url = str(head.url)
-        self._size = int(head.headers["content-length"])
+        self._origin = url
+        self._resolve()
         self._pos = 0
+
+    def _resolve(self) -> None:
+        head = self._client.head(self._origin)
+        head.raise_for_status()
+        self.url = str(head.url)
+        self._size = int(head.headers["content-length"])
 
     def readable(self) -> bool:
         return True
@@ -428,14 +531,23 @@ class _HTTPRangeFile(io.RawIOBase):
         self._pos = max(0, base + offset)
         return self._pos
 
+    def _range(self, start: int, end: int) -> bytes:
+        response = self._client.get(self.url, headers={"Range": f"bytes={start}-{end}"})
+        if response.status_code != 206:
+            raise OSError(f"range request returned {response.status_code}")
+        return response.content
+
     def readinto(self, b) -> int:
         if self._pos >= self._size:
             return 0
         end = min(self._size, self._pos + len(b)) - 1
-        response = self._client.get(self._url, headers={"Range": f"bytes={self._pos}-{end}"})
-        if response.status_code != 206:
-            raise OSError(f"range request returned {response.status_code}")
-        data = response.content
+        try:
+            data = self._range(self._pos, end)
+        except (OSError, httpx.HTTPError) as e:
+            logger.warning("range read failed (%s); retrying once", e)
+            time.sleep(RETRY_PAUSE_S)
+            self._resolve()
+            data = self._range(self._pos, end)
         n = len(data)
         b[:n] = data
         self._pos += n

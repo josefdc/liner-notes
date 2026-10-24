@@ -4,13 +4,16 @@ Where the datasets live and how much disk they may use.
 The data directory is outside the repository (``~/liner-notes-data`` unless
 ``LINER_NOTES_DATA`` names another) and holds at most ``LINER_NOTES_DATA_CAP_BYTES`` bytes
 (2 GB by default). Every download asks the budget first and is refused when it would take the
-directory past the cap; usage is counted like ``du`` (allocated blocks), so the number matches
-``du -s`` on the directory.
+directory past the cap (the annotations, small, are checked once against an upper bound on
+their size); usage is counted like ``du`` (allocated blocks), so the number matches ``du -s``
+on the directory. One run at a time holds the directory.
 """
 
 from __future__ import annotations
 
+import fcntl
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 DEFAULT_DATA_DIR = "~/liner-notes-data"
@@ -21,16 +24,59 @@ class DataCapExceeded(RuntimeError):
     """A download would take the data directory past its cap."""
 
 
+class DataDirBusy(RuntimeError):
+    """Another run holds the data directory."""
+
+
 def data_dir(override: str | None = None) -> Path:
     raw = override or os.environ.get("LINER_NOTES_DATA") or DEFAULT_DATA_DIR
     return Path(raw).expanduser().resolve()
 
 
+class SettingError(ValueError):
+    """A data-directory setting that cannot be used."""
+
+
 def cap_bytes(override: int | None = None) -> int:
+    """The cap in bytes: a positive whole number (LINER_NOTES_DATA_CAP_BYTES, default 2 GB)."""
     if override is not None:
-        return int(override)
-    raw = os.environ.get("LINER_NOTES_DATA_CAP_BYTES")
-    return int(raw) if raw else DEFAULT_CAP_BYTES
+        value = override
+    else:
+        raw = (os.environ.get("LINER_NOTES_DATA_CAP_BYTES") or "").strip()
+        if not raw:
+            return DEFAULT_CAP_BYTES
+        if not raw.isdigit():
+            raise SettingError(
+                f"LINER_NOTES_DATA_CAP_BYTES must be a whole number of bytes, got {raw!r}"
+            )
+        value = int(raw)
+    if value <= 0:
+        raise SettingError(f"the data cap must be positive, got {value}")
+    return value
+
+
+def check_outside(root: Path, repo: Path) -> None:
+    """The datasets never live inside the repository (nothing would keep them out of git)."""
+    if root == repo or repo in root.parents:
+        raise SettingError(f"the data directory {root} is inside the repository {repo}")
+
+
+@contextmanager
+def exclusive(root: Path):
+    """
+    Hold the data directory for one run: two runs at once would both pass the cap check and
+    write the same partial files. A second run is refused, not queued.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    with open(root / ".lock", "w") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise DataDirBusy(f"another run is using {root}; wait for it to finish") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def disk_usage(path: Path) -> int:

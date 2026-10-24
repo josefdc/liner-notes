@@ -1,0 +1,55 @@
+name: evals audio
+
+# The audio accuracy harness (evals/audio): lint, its unit tests and the check that it runs
+# the service's own library versions. No dataset is downloaded and no suite is run; the
+# suites are run by hand (see evals/audio/README.md). The harness imports services/audio, so a
+# change there runs this too.
+on:
+  pull_request:
+    paths:
+      - "evals/audio/**"
+      - "services/audio/**"
+      - ".github/workflows/evals-audio.yml"
+  push:
+    branches: [main]
+    paths:
+      - "evals/audio/**"
+      - "services/audio/**"
+      - ".github/workflows/evals-audio.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-audio-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  harness:
+    name: audio eval harness (ruff, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: evals/audio
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: evals/audio/uv.lock
+      - name: Lock is current
+        run: uv lock --check
+      - name: Ruff
+        run: |
+          uv run --frozen --only-group dev ruff check .
+          uv run --frozen --only-group dev ruff format --check .
+      # Without the "models" extra: the unit tests never load Essentia or reach the network.
+      - run: uv sync --frozen
+      - name: Pytest
+        run: |
+          uv run --frozen python -VV
+          uv run --frozen pytest -q -rsxX

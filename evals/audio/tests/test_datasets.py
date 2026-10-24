@@ -41,8 +41,15 @@ def test_selection_is_fixed_by_the_seed_and_skips_unusable_tracks():
     assert len(select(refs(100), None, seed=3)) == 100
 
 
-def test_every_dataset_records_its_licence_and_sources():
+def test_every_dataset_records_what_its_licence_covers_and_whom_to_credit():
     for spec in DATASETS.values():
-        assert spec.licence and spec.licence_source
+        # The licence row names the annotations; the audio has its own row and no licence.
+        assert "creativecommons.org" in spec.annotation_licence
+        assert "no licence is stated for the audio" in spec.audio_rights
+        assert "never redistributed" in spec.audio_rights
+        assert any("doi:" in c for c in spec.credits)
         assert spec.sources and all(url for _, url in spec.sources)
         assert spec.name in SUITE_DATASETS[spec.suite]
+    # Where the licence is known only from mirdata, the cell says so.
+    assert "per mirdata" in DATASETS["ballroom"].annotation_licence
+    assert "per mirdata" in DATASETS["giantsteps-tempo"].annotation_licence

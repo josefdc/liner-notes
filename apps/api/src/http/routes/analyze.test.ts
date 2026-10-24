@@ -46,6 +46,20 @@ const stub = vi.hoisted(() => ({
   composerAfterComplete: null as Hook,
   detailsStep: null as null | (() => Promise<void>),
   detailsFail: false,
+  /**
+   * A result the stream can send (a TrackAnalysis: the stream checks every event against the
+   * contract), with the title the test looks for and any extra fields.
+   */
+  track: (title: string, extra: Record<string, unknown> = {}) => ({
+    id: "track-only",
+    title,
+    artist: "Artist",
+    album: "Album",
+    coverUrl: "",
+    bpm: null,
+    genealogy: { nodes: [], links: [] },
+    ...extra,
+  }),
 }));
 
 vi.mock("../../sources/spotify.js", () => ({
@@ -90,7 +104,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
       status(config, "scout", "searching");
       const query = state.songQuery;
       if (query.startsWith("cached")) {
-        const trackData = { title: "cached", artist: "Artist" };
+        const trackData = stub.track("cached");
         config.writer?.({ type: "complete", data: trackData });
         return { trackData };
       }
@@ -128,11 +142,9 @@ vi.mock("../../agent/nodes/index.js", async () => {
     },
     composerNode: async (state: State, config: Config) => {
       stub.calls.composer++;
-      const trackData = {
-        title: state.songQuery.includes("fallback") ? "fallback" : "composed",
-        artist: "Artist",
+      const trackData = stub.track(state.songQuery.includes("fallback") ? "fallback" : "composed", {
         spotify: state.spotifyData,
-      };
+      });
       config.writer?.({ type: "complete", data: trackData });
       // Stands for the store write the real composer awaits after reporting the result.
       await stub.composerAfterComplete?.(config.signal);

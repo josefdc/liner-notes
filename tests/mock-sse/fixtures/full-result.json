@@ -4,22 +4,34 @@
     "/api/analyze/stream": [
       {
         "type": "connected",
+        "runId": "thread-full",
+        "seq": 0,
         "threadId": "thread-full"
       },
       {
+        "type": "heartbeat",
+        "runId": "thread-full"
+      },
+      {
         "type": "status",
+        "runId": "thread-full",
+        "seq": 1,
         "node": "scout",
         "message": "Searching for the track",
         "code": "SPOTIFY-SEARCH"
       },
       {
         "type": "status",
+        "runId": "thread-full",
+        "seq": 2,
         "node": "composer",
         "message": "Composing the result",
         "code": "GEMINI-CONNECT"
       },
       {
         "type": "complete",
+        "runId": "thread-full",
+        "seq": 3,
         "data": {
           "id": "t-full",
           "title": "Bright Lines",
@@ -154,6 +166,8 @@
       },
       {
         "type": "done",
+        "runId": "thread-full",
+        "seq": 4,
         "timestamp": "2026-10-16T00:00:00.000Z"
       }
     ]

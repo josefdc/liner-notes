@@ -143,6 +143,8 @@ const ERROR_HINTS_BY_CODE: Record<string, string> = {
   run_interrupted: 'That choice is no longer open. Search again.',
   upstream_unavailable: 'An upstream service is not answering. Try again later.',
   timeout: 'An upstream service is not answering. Try again later.',
+  // The app's own code: a newer version was deployed since this page loaded.
+  outdated_client: 'A newer version is out. Reload the page to get it.',
 };
 
 // UX: Error hint helper (Item 10 - in-character error copy). A failure code decides; only an

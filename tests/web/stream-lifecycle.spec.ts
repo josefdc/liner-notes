@@ -24,8 +24,13 @@ const result = fullResultData();
 const pickerEvents = [
   { type: "connected", threadId: "thread-hitl" },
   { type: "status", node: "scout", message: "Searching for the track", code: "SPOTIFY-SEARCH" },
-  { type: "candidates", candidates },
-  { type: "interrupt", reason: "disambiguation", threadId: "thread-hitl", candidates },
+  {
+    type: "interrupt",
+    reason: "disambiguation",
+    threadId: "thread-hitl",
+    candidates,
+    message: "Multiple songs found. Please select the correct one.",
+  },
 ];
 
 const posts = (log: string[]) => log.filter((entry) => entry.startsWith("fetch /api/analyze"));
@@ -46,7 +51,7 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
   await useMockApi(page, {
     suggestions: [],
     streams: {
-      // The picker appears on "candidates"; "done" is held back until after the pick.
+      // The picker appears on "interrupt"; "done" is held back until after the pick.
       [ANALYZE]: [...pickerEvents, { $wait: "analysis-done" }, { type: "done" }],
       [RESUME]: [
         { type: "resuming", threadId: "thread-hitl" },
@@ -127,7 +132,8 @@ test("a complete event without a result shows an error with a retry", async ({ p
       [ANALYZE]: [
         { type: "connected", threadId: "thread-empty" },
         { type: "status", node: "composer", message: "Composing", code: "GEMINI-CONNECT" },
-        { type: "complete" },
+        // Not an event the API sends: the app cannot read it, so the run fails and asks for a reload.
+        { $unchecked: { type: "complete" } },
         { type: "done" },
       ],
     },
@@ -148,11 +154,11 @@ test("a duplicate complete for the thread is ignored when the picker times out",
     suggestions: [],
     streams: {
       [ANALYZE]: [...pickerEvents, { type: "done" }],
-      // The server sends the result twice (graph writer and state update) before "done".
+      // A second result for the run (the API sends one; a repeat must not count twice).
       [RESUME]: [
         { type: "resuming", threadId: "thread-hitl" },
         { type: "complete", data: result },
-        { type: "complete", data: result },
+        { $unchecked: { type: "complete", data: result } },
         { type: "done" },
       ],
     },
@@ -175,4 +181,68 @@ test("a duplicate complete for the thread is ignored when the picker times out",
   expect((await streamLog(page)).filter((entry) => entry === `${RESUME} complete`)).toHaveLength(2);
   await expect.soft(page.getByText(COMPLETE_LOG)).toHaveCount(1);
   expect(problems).toEqual([]);
+});
+
+// The browser's own EventSource (not the mocked one): a stream the app leaves open is opened
+// again by the browser once the response ends, which would start the analysis again on the
+// server. The response comes from a route with a short `retry:`, so a reconnect would show up
+// within a few hundred milliseconds.
+test.describe("with the browser's EventSource", () => {
+  const sse = (events: object[]) =>
+    `retry: 50\n\n${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}`;
+  const run = "3f6c1d2e-0000-4000-8000-0000000000bb";
+
+  async function serveStream(page: Page, body: string) {
+    const opened: string[] = [];
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+    await page.route("**/api/search/suggest**", (route) =>
+      route.fulfill({ json: { success: true, suggestions: [] } }),
+    );
+    await page.route("**/api/analyze/stream?**", (route) => {
+      opened.push(route.request().url());
+      return route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+        body,
+      });
+    });
+    return opened;
+  }
+
+  test("an error closes the stream: the analysis is not requested again", async ({ page }) => {
+    const opened = await serveStream(
+      page,
+      sse([
+        { type: "connected", runId: run, seq: 0, threadId: run },
+        {
+          type: "error",
+          runId: run,
+          seq: 1,
+          code: "timeout",
+          error: "The analysis took too long.",
+        },
+        { type: "done", runId: run, seq: 2 },
+      ]),
+    );
+    await search(page, "Hurt");
+
+    await expect(page.getByText("The analysis took too long.")).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(opened).toHaveLength(1);
+  });
+
+  test("a connection that drops mid-run is not opened again", async ({ page }) => {
+    const opened = await serveStream(
+      page,
+      sse([
+        { type: "connected", runId: run, seq: 0, threadId: run },
+        { type: "status", runId: run, seq: 1, node: "scout", message: "Searching" },
+      ]),
+    );
+    await search(page, "Hurt");
+
+    await expect(page.getByText("Lost the connection to the analysis.")).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(opened).toHaveLength(1);
+  });
 });

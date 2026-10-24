@@ -1,6 +1,7 @@
 /**
- * TrackAnalysis v1 accepts every payload the API produces today, and the stream events of the
- * web app's mock fixtures fit the event union once they carry a run id and a sequence number.
+ * TrackAnalysis v1 accepts every payload the API produces today, and the web app's mock fixtures
+ * replay the API's own event sequences: every event fits the event union as it is written, with
+ * its run id and sequence number, except those marked `$unchecked` (sent on purpose).
  *
  * fixtures/api-payloads/ holds results built with the API's own functions at commit 58f9b0a:
  * createEmptyTrackData (empty), transformFlatToTrackData followed by the composer node's
@@ -16,9 +17,10 @@ import { jsonFiles, packageDir, repoDir } from "./testing/samples.js";
 import { Factoid, SearchCandidate, TrackAnalysis } from "./track.js";
 
 type StreamEvent = { type: string; [field: string]: unknown };
+type Directive = { $unchecked?: StreamEvent; [field: string]: unknown };
 type MockFixture = {
   suggestions: unknown[];
-  streams: Record<string, StreamEvent[] | { opens: StreamEvent[][] }>;
+  streams: Record<string, Array<StreamEvent | Directive> | { opens: StreamEvent[][] }>;
 };
 
 const apiPayloads = jsonFiles(join(packageDir, "fixtures", "api-payloads"));
@@ -26,12 +28,26 @@ const mockFixtures = jsonFiles(join(repoDir, "tests", "mock-sse", "fixtures")) a
   [string, MockFixture]
 >;
 
-const eventsOf = (fixture: MockFixture) =>
+type MarkedEvent = { event: StreamEvent; unchecked: boolean };
+
+/** Each opening of each stream path: its events, `$unchecked` ones unwrapped and marked. */
+const streamsOf = (fixture: MockFixture) =>
   Object.entries(fixture.streams).flatMap(([path, entry]) =>
-    (Array.isArray(entry) ? entry : entry.opens.flat())
-      // Directives of the mock server, not events
-      .filter((event) => typeof event.type === "string")
-      .map((event) => ({ path, event })),
+    (Array.isArray(entry) ? [entry] : entry.opens).map((events) => ({
+      path,
+      events: (events as Array<StreamEvent | Directive>).flatMap((item): MarkedEvent[] => {
+        if (typeof item.type === "string")
+          return [{ event: item as StreamEvent, unchecked: false }];
+        // Other directives of the mock server are not events.
+        const { $unchecked } = item as Directive;
+        return $unchecked ? [{ event: $unchecked, unchecked: true }] : [];
+      }),
+    })),
+  );
+
+const eventsOf = (fixture: MockFixture) =>
+  streamsOf(fixture).flatMap(({ path, events }) =>
+    events.map(({ event, unchecked }) => ({ path, event, unchecked })),
   );
 
 const issuePaths = (result: {
@@ -116,23 +132,46 @@ describe("web mock fixtures", () => {
     expect(rejected.map((data) => data.id)).toEqual(["m2"]);
   });
 
-  it.each(mockFixtures)(
-    "%s: events fit the union once they carry runId and seq",
-    (name, fixture) => {
-      const misfits: string[] = [];
-      eventsOf(fixture).forEach(({ path, event }, seq) => {
-        const factoidStream = path.startsWith("/api/factoids/");
-        const schema = factoidStream ? FactoidStreamEvent : AnalyzeStreamEvent;
-        const withEnvelope = { ...event, runId: factoidStream ? null : "run-1", seq };
-        if (!schema.safeParse(withEnvelope).success) misfits.push(event.type);
-      });
-      // `candidates` is the protocol before the single `interrupt` event (#8); a factoid event
-      // with the removed lyrics type is one item of the stream, and is skipped as a whole.
-      const expected: Record<string, string[]> = {
-        hitl: ["candidates"],
-        "decrypt-after-model-unavailable": ["factoid"],
-      };
-      expect(misfits).toEqual(expected[name] ?? []);
-    },
-  );
+  it.each(mockFixtures)("%s: events fit the union as they are written", (name, fixture) => {
+    const misfits: string[] = [];
+    const unchecked: string[] = [];
+    for (const { path, event, unchecked: marked } of eventsOf(fixture)) {
+      const schema = path.startsWith("/api/factoids/") ? FactoidStreamEvent : AnalyzeStreamEvent;
+      const fits = schema.safeParse(event).success;
+      if (marked) unchecked.push(`${event.type}${fits ? " (fits)" : ""}`);
+      else if (!fits) misfits.push(event.type);
+    }
+    expect(misfits).toEqual([]);
+    // A factoid event with the removed lyrics type is one item of an older stream, skipped as a
+    // whole by the client.
+    const expected: Record<string, string[]> = {
+      "decrypt-after-model-unavailable": ["factoid"],
+    };
+    expect(unchecked).toEqual(expected[name] ?? []);
+  });
+
+  it.each(mockFixtures)("%s: streams follow the API's sequence", (_name, fixture) => {
+    for (const { path, events } of streamsOf(fixture)) {
+      const all = events.map(({ event }) => event);
+      // One run per stream; seq 0, 1, 2… on every event but heartbeats, which carry none.
+      expect(new Set(all.map((event) => event.runId)).size, path).toBe(1);
+      const numbered = all.filter((event) => event.type !== "heartbeat");
+      expect(
+        numbered.map((event) => event.seq),
+        path,
+      ).toEqual(numbered.map((_, index) => index));
+      expect(all.filter((event) => event.type === "heartbeat" && "seq" in event)).toEqual([]);
+      // The picker is announced by `interrupt` alone (#8); one outcome at most; `done` last.
+      expect(
+        all.filter((event) => event.type === "candidates"),
+        path,
+      ).toEqual([]);
+      const outcomes = all.filter((event) =>
+        ["complete", "interrupt", "error"].includes(event.type),
+      );
+      expect(outcomes.length, path).toBeLessThanOrEqual(1);
+      expect(all.filter((event) => event.type === "done").length, path).toBe(1);
+      expect(all.at(-1)?.type, path).toBe("done");
+    }
+  });
 });

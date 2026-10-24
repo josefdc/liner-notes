@@ -418,10 +418,12 @@ describe("GET /api/factoids/decrypt/stream", () => {
       "done",
     ]);
     const errors = stream.messages.filter(ofType("error"));
-    expect(errors).toEqual([
-      { type: "error", code: "failed", error: "This fact could not be generated.", index: 0 },
-      { type: "error", code: "failed", error: "This fact could not be generated.", index: 1 },
-    ]);
+    expect(errors).toEqual(
+      [
+        { type: "error", code: "failed", error: "This fact could not be generated.", index: 0 },
+        { type: "error", code: "failed", error: "This fact could not be generated.", index: 1 },
+      ].map((error, i) => ({ ...error, runId: null, seq: i + 1 })),
+    );
     expect(JSON.stringify(stream.messages)).not.toMatch(/AIza|\/home|upstream said|hang up/);
   });
 

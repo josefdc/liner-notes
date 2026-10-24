@@ -62,14 +62,22 @@ type PutArgs = Parameters<SqliteSaver["put"]>;
 type PutWritesArgs = Parameters<SqliteSaver["putWrites"]>;
 
 export class PreviewFreeSqliteSaver extends SqliteSaver {
-  override async put(...[config, checkpoint, metadata]: PutArgs) {
+  // Every argument after the checkpoint is passed on as given (the base saver's interface also
+  // has `newVersions`, which this version of the SQLite saver does not declare).
+  override async put(...args: PutArgs) {
+    const [config, checkpoint, ...rest] = args as unknown[] as [
+      PutArgs[0],
+      PutArgs[1],
+      ...unknown[],
+    ];
     const values = Object.fromEntries(
       Object.entries(checkpoint.channel_values).map(([channel, value]) => [
         channel,
         saved(channel, value),
       ]),
     );
-    return super.put(config, { ...checkpoint, channel_values: values }, metadata);
+    const basePut = super.put as (...forwarded: unknown[]) => ReturnType<SqliteSaver["put"]>;
+    return basePut.call(this, config, { ...checkpoint, channel_values: values }, ...rest);
   }
 
   override async putWrites(...[config, writes, taskId]: PutWritesArgs) {

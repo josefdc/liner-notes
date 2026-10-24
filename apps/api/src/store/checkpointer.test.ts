@@ -5,7 +5,8 @@
 
 import { Annotation, Command, END, interrupt, START, StateGraph } from "@langchain/langgraph";
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { describe, expect, it, vi } from "vitest";
 import { PreviewFreeSqliteSaver } from "./checkpointer.js";
 
 const CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/c.mp3?hdnea=exp=1761300000~hmac=abc";
@@ -131,5 +132,25 @@ describe("PreviewFreeSqliteSaver", () => {
     expect(resumed).toContain("Could not read [preview]");
     expect(resumed).not.toContain("dzcdn.net");
     expect(resumed).not.toContain("hdnea");
+  });
+
+  it("passes on every argument of a checkpoint write after the checkpoint", async () => {
+    const base = vi.spyOn(SqliteSaver.prototype, "put").mockResolvedValue({});
+    const saver = new PreviewFreeSqliteSaver(new Database(":memory:"));
+    const checkpoint = { channel_values: { previewUrl: CLIP, note: "kept" } };
+    const newVersions = { previewUrl: 2 };
+
+    await (saver.put as (...args: unknown[]) => Promise<unknown>)(
+      { configurable: { thread_id: "t-3" } },
+      checkpoint,
+      { source: "loop" },
+      newVersions,
+    );
+
+    expect(base.mock.calls[0]?.[1]).toMatchObject({
+      channel_values: { previewUrl: null, note: "kept" },
+    });
+    expect(base.mock.calls[0]?.slice(2)).toEqual([{ source: "loop" }, newVersions]);
+    base.mockRestore();
   });
 });

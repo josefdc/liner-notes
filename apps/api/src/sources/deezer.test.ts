@@ -423,6 +423,190 @@ describe("Deezer preview of one recording", () => {
       ]);
     });
 
+    describe("titles that name another work in quotes", () => {
+      const SCHINDLER: PreviewRequest = {
+        title: 'Theme From "Schindler\'s List"',
+        artist: "John Williams",
+        album: "Greatest Hits 1969-1999",
+        isrc: "USSM19900001",
+        durationMs: 255_000,
+      };
+      const williams = (id: number, title: string, rest: Partial<Entry> = {}) =>
+        entry({
+          id,
+          title,
+          artist: "John Williams",
+          album: SCHINDLER.album,
+          duration: 257,
+          ...rest,
+        });
+      const JURASSIC = 'Theme From "Jurassic Park"';
+
+      it("gives no preview from the search for another theme on the album", async () => {
+        deezer({
+          isrc: williams(1, SCHINDLER.title, { isrc: "USSM19900001", readable: false }),
+          search: [williams(1, SCHINDLER.title), williams(2, JURASSIC, { isrc: "USSM19900002" })],
+        });
+
+        expect(rejections(await findDeezerPreview(SCHINDLER))).toEqual([
+          { deezerId: 1, method: "isrc", reason: "not_readable" },
+          { deezerId: 1, method: "search", reason: "turned_down_by_isrc" },
+          { deezerId: 2, method: "search", reason: "title_differs" },
+        ]);
+      });
+
+      it("gives no preview from an alternative that is another theme", async () => {
+        deezer({
+          isrc: williams(3, SCHINDLER.title, {
+            isrc: "USSM19900001",
+            readable: false,
+            alternative: { id: 4 },
+          }),
+          tracks: { 4: williams(4, JURASSIC, { isrc: "USSM19900002" }) },
+          search: [],
+        });
+
+        expect(rejections(await findDeezerPreview(SCHINDLER))).toContainEqual({
+          deezerId: 4,
+          method: "id",
+          reason: "title_differs",
+        });
+      });
+
+      it("gives no preview from an ISRC entry that is another theme", async () => {
+        deezer({ isrc: williams(5, JURASSIC, { isrc: "USSM19900001" }), search: [] });
+
+        expect(rejections(await findDeezerPreview(SCHINDLER))).toEqual([
+          { deezerId: 5, method: "isrc", reason: "title_differs" },
+        ]);
+      });
+
+      it("still matches a title whose quoted work follows the title proper", async () => {
+        const result = await searchOnly(
+          LET_IT_GO,
+          entry({
+            id: 6,
+            title: 'Let It Go - From "Frozen"',
+            artist: "Idina Menzel",
+            album: "Frozen",
+            duration: 224,
+          }),
+        );
+
+        expect(matched(result).match.deezerId).toBe(6);
+      });
+    });
+
+    describe("ISRC entries of another part, movement or number", () => {
+      const PIGS: PreviewRequest = {
+        title: "Pigs on the Wing (Part One)",
+        artist: "Pink Floyd",
+        album: "Animals",
+        isrc: "GBN9Y1100088",
+        durationMs: 85_000,
+      };
+      const floyd = (id: number, title: string) =>
+        entry({
+          id,
+          title,
+          artist: "Pink Floyd",
+          album: "Animals",
+          duration: 83,
+          isrc: PIGS.isrc ?? "",
+        });
+
+      it.each([
+        ["the ISRC entry", "isrc"],
+        ["a search entry", "search"],
+      ])("turns down another part that %s carries the ISRC of", async (_label, method) => {
+        const wrong = floyd(7, "Pigs on the Wing (Part Two)");
+        deezer(method === "isrc" ? { isrc: wrong, search: [] } : { search: [wrong] });
+
+        expect(rejections(await findDeezerPreview(PIGS))).toEqual([
+          { deezerId: 7, method, reason: "title_differs" },
+        ]);
+      });
+
+      it("takes the same part that carries the ISRC", async () => {
+        deezer({ isrc: floyd(8, "Pigs on the Wing (Part One)") });
+
+        expect(matched(await findDeezerPreview(PIGS)).match.method).toBe("isrc");
+      });
+
+      it("turns down another movement that carries the ISRC", async () => {
+        const symphony = "Symphony No. 7 in A Major, Op. 92";
+        deezer({
+          isrc: entry({
+            id: 9,
+            title: `${symphony} - III. Presto`,
+            artist: "Carlos Kleiber",
+            album: "Beethoven: Symphonies Nos. 5 & 7",
+            duration: 480,
+            isrc: "DEF057700001",
+          }),
+          search: [],
+        });
+
+        const result = await findDeezerPreview({
+          title: `${symphony} - II. Allegretto`,
+          artist: "Carlos Kleiber",
+          album: "Beethoven: Symphonies Nos. 5 & 7",
+          isrc: "DEF057700001",
+          durationMs: 481_000,
+        });
+
+        expect(rejections(result)).toEqual([
+          { deezerId: 9, method: "isrc", reason: "title_differs" },
+        ]);
+      });
+
+      it.each([
+        ["505", "Arctic Monkeys", "Do Me a Favour", 253],
+        ["1999", "Prince", "Little Red Corvette", 304],
+      ])("compares a title of digits only: %s", async (title, artist, other, seconds) => {
+        const isrc = "USXX19990001";
+        deezer({
+          isrc: entry({ id: 10, title: other, artist, album: "Album", duration: seconds, isrc }),
+          search: [],
+        });
+
+        const result = await findDeezerPreview({
+          title,
+          artist,
+          album: "Album",
+          isrc,
+          durationMs: seconds * 1000,
+        });
+
+        expect(rejections(result)).toEqual([
+          { deezerId: 10, method: "isrc", reason: "title_differs" },
+        ]);
+      });
+
+      it("takes an ISRC entry with an alternative title on one side only", async () => {
+        deezer({
+          isrc: entry({
+            id: 11,
+            title: "Gangnam Style (강남스타일)",
+            artist: "PSY",
+            album: "PSY 6甲",
+            duration: 219,
+            isrc: "KRA381200001",
+          }),
+        });
+
+        const result = await findDeezerPreview({
+          title: "Gangnam Style",
+          artist: "PSY",
+          album: "PSY 6甲",
+          isrc: "KRA381200001",
+          durationMs: 219_000,
+        });
+
+        expect(matched(result).match.method).toBe("isrc");
+      });
+    });
+
     it("takes an ISRC entry whose title is in another script", async () => {
       deezer({
         isrc: entry({
@@ -693,6 +877,21 @@ describe("Deezer preview of one recording", () => {
 
       expect(rejections(result)[0]?.reason).toBe("other_version");
     });
+
+    it.each([
+      ["Alive", "(Live)"],
+      ["Demons", "(Demo)"],
+    ])(
+      "reads a version given apart that is part of a word of the title: %s %s",
+      async (title, version) => {
+        const result = await searchOnly(
+          { title, artist: "Artist", album: "Album", durationMs: 200_000 },
+          entry({ id: 66, title, artist: "Artist", album: "Album", title_version: version }),
+        );
+
+        expect(rejections(result)[0]?.reason).toBe("other_version");
+      },
+    );
 
     it("takes only the lead artist's own entry, not a featured artist's", async () => {
       const result = await searchOnly(

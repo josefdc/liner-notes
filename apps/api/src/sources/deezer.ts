@@ -3,10 +3,13 @@
  * clip: nothing below ever falls back to "any track with a preview".
  *
  * The recording is looked up by its ISRC first (`/track/isrc:<ISRC>`). Even that entry is used
- * only when it carries the requested ISRC and agrees with the track: the same lead artist, the
- * same title when both are written in a common script, no other version (live, remix, karaoke,
- * re-recording, take and the like) and a duration within 3 s, since ISRCs are reused and
- * misassigned by karaoke and compilation labels. An entry without an `isrc` field is not an ISRC
+ * only when it carries the requested ISRC and agrees with the track, since ISRCs are reused and
+ * misassigned (karaoke and compilation labels, a neighbouring track): the same lead artist; the
+ * same title when the two titles can be compared word for word (a common script, or a title of
+ * digits only); a shared part title when both carry one ("(Part One)", "- II. Allegretto"); no
+ * other version marked in its title or album name (live, remix, karaoke, re-recording, take and
+ * the like); and a duration within 3 s. Its album is not checked. An entry without an `isrc`
+ * field is not an ISRC
  * match: it must pass the strict check below. When the ISRC entry is not readable or has no
  * preview, the entry Deezer names as its readable alternative is read by id (`/track/<id>`), and
  * last a search is made, which never takes an entry the ISRC step turned down. A search result
@@ -34,9 +37,10 @@ import { z } from "zod";
 import {
   markedAsOtherVersion,
   recordingTitleDifference,
+  comparableTitles,
+  partTitlesDiffer,
   sameAlbumName,
   sameArtistName,
-  shareScript,
   words,
 } from "../agent/trackMatch.js";
 import { fetchJson, type Shape, SourceError } from "./http.js";
@@ -215,11 +219,20 @@ function leadArtist(request: PreviewRequest): string {
   return request.artistNames?.[0] ?? request.artist;
 }
 
+/** Whether `part` occurs in `text` as whole words, in order ("Live" is not in "Alive"). */
+function containsWords(text: string[], part: string[]): boolean {
+  if (part.length === 0) return true;
+  for (let at = 0; at + part.length <= text.length; at++) {
+    if (part.every((word, i) => text[at + i] === word)) return true;
+  }
+  return false;
+}
+
 /** The entry's title with its version part, when Deezer gives that apart. */
 function fullTitle(entry: DeezerTrack): string {
   const title = entry.title ?? "";
   const version = entry.title_version?.trim();
-  if (!version || words(title).join(" ").includes(words(version).join(" "))) return title;
+  if (!version || containsWords(words(title), words(version))) return title;
   return `${title} ${version}`;
 }
 
@@ -232,10 +245,8 @@ function durationMismatch(request: PreviewRequest, entry: DeezerTrack): DeezerRe
 }
 
 /**
- * Why an entry that carries the requested ISRC is still not the requested recording, or null.
- * ISRCs are reused and misassigned (karaoke labels, compilations, a neighbouring track of the
- * album), so its lead artist, its version and its duration must agree, and so must its title
- * when both are written in a common script. A title in another script ("Yoru ni Kakeru" for
+ * Why an entry that carries the requested ISRC is still not the requested recording, or null
+ * (see the file comment for the checks). A title in another script ("Yoru ni Kakeru" for
  * "夜に駆ける") cannot be compared word for word and is left to the ISRC. Its album may differ:
  * the ISRC names the recording on any release.
  */
@@ -244,11 +255,12 @@ function isrcMismatch(request: PreviewRequest, entry: DeezerTrack): DeezerReject
   const requested = { title: request.title, album: request.album };
   const offered = { title: fullTitle(entry), album: entry.album?.title };
   if (
-    shareScript(requested.title, offered.title) &&
+    comparableTitles(requested.title, offered.title) &&
     recordingTitleDifference(requested, offered) === "title"
   ) {
     return "title_differs";
   }
+  if (partTitlesDiffer(requested, offered)) return "title_differs";
   if (markedAsOtherVersion(requested, offered)) return "other_version";
   return durationMismatch(request, entry);
 }

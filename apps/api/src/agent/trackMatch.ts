@@ -708,7 +708,13 @@ interface RecordingTitle {
 }
 
 function recordingTitle(title: string): RecordingTitle {
-  const unsourced = title.replace(QUOTED_SOURCE, " ");
+  // A quoted work is left out only from the parts after the title proper (in brackets or after
+  // " - "): in `Theme From "Jurassic Park"` it is the title itself.
+  const starts = [title.search(/[([]/), title.search(/\s[-–—]\s/)].filter((at) => at >= 0);
+  const properEnd = starts.length > 0 ? Math.min(...starts) : title.length;
+  const unsourced = title.replace(QUOTED_SOURCE, (source, at: number) =>
+    at < properEnd ? source : " ",
+  );
   const brackets = [...unsourced.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map(
     (m) => m[1] ?? m[2] ?? "",
   );
@@ -832,6 +838,17 @@ export function markedAsOtherVersion(
   return markedApart(a, recordingTitle(a.title), b, recordingTitle(b.title));
 }
 
+/**
+ * Whether both entries carry part titles ("(Part One)", "- II. Allegretto") and none of them is
+ * shared: two parts of one work, or two movements. A part title on one side only ("Gangnam
+ * Style (강남스타일)") does not tell them apart.
+ */
+export function partTitlesDiffer(a: { title: string }, b: { title: string }): boolean {
+  const x = recordingTitle(a.title).alternatives;
+  const y = recordingTitle(b.title).alternatives;
+  return x.length > 0 && y.length > 0 && !x.some((part) => y.some((other) => same(part, other)));
+}
+
 const SCRIPTS = [
   /\p{Script=Latin}/u,
   /\p{Script=Cyrillic}/u,
@@ -851,6 +868,14 @@ const SCRIPTS = [
  */
 export function shareScript(a: string, b: string): boolean {
   return SCRIPTS.some((script) => script.test(a) && script.test(b));
+}
+
+/**
+ * Whether two titles can be compared word for word: they share a script, or one of them has no
+ * letters at all ("505", "1999"), so its digits are the same in any script.
+ */
+export function comparableTitles(a: string, b: string): boolean {
+  return shareScript(a, b) || !/\p{L}/u.test(a) || !/\p{L}/u.test(b);
 }
 
 /**

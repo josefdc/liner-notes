@@ -1,11 +1,11 @@
 {
- "schemaVersion": 2,
+ "schemaVersion": 3,
  "runs": [
   {
    "suite": "tempo",
    "command": "uv run python -m evals_audio --suite tempo --dataset ballroom --limit 50 --seed 1",
-   "startedAt": "2026-10-24T13:44:02Z",
-   "wallSeconds": 28.5,
+   "startedAt": "2026-10-24T14:14:30Z",
+   "wallSeconds": 33.8,
    "jobs": 4,
    "seeds": {
     "selection": 1,
@@ -15,7 +15,7 @@
    "limit": 50,
    "selection": "50 of 698 usable tracks drawn with numpy default_rng(1)",
    "clipSeconds": 30.0,
-   "gitCommit": "4260267",
+   "gitCommit": "18c1e0f",
    "analyzerVersion": "2.0.0",
    "analyzerVersions": {
     "librosa": "2.0.0+librosa",
@@ -36,7 +36,7 @@
     "mirdataName": "ballroom",
     "title": "Ballroom (ISMIR 2004 tempo induction contest)",
     "annotationLicence": "CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/), per mirdata 1.0.0 (ballroom.LICENSE_INFO); not stated by the dataset: the contest page states no licence",
-    "audioRights": "commercial excerpts (BallroomDancers.com, credited on the contest page); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio, reference labels or file names, only track ids and the service's own results.",
+    "audioRights": "commercial excerpts (BallroomDancers.com, credited on the contest page); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio and no audio file names.",
     "credits": [
      "Gouyon, F., Klapuri, A., Dixon, S., Alonso, M., Tzanetakis, G., Uhle, C., Cano, P. (2006). An experimental comparison of audio tempo induction algorithms. IEEE Transactions on Audio, Speech, and Language Processing 14(5), 1832-1844. doi:10.1109/TSA.2005.858509"
     ],
@@ -58,7 +58,8 @@
     "referenceStats": null,
     "notes": [
      "698 excerpts of about 30 s from BallroomDancers.com, eight dance styles. The excerpts are 29.4-31.8 s long, so the 30 s window is in effect the whole excerpt.",
-     "Published Ballroom figures use all 698 excerpts; a sample of n clips is only comparable within its interval."
+     "Published Ballroom figures use all 698 excerpts; a sample of n clips is only comparable within its interval.",
+     "Ballroom's track ids are its file names (album names included), so the results use the first 10 hex digits of a SHA-256 of the id; `uv run python -m evals_audio --lookup ID --dataset ballroom` maps one back from the local index."
     ],
     "tracksInIndex": 698,
     "usable": 698,
@@ -228,96 +229,292 @@
     "librosa": {
      "n": 50,
      "returned": 37,
-     "unreturned": 4,
-     "metrics": {
-      "acc1": {
-       "unreturned": {
-        "n": 4,
-        "total": 3.0,
-        "mean": 0.75,
-        "ciLow": 0.30064184258240184,
-        "ciHigh": 0.9544127391902995,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 31.0,
-        "mean": 0.62,
-        "ciLow": 0.4815044693099298,
-        "ciHigh": 0.7413721068980641,
-        "method": "Wilson",
-        "note": null
+     "unreturned": 9,
+     "rules": [
+      {
+       "rule": "confidence under the estimator's minimum",
+       "count": 5,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 5,
+          "total": 3.0,
+          "mean": 0.6,
+          "ciLow": 0.2307242812760128,
+          "ciHigh": 0.882379225767352,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 31.0,
+          "mean": 0.62,
+          "ciLow": 0.4815044693099298,
+          "ciHigh": 0.7413721068980641,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 5,
+          "total": 4.0,
+          "mean": 0.8,
+          "ciLow": 0.37553462976252533,
+          "ciHigh": 0.9637758913675698,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 40.0,
+          "mean": 0.8,
+          "ciLow": 0.6696289406777459,
+          "ciHigh": 0.887562499842239,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       },
-      "acc2": {
-       "unreturned": {
-        "n": 4,
-        "total": 3.0,
-        "mean": 0.75,
-        "ciLow": 0.30064184258240184,
-        "ciHigh": 0.9544127391902995,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 39.0,
-        "mean": 0.78,
-        "ciLow": 0.6475845041874634,
-        "ciHigh": 0.8724608402978559,
-        "method": "Wilson",
-        "note": null
+      {
+       "rule": "tempo does not hold over the window",
+       "count": 4,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 4,
+          "total": 3.0,
+          "mean": 0.75,
+          "ciLow": 0.30064184258240184,
+          "ciHigh": 0.9544127391902995,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 31.0,
+          "mean": 0.62,
+          "ciLow": 0.4815044693099298,
+          "ciHigh": 0.7413721068980641,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 4,
+          "total": 3.0,
+          "mean": 0.75,
+          "ciLow": 0.30064184258240184,
+          "ciHigh": 0.9544127391902995,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 39.0,
+          "mean": 0.78,
+          "ciLow": 0.6475845041874634,
+          "ciHigh": 0.8724608402978559,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "all",
+       "count": 9,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 9,
+          "total": 6.0,
+          "mean": 0.6666666666666666,
+          "ciLow": 0.3542021355803963,
+          "ciHigh": 0.879416181613089,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 34.0,
+          "mean": 0.68,
+          "ciLow": 0.5418970269185592,
+          "ciHigh": 0.7924178373934316,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 9,
+          "total": 7.0,
+          "mean": 0.7777777777777778,
+          "ciLow": 0.45258896910698887,
+          "ciHigh": 0.9367748928821533,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 43.0,
+          "mean": 0.86,
+          "ciLow": 0.7381380628941446,
+          "ciHigh": 0.9304916657298371,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       }
-     }
+     ]
     },
     "essentia": {
      "n": 50,
      "returned": 30,
-     "unreturned": 4,
-     "metrics": {
-      "acc1": {
-       "unreturned": {
-        "n": 4,
-        "total": 4.0,
-        "mean": 1.0,
-        "ciLow": 0.5101091635454027,
-        "ciHigh": 1.0,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 30.0,
-        "mean": 0.6,
-        "ciLow": 0.4618143774758936,
-        "ciHigh": 0.7239161026974346,
-        "method": "Wilson",
-        "note": null
+     "unreturned": 16,
+     "rules": [
+      {
+       "rule": "confidence under the estimator's minimum",
+       "count": 12,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 12,
+          "total": 8.0,
+          "mean": 0.6666666666666666,
+          "ciLow": 0.39062208887279953,
+          "ciHigh": 0.8618799089087867,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 34.0,
+          "mean": 0.68,
+          "ciLow": 0.5418970269185592,
+          "ciHigh": 0.7924178373934316,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 12,
+          "total": 12.0,
+          "mean": 1.0,
+          "ciLow": 0.7575059933447592,
+          "ciHigh": 1.0,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 41.0,
+          "mean": 0.82,
+          "ciLow": 0.6920394632569922,
+          "ciHigh": 0.9022980732976582,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       },
-      "acc2": {
-       "unreturned": {
-        "n": 4,
-        "total": 4.0,
-        "mean": 1.0,
-        "ciLow": 0.5101091635454027,
-        "ciHigh": 1.0,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 33.0,
-        "mean": 0.66,
-        "ciLow": 0.521538260502326,
-        "ciHigh": 0.7756305077749992,
-        "method": "Wilson",
-        "note": null
+      {
+       "rule": "tempo does not hold over the window",
+       "count": 4,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 4,
+          "total": 4.0,
+          "mean": 1.0,
+          "ciLow": 0.5101091635454027,
+          "ciHigh": 1.0,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 30.0,
+          "mean": 0.6,
+          "ciLow": 0.4618143774758936,
+          "ciHigh": 0.7239161026974346,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 4,
+          "total": 4.0,
+          "mean": 1.0,
+          "ciLow": 0.5101091635454027,
+          "ciHigh": 1.0,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 33.0,
+          "mean": 0.66,
+          "ciLow": 0.521538260502326,
+          "ciHigh": 0.7756305077749992,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "all",
+       "count": 16,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 16,
+          "total": 12.0,
+          "mean": 0.75,
+          "ciLow": 0.5050168346449122,
+          "ciHigh": 0.8981793250878696,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 38.0,
+          "mean": 0.76,
+          "ciLow": 0.6258731624205708,
+          "ciHigh": 0.8570260860300828,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 16,
+          "total": 16.0,
+          "mean": 1.0,
+          "ciLow": 0.8063923194655637,
+          "ciHigh": 1.0,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 45.0,
+          "mean": 0.9,
+          "ciLow": 0.7863976856252035,
+          "ciHigh": 0.9565242350681096,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       }
-     }
+     ]
     }
    },
    "coverage": {
@@ -505,13 +702,15 @@
        "correct": 28,
        "wrong": 9,
        "auc": 0.6785714285714286,
-       "p": 0.05757403461022159
+       "p": 0.05686,
+       "pMethod": "Monte Carlo, 100,000 permutations"
       },
       "acc2": {
        "correct": 36,
        "wrong": 1,
        "auc": 0.8611111111111112,
-       "p": 0.12082530319217294
+       "p": 0.16216216216216217,
+       "pMethod": "exact permutation"
       }
      }
     },
@@ -649,20 +848,22 @@
        "correct": 26,
        "wrong": 4,
        "auc": 0.6634615384615384,
-       "p": 0.16383871556285348
+       "p": 0.16383871556285348,
+       "pMethod": "exact permutation"
       },
       "acc2": {
        "correct": 29,
        "wrong": 1,
        "auc": 0.896551724137931,
-       "p": 0.13333333333333333
+       "p": 0.13333333333333333,
+       "pMethod": "exact permutation"
       }
      }
     }
    },
    "clips": [
     {
-     "trackId": "Albums-Cafe_Paradiso-07",
+     "trackId": "67f42ea20c",
      "window": {
       "offsetSeconds": 0.023,
       "durationSeconds": 30.0,
@@ -671,7 +872,7 @@
      }
     },
     {
-     "trackId": "Albums-Cafe_Paradiso-11",
+     "trackId": "5a780ee438",
      "window": {
       "offsetSeconds": 0.074,
       "durationSeconds": 30.0,
@@ -680,7 +881,7 @@
      }
     },
     {
-     "trackId": "Albums-I_Like_It2-02",
+     "trackId": "29d5a70b51",
      "window": {
       "offsetSeconds": 0.322,
       "durationSeconds": 30.0,
@@ -689,7 +890,7 @@
      }
     },
     {
-     "trackId": "Albums-Latin_Jam-15",
+     "trackId": "0e587caa8d",
      "window": {
       "offsetSeconds": 0.033,
       "durationSeconds": 30.0,
@@ -698,7 +899,7 @@
      }
     },
     {
-     "trackId": "Albums-Latin_Jam3-04",
+     "trackId": "73e3200e16",
      "window": {
       "offsetSeconds": 0.136,
       "durationSeconds": 30.0,
@@ -707,7 +908,7 @@
      }
     },
     {
-     "trackId": "Albums-Latin_Jam4-07",
+     "trackId": "a774113ece",
      "window": {
       "offsetSeconds": 0.139,
       "durationSeconds": 30.0,
@@ -716,7 +917,7 @@
      }
     },
     {
-     "trackId": "Albums-Latin_Jam4-08",
+     "trackId": "ff4a3f61f9",
      "window": {
       "offsetSeconds": 0.074,
       "durationSeconds": 30.0,
@@ -725,7 +926,7 @@
      }
     },
     {
-     "trackId": "Albums-Latin_Jam4-11",
+     "trackId": "9519c14377",
      "window": {
       "offsetSeconds": 0.001,
       "durationSeconds": 30.0,
@@ -734,7 +935,7 @@
      }
     },
     {
-     "trackId": "Albums-Latin_Jam5-08",
+     "trackId": "e0a1c41c6c",
      "window": {
       "offsetSeconds": 0.0,
       "durationSeconds": 29.376,
@@ -743,7 +944,7 @@
      }
     },
     {
-     "trackId": "Albums-Macumba-07",
+     "trackId": "42006d7bee",
      "window": {
       "offsetSeconds": 0.028,
       "durationSeconds": 30.0,
@@ -752,7 +953,7 @@
      }
     },
     {
-     "trackId": "Albums-Macumba-08",
+     "trackId": "ac4173cf96",
      "window": {
       "offsetSeconds": 0.053,
       "durationSeconds": 30.0,
@@ -761,7 +962,7 @@
      }
     },
     {
-     "trackId": "Albums-Pais_Tropical-07",
+     "trackId": "cc8aa43e50",
      "window": {
       "offsetSeconds": 0.117,
       "durationSeconds": 30.0,
@@ -770,7 +971,7 @@
      }
     },
     {
-     "trackId": "Albums-Secret_Garden-06",
+     "trackId": "bf6a4b3d7b",
      "window": {
       "offsetSeconds": 0.193,
       "durationSeconds": 30.0,
@@ -779,7 +980,7 @@
      }
     },
     {
-     "trackId": "Albums-Step_By_Step-09",
+     "trackId": "3acf9b6bbc",
      "window": {
       "offsetSeconds": 0.046,
       "durationSeconds": 30.0,
@@ -788,7 +989,7 @@
      }
     },
     {
-     "trackId": "Albums-Step_By_Step-15",
+     "trackId": "f1206cd42e",
      "window": {
       "offsetSeconds": 1.118,
       "durationSeconds": 30.0,
@@ -797,7 +998,7 @@
      }
     },
     {
-     "trackId": "Albums-StrictlyDancing_Tango-02",
+     "trackId": "78ccb7850c",
      "window": {
       "offsetSeconds": 0.732,
       "durationSeconds": 30.0,
@@ -806,7 +1007,7 @@
      }
     },
     {
-     "trackId": "Media-100604",
+     "trackId": "83bf23b226",
      "window": {
       "offsetSeconds": 0.053,
       "durationSeconds": 30.0,
@@ -815,7 +1016,7 @@
      }
     },
     {
-     "trackId": "Media-103306",
+     "trackId": "a3cbf068a5",
      "window": {
       "offsetSeconds": 1.388,
       "durationSeconds": 30.0,
@@ -824,7 +1025,7 @@
      }
     },
     {
-     "trackId": "Media-103406",
+     "trackId": "eb5225aa81",
      "window": {
       "offsetSeconds": 0.856,
       "durationSeconds": 30.0,
@@ -833,7 +1034,7 @@
      }
     },
     {
-     "trackId": "Media-103503",
+     "trackId": "44d1b97ced",
      "window": {
       "offsetSeconds": 1.189,
       "durationSeconds": 30.0,
@@ -842,7 +1043,7 @@
      }
     },
     {
-     "trackId": "Media-103609",
+     "trackId": "cbfe6de741",
      "window": {
       "offsetSeconds": 0.832,
       "durationSeconds": 30.0,
@@ -851,7 +1052,7 @@
      }
     },
     {
-     "trackId": "Media-103709",
+     "trackId": "1a5ab86abe",
      "window": {
       "offsetSeconds": 1.151,
       "durationSeconds": 30.0,
@@ -860,7 +1061,7 @@
      }
     },
     {
-     "trackId": "Media-103714",
+     "trackId": "40945a6f62",
      "window": {
       "offsetSeconds": 0.796,
       "durationSeconds": 30.0,
@@ -869,7 +1070,7 @@
      }
     },
     {
-     "trackId": "Media-103902",
+     "trackId": "10f2670072",
      "window": {
       "offsetSeconds": 1.137,
       "durationSeconds": 30.0,
@@ -878,7 +1079,7 @@
      }
     },
     {
-     "trackId": "Media-103906",
+     "trackId": "62391c7c7a",
      "window": {
       "offsetSeconds": 1.661,
       "durationSeconds": 30.0,
@@ -887,7 +1088,7 @@
      }
     },
     {
-     "trackId": "Media-104008",
+     "trackId": "d47216cba5",
      "window": {
       "offsetSeconds": 0.837,
       "durationSeconds": 30.0,
@@ -896,7 +1097,7 @@
      }
     },
     {
-     "trackId": "Media-104309",
+     "trackId": "683f867562",
      "window": {
       "offsetSeconds": 0.731,
       "durationSeconds": 30.0,
@@ -905,7 +1106,7 @@
      }
     },
     {
-     "trackId": "Media-104507",
+     "trackId": "f825131b15",
      "window": {
       "offsetSeconds": 0.936,
       "durationSeconds": 30.0,
@@ -914,7 +1115,7 @@
      }
     },
     {
-     "trackId": "Media-104705",
+     "trackId": "058fc94d04",
      "window": {
       "offsetSeconds": 0.066,
       "durationSeconds": 30.0,
@@ -923,7 +1124,7 @@
      }
     },
     {
-     "trackId": "Media-104806",
+     "trackId": "e335b618a0",
      "window": {
       "offsetSeconds": 1.592,
       "durationSeconds": 30.0,
@@ -932,7 +1133,7 @@
      }
     },
     {
-     "trackId": "Media-104809",
+     "trackId": "09def1126d",
      "window": {
       "offsetSeconds": 1.627,
       "durationSeconds": 30.0,
@@ -941,7 +1142,7 @@
      }
     },
     {
-     "trackId": "Media-104810",
+     "trackId": "3b6d609295",
      "window": {
       "offsetSeconds": 1.058,
       "durationSeconds": 30.0,
@@ -950,7 +1151,7 @@
      }
     },
     {
-     "trackId": "Media-104903",
+     "trackId": "aebd040a8c",
      "window": {
       "offsetSeconds": 1.513,
       "durationSeconds": 30.0,
@@ -959,7 +1160,7 @@
      }
     },
     {
-     "trackId": "Media-104904",
+     "trackId": "cb8fdcc5a0",
      "window": {
       "offsetSeconds": 0.85,
       "durationSeconds": 30.0,
@@ -968,7 +1169,7 @@
      }
     },
     {
-     "trackId": "Media-104908",
+     "trackId": "597cbed18f",
      "window": {
       "offsetSeconds": 1.372,
       "durationSeconds": 30.0,
@@ -977,7 +1178,7 @@
      }
     },
     {
-     "trackId": "Media-104917",
+     "trackId": "e6f3658919",
      "window": {
       "offsetSeconds": 1.14,
       "durationSeconds": 30.0,
@@ -986,7 +1187,7 @@
      }
     },
     {
-     "trackId": "Media-105007",
+     "trackId": "b2e2a41fd0",
      "window": {
       "offsetSeconds": 0.913,
       "durationSeconds": 30.0,
@@ -995,7 +1196,7 @@
      }
     },
     {
-     "trackId": "Media-105017",
+     "trackId": "9fad394a32",
      "window": {
       "offsetSeconds": 1.537,
       "durationSeconds": 30.0,
@@ -1004,7 +1205,7 @@
      }
     },
     {
-     "trackId": "Media-105107",
+     "trackId": "ebe180bb14",
      "window": {
       "offsetSeconds": 0.08,
       "durationSeconds": 30.0,
@@ -1013,7 +1214,7 @@
      }
     },
     {
-     "trackId": "Media-105122",
+     "trackId": "7d3f650459",
      "window": {
       "offsetSeconds": 0.094,
       "durationSeconds": 30.0,
@@ -1022,7 +1223,7 @@
      }
     },
     {
-     "trackId": "Media-105314",
+     "trackId": "6f8c7ec519",
      "window": {
       "offsetSeconds": 1.546,
       "durationSeconds": 30.0,
@@ -1031,7 +1232,7 @@
      }
     },
     {
-     "trackId": "Media-105403",
+     "trackId": "4996f5c138",
      "window": {
       "offsetSeconds": 0.116,
       "durationSeconds": 30.0,
@@ -1040,7 +1241,7 @@
      }
     },
     {
-     "trackId": "Media-105413",
+     "trackId": "9ed4b2a9a2",
      "window": {
       "offsetSeconds": 1.462,
       "durationSeconds": 30.0,
@@ -1049,7 +1250,7 @@
      }
     },
     {
-     "trackId": "Media-105501",
+     "trackId": "118a338f06",
      "window": {
       "offsetSeconds": 0.73,
       "durationSeconds": 30.0,
@@ -1058,7 +1259,7 @@
      }
     },
     {
-     "trackId": "Media-105605",
+     "trackId": "bf910e899f",
      "window": {
       "offsetSeconds": 0.677,
       "durationSeconds": 30.0,
@@ -1067,7 +1268,7 @@
      }
     },
     {
-     "trackId": "Media-105612",
+     "trackId": "1d2ed13b46",
      "window": {
       "offsetSeconds": 1.109,
       "durationSeconds": 30.0,
@@ -1076,7 +1277,7 @@
      }
     },
     {
-     "trackId": "Media-105614",
+     "trackId": "cdc4cb9d7a",
      "window": {
       "offsetSeconds": 1.009,
       "durationSeconds": 30.0,
@@ -1085,7 +1286,7 @@
      }
     },
     {
-     "trackId": "Media-106010",
+     "trackId": "32c622480d",
      "window": {
       "offsetSeconds": 1.397,
       "durationSeconds": 30.0,
@@ -1094,7 +1295,7 @@
      }
     },
     {
-     "trackId": "Media-106104",
+     "trackId": "0a9e33bc15",
      "window": {
       "offsetSeconds": 1.571,
       "durationSeconds": 30.0,
@@ -1103,7 +1304,7 @@
      }
     },
     {
-     "trackId": "Media-106110",
+     "trackId": "63523fd5a0",
      "window": {
       "offsetSeconds": 0.381,
       "durationSeconds": 30.0,
@@ -1115,7 +1316,7 @@
    "tracks": {
     "librosa": [
      {
-      "trackId": "Albums-Cafe_Paradiso-07",
+      "trackId": "67f42ea20c",
       "estimate": "123.73",
       "confidence": 0.655,
       "withheld": false,
@@ -1129,7 +1330,7 @@
       }
      },
      {
-      "trackId": "Albums-Cafe_Paradiso-11",
+      "trackId": "5a780ee438",
       "estimate": "95.73",
       "confidence": 0.834,
       "withheld": false,
@@ -1143,7 +1344,7 @@
       }
      },
      {
-      "trackId": "Albums-I_Like_It2-02",
+      "trackId": "29d5a70b51",
       "estimate": "121",
       "confidence": 0.565,
       "withheld": false,
@@ -1157,7 +1358,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam-15",
+      "trackId": "0e587caa8d",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1170,6 +1371,7 @@
       "unreturned": {
        "estimate": "103.81",
        "confidence": 0.378,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -1177,7 +1379,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam3-04",
+      "trackId": "73e3200e16",
       "estimate": "100.06",
       "confidence": 0.59,
       "withheld": false,
@@ -1191,7 +1393,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam4-07",
+      "trackId": "a774113ece",
       "estimate": "103.88",
       "confidence": 0.513,
       "withheld": false,
@@ -1205,7 +1407,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam4-08",
+      "trackId": "ff4a3f61f9",
       "estimate": "103.72",
       "confidence": 0.707,
       "withheld": false,
@@ -1219,7 +1421,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam4-11",
+      "trackId": "9519c14377",
       "estimate": "127.55",
       "confidence": 0.63,
       "withheld": false,
@@ -1233,7 +1435,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam5-08",
+      "trackId": "e0a1c41c6c",
       "estimate": "103.76",
       "confidence": 0.71,
       "withheld": false,
@@ -1247,7 +1449,7 @@
       }
      },
      {
-      "trackId": "Albums-Macumba-07",
+      "trackId": "42006d7bee",
       "estimate": "98.48",
       "confidence": 0.452,
       "withheld": false,
@@ -1261,7 +1463,7 @@
       }
      },
      {
-      "trackId": "Albums-Macumba-08",
+      "trackId": "ac4173cf96",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1270,10 +1472,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "136.23",
+       "confidence": 0.259,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
-      "trackId": "Albums-Pais_Tropical-07",
+      "trackId": "cc8aa43e50",
       "estimate": "123.75",
       "confidence": 0.713,
       "withheld": false,
@@ -1287,7 +1498,7 @@
       }
      },
      {
-      "trackId": "Albums-Secret_Garden-06",
+      "trackId": "bf6a4b3d7b",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1299,7 +1510,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Albums-Step_By_Step-09",
+      "trackId": "3acf9b6bbc",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1308,10 +1519,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "180.9",
+       "confidence": 0.252,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Albums-Step_By_Step-15",
+      "trackId": "f1206cd42e",
       "estimate": "103.29",
       "confidence": 0.361,
       "withheld": false,
@@ -1325,7 +1545,7 @@
       }
      },
      {
-      "trackId": "Albums-StrictlyDancing_Tango-02",
+      "trackId": "78ccb7850c",
       "estimate": "116.04",
       "confidence": 0.588,
       "withheld": false,
@@ -1339,7 +1559,7 @@
       }
      },
      {
-      "trackId": "Media-100604",
+      "trackId": "83bf23b226",
       "estimate": "173.95",
       "confidence": 0.57,
       "withheld": false,
@@ -1353,7 +1573,7 @@
       }
      },
      {
-      "trackId": "Media-103306",
+      "trackId": "a3cbf068a5",
       "estimate": "130.64",
       "confidence": 0.538,
       "withheld": false,
@@ -1367,7 +1587,7 @@
       }
      },
      {
-      "trackId": "Media-103406",
+      "trackId": "eb5225aa81",
       "estimate": "124.01",
       "confidence": 0.787,
       "withheld": false,
@@ -1381,7 +1601,7 @@
       }
      },
      {
-      "trackId": "Media-103503",
+      "trackId": "44d1b97ced",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1394,6 +1614,7 @@
       "unreturned": {
        "estimate": "100.37",
        "confidence": 0.326,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -1401,7 +1622,7 @@
       }
      },
      {
-      "trackId": "Media-103609",
+      "trackId": "cbfe6de741",
       "estimate": "99.91",
       "confidence": 0.648,
       "withheld": false,
@@ -1415,7 +1636,7 @@
       }
      },
      {
-      "trackId": "Media-103709",
+      "trackId": "1a5ab86abe",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1424,10 +1645,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "92.62",
+       "confidence": 0.245,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Media-103714",
+      "trackId": "40945a6f62",
       "estimate": "87.99",
       "confidence": 0.596,
       "withheld": false,
@@ -1441,7 +1671,7 @@
       }
      },
      {
-      "trackId": "Media-103902",
+      "trackId": "10f2670072",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1454,6 +1684,7 @@
       "unreturned": {
        "estimate": "99.62",
        "confidence": 0.404,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -1461,7 +1692,7 @@
       }
      },
      {
-      "trackId": "Media-103906",
+      "trackId": "62391c7c7a",
       "estimate": "124",
       "confidence": 0.607,
       "withheld": false,
@@ -1475,7 +1706,7 @@
       }
      },
      {
-      "trackId": "Media-104008",
+      "trackId": "d47216cba5",
       "estimate": "99.86",
       "confidence": 0.495,
       "withheld": false,
@@ -1489,7 +1720,7 @@
       }
      },
      {
-      "trackId": "Media-104309",
+      "trackId": "683f867562",
       "estimate": "89.41",
       "confidence": 0.58,
       "withheld": false,
@@ -1503,7 +1734,28 @@
       }
      },
      {
-      "trackId": "Media-104507",
+      "trackId": "f825131b15",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "89.82",
+       "confidence": 0.177,
+       "steady": false,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "058fc94d04",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1515,19 +1767,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Media-104705",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-104806",
+      "trackId": "e335b618a0",
       "estimate": "131.94",
       "confidence": 0.345,
       "withheld": false,
@@ -1541,7 +1781,7 @@
       }
      },
      {
-      "trackId": "Media-104809",
+      "trackId": "09def1126d",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1550,10 +1790,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "178.97",
+       "confidence": 0.224,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Media-104810",
+      "trackId": "3b6d609295",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1566,6 +1815,7 @@
       "unreturned": {
        "estimate": "172.27",
        "confidence": 0.632,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -1573,7 +1823,7 @@
       }
      },
      {
-      "trackId": "Media-104903",
+      "trackId": "aebd040a8c",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1585,7 +1835,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Media-104904",
+      "trackId": "cb8fdcc5a0",
       "estimate": "169.89",
       "confidence": 0.799,
       "withheld": false,
@@ -1599,7 +1849,7 @@
       }
      },
      {
-      "trackId": "Media-104908",
+      "trackId": "597cbed18f",
       "estimate": "174.72",
       "confidence": 0.402,
       "withheld": false,
@@ -1613,7 +1863,7 @@
       }
      },
      {
-      "trackId": "Media-104917",
+      "trackId": "e6f3658919",
       "estimate": "101.7",
       "confidence": 0.355,
       "withheld": false,
@@ -1627,7 +1877,7 @@
       }
      },
      {
-      "trackId": "Media-105007",
+      "trackId": "b2e2a41fd0",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1639,7 +1889,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Media-105017",
+      "trackId": "9fad394a32",
       "estimate": "102.56",
       "confidence": 0.468,
       "withheld": false,
@@ -1653,7 +1903,7 @@
       }
      },
      {
-      "trackId": "Media-105107",
+      "trackId": "ebe180bb14",
       "estimate": "127.37",
       "confidence": 0.628,
       "withheld": false,
@@ -1667,7 +1917,7 @@
       }
      },
      {
-      "trackId": "Media-105122",
+      "trackId": "7d3f650459",
       "estimate": "103.86",
       "confidence": 0.337,
       "withheld": false,
@@ -1681,7 +1931,7 @@
       }
      },
      {
-      "trackId": "Media-105314",
+      "trackId": "6f8c7ec519",
       "estimate": "100",
       "confidence": 0.339,
       "withheld": false,
@@ -1695,7 +1945,7 @@
       }
      },
      {
-      "trackId": "Media-105403",
+      "trackId": "4996f5c138",
       "estimate": "102.09",
       "confidence": 0.43,
       "withheld": false,
@@ -1709,7 +1959,7 @@
       }
      },
      {
-      "trackId": "Media-105413",
+      "trackId": "9ed4b2a9a2",
       "estimate": "159.86",
       "confidence": 0.406,
       "withheld": false,
@@ -1723,7 +1973,7 @@
       }
      },
      {
-      "trackId": "Media-105501",
+      "trackId": "118a338f06",
       "estimate": "86.44",
       "confidence": 0.366,
       "withheld": false,
@@ -1737,7 +1987,7 @@
       }
      },
      {
-      "trackId": "Media-105605",
+      "trackId": "bf910e899f",
       "estimate": "123.99",
       "confidence": 0.713,
       "withheld": false,
@@ -1751,7 +2001,7 @@
       }
      },
      {
-      "trackId": "Media-105612",
+      "trackId": "1d2ed13b46",
       "estimate": "104.02",
       "confidence": 0.697,
       "withheld": false,
@@ -1765,7 +2015,7 @@
       }
      },
      {
-      "trackId": "Media-105614",
+      "trackId": "cdc4cb9d7a",
       "estimate": "104",
       "confidence": 0.687,
       "withheld": false,
@@ -1779,7 +2029,7 @@
       }
      },
      {
-      "trackId": "Media-106010",
+      "trackId": "32c622480d",
       "estimate": "92.03",
       "confidence": 0.452,
       "withheld": false,
@@ -1793,7 +2043,7 @@
       }
      },
      {
-      "trackId": "Media-106104",
+      "trackId": "0a9e33bc15",
       "estimate": "123.86",
       "confidence": 0.448,
       "withheld": false,
@@ -1807,7 +2057,7 @@
       }
      },
      {
-      "trackId": "Media-106110",
+      "trackId": "63523fd5a0",
       "estimate": "95.97",
       "confidence": 0.343,
       "withheld": false,
@@ -1823,7 +2073,7 @@
     ],
     "essentia": [
      {
-      "trackId": "Albums-Cafe_Paradiso-07",
+      "trackId": "67f42ea20c",
       "estimate": "123.7",
       "confidence": 0.676,
       "withheld": false,
@@ -1837,7 +2087,7 @@
       }
      },
      {
-      "trackId": "Albums-Cafe_Paradiso-11",
+      "trackId": "5a780ee438",
       "estimate": "95.77",
       "confidence": 0.768,
       "withheld": false,
@@ -1851,7 +2101,7 @@
       }
      },
      {
-      "trackId": "Albums-I_Like_It2-02",
+      "trackId": "29d5a70b51",
       "estimate": "120.98",
       "confidence": 0.609,
       "withheld": false,
@@ -1865,7 +2115,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam-15",
+      "trackId": "0e587caa8d",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1878,6 +2128,7 @@
       "unreturned": {
        "estimate": "103.48",
        "confidence": 0.684,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -1885,7 +2136,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam3-04",
+      "trackId": "73e3200e16",
       "estimate": "100.06",
       "confidence": 0.68,
       "withheld": false,
@@ -1899,7 +2150,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam4-07",
+      "trackId": "a774113ece",
       "estimate": "103.72",
       "confidence": 0.518,
       "withheld": false,
@@ -1913,7 +2164,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam4-08",
+      "trackId": "ff4a3f61f9",
       "estimate": "103.75",
       "confidence": 0.622,
       "withheld": false,
@@ -1927,7 +2178,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam4-11",
+      "trackId": "9519c14377",
       "estimate": "127.69",
       "confidence": 0.623,
       "withheld": false,
@@ -1941,7 +2192,7 @@
       }
      },
      {
-      "trackId": "Albums-Latin_Jam5-08",
+      "trackId": "e0a1c41c6c",
       "estimate": "103.76",
       "confidence": 0.741,
       "withheld": false,
@@ -1955,7 +2206,7 @@
       }
      },
      {
-      "trackId": "Albums-Macumba-07",
+      "trackId": "42006d7bee",
       "estimate": "99.98",
       "confidence": 0.646,
       "withheld": false,
@@ -1969,7 +2220,7 @@
       }
      },
      {
-      "trackId": "Albums-Macumba-08",
+      "trackId": "ac4173cf96",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -1982,6 +2233,7 @@
       "unreturned": {
        "estimate": "99.8",
        "confidence": 0.71,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -1989,7 +2241,7 @@
       }
      },
      {
-      "trackId": "Albums-Pais_Tropical-07",
+      "trackId": "cc8aa43e50",
       "estimate": "123.71",
       "confidence": 0.672,
       "withheld": false,
@@ -2003,7 +2255,7 @@
       }
      },
      {
-      "trackId": "Albums-Secret_Garden-06",
+      "trackId": "bf6a4b3d7b",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2015,7 +2267,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Albums-Step_By_Step-09",
+      "trackId": "3acf9b6bbc",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2024,10 +2276,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "179.95",
+       "confidence": 0.158,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Albums-Step_By_Step-15",
+      "trackId": "f1206cd42e",
       "estimate": "101.81",
       "confidence": 0.395,
       "withheld": false,
@@ -2041,7 +2302,7 @@
       }
      },
      {
-      "trackId": "Albums-StrictlyDancing_Tango-02",
+      "trackId": "78ccb7850c",
       "estimate": "116.02",
       "confidence": 0.642,
       "withheld": false,
@@ -2055,7 +2316,7 @@
       }
      },
      {
-      "trackId": "Media-100604",
+      "trackId": "83bf23b226",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2064,10 +2325,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "86.85",
+       "confidence": 0.271,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Media-103306",
+      "trackId": "a3cbf068a5",
       "estimate": "129.81",
       "confidence": 0.343,
       "withheld": false,
@@ -2081,7 +2351,7 @@
       }
      },
      {
-      "trackId": "Media-103406",
+      "trackId": "eb5225aa81",
       "estimate": "124.01",
       "confidence": 0.72,
       "withheld": false,
@@ -2095,7 +2365,7 @@
       }
      },
      {
-      "trackId": "Media-103503",
+      "trackId": "44d1b97ced",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2108,6 +2378,7 @@
       "unreturned": {
        "estimate": "99.78",
        "confidence": 0.466,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -2115,7 +2386,7 @@
       }
      },
      {
-      "trackId": "Media-103609",
+      "trackId": "cbfe6de741",
       "estimate": "99.89",
       "confidence": 0.624,
       "withheld": false,
@@ -2129,7 +2400,7 @@
       }
      },
      {
-      "trackId": "Media-103709",
+      "trackId": "1a5ab86abe",
       "estimate": "92.68",
       "confidence": 0.45,
       "withheld": false,
@@ -2143,7 +2414,7 @@
       }
      },
      {
-      "trackId": "Media-103714",
+      "trackId": "40945a6f62",
       "estimate": "87.9",
       "confidence": 0.546,
       "withheld": false,
@@ -2157,7 +2428,7 @@
       }
      },
      {
-      "trackId": "Media-103902",
+      "trackId": "10f2670072",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2170,6 +2441,7 @@
       "unreturned": {
        "estimate": "99.7",
        "confidence": 0.713,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -2177,7 +2449,7 @@
       }
      },
      {
-      "trackId": "Media-103906",
+      "trackId": "62391c7c7a",
       "estimate": "124.09",
       "confidence": 0.659,
       "withheld": false,
@@ -2191,7 +2463,7 @@
       }
      },
      {
-      "trackId": "Media-104008",
+      "trackId": "d47216cba5",
       "estimate": "100.25",
       "confidence": 0.424,
       "withheld": false,
@@ -2205,7 +2477,49 @@
       }
      },
      {
-      "trackId": "Media-104309",
+      "trackId": "683f867562",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "178.79",
+       "confidence": 0.281,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "f825131b15",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "91.7",
+       "confidence": 0.089,
+       "steady": false,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "058fc94d04",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2217,31 +2531,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Media-104507",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-104705",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-104806",
+      "trackId": "e335b618a0",
       "estimate": "132.09",
       "confidence": 0.351,
       "withheld": false,
@@ -2255,7 +2545,49 @@
       }
      },
      {
-      "trackId": "Media-104809",
+      "trackId": "09def1126d",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "179.37",
+       "confidence": 0.104,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "3b6d609295",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "179.7",
+       "confidence": 0.198,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "aebd040a8c",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2267,7 +2599,70 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Media-104810",
+      "trackId": "cb8fdcc5a0",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "169.06",
+       "confidence": 0.198,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "597cbed18f",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "174.35",
+       "confidence": 0.199,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "e6f3658919",
+      "estimate": null,
+      "confidence": null,
+      "withheld": true,
+      "gate": {
+       "passed": true,
+       "reason": null
+      },
+      "scores": null,
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "101.77",
+       "confidence": 0.277,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 1.0
+       }
+      }
+     },
+     {
+      "trackId": "b2e2a41fd0",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2279,67 +2674,7 @@
       "withheldReason": "no estimate"
      },
      {
-      "trackId": "Media-104903",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-104904",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-104908",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-104917",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-105007",
-      "estimate": null,
-      "confidence": null,
-      "withheld": true,
-      "gate": {
-       "passed": true,
-       "reason": null
-      },
-      "scores": null,
-      "withheldReason": "no estimate"
-     },
-     {
-      "trackId": "Media-105017",
+      "trackId": "9fad394a32",
       "estimate": "102.61",
       "confidence": 0.656,
       "withheld": false,
@@ -2353,7 +2688,7 @@
       }
      },
      {
-      "trackId": "Media-105107",
+      "trackId": "ebe180bb14",
       "estimate": "127.46",
       "confidence": 0.467,
       "withheld": false,
@@ -2367,7 +2702,7 @@
       }
      },
      {
-      "trackId": "Media-105122",
+      "trackId": "7d3f650459",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2376,10 +2711,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "104.11",
+       "confidence": 0.095,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Media-105314",
+      "trackId": "6f8c7ec519",
       "estimate": "99.87",
       "confidence": 0.445,
       "withheld": false,
@@ -2393,7 +2737,7 @@
       }
      },
      {
-      "trackId": "Media-105403",
+      "trackId": "4996f5c138",
       "estimate": "101.97",
       "confidence": 0.533,
       "withheld": false,
@@ -2407,7 +2751,7 @@
       }
      },
      {
-      "trackId": "Media-105413",
+      "trackId": "9ed4b2a9a2",
       "estimate": "159.86",
       "confidence": 0.407,
       "withheld": false,
@@ -2421,7 +2765,7 @@
       }
      },
      {
-      "trackId": "Media-105501",
+      "trackId": "118a338f06",
       "estimate": "87.08",
       "confidence": 0.353,
       "withheld": false,
@@ -2435,7 +2779,7 @@
       }
      },
      {
-      "trackId": "Media-105605",
+      "trackId": "bf910e899f",
       "estimate": "123.98",
       "confidence": 0.608,
       "withheld": false,
@@ -2449,7 +2793,7 @@
       }
      },
      {
-      "trackId": "Media-105612",
+      "trackId": "1d2ed13b46",
       "estimate": "103.95",
       "confidence": 0.607,
       "withheld": false,
@@ -2463,7 +2807,7 @@
       }
      },
      {
-      "trackId": "Media-105614",
+      "trackId": "cdc4cb9d7a",
       "estimate": "104.04",
       "confidence": 0.671,
       "withheld": false,
@@ -2477,7 +2821,7 @@
       }
      },
      {
-      "trackId": "Media-106010",
+      "trackId": "32c622480d",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2486,10 +2830,19 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "92.13",
+       "confidence": 0.172,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
-      "trackId": "Media-106104",
+      "trackId": "0a9e33bc15",
       "estimate": "123.71",
       "confidence": 0.582,
       "withheld": false,
@@ -2503,7 +2856,7 @@
       }
      },
      {
-      "trackId": "Media-106110",
+      "trackId": "63523fd5a0",
       "estimate": null,
       "confidence": null,
       "withheld": true,
@@ -2512,7 +2865,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "94.95",
+       "confidence": 0.243,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      }
     ]
    }
@@ -2520,7 +2882,7 @@
   {
    "suite": "tempo",
    "command": "uv run python -m evals_audio --suite tempo --dataset giantsteps-tempo --limit 50 --seed 1",
-   "startedAt": "2026-10-24T13:44:32Z",
+   "startedAt": "2026-10-24T14:15:05Z",
    "wallSeconds": 32.0,
    "jobs": 4,
    "seeds": {
@@ -2531,7 +2893,7 @@
    "limit": 50,
    "selection": "50 of 661 usable tracks drawn with numpy default_rng(1)",
    "clipSeconds": 30.0,
-   "gitCommit": "4260267",
+   "gitCommit": "18c1e0f",
    "analyzerVersion": "2.0.0",
    "analyzerVersions": {
     "librosa": "2.0.0+librosa",
@@ -2552,7 +2914,7 @@
     "mirdataName": "giantsteps_tempo",
     "title": "GiantSteps Tempo",
     "annotationLicence": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), per mirdata 1.0.0 (giantsteps_tempo.LICENSE_INFO); not stated by the dataset: the annotation repository has no licence",
-    "audioRights": "commercial excerpts (Beatport two-minute previews); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio, reference labels or file names, only track ids and the service's own results.",
+    "audioRights": "commercial excerpts (Beatport two-minute previews); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio and no audio file names.",
     "credits": [
      "Knees, P., Faraldo, Á., Herrera, P., Vogl, R., Böck, S., Hörschläger, F., Le Goff, M. (2015). Two data sets for tempo estimation and key detection in electronic dance music annotated from user corrections. Proc. ISMIR 2015, 364-370. doi:10.5281/zenodo.1414996",
      "Schreiber, H., Müller, M. (2018). A crowdsourced experiment for tempo estimation of electronic dance music. Proc. ISMIR 2018. doi:10.5281/zenodo.1492437 (the v2 annotations used here)"
@@ -2762,96 +3124,292 @@
     "librosa": {
      "n": 50,
      "returned": 27,
-     "unreturned": 9,
-     "metrics": {
-      "acc1": {
-       "unreturned": {
-        "n": 9,
-        "total": 1.0,
-        "mean": 0.1111111111111111,
-        "ciLow": 0.019890887638544907,
-        "ciHigh": 0.434999705576656,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 11.0,
-        "mean": 0.22,
-        "ciLow": 0.1275391597021442,
-        "ciHigh": 0.3524154958125367,
-        "method": "Wilson",
-        "note": null
+     "unreturned": 20,
+     "rules": [
+      {
+       "rule": "confidence under the estimator's minimum",
+       "count": 11,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 11,
+          "total": 6.0,
+          "mean": 0.5454545454545454,
+          "ciLow": 0.280091537409322,
+          "ciHigh": 0.7872872837754024,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 16.0,
+          "mean": 0.32,
+          "ciLow": 0.20758216260656845,
+          "ciHigh": 0.45810297308144077,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 11,
+          "total": 6.0,
+          "mean": 0.5454545454545454,
+          "ciLow": 0.280091537409322,
+          "ciHigh": 0.7872872837754024,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 20.0,
+          "mean": 0.4,
+          "ciLow": 0.27608389730256544,
+          "ciHigh": 0.5381856225241064,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       },
-      "acc2": {
-       "unreturned": {
-        "n": 9,
-        "total": 1.0,
-        "mean": 0.1111111111111111,
-        "ciLow": 0.019890887638544907,
-        "ciHigh": 0.434999705576656,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 15.0,
-        "mean": 0.3,
-        "ciLow": 0.19103553500880954,
-        "ciHigh": 0.437503504644534,
-        "method": "Wilson",
-        "note": null
+      {
+       "rule": "tempo does not hold over the window",
+       "count": 9,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 9,
+          "total": 1.0,
+          "mean": 0.1111111111111111,
+          "ciLow": 0.019890887638544907,
+          "ciHigh": 0.434999705576656,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 11.0,
+          "mean": 0.22,
+          "ciLow": 0.1275391597021442,
+          "ciHigh": 0.3524154958125367,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 9,
+          "total": 1.0,
+          "mean": 0.1111111111111111,
+          "ciLow": 0.019890887638544907,
+          "ciHigh": 0.434999705576656,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 15.0,
+          "mean": 0.3,
+          "ciLow": 0.19103553500880954,
+          "ciHigh": 0.437503504644534,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "all",
+       "count": 20,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 20,
+          "total": 7.0,
+          "mean": 0.35,
+          "ciLow": 0.18119182410108206,
+          "ciHigh": 0.5671457233147638,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 17.0,
+          "mean": 0.34,
+          "ciLow": 0.2243694922250009,
+          "ciHigh": 0.478461739497674,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 20,
+          "total": 7.0,
+          "mean": 0.35,
+          "ciLow": 0.18119182410108206,
+          "ciHigh": 0.5671457233147638,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 21.0,
+          "mean": 0.42,
+          "ciLow": 0.2937500335471198,
+          "ciHigh": 0.5576655823142176,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       }
-     }
+     ]
     },
     "essentia": {
      "n": 50,
      "returned": 20,
-     "unreturned": 23,
-     "metrics": {
-      "acc1": {
-       "unreturned": {
-        "n": 23,
-        "total": 13.0,
-        "mean": 0.5652173913043478,
-        "ciLow": 0.3681137508501646,
-        "ciHigh": 0.743653646743258,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 23.0,
-        "mean": 0.46,
-        "ciLow": 0.3296965219222435,
-        "ciHigh": 0.5960112860084253,
-        "method": "Wilson",
-        "note": null
+     "unreturned": 27,
+     "rules": [
+      {
+       "rule": "tempo does not hold over the window",
+       "count": 23,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 23,
+          "total": 13.0,
+          "mean": 0.5652173913043478,
+          "ciLow": 0.3681137508501646,
+          "ciHigh": 0.743653646743258,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 23.0,
+          "mean": 0.46,
+          "ciLow": 0.3296965219222435,
+          "ciHigh": 0.5960112860084253,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 23,
+          "total": 17.0,
+          "mean": 0.7391304347826086,
+          "ciLow": 0.5352999516257462,
+          "ciHigh": 0.8745138395501366,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 32.0,
+          "mean": 0.64,
+          "ciLow": 0.501410168761127,
+          "ciHigh": 0.7586125034815325,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       },
-      "acc2": {
-       "unreturned": {
-        "n": 23,
-        "total": 17.0,
-        "mean": 0.7391304347826086,
-        "ciLow": 0.5352999516257462,
-        "ciHigh": 0.8745138395501366,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 32.0,
-        "mean": 0.64,
-        "ciLow": 0.501410168761127,
-        "ciHigh": 0.7586125034815325,
-        "method": "Wilson",
-        "note": null
+      {
+       "rule": "confidence under the estimator's minimum",
+       "count": 4,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 4,
+          "total": 1.0,
+          "mean": 0.25,
+          "ciLow": 0.04558726080970055,
+          "ciHigh": 0.6993581574175981,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 11.0,
+          "mean": 0.22,
+          "ciLow": 0.1275391597021442,
+          "ciHigh": 0.3524154958125367,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 4,
+          "total": 2.0,
+          "mean": 0.5,
+          "ciLow": 0.15003898915214947,
+          "ciHigh": 0.8499610108478506,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 17.0,
+          "mean": 0.34,
+          "ciLow": 0.2243694922250009,
+          "ciHigh": 0.478461739497674,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "all",
+       "count": 27,
+       "metrics": {
+        "acc1": {
+         "unreturned": {
+          "n": 27,
+          "total": 14.0,
+          "mean": 0.5185185185185185,
+          "ciLow": 0.3398561575495229,
+          "ciHigh": 0.6925677302378153,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 24.0,
+          "mean": 0.48,
+          "ciLow": 0.34797135286578046,
+          "ciHigh": 0.6148825510995539,
+          "method": "Wilson",
+          "note": null
+         }
+        },
+        "acc2": {
+         "unreturned": {
+          "n": 27,
+          "total": 19.0,
+          "mean": 0.7037037037037037,
+          "ciLow": 0.5151931703585185,
+          "ciHigh": 0.8414695953022023,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 34.0,
+          "mean": 0.68,
+          "ciLow": 0.5418970269185592,
+          "ciHigh": 0.7924178373934316,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       }
-     }
+     ]
     }
    },
    "coverage": {
@@ -2989,13 +3547,15 @@
        "correct": 10,
        "wrong": 17,
        "auc": 0.6411764705882353,
-       "p": 0.11897887536836255
+       "p": 0.11902,
+       "pMethod": "Monte Carlo, 100,000 permutations"
       },
       "acc2": {
        "correct": 14,
        "wrong": 13,
        "auc": 0.6840659340659341,
-       "p": 0.054621193701565166
+       "p": 0.05366,
+       "pMethod": "Monte Carlo, 100,000 permutations"
       }
      }
     },
@@ -3083,13 +3643,15 @@
        "correct": 10,
        "wrong": 10,
        "auc": 0.69,
-       "p": 0.08098620524006306
+       "p": 0.08274697438784126,
+       "pMethod": "exact permutation"
       },
       "acc2": {
        "correct": 15,
        "wrong": 5,
        "auc": 0.8,
-       "p": 0.02631578947368421
+       "p": 0.02631578947368421,
+       "pMethod": "exact permutation"
       }
      }
     }
@@ -3584,7 +4146,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "112.59",
+       "confidence": 0.285,
+       "steady": false,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "14",
@@ -3614,6 +4185,7 @@
       "unreturned": {
        "estimate": "140.04",
        "confidence": 0.541,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -3634,6 +4206,7 @@
       "unreturned": {
        "estimate": "92.15",
        "confidence": 0.363,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -3710,6 +4283,7 @@
       "unreturned": {
        "estimate": "93.32",
        "confidence": 0.402,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -3730,6 +4304,7 @@
       "unreturned": {
        "estimate": "116.68",
        "confidence": 0.544,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -3778,6 +4353,7 @@
       "unreturned": {
        "estimate": "92.84",
        "confidence": 0.433,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -3822,7 +4398,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "124.17",
+       "confidence": 0.079,
+       "steady": false,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "320",
@@ -3848,7 +4433,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "110.72",
+       "confidence": 0.282,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "351",
@@ -4000,6 +4594,7 @@
       "unreturned": {
        "estimate": "112.78",
        "confidence": 0.374,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4020,6 +4615,7 @@
       "unreturned": {
        "estimate": "93.32",
        "confidence": 0.55,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4036,7 +4632,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "160.05",
+       "confidence": 0.272,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "521",
@@ -4062,7 +4667,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "171.94",
+       "confidence": 0.271,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "542",
@@ -4078,6 +4692,7 @@
       "unreturned": {
        "estimate": "114.71",
        "confidence": 0.502,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4098,6 +4713,7 @@
       "unreturned": {
        "estimate": "107.29",
        "confidence": 0.426,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4128,7 +4744,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "82.45",
+       "confidence": 0.268,
+       "steady": false,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "580",
@@ -4140,7 +4765,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "140.24",
+       "confidence": 0.23,
+       "steady": false,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "594",
@@ -4166,7 +4800,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "140",
+       "confidence": 0.286,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "639",
@@ -4178,7 +4821,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "127.99",
+       "confidence": 0.15,
+       "steady": true,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "643",
@@ -4190,7 +4842,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "110.46",
+       "confidence": 0.227,
+       "steady": false,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "65",
@@ -4258,7 +4919,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "102",
+       "confidence": 0.216,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "96",
@@ -4290,6 +4960,7 @@
       "unreturned": {
        "estimate": "147.94",
        "confidence": 0.427,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4322,6 +4993,7 @@
       "unreturned": {
        "estimate": "140.04",
        "confidence": 0.443,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4356,6 +5028,7 @@
       "unreturned": {
        "estimate": "140.1",
        "confidence": 0.565,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4376,6 +5049,7 @@
       "unreturned": {
        "estimate": "69.99",
        "confidence": 0.539,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 1.0
@@ -4424,6 +5098,7 @@
       "unreturned": {
        "estimate": "167.97",
        "confidence": 0.425,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4458,6 +5133,7 @@
       "unreturned": {
        "estimate": "139.7",
        "confidence": 0.337,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4478,6 +5154,7 @@
       "unreturned": {
        "estimate": "116",
        "confidence": 0.405,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4526,6 +5203,7 @@
       "unreturned": {
        "estimate": "138.65",
        "confidence": 0.358,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4574,6 +5252,7 @@
       "unreturned": {
        "estimate": "124.14",
        "confidence": 0.437,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4604,7 +5283,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "109.91",
+       "confidence": 0.153,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "351",
@@ -4646,6 +5334,7 @@
       "unreturned": {
        "estimate": "70.01",
        "confidence": 0.438,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 1.0
@@ -4674,7 +5363,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "139.4",
+       "confidence": 0.235,
+       "steady": false,
+       "scores": {
+        "acc1": 1.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "403",
@@ -4690,6 +5388,7 @@
       "unreturned": {
        "estimate": "174.47",
        "confidence": 0.285,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4710,6 +5409,7 @@
       "unreturned": {
        "estimate": "139.78",
        "confidence": 0.542,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4772,6 +5472,7 @@
       "unreturned": {
        "estimate": "85.36",
        "confidence": 0.548,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 1.0
@@ -4792,6 +5493,7 @@
       "unreturned": {
        "estimate": "139.94",
        "confidence": 0.574,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4826,6 +5528,7 @@
       "unreturned": {
        "estimate": "86.17",
        "confidence": 0.622,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 1.0
@@ -4860,6 +5563,7 @@
       "unreturned": {
        "estimate": "114.67",
        "confidence": 0.45,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -4880,6 +5584,7 @@
       "unreturned": {
        "estimate": "158.47",
        "confidence": 0.312,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4914,6 +5619,7 @@
       "unreturned": {
        "estimate": "120.02",
        "confidence": 0.383,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4934,6 +5640,7 @@
       "unreturned": {
        "estimate": "139.76",
        "confidence": 0.282,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -4996,6 +5703,7 @@
       "unreturned": {
        "estimate": "139.98",
        "confidence": 0.622,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -5016,6 +5724,7 @@
       "unreturned": {
        "estimate": "86.77",
        "confidence": 0.315,
+       "steady": false,
        "scores": {
         "acc1": 1.0,
         "acc2": 1.0
@@ -5036,6 +5745,7 @@
       "unreturned": {
        "estimate": "100.66",
        "confidence": 0.576,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -5052,7 +5762,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "156.31",
+       "confidence": 0.193,
+       "steady": true,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 0.0
+       }
+      }
      },
      {
       "trackId": "79",
@@ -5078,7 +5797,16 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no estimate"
+      "withheldReason": "confidence under the estimator's minimum",
+      "unreturned": {
+       "estimate": "157.74",
+       "confidence": 0.185,
+       "steady": false,
+       "scores": {
+        "acc1": 0.0,
+        "acc2": 1.0
+       }
+      }
      },
      {
       "trackId": "96",
@@ -5094,6 +5822,7 @@
       "unreturned": {
        "estimate": "148.78",
        "confidence": 0.468,
+       "steady": false,
        "scores": {
         "acc1": 0.0,
         "acc2": 0.0
@@ -5106,8 +5835,8 @@
   {
    "suite": "key",
    "command": "uv run python -m evals_audio --suite key --dataset giantsteps-key --limit 50 --seed 1",
-   "startedAt": "2026-10-24T13:45:05Z",
-   "wallSeconds": 29.7,
+   "startedAt": "2026-10-24T14:15:39Z",
+   "wallSeconds": 32.1,
    "jobs": 4,
    "seeds": {
     "selection": 1,
@@ -5117,7 +5846,7 @@
    "limit": 50,
    "selection": "50 of 476 usable tracks drawn with numpy default_rng(1)",
    "clipSeconds": 30.0,
-   "gitCommit": "4260267",
+   "gitCommit": "18c1e0f",
    "analyzerVersion": "2.0.0",
    "analyzerVersions": {
     "librosa": "2.0.0+librosa",
@@ -5138,7 +5867,7 @@
     "mirdataName": "giantsteps_key",
     "title": "GiantSteps Key, as GiantSteps+ (Faraldo 2017 revision)",
     "annotationLicence": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), stated in the Zenodo record (10.5281/zenodo.1095691); mirdata 1.0.0 agrees",
-    "audioRights": "commercial excerpts (Beatport two-minute previews; the record says the audio belongs to Beatport); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio, reference labels or file names, only track ids and the service's own results.",
+    "audioRights": "commercial excerpts (Beatport two-minute previews; the record says the audio belongs to Beatport); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio and no audio file names.",
     "credits": [
      "Faraldo, Á. (2017). GiantSteps+ EDM Key Dataset. Zenodo. doi:10.5281/zenodo.1095691",
      "Faraldo, Á. (2017). Tonality Estimation in Electronic Dance Music: A Computational and Musically Informed Examination. PhD thesis, Universitat Pompeu Fabra, Barcelona",
@@ -5205,8 +5934,8 @@
        "n": 50,
        "total": 8.3,
        "mean": 0.166,
-       "ciLow": 0.08199999999999999,
-       "ciHigh": 0.282,
+       "ciLow": 0.086,
+       "ciHigh": 0.28200000000000003,
        "method": "BCa bootstrap",
        "note": null
       },
@@ -5280,7 +6009,7 @@
        "n": 11,
        "total": 8.5,
        "mean": 0.7727272727272727,
-       "ciLow": 0.4909090909090909,
+       "ciLow": 0.4818181818181818,
        "ciHigh": 0.9363636363636364,
        "method": "BCa bootstrap",
        "note": null
@@ -5306,15 +6035,19 @@
       "mirex": {
        "firstMean": 0.7545454545454546,
        "secondMean": 0.7727272727272727,
+       "firstHigher": 1,
+       "secondHigher": 3,
        "difference": {
         "n": 11,
         "total": -0.2,
         "mean": -0.018181818181818184,
-        "ciLow": -0.18181818181818182,
-        "ciHigh": 0.2727272727272727,
-        "method": "BCa bootstrap",
+        "ciLow": -0.3828801224252874,
+        "ciHigh": 0.34651648606165103,
+        "method": "paired t, ±1 pseudo-differences",
         "note": null
-       }
+       },
+       "signFlipP": 1.0,
+       "signFlipMethod": "exact"
       },
       "exact": {
        "firstCorrect": 7,
@@ -5331,15 +6064,19 @@
       "mirex": {
        "firstMean": 0.166,
        "secondMean": 0.17,
+       "firstHigher": 1,
+       "secondHigher": 3,
        "difference": {
         "n": 50,
         "total": -0.19999999999999996,
         "mean": -0.003999999999999999,
-        "ciLow": -0.04,
-        "ciHigh": 0.066,
-        "method": "BCa bootstrap",
+        "ciLow": -0.07886636253268157,
+        "ciHigh": 0.07086636253268157,
+        "method": "paired t, ±1 pseudo-differences",
         "note": null
-       }
+       },
+       "signFlipP": 1.0,
+       "signFlipMethod": "exact"
       },
       "exact": {
        "firstCorrect": 7,
@@ -5355,96 +6092,476 @@
     "librosa": {
      "n": 50,
      "returned": 11,
-     "unreturned": 37,
-     "metrics": {
-      "mirex": {
-       "unreturned": {
-        "n": 37,
-        "total": 17.499999999999996,
-        "mean": 0.47297297297297286,
-        "ciLow": 0.33513513513513515,
-        "ciHigh": 0.6135135135135135,
-        "method": "BCa bootstrap",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 25.8,
-        "mean": 0.516,
-        "ciLow": 0.39676143851471396,
-        "ciHigh": 0.638,
-        "method": "BCa bootstrap",
-        "note": null
+     "unreturned": 39,
+     "rules": [
+      {
+       "rule": "no sustained pitch",
+       "count": 28,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 28,
+          "total": 12.3,
+          "mean": 0.43928571428571433,
+          "ciLow": 0.2857142857142857,
+          "ciHigh": 0.6178571428571429,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 20.6,
+          "mean": 0.41200000000000003,
+          "ciLow": 0.292,
+          "ciHigh": 0.5379999999999999,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 28,
+          "total": 10.0,
+          "mean": 0.35714285714285715,
+          "ciLow": 0.2070582950773768,
+          "ciHigh": 0.5416969348557219,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 17.0,
+          "mean": 0.34,
+          "ciLow": 0.2243694922250009,
+          "ciHigh": 0.478461739497674,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       },
-      "exact": {
-       "unreturned": {
-        "n": 37,
-        "total": 14.0,
-        "mean": 0.3783783783783784,
-        "ciLow": 0.24063999175798265,
-        "ciHigh": 0.5389956956078235,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 21.0,
-        "mean": 0.42,
-        "ciLow": 0.2937500335471198,
-        "ciHigh": 0.5576655823142176,
-        "method": "Wilson",
-        "note": null
+      {
+       "rule": "fewer than three pitch classes",
+       "count": 5,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 5,
+          "total": 2.6,
+          "mean": 0.52,
+          "ciLow": 0.2,
+          "ciHigh": 0.8400000000000001,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 10.899999999999999,
+          "mean": 0.21799999999999997,
+          "ciLow": 0.124,
+          "ciHigh": 0.33799999999999997,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 5,
+          "total": 2.0,
+          "mean": 0.4,
+          "ciLow": 0.11762077423264783,
+          "ciHigh": 0.769275718723987,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 9.0,
+          "mean": 0.18,
+          "ciLow": 0.09770192670234178,
+          "ciHigh": 0.30796053674300783,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "one voice without stable notes (speech-like)",
+       "count": 5,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 5,
+          "total": 2.6,
+          "mean": 0.52,
+          "ciLow": 0.24,
+          "ciHigh": 0.86,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 10.9,
+          "mean": 0.218,
+          "ciLow": 0.126,
+          "ciHigh": 0.348,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 5,
+          "total": 2.0,
+          "mean": 0.4,
+          "ciLow": 0.11762077423264783,
+          "ciHigh": 0.769275718723987,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 9.0,
+          "mean": 0.18,
+          "ciLow": 0.09770192670234178,
+          "ciHigh": 0.30796053674300783,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "one held pitch over the beat (a drone or one bass note)",
+       "count": 1,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 1,
+          "total": 0.0,
+          "mean": 0.0,
+          "ciLow": null,
+          "ciHigh": null,
+          "method": "BCa bootstrap",
+          "note": "all scores equal"
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 8.3,
+          "mean": 0.166,
+          "ciLow": 0.08199999999999999,
+          "ciHigh": 0.28,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 1,
+          "total": 0.0,
+          "mean": 0.0,
+          "ciLow": 0.0,
+          "ciHigh": 0.7934506856227626,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 7.0,
+          "mean": 0.14,
+          "ciLow": 0.06950833427016294,
+          "ciHigh": 0.2618619371058554,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "all",
+       "count": 39,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 39,
+          "total": 17.5,
+          "mean": 0.44871794871794873,
+          "ciLow": 0.317948717948718,
+          "ciHigh": 0.5923076923076922,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 25.799999999999997,
+          "mean": 0.5159999999999999,
+          "ciLow": 0.3940000000000001,
+          "ciHigh": 0.64,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 39,
+          "total": 14.0,
+          "mean": 0.358974358974359,
+          "ciLow": 0.22742085458992867,
+          "ciHigh": 0.5158185144045146,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 21.0,
+          "mean": 0.42,
+          "ciLow": 0.2937500335471198,
+          "ciHigh": 0.5576655823142176,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       }
-     }
+     ]
     },
     "essentia": {
      "n": 50,
      "returned": 11,
      "unreturned": 39,
-     "metrics": {
-      "mirex": {
-       "unreturned": {
-        "n": 39,
-        "total": 28.0,
-        "mean": 0.717948717948718,
-        "ciLow": 0.5871794871794872,
-        "ciHigh": 0.8333333333333334,
-        "method": "BCa bootstrap",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 36.5,
-        "mean": 0.73,
-        "ciLow": 0.616,
-        "ciHigh": 0.83,
-        "method": "BCa bootstrap",
-        "note": null
+     "rules": [
+      {
+       "rule": "no sustained pitch",
+       "count": 28,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 28,
+          "total": 20.9,
+          "mean": 0.7464285714285713,
+          "ciLow": 0.5821428571428572,
+          "ciHigh": 0.8678571428571429,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 29.4,
+          "mean": 0.588,
+          "ciLow": 0.45799999999999996,
+          "ciHigh": 0.71,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 28,
+          "total": 19.0,
+          "mean": 0.6785714285714286,
+          "ciLow": 0.49338843180857617,
+          "ciHigh": 0.8206675307750504,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 27.0,
+          "mean": 0.54,
+          "ciLow": 0.40398871399157477,
+          "ciHigh": 0.6703034780777566,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       },
-      "exact": {
-       "unreturned": {
-        "n": 39,
-        "total": 25.0,
-        "mean": 0.6410256410256411,
-        "ciLow": 0.4841814855954854,
-        "ciHigh": 0.7725791454100714,
-        "method": "Wilson",
-        "note": null
-       },
-       "ifReturnedOverN": {
-        "n": 50,
-        "total": 33.0,
-        "mean": 0.66,
-        "ciLow": 0.521538260502326,
-        "ciHigh": 0.7756305077749992,
-        "method": "Wilson",
-        "note": null
+      {
+       "rule": "fewer than three pitch classes",
+       "count": 5,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 5,
+          "total": 5.0,
+          "mean": 1.0,
+          "ciLow": null,
+          "ciHigh": null,
+          "method": "BCa bootstrap",
+          "note": "all scores equal"
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 13.5,
+          "mean": 0.27,
+          "ciLow": 0.16,
+          "ciHigh": 0.406,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 5,
+          "total": 5.0,
+          "mean": 1.0,
+          "ciLow": 0.5655175352168251,
+          "ciHigh": 1.0,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 13.0,
+          "mean": 0.26,
+          "ciLow": 0.15871527493552393,
+          "ciHigh": 0.39553157264848837,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "one voice without stable notes (speech-like)",
+       "count": 5,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 5,
+          "total": 2.1,
+          "mean": 0.42000000000000004,
+          "ciLow": 0.18,
+          "ciHigh": 0.76,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 10.6,
+          "mean": 0.212,
+          "ciLow": 0.12,
+          "ciHigh": 0.33799999999999997,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 5,
+          "total": 1.0,
+          "mean": 0.2,
+          "ciLow": 0.03622410863243014,
+          "ciHigh": 0.6244653702374747,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 9.0,
+          "mean": 0.18,
+          "ciLow": 0.09770192670234178,
+          "ciHigh": 0.30796053674300783,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "one held pitch over the beat (a drone or one bass note)",
+       "count": 1,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 1,
+          "total": 0.0,
+          "mean": 0.0,
+          "ciLow": null,
+          "ciHigh": null,
+          "method": "BCa bootstrap",
+          "note": "all scores equal"
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 8.5,
+          "mean": 0.17,
+          "ciLow": 0.08504536652531045,
+          "ciHigh": 0.29252093020040776,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 1,
+          "total": 0.0,
+          "mean": 0.0,
+          "ciLow": 0.0,
+          "ciHigh": 0.7934506856227626,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 8.0,
+          "mean": 0.16,
+          "ciLow": 0.08337420678033404,
+          "ciHigh": 0.2851421606303499,
+          "method": "Wilson",
+          "note": null
+         }
+        }
+       }
+      },
+      {
+       "rule": "all",
+       "count": 39,
+       "metrics": {
+        "mirex": {
+         "unreturned": {
+          "n": 39,
+          "total": 28.0,
+          "mean": 0.717948717948718,
+          "ciLow": 0.5798804138487605,
+          "ciHigh": 0.8307692307692307,
+          "method": "BCa bootstrap",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 36.5,
+          "mean": 0.73,
+          "ciLow": 0.6140000000000001,
+          "ciHigh": 0.8319999999999999,
+          "method": "BCa bootstrap",
+          "note": null
+         }
+        },
+        "exact": {
+         "unreturned": {
+          "n": 39,
+          "total": 25.0,
+          "mean": 0.6410256410256411,
+          "ciLow": 0.4841814855954854,
+          "ciHigh": 0.7725791454100714,
+          "method": "Wilson",
+          "note": null
+         },
+         "ifReturnedOverN": {
+          "n": 50,
+          "total": 33.0,
+          "mean": 0.66,
+          "ciLow": 0.521538260502326,
+          "ciHigh": 0.7756305077749992,
+          "method": "Wilson",
+          "note": null
+         }
+        }
        }
       }
-     }
+     ]
     }
    },
    "coverage": {
@@ -5484,7 +6601,7 @@
          "n": 11,
          "total": 8.3,
          "mean": 0.7545454545454546,
-         "ciLow": 0.49090909090909096,
+         "ciLow": 0.5,
          "ciHigh": 0.9090909090909091,
          "method": "BCa bootstrap",
          "note": null
@@ -5507,7 +6624,8 @@
        "correct": 7,
        "wrong": 4,
        "auc": 0.75,
-       "p": 0.11515151515151514
+       "p": 0.11515151515151516,
+       "pMethod": "exact permutation"
       }
      }
     },
@@ -5522,7 +6640,7 @@
          "n": 10,
          "total": 7.5,
          "mean": 0.75,
-         "ciLow": 0.45,
+         "ciLow": 0.44000000000000006,
          "ciHigh": 0.93,
          "method": "BCa bootstrap",
          "note": null
@@ -5570,7 +6688,8 @@
        "correct": 8,
        "wrong": 3,
        "auc": 0.5416666666666666,
-       "p": 0.4606060606060607
+       "p": 0.46060606060606063,
+       "pMethod": "exact permutation"
       }
      }
     }
@@ -6227,7 +7346,15 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no sustained pitch"
+      "withheldReason": "no sustained pitch",
+      "unreturned": {
+       "estimate": "G# minor",
+       "confidence": 0.292,
+       "scores": {
+        "mirex": 0.0,
+        "exact": 0.0
+       }
+      }
      },
      {
       "trackId": "260",
@@ -6615,7 +7742,15 @@
        "reason": null
       },
       "scores": null,
-      "withheldReason": "no sustained pitch"
+      "withheldReason": "no sustained pitch",
+      "unreturned": {
+       "estimate": "G minor",
+       "confidence": 0.289,
+       "scores": {
+        "mirex": 0.0,
+        "exact": 0.0
+       }
+      }
      },
      {
       "trackId": "458",

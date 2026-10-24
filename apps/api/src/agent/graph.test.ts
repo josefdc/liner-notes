@@ -132,7 +132,8 @@ import { SourceError } from "../sources/http.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
-const QUERY = "ice ice baby";
+// The web's query names the artist: a title alone always asks which recording is meant.
+const QUERY = "Ice Ice Baby Vanilla Ice";
 
 let dir: string;
 beforeEach(() => {

@@ -71,10 +71,10 @@ describe("matchTrack", () => {
 
 describe("needsChoice", () => {
   it("asks when two songs match equally, not for versions or re-releases of one song", () => {
-    const query = "hurt";
+    const query = "hurt johnny cash";
     expect(
       needsChoice(
-        rankTracks(query, [track("Hurt", "Johnny Cash"), track("Hurt", "Nine Inch Nails")]),
+        rankTracks("hurt", [track("Hurt", "Johnny Cash"), track("Hurt", "Nine Inch Nails")]),
       ),
     ).toBe(true);
     expect(
@@ -152,8 +152,8 @@ const corrected: Case[] = [
     "ask",
   ],
   [
-    "a Korean query selects PSY's song over a karaoke track with the Korean title",
-    "강남스타일",
+    "a Korean title with the artist selects PSY's song over a karaoke track with that title",
+    "강남스타일 PSY",
     [
       track("Gangnam Style (강남스타일)", "PSY"),
       track("강남스타일 (Karaoke Version)", "Ameritz K-Pop Karaoke"),
@@ -161,8 +161,8 @@ const corrected: Case[] = [
     "auto Gangnam Style (강남스타일)/PSY (exact)",
   ],
   [
-    "a Korean query matches the Korean title in brackets",
-    "강남스타일",
+    "a Korean title with the artist matches the Korean title in brackets",
+    "강남스타일 PSY",
     [track("Gangnam Style (강남스타일)", "PSY")],
     "auto Gangnam Style (강남스타일)/PSY (exact)",
   ],
@@ -247,7 +247,7 @@ const corrected: Case[] = [
   ],
   [
     "a query that asks for the remix selects the remix",
-    "Blinding Lights remix",
+    "Blinding Lights remix The Weeknd",
     [
       track("Blinding Lights", "The Weeknd"),
       track("Blinding Lights (with ROSALÍA) - Remix", "The Weeknd", "ROSALÍA"),
@@ -256,7 +256,7 @@ const corrected: Case[] = [
   ],
   [
     "a query that asks for a live take selects the live take",
-    "Hotel California live",
+    "Hotel California live Eagles",
     [
       track("Hotel California - 2013 Remaster", "Eagles"),
       track("Hotel California - Live On MTV, 1994", "Eagles"),
@@ -386,7 +386,7 @@ const kept: Case[] = [
   ],
   [
     "a remix of the same song is not a rival",
-    "Despacito",
+    "Despacito Luis Fonsi",
     [
       track("Despacito - Remix", "Luis Fonsi", "Daddy Yankee", "Justin Bieber"),
       track("Despacito", "Luis Fonsi", "Daddy Yankee"),
@@ -631,19 +631,19 @@ const second: Case[] = [
       track("Purple Rain", "Prince"),
       track("Prince Ali - Reprise", "Robin Williams"),
     ],
-    "auto Prince Ali/Robin Williams (exact)",
+    "ask",
   ],
   [
     "B8 word-artist inside title, Love",
     "Crazy in Love",
     [track("Crazy In Love (feat. Jay-Z)", "Beyoncé", "JAY-Z"), track("Alone Again Or", "Love")],
-    "auto Crazy In Love (feat. Jay-Z)/Beyoncé,JAY-Z (exact)",
+    "ask",
   ],
   [
     "B9 Future in title",
     "Future Nostalgia",
     [track("Future Nostalgia", "Dua Lipa"), track("Mask Off", "Future")],
-    "auto Future Nostalgia/Dua Lipa (exact)",
+    "ask",
   ],
   [
     "B11 artist-only self-titled",
@@ -822,7 +822,7 @@ const secondKept: Case[] = [
     "C5 only cover present (original absent)",
     "Hurt",
     [track("Hurt", "Johnny Cash"), track("Personal Jesus", "Johnny Cash")],
-    "auto Hurt/Johnny Cash (exact)",
+    "ask",
   ],
   [
     "C6 cover by catalogue w/ version label",
@@ -843,7 +843,7 @@ const secondKept: Case[] = [
     "D3 asks TV",
     "Love Story Taylor's Version",
     [track("Love Story", "Taylor Swift"), track("Love Story (Taylor's Version)", "Taylor Swift")],
-    "auto Love Story (Taylor's Version)/Taylor Swift (exact)",
+    "ask",
   ],
   [
     "D10 remaster vs original (same recording)",
@@ -1004,7 +1004,7 @@ const secondKept: Case[] = [
       track("Save Your Tears", "The Weeknd"),
       track("Starboy", "The Weeknd", "Daft Punk"),
     ],
-    "auto Blinding Lights/The Weeknd (exact)",
+    "ask",
   ],
   [
     "H2 bad guy",
@@ -1027,7 +1027,7 @@ const secondKept: Case[] = [
       track("everything i wanted", "Billie Eilish"),
       track("Bad Habits", "Ed Sheeran"),
     ],
-    "auto bad guy/Billie Eilish (exact)",
+    "ask",
   ],
   [
     "H3 Despacito",
@@ -1071,7 +1071,7 @@ const secondKept: Case[] = [
       track("Smells Like Teen Spirit - Remastered 2021", "Nirvana"),
       track("Come As You Are", "Nirvana"),
     ],
-    "auto Smells Like Teen Spirit/Nirvana (exact)",
+    "ask",
   ],
   [
     "H7 web form hit",
@@ -1116,7 +1116,7 @@ const secondKept: Case[] = [
     "I6 feat. on rival shared lead",
     "Run",
     [track("Run", "Snow Patrol"), track("Run", "Leona Lewis", "Snow Patrol")],
-    "auto Run/Snow Patrol (exact)",
+    "ask",
   ],
 ];
 
@@ -1168,7 +1168,842 @@ const coverFirst: Case[] = [
     "the artist's own songs in other spellings do not make a choice",
     "Dont Stop Believing",
     [track("Don't Stop Believing", "Journey"), track("Don't Stop Believin' - Live", "Journey")],
-    "auto Don't Stop Believing/Journey (exact)",
+    "ask",
+  ],
+];
+
+// Rows a third review found decided wrongly by the version before: a live take named by a
+// version word of the title, a featured credit on another recording, unknown take labels, and
+// title-only queries (which now always ask).
+const third: Case[] = [
+  [
+    "J1 live take, studio credited to Wings",
+    "Live and Let Die Paul McCartney",
+    [
+      track("Live And Let Die - Live", "Paul McCartney"),
+      track("Live And Let Die - 2018 Remaster", "Wings"),
+      track("Live and Let Die", "Guns N' Roses"),
+      track("Live And Let Die - Live At Amoeba", "Paul McCartney"),
+      track("Hey Jude - Live", "Paul McCartney"),
+      track("Band On The Run - 2010 Remaster", "Wings"),
+      track("Jet - 2010 Remaster", "Wings"),
+      track("Maybe I'm Amazed - Remastered 2011", "Paul McCartney"),
+      track("Let It Be - Live", "Paul McCartney"),
+      track("Live And Let Die - Live / Remastered", "Wings"),
+    ],
+    "ask",
+  ],
+  [
+    "J1b live first, studio credited to both",
+    "Live and Let Die Paul McCartney",
+    [
+      track("Live And Let Die - Live", "Paul McCartney"),
+      track("Live And Let Die - 2018 Remaster", "Paul McCartney", "Wings"),
+      track("Live and Let Die", "Guns N' Roses"),
+    ],
+    "auto Live And Let Die - 2018 Remaster/Paul McCartney,Wings (exact)",
+  ],
+  [
+    "J1d same, live first (asks for nothing live)",
+    "Live and Let Die Wings",
+    [
+      track("Live And Let Die - Live", "Paul McCartney", "Wings"),
+      track("Live And Let Die - 2018 Remaster", "Paul McCartney", "Wings"),
+    ],
+    "auto Live And Let Die - 2018 Remaster/Paul McCartney,Wings (exact)",
+  ],
+  [
+    "J2 Live Forever, Knebworth first",
+    "Live Forever Oasis",
+    [
+      track("Live Forever (Live at Knebworth, 10 August '96)", "Oasis"),
+      track("Live Forever - Remastered", "Oasis"),
+      track("Wonderwall - Remastered", "Oasis"),
+    ],
+    "auto Live Forever - Remastered/Oasis (exact)",
+  ],
+  [
+    "J2b title only, all Oasis, Knebworth first",
+    "Live Forever",
+    [
+      track("Live Forever (Live at Knebworth, 10 August '96)", "Oasis"),
+      track("Live Forever - Remastered", "Oasis"),
+      track("Wonderwall - Remastered", "Oasis"),
+      track("Champagne Supernova - Remastered", "Oasis"),
+    ],
+    "ask",
+  ],
+  [
+    "J3 Live Wire",
+    "Live Wire Motley Crue",
+    [track("Live Wire - Live", "Mötley Crüe"), track("Live Wire", "Mötley Crüe")],
+    "auto Live Wire/Mötley Crüe (exact)",
+  ],
+  [
+    "J5 Acoustic #3 acoustic take",
+    "Acoustic #3 Goo Goo Dolls",
+    [
+      track("Acoustic #3 - Acoustic", "The Goo Goo Dolls"),
+      track("Acoustic #3", "The Goo Goo Dolls"),
+    ],
+    "auto Acoustic #3/The Goo Goo Dolls (exact)",
+  ],
+  [
+    "K1 Higher Love, Kygo first",
+    "Higher Love Whitney Houston",
+    [
+      track("Higher Love", "Kygo", "Whitney Houston"),
+      track("Higher Love", "Whitney Houston"),
+      track("Higher Love", "Steve Winwood"),
+      track("Higher Love", "James Vincent McMorrow"),
+      track("I Wanna Dance with Somebody (Who Loves Me)", "Whitney Houston"),
+      track("Firestone", "Kygo", "Conrad Sewell"),
+    ],
+    "ask",
+  ],
+  [
+    "K2 Unforgettable duet first",
+    "Unforgettable Nat King Cole",
+    [
+      track("Unforgettable", "Natalie Cole", "Nat King Cole"),
+      track("Unforgettable", "Nat King Cole"),
+      track("Unforgettable", "French Montana", "Swae Lee"),
+      track("L-O-V-E", "Nat King Cole"),
+    ],
+    "ask",
+  ],
+  [
+    "K3 Wonderful World Kenny G first",
+    "What a Wonderful World Louis Armstrong",
+    [
+      track("What A Wonderful World", "Kenny G", "Louis Armstrong"),
+      track("What A Wonderful World", "Louis Armstrong"),
+    ],
+    "ask",
+  ],
+  [
+    "K4 RPO overdub first",
+    "If I Can Dream Elvis Presley",
+    [
+      track(
+        "If I Can Dream (with the Royal Philharmonic Orchestra)",
+        "Elvis Presley",
+        "Royal Philharmonic Orchestra",
+      ),
+      track("If I Can Dream", "Elvis Presley"),
+    ],
+    "ask",
+  ],
+  [
+    "K4b RPO overdub first, title only",
+    "If I Can Dream",
+    [
+      track(
+        "If I Can Dream (with the Royal Philharmonic Orchestra)",
+        "Elvis Presley",
+        "Royal Philharmonic Orchestra",
+      ),
+      track("If I Can Dream", "Elvis Presley"),
+      track("Burning Love", "Elvis Presley"),
+    ],
+    "ask",
+  ],
+  [
+    "K4c RPO, Can't Help Falling, named",
+    "Can't Help Falling in Love Elvis Presley",
+    [
+      track(
+        "Can't Help Falling in Love (with the Royal Philharmonic Orchestra)",
+        "Elvis Presley",
+        "Royal Philharmonic Orchestra",
+      ),
+      track("Can't Help Falling in Love", "Elvis Presley"),
+      track("Can't Help Falling in Love", "Kina Grannis"),
+      track("Can't Help Falling In Love", "UB40"),
+    ],
+    "ask",
+  ],
+  [
+    "K5 Tom's Diner DNA first, named Vega",
+    "Tom's Diner Suzanne Vega",
+    [
+      track("Tom's Diner", "DNA", "Suzanne Vega"),
+      track("Tom's Diner", "Suzanne Vega"),
+      track("Tom's Diner", "AnnenMayKantereit", "Giant Rooks"),
+      track("Luka", "Suzanne Vega"),
+    ],
+    "ask",
+  ],
+  [
+    "K6 Run cover credits original",
+    "Run Snow Patrol",
+    [track("Run", "Leona Lewis", "Snow Patrol"), track("Run", "Snow Patrol")],
+    "ask",
+  ],
+  [
+    "K8 orchestra credit bracket, LSO",
+    "Bohemian Rhapsody Queen",
+    [
+      track(
+        "Bohemian Rhapsody (feat. London Symphony Orchestra)",
+        "Queen",
+        "London Symphony Orchestra",
+      ),
+      track("Bohemian Rhapsody - Remastered 2011", "Queen"),
+    ],
+    "ask",
+  ],
+  [
+    "L1 Def Leppard forgery (2012)",
+    "Pour Some Sugar on Me Def Leppard",
+    [
+      track("Pour Some Sugar On Me (2012)", "Def Leppard"),
+      track("Pour Some Sugar On Me", "Def Leppard"),
+    ],
+    "ask",
+  ],
+  [
+    "L2 Re-Recording",
+    "Tainted Love Soft Cell",
+    [track("Tainted Love (Re-Recording)", "Soft Cell"), track("Tainted Love", "Soft Cell")],
+    "ask",
+  ],
+  [
+    "L3 Re-Record",
+    "Tainted Love Soft Cell",
+    [track("Tainted Love - Re-Record", "Soft Cell"), track("Tainted Love", "Soft Cell")],
+    "ask",
+  ],
+  [
+    "L4 Spotify Studios",
+    "Dancing On My Own Robyn",
+    [
+      track("Dancing On My Own - Recorded at Spotify Studios NYC", "Robyn"),
+      track("Dancing On My Own", "Robyn"),
+    ],
+    "ask",
+  ],
+  [
+    "L5 Spotify Singles",
+    "Ocean Eyes Billie Eilish",
+    [track("ocean eyes - Spotify Singles", "Billie Eilish"), track("ocean eyes", "Billie Eilish")],
+    "ask",
+  ],
+  [
+    "L6 Alternate take",
+    "Strawberry Fields Forever The Beatles",
+    [
+      track("Strawberry Fields Forever - Take 7", "The Beatles"),
+      track("Strawberry Fields Forever - Remastered 2009", "The Beatles"),
+    ],
+    "ask",
+  ],
+  [
+    "L7 New recording",
+    "Total Eclipse of the Heart Bonnie Tyler",
+    [
+      track("Total Eclipse of the Heart (New Recording)", "Bonnie Tyler"),
+      track("Total Eclipse of the Heart", "Bonnie Tyler"),
+    ],
+    "ask",
+  ],
+  [
+    "L8 Home recording / outtake",
+    "Yesterday The Beatles",
+    [
+      track("Yesterday - Outtake", "The Beatles"),
+      track("Yesterday - Remastered 2009", "The Beatles"),
+    ],
+    "ask",
+  ],
+  [
+    "L10 Re-recording title only, artist-only list",
+    "Tainted Love",
+    [
+      track("Tainted Love (Re-Recording)", "Soft Cell"),
+      track("Tainted Love", "Soft Cell"),
+      track("Say Hello, Wave Goodbye", "Soft Cell"),
+    ],
+    "ask",
+  ],
+  [
+    "M1 YMCA cover first",
+    "YMCA",
+    [
+      track("YMCA", "The Party Hits Band"),
+      track("Y.M.C.A.", "Village People"),
+      track("In the Navy", "Village People"),
+      track("Macho Man", "Village People"),
+    ],
+    "ask",
+  ],
+  [
+    "M2 Skater Boy",
+    "Skater Boy",
+    [
+      track("Skater Boy", "Pop Punk Kids"),
+      track("Sk8er Boi", "Avril Lavigne"),
+      track("Complicated", "Avril Lavigne"),
+    ],
+    "ask",
+  ],
+  [
+    "M3 Gangster's Paradise",
+    "Gangsters Paradise",
+    [track("Gangster's Paradise", "Some Covers"), track("Gangsta's Paradise", "Coolio", "L.V.")],
+    "ask",
+  ],
+  [
+    "M4 Numa Numa",
+    "Numa Numa",
+    [track("Numa Numa", "Party DJs"), track("Dragostea Din Tei", "O-Zone")],
+    "ask",
+  ],
+  [
+    "M5 PYT",
+    "PYT",
+    [track("PYT", "Some Band"), track("P.Y.T. (Pretty Young Thing)", "Michael Jackson")],
+    "ask",
+  ],
+  [
+    "M6 Wanna Be",
+    "Wanna Be",
+    [track("Wanna Be", "Some Band"), track("Wannabe", "Spice Girls")],
+    "ask",
+  ],
+  [
+    "M7 Sukiyaki translated",
+    "Sukiyaki",
+    [track("Sukiyaki", "A Taste of Honey"), track("Ue O Muite Arukou", "Kyu Sakamoto")],
+    "ask",
+  ],
+  [
+    "M8 Ketchup Song",
+    "The Ketchup Song",
+    [track("The Ketchup Song", "Party Hits"), track("Aserejé", "Las Ketchup")],
+    "ask",
+  ],
+  [
+    "M9 More Money More Problems",
+    "More Money More Problems",
+    [
+      track("More Money More Problems", "Some Rapper"),
+      track(
+        "Mo Money Mo Problems (feat. Puff Daddy & Mase)",
+        "The Notorious B.I.G.",
+        "Puff Daddy",
+        "Mase",
+      ),
+    ],
+    "ask",
+  ],
+  [
+    "M13 Sk8er Boi with translit",
+    "Sk8ter Boy",
+    [track("Sk8ter Boy", "X"), track("Sk8er Boi", "Avril Lavigne")],
+    "ask",
+  ],
+  [
+    "M14 Ievan Polkka",
+    "Leva's Polka",
+    [track("Leva's Polka", "Hatsune Miku"), track("Ievan Polkka", "Loituma")],
+    "ask",
+  ],
+];
+
+// Rows of that review the version before already decided rightly.
+const thirdKept: Case[] = [
+  [
+    "J1c studio first, live second, credited to both",
+    "Live and Let Die Wings",
+    [
+      track("Live And Let Die - 2018 Remaster", "Paul McCartney", "Wings"),
+      track("Live And Let Die - Live", "Paul McCartney", "Wings"),
+    ],
+    "auto Live And Let Die - 2018 Remaster/Paul McCartney,Wings (exact)",
+  ],
+  [
+    "J2c control: Wonderwall live first",
+    "Wonderwall Oasis",
+    [
+      track("Wonderwall (Live at Knebworth, 10 August '96)", "Oasis"),
+      track("Wonderwall - Remastered", "Oasis"),
+    ],
+    "auto Wonderwall - Remastered/Oasis (exact)",
+  ],
+  [
+    "J4 Piano Man piano cover first, named",
+    "Piano Man Billy Joel",
+    [track("Piano Man - Piano Version", "Billy Joel"), track("Piano Man", "Billy Joel")],
+    "auto Piano Man/Billy Joel (exact)",
+  ],
+  [
+    "J6 Mix tape word",
+    "Mixtape Butch Walker",
+    [track("Mixtape - Remix", "Butch Walker"), track("Mixtape", "Butch Walker")],
+    "auto Mixtape/Butch Walker (exact)",
+  ],
+  [
+    "K7 cover act + original featured, title only",
+    "Hurt",
+    [track("Hurt", "The Cash Brothers", "Johnny Cash"), track("Hurt", "Johnny Cash")],
+    "ask",
+  ],
+  [
+    "L9 Extended",
+    "Blue Monday New Order",
+    [track("Blue Monday '88 - Extended", "New Order"), track("Blue Monday", "New Order")],
+    "auto Blue Monday/New Order (exact)",
+  ],
+  [
+    "M1b YMCA original first",
+    "YMCA",
+    [track("Y.M.C.A.", "Village People"), track("YMCA", "The Party Hits Band")],
+    "ask",
+  ],
+  [
+    "M10 Smells Like Teen Spirit misspelt",
+    "Smells Like Teen Sprit",
+    [track("Smells Like Teen Sprit", "Some Band"), track("Smells Like Teen Spirit", "Nirvana")],
+    "ask",
+  ],
+  [
+    "M11 Every Breath (one word dropped)",
+    "Every Breath You Take",
+    [
+      track("Every Breath You Take", "Some Band"),
+      track("Every Breath You Take - Remastered 2003", "The Police"),
+    ],
+    "ask",
+  ],
+  [
+    "M12 Dont Stop Me Now cover first",
+    "Dont Stop Me Now",
+    [track("Dont Stop Me Now", "Some Band"), track("Don't Stop Me Now - Remastered 2011", "Queen")],
+    "ask",
+  ],
+  [
+    "N1 same-name cover act",
+    "Hurt Johnny Cash",
+    [track("Hurt", "Johnny Cash"), track("Hurt", "Johnny Cash")],
+    "auto Hurt/Johnny Cash (exact)",
+  ],
+  [
+    "N2 Various Artists named query",
+    "Hurt Johnny Cash",
+    [track("Hurt", "Various Artists"), track("Hurt", "Johnny Cash")],
+    "auto Hurt/Johnny Cash (exact)",
+  ],
+  [
+    "N3 Various Artists title only",
+    "Hurt",
+    [track("Hurt", "Various Artists"), track("Hurt - 2002", "Johnny Cash")],
+    "ask",
+  ],
+  [
+    "N4 tribute credits original as lead",
+    "Hurt Johnny Cash",
+    [track("Hurt", "Johnny Cash", "Johnny Cash Tribute Band"), track("Hurt", "Johnny Cash")],
+    "auto Hurt/Johnny Cash (exact)",
+  ],
+  [
+    "N5 named artist covers another's song, original present",
+    "Valerie Amy Winehouse",
+    [
+      track("Valerie", "The Zutons"),
+      track("Valerie (Version Revisited)", "Mark Ronson", "Amy Winehouse"),
+      track("Valerie - Live at BBC", "Amy Winehouse"),
+    ],
+    "ask",
+  ],
+  [
+    "N6 named artist only has cover; query means own different song",
+    "Hallelujah Paramore",
+    [track("Hallelujah", "Paramore"), track("Hallelujah", "Jeff Buckley")],
+    "auto Hallelujah/Paramore (exact)",
+  ],
+  [
+    "O1 named partial vs named exact",
+    "Yesterday Beatles",
+    [
+      track("Yesterday Once More", "The Beatles"),
+      track("Yesterday - Remastered 2009", "The Beatles"),
+    ],
+    "auto Yesterday - Remastered 2009/The Beatles (exact)",
+  ],
+  [
+    "O2 artist word inside another title (span from another result)",
+    "Queen of Hearts Queen",
+    [track("Queen of Hearts", "Juice Newton"), track("Killer Queen - Remastered 2011", "Queen")],
+    "ask",
+  ],
+  [
+    "O3 longest span from another result swallows the artist",
+    "Hurt Johnny Cash",
+    [
+      track("Hurt", "Johnny Cash"),
+      track("Hurt Johnny Cash", "Tribute Kids"),
+      track("Hurt", "Nine Inch Nails"),
+    ],
+    "ask",
+  ],
+  [
+    "O4 query equals the title of the named artist's other song",
+    "Johnny Cash",
+    [track("Johnny Cash", "Sons of Bill"), track("Hurt", "Johnny Cash")],
+    "ask",
+  ],
+  [
+    "O5 feat in query names the cover's lead only",
+    "Hurt with Johnny Cash",
+    [track("Hurt", "Johnny Cash"), track("Hurt", "Nine Inch Nails")],
+    "auto Hurt/Johnny Cash (exact)",
+  ],
+  [
+    "O6 version asked, named, original marked mix",
+    "Strobe Original Mix deadmau5",
+    [track("Strobe - Original Mix", "deadmau5"), track("Strobe - Radio Edit", "deadmau5")],
+    "ask",
+  ],
+];
+
+// Modelled top tens for hits searched by title alone: each is a choice, whatever it holds.
+const titleOnlyHits: [string, SpotifyData[]][] = [
+  [
+    "Blinding Lights",
+    [
+      track("Blinding Lights", "The Weeknd"),
+      track("Save Your Tears", "The Weeknd"),
+      track("Starboy", "The Weeknd", "Daft Punk"),
+      track("Blinding Lights (with ROSALÍA) - Remix", "The Weeknd", "ROSALÍA"),
+      track("The Hills", "The Weeknd"),
+      track("Die For You", "The Weeknd"),
+      track("In Your Eyes", "The Weeknd"),
+      track("Blinding Lights - Sped Up", "Tazzy"),
+      track("After Hours", "The Weeknd"),
+      track("Earned It", "The Weeknd"),
+    ],
+  ],
+  [
+    "bad guy",
+    [
+      track("bad guy", "Billie Eilish"),
+      track("bad guy (with Justin Bieber)", "Billie Eilish", "Justin Bieber"),
+      track("ocean eyes", "Billie Eilish"),
+      track("lovely (with Khalid)", "Billie Eilish", "Khalid"),
+      track("Bad Guy", "Eminem"),
+      track("Happier Than Ever", "Billie Eilish"),
+      track("when the party's over", "Billie Eilish"),
+      track("BIRDS OF A FEATHER", "Billie Eilish"),
+      track("Bad Habits", "Ed Sheeran"),
+      track("Bad Guy", "Necry Talkie"),
+    ],
+  ],
+  [
+    "Hurt",
+    [
+      track("Hurt", "Johnny Cash"),
+      track("Hurt", "Nine Inch Nails"),
+      track("Hurt", "Christina Aguilera"),
+      track("Hurts", "Emeli Sandé"),
+      track("Personal Jesus", "Johnny Cash"),
+      track("Hurt", "Oliver Tree"),
+      track("Hurt Me", "Låpsley"),
+      track("Hurt - Live", "Johnny Cash"),
+      track("Hurt", "NewJeans"),
+      track("Folsom Prison Blues", "Johnny Cash"),
+    ],
+  ],
+  [
+    "Smells Like Teen Spirit",
+    [
+      track("Smells Like Teen Spirit", "Nirvana"),
+      track("Come As You Are", "Nirvana"),
+      track("Heart-Shaped Box", "Nirvana"),
+      track("Smells Like Teen Spirit", "Malia J"),
+      track("Lithium", "Nirvana"),
+      track("Smells Like Teen Spirit - Live", "Nirvana"),
+      track("Something In The Way", "Nirvana"),
+      track("In Bloom", "Nirvana"),
+      track("Smells Like Teen Spirit", "Tori Amos"),
+      track("Polly", "Nirvana"),
+    ],
+  ],
+  [
+    "Wonderwall",
+    [
+      track("Wonderwall - Remastered", "Oasis"),
+      track("Don't Look Back In Anger - Remastered", "Oasis"),
+      track("Champagne Supernova - Remastered", "Oasis"),
+      track("Wonderwall", "Ryan Adams"),
+      track("Live Forever - Remastered", "Oasis"),
+      track("Stop Crying Your Heart Out", "Oasis"),
+      track("Wonderwall (Live at Knebworth, 10 August '96)", "Oasis"),
+      track("Stand By Me - Remastered", "Oasis"),
+      track("Half The World Away", "Oasis"),
+      track("Supersonic - Remastered", "Oasis"),
+    ],
+  ],
+  [
+    "Bohemian Rhapsody",
+    [
+      track("Bohemian Rhapsody - Remastered 2011", "Queen"),
+      track("Don't Stop Me Now - Remastered 2011", "Queen"),
+      track("Another One Bites The Dust - Remastered 2011", "Queen"),
+      track("Bohemian Rhapsody - Live Aid", "Queen"),
+      track("Under Pressure - Remastered 2011", "Queen", "David Bowie"),
+      track("We Will Rock You - Remastered 2011", "Queen"),
+      track("Bohemian Rhapsody", "Panic! At The Disco"),
+      track("Killer Queen - Remastered 2011", "Queen"),
+      track("Somebody To Love - Remastered 2011", "Queen"),
+      track("Radio Ga Ga - Remastered 2011", "Queen"),
+    ],
+  ],
+  [
+    "Hey Jude",
+    [
+      track("Hey Jude - Remastered 2015", "The Beatles"),
+      track("Let It Be - Remastered 2009", "The Beatles"),
+      track("Here Comes The Sun - Remastered 2009", "The Beatles"),
+      track("Yesterday - Remastered 2009", "The Beatles"),
+      track("Hey Jude - Remastered 2009", "The Beatles"),
+      track("Come Together - Remastered 2009", "The Beatles"),
+      track("Hey Jude", "Wilson Pickett"),
+      track("Something - Remastered 2009", "The Beatles"),
+      track("Twist And Shout - Remastered 2009", "The Beatles"),
+      track("Help! - Remastered 2009", "The Beatles"),
+    ],
+  ],
+  [
+    "Imagine",
+    [
+      track("Imagine - Remastered 2010", "John Lennon"),
+      track("imagine", "Ariana Grande"),
+      track("Imagine", "Carrie Underwood"),
+      track("Imagine Dragons Mix", "Various"),
+      track("Jealous Guy - Remastered 2010", "John Lennon"),
+      track("Imagine", "A Perfect Circle"),
+      track("Woman - Remastered 2010", "John Lennon"),
+      track("Imagine", "Ben Platt"),
+      track("Stand By Me - Remastered 2010", "John Lennon"),
+      track("Imagination", "Shawn Mendes"),
+    ],
+  ],
+  [
+    "Jolene",
+    [
+      track("Jolene", "Dolly Parton"),
+      track("JOLENE", "Beyoncé"),
+      track("Jolene", "The White Stripes"),
+      track("9 to 5", "Dolly Parton"),
+      track("Jolene - Live", "Dolly Parton"),
+      track("Jolene", "Miley Cyrus"),
+      track("I Will Always Love You", "Dolly Parton"),
+      track("Coat of Many Colors", "Dolly Parton"),
+      track("Jolene", "Ray LaMontagne"),
+      track("Islands in the Stream", "Kenny Rogers", "Dolly Parton"),
+    ],
+  ],
+  [
+    "Shape of You",
+    [
+      track("Shape of You", "Ed Sheeran"),
+      track("Perfect", "Ed Sheeran"),
+      track("Photograph", "Ed Sheeran"),
+      track("Thinking out Loud", "Ed Sheeran"),
+      track("Shape of You (feat. Stormzy) - Remix", "Ed Sheeran", "Stormzy"),
+      track("Bad Habits", "Ed Sheeran"),
+      track("Shivers", "Ed Sheeran"),
+      track("Castle on the Hill", "Ed Sheeran"),
+      track("Galway Girl", "Ed Sheeran"),
+      track("Shape of You - Acoustic", "Ed Sheeran"),
+    ],
+  ],
+  [
+    "Levitating",
+    [
+      track("Levitating", "Dua Lipa"),
+      track("Levitating (feat. DaBaby)", "Dua Lipa", "DaBaby"),
+      track("Don't Start Now", "Dua Lipa"),
+      track("Physical", "Dua Lipa"),
+      track("New Rules", "Dua Lipa"),
+      track("Houdini", "Dua Lipa"),
+      track(
+        "Levitating - The Blessed Madonna Remix",
+        "Dua Lipa",
+        "The Blessed Madonna",
+        "Madonna",
+        "Missy Elliott",
+      ),
+      track("Break My Heart", "Dua Lipa"),
+      track("One Kiss", "Calvin Harris", "Dua Lipa"),
+      track("Levitate", "Twenty One Pilots"),
+    ],
+  ],
+  [
+    "Anti-Hero",
+    [
+      track("Anti-Hero", "Taylor Swift"),
+      track("Cruel Summer", "Taylor Swift"),
+      track("Lavender Haze", "Taylor Swift"),
+      track("Karma", "Taylor Swift"),
+      track("Anti-Hero (feat. Bleachers)", "Taylor Swift", "Bleachers"),
+      track("Midnight Rain", "Taylor Swift"),
+      track("Anti-Hero", "Lil Peep"),
+      track("Bejeweled", "Taylor Swift"),
+      track("Maroon", "Taylor Swift"),
+      track("Snow On The Beach", "Taylor Swift", "Lana Del Rey"),
+    ],
+  ],
+  [
+    "As It Was",
+    [
+      track("As It Was", "Harry Styles"),
+      track("Watermelon Sugar", "Harry Styles"),
+      track("Late Night Talking", "Harry Styles"),
+      track("Satellite", "Harry Styles"),
+      track("Adore You", "Harry Styles"),
+      track("Sign of the Times", "Harry Styles"),
+      track("As It Was - Sped Up", "Harry Styles"),
+      track("As It Was", "Cimorelli"),
+      track("Matilda", "Harry Styles"),
+      track("Music For a Sushi Restaurant", "Harry Styles"),
+    ],
+  ],
+  [
+    "Heat Waves",
+    [
+      track("Heat Waves", "Glass Animals"),
+      track("Heat Waves - Sped Up", "Glass Animals"),
+      track("Gooey", "Glass Animals"),
+      track("Heat Waves (with iann dior)", "Glass Animals", "iann dior"),
+      track("Tokyo Drifting", "Glass Animals", "Denzel Curry"),
+      track("Your Love (Déjà Vu)", "Glass Animals"),
+      track("Heatwave", "Martha Reeves & The Vandellas"),
+      track("Heat Waves - Slowed", "Glass Animals"),
+      track("Space Ghost Coast To Coast", "Glass Animals"),
+      track("Heat Wave", "Snail Mail"),
+    ],
+  ],
+  [
+    "Creep",
+    [
+      track("Creep", "Radiohead"),
+      track("Creep", "TLC"),
+      track("Karma Police", "Radiohead"),
+      track("No Surprises", "Radiohead"),
+      track("Creep - Acoustic", "Radiohead"),
+      track("Creep", "Scala & Kolacny Brothers"),
+      track("Creepin' (with The Weeknd & 21 Savage)", "Metro Boomin", "The Weeknd", "21 Savage"),
+      track("High and Dry", "Radiohead"),
+      track("Creep", "Postmodern Jukebox", "Haley Reinhart"),
+      track("Fake Plastic Trees", "Radiohead"),
+    ],
+  ],
+  [
+    "Hello",
+    [
+      track("Hello", "Adele"),
+      track("Hello", "Lionel Richie"),
+      track("Hello", "Evanescence"),
+      track("Someone Like You", "Adele"),
+      track("Hello", "OMFG"),
+      track("Hello (feat. A Boogie Wit da Hoodie)", "Pop Smoke", "A Boogie Wit da Hoodie"),
+      track("Easy On Me", "Adele"),
+      track("Hello Kitty", "Avril Lavigne"),
+      track("Hello Goodbye - Remastered 2009", "The Beatles"),
+      track("Hellohello", "Kristian Kostov"),
+    ],
+  ],
+  [
+    "Believer",
+    [
+      track("Believer", "Imagine Dragons"),
+      track("Thunder", "Imagine Dragons"),
+      track("Demons", "Imagine Dragons"),
+      track("Radioactive", "Imagine Dragons"),
+      track("Believer", "Lil Wayne"),
+      track("Bones", "Imagine Dragons"),
+      track("Enemy", "Imagine Dragons", "JID"),
+      track("Believe", "Cher"),
+      track("Natural", "Imagine Dragons"),
+      track("Believer - Kaskade Remix", "Imagine Dragons", "Kaskade"),
+    ],
+  ],
+  [
+    "Toxic",
+    [
+      track("Toxic", "Britney Spears"),
+      track("Womanizer", "Britney Spears"),
+      track("Toxic", "BoyWithUke"),
+      track("Gimme More", "Britney Spears"),
+      track("...Baby One More Time", "Britney Spears"),
+      track("Toxic - Y2K & Alexander Lewis Remix", "Britney Spears", "Y2K", "Alexander Lewis"),
+      track("Toxic", "Melanie Martinez"),
+      track("Circus", "Britney Spears"),
+      track("Toxicity", "System Of A Down"),
+      track("Oops!...I Did It Again", "Britney Spears"),
+    ],
+  ],
+  [
+    "Thriller",
+    [
+      track("Thriller", "Michael Jackson"),
+      track("Billie Jean", "Michael Jackson"),
+      track("Beat It", "Michael Jackson"),
+      track("Smooth Criminal - 2012 Remaster", "Michael Jackson"),
+      track("Thriller - Single Version", "Michael Jackson"),
+      track("Bad - 2012 Remaster", "Michael Jackson"),
+      track("Thriller", "Fall Out Boy"),
+      track("Human Nature", "Michael Jackson"),
+      track("P.Y.T. (Pretty Young Thing)", "Michael Jackson"),
+      track("Rock with You - Single Version", "Michael Jackson"),
+    ],
+  ],
+  [
+    "Flowers",
+    [
+      track("Flowers", "Miley Cyrus"),
+      track("Flowers", "Lauren Spencer Smith"),
+      track("Wrecking Ball", "Miley Cyrus"),
+      track("Flowers - Demo", "Miley Cyrus"),
+      track("Party In The U.S.A.", "Miley Cyrus"),
+      track("Flowers", "Sweet Female Attitude"),
+      track("Used To Be Young", "Miley Cyrus"),
+      track("Flowers (in the rain)", "The Move"),
+      track("Malibu", "Miley Cyrus"),
+      track("Flowers", "Jhené Aiko"),
+    ],
+  ],
+  [
+    "Dancing Queen",
+    [
+      track("Dancing Queen", "ABBA"),
+      track("Mamma Mia", "ABBA"),
+      track("Gimme! Gimme! Gimme! (A Man After Midnight)", "ABBA"),
+      track("The Winner Takes It All", "ABBA"),
+      track("Dancing Queen", "Cher"),
+      track("Waterloo", "ABBA"),
+      track("Dancing Queen", "Lily James", "Amanda Seyfried"),
+      track("Lay All Your Love On Me", "ABBA"),
+      track("Chiquitita", "ABBA"),
+      track("Super Trouper", "ABBA"),
+    ],
+  ],
+  [
+    "Sweet Caroline",
+    [
+      track("Sweet Caroline", "Neil Diamond"),
+      track("Cracklin' Rosie", "Neil Diamond"),
+      track("Song Sung Blue", "Neil Diamond"),
+      track("Sweet Caroline - Single Version", "Neil Diamond"),
+      track("I'm A Believer", "Neil Diamond"),
+      track("America", "Neil Diamond"),
+      track("Forever in Blue Jeans", "Neil Diamond"),
+      track("Sweet Caroline", "Mylan"),
+      track("Red Red Wine", "Neil Diamond"),
+      track("Solitary Man", "Neil Diamond"),
+    ],
   ],
 ];
 
@@ -1187,6 +2022,15 @@ describe("the scout's decision", () => {
   });
   it.each(coverFirst)("%s", (_label, query, tracks, expected) => {
     expect(decide(query, tracks)).toBe(expected);
+  });
+  it.each(third)("%s", (_label, query, tracks, expected) => {
+    expect(decide(query, tracks)).toBe(expected);
+  });
+  it.each(thirdKept)("%s", (_label, query, tracks, expected) => {
+    expect(decide(query, tracks)).toBe(expected);
+  });
+  it.each(titleOnlyHits)("asks for %j, a title alone", (query, tracks) => {
+    expect(decide(query, tracks)).toBe("ask");
   });
 
   it.each([

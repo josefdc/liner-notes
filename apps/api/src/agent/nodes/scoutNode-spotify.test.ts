@@ -2,8 +2,9 @@
  * Scout over the real Spotify client with a stubbed Web API: results are judged on how their
  * title and artists match the query, since Spotify gives this app no popularity. Popularity may
  * be null or missing without dropping a result; an exact title ranks first and the original
- * recording before live takes, remixes and karaoke; one clear match is selected without asking;
- * a query nothing matches is never selected on its own; the ISRC reaches the state.
+ * recording before live takes, remixes and karaoke; one clear match for a title and artist is
+ * selected without asking; a title alone, or a query nothing matches, is always a choice; the
+ * ISRC reaches the state.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -151,13 +152,13 @@ describe("scoutNode with Spotify results that carry no popularity", () => {
     const karaoke = spotifyTrack("Bohemian Rhapsody (Karaoke Version)", ["Karaoke Hits Band"]);
     spotifySearch([live, original, karaoke]);
 
-    const out = await scout("bohemian rhapsody");
+    const out = await scout("bohemian rhapsody queen");
 
     expect(out.candidates ?? null).toBeNull();
     expect(out.spotifyData?.id).toBe(original.id);
   });
 
-  it("selects one clear match without asking and records its ISRC", async () => {
+  const iceIceBaby = () => {
     const hit = spotifyTrack("Ice Ice Baby", ["Vanilla Ice"], {
       external_ids: { isrc: "USAT29900609" },
       preview_url: "https://p.scdn.co/mp3-preview/abc",
@@ -165,12 +166,27 @@ describe("scoutNode with Spotify results that carry no popularity", () => {
     spotifySearch([
       hit,
       spotifyTrack("Ice Ice Baby (Karaoke Version)", ["Karaoke Hits Band"]),
-      // Another artist's song whose title is within the query ("Baby") would make it a choice.
-      spotifyTrack("Under Pressure", ["Queen", "David Bowie"]),
+      spotifyTrack("Baby", ["Justin Bieber", "Ludacris"]),
       spotifyTrack("Ice Cream", ["BLACKPINK", "Selena Gomez"]),
     ]);
+    return hit;
+  };
+
+  it("asks for a title alone, even with one clear match, and lists that match first", async () => {
+    const hit = iceIceBaby();
 
     const out = await scout("ice ice baby");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+    expect(ids(out.candidates)[0]).toBe(hit.id);
+    expect(out.queryMatch).toBe("exact");
+  });
+
+  it("selects one clear match for the title and artist without asking and records its ISRC", async () => {
+    const hit = iceIceBaby();
+
+    const out = await scout("ice ice baby vanilla ice");
 
     expect(out.candidates ?? null).toBeNull();
     expect(out.spotifyData).toMatchObject({
@@ -186,7 +202,7 @@ describe("scoutNode with Spotify results that carry no popularity", () => {
     const yoru = spotifyTrack("夜に駆ける", ["YOASOBI"]);
     spotifySearch([spotifyTrack("群青", ["YOASOBI"]), yoru, spotifyTrack("アイドル", ["YOASOBI"])]);
 
-    const out = await scout("夜に駆ける");
+    const out = await scout("夜に駆ける YOASOBI");
 
     expect(out.candidates ?? null).toBeNull();
     expect(out.spotifyData?.id).toBe(yoru.id);
@@ -257,13 +273,13 @@ describe("scoutNode never selects another recording on its own", () => {
     expect(out.candidates?.[0]).toMatchObject({ title: "Rihanna", artist: "Yxng Bane" });
   });
 
-  it("selects PSY's song for the Korean title, as an exact match", async () => {
+  it("selects PSY's song for the Korean title and the artist, as an exact match", async () => {
     const psy = spotifyTrack("Gangnam Style (강남스타일)", ["PSY"], {
       external_ids: { isrc: "KRA381200450" },
     });
     spotifySearch([psy]);
 
-    const out = await scout("강남스타일");
+    const out = await scout("강남스타일 PSY");
 
     expect(out.spotifyData?.id).toBe(psy.id);
     expect(out.isrc).toBe("KRA381200450");
@@ -406,5 +422,80 @@ describe("scoutNode with a query spelt unlike the original, or that is only a ti
 
     expect(out.spotifyData?.id).toBe(original.id);
     expect(out.isrc).toBe("USCJY0803275");
+  });
+});
+
+describe("scoutNode with a named artist and several recordings of the song", () => {
+  const isrc = (code: string) => ({ external_ids: { isrc: code } });
+
+  it("does not select a live take because the title holds the word live", async () => {
+    spotifySearch([
+      spotifyTrack("Live And Let Die - Live", ["Paul McCartney"], isrc("GBCCS0900002")),
+      spotifyTrack(
+        "Live And Let Die - 2018 Remaster",
+        ["Paul McCartney", "Wings"],
+        isrc("GBCCS1800001"),
+      ),
+      spotifyTrack("Live and Let Die", ["Guns N' Roses"]),
+    ]);
+
+    const out = await scout("Live and Let Die Paul McCartney");
+
+    expect(out.spotifyData?.title).toBe("Live And Let Die - 2018 Remaster");
+    expect(out.isrc).toBe("GBCCS1800001");
+  });
+
+  it("asks when the studio take is credited to Wings and a live take to Paul McCartney", async () => {
+    spotifySearch([
+      spotifyTrack("Live And Let Die - 2018 Remaster", ["Wings"], isrc("GBCCS1800001")),
+      spotifyTrack("Live And Let Die - Live", ["Paul McCartney"], isrc("GBCCS0900002")),
+      spotifyTrack("Live and Let Die", ["Guns N' Roses"]),
+    ]);
+
+    const out = await scout("Live and Let Die Paul McCartney");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+  });
+
+  it("asks instead of selecting a remix that only features the named artist", async () => {
+    const original = spotifyTrack("Tom's Diner", ["Suzanne Vega"], isrc("USAM18700001"));
+    spotifySearch([
+      spotifyTrack("Tom's Diner", ["DNA", "Suzanne Vega"], isrc("GBAAA9000123")),
+      original,
+      spotifyTrack("Luka", ["Suzanne Vega"]),
+    ]);
+
+    const out = await scout("Tom's Diner Suzanne Vega");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+    expect(ids(out.candidates)).toContain(original.id);
+  });
+
+  it("asks when the artist has a take with a label that is not a known one ((2012))", async () => {
+    spotifySearch([
+      spotifyTrack("Pour Some Sugar On Me (2012)", ["Def Leppard"], isrc("GBUM71200001")),
+      spotifyTrack("Pour Some Sugar On Me", ["Def Leppard"], isrc("GBF088700001")),
+    ]);
+
+    const out = await scout("Pour Some Sugar on Me Def Leppard");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
+  });
+
+  it("asks for YMCA, a title alone, even with a cover spelt like the query listed first", async () => {
+    const original = spotifyTrack("Y.M.C.A.", ["Village People"], isrc("FRX207800001"));
+    spotifySearch([
+      spotifyTrack("YMCA", ["The Party Hits Band"], isrc("QZAAA2300001")),
+      original,
+      spotifyTrack("In the Navy", ["Village People"]),
+    ]);
+
+    const out = await scout("YMCA");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(ids(out.candidates)).toContain(original.id);
   });
 });

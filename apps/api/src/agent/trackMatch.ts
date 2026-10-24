@@ -3,11 +3,11 @@
  * artists only (Spotify no longer gives this app a popularity score). The scout uses it to order
  * the results, to decide whether the user has to choose and to flag a query nothing matches.
  *
- * A track is selected without asking only when the choice is clearly right: one song carries
- * exactly the title the query asks for, by the artist the query names (if it names one), and it
- * is the original recording unless the query asks for a version. Anything less is a choice for
- * the user: asking costs one click, a wrong recording costs a whole analysis of a song the user
- * did not ask for.
+ * A track is selected without asking only when the choice is clearly right: the query names
+ * the artist, one recording by that artist carries exactly the title the query asks for, and it
+ * is the original recording unless the query asks for a version. A query that names no artist
+ * always asks. Anything less is a choice for the user: asking costs one click, a wrong
+ * recording costs a whole analysis of a song the user did not ask for.
  *
  * Text is compared after normalisation: compatibility forms folded, accents of Latin letters
  * dropped, case folded, "&" and "+" read as "and", and anything that is not a letter or a digit
@@ -42,11 +42,11 @@ export interface RankedTrack {
   /** Where Spotify listed the result (0 first). */
   position: number;
   /**
-   * The title may be the one the query means, spelt another way: most of its words match the
-   * query's allowing for a dropped letter or a typo ("Don't Stop Believin'" for "Dont Stop
-   * Believing"), or it is written in another script ("夜に駆ける" for "Yoru ni Kakeru").
+   * What the full title adds to the title proper once known labels of the original release
+   * ("Remastered 2011", "Radio Edit", "Single Version", "Original Mix") and the artists the
+   * query names are left out: "(2012)", "Take 7", "(with the Royal Philharmonic Orchestra)".
    */
-  similarTitle: boolean;
+  extraWords: string[];
 }
 
 const CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}";
@@ -342,99 +342,32 @@ function withoutArtists(query: string[], artists: string[]): string[] {
   return rest;
 }
 
-// The scripts a word is written in: "latin", "cyrillic", "cjk" and so on.
-const SCRIPTS: [string, RegExp][] = [
-  ["latin", /\p{Script=Latin}/u],
-  ["cyrillic", /\p{Script=Cyrillic}/u],
-  ["greek", /\p{Script=Greek}/u],
-  ["cjk", /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u],
-  ["hangul", /\p{Script=Hangul}/u],
-  ["arabic", /\p{Script=Arabic}/u],
-  ["hebrew", /\p{Script=Hebrew}/u],
+// Labels of the original release that a full title may add to the title proper.
+const RELEASE_LABELS = [
+  ...CANONICAL_LABELS,
+  ["radio", "edit"],
+  ["single", "edit"],
+  ["album", "edit"],
+  ["single", "version"],
+  ["album", "version"],
+  ["radio", "version"],
+  ["original", "version"],
+  ["mono", "version"],
+  ["stereo", "version"],
 ];
+const RELEASE_WORDS = new Set(["remaster", "remastered", "explicit", "clean", "mono", "stereo"]);
 
-function scripts(text: string[]): Set<string> {
-  const found = new Set<string>();
-  for (const word of text) {
-    for (const [name, pattern] of SCRIPTS) if (pattern.test(word)) found.add(name);
-    if (/\p{L}/u.test(word) && !SCRIPTS.some(([, pattern]) => pattern.test(word))) {
-      found.add("other");
-    }
-  }
-  return found;
-}
-
-/** Levenshtein distance, stopping early once it exceeds `limit`. */
-function distance(a: string, b: string, limit: number): number {
-  if (Math.abs(a.length - b.length) > limit) return limit + 1;
-  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const current = [i];
-    for (let j = 1; j <= b.length; j++) {
-      current[j] = Math.min(
-        previous[j] + 1,
-        current[j - 1] + 1,
-        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    if (Math.min(...current) > limit) return limit + 1;
-    previous = current;
-  }
-  return previous[b.length];
-}
-
-/**
- * Two words that may be one spelt two ways: equal, written for their sound ("2" and "to"), one
- * with an "s" added, one the start of the other ("believin" and "believing", from three
- * letters), or one letter apart in words of five letters or more ("rapsody" and "rhapsody").
- * "o" and "of", or "mine" and "my", are not.
- */
-// Words written as letters or digits for their sound ("Nothing Compares 2 U", "thank u, next").
-const SOUNDS_LIKE: Record<string, string[]> = {
-  "2": ["to", "too", "two"],
-  "4": ["for", "four"],
-  u: ["you"],
-  r: ["are"],
-  n: ["and"],
-  ur: ["your", "youre"],
-};
-
-function nearWord(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (SOUNDS_LIKE[a]?.includes(b) || SOUNDS_LIKE[b]?.includes(a)) return true;
-  // A plural or possessive "s" ("Up" and "Ups").
-  if (a === `${b}s` || b === `${a}s`) return true;
-  const short = Math.min(a.length, b.length);
-  if (short >= 3 && (a.startsWith(b) || b.startsWith(a))) return true;
-  return short >= 5 && distance(a, b, 1) <= 1;
-}
-
-/** Whether most words of the longer of two titles match words of the other. */
-function nearTitle(query: string[], title: string[]): boolean {
-  const q = content(query);
-  const t = content(title);
-  if (q.length === 0 || t.length === 0) return false;
-  const unused = [...t];
-  let matched = 0;
-  for (const word of q) {
-    const at = unused.findIndex((other) => nearWord(word, other));
-    if (at >= 0) {
-      matched++;
-      unused.splice(at, 1);
-    }
-  }
-  return matched * 2 > Math.max(q.length, t.length);
-}
-
-/**
- * Whether a title may be the one the query means: near in spelling, or written in scripts the
- * query does not use at all (a romanised query cannot be compared with the original script).
- */
-function similarTitle(query: string[], titles: string[][]): boolean {
-  if (titles.some((t) => nearTitle(query, t))) return true;
-  const asked = scripts(query);
-  const own = scripts(titles.flat());
-  return asked.size > 0 && own.size > 0 && [...own].every((script) => !asked.has(script));
+/** See `RankedTrack.extraWords`. */
+function extraWords(title: TitleParts, named: string[]): string[] {
+  let extra = withoutArtists(without(title.full, title.base), named);
+  for (const label of RELEASE_LABELS) extra = without(extra, label);
+  // A year is a label only next to a remaster ("Remastered 2011"); alone it may date a
+  // re-recording ("(2012)").
+  const remastered = extra.some((word) => word === "remaster" || word === "remastered");
+  return extra.filter(
+    (word) =>
+      !RELEASE_WORDS.has(word) && !JOINERS.has(word) && !(remastered && /^\d{4}$/.test(word)),
+  );
 }
 
 /** How one result matches the query, given the artists the query names. */
@@ -476,8 +409,11 @@ function judge(
   const artistMarked = artists.some((artist) =>
     ARTIST_MARKERS.some((marker) => indexOf(words(artist), marker) >= 0),
   );
+  // A marker counts as asked for only outside this track's own title: "Live and Let Die" does
+  // not ask for a live take.
+  const outside = [title.base, ...title.alternatives].reduce((left, t) => without(left, t), rest);
   const marked =
-    versionMarkers(title.suffix).some((marker) => indexOf(query, marker) < 0) ||
+    versionMarkers(title.suffix).some((marker) => indexOf(outside, marker) < 0) ||
     (artistMarked && !query.includes("karaoke") && !query.includes("tribute"));
   // When the query asks for a version, a result without it is another version.
   const lacksAsked = asked.some((word) => !title.suffix.includes(word));
@@ -491,7 +427,7 @@ function judge(
     otherVersion: marked || lacksAsked,
     coverVersion,
     position,
-    similarTitle: similarTitle(query, titles),
+    extraWords: extraWords(title, credited),
   };
 }
 
@@ -562,47 +498,35 @@ function sameSong(a: SpotifyData, b: SpotifyData): boolean {
 }
 
 /**
- * Whether the user has to choose among ranked results. A track is selected without asking only
- * when the best one carries the exact title, is the original recording (or the version the
- * query asks for), and is credited to the artist the query names when it names one, and when no
- * other result (karaoke and covers aside) speaks against it:
- * - another song with the exact title, unless the query names the best one's artist and not
- *   the other's (a live take or a remix of another song counts);
- * - for a query that names no artist, any result by someone else whose title matches the query
- *   even in part ("...Baby One More Time" for "Hit Me Baby One More Time"), or may be the same
- *   title spelt another way or written in another script, wherever Spotify lists it: a cover
- *   spelt like the query may come before the original;
- * - a result Spotify lists before the best one, by someone else, that is not another version
- *   and that the query does not rule out: the original may be spelt differently from the query
- *   ("Don't Stop Believin'" for "Dont Stop Believing", "夜に駆ける" for "Yoru ni Kakeru").
+ * Whether the user has to choose among ranked results. A query that names no artist always
+ * asks: a title alone does not say which recording is meant (covers, other songs with the
+ * title, the title spelt another way or in another script). A query that names an artist
+ * selects the best result without asking only when it carries the exact title, is the original
+ * recording (or the version the query asks for), is credited to the named artist, and no other
+ * result (karaoke and covers aside) speaks against it:
+ * - another song with the exact title by an artist the query names, or another recording of
+ *   the song with a different lead artist ("Tom's Diner" by DNA featuring Suzanne Vega);
+ * - another take of the song by the same lead whose full title adds something that is not a
+ *   known label of the original release ("(2012)", "Take 7", "(with the Royal Philharmonic
+ *   Orchestra)");
+ * - a result by another named artist that Spotify lists first.
  */
 export function needsChoice(ranked: RankedTrack[]): boolean {
   const [best, ...others] = ranked;
   if (!best) return false;
-  if (best.match !== "exact" || best.otherVersion) return true;
-  // The query names an artist and the best match is not theirs ("Rihanna" and Yxng Bane's
-  // song "Rihanna"): the best match by title ranks above the named artist's songs.
-  if (!best.artistNamed && others.some((other) => other.artistNamed)) return true;
+  if (best.match !== "exact" || best.otherVersion || !best.artistNamed) return true;
   const bestCredits = credits(best.track);
   const sharesArtist = (other: RankedTrack) =>
     credits(other.track).some((name) => bestCredits.includes(name));
-  const sharesLead = (other: RankedTrack) => credits(other.track).includes(bestCredits[0] ?? "");
-  const notRuledOut = (other: RankedTrack) => other.artistNamed || !best.artistNamed;
+  const sameLead = (other: RankedTrack) => credits(other.track)[0] === bestCredits[0];
   return others.some((other) => {
-    if (other.coverVersion) return false;
-    if (other.match === "exact" && notRuledOut(other) && !sameSong(other.track, best.track)) {
-      return true;
+    if (other.coverVersion || !other.artistNamed) return false;
+    if (other.match === "exact") {
+      if (!sameSong(other.track, best.track) || !sameLead(other)) return true;
+      if (!other.otherVersion && other.extraWords.join(" ") !== best.extraWords.join(" ")) {
+        return true;
+      }
     }
-    const titled = other.match === "exact" || other.match === "partial";
-    if (!best.artistNamed && titled && !sharesLead(other)) return true;
-    if (!best.artistNamed && other.similarTitle && !other.otherVersion && !sharesLead(other)) {
-      return true;
-    }
-    return (
-      other.position < best.position &&
-      !other.otherVersion &&
-      notRuledOut(other) &&
-      !sharesArtist(other)
-    );
+    return other.position < best.position && !other.otherVersion && !sharesArtist(other);
   });
 }

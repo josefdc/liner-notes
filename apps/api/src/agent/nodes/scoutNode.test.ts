@@ -150,13 +150,14 @@ describe("scoutNode's stored results", () => {
   it("composes again instead of serving a stored result the contract does not accept", async () => {
     spotify.answer = async () => JSON.stringify([track]);
     const store = new InMemoryStore();
-    await store.put(TRACKS_NAMESPACE, resultCacheKey("song", configuredSources()), {
+    await store.put(TRACKS_NAMESPACE, resultCacheKey("song a", configuredSources()), {
       ...stored,
       trackData: { title: "Stored, but no id, artist or genealogy" },
     });
     const { graph } = scoutGraph(store);
 
-    const out = await graph.invoke({ songQuery: "Song" });
+    // The query names the artist, so the one match is selected without asking.
+    const out = await graph.invoke({ songQuery: "Song A" });
 
     expect(out.trackData).toBeFalsy();
     expect(out.spotifyData).toMatchObject({ id: "t1" });

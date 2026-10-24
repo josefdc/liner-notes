@@ -121,10 +121,9 @@ describe("the golden set through the scout's decision", () => {
       artistDashTitle,
       { selected: 45, asked: 0, wrong: [] },
     ],
-    ["the title alone", "none", titleOnly, { selected: 45, asked: 0, wrong: [] }],
-    // Another artist's recording of the title makes the title alone a choice.
+    // A query that names no artist always asks.
+    ["the title alone", "none", titleOnly, { selected: 0, asked: 45, wrong: [] }],
     ["the title alone", "unmarked", titleOnly, { selected: 0, asked: 45, wrong: [] }],
-    // A cover spelt like the query is never selected over the original listed before it.
     ["the title spelt differently", "respelt", respeltTitle, { selected: 0, asked: 45, wrong: [] }],
     [
       "the title spelt differently",

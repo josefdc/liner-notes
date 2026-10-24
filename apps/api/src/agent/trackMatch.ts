@@ -659,6 +659,35 @@ const EDITION_WORDS = new Set([
   "collectors",
   "legacy",
 ]);
+// Words of an edition label that make "Version" name an edition of the same release ("Deluxe
+// Version"), not another recording ("2023 Version", "Taylor's Version").
+const EDITION_VERSION_WORDS = new Set([
+  "deluxe",
+  "super",
+  "special",
+  "expanded",
+  "anniversary",
+  "remaster",
+  "remastered",
+  "edition",
+]);
+// Words of a credit part ("(with …)", "(feat. …)") that name an orchestra, strings or another
+// ensemble: such a part marks another recording, not just another credit.
+const ENSEMBLE_WORDS = new Set([
+  "orchestra",
+  "philharmonic",
+  "philharmonia",
+  "symphony",
+  "symphonic",
+  "sinfonia",
+  "strings",
+  "string",
+  "quartet",
+  "ensemble",
+  "choir",
+  "chorus",
+  "orchestral",
+]);
 // A quoted work a title names as its source: `From "Frozen"`, `from “Encanto”`.
 const QUOTED_SOURCE = /\bfrom\s+(?:"[^"]*"|“[^”]*”|'[^']*'|‘[^’]*’|«[^»]*»)/giu;
 
@@ -695,10 +724,19 @@ function recordingTitle(title: string): RecordingTitle {
   const extra: string[] = [];
   for (const text of parts.flatMap((part) => part.split("/"))) {
     let part = words(text);
-    if (part.length === 0 || (CREDIT_WORDS.has(part[0]) && part[0] !== "from")) continue;
-    // An unquoted "From …" names a work; only the version words in it are kept.
+    if (part.length === 0) continue;
+    // A credit is not a version, unless it names an orchestra, strings or an ensemble ("(with
+    // the Royal Philharmonic Orchestra)", "- With Strings").
+    if (CREDIT_WORDS.has(part[0]) && part[0] !== "from") {
+      if (part.some((word) => ENSEMBLE_WORDS.has(word))) {
+        extra.push(...part.filter((word) => !JOINERS.has(word) && !CREDIT_WORDS.has(word)));
+      }
+      continue;
+    }
+    // An unquoted "From …" may name a work or a session ("From The Basement"): all its words
+    // count. Only a quoted work (`From "Frozen"`) was left out above.
     if (part[0] === "from") {
-      extra.push(...part.filter((word) => VERSION_WORDS.has(word)));
+      extra.push(...part.slice(1));
       continue;
     }
     for (const label of RELEASE_LABELS) part = without(part, label);
@@ -729,8 +767,15 @@ function albumName(album: string): string[] {
     parts.push(rest.slice(dash + 3));
     rest = rest.slice(0, dash);
   }
-  const edition = (part: string) =>
-    words(part).every((word) => EDITION_WORDS.has(word) || /^\d+(?:st|nd|rd|th)?$/.test(word));
+  const edition = (part: string) => {
+    const label = words(part);
+    const known = label.every(
+      (word) => EDITION_WORDS.has(word) || /^\d+(?:st|nd|rd|th)?$/.test(word),
+    );
+    // "Version" alone with a year names another recording ("2023 Version").
+    const version = !label.includes("version") || label.some((w) => EDITION_VERSION_WORDS.has(w));
+    return known && version;
+  };
   return [...words(rest), ...parts.filter((part) => !edition(part)).flatMap(words)];
 }
 
@@ -785,6 +830,27 @@ export function markedAsOtherVersion(
   b: { title: string; album?: string },
 ): boolean {
   return markedApart(a, recordingTitle(a.title), b, recordingTitle(b.title));
+}
+
+const SCRIPTS = [
+  /\p{Script=Latin}/u,
+  /\p{Script=Cyrillic}/u,
+  /\p{Script=Greek}/u,
+  /\p{Script=Arabic}/u,
+  /\p{Script=Hebrew}/u,
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u,
+  /\p{Script=Hangul}/u,
+  /\p{Script=Thai}/u,
+  /\p{Script=Devanagari}/u,
+];
+
+/**
+ * Whether two titles are written in a common script (Japanese kana and kanji count as one). Two
+ * titles in different scripts ("夜に駆ける" and "Yoru ni Kakeru") cannot be compared word for
+ * word.
+ */
+export function shareScript(a: string, b: string): boolean {
+  return SCRIPTS.some((script) => script.test(a) && script.test(b));
 }
 
 /**

@@ -328,12 +328,121 @@ describe("Deezer preview of one recording", () => {
       ]);
     });
 
-    it("never takes a search entry that carries another ISRC", async () => {
-      deezer({ search: [weeknd(23, "Blinding Lights", { isrc: "USXX12345678" })] });
+    it("takes a search entry that carries the requested ISRC from another album", async () => {
+      deezer({
+        isrc: weeknd(23, "Blinding Lights", { isrc: ISRC, readable: false }),
+        search: [
+          weeknd(24, "Blinding Lights", { isrc: "USXX12345678", album: "The Highlights" }),
+          weeknd(25, "Blinding Lights", { isrc: ISRC, album: "Blinding Lights" }),
+        ],
+      });
+
+      const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
+
+      expect(result.match).toEqual({
+        provider: "deezer",
+        method: "isrc",
+        deezerId: 25,
+        score: null,
+      });
+    });
+
+    it("prefers a search entry with the requested ISRC to one that only matches strictly", async () => {
+      deezer({
+        search: [
+          weeknd(26, "Blinding Lights", { isrc: "GBUM71029604" }),
+          weeknd(27, "Blinding Lights", { isrc: ISRC, album: "The Highlights", duration: 201 }),
+        ],
+      });
+
+      expect(matched(await findDeezerPreview(BLINDING_LIGHTS)).match.deezerId).toBe(27);
+    });
+
+    it("takes a strictly matching search entry that carries another ISRC (a remaster)", async () => {
+      deezer({
+        isrc: weeknd(28, "Blinding Lights", { isrc: ISRC, readable: false }),
+        search: [weeknd(29, "Blinding Lights", { isrc: "GBUM71029604" })],
+      });
+
+      const result = matched(await findDeezerPreview(BLINDING_LIGHTS));
+
+      expect(result.match).toEqual({
+        provider: "deezer",
+        method: "search",
+        deezerId: 29,
+        score: 0.99,
+      });
+    });
+
+    it.each([
+      ["on another album", { album: "The Highlights" }, "album_differs"],
+      ["4 s longer", { duration: 204 }, "duration_differs"],
+      ["by another artist", { artist: "Ameritz Karaoke" }, "artist_differs"],
+    ])("turns down a search entry with another ISRC %s", async (_label, change, reason) => {
+      const other = { ...weeknd(30, "Blinding Lights", { isrc: "GBUM71029604" }), ...change };
+      if ("artist" in change) other.artist = { id: 300, name: change.artist as string };
+      deezer({ search: [other] });
 
       expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
-        { deezerId: 23, method: "search", reason: "isrc_differs" },
+        { deezerId: 30, method: "search", reason },
       ]);
+    });
+
+    it.each([
+      ["the ISRC entry", "isrc", 31],
+      ["a search entry", "search", 32],
+    ])(
+      "turns down another song of the artist that %s carries the ISRC of",
+      async (_l, method, id) => {
+        for (const title of ["Save Your Tears", "Starboy"]) {
+          const wrong = weeknd(id, title, { isrc: ISRC });
+          deezer(method === "isrc" ? { isrc: wrong, search: [] } : { search: [wrong] });
+          expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+            { deezerId: id, method, reason: "title_differs" },
+          ]);
+        }
+      },
+    );
+
+    it("turns down a same-ISRC alternative that is another song", async () => {
+      deezer({
+        isrc: weeknd(33, "Blinding Lights", {
+          isrc: ISRC,
+          readable: false,
+          alternative: { id: 34 },
+        }),
+        tracks: {
+          34: weeknd(34, "In Your Eyes", { isrc: ISRC, album: "The Highlights", duration: 201 }),
+        },
+        search: [],
+      });
+
+      expect(rejections(await findDeezerPreview(BLINDING_LIGHTS))).toEqual([
+        { deezerId: 33, method: "isrc", reason: "not_readable" },
+        { deezerId: 34, method: "id", reason: "title_differs" },
+      ]);
+    });
+
+    it("takes an ISRC entry whose title is in another script", async () => {
+      deezer({
+        isrc: entry({
+          id: 35,
+          title: "Yoru ni Kakeru",
+          artist: "YOASOBI",
+          duration: 261,
+          isrc: "JPP302000001",
+        }),
+      });
+
+      const result = await findDeezerPreview({
+        title: "夜に駆ける",
+        artist: "YOASOBI",
+        album: "夜に駆ける",
+        isrc: "JPP302000001",
+        durationMs: 261_000,
+      });
+
+      expect(matched(result).match).toMatchObject({ method: "isrc", deezerId: 35 });
     });
   });
 
@@ -716,6 +825,48 @@ describe("Deezer preview of one recording", () => {
         168,
       ],
       [
+        "an orchestral re-recording credited with the orchestra",
+        { title: "Song", artist: "Artist", album: "Album", durationMs: 200_000 },
+        "Song (with The Royal Philharmonic Orchestra)",
+        "Album (Deluxe Edition)",
+        201,
+      ],
+      [
+        "a version with strings",
+        { title: "Song", artist: "Artist", album: "Album", durationMs: 200_000 },
+        "Song - With Strings",
+        "Album",
+        201,
+      ],
+      [
+        "an unquoted sing-along from a film",
+        LET_IT_GO,
+        "Let It Go - From Frozen Sing Along",
+        "Frozen",
+        224,
+      ],
+      [
+        "a session named in a From part",
+        { title: "Song", artist: "Artist", album: "Album", durationMs: 200_000 },
+        "Song - From The Basement",
+        "Album",
+        201,
+      ],
+      [
+        "an album re-recorded as a dated version",
+        { title: "Song", artist: "Artist", album: "Album", durationMs: 200_000 },
+        "Song",
+        "Album (2023 Version)",
+        200,
+      ],
+      [
+        "an album re-recorded as the artist's version",
+        { title: "Love Story", artist: "Taylor Swift", album: "Fearless", durationMs: 235_000 },
+        "Love Story",
+        "Fearless (Taylor's Version)",
+        235,
+      ],
+      [
         "the same generic title on another album",
         { title: "Intro", artist: "The xx", album: "xx", durationMs: 127_000 },
         "Intro",
@@ -755,11 +906,35 @@ describe("Deezer preview of one recording", () => {
         "Gangnam Style (강남스타일)",
         "PSY 6甲",
       ],
+      [
+        "a featured artist named in a with part",
+        {
+          title: "STAY (with Justin Bieber)",
+          artist: "The Kid LAROI, Justin Bieber",
+          artistNames: ["The Kid LAROI", "Justin Bieber"],
+          album: "F*CK LOVE 3: OVER YOU",
+          durationMs: 141_000,
+        },
+        "STAY",
+        "F*CK LOVE 3: OVER YOU",
+      ],
+      [
+        "a deluxe version of the album",
+        { title: "Song", artist: "Artist", album: "Album", durationMs: 200_000 },
+        "Song",
+        "Album (Deluxe Version)",
+      ],
     ])("still matches the same recording with %s", async (_label, request, title, album) => {
       const duration = (request.durationMs ?? 0) / 1000;
       const result = await searchOnly(
         request,
-        entry({ id: 71, title, artist: request.artist, album, duration }),
+        entry({
+          id: 71,
+          title,
+          artist: request.artistNames?.[0] ?? request.artist,
+          album,
+          duration,
+        }),
       );
 
       expect(matched(result).match.deezerId).toBe(71);

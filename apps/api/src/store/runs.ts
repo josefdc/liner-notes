@@ -242,7 +242,8 @@ export function withoutPreviewUrls(value: unknown): unknown {
 export type StoreResultOutcome = "stored" | "another_run" | "invalid" | "no_run";
 
 /**
- * Stores a completed run's result, as the contract reads it and without preview URLs, with the
+ * Stores a completed run's result, as the contract reads it, without preview URLs and without
+ * how the run's search text matched the track (`queryMatch`, which belongs to that run), with the
  * Spotify id of its track (null when the result does not carry a valid one) and the run's mode:
  * replay when the caller or the result says so, else live. When the caller says replay, the
  * stored result's own run information says replay too, so the two never disagree. The result's
@@ -270,7 +271,10 @@ export function storeRunResult(
       .run(runId);
     return marked.changes > 0 ? "another_run" : "no_run";
   }
-  const stored = TrackAnalysis.safeParse(withoutPreviewUrls(parsed.data));
+  // How the run's search text matched the track is not kept: the stored result is served by
+  // track to people who typed nothing, or something else.
+  const { queryMatch: _match, ...kept } = parsed.data;
+  const stored = TrackAnalysis.safeParse(withoutPreviewUrls(kept));
   if (!stored.success) return "invalid";
   const spotifyId = SPOTIFY_ID_PATTERN.test(stored.data.id) ? stored.data.id : null;
   const replay = mode === "replay" || stored.data.run?.mode === "replay";

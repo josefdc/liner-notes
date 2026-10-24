@@ -147,6 +147,8 @@ vi.mock("../../agent/nodes/index.js", async () => {
         },
         // Not a TrackAnalysis field: never stored, never served.
         songQuery: state.songQuery,
+        // How this run's text matched the track: sent with the run's result, never stored.
+        queryMatch: "partial",
       };
       if (state.songQuery.startsWith("badresult")) delete trackData.title;
       config.writer?.({ type: "complete", data: trackData });
@@ -265,6 +267,8 @@ describe("runs routes", () => {
     await analyze(`${typed} first`);
     const { runId, events } = await analyze(typed);
     expect(events.map((e) => e.type)).toContain("complete");
+    const complete = events.find((e) => e.type === "complete") as { data?: object } | undefined;
+    expect(complete?.data).toMatchObject({ queryMatch: "partial" });
 
     const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
     expect(res.status).toBe(200);
@@ -288,6 +292,9 @@ describe("runs routes", () => {
       expect(text).not.toMatch(/dzcdn|hdnea/);
     }
     expect(res.body.analysis.genealogy.nodes[0]).toMatchObject({ id: "self", img: "" });
+    // How that run's text matched the track is not served to someone who opens the track.
+    expect(res.body.analysis).not.toHaveProperty("queryMatch");
+    expect(getRun(getDb(), runId)?.analysis).not.toHaveProperty("queryMatch");
 
     const byId = await request(app).get(`/api/runs/${runId}`);
     expect(byId.status).toBe(200);

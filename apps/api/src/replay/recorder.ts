@@ -408,8 +408,11 @@ export function buildRecord(
   const analyzerVersion = analysis.audio?.analyzerVersion ?? null;
   const placeholder = recordedRunId(slug);
 
+  // How the recorded run's search text matched the track is left out: the record is replayed
+  // for other texts, and the typed text is not kept.
+  const { queryMatch: _match, ...recorded } = analysis;
   const recordedAnalysis = withoutMediaFields({
-    ...analysis,
+    ...recorded,
     run: { ...runInfo, id: placeholder, mode: "replay", recordedAt, commit, analyzerVersion },
   }) as TrackAnalysis;
 

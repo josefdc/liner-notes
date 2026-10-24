@@ -36,7 +36,7 @@ import { acquireLock } from "../llm/fileLock.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
-import { playRecord, setReplayPacingForTests } from "./player.js";
+import { playRecord, replayedAnalysis, setReplayPacingForTests } from "./player.js";
 import {
   buildRecord,
   leaks,
@@ -397,6 +397,22 @@ describe("the recorder", () => {
     }
   });
 
+  it("does not record how the recorded run's search text matched the track", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const matched = {
+      ...fixture,
+      analysis: { ...fixture.analysis, queryMatch: "partial" as const },
+    };
+    const { run, events } = fixtureAsLiveRun(matched, "daft punk one more");
+    const { record: built } = buildRecord(run, events, {
+      slug: fixture.slug,
+      commit: fixture.commit,
+      secrets: [],
+    });
+    expect(built.analysis).not.toHaveProperty("queryMatch");
+    expect(JSON.stringify(built.events)).not.toContain("queryMatch");
+  });
+
   it("records source evidence as it is: MusicBrainz ids and long source URLs are content", () => {
     const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
     const mbid = "4f5e6d7c-1111-4222-8333-944455566677";
@@ -572,6 +588,17 @@ describe("the recorder", () => {
     expect(reasons).toEqual(
       expect.arrayContaining([expect.stringMatching(/album: a configured credential/)]),
     );
+  });
+});
+
+describe("the player", () => {
+  it("serves no search match from a record: it belonged to the recorded run", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    // A record written before the recorder left the match out.
+    const older = { ...fixture, analysis: { ...fixture.analysis, queryMatch: "none" as const } };
+    const served = replayedAnalysis(older, "0f0e0d0c-aaaa-4bbb-8ccc-000000000002");
+    expect(served).not.toHaveProperty("queryMatch");
+    expect(served.run).toMatchObject({ mode: "replay" });
   });
 });
 

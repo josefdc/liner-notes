@@ -212,6 +212,14 @@ describe("storeRunResult", () => {
     });
   });
 
+  it("does not store how the run's search text matched the track", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "typed words" });
+    expect(storeRunResult(db, "r", result("r", { queryMatch: "none" }))).toBe("stored");
+    const row = db.prepare("SELECT analysis FROM runs WHERE run_id = 'r'").pluck().get() as string;
+    expect(row).not.toContain("queryMatch");
+    expect(getRun(db, "r")?.analysis).not.toHaveProperty("queryMatch");
+  });
+
   it("marks a result composed by another run instead of storing it as the run's own", () => {
     startRun(db, { runId: "r", threadId: "r", query: "q" });
     const { run: _run, ...cached } = result("earlier");

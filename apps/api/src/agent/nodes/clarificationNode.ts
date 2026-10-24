@@ -6,6 +6,7 @@
 
 import { getStore, interrupt } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+import type { SourceError } from "@liner-notes/contract";
 import { getTrackDetails } from "../../sources/spotify.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
@@ -13,6 +14,16 @@ import { isAbortError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import { readStoredResult, servedResult } from "../storedResults.js";
 import { matchTrack } from "../trackMatch.js";
+
+/**
+ * The source error recorded when the picked track's details could not be read (Spotify failed,
+ * or answered with something that is not a track). The tool's text is not passed on.
+ */
+const DETAILS_UNREAD: SourceError = {
+  source: "spotify",
+  code: "unavailable",
+  message: "the picked track's details could not be read",
+};
 
 interface DisambiguationInterrupt {
   type: string;
@@ -70,6 +81,11 @@ export async function clarificationNode(
   // Fetch full Spotify data for selected track
   let spotifyData: SpotifyData;
   let detailed = true;
+  // Set when the details could not be read: the run goes on with the candidate's fields, and
+  // its result is not stored (the composer stores nothing after a source error), so a later run
+  // with the track's full details (its ISRC and duration, which the audio lookup needs) is
+  // never served this one.
+  let sourceErrors: SourceError[] = [];
   try {
     config.signal?.throwIfAborted();
     const detailsResult = await getTrackDetails.invoke(
@@ -84,6 +100,8 @@ export async function clarificationNode(
     // left unknown rather than guessed: the duration (0, shown as missing), whether the track
     // is explicit (null), its ISRC and its popularity.
     detailed = false;
+    sourceErrors = [DETAILS_UNREAD];
+    console.warn("⚠️ [Clarification] Track details not read; using the candidate:", selectedId);
     spotifyData = {
       id: selected.id,
       title: selected.title,
@@ -112,6 +130,7 @@ export async function clarificationNode(
     selectedBy: "user" as const,
     queryMatch: matchTrack(state.songQuery, spotifyData).match,
     candidates: null, // Clear candidates
+    ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
   };
 
   // A result stored for the picked track is served as it is: it is about this track, whatever

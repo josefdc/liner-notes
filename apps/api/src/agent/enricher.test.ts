@@ -115,10 +115,12 @@ describe("enrichGenealogyWithArtwork when the run is cancelled", () => {
   it.each([
     ["a track was found", hit],
     ["no track was found", { tracks: { items: [], total: 0 } }],
-  ])("caches no artwork when %s after the cancel", async (_label, answer) => {
+  ])("rejects and caches no artwork when %s after the cancel", async (_label, answer) => {
     const { controller, net } = cancelledWhileAnswering(answer);
 
-    await enrichGenealogyWithArtwork(genealogy, "https://i.scdn.co/image/c", controller.signal);
+    await expect(
+      enrichGenealogyWithArtwork(genealogy, "https://i.scdn.co/image/c", controller.signal),
+    ).rejects.toThrow();
 
     expect(cache.putArtwork).not.toHaveBeenCalled();
     const search = net.calls.find((call) => call.url.startsWith(SEARCH_URL));

@@ -209,6 +209,40 @@ describe("clarificationNode's chosen track", () => {
   });
 });
 
+describe("clarificationNode when the track details cannot be read", () => {
+  it.each([
+    "Error: Rate limited by Spotify (429) while getting track details",
+    "Error: getting track details failed: spotify: deadline reached",
+    "not a track",
+  ])("records a Spotify source error for %j, so the result is not stored", async (answer) => {
+    const { graph, node, thread } = await pausedAtChoice(() => {});
+    spotify.details.mockResolvedValue(answer);
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.spotifyData).toMatchObject({ id: "track-b", durationMs: 0, isrc: null });
+    expect(update.sourceErrors).toEqual([
+      {
+        source: "spotify",
+        code: "unavailable",
+        message: "the picked track's details could not be read",
+      },
+    ]);
+  });
+
+  it("records no source error when the details were read", async () => {
+    const { graph, node, thread } = await pausedAtChoice(() => {});
+    spotify.details.mockResolvedValue(
+      JSON.stringify({ id: "track-b", title: "Song", artist: "A", artistIds: [], durationMs: 1 }),
+    );
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    expect((node.update as Partial<SonicAgentStateType>).sourceErrors).toBeUndefined();
+  });
+});
+
 describe("clarificationNode's stored results", () => {
   const { run: _run, ...analysis } = JSON.parse(
     readFileSync(

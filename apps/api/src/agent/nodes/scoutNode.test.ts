@@ -216,6 +216,44 @@ describe("scoutNode's stored results", () => {
     expect(spotify.calls).toBe(1);
   });
 
+  it("serves this run's search match, never one stored with the result", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+      ...stored,
+      trackData: { ...stored.trackData, queryMatch: "none" },
+    });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData).toMatchObject({ id: track.id, queryMatch: "exact" });
+  });
+
+  it("serves the contract's reading of a stored result", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+      ...stored,
+      trackData: { ...stored.trackData, preview: { weird: 1 }, songQuery: "someone's text" },
+    });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData).toMatchObject({ id: track.id, preview: null });
+    expect(out.trackData).not.toHaveProperty("songQuery");
+  });
+
+  it("does not serve a result dated ahead of the clock", async () => {
+    const store = new InMemoryStore();
+    const yearAhead = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), { ...stored, timestamp: yearAhead });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData ?? null).toBeNull();
+  });
+
   it("does not serve an expired result", async () => {
     const store = new InMemoryStore();
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000 - 1;

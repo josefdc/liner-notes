@@ -748,6 +748,35 @@ describe("the analysis graph's stored results", () => {
     expect(llm.calls).toEqual([]);
   });
 
+  it("does not store a picked track's result built without its details, and composes it again later", async () => {
+    const store = new InMemoryStore();
+    const checkpointer = new MemorySaver();
+    const threadId = "t-degraded";
+    await drive(stubModel(["done"]), { store, checkpointer, threadId, query: "Ice Ice Baby" });
+
+    // The details lookup fails (the network is denied): the run goes on with the candidate.
+    const picked = await drive(stubModel(["done"]), {
+      store,
+      checkpointer,
+      threadId,
+      resume: TRACK_ID,
+    });
+
+    const result = complete(picked.events)?.data;
+    expect(result).toMatchObject({ id: TRACK_ID });
+    expect(result?.run?.sourceErrors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "spotify" })]),
+    );
+    expect(await store.search(["tracks", "v4"])).toEqual([]);
+
+    // A later run that finds the track with its full details composes it, and stores that.
+    const llm = stubModel(["done"]);
+    const later = await drive(llm, { store });
+    expect(llm.calls.map((call) => call.callSite)).toContain("composer");
+    expect(complete(later.events)?.data.run?.sourceErrors ?? []).toEqual([]);
+    expect(await store.search(["tracks", "v4"])).toHaveLength(1);
+  });
+
   it("does not serve a result stored for another track", async () => {
     const store = new InMemoryStore();
     await drive(stubModel(["done"]), { store });

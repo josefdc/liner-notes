@@ -135,7 +135,8 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
  *
  * @param genealogy - The genealogy object from the Composer (may have optional fields)
  * @param currentTrackCoverUrl - The cover URL of the main track (already known)
- * @param signal - The run's abort signal: a cancelled run stops the Spotify requests
+ * @param signal - The run's abort signal: a cancelled run stops the Spotify requests and
+ *   rejects
  * @returns Enriched genealogy with real artwork URLs
  */
 export async function enrichGenealogyWithArtwork(
@@ -235,6 +236,8 @@ export async function enrichGenealogyWithArtwork(
       links: safeLinks,
     };
   } catch (error) {
+    // A cancelled run stops here: it reports nothing.
+    if (signal?.aborted || isAbortError(error)) throw error;
     console.error("❌ [Enricher] Error enriching genealogy:", error);
     // Return safe fallback if enrichment fails
     return {

@@ -1152,6 +1152,11 @@ describe("migrations", () => {
     const oldResult = JSON.stringify({ trackData: { id: "x", previewUrl: "https://p.scdn.co/x" } });
     putItem.run('["tracks","v3"]', "midnight city|lastfm=0:tavily=0", oldResult, now, now);
     putItem.run('["tracks","v2"]', "midnight city", oldResult, now, now);
+    // Written under the plain namespace after migration 3 ran, until results were versioned.
+    putItem.run('["tracks"]', "midnight city", oldResult, now, now);
+    // A result keyed by track (this code's namespace) is kept.
+    const byTrack = JSON.stringify({ trackData: { id: "x" }, timestamp: 1 });
+    putItem.run('["tracks","v4"]', "x|lastfm=0:tavily=0", byTrack, now, now);
     putItem.run('["disambiguation"]', "midnight city", '{"selectedTrackId":"abc"}', now, now);
     const storedPreviews = (db: Database.Database) => [
       db
@@ -1165,7 +1170,7 @@ describe("migrations", () => {
         .pluck()
         .get(),
     ];
-    expect(storedPreviews(raw)).toEqual([1, 2]);
+    expect(storedPreviews(raw)).toEqual([1, 3]);
     raw.close();
 
     const db = initializeDatabase(dbPath);
@@ -1180,9 +1185,9 @@ describe("migrations", () => {
       trackTitle: "Under Pressure",
       trackArtist: "Queen",
     });
-    expect(db.prepare("SELECT namespace FROM store_items").pluck().all()).toEqual([
-      '["disambiguation"]',
-    ]);
+    expect(
+      db.prepare("SELECT namespace FROM store_items ORDER BY namespace").pluck().all(),
+    ).toEqual(['["disambiguation"]', '["tracks","v4"]']);
   });
 
   it("requires migrations numbered 1..n in order", () => {

@@ -35,6 +35,9 @@ const SHOWCASE_QUERY = "One More Time Daft Punk";
 const TYPED_QUERY = "DAFT punk: one MORE time";
 const START_TIMEOUT_MS = 120_000;
 const STOP_TIMEOUT_MS = 20_000;
+// Each request, body included: a stream that never ends fails the check instead of hanging CI.
+const REQUEST_TIMEOUT_MS = 30_000;
+const timeout = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
 const scratch = mkdtempSync(join(tmpdir(), "replay-e2e-"));
 const report = join(scratch, "deny-network.jsonl");
@@ -136,7 +139,9 @@ const { AnalyzeStreamEvent, RunResponse, runIssues } = await import("@liner-note
 
 /** The events of one analysis stream (heartbeats left out). */
 async function stream(query) {
-  const res = await fetch(`${base}/api/analyze/stream?query=${encodeURIComponent(query)}`);
+  const res = await fetch(`${base}/api/analyze/stream?query=${encodeURIComponent(query)}`, {
+    signal: timeout(),
+  });
   const text = await res.text();
   const events = text
     .split("\n")
@@ -148,7 +153,7 @@ async function stream(query) {
 
 /** The event types (with error codes) of any event stream, heartbeats left out. */
 async function sseTypes(path) {
-  const text = await (await fetch(`${base}${path}`)).text();
+  const text = await (await fetch(`${base}${path}`, { signal: timeout() })).text();
   return text
     .split("\n")
     .filter((line) => line.startsWith("data:"))
@@ -159,7 +164,7 @@ async function sseTypes(path) {
 }
 
 async function json(path, init) {
-  const res = await fetch(`${base}${path}`, init);
+  const res = await fetch(`${base}${path}`, { ...init, signal: timeout() });
   return { status: res.status, text: await res.clone().text(), body: await res.json() };
 }
 
@@ -312,9 +317,7 @@ try {
   check(resumeStream === "error:live_disabled done", "the resume stream is refused");
   const head = await fetch(
     `${base}/api/analyze/stream?query=${encodeURIComponent(SHOWCASE_QUERY)}`,
-    {
-      method: "HEAD",
-    },
+    { method: "HEAD", signal: timeout() },
   );
   check(head.status === 200, "HEAD on the stream answers its headers only");
 } catch (error) {

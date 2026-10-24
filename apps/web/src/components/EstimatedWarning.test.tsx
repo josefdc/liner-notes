@@ -323,6 +323,45 @@ describe('ResultNotices search match', () => {
     expect(container.textContent).toBe('');
   });
 
+  it('shows the note on a live, loosely matched result, next to no recording label', () => {
+    const live = { ...base, queryMatch: 'partial' as const, run: { id: 'r1', mode: 'live' } };
+    render(
+      <>
+        <RecordedRunNotice track={live} />
+        <ResultNotices track={live} />
+      </>,
+    );
+    expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Recorded run' })).toBeNull();
+  });
+
+  it('never shows the note on a replayed recording, even one that carries a match', () => {
+    const replay = {
+      ...base,
+      queryMatch: 'none' as const,
+      run: { id: 'r1', mode: 'replay', recordedAt: '2026-10-22T14:03:00.000Z', commit: 'abc1234' },
+    };
+    const { container } = render(
+      <>
+        <RecordedRunNotice track={replay} />
+        <ResultNotices track={replay} />
+      </>,
+    );
+    expect(screen.getByRole('region', { name: 'Recorded run' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Search match' })).toBeNull();
+    expect(container.textContent).not.toContain('This may not be the song you searched for');
+  });
+
+  it('shows the note when only the model answers were replayed (the search ran live)', () => {
+    const modelOnly = {
+      ...base,
+      queryMatch: 'artist' as const,
+      run: { id: 'r1', mode: 'replay', recordedAt: null, commit: null },
+    };
+    render(<ResultNotices track={modelOnly} />);
+    expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
+  });
+
   it('shows the search-match note with the missing-data notices', () => {
     render(
       <ResultNotices

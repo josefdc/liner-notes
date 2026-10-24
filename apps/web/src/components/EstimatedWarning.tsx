@@ -199,12 +199,15 @@ const Notice: React.FC<{ title: string; children: React.ReactNode }> = ({ title,
  * Notices about a result: that the track may not be the song searched for (the search text did
  * not match it exactly), the model's output when the model was unavailable, and the audio
  * values that were not measured (with the reason). Renders nothing otherwise.
+ *
+ * A whole recorded run played again never shows the search-match note: how a text matched the
+ * track belonged to the recorded run (the API sends none with a replay).
  */
 export const ResultNotices: React.FC<{ track: TrackData; className?: string }> = ({
   track,
   className = '',
 }) => {
-  const match = queryMatchText(track.queryMatch);
+  const match = isWholeRecording(track.run) ? null : queryMatchText(track.queryMatch);
   const audio = audioNotice(track);
   const modelMissing = track.modelUnavailable ? missingModelOutput(track) : [];
   const missing = Boolean(track.modelUnavailable || audio);

@@ -1,6 +1,6 @@
 /**
- * Clarification: a run cancelled after the user picked a track writes no disambiguation
- * memory and does not turn the cancelled track lookup into the candidate fallback. The
+ * Clarification: a pick is not remembered for the query's text; a run cancelled after the user
+ * picked a track does not turn the cancelled track lookup into the candidate fallback. The
  * candidate fallback keeps the separate artists and their Spotify ids.
  */
 
@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe("clarificationNode when the run is cancelled", () => {
-  it("writes no disambiguation memory once the run was cancelled", async () => {
+  it("looks nothing up and remembers nothing once the run was cancelled", async () => {
     const controller = new AbortController();
     const { graph, store, thread } = await pausedAtChoice(() => controller.abort());
 
@@ -154,6 +154,43 @@ describe("clarificationNode's chosen track", () => {
     const update = node.update as Partial<SonicAgentStateType>;
     expect(update.isrc).toBe("USSM17400001");
     expect(update.queryMatch).toBe("exact");
+  });
+
+  it("records how a picked track that only partly matches the query matches it", async () => {
+    const { graph, node, thread } = await pausedAtChoice(() => {});
+    spotify.details.mockResolvedValue(
+      JSON.stringify({
+        id: "track-b",
+        title: "Another Song",
+        artist: "Ramsey Lewis",
+        artistNames: ["Ramsey Lewis"],
+        artistIds: [],
+        album: "Album",
+        releaseDate: "1974",
+        coverUrl: "",
+        isrc: null,
+        duration: "3:00",
+        durationMs: 180_000,
+        explicit: false,
+        spotifyUrl: "https://open.spotify.com/track/track-b",
+        previewUrl: null,
+      }),
+    );
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.queryMatch).toBe("partial");
+    expect(update.selectedBy).toBe("user");
+  });
+
+  it("remembers no pick for the query's text", async () => {
+    const { graph, store, thread } = await pausedAtChoice(() => {});
+    spotify.details.mockResolvedValue("not a track");
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    expect(await store.search(["disambiguation"])).toEqual([]);
   });
 
   it("invents no ISRC or popularity when it falls back to the candidate", async () => {

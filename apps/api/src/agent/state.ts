@@ -356,6 +356,14 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
+  // Who chose the track: "match" when the scout selected it as the query's clear match, "user"
+  // when it came from the track picker (a click or the picker's countdown). Only a clear match
+  // may be served to the next search of the same text.
+  selectedBy: Annotation<"match" | "user" | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
   // Spotify metadata
   spotifyData: Annotation<SpotifyData | null>({
     reducer: (_, next) => next,
@@ -449,7 +457,7 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
-  // HITL configuration (configurable thresholds for disambiguation)
+  // HITL configuration (how many candidates the track picker offers)
   hitlConfig: Annotation<HITLConfig>({
     reducer: (_, next) => next,
     default: () => DEFAULT_HITL_CONFIG,

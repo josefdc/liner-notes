@@ -477,7 +477,7 @@ export const searchMultipleTracks = tool(
     name: "spotify_search_multiple",
     description:
       "Search for multiple tracks by query. " +
-      "Returns up to 5 candidates for disambiguation when a search is ambiguous.",
+      "Returns up to `limit` candidates (default 5, at most 10) for choosing among them.",
     schema: z.object({
       query: z.string().describe("The song title and/or artist name"),
       limit: z.number().optional().describe("Max results to return (1-10, default 5)"),

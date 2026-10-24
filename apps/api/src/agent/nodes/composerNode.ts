@@ -32,6 +32,7 @@ import type { InvokeResult } from "../../llm/invoke.js";
 import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
 import { pickRecording } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
+import { withoutPreviewUrls } from "../../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { answeredCall, failedCall, refusedAnswer, runUsage } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
@@ -350,22 +351,6 @@ async function withArtwork(
   }
 }
 
-/**
- * The result without its preview URLs (the track's and the genealogy nodes'). Preview links
- * are handed out for one run and are not kept: a result served from the store shows the
- * preview as missing.
- */
-function withoutPreviewUrls(result: Omit<TrackData, "run">): Omit<TrackData, "run"> {
-  const { previewUrl: _previewUrl, ...rest } = result;
-  return {
-    ...rest,
-    genealogy: {
-      ...result.genealogy,
-      nodes: result.genealogy.nodes.map(({ previewUrl: _nodePreview, ...node }) => node),
-    },
-  };
-}
-
 /** The fields every result takes from Spotify, the measurement and the evidence state. */
 function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
   return {
@@ -542,12 +527,16 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       (e) => e.code !== "not_configured",
     );
     const plannerFailed = state.usage.some((u) => u.status !== "ok");
-    if (store && !transientAudio && !transientSources && !plannerFailed) {
+    // Only a track the scout selected as the query's clear match is stored under the query's
+    // text: a pick from the track picker is one user's choice, not the answer to the text.
+    const clearMatch = state.selectedBy === "match";
+    if (store && clearMatch && !transientAudio && !transientSources && !plannerFailed) {
       const normalizedQuery = state.songQuery.toLowerCase().trim();
       const { run: _run, ...cached } = trackData;
       try {
         signal?.throwIfAborted();
         await store.put(TRACKS_NAMESPACE, resultCacheKey(normalizedQuery, configuredSources()), {
+          // Preview links are handed out for one run: a result served later shows none.
           trackData: withoutPreviewUrls(cached),
           timestamp: runtime.now().getTime(),
         });

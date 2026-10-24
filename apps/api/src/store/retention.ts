@@ -9,8 +9,8 @@
  *   whose activity time cannot be read (a checkpoint not stored as JSON and no run record) is
  *   kept.
  * - Store items (LangGraph BaseStore) are deleted when not updated within the store retention,
- *   except the ["disambiguation"] namespace: those are the user's track choices, which the scout
- *   reads without rewriting, so their age says nothing about whether they are still used.
+ *   except the ["disambiguation"] namespace: track choices saved by earlier versions. Nothing reads
+ *   or writes them any more; they are kept until choices are remembered per user again.
  * - Run records are deleted when they finished (or, if never finished, started) longer ago than
  *   the run retention, and the events their streams sent with them.
  * - Stored stream events are deleted once they were sent longer ago than the event retention,

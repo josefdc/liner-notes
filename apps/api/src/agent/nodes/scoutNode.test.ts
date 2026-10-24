@@ -202,17 +202,17 @@ describe("scoutNode's track picker", () => {
     expect(out.error ?? null).toBeNull();
   });
 
-  it("matches a remembered choice against the candidates that were offered", async () => {
+  it("does not reuse a pick stored for the same text by an earlier version", async () => {
     spotify.answer = async () => JSON.stringify(ambiguous);
     const store = new InMemoryStore();
-    // What the clarification node saves after a pick from the offered rows (b was left out).
+    // What the clarification node used to save after a pick from the offered rows.
     await store.put(["disambiguation"], "song", { selectedTrackId: "c", candidateIds: "a,c" });
     const { graph } = scoutGraph(store);
 
     const out = await graph.invoke({ songQuery: "Song" });
 
-    expect(out.selectedTrackId).toBe("c");
-    expect(out.candidates ?? null).toBeNull();
+    expect(out.selectedTrackId ?? null).toBeNull();
+    expect(out.candidates?.map((candidate: { id: string }) => candidate.id)).toEqual(["a", "c"]);
   });
 
   it("fails the search when no candidate fits the contract", async () => {

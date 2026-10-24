@@ -101,8 +101,8 @@ function decide(query: string, tracks: SpotifyData[]): string {
 
 type Case = [string, string, SpotifyData[], string];
 
-// Each row was decided wrongly by the first version of these rules; the label names the
-// review finding it comes from.
+// Covers, karaoke and other recordings that looked like the requested song, and queries that
+// name an artist in ways the matching has to read.
 const corrected: Case[] = [
   [
     "a romanised query names YOASOBI: their song is offered, not a marked piano cover",
@@ -328,7 +328,7 @@ const corrected: Case[] = [
   ],
 ];
 
-// Rows the first version already decided rightly; they keep it so.
+// Same-title songs, named artists and versions the query asks for.
 const kept: Case[] = [
   [
     "a query that asks for an acoustic take selects it",
@@ -451,10 +451,11 @@ const kept: Case[] = [
   ],
 ];
 
-// Rows a further review found decided wrongly by the second version of these rules.
+// Titles spelt otherwise than the original, artists whose name is a title, and
+// re-recordings.
 const second: Case[] = [
   [
-    "A1 spelling, title only",
+    "spelling, title only",
     "Dont Stop Believing",
     [
       track("Don't Stop Believin'", "Journey"),
@@ -471,7 +472,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A2 common misspelling",
+    "common misspelling",
     "Sweet Child of Mine",
     [
       track("Sweet Child O' Mine", "Guns N' Roses"),
@@ -488,7 +489,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A3 longer common title",
+    "longer common title",
     "Hit Me Baby One More Time",
     [
       track("...Baby One More Time", "Britney Spears"),
@@ -501,7 +502,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A3b longer common title, one cover",
+    "longer common title, one cover",
     "Hit Me Baby One More Time",
     [
       track("...Baby One More Time", "Britney Spears"),
@@ -512,7 +513,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A4 numerals",
+    "numerals",
     "Nothing Compares to You",
     [
       track("Nothing Compares 2 U", "Sinéad O'Connor"),
@@ -523,7 +524,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A5 romanised title only",
+    "romanised title only",
     "Yoru ni Kakeru",
     [
       track("夜に駆ける", "YOASOBI"),
@@ -535,7 +536,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A6 romanised title only",
+    "romanised title only, another song",
     "Gurenge",
     [
       track("紅蓮華", "LiSA"),
@@ -546,13 +547,13 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "A7 transliterated title only",
+    "transliterated title only",
     "Gruppa Krovi",
     [track("Группа крови", "Кино"), track("Gruppa Krovi", "Lumen"), track("Кукушка", "Кино")],
     "ask",
   ],
   [
-    "A8 thank u next",
+    "thank u next",
     "thank you next",
     [
       track("thank u, next", "Ariana Grande"),
@@ -562,7 +563,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B1 artist == title of another's song",
+    "artist == title of another's song",
     "Bad Religion",
     [
       track("Bad Religion", "Frank Ocean"),
@@ -574,7 +575,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B2 Talk Talk",
+    "Talk Talk",
     "talk talk",
     [
       track("Talk talk", "Charli xcx"),
@@ -585,7 +586,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B3 act named after the song (tribute w/o marker)",
+    "act named after the song (tribute without a marker)",
     "Hotel California",
     [
       track("Hotel California - 2013 Remaster", "Eagles"),
@@ -595,7 +596,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B3b act named after the song, original only otherwise",
+    "act named after the song, original only otherwise",
     "Dancing Queen",
     [
       track("Dancing Queen", "ABBA"),
@@ -605,7 +606,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B4 title-word artist covers title (loophole)",
+    "title-word artist covers title",
     "Bennie and the Jets",
     [
       track("Bennie And The Jets - Remastered 2014", "Elton John"),
@@ -614,7 +615,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B5 partial-name artist with exact title",
+    "partial-name artist with exact title",
     "Angel",
     [
       track("Angel", "Shaggy", "Rayvon"),
@@ -624,7 +625,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B7 Prince Ali w/ Prince tracks",
+    "Prince Ali with Prince tracks",
     "Prince Ali",
     [
       track("Prince Ali", "Robin Williams"),
@@ -634,19 +635,19 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "B8 word-artist inside title, Love",
+    "word-artist inside title, Love",
     "Crazy in Love",
     [track("Crazy In Love (feat. Jay-Z)", "Beyoncé", "JAY-Z"), track("Alone Again Or", "Love")],
     "ask",
   ],
   [
-    "B9 Future in title",
+    "Future in title",
     "Future Nostalgia",
     [track("Future Nostalgia", "Dua Lipa"), track("Mask Off", "Future")],
     "ask",
   ],
   [
-    "B11 artist-only self-titled",
+    "artist-only self-titled",
     "Iron Maiden",
     [
       track("The Trooper - 2015 Remaster", "Iron Maiden"),
@@ -656,7 +657,7 @@ const second: Case[] = [
     "ask",
   ],
   [
-    "D1 Taylor's Version first, original second, named",
+    "Taylor's Version first, original second, named",
     "Love Story Taylor Swift",
     [
       track("Love Story (Taylor's Version)", "Taylor Swift"),
@@ -666,7 +667,7 @@ const second: Case[] = [
     "auto Love Story/Taylor Swift (exact)",
   ],
   [
-    "D4 Re-Recorded first",
+    "Re-Recorded first",
     "Kung Fu Fighting Carl Douglas",
     [
       track("Kung Fu Fighting (Re-Recorded)", "Carl Douglas"),
@@ -675,7 +676,7 @@ const second: Case[] = [
     "auto Kung Fu Fighting/Carl Douglas (exact)",
   ],
   [
-    "D5 Rerecorded dash",
+    "Rerecorded dash",
     "Kung Fu Fighting Carl Douglas",
     [
       track("Kung Fu Fighting - Rerecorded", "Carl Douglas"),
@@ -684,13 +685,13 @@ const second: Case[] = [
     "auto Kung Fu Fighting/Carl Douglas (exact)",
   ],
   [
-    "D6 Stripped first",
+    "Stripped first",
     "Chandelier Sia",
     [track("Chandelier - Stripped", "Sia"), track("Chandelier", "Sia")],
     "auto Chandelier/Sia (exact)",
   ],
   [
-    "D7 Orchestral first",
+    "Orchestral first",
     "Bitter Sweet Symphony The Verve",
     [
       track("Bitter Sweet Symphony - Orchestral Version", "The Verve"),
@@ -699,13 +700,13 @@ const second: Case[] = [
     "auto Bitter Sweet Symphony/The Verve (exact)",
   ],
   [
-    "D8 acapella",
+    "acapella",
     "Toxic Britney Spears",
     [track("Toxic - A Cappella", "Britney Spears"), track("Toxic", "Britney Spears")],
     "auto Toxic/Britney Spears (exact)",
   ],
   [
-    "D9 Spanish version",
+    "Spanish version",
     "Despacito Luis Fonsi",
     [
       track("Despacito - Versión Pop", "Luis Fonsi"),
@@ -714,13 +715,13 @@ const second: Case[] = [
     "auto Despacito/Luis Fonsi,Daddy Yankee (exact)",
   ],
   [
-    "D12 sessions",
+    "sessions",
     "Wonderwall Oasis",
     [track("Wonderwall - BBC Session", "Oasis"), track("Wonderwall - Remastered", "Oasis")],
     "auto Wonderwall - Remastered/Oasis (exact)",
   ],
   [
-    "D14 VIP / Bootleg / Rework",
+    "VIP / Bootleg / Rework",
     "Levels Avicii",
     [
       track("Levels - Skrillex Remix", "Avicii"),
@@ -730,7 +731,7 @@ const second: Case[] = [
     "auto Levels/Avicii (exact)",
   ],
   [
-    "D16 version phrase in title base",
+    "version phrase in title base",
     "Remix to Ignition",
     [track("Ignition - Remix", "R. Kelly"), track("Remix to Ignition", "Some Band")],
     "ask",
@@ -762,10 +763,10 @@ const second: Case[] = [
   ],
 ];
 
-// Rows of that review the second version already decided rightly.
+// More titles, artists and versions: classical, soundtrack and mixed-script queries.
 const secondKept: Case[] = [
   [
-    "B6 partial-name artist, no exact",
+    "partial-name artist, no exact",
     "Yellow",
     [
       track("Yellow", "Coldplay"),
@@ -775,13 +776,13 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "B10 Seal as artist named in query",
+    "Seal as artist named in query",
     "Kiss from a Rose",
     [track("Kiss from a Rose", "Seal"), track("Kiss from a Rose", "Kidz Bop Kids")],
     "ask",
   ],
   [
-    "C1 Hurt neither named",
+    "Hurt neither named",
     "Hurt",
     [
       track("Hurt", "Johnny Cash"),
@@ -791,7 +792,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "C2 Hallelujah",
+    "Hallelujah",
     "Hallelujah",
     [
       track("Hallelujah", "Jeff Buckley"),
@@ -801,7 +802,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "C3 Watchtower",
+    "Watchtower",
     "All Along the Watchtower",
     [
       track("All Along the Watchtower", "Jimi Hendrix"),
@@ -810,7 +811,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "C4 Watchtower named Dylan",
+    "Watchtower named Dylan",
     "All Along the Watchtower Bob Dylan",
     [
       track("All Along the Watchtower", "Jimi Hendrix"),
@@ -819,13 +820,13 @@ const secondKept: Case[] = [
     "auto All Along the Watchtower/Bob Dylan (exact)",
   ],
   [
-    "C5 only cover present (original absent)",
+    "only cover present (original absent)",
     "Hurt",
     [track("Hurt", "Johnny Cash"), track("Personal Jesus", "Johnny Cash")],
     "ask",
   ],
   [
-    "C6 cover by catalogue w/ version label",
+    "cover by catalogue with version label",
     "Don't Stop Believin'",
     [
       track("Don't Stop Believin' (Glee Cast Version)", "Glee Cast"),
@@ -834,19 +835,19 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "D2 original first",
+    "original first",
     "Love Story Taylor Swift",
     [track("Love Story", "Taylor Swift"), track("Love Story (Taylor's Version)", "Taylor Swift")],
     "auto Love Story/Taylor Swift (exact)",
   ],
   [
-    "D3 asks TV",
+    "asks TV",
     "Love Story Taylor's Version",
     [track("Love Story", "Taylor Swift"), track("Love Story (Taylor's Version)", "Taylor Swift")],
     "ask",
   ],
   [
-    "D10 remaster vs original (same recording)",
+    "remaster vs original (same recording)",
     "Bohemian Rhapsody Queen",
     [
       track("Bohemian Rhapsody - Remastered 2011", "Queen"),
@@ -856,7 +857,7 @@ const secondKept: Case[] = [
     "auto Bohemian Rhapsody - Remastered 2011/Queen (exact)",
   ],
   [
-    "D11 Live without marker (MTV Unplugged album) named",
+    "Live without marker (MTV Unplugged album) named",
     "The Man Who Sold the World Nirvana",
     [
       track("The Man Who Sold The World", "Nirvana"),
@@ -865,19 +866,19 @@ const secondKept: Case[] = [
     "auto The Man Who Sold The World/Nirvana (exact)",
   ],
   [
-    "D13 Edit",
+    "Edit",
     "Strobe deadmau5",
     [track("Strobe - Radio Edit", "deadmau5"), track("Strobe", "deadmau5")],
     "auto Strobe - Radio Edit/deadmau5 (exact)",
   ],
   [
-    "D15 demo word in base?",
+    "demo word in base?",
     "Live Forever Oasis",
     [track("Live Forever - Remastered", "Oasis"), track("Live Forever", "Oasis")],
     "auto Live Forever - Remastered/Oasis (exact)",
   ],
   [
-    "E1 soundtrack credit",
+    "soundtrack credit",
     "Let It Go",
     [
       track('Let It Go - From "Frozen"/Soundtrack Version', "Idina Menzel"),
@@ -887,7 +888,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "E2 soundtrack named",
+    "soundtrack named",
     "Let It Go Idina Menzel",
     [
       track('Let It Go - From "Frozen"/Soundtrack Version', "Idina Menzel"),
@@ -896,7 +897,7 @@ const secondKept: Case[] = [
     'auto Let It Go - From "Frozen"/Soundtrack Version/Idina Menzel (exact)',
   ],
   [
-    "E4 classical, named performer",
+    "classical, named performer",
     "Clair de Lune Seong-Jin Cho",
     [
       track("Clair de Lune", "Debussy", "Lang Lang"),
@@ -905,7 +906,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "E5 classical composer named",
+    "classical composer named",
     "Moonlight Sonata Beethoven",
     [
       track("Moonlight Sonata", "Ludwig van Beethoven", "Daniel Barenboim"),
@@ -919,13 +920,13 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "E6 performer-first classical",
+    "performer-first classical",
     "Clair de Lune",
     [track("Clair de Lune", "Isao Tomita"), track("Clair de Lune", "Debussy", "Lang Lang")],
     "ask",
   ],
   [
-    "F1 feat. in query, with in credit",
+    "feat. in query, with in credit",
     "Stay feat Justin Bieber",
     [
       track("STAY (with Justin Bieber)", "The Kid LAROI", "Justin Bieber"),
@@ -934,7 +935,7 @@ const secondKept: Case[] = [
     "auto STAY (with Justin Bieber)/The Kid LAROI,Justin Bieber (exact)",
   ],
   [
-    "F2 feat artist only remix",
+    "feat artist only remix",
     "Despacito Justin Bieber",
     [
       track("Despacito - Remix", "Luis Fonsi", "Daddy Yankee", "Justin Bieber"),
@@ -943,7 +944,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "F3 Old Town Road Billy Ray",
+    "Old Town Road Billy Ray",
     "Old Town Road Billy Ray Cyrus",
     [
       track("Old Town Road (feat. Billy Ray Cyrus) - Remix", "Lil Nas X", "Billy Ray Cyrus"),
@@ -952,7 +953,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "F4 feat artist named only, other song by feat artist",
+    "feat artist named only, other song by feat artist",
     "Lean On MO",
     [
       track("Lean On (feat. MØ & DJ Snake)", "Major Lazer", "MØ", "DJ Snake"),
@@ -961,25 +962,25 @@ const secondKept: Case[] = [
     "auto Lean On (feat. MØ & DJ Snake)/Major Lazer,MØ,DJ Snake (exact)",
   ],
   [
-    "G1 Latin title + Hangul artist",
+    "Latin title + Hangul artist",
     "Gangnam Style 싸이",
     [track("Gangnam Style (강남스타일)", "PSY")],
     "ask",
   ],
   [
-    "G2 Japanese title + romanised artist",
+    "Japanese title + romanised artist",
     "夜に駆ける YOASOBI",
     [track("夜に駆ける", "YOASOBI"), track("Yoru ni Kakeru", "Rainych")],
     "auto 夜に駆ける/YOASOBI (exact)",
   ],
   [
-    "G3 Cyrillic title + Latin artist",
+    "Cyrillic title + Latin artist",
     "Группа крови Kino",
     [track("Группа крови", "Кино"), track("Группа крови", "Би-2")],
     "ask",
   ],
   [
-    "H1 Blinding Lights",
+    "Blinding Lights",
     "Blinding Lights",
     [
       track("Blinding Lights", "The Weeknd"),
@@ -996,7 +997,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H1b Blinding Lights no catalogue cover",
+    "Blinding Lights no catalogue cover",
     "Blinding Lights",
     [
       track("Blinding Lights", "The Weeknd"),
@@ -1007,7 +1008,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H2 bad guy",
+    "bad guy",
     "bad guy",
     [
       track("bad guy", "Billie Eilish"),
@@ -1019,7 +1020,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H2b bad guy no rival",
+    "bad guy no rival",
     "bad guy",
     [
       track("bad guy", "Billie Eilish"),
@@ -1030,7 +1031,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H3 Despacito",
+    "Despacito",
     "Despacito",
     [
       track("Despacito", "Luis Fonsi", "Daddy Yankee"),
@@ -1041,7 +1042,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H4 Shape of You",
+    "Shape of You",
     "Shape of You",
     [
       track("Shape of You", "Ed Sheeran"),
@@ -1053,7 +1054,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H5 Bohemian Rhapsody",
+    "Bohemian Rhapsody",
     "Bohemian Rhapsody",
     [
       track("Bohemian Rhapsody - Remastered 2011", "Queen"),
@@ -1064,7 +1065,7 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H6 Smells Like Teen Spirit",
+    "Smells Like Teen Spirit",
     "Smells Like Teen Spirit",
     [
       track("Smells Like Teen Spirit", "Nirvana"),
@@ -1074,13 +1075,13 @@ const secondKept: Case[] = [
     "ask",
   ],
   [
-    "H7 web form hit",
+    "web form hit",
     "Blinding Lights The Weeknd",
     [track("Blinding Lights", "The Weeknd"), track("Blinding Lights", "KIDZ BOP Kids")],
     "auto Blinding Lights/The Weeknd (exact)",
   ],
   [
-    "I1 two named artists, one exact",
+    "two named artists, one exact",
     "Under Pressure Queen David Bowie",
     [
       track("Under Pressure - Remastered 2011", "Queen", "David Bowie"),
@@ -1089,31 +1090,31 @@ const secondKept: Case[] = [
     "auto Under Pressure - Remastered 2011/Queen,David Bowie (exact)",
   ],
   [
-    "I2 named artist exact + named artist other song same title",
+    "named artist exact + named artist other song same title",
     "Angel Massive Attack",
     [track("Angel", "Massive Attack"), track("Angel - Mad Professor Remix", "Massive Attack")],
     "auto Angel/Massive Attack (exact)",
   ],
   [
-    "I3 The Cure",
+    "The Cure",
     "The Cure",
     [track("The Cure", "Lady Gaga"), track("Just Like Heaven", "The Cure")],
     "ask",
   ],
   [
-    "I4 query only 'Live'",
+    "query only 'Live'",
     "Live",
     [track("Live", "Some Artist"), track("Lightning Crashes", "Live")],
     "ask",
   ],
   [
-    "I5 artist name equals version word, query names",
+    "artist name equals version word, query names",
     "Lightning Crashes Live",
     [track("Lightning Crashes", "Live"), track("Lightning Crashes - Live", "Some Band")],
     "auto Lightning Crashes/Live (exact)",
   ],
   [
-    "I6 feat. on rival shared lead",
+    "feat. on rival shared lead",
     "Run",
     [track("Run", "Snow Patrol"), track("Run", "Leona Lewis", "Snow Patrol")],
     "ask",
@@ -1172,12 +1173,11 @@ const coverFirst: Case[] = [
   ],
 ];
 
-// Rows a third review found decided wrongly by the version before: a live take named by a
-// version word of the title, a featured credit on another recording, unknown take labels, and
-// title-only queries (which now always ask).
+// A version word inside the title, the named artist featured on another recording, take
+// labels the rules do not know, and titles alone (which always ask).
 const third: Case[] = [
   [
-    "J1 live take, studio credited to Wings",
+    "live take, studio credited to Wings",
     "Live and Let Die Paul McCartney",
     [
       track("Live And Let Die - Live", "Paul McCartney"),
@@ -1194,7 +1194,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "J1b live first, studio credited to both",
+    "live first, studio credited to both",
     "Live and Let Die Paul McCartney",
     [
       track("Live And Let Die - Live", "Paul McCartney"),
@@ -1204,7 +1204,7 @@ const third: Case[] = [
     "auto Live And Let Die - 2018 Remaster/Paul McCartney,Wings (exact)",
   ],
   [
-    "J1d same, live first (asks for nothing live)",
+    "same, live first (asks for nothing live)",
     "Live and Let Die Wings",
     [
       track("Live And Let Die - Live", "Paul McCartney", "Wings"),
@@ -1213,7 +1213,7 @@ const third: Case[] = [
     "auto Live And Let Die - 2018 Remaster/Paul McCartney,Wings (exact)",
   ],
   [
-    "J2 Live Forever, Knebworth first",
+    "Live Forever, Knebworth first",
     "Live Forever Oasis",
     [
       track("Live Forever (Live at Knebworth, 10 August '96)", "Oasis"),
@@ -1223,7 +1223,7 @@ const third: Case[] = [
     "auto Live Forever - Remastered/Oasis (exact)",
   ],
   [
-    "J2b title only, all Oasis, Knebworth first",
+    "title only, all Oasis, Knebworth first",
     "Live Forever",
     [
       track("Live Forever (Live at Knebworth, 10 August '96)", "Oasis"),
@@ -1234,13 +1234,13 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "J3 Live Wire",
+    "Live Wire",
     "Live Wire Motley Crue",
     [track("Live Wire - Live", "Mötley Crüe"), track("Live Wire", "Mötley Crüe")],
     "auto Live Wire/Mötley Crüe (exact)",
   ],
   [
-    "J5 Acoustic #3 acoustic take",
+    "Acoustic #3 acoustic take",
     "Acoustic #3 Goo Goo Dolls",
     [
       track("Acoustic #3 - Acoustic", "The Goo Goo Dolls"),
@@ -1249,7 +1249,7 @@ const third: Case[] = [
     "auto Acoustic #3/The Goo Goo Dolls (exact)",
   ],
   [
-    "K1 Higher Love, Kygo first",
+    "Higher Love, Kygo first",
     "Higher Love Whitney Houston",
     [
       track("Higher Love", "Kygo", "Whitney Houston"),
@@ -1262,7 +1262,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K2 Unforgettable duet first",
+    "Unforgettable duet first",
     "Unforgettable Nat King Cole",
     [
       track("Unforgettable", "Natalie Cole", "Nat King Cole"),
@@ -1273,7 +1273,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K3 Wonderful World Kenny G first",
+    "Wonderful World Kenny G first",
     "What a Wonderful World Louis Armstrong",
     [
       track("What A Wonderful World", "Kenny G", "Louis Armstrong"),
@@ -1282,7 +1282,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K4 RPO overdub first",
+    "RPO overdub first",
     "If I Can Dream Elvis Presley",
     [
       track(
@@ -1295,7 +1295,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K4b RPO overdub first, title only",
+    "RPO overdub first, title only",
     "If I Can Dream",
     [
       track(
@@ -1309,7 +1309,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K4c RPO, Can't Help Falling, named",
+    "RPO, Can't Help Falling, named",
     "Can't Help Falling in Love Elvis Presley",
     [
       track(
@@ -1324,7 +1324,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K5 Tom's Diner DNA first, named Vega",
+    "Tom's Diner DNA first, named Vega",
     "Tom's Diner Suzanne Vega",
     [
       track("Tom's Diner", "DNA", "Suzanne Vega"),
@@ -1335,13 +1335,13 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "K6 Run cover credits original",
+    "Run cover credits original",
     "Run Snow Patrol",
     [track("Run", "Leona Lewis", "Snow Patrol"), track("Run", "Snow Patrol")],
     "ask",
   ],
   [
-    "K8 orchestra credit bracket, LSO",
+    "orchestra credit bracket, LSO",
     "Bohemian Rhapsody Queen",
     [
       track(
@@ -1354,7 +1354,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "L1 Def Leppard forgery (2012)",
+    "Def Leppard forgery (2012)",
     "Pour Some Sugar on Me Def Leppard",
     [
       track("Pour Some Sugar On Me (2012)", "Def Leppard"),
@@ -1363,19 +1363,19 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "L2 Re-Recording",
+    "Re-Recording",
     "Tainted Love Soft Cell",
     [track("Tainted Love (Re-Recording)", "Soft Cell"), track("Tainted Love", "Soft Cell")],
     "ask",
   ],
   [
-    "L3 Re-Record",
+    "Re-Record",
     "Tainted Love Soft Cell",
     [track("Tainted Love - Re-Record", "Soft Cell"), track("Tainted Love", "Soft Cell")],
     "ask",
   ],
   [
-    "L4 Spotify Studios",
+    "Spotify Studios",
     "Dancing On My Own Robyn",
     [
       track("Dancing On My Own - Recorded at Spotify Studios NYC", "Robyn"),
@@ -1384,13 +1384,13 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "L5 Spotify Singles",
+    "Spotify Singles",
     "Ocean Eyes Billie Eilish",
     [track("ocean eyes - Spotify Singles", "Billie Eilish"), track("ocean eyes", "Billie Eilish")],
     "ask",
   ],
   [
-    "L6 Alternate take",
+    "Alternate take",
     "Strawberry Fields Forever The Beatles",
     [
       track("Strawberry Fields Forever - Take 7", "The Beatles"),
@@ -1399,7 +1399,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "L7 New recording",
+    "New recording",
     "Total Eclipse of the Heart Bonnie Tyler",
     [
       track("Total Eclipse of the Heart (New Recording)", "Bonnie Tyler"),
@@ -1408,7 +1408,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "L8 Home recording / outtake",
+    "Home recording / outtake",
     "Yesterday The Beatles",
     [
       track("Yesterday - Outtake", "The Beatles"),
@@ -1417,7 +1417,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "L10 Re-recording title only, artist-only list",
+    "Re-recording title only, artist-only list",
     "Tainted Love",
     [
       track("Tainted Love (Re-Recording)", "Soft Cell"),
@@ -1427,7 +1427,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "M1 YMCA cover first",
+    "YMCA cover first",
     "YMCA",
     [
       track("YMCA", "The Party Hits Band"),
@@ -1438,7 +1438,7 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "M2 Skater Boy",
+    "Skater Boy",
     "Skater Boy",
     [
       track("Skater Boy", "Pop Punk Kids"),
@@ -1448,43 +1448,43 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "M3 Gangster's Paradise",
+    "Gangster's Paradise",
     "Gangsters Paradise",
     [track("Gangster's Paradise", "Some Covers"), track("Gangsta's Paradise", "Coolio", "L.V.")],
     "ask",
   ],
   [
-    "M4 Numa Numa",
+    "Numa Numa",
     "Numa Numa",
     [track("Numa Numa", "Party DJs"), track("Dragostea Din Tei", "O-Zone")],
     "ask",
   ],
   [
-    "M5 PYT",
+    "PYT",
     "PYT",
     [track("PYT", "Some Band"), track("P.Y.T. (Pretty Young Thing)", "Michael Jackson")],
     "ask",
   ],
   [
-    "M6 Wanna Be",
+    "Wanna Be",
     "Wanna Be",
     [track("Wanna Be", "Some Band"), track("Wannabe", "Spice Girls")],
     "ask",
   ],
   [
-    "M7 Sukiyaki translated",
+    "Sukiyaki translated",
     "Sukiyaki",
     [track("Sukiyaki", "A Taste of Honey"), track("Ue O Muite Arukou", "Kyu Sakamoto")],
     "ask",
   ],
   [
-    "M8 Ketchup Song",
+    "Ketchup Song",
     "The Ketchup Song",
     [track("The Ketchup Song", "Party Hits"), track("Aserejé", "Las Ketchup")],
     "ask",
   ],
   [
-    "M9 More Money More Problems",
+    "More Money More Problems",
     "More Money More Problems",
     [
       track("More Money More Problems", "Some Rapper"),
@@ -1498,23 +1498,23 @@ const third: Case[] = [
     "ask",
   ],
   [
-    "M13 Sk8er Boi with translit",
+    "Sk8er Boi with translit",
     "Sk8ter Boy",
     [track("Sk8ter Boy", "X"), track("Sk8er Boi", "Avril Lavigne")],
     "ask",
   ],
   [
-    "M14 Ievan Polkka",
+    "Ievan Polkka",
     "Leva's Polka",
     [track("Leva's Polka", "Hatsune Miku"), track("Ievan Polkka", "Loituma")],
     "ask",
   ],
 ];
 
-// Rows of that review the version before already decided rightly.
+// Same-name artists, tribute acts and titles that hold an artist's name.
 const thirdKept: Case[] = [
   [
-    "J1c studio first, live second, credited to both",
+    "studio first, live second, credited to both",
     "Live and Let Die Wings",
     [
       track("Live And Let Die - 2018 Remaster", "Paul McCartney", "Wings"),
@@ -1523,7 +1523,7 @@ const thirdKept: Case[] = [
     "auto Live And Let Die - 2018 Remaster/Paul McCartney,Wings (exact)",
   ],
   [
-    "J2c control: Wonderwall live first",
+    "control: Wonderwall live first",
     "Wonderwall Oasis",
     [
       track("Wonderwall (Live at Knebworth, 10 August '96)", "Oasis"),
@@ -1532,43 +1532,43 @@ const thirdKept: Case[] = [
     "auto Wonderwall - Remastered/Oasis (exact)",
   ],
   [
-    "J4 Piano Man piano cover first, named",
+    "Piano Man piano cover first, named",
     "Piano Man Billy Joel",
     [track("Piano Man - Piano Version", "Billy Joel"), track("Piano Man", "Billy Joel")],
     "auto Piano Man/Billy Joel (exact)",
   ],
   [
-    "J6 Mix tape word",
+    "Mix tape word",
     "Mixtape Butch Walker",
     [track("Mixtape - Remix", "Butch Walker"), track("Mixtape", "Butch Walker")],
     "auto Mixtape/Butch Walker (exact)",
   ],
   [
-    "K7 cover act + original featured, title only",
+    "cover act + original featured, title only",
     "Hurt",
     [track("Hurt", "The Cash Brothers", "Johnny Cash"), track("Hurt", "Johnny Cash")],
     "ask",
   ],
   [
-    "L9 Extended",
+    "Extended",
     "Blue Monday New Order",
     [track("Blue Monday '88 - Extended", "New Order"), track("Blue Monday", "New Order")],
     "auto Blue Monday/New Order (exact)",
   ],
   [
-    "M1b YMCA original first",
+    "YMCA original first",
     "YMCA",
     [track("Y.M.C.A.", "Village People"), track("YMCA", "The Party Hits Band")],
     "ask",
   ],
   [
-    "M10 Smells Like Teen Spirit misspelt",
+    "Smells Like Teen Spirit misspelt",
     "Smells Like Teen Sprit",
     [track("Smells Like Teen Sprit", "Some Band"), track("Smells Like Teen Spirit", "Nirvana")],
     "ask",
   ],
   [
-    "M11 Every Breath (one word dropped)",
+    "Every Breath (one word dropped)",
     "Every Breath You Take",
     [
       track("Every Breath You Take", "Some Band"),
@@ -1577,37 +1577,37 @@ const thirdKept: Case[] = [
     "ask",
   ],
   [
-    "M12 Dont Stop Me Now cover first",
+    "Dont Stop Me Now cover first",
     "Dont Stop Me Now",
     [track("Dont Stop Me Now", "Some Band"), track("Don't Stop Me Now - Remastered 2011", "Queen")],
     "ask",
   ],
   [
-    "N1 same-name cover act",
+    "same-name cover act",
     "Hurt Johnny Cash",
     [track("Hurt", "Johnny Cash"), track("Hurt", "Johnny Cash")],
     "auto Hurt/Johnny Cash (exact)",
   ],
   [
-    "N2 Various Artists named query",
+    "Various Artists named query",
     "Hurt Johnny Cash",
     [track("Hurt", "Various Artists"), track("Hurt", "Johnny Cash")],
     "auto Hurt/Johnny Cash (exact)",
   ],
   [
-    "N3 Various Artists title only",
+    "Various Artists title only",
     "Hurt",
     [track("Hurt", "Various Artists"), track("Hurt - 2002", "Johnny Cash")],
     "ask",
   ],
   [
-    "N4 tribute credits original as lead",
+    "tribute credits original as lead",
     "Hurt Johnny Cash",
     [track("Hurt", "Johnny Cash", "Johnny Cash Tribute Band"), track("Hurt", "Johnny Cash")],
     "auto Hurt/Johnny Cash (exact)",
   ],
   [
-    "N5 named artist covers another's song, original present",
+    "named artist covers another's song, original present",
     "Valerie Amy Winehouse",
     [
       track("Valerie", "The Zutons"),
@@ -1617,13 +1617,13 @@ const thirdKept: Case[] = [
     "ask",
   ],
   [
-    "N6 named artist only has cover; query means own different song",
+    "named artist only has cover; query means own different song",
     "Hallelujah Paramore",
     [track("Hallelujah", "Paramore"), track("Hallelujah", "Jeff Buckley")],
     "auto Hallelujah/Paramore (exact)",
   ],
   [
-    "O1 named partial vs named exact",
+    "named partial vs named exact",
     "Yesterday Beatles",
     [
       track("Yesterday Once More", "The Beatles"),
@@ -1632,13 +1632,13 @@ const thirdKept: Case[] = [
     "auto Yesterday - Remastered 2009/The Beatles (exact)",
   ],
   [
-    "O2 artist word inside another title (span from another result)",
+    "artist word inside another title (span from another result)",
     "Queen of Hearts Queen",
     [track("Queen of Hearts", "Juice Newton"), track("Killer Queen - Remastered 2011", "Queen")],
     "ask",
   ],
   [
-    "O3 longest span from another result swallows the artist",
+    "longest span from another result swallows the artist",
     "Hurt Johnny Cash",
     [
       track("Hurt", "Johnny Cash"),
@@ -1648,19 +1648,19 @@ const thirdKept: Case[] = [
     "ask",
   ],
   [
-    "O4 query equals the title of the named artist's other song",
+    "query equals the title of the named artist's other song",
     "Johnny Cash",
     [track("Johnny Cash", "Sons of Bill"), track("Hurt", "Johnny Cash")],
     "ask",
   ],
   [
-    "O5 feat in query names the cover's lead only",
+    "feat in query names the cover's lead only",
     "Hurt with Johnny Cash",
     [track("Hurt", "Johnny Cash"), track("Hurt", "Nine Inch Nails")],
     "auto Hurt/Johnny Cash (exact)",
   ],
   [
-    "O6 version asked, named, original marked mix",
+    "version asked, named, original marked mix",
     "Strobe Original Mix deadmau5",
     [track("Strobe - Original Mix", "deadmau5"), track("Strobe - Radio Edit", "deadmau5")],
     "ask",
@@ -2007,6 +2007,109 @@ const titleOnlyHits: [string, SpotifyData[]][] = [
   ],
 ];
 
+/** A result with the fields that tell takes apart: album, ISRC and duration. */
+function take(title: string, artists: string[], extra: Partial<SpotifyData>): SpotifyData {
+  return { ...track(title, ...artists), ...extra };
+}
+
+// Takes of one song that the title alone does not tell apart, and titles that differ only by a
+// joining word or a mix label.
+const takes: Case[] = [
+  [
+    "a re-recording with another ISRC listed before the original",
+    "I Walk the Line Johnny Cash",
+    [
+      take("I Walk The Line", ["Johnny Cash"], { isrc: "USSM16400001", durationMs: 165_000 }),
+      take("I Walk the Line", ["Johnny Cash"], { isrc: "USA2P0500001", durationMs: 166_000 }),
+    ],
+    "ask",
+  ],
+  [
+    "a take of the same length and ISRC listed twice is one take",
+    "I Walk the Line Johnny Cash",
+    [
+      take("I Walk The Line", ["Johnny Cash"], { isrc: "USA2P0500001", durationMs: 165_000 }),
+      take("I Walk the Line", ["Johnny Cash"], { isrc: "USA2P0500001", durationMs: 166_000 }),
+    ],
+    "auto I Walk The Line/Johnny Cash (exact)",
+  ],
+  [
+    "a track on a live album is a live take",
+    "Hotel California Eagles",
+    [
+      take("Hotel California", ["Eagles"], { album: "Eagles Live" }),
+      track("Hotel California - 2013 Remaster", "Eagles"),
+    ],
+    "auto Hotel California - 2013 Remaster/Eagles (exact)",
+  ],
+  [
+    "an early take is the only one",
+    "Yesterday The Beatles",
+    [
+      track("Yesterday - Take 1", "The Beatles"),
+      track("Let It Be - Remastered 2009", "The Beatles"),
+    ],
+    "ask",
+  ],
+  [
+    "a live take marked in Spanish is the only one",
+    "Rayando el Sol Mana",
+    [track("Rayando el Sol - En Vivo", "Maná"), track("Oye Mi Amor", "Maná")],
+    "ask",
+  ],
+  [
+    "a live take marked in Portuguese is listed before the studio take",
+    "Evidencias Chitaozinho & Xororo",
+    [
+      track("Evidências - Ao Vivo", "Chitãozinho & Xororó"),
+      track("Evidências", "Chitãozinho & Xororó"),
+    ],
+    "auto Evidências/Chitãozinho & Xororó (exact)",
+  ],
+  [
+    "a club mix is another version",
+    "Pump Up the Jam Technotronic",
+    [track("Pump Up the Jam - Club Mix", "Technotronic"), track("Pump Up the Jam", "Technotronic")],
+    "auto Pump Up the Jam/Technotronic (exact)",
+  ],
+  [
+    "an extended mix alone is another version",
+    "Blue Monday New Order",
+    [track("Blue Monday - Extended Mix", "New Order"), track("Blue Monday '88", "New Order")],
+    "ask",
+  ],
+  [
+    "a featured artist's credit need not be in the query",
+    "Crazy in Love Beyonce",
+    [track("Crazy In Love (feat. Jay-Z)", "Beyoncé", "JAY-Z")],
+    "auto Crazy In Love (feat. Jay-Z)/Beyoncé,JAY-Z (exact)",
+  ],
+  [
+    "a source named in the title need not be in the query",
+    "Let It Go Idina Menzel",
+    [track('Let It Go - From "Frozen"/Soundtrack Version', "Idina Menzel")],
+    'auto Let It Go - From "Frozen"/Soundtrack Version/Idina Menzel (exact)',
+  ],
+  [
+    "With You is not You",
+    "With You Chris Brown",
+    [track("You", "Chris Brown"), track("With You", "Chris Brown")],
+    "auto With You/Chris Brown (exact)",
+  ],
+  [
+    "X&Y is not Y",
+    "X&Y Coldplay",
+    [track("Y", "Coldplay"), track("X&Y", "Coldplay")],
+    "auto X&Y/Coldplay (exact)",
+  ],
+  [
+    "a karaoke track credited to the named artist is not a rival",
+    "Hurt Johnny Cash",
+    [track("Hurt", "Johnny Cash"), track("Hurt (Karaoke Version)", "Karaoke Hits", "Johnny Cash")],
+    "auto Hurt/Johnny Cash (exact)",
+  ],
+];
+
 describe("the scout's decision", () => {
   it.each(corrected)("%s", (_label, query, tracks, expected) => {
     expect(decide(query, tracks)).toBe(expected);
@@ -2027,6 +2130,9 @@ describe("the scout's decision", () => {
     expect(decide(query, tracks)).toBe(expected);
   });
   it.each(thirdKept)("%s", (_label, query, tracks, expected) => {
+    expect(decide(query, tracks)).toBe(expected);
+  });
+  it.each(takes)("%s", (_label, query, tracks, expected) => {
     expect(decide(query, tracks)).toBe(expected);
   });
   it.each(titleOnlyHits)("asks for %j, a title alone", (query, tracks) => {

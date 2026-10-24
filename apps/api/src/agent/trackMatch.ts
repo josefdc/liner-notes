@@ -3,11 +3,15 @@
  * artists only (Spotify no longer gives this app a popularity score). The scout uses it to order
  * the results, to decide whether the user has to choose and to flag a query nothing matches.
  *
- * A track is selected without asking only when the choice is clearly right: the query names
- * the artist, one recording by that artist carries exactly the title the query asks for, and it
- * is the original recording unless the query asks for a version. A query that names no artist
- * always asks. Anything less is a choice for the user: asking costs one click, a wrong
- * recording costs a whole analysis of a song the user did not ask for.
+ * A track is selected without asking only when the choice is clearly right (see `needsChoice`
+ * for exactly what is checked): the query names the artist; the best result by that artist has
+ * exactly the title asked for, is not marked as another version, and adds nothing to the title
+ * the query does not hold beyond known release labels; and no other take by that artist with the
+ * title differs from it in title, ISRC or length, nor another recording with a different lead.
+ * A query that names no artist always asks. Anything less is a choice for the user: asking
+ * costs one click, a wrong recording costs a whole analysis of a song the user did not ask for.
+ * When the user has to choose, the most likely original comes first (see `rankTracks`): the
+ * track picker's countdown takes the first candidate.
  *
  * Text is compared after normalisation: compatibility forms folded, accents of Latin letters
  * dropped, case folded, "&" and "+" read as "and", and anything that is not a letter or a digit
@@ -42,11 +46,18 @@ export interface RankedTrack {
   /** Where Spotify listed the result (0 first). */
   position: number;
   /**
+   * The title may be the one the query means even when spelt otherwise: a title match, most
+   * words of a longer title, or a title in another script than the query.
+   */
+  near: boolean;
+  /**
    * What the full title adds to the title proper once known labels of the original release
    * ("Remastered 2011", "Radio Edit", "Single Version", "Original Mix") and the artists the
    * query names are left out: "(2012)", "Take 7", "(with the Royal Philharmonic Orchestra)".
    */
   extraWords: string[];
+  /** Every one of `extraWords` is in the query. */
+  extraAsked: boolean;
 }
 
 const CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}";
@@ -117,7 +128,15 @@ const COVER_PHRASES = [
   ["made", "famous"],
   ["in", "the", "style", "of"],
 ];
-const VERSION_PHRASES = [...COVER_PHRASES, ["re", "recorded"]];
+const VERSION_PHRASES = [
+  ...COVER_PHRASES,
+  ["re", "recorded"],
+  ["en", "vivo"],
+  ["ao", "vivo"],
+  ["en", "directo"],
+];
+// An album name marks its tracks as another recording with these ("MTV Unplugged", "Eagles Live").
+const ALBUM_MARKERS = [["live"], ["unplugged"], ["en", "vivo"], ["ao", "vivo"], ["en", "directo"]];
 // "Version" marks another recording ("Taylor's Version", "Versión Pop", "Glee Cast Version")
 // unless a neighbouring word names the original release.
 const ORIGINAL_RELEASE_WORDS = new Set([
@@ -131,7 +150,6 @@ const ORIGINAL_RELEASE_WORDS = new Set([
   "clean",
   "mono",
   "stereo",
-  "extended",
   "short",
   "long",
   "lp",
@@ -155,8 +173,6 @@ const COVER_WORDS = new Set([
 const CANONICAL_LABELS = [
   ["original", "mix"],
   ["radio", "mix"],
-  ["club", "mix"],
-  ["extended", "mix"],
   ["single", "mix"],
   ["album", "mix"],
   ["main", "mix"],
@@ -219,21 +235,20 @@ function without(text: string[], phrase: string[]): string[] {
   return rest;
 }
 
-/** The words that are compared: joining words dropped, unless nothing else is left. */
+/** The words of an artist's name that are compared: joining words dropped. */
 function content(text: string[]): string[] {
   const kept = text.filter((word) => !JOINERS.has(word));
   return kept.length > 0 ? kept : text;
 }
 
+// Titles are compared word for word: "With You" is not "You", nor "X&Y" "Y".
 function same(a: string[], b: string[]): boolean {
-  const x = content(a);
-  const y = content(b);
-  return a.length > 0 && x.length === y.length && x.every((word, i) => word === y[i]);
+  return a.length > 0 && a.length === b.length && a.every((word, i) => word === b[i]);
 }
 
 function within(part: string[], whole: string[]): boolean {
   const set = new Set(whole);
-  return part.length > 0 && content(part).every((word) => set.has(word));
+  return part.length > 0 && part.every((word) => set.has(word));
 }
 
 interface TitleParts {
@@ -244,6 +259,8 @@ interface TitleParts {
   alternatives: string[][];
   /** The suffix words that may mark a version; credits such as "(feat. X)" are left out. */
   suffix: string[];
+  /** Suffix parts naming where the recording comes from ("- From \"Frozen\""). */
+  sources: string[][];
 }
 
 function titleParts(title: string): TitleParts {
@@ -258,8 +275,11 @@ function titleParts(title: string): TitleParts {
     base = base.slice(0, dash);
   }
   const full = words(title);
+  // A credit ("(with Justin Bieber)") or a label ("(Remastered 2011)") is not another title; a
+  // subtitle may still hold a joining word ("(A Deal With God)").
   const isLabel = (part: string[]) =>
-    part.some((word) => LABEL_WORDS.has(word) || /^\d{4}$/.test(word));
+    CREDIT_WORDS.has(part[0] ?? "") ||
+    part.some((word) => (LABEL_WORDS.has(word) && !CREDIT_WORDS.has(word)) || /^\d{4}$/.test(word));
   let suffix = [...brackets.filter((part) => !CREDIT_WORDS.has(part[0] ?? "")).flat(), ...dashed];
   for (const label of CANONICAL_LABELS) suffix = without(suffix, label);
   return {
@@ -268,6 +288,7 @@ function titleParts(title: string): TitleParts {
     full,
     alternatives: brackets.filter((part) => part.length > 0 && !isLabel(part)),
     suffix,
+    sources: [...brackets, dashed].filter((part) => part[0] === "from"),
   };
 }
 
@@ -333,13 +354,25 @@ function versionMarkers(suffix: string[]): string[][] {
   return found;
 }
 
-/** The query's words with every occurrence of the given artists taken out. */
-function withoutArtists(query: string[], artists: string[]): string[] {
-  let rest = query;
+/**
+ * The words with every occurrence of the given artists taken out, and the joining words next to
+ * them ("by" in "Hurt by Johnny Cash", "with" in "Stay with Justin Bieber").
+ */
+function withoutArtists(text: string[], artists: string[]): string[] {
+  const gone = text.map(() => false);
   for (const artist of artists) {
-    for (const form of nameForms(artist)) rest = without(rest, form);
+    for (const form of nameForms(artist)) {
+      for (let at = indexOf(text, form); at >= 0; at = indexOf(text, form, at + 1)) {
+        for (let i = at; i < at + form.length; i++) gone[i] = true;
+      }
+    }
   }
-  return rest;
+  for (let pass = 0; pass < 2; pass++) {
+    text.forEach((word, i) => {
+      if (!gone[i] && JOINERS.has(word) && (gone[i - 1] || gone[i + 1])) gone[i] = true;
+    });
+  }
+  return text.filter((_, i) => !gone[i]);
 }
 
 // Labels of the original release that a full title may add to the title proper.
@@ -359,7 +392,8 @@ const RELEASE_WORDS = new Set(["remaster", "remastered", "explicit", "clean", "m
 
 /** See `RankedTrack.extraWords`. */
 function extraWords(title: TitleParts, named: string[]): string[] {
-  let extra = withoutArtists(without(title.full, title.base), named);
+  const sourced = title.sources.reduce((left, part) => without(left, part), title.full);
+  let extra = withoutArtists(without(sourced, title.base), named);
   for (const label of RELEASE_LABELS) extra = without(extra, label);
   // A year is a label only next to a remaster ("Remastered 2011"); alone it may date a
   // re-recording ("(2012)").
@@ -412,8 +446,11 @@ function judge(
   // A marker counts as asked for only outside this track's own title: "Live and Let Die" does
   // not ask for a live take.
   const outside = [title.base, ...title.alternatives].reduce((left, t) => without(left, t), rest);
+  // The album's name, without the title it may repeat ("Live And Let Die (album)").
+  const album = without(words(track.album ?? ""), title.base);
   const marked =
     versionMarkers(title.suffix).some((marker) => indexOf(outside, marker) < 0) ||
+    ALBUM_MARKERS.some((marker) => indexOf(album, marker) >= 0 && indexOf(outside, marker) < 0) ||
     (artistMarked && !query.includes("karaoke") && !query.includes("tribute"));
   // When the query asks for a version, a result without it is another version.
   const lacksAsked = asked.some((word) => !title.suffix.includes(word));
@@ -421,13 +458,29 @@ function judge(
     artistMarked ||
     title.suffix.some((word) => COVER_WORDS.has(word)) ||
     COVER_PHRASES.some((phrase) => indexOf(title.suffix, phrase) >= 0);
+  // A title spelt otherwise than the query may still be the one it means: most words of a
+  // title of three words or more are in the query, or the title is in another script.
+  const latin = (text: string[]) => text.some((word) => /\p{Script=Latin}/u.test(word));
+  const shared = title.base.filter((word) => rest.includes(word)).length;
+  const near =
+    match === "exact" ||
+    match === "partial" ||
+    (title.base.length >= 3 && shared >= title.base.length - 1) ||
+    (latin(rest) && !latin(title.base) && title.base.length > 0);
+  const extra = extraWords(title, credited);
   return {
     match,
     artistNamed,
+    near,
     otherVersion: marked || lacksAsked,
     coverVersion,
     position,
-    extraWords: extraWords(title, credited),
+    extraWords: extra,
+    // Featured artists credited on the track may be left out of the query ("Crazy In Love
+    // (feat. Jay-Z)"), and a version the query asks for may carry more words ("Live On MTV").
+    extraAsked:
+      extraWords(title, artists).every((word) => query.includes(word)) ||
+      (asked.length > 0 && !lacksAsked),
   };
 }
 
@@ -451,23 +504,30 @@ const ORDER: Record<QueryMatch, number> = { exact: 0, partial: 1, artist: 2, non
 
 /**
  * Where a result goes in the list: a title match by an artist the query names, then any other
- * exact title or unmarked partial title, then the named artist's other songs, then other
- * versions that match the title only in part, then the rest. A marked cover that half matches
- * the title comes after the songs of the artist the query names.
+ * exact title or unmarked title that may be the one meant (see `near`; with a named artist,
+ * covers spelt like the title are only partial matches and come after it), then the named
+ * artist's other songs, then other versions that match the title only in part, then the rest.
+ * A marked cover that half matches the title comes after the songs of the artist the query
+ * names.
  */
 function tier(r: Omit<RankedTrack, "track">): number {
   const titled = r.match === "exact" || r.match === "partial";
   if (titled && r.artistNamed) return 0;
-  if (r.match === "exact" || (r.match === "partial" && !r.otherVersion)) return 1;
+  if (r.match === "exact" || (r.near && !r.otherVersion)) return 1;
   if (r.artistNamed) return 2;
   if (titled) return 3;
   return 4;
 }
 
+// Among the other title matches, exact or respelt titles (in Spotify's order) before partial
+// ones: the original spelt otherwise keeps its place ahead of covers spelt like the query.
+const group = (r: Omit<RankedTrack, "track">) => (r.match === "partial" ? 1 : 0);
+
 /**
- * The results best match first (see `tier`); within a tier an exact title before a partial
- * one, then the original recording (or the version the query asks for) before other versions.
- * Results that compare equal keep Spotify's order.
+ * The results best match first (see `tier`). Within the first tier an exact title comes before
+ * a partial one; within the others an exact or respelt title (in Spotify's order) before a
+ * partial one. Then the original recording (or the version the query asks for) before other
+ * versions. Results that compare equal keep Spotify's order.
  */
 export function rankTracks(query: string, tracks: SpotifyData[]): RankedTrack[] {
   const q = words(query);
@@ -477,7 +537,7 @@ export function rankTracks(query: string, tracks: SpotifyData[]): RankedTrack[] 
     .sort(
       (a, b) =>
         tier(a) - tier(b) ||
-        ORDER[a.match] - ORDER[b.match] ||
+        (tier(a) === 0 ? ORDER[a.match] - ORDER[b.match] : group(a) - group(b)) ||
         Number(a.otherVersion) - Number(b.otherVersion) ||
         a.position - b.position,
     );
@@ -497,36 +557,40 @@ function sameSong(a: SpotifyData, b: SpotifyData): boolean {
   return shared && same(titleParts(a.title).base, titleParts(b.title).base);
 }
 
+/** The same take, as far as Spotify tells: ISRCs, and durations within 3 s, where both known. */
+function sameTake(a: SpotifyData, b: SpotifyData): boolean {
+  if (a.isrc && b.isrc && a.isrc !== b.isrc) return false;
+  return !(a.durationMs > 0 && b.durationMs > 0 && Math.abs(a.durationMs - b.durationMs) > 3000);
+}
+
 /**
  * Whether the user has to choose among ranked results. A query that names no artist always
- * asks: a title alone does not say which recording is meant (covers, other songs with the
- * title, the title spelt another way or in another script). A query that names an artist
- * selects the best result without asking only when it carries the exact title, is the original
- * recording (or the version the query asks for), is credited to the named artist, and no other
- * result (karaoke and covers aside) speaks against it:
- * - another song with the exact title by an artist the query names, or another recording of
- *   the song with a different lead artist ("Tom's Diner" by DNA featuring Suzanne Vega);
- * - another take of the song by the same lead whose full title adds something that is not a
- *   known label of the original release ("(2012)", "Take 7", "(with the Royal Philharmonic
- *   Orchestra)");
- * - a result by another named artist that Spotify lists first.
+ * asks. A query that names an artist selects the best result without asking only when:
+ * - its title is exactly the one the query asks for, it is credited to the named artist, and it
+ *   is not marked as another version (live, remix, acoustic, karaoke, re-recording and the like,
+ *   in its title or its album's name) unless the query asks for that version;
+ * - everything its full title adds to the title (apart from known labels of the original
+ *   release such as "Remastered 2011", "Radio Edit", "Single Version", "Original Mix", and the
+ *   named artists) is in the query: "Rayando el Sol - En Vivo" or "Yesterday - Take 1" ask;
+ * - no other result by a named artist with the exact title (covers aside) is another song,
+ *   another recording with a different lead artist ("Tom's Diner" by DNA featuring Suzanne
+ *   Vega), a take whose title adds something else ("(2012)", "(with the Royal Philharmonic
+ *   Orchestra)"), or a take with the same title but another ISRC or a duration more than 3 s
+ *   apart ("Come As You Are" from MTV Unplugged and from Nevermind).
  */
 export function needsChoice(ranked: RankedTrack[]): boolean {
   const [best, ...others] = ranked;
   if (!best) return false;
   if (best.match !== "exact" || best.otherVersion || !best.artistNamed) return true;
+  if (!best.extraAsked) return true;
   const bestCredits = credits(best.track);
-  const sharesArtist = (other: RankedTrack) =>
-    credits(other.track).some((name) => bestCredits.includes(name));
   const sameLead = (other: RankedTrack) => credits(other.track)[0] === bestCredits[0];
   return others.some((other) => {
-    if (other.coverVersion || !other.artistNamed) return false;
-    if (other.match === "exact") {
-      if (!sameSong(other.track, best.track) || !sameLead(other)) return true;
-      if (!other.otherVersion && other.extraWords.join(" ") !== best.extraWords.join(" ")) {
-        return true;
-      }
-    }
-    return other.position < best.position && !other.otherVersion && !sharesArtist(other);
+    if (other.coverVersion || !other.artistNamed || other.match !== "exact") return false;
+    if (!sameSong(other.track, best.track) || !sameLead(other)) return true;
+    if (other.otherVersion) return false;
+    return (
+      other.extraWords.join(" ") !== best.extraWords.join(" ") || !sameTake(other.track, best.track)
+    );
   });
 }

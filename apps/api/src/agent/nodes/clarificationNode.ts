@@ -3,7 +3,7 @@
  * Pauses execution until user selects a track
  */
 
-import { interrupt, getStore } from "@langchain/langgraph";
+import { interrupt } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getTrackDetails } from "../../sources/spotify.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
@@ -24,7 +24,6 @@ export async function clarificationNode(
   runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   console.log("⏸️ [Clarification] Waiting for user to select track...");
-  const store = getStore();
 
   // Pauses the run: the first time through, interrupt() stops the graph and the route sends the
   // payload's candidates to the client. On resume (Command({ resume })) the node runs again from
@@ -63,24 +62,8 @@ export async function clarificationNode(
     timestamp: timestampOf(runtime),
   });
 
-  // Save disambiguation preference in long-term memory
-  config.signal?.throwIfAborted();
-  if (store && state.candidates) {
-    const normalizedQuery = state.songQuery.toLowerCase().trim();
-    const candidateIds = state.candidates
-      .map((c) => c.id)
-      .sort()
-      .join(",");
-    try {
-      await store.put(["disambiguation"], normalizedQuery, {
-        selectedTrackId: selectedId,
-        candidateIds,
-        timestamp: runtime.now().getTime(),
-      });
-    } catch (e) {
-      console.warn("⚠️ [Clarification] Store write error:", e);
-    }
-  }
+  // The pick is not remembered for the query's text: it is this user's choice, and the next
+  // search of the same text asks again.
 
   // Fetch full Spotify data for selected track
   try {
@@ -97,6 +80,7 @@ export async function clarificationNode(
       spotifyData,
       selectedTrackId: selectedId,
       isrc: spotifyData.isrc ?? null,
+      selectedBy: "user",
       queryMatch: matchTrack(state.songQuery, spotifyData).match,
       candidates: null, // Clear candidates
       statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
@@ -129,6 +113,7 @@ export async function clarificationNode(
       spotifyData,
       selectedTrackId: selectedId,
       isrc: null,
+      selectedBy: "user",
       queryMatch: matchTrack(state.songQuery, spotifyData).match,
       candidates: null,
       statusMessages: [`✅ Selected: "${selected.title}"`],

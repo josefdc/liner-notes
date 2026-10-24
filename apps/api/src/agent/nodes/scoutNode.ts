@@ -146,48 +146,8 @@ export async function scoutNode(
           }
           return checked.success;
         });
-      // Check stored disambiguation preference before interrupting. A query nothing matches
-      // always asks: a remembered pick is not a match.
-      if (store && queryMatch !== "none") {
-        try {
-          const pref = await store.get(["disambiguation"], normalizedQuery);
-          if (pref?.value?.selectedTrackId) {
-            // The same list the clarification node remembers, so a left-out row cannot block a match.
-            const currentIds = candidates
-              .map((c) => c.id)
-              .sort()
-              .join(",");
-            if (pref.value.candidateIds === currentIds) {
-              // Same candidate set — auto-select the remembered preference
-              const rememberedRank = ranked.find((r) => r.track.id === pref.value.selectedTrackId);
-              const remembered = rememberedRank?.track;
-              if (rememberedRank && remembered) {
-                console.log(
-                  "📦 [Scout] Auto-selecting from disambiguation memory:",
-                  remembered.title,
-                );
-                writer?.({
-                  type: "status",
-                  code: "SPOTIFY-FOUND",
-                  message: `Remembered preference: "${remembered.title}" // ${remembered.artist}`,
-                  node: "scout",
-                  timestamp: timestampOf(runtime),
-                });
-                return {
-                  spotifyData: remembered,
-                  selectedTrackId: remembered.id,
-                  isrc: remembered.isrc ?? null,
-                  queryMatch: rememberedRank.match,
-                  statusMessages: [`✅ Remembered: "${remembered.title}" by ${remembered.artist}`],
-                };
-              }
-            }
-          }
-        } catch (e) {
-          console.warn("⚠️ [Scout] Disambiguation store read error:", e);
-        }
-      }
-
+      // A pick remembered for the same text is not reused: it was one user's choice (or the
+      // picker's countdown), and a title alone must always ask.
       console.log("⚠️ [Scout] Choice needed:", {
         query: state.songQuery,
         queryMatch,
@@ -231,6 +191,7 @@ export async function scoutNode(
       selectedTrackId: topTrack.id,
       isrc: topTrack.isrc ?? null,
       queryMatch,
+      selectedBy: "match",
       statusMessages: [`✅ Found: "${topTrack.title}" by ${topTrack.artist}`],
     };
   } catch (error) {

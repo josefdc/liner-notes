@@ -15,9 +15,10 @@ vi.hoisted(() => {
   process.env.SPOTIFY_CLIENT_SECRET = "test-secret";
 });
 
-import { END, InMemoryStore, START, StateGraph } from "@langchain/langgraph";
+import { Command, END, InMemoryStore, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { SpotifyAuthManager } from "../../sources/spotify.js";
 import { SonicAgentState } from "../state.js";
+import { clarificationNode } from "./clarificationNode.js";
 import { scoutNode } from "./scoutNode.js";
 
 const SEARCH = "https://api.spotify.com/v1/search?";
@@ -196,6 +197,8 @@ describe("scoutNode with Spotify results that carry no popularity", () => {
     });
     expect(out.isrc).toBe("USAT29900609");
     expect(out.queryMatch).toBe("exact");
+    // A clear match: its result may answer the next search of the same text.
+    expect(out.selectedBy).toBe("match");
   });
 
   it("selects a non-Latin title that matches the query", async () => {
@@ -300,39 +303,42 @@ describe("scoutNode never selects another recording on its own", () => {
   });
 });
 
-describe("scoutNode's remembered choice", () => {
-  const remember = async (query: string, picked: string, offered: string[]) => {
-    const store = new InMemoryStore();
-    await store.put(["disambiguation"], query, {
-      selectedTrackId: picked,
-      candidateIds: [...offered].sort().join(","),
-    });
-    return store;
-  };
-
-  it("records the ISRC of the remembered track", async () => {
+describe("a pick from the track picker", () => {
+  it("is not reused: after one user picks a karaoke track for Hurt, the next search asks", async () => {
     const cash = spotifyTrack("Hurt", ["Johnny Cash"], { external_ids: { isrc: "USUM70207211" } });
     const nin = spotifyTrack("Hurt", ["Nine Inch Nails"]);
-    spotifySearch([cash, nin]);
+    const karaoke = spotifyTrack("Hurt (Karaoke Version)", ["Ameritz Karaoke"]);
+    stubFetch((call: FetchCall) => {
+      if (call.url === "https://accounts.spotify.com/api/token") {
+        return json({ access_token: "test-token", token_type: "Bearer", expires_in: 3600 });
+      }
+      if (call.url.startsWith(SEARCH)) {
+        return json({ tracks: { items: [cash, nin, karaoke], total: 3 } });
+      }
+      if (call.url === `https://api.spotify.com/v1/tracks/${karaoke.id}`) return json(karaoke);
+      return undefined;
+    });
+    const store = new InMemoryStore();
+    const graph = new StateGraph(SonicAgentState)
+      .addNode("scout", scoutNode)
+      .addNode("clarification", clarificationNode)
+      .addEdge(START, "scout")
+      .addConditionalEdges("scout", (state) => (state.candidates ? "clarification" : END))
+      .addEdge("clarification", END)
+      .compile({ store, checkpointer: new MemorySaver() });
+    const thread = { configurable: { thread_id: "first-user" } };
 
-    const out = await scout("Hurt", await remember("hurt", cash.id, [cash.id, nin.id]));
-
-    expect(out.spotifyData?.id).toBe(cash.id);
-    expect(out.isrc).toBe("USUM70207211");
-    expect(out.queryMatch).toBe("exact");
-  });
-
-  it("is not used when nothing matches the query", async () => {
-    const unrelated = spotifyTrack("xStep", ["DJVI"]);
-    spotifySearch([unrelated]);
-
-    const out = await scout(
-      "qwzx vlorp blenk",
-      await remember("qwzx vlorp blenk", unrelated.id, [unrelated.id]),
+    await graph.invoke({ songQuery: "Hurt" }, thread);
+    const picked = await graph.invoke(new Command({ resume: karaoke.id }), thread);
+    const next = await graph.invoke(
+      { songQuery: "hurt" },
+      { configurable: { thread_id: "next-user" } },
     );
 
-    expect(out.spotifyData ?? null).toBeNull();
-    expect(ids(out.candidates)).toEqual([unrelated.id]);
+    expect(picked.spotifyData?.id).toBe(karaoke.id);
+    expect(picked.selectedBy).toBe("user");
+    expect(next.spotifyData ?? null).toBeNull();
+    expect(ids(next.candidates)[0]).toBe(cash.id);
   });
 });
 
@@ -497,5 +503,164 @@ describe("scoutNode with a named artist and several recordings of the song", () 
 
     expect(out.spotifyData ?? null).toBeNull();
     expect(ids(out.candidates)).toContain(original.id);
+  });
+});
+
+describe("the first candidate, which the picker's countdown takes", () => {
+  const first = async (query: string, items: unknown[]) => {
+    spotifySearch(items);
+    const out = await scout(query);
+    expect(out.spotifyData ?? null).toBeNull();
+    const [top] = out.candidates ?? [];
+    return top ? `${top.title} / ${top.artist}` : null;
+  };
+
+  it("is the original spelt otherwise, not a cover spelt like the query", async () => {
+    expect(
+      await first("Dont Stop Believing", [
+        spotifyTrack("Don't Stop Believin'", ["Journey"]),
+        spotifyTrack("Don't Stop Believing", ["Petra Haden"]),
+        spotifyTrack("Any Way You Want It", ["Journey"]),
+      ]),
+    ).toBe("Don't Stop Believin' / Journey");
+  });
+
+  it("is the original among a top ten of covers, karaoke and a Glee version", async () => {
+    expect(
+      await first("Dont Stop Believing", [
+        spotifyTrack("Don't Stop Believin'", ["Journey"]),
+        spotifyTrack("Don't Stop Believin' - 2022 Remaster", ["Journey"]),
+        spotifyTrack("Don't Stop Believin' (Glee Cast Version)", ["Glee Cast"]),
+        spotifyTrack("Don't Stop Believing", ["Petra Haden"]),
+        spotifyTrack("Don't Stop Believing (Karaoke Version)", ["Ameritz Karaoke"]),
+        spotifyTrack("Don't Stop Believing", ["Kidz Bop Kids"]),
+        spotifyTrack("Don't Stop Believing - Piano Version", ["Piano Dreamers"]),
+        spotifyTrack("Don't Stop Believing", ["The Hit Crew"]),
+        spotifyTrack("Don't Stop Believin' - Live", ["Journey"]),
+        spotifyTrack("Don't Stop Believing (In the Style of Journey) [Karaoke Version]", [
+          "Sing Karaoke",
+        ]),
+      ]),
+    ).toBe("Don't Stop Believin' / Journey");
+  });
+
+  it("is the Japanese original for a romanised title, not a romanised cover", async () => {
+    expect(
+      await first("Yoru ni Kakeru", [
+        spotifyTrack("夜に駆ける", ["YOASOBI"]),
+        spotifyTrack("Yoru ni Kakeru", ["Rainych"]),
+        spotifyTrack("Yoru ni Kakeru (Piano Cover)", ["Animenz"]),
+        spotifyTrack("Yoru ni Kakeru", ["Lefty Hand Cream"]),
+        spotifyTrack("Yoru ni Kakeru - Acoustic", ["Some Singer"]),
+        spotifyTrack("Yoru ni Kakeru", ["Covers Inc"]),
+        spotifyTrack("群青", ["YOASOBI"]),
+      ]),
+    ).toBe("夜に駆ける / YOASOBI");
+    expect(
+      await first("Gurenge", [
+        spotifyTrack("紅蓮華", ["LiSA"]),
+        spotifyTrack("Gurenge", ["Raon"]),
+        spotifyTrack("Gurenge", ["Akano"]),
+        spotifyTrack("Gurenge (Demon Slayer)", ["Anime Covers"]),
+        spotifyTrack("Gurenge - Piano", ["Animenz"]),
+        spotifyTrack("Gurenge", ["Amalee"]),
+      ]),
+    ).toBe("紅蓮華 / LiSA");
+  });
+
+  it("is the named artist's song spelt otherwise, not one of several covers", async () => {
+    expect(
+      await first("Dont Stop Believing Journey", [
+        spotifyTrack("Don't Stop Believin'", ["Journey"]),
+        spotifyTrack("Don't Stop Believin' - 2022 Remaster", ["Journey"]),
+        spotifyTrack("Don't Stop Believing", ["Petra Haden"]),
+        spotifyTrack("Don't Stop Believing", ["Kidz Bop Kids"]),
+        spotifyTrack("Don't Stop Believing", ["The Hit Crew"]),
+        spotifyTrack("Don't Stop Believing", ["Boyce Avenue"]),
+        spotifyTrack("Don't Stop Believing", ["Vitamin String Quartet"]),
+        spotifyTrack("Any Way You Want It", ["Journey"]),
+      ]),
+    ).toBe("Don't Stop Believin' / Journey");
+    expect(
+      await first("Yoru ni Kakeru YOASOBI", [
+        spotifyTrack("夜に駆ける", ["YOASOBI"]),
+        spotifyTrack("Yoru ni Kakeru", ["Rainych"]),
+        spotifyTrack("Yoru ni Kakeru", ["Lefty Hand Cream"]),
+        spotifyTrack("Yoru ni Kakeru", ["Covers Inc"]),
+        spotifyTrack("Yoru ni Kakeru", ["Amalee"]),
+        spotifyTrack("Yoru ni Kakeru", ["Raon"]),
+        spotifyTrack("群青", ["YOASOBI"]),
+      ]),
+    ).toBe("夜に駆ける / YOASOBI");
+  });
+
+  it("is the named artist's song spelt otherwise, even when Spotify lists covers first", async () => {
+    expect(
+      await first("Dont Stop Believing Journey", [
+        spotifyTrack("Don't Stop Believing", ["Petra Haden"]),
+        spotifyTrack("Don't Stop Believing", ["Kidz Bop Kids"]),
+        spotifyTrack("Don't Stop Believin'", ["Journey"]),
+      ]),
+    ).toBe("Don't Stop Believin' / Journey");
+  });
+
+  it("keeps Spotify's first for three songs called Hurt", async () => {
+    expect(
+      await first("Hurt", [
+        spotifyTrack("Hurt", ["Nine Inch Nails"]),
+        spotifyTrack("Hurt", ["Johnny Cash"]),
+        spotifyTrack("Hurt", ["Christina Aguilera"]),
+      ]),
+    ).toBe("Hurt / Nine Inch Nails");
+  });
+});
+
+describe("scoutNode with takes of one song that Spotify titles alike", () => {
+  it("selects the album take of Come As You Are, not the MTV Unplugged take listed first", async () => {
+    spotifySearch([
+      spotifyTrack("Come As You Are", ["Nirvana"], {
+        album: { name: "MTV Unplugged In New York", release_date: "1994-11-01", images: [] },
+        duration_ms: 253_000,
+        external_ids: { isrc: "USGF19463206" },
+      }),
+      spotifyTrack("Come As You Are", ["Nirvana"], {
+        album: { name: "Nevermind", release_date: "1991-09-24", images: [] },
+        duration_ms: 219_000,
+        external_ids: { isrc: "USGF19942503" },
+      }),
+      spotifyTrack("Lithium", ["Nirvana"]),
+    ]);
+
+    const out = await scout("Come As You Are Nirvana");
+
+    // The Unplugged take is a live recording (its album says so): the album take is selected.
+    expect(out.spotifyData?.album).toBe("Nevermind");
+    expect(out.isrc).toBe("USGF19942503");
+  });
+
+  it("asks when two takes with the same title differ in length", async () => {
+    spotifySearch([
+      spotifyTrack("Come As You Are", ["Nirvana"], { duration_ms: 253_000 }),
+      spotifyTrack("Come As You Are", ["Nirvana"], { duration_ms: 219_000 }),
+    ]);
+
+    const out = await scout("Come As You Are Nirvana");
+
+    expect(out.spotifyData ?? null).toBeNull();
+  });
+
+  it("asks when the only take carries words the query does not hold", async () => {
+    spotifySearch([
+      spotifyTrack("Rayando el Sol - En Vivo", ["Maná"], {
+        external_ids: { isrc: "USWB19900001" },
+      }),
+      spotifyTrack("Oye Mi Amor", ["Maná"]),
+      spotifyTrack("Rayando el Sol", ["Some Cover Band"]),
+    ]);
+
+    const out = await scout("Rayando el Sol Maná");
+
+    expect(out.spotifyData ?? null).toBeNull();
+    expect(out.isrc ?? null).toBeNull();
   });
 });

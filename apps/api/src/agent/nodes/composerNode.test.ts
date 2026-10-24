@@ -154,6 +154,8 @@ function stateWith(
     sourceErrors: [],
     isrc: null,
     preview: null,
+    // The scout selected the track as the query's clear match.
+    selectedBy: "match",
   } as unknown as SonicAgentStateType;
 }
 
@@ -645,6 +647,14 @@ describe("composerNode", () => {
     ])("does not store a result when %s", async (_name, extra) => {
       await createComposerNode(testRuntime(succeeding()))(
         { ...stateWith(measured), ...extra } as SonicAgentStateType,
+        config(),
+      );
+      expect(store.put).not.toHaveBeenCalled();
+    });
+
+    it("does not store a result for a track picked from the track picker", async () => {
+      await createComposerNode(testRuntime(succeeding()))(
+        { ...stateWith(measured), selectedBy: "user" } as SonicAgentStateType,
         config(),
       );
       expect(store.put).not.toHaveBeenCalled();

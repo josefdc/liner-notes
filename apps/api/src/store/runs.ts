@@ -13,7 +13,9 @@
  *   audio_available 1/0 whether audio was measured; null when unknown
  *   payload         JSON with anything else worth keeping about the run; null when none.
  *                   `resultFrom: "another_run"` marks a run that sent a result another run
- *                   composed (a cached one), which is not stored as this run's
+ *                   composed (a cached one), which is not stored as this run's.
+ *                   `replayOf: { slug, recordedAt }` names the recorded run a replayed run
+ *                   served (see storeReplayOf): its result is the record's, not stored again
  *   spotify_id      Spotify id of the analysed track, once the run has a result of its own;
  *                   else null
  *   mode            how the result the run sent was produced: "live", computed by this run, or
@@ -168,7 +170,8 @@ export function getRun(db: Database.Database, runId: string): RunRecord | null {
 }
 
 /**
- * The runs of a track that have a result of their own, latest first: by the time they finished
+ * The runs of a track that have a result of their own (or that replayed a recorded run, see
+ * storeReplayOf), latest first: by the time they finished
  * (a resumed run finishes after runs started later), then by start, then by the order they were
  * recorded. At most `limit` runs.
  */
@@ -274,6 +277,46 @@ export function storeRunResult(
     .prepare("UPDATE runs SET spotify_id = ?, mode = ?, analysis = ? WHERE run_id = ?")
     .run(spotifyId, replay ? "replay" : "live", JSON.stringify(own), runId);
   return result.changes > 0 ? "stored" : "no_run";
+}
+
+/** The recorded run a replayed run served: the record's slug and when it was recorded. */
+export interface ReplayOf {
+  slug: string;
+  recordedAt: string;
+}
+
+/**
+ * Records that a run replayed a recorded run: its track, mode "replay" and which record it served
+ * (`payload.replayOf`). The result itself is not copied: it is the record's, with this run's
+ * id, and the runs routes rebuild it from the record while that recording is still served. A
+ * copy per replay would only fill the disk.
+ */
+export function storeReplayOf(
+  db: Database.Database,
+  runId: string,
+  spotifyId: string,
+  replayOf: ReplayOf,
+): boolean {
+  const result = db
+    .prepare(
+      `UPDATE runs SET spotify_id = ?, mode = 'replay', analysis = NULL,
+         payload = json_set(COALESCE(payload, '{}'), '$.replayOf', json(?))
+       WHERE run_id = ?`,
+    )
+    .run(
+      SPOTIFY_ID_PATTERN.test(spotifyId) ? spotifyId : null,
+      JSON.stringify({ slug: replayOf.slug, recordedAt: replayOf.recordedAt }),
+      runId,
+    );
+  return result.changes > 0;
+}
+
+/** The recorded run a replayed run served (storeReplayOf), or null. */
+export function replayOfRun(run: RunRecord): ReplayOf | null {
+  const replayOf = (run.payload as { replayOf?: Partial<ReplayOf> } | null)?.replayOf;
+  return typeof replayOf?.slug === "string" && typeof replayOf.recordedAt === "string"
+    ? { slug: replayOf.slug, recordedAt: replayOf.recordedAt }
+    : null;
 }
 
 /**

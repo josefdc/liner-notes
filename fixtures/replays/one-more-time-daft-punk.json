@@ -1,0 +1,988 @@
+{
+  "version": 1,
+  "slug": "one-more-time-daft-punk",
+  "request": {
+    "query": "One More Time Daft Punk",
+    "selectedTrackId": "0DiWol3AO6WpXZgp0goxAV"
+  },
+  "recordedAt": "2026-10-24T16:23:50.579Z",
+  "commit": "1b91857cbea2",
+  "analyzerVersion": null,
+  "events": [
+    {
+      "atMs": 0,
+      "event": {
+        "type": "connected",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 0,
+        "threadId": "recorded-one-more-time-daft-punk",
+        "timestamp": "2026-10-24T16:23:19.466Z"
+      }
+    },
+    {
+      "atMs": 21,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 1,
+        "message": "Establishing connection to Spotify API...",
+        "code": "NET-100",
+        "node": "scout",
+        "timestamp": "2026-10-24T16:23:19.481Z"
+      }
+    },
+    {
+      "atMs": 24,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 2,
+        "message": "User confirmed: \"One More Time\" // Daft Punk",
+        "code": "SPOTIFY-FOUND",
+        "node": "clarification",
+        "timestamp": "2026-10-24T16:23:27.580Z"
+      }
+    },
+    {
+      "atMs": 108,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 3,
+        "message": "Initializing audio waveform parser...",
+        "code": "AUDIO-INIT",
+        "node": "engineer",
+        "timestamp": "2026-10-24T16:23:27.658Z"
+      }
+    },
+    {
+      "atMs": 108,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 4,
+        "message": "Activating deep-web research protocols...",
+        "code": "RESEARCH-START",
+        "node": "historian",
+        "timestamp": "2026-10-24T16:23:27.658Z"
+      }
+    },
+    {
+      "atMs": 316,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 5,
+        "message": "🔬 Starting deep dive research...",
+        "node": "research_manager",
+        "timestamp": "2026-10-24T16:23:27.872Z"
+      }
+    },
+    {
+      "atMs": 321,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 6,
+        "message": "🔎 Searching samples...",
+        "node": "research_tool",
+        "timestamp": "2026-10-24T16:23:27.875Z"
+      }
+    },
+    {
+      "atMs": 1829,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 7,
+        "message": "🧠 Planning the next research step (1/2)...",
+        "node": "research_manager",
+        "timestamp": "2026-10-24T16:23:29.382Z"
+      }
+    },
+    {
+      "atMs": 3334,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 8,
+        "message": "🔍 The sample search surfaced later uses of the track, but its MusicBrainz recording relationships have not been checked. Check those relationships first for structured sample, cover, or remix credits.",
+        "node": "research_manager",
+        "timestamp": "2026-10-24T16:23:30.891Z"
+      }
+    },
+    {
+      "atMs": 3338,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 9,
+        "message": "🔎 Searching musicbrainz...",
+        "node": "research_tool",
+        "timestamp": "2026-10-24T16:23:30.893Z"
+      }
+    },
+    {
+      "atMs": 4541,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 10,
+        "message": "⚠️ MusicBrainz could not be read (rate_limited)",
+        "node": "research_tool",
+        "timestamp": "2026-10-24T16:23:32.097Z"
+      }
+    },
+    {
+      "atMs": 4544,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 11,
+        "message": "🧠 Planning the next research step (2/2)...",
+        "node": "research_manager",
+        "timestamp": "2026-10-24T16:23:32.100Z"
+      }
+    },
+    {
+      "atMs": 6614,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 12,
+        "message": "🔍 The collected result names Drake and 21 Savage’s “Circo Loco” as a track that samples or interpolates “One More Time.” I’ll check that specific lead to clarify the relationship and sample history.",
+        "node": "research_manager",
+        "timestamp": "2026-10-24T16:23:34.171Z"
+      }
+    },
+    {
+      "atMs": 6617,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 13,
+        "message": "🔎 Searching samples...",
+        "node": "research_tool",
+        "timestamp": "2026-10-24T16:23:34.173Z"
+      }
+    },
+    {
+      "atMs": 6731,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 14,
+        "message": "Intelligence extraction complete: 3 layers processed",
+        "code": "RESEARCH-FOUND",
+        "node": "historian",
+        "timestamp": "2026-10-24T16:23:34.288Z"
+      }
+    },
+    {
+      "atMs": 20144,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 15,
+        "message": "The analysis found no key (not_detected)",
+        "code": "AUDIO-ERROR",
+        "node": "engineer",
+        "timestamp": "2026-10-24T16:23:47.700Z"
+      }
+    },
+    {
+      "atMs": 20149,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 16,
+        "message": "Composing the liner notes...",
+        "code": "LLM-CONNECT",
+        "node": "composer",
+        "timestamp": "2026-10-24T16:23:47.703Z"
+      }
+    },
+    {
+      "atMs": 22579,
+      "event": {
+        "type": "status",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 17,
+        "message": "Cross-referencing visual artifacts from Spotify...",
+        "code": "GRAPH-ENRICH",
+        "node": "composer",
+        "timestamp": "2026-10-24T16:23:50.134Z"
+      }
+    },
+    {
+      "atMs": 23022,
+      "event": {
+        "type": "complete",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 18,
+        "data": {
+          "id": "0DiWol3AO6WpXZgp0goxAV",
+          "title": "One More Time",
+          "artist": "Daft Punk",
+          "album": "Discovery",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/0DiWol3AO6WpXZgp0goxAV",
+          "releaseYear": "2001",
+          "explicit": false,
+          "durationSeconds": 320,
+          "bpm": 123,
+          "key": null,
+          "energy": 0.669,
+          "valence": null,
+          "danceability": null,
+          "acousticness": null,
+          "keyMoments": [
+            {
+              "time": 0.06,
+              "type": "onset",
+              "intensity": 1,
+              "description": "Onset"
+            },
+            {
+              "time": 1.46,
+              "type": "onset",
+              "intensity": 0.273,
+              "description": "Onset"
+            },
+            {
+              "time": 3.41,
+              "type": "onset",
+              "intensity": 0.292,
+              "description": "Onset"
+            },
+            {
+              "time": 4.38,
+              "type": "onset",
+              "intensity": 0.264,
+              "description": "Onset"
+            },
+            {
+              "time": 5.36,
+              "type": "onset",
+              "intensity": 0.309,
+              "description": "Onset"
+            },
+            {
+              "time": 6.1,
+              "type": "onset",
+              "intensity": 0.373,
+              "description": "Onset"
+            },
+            {
+              "time": 7.31,
+              "type": "onset",
+              "intensity": 0.273,
+              "description": "Onset"
+            },
+            {
+              "time": 8.28,
+              "type": "onset",
+              "intensity": 0.268,
+              "description": "Onset"
+            },
+            {
+              "time": 9.77,
+              "type": "harmonic_change",
+              "intensity": 0.23,
+              "description": "Harmonic change"
+            },
+            {
+              "time": 10,
+              "type": "onset",
+              "intensity": 0.356,
+              "description": "Onset"
+            },
+            {
+              "time": 14.65,
+              "type": "harmonic_change",
+              "intensity": 0.288,
+              "description": "Harmonic change"
+            },
+            {
+              "time": 15.62,
+              "type": "onset",
+              "intensity": 0.283,
+              "description": "Onset"
+            },
+            {
+              "time": 20.5,
+              "type": "onset",
+              "intensity": 0.292,
+              "description": "Onset"
+            },
+            {
+              "time": 21.47,
+              "type": "onset",
+              "intensity": 0.286,
+              "description": "Onset"
+            },
+            {
+              "time": 22.94,
+              "type": "onset",
+              "intensity": 0.306,
+              "description": "Onset"
+            },
+            {
+              "time": 27.81,
+              "type": "onset",
+              "intensity": 0.264,
+              "description": "Onset"
+            }
+          ],
+          "audioSource": "unavailable",
+          "audioConfidence": "low",
+          "audioUnavailableReason": "not_detected",
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 8,
+              "color": "#374151"
+            },
+            {
+              "label": "Verse 1",
+              "start": 8,
+              "end": 25,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 25,
+              "end": 42,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse 2",
+              "start": 42,
+              "end": 58,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Bridge",
+              "start": 58,
+              "end": 75,
+              "color": "#FFB000"
+            },
+            {
+              "label": "Chorus",
+              "start": 75,
+              "end": 92,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 92,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "template",
+          "samples": [],
+          "factoids": [
+            {
+              "id": "53d9a6f0-5a1a-4e66-9859-1a0d0cf5bb2b",
+              "title": "A Romanthony vocal",
+              "content": "Romanthony provides the Auto-Tuned vocal performance on “One More Time.”",
+              "type": "credits",
+              "entities": [
+                {
+                  "id": "01a7f6b9-f153-46a8-8aae-a0865ec32828",
+                  "text": "Romanthony",
+                  "type": "artist",
+                  "searchQuery": "Romanthony"
+                }
+              ],
+              "claimId": "6106c25d-bf02-42dd-b65e-c37707dd8b26"
+            },
+            {
+              "id": "33dbbd85-4fa3-4b96-a7a1-3cfa2a1310b2",
+              "title": "A disco source",
+              "content": "“One More Time” incorporates material from Eddie Johns’s “More Spell on You,” a 1979 recording.",
+              "type": "sample",
+              "entities": [
+                {
+                  "id": "c50bc655-1eab-49be-99ae-40f881ba4909",
+                  "text": "Eddie Johns",
+                  "type": "artist",
+                  "searchQuery": "Eddie Johns"
+                },
+                {
+                  "id": "2e708896-d5e8-4244-ac10-bca049e1483c",
+                  "text": "More Spell on You",
+                  "type": "sample",
+                  "searchQuery": "More Spell on You"
+                },
+                {
+                  "id": "6e7e6ddf-b107-4e5f-a0f3-60a0e8eaa821",
+                  "text": "1979",
+                  "type": "year",
+                  "searchQuery": "1979"
+                }
+              ],
+              "claimId": "245cd362-0efe-4603-ad1d-28f26c101184"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "One More Time",
+                "img": "",
+                "size": 40,
+                "trackTitle": "One More Time",
+                "trackArtist": "Daft Punk"
+              },
+              {
+                "id": "source1",
+                "group": 4,
+                "label": "More Spell on You - Eddie Johns (1979)",
+                "img": "",
+                "size": 22,
+                "spotifyId": "5UWypDFke2swJxdSJ6mdkq",
+                "trackTitle": "More Spell on You",
+                "trackArtist": "Eddie Johns"
+              }
+            ],
+            "links": [
+              {
+                "source": "source1",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              }
+            ]
+          },
+          "evidence": [],
+          "claims": [
+            {
+              "id": "36cafb62-ac76-4953-8575-ebd972ccca97",
+              "text": "“One More Time” is a Daft Punk track from the 2001 album Discovery.",
+              "about": "track",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "b6c54315-4d5c-4616-89ba-b90e588b0a9f",
+              "text": "The preview analysis measured the track at 123 BPM.",
+              "about": "track",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "field": "tempo"
+            },
+            {
+              "id": "d72b4ea9-6c82-44ee-84b2-d4ff6208d253",
+              "text": "“One More Time” features an Auto-Tuned vocal performance by Romanthony.",
+              "about": "credit",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "1e9894a5-d13e-4001-b7aa-c185fba54a84",
+              "text": "“One More Time” was released as the lead single from Discovery in November 2000.",
+              "about": "history",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "3c79dd02-e836-4719-b757-983ea3ad9584",
+              "text": "The track incorporates material from Eddie Johns’s “More Spell on You.”",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "6106c25d-bf02-42dd-b65e-c37707dd8b26",
+              "text": "Romanthony provides the Auto-Tuned vocal performance on “One More Time.”",
+              "about": "credit",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "factoid": {
+                "title": "A Romanthony vocal",
+                "type": "credits",
+                "entities": [
+                  {
+                    "text": "Romanthony",
+                    "type": "artist"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "245cd362-0efe-4603-ad1d-28f26c101184",
+              "text": "“One More Time” incorporates material from Eddie Johns’s “More Spell on You,” a 1979 recording.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "factoid": {
+                "title": "A disco source",
+                "type": "sample",
+                "entities": [
+                  {
+                    "text": "Eddie Johns",
+                    "type": "artist"
+                  },
+                  {
+                    "text": "More Spell on You",
+                    "type": "sample"
+                  },
+                  {
+                    "text": "1979",
+                    "type": "year"
+                  }
+                ]
+              }
+            }
+          ],
+          "run": {
+            "id": "recorded-one-more-time-daft-punk",
+            "mode": "replay",
+            "recordedAt": "2026-10-24T16:23:50.579Z",
+            "commit": "1b91857cbea2",
+            "analyzerVersion": null,
+            "fallback": false,
+            "usage": {
+              "llmCalls": 3,
+              "inputTokens": 5511,
+              "outputTokens": 742,
+              "reasoningTokens": 178,
+              "usd": 0.001016
+            },
+            "sourceErrors": [
+              {
+                "source": "musicbrainz",
+                "code": "rate_limited",
+                "message": "musicbrainz: rate limited (HTTP 503); retry after 0 s"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "atMs": 23026,
+      "event": {
+        "type": "done",
+        "runId": "recorded-one-more-time-daft-punk",
+        "seq": 19,
+        "timestamp": "2026-10-24T16:23:50.583Z"
+      }
+    }
+  ],
+  "analysis": {
+    "id": "0DiWol3AO6WpXZgp0goxAV",
+    "title": "One More Time",
+    "artist": "Daft Punk",
+    "album": "Discovery",
+    "coverUrl": "",
+    "spotifyUrl": "https://open.spotify.com/track/0DiWol3AO6WpXZgp0goxAV",
+    "releaseYear": "2001",
+    "explicit": false,
+    "durationSeconds": 320,
+    "bpm": 123,
+    "key": null,
+    "energy": 0.669,
+    "valence": null,
+    "danceability": null,
+    "acousticness": null,
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 1.46,
+        "type": "onset",
+        "intensity": 0.273,
+        "description": "Onset"
+      },
+      {
+        "time": 3.41,
+        "type": "onset",
+        "intensity": 0.292,
+        "description": "Onset"
+      },
+      {
+        "time": 4.38,
+        "type": "onset",
+        "intensity": 0.264,
+        "description": "Onset"
+      },
+      {
+        "time": 5.36,
+        "type": "onset",
+        "intensity": 0.309,
+        "description": "Onset"
+      },
+      {
+        "time": 6.1,
+        "type": "onset",
+        "intensity": 0.373,
+        "description": "Onset"
+      },
+      {
+        "time": 7.31,
+        "type": "onset",
+        "intensity": 0.273,
+        "description": "Onset"
+      },
+      {
+        "time": 8.28,
+        "type": "onset",
+        "intensity": 0.268,
+        "description": "Onset"
+      },
+      {
+        "time": 9.77,
+        "type": "harmonic_change",
+        "intensity": 0.23,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 10,
+        "type": "onset",
+        "intensity": 0.356,
+        "description": "Onset"
+      },
+      {
+        "time": 14.65,
+        "type": "harmonic_change",
+        "intensity": 0.288,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 15.62,
+        "type": "onset",
+        "intensity": 0.283,
+        "description": "Onset"
+      },
+      {
+        "time": 20.5,
+        "type": "onset",
+        "intensity": 0.292,
+        "description": "Onset"
+      },
+      {
+        "time": 21.47,
+        "type": "onset",
+        "intensity": 0.286,
+        "description": "Onset"
+      },
+      {
+        "time": 22.94,
+        "type": "onset",
+        "intensity": 0.306,
+        "description": "Onset"
+      },
+      {
+        "time": 27.81,
+        "type": "onset",
+        "intensity": 0.264,
+        "description": "Onset"
+      }
+    ],
+    "audioSource": "unavailable",
+    "audioConfidence": "low",
+    "audioUnavailableReason": "not_detected",
+    "segments": [
+      {
+        "label": "Intro",
+        "start": 0,
+        "end": 8,
+        "color": "#374151"
+      },
+      {
+        "label": "Verse 1",
+        "start": 8,
+        "end": 25,
+        "color": "#1F2937"
+      },
+      {
+        "label": "Chorus",
+        "start": 25,
+        "end": 42,
+        "color": "#00F0FF"
+      },
+      {
+        "label": "Verse 2",
+        "start": 42,
+        "end": 58,
+        "color": "#1F2937"
+      },
+      {
+        "label": "Bridge",
+        "start": 58,
+        "end": 75,
+        "color": "#FFB000"
+      },
+      {
+        "label": "Chorus",
+        "start": 75,
+        "end": 92,
+        "color": "#00F0FF"
+      },
+      {
+        "label": "Outro",
+        "start": 92,
+        "end": 100,
+        "color": "#374151"
+      }
+    ],
+    "segmentsSource": "template",
+    "samples": [],
+    "factoids": [
+      {
+        "id": "53d9a6f0-5a1a-4e66-9859-1a0d0cf5bb2b",
+        "title": "A Romanthony vocal",
+        "content": "Romanthony provides the Auto-Tuned vocal performance on “One More Time.”",
+        "type": "credits",
+        "entities": [
+          {
+            "id": "01a7f6b9-f153-46a8-8aae-a0865ec32828",
+            "text": "Romanthony",
+            "type": "artist",
+            "searchQuery": "Romanthony"
+          }
+        ],
+        "claimId": "6106c25d-bf02-42dd-b65e-c37707dd8b26"
+      },
+      {
+        "id": "33dbbd85-4fa3-4b96-a7a1-3cfa2a1310b2",
+        "title": "A disco source",
+        "content": "“One More Time” incorporates material from Eddie Johns’s “More Spell on You,” a 1979 recording.",
+        "type": "sample",
+        "entities": [
+          {
+            "id": "c50bc655-1eab-49be-99ae-40f881ba4909",
+            "text": "Eddie Johns",
+            "type": "artist",
+            "searchQuery": "Eddie Johns"
+          },
+          {
+            "id": "2e708896-d5e8-4244-ac10-bca049e1483c",
+            "text": "More Spell on You",
+            "type": "sample",
+            "searchQuery": "More Spell on You"
+          },
+          {
+            "id": "6e7e6ddf-b107-4e5f-a0f3-60a0e8eaa821",
+            "text": "1979",
+            "type": "year",
+            "searchQuery": "1979"
+          }
+        ],
+        "claimId": "245cd362-0efe-4603-ad1d-28f26c101184"
+      }
+    ],
+    "genealogy": {
+      "nodes": [
+        {
+          "id": "current",
+          "group": 1,
+          "label": "One More Time",
+          "img": "",
+          "size": 40,
+          "trackTitle": "One More Time",
+          "trackArtist": "Daft Punk"
+        },
+        {
+          "id": "source1",
+          "group": 4,
+          "label": "More Spell on You - Eddie Johns (1979)",
+          "img": "",
+          "size": 22,
+          "spotifyId": "5UWypDFke2swJxdSJ6mdkq",
+          "trackTitle": "More Spell on You",
+          "trackArtist": "Eddie Johns"
+        }
+      ],
+      "links": [
+        {
+          "source": "source1",
+          "target": "current",
+          "value": 1,
+          "type": "influence",
+          "kind": "inferred",
+          "origin": "model",
+          "evidenceIds": []
+        }
+      ]
+    },
+    "evidence": [],
+    "claims": [
+      {
+        "id": "36cafb62-ac76-4953-8575-ebd972ccca97",
+        "text": "“One More Time” is a Daft Punk track from the 2001 album Discovery.",
+        "about": "track",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a"
+      },
+      {
+        "id": "b6c54315-4d5c-4616-89ba-b90e588b0a9f",
+        "text": "The preview analysis measured the track at 123 BPM.",
+        "about": "track",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a",
+        "field": "tempo"
+      },
+      {
+        "id": "d72b4ea9-6c82-44ee-84b2-d4ff6208d253",
+        "text": "“One More Time” features an Auto-Tuned vocal performance by Romanthony.",
+        "about": "credit",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a"
+      },
+      {
+        "id": "1e9894a5-d13e-4001-b7aa-c185fba54a84",
+        "text": "“One More Time” was released as the lead single from Discovery in November 2000.",
+        "about": "history",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a"
+      },
+      {
+        "id": "3c79dd02-e836-4719-b757-983ea3ad9584",
+        "text": "The track incorporates material from Eddie Johns’s “More Spell on You.”",
+        "about": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a"
+      },
+      {
+        "id": "6106c25d-bf02-42dd-b65e-c37707dd8b26",
+        "text": "Romanthony provides the Auto-Tuned vocal performance on “One More Time.”",
+        "about": "credit",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a",
+        "factoid": {
+          "title": "A Romanthony vocal",
+          "type": "credits",
+          "entities": [
+            {
+              "text": "Romanthony",
+              "type": "artist"
+            }
+          ]
+        }
+      },
+      {
+        "id": "245cd362-0efe-4603-ad1d-28f26c101184",
+        "text": "“One More Time” incorporates material from Eddie Johns’s “More Spell on You,” a 1979 recording.",
+        "about": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "evidenceIds": [],
+        "verdict": null,
+        "verdictReason": null,
+        "numericCheck": "n/a",
+        "factoid": {
+          "title": "A disco source",
+          "type": "sample",
+          "entities": [
+            {
+              "text": "Eddie Johns",
+              "type": "artist"
+            },
+            {
+              "text": "More Spell on You",
+              "type": "sample"
+            },
+            {
+              "text": "1979",
+              "type": "year"
+            }
+          ]
+        }
+      }
+    ],
+    "run": {
+      "id": "recorded-one-more-time-daft-punk",
+      "mode": "replay",
+      "recordedAt": "2026-10-24T16:23:50.579Z",
+      "commit": "1b91857cbea2",
+      "analyzerVersion": null,
+      "fallback": false,
+      "usage": {
+        "llmCalls": 3,
+        "inputTokens": 5511,
+        "outputTokens": 742,
+        "reasoningTokens": 178,
+        "usd": 0.001016
+      },
+      "sourceErrors": [
+        {
+          "source": "musicbrainz",
+          "code": "rate_limited",
+          "message": "musicbrainz: rate limited (HTTP 503); retry after 0 s"
+        }
+      ]
+    }
+  },
+  "usage": {
+    "llmCalls": 3,
+    "inputTokens": 5511,
+    "outputTokens": 742,
+    "reasoningTokens": 178,
+    "usd": 0.001016
+  }
+}

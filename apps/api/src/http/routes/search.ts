@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
+import { liveRefused } from "../../replay/mode.js";
+import { replays } from "../../replay/records.js";
 import { searchMultipleTracks } from "../../sources/spotify.js";
 import { asyncRoute, sendError } from "../middleware/errors.js";
 import { boundedText, describeIssues } from "../validation.js";
@@ -23,6 +25,10 @@ const SuggestQuerySchema = z.object({
  * Returns: Top matching tracks for autocomplete dropdown. The query is 2-200 characters and the
  * limit 1-10 (default 5); anything else is a 400 `invalid_input`. A Spotify failure is a 502
  * `upstream_unavailable` with a generic message.
+ *
+ * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) Spotify is not called:
+ * the suggestions are the recorded tracks whose title, artist or album has a word starting with
+ * each word of the query (often none).
  */
 router.get(
   "/api/search/suggest",
@@ -36,6 +42,16 @@ router.get(
       return;
     }
     const { query, limit = 5 } = parsed.data;
+
+    if (liveRefused()) {
+      const suggestions = replays().suggestions(query, limit);
+      res.json({
+        success: true,
+        suggestions,
+        meta: { query, resultCount: suggestions.length, timestamp: new Date().toISOString() },
+      });
+      return;
+    }
 
     try {
       const result = await searchMultipleTracks.invoke({ query, limit });

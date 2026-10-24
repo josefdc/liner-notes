@@ -7,15 +7,20 @@
  * MAX_LLM_CALLS_PER_RUN calls; the request's abort signal stops a call in flight when the
  * client leaves. There is no evidence here: these factoids are model inference, and the prompt
  * says so.
+ *
+ * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) no model is called:
+ * a recorded track's "more facts" are the recorded factoids the client does not have yet (often
+ * none), and any other track gets live_disabled.
  */
 
 import { randomUUID } from "node:crypto";
-import { type ComposerFactoid, FactoidsOutput } from "@liner-notes/contract";
+import { type ComposerFactoid, FactoidsOutput, type ReplayRecord } from "@liner-notes/contract";
 import { type Response, Router } from "express";
 import { z } from "zod";
 import { isLlmError } from "../../llm/errors.js";
 import type { LlmPurpose } from "../../config/settings.js";
 import { type Llm, type LlmMessage, llm } from "../../llm/invoke.js";
+import { chooseReplay } from "../../replay/mode.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
@@ -120,6 +125,24 @@ function toFactoid(card: ComposerFactoid, id: string) {
   };
 }
 
+/**
+ * The factoids of a recording that the client does not have yet (by id), at most `count`,
+ * numbered after the existing ids as the model's are.
+ */
+export function recordedFactoids(record: ReplayRecord, existingIds: string[], count: number) {
+  const known = new Set(existingIds);
+  return record.analysis.factoids
+    .filter((factoid) => !known.has(factoid.id))
+    .slice(0, count)
+    .map((factoid, i) => ({
+      id: `f${existingIds.length + i + 1}`,
+      title: factoid.title,
+      content: factoid.content,
+      type: factoid.type,
+      entities: factoid.entities ?? [],
+    }));
+}
+
 /** What the server log says about a failed call: the error kind, never the prompt. */
 const failure = (error: unknown) =>
   isLlmError(error) ? `${error.kind}: ${error.message}` : String(error);
@@ -139,6 +162,7 @@ const STREAM_ERRORS = {
   invalid_input: "The request is not valid.",
   rate_limited: "The model is busy. Please try again later.",
   budget_exhausted: "Live model calls are paused for now.",
+  live_disabled: "Live facts are not available here. Only recorded tracks have facts.",
   failed: "This fact could not be generated.",
 } as const;
 
@@ -208,7 +232,8 @@ export function createFactoidsRouter({
    * Returns: { factoids: Factoid[] } - up to 3 new facts with entities (fewer when the model
    * knows fewer), numbered after the existing ids
    * A malformed body is a 400 `invalid_input`; the model's rate limit a 429 `rate_limited`; the
-   * budget or the call cap a 503 `budget_exhausted`; any other failed generation a 500 `failed`.
+   * budget or the call cap a 503 `budget_exhausted`; any other failed generation a 500 `failed`;
+   * a track with no recording while live calls may not be made (REPLAY_MODE) a 503 `live_disabled`.
    * An empty list is a valid answer (nothing documented the model is sure of).
    */
   router.post(
@@ -224,6 +249,29 @@ export function createFactoidsRouter({
       }
       const { trackTitle, trackArtist, existingFactoidIds } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
+
+      const replay = chooseReplay(
+        (records) =>
+          records.forTrack(parsed.data.trackId) ?? records.forTitle(trackTitle, trackArtist),
+      );
+      if (replay.kind === "refused") {
+        sendError(res, "live_disabled");
+        return;
+      }
+      if (replay.kind === "replay") {
+        console.log(`[Factoids] Recorded facts for ${track} (${replay.record.slug})`);
+        res.json({
+          success: true,
+          factoids: recordedFactoids(replay.record, existingFactoidIds, DECRYPT_COUNT),
+          meta: {
+            trackId: parsed.data.trackId,
+            mode: "replay",
+            recordedAt: replay.record.recordedAt,
+            timestamp: new Date().toISOString(),
+          },
+        });
+        return;
+      }
 
       console.log(`[Factoids] Decrypting more facts for ${track}`);
 
@@ -282,6 +330,8 @@ export function createFactoidsRouter({
    * - { type: "heartbeat" }: every 15 s while the stream is open
    * - { type: "done" }: always last
    *
+   * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled.
+   *
    * Invalid input is reported in the stream (an EventSource cannot read an error status). When
    * the client disconnects, no further factoid is requested and nothing more is written.
    */
@@ -300,8 +350,24 @@ export function createFactoidsRouter({
       const { trackTitle, trackArtist, existingIds } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
 
+      const replay = chooseReplay((records) => records.forTitle(trackTitle, trackArtist));
+      if (replay.kind === "refused") {
+        error("live_disabled");
+        stream.done();
+        return;
+      }
+
       console.log(`[Factoids] Streaming factoids for ${track}`);
       stream.send({ type: "connected", timestamp: new Date().toISOString() });
+
+      if (replay.kind === "replay") {
+        const cards = recordedFactoids(replay.record, existingIds, STREAM_CATEGORIES.length);
+        for (const [index, card] of cards.entries()) {
+          stream.send({ type: "factoid", data: card }, { index });
+        }
+        stream.done();
+        return;
+      }
 
       const run = requestRun(stream.signal);
       try {

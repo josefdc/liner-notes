@@ -118,9 +118,11 @@ export const StoredRun = z.object({
 export type StoredRun = z.infer<typeof StoredRun>;
 
 /**
- * 200 answer of GET /api/runs/:id and GET /api/runs/by-track/:spotifyId (the latest stored
- * run of that track). `analysis` is null until the run has completed. A run or track without a
- * stored run answers 404 `not_found`.
+ * 200 answer of GET /api/runs/:id and GET /api/runs/by-track/:spotifyId (the run of that track
+ * that most recently finished with a result of its own). `analysis` is null when the run has no
+ * stored result of its own: it has not completed, it sent a result another run composed (a
+ * cached one), or it completed before results were stored. A run or track without a stored run
+ * answers 404 `not_found`.
  */
 export const RunResponse = z.object({
   success: z.literal(true),

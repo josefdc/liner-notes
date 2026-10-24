@@ -1112,8 +1112,9 @@ describe("migrations", () => {
       coverUrl: "",
       bpm: null,
       genealogy: { nodes: [], links: [] },
+      run: { id: "old", mode: "live", recordedAt: null, commit: null, analyzerVersion: null },
     };
-    expect(storeRunResult(db, "old", analysis)).toBe(true);
+    expect(storeRunResult(db, "old", analysis)).toBe("stored");
     expect(getRun(db, "old")).toMatchObject({ spotifyId: analysis.id, analysis });
 
     // A resumed run's second stream numbers its events from 0 again.

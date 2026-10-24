@@ -256,7 +256,7 @@ export const MIGRATIONS: readonly Migration[] = [
         ALTER TABLE runs ADD COLUMN spotify_id TEXT;
         ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'live';
         ALTER TABLE runs ADD COLUMN analysis TEXT;
-        CREATE INDEX runs_spotify_id ON runs (spotify_id, created_at);
+        CREATE INDEX runs_spotify_id ON runs (spotify_id, finished_at);
 
         CREATE TABLE run_events (
           run_id TEXT NOT NULL,

@@ -154,6 +154,28 @@ describe("pruneDatabase", () => {
     expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
   });
 
+  it("deletes a run's events with it, and events without a run once they are as old", () => {
+    runAt("old", "t1", NOW - 40 * DAY, NOW - 31 * DAY);
+    // Finished exactly at the cutoff; its last event was sent a moment after the recorded finish.
+    runAt("edge", "t2", NOW - 31 * DAY, NOW - 30 * DAY);
+    runAt("recent", "t3", NOW - DAY, NOW - DAY);
+    const event = db.prepare(
+      "INSERT INTO run_events (run_id, stream, seq, sent_at, event) VALUES (?, 0, ?, ?, '{}')",
+    );
+    event.run("old", 0, NOW - 31 * DAY);
+    event.run("edge", 0, NOW - 30 * DAY + 2000);
+    event.run("recent", 0, NOW - DAY);
+    event.run("no-record-young", 0, NOW - HOUR);
+    event.run("no-record-old", 0, NOW - 31 * DAY);
+
+    const result = pruneDatabase(db, DEFAULT_RETENTION, NOW);
+    expect(result).toMatchObject({ runs: 2, runEvents: 3 });
+    expect(db.prepare("SELECT run_id FROM run_events ORDER BY run_id").pluck().all()).toEqual([
+      "no-record-young",
+      "recent",
+    ]);
+  });
+
   it("works before the checkpointer has created its tables", () => {
     const fresh = new Database(":memory:");
     runMigrations(fresh);

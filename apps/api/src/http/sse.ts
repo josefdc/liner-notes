@@ -97,7 +97,7 @@ export interface EventStream {
   done(): void;
 }
 
-/** An event as the stream wrote it, with its run id and seq. */
+/** An event the stream wrote, with its run id and seq. */
 export type SentEvent = EventBody & { runId: string | null; seq: number };
 
 export interface EventStreamOptions {
@@ -105,7 +105,8 @@ export interface EventStreamOptions {
   heartbeatMs?: number;
   /**
    * Called with each event written that carries a seq (every event but heartbeats), once it is
-   * written. An error it throws is logged and does not affect the stream.
+   * written: the event as the contract reads it (fields the contract does not name are left
+   * out). An error it throws is logged and does not affect the stream.
    */
   onSent?: (event: SentEvent) => void;
 }
@@ -149,7 +150,7 @@ function openStream(
    */
   const encode = (
     event: Record<string, unknown> & { type: string },
-  ): { line: string } | { problem: string; detail: unknown } => {
+  ): { line: string; checked: SentEvent } | { problem: string; detail: unknown } => {
     const checked = kind.schema.safeParse(event);
     if (!checked.success) {
       return {
@@ -160,29 +161,34 @@ function openStream(
       };
     }
     try {
-      return { line: encodeSseEvent(event as AnalyzeStreamEvent) };
+      return {
+        line: encodeSseEvent(event as AnalyzeStreamEvent),
+        checked: checked.data as SentEvent,
+      };
     } catch (err) {
       return { problem: "it cannot be encoded", detail: err };
     }
   };
 
-  /** Writes a control event built here (`done`, `heartbeat`); false when it was not written. */
-  const write = (event: Record<string, unknown> & { type: string }): boolean => {
+  /**
+   * Writes a control event built here (`done`, `heartbeat`). Returns the event as the contract
+   * reads it, or null when it was not written.
+   */
+  const write = (event: Record<string, unknown> & { type: string }): SentEvent | null => {
     const encoded = encode(event);
     if ("problem" in encoded) {
       console.error(
         `[SSE ${kind.name}] ${event.type} event not sent: ${encoded.problem}`,
         encoded.detail,
       );
-      return false;
+      return null;
     }
     res.write(encoded.line);
-    return true;
+    return encoded.checked;
   };
 
   const sendNumbered = (body: EventBody, replacedWith?: Record<string, unknown>): boolean => {
-    const event: SentEvent = { ...body, runId, seq };
-    const encoded = encode(event);
+    const encoded = encode({ ...body, runId, seq });
     if ("problem" in encoded) {
       if (kind.replaced.has(body.type)) {
         // The client is waiting for this event: it is told the request failed instead.
@@ -200,7 +206,7 @@ function openStream(
     res.write(encoded.line);
     seq += 1;
     if (kind.outcomes.has(body.type)) outcome = body.type;
-    sent(event);
+    sent(encoded.checked);
     return true;
   };
 
@@ -223,13 +229,13 @@ function openStream(
 
   const done = () => {
     if (writable()) {
-      const event: SentEvent = {
+      const written = write({
         type: "done",
         runId,
         seq: seq++,
         timestamp: new Date().toISOString(),
-      };
-      if (write(event)) sent(event);
+      });
+      if (written) sent(written);
     }
     ended = true;
     clearInterval(heartbeat);

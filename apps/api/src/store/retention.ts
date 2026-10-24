@@ -169,13 +169,23 @@ export function pruneDatabase(
       .prepare(`DELETE FROM store_items WHERE updated_at < ? AND namespace NOT IN (${kept})`)
       .run(storeCutoff, ...KEPT_NAMESPACES).changes;
 
+    // A run's events go with it.
+    const expired = "SELECT run_id FROM runs WHERE COALESCE(finished_at, created_at) <= ?";
+    result.runEvents = db
+      .prepare(`DELETE FROM run_events WHERE run_id IN (${expired})`)
+      .run(runCutoff).changes;
     result.runs = db
       .prepare("DELETE FROM runs WHERE COALESCE(finished_at, created_at) <= ?")
       .run(runCutoff).changes;
-    // Events go with their run, including those of a run whose record could not be written.
-    result.runEvents = db
-      .prepare("DELETE FROM run_events WHERE run_id NOT IN (SELECT run_id FROM runs)")
-      .run().changes;
+    // Events whose run has no record (it could not be written) go once they are as old as a run
+    // that would be pruned, so a run still sending them keeps them.
+    result.runEvents += db
+      .prepare(
+        `DELETE FROM run_events
+         WHERE sent_at <= ?
+           AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.run_id = run_events.run_id)`,
+      )
+      .run(runCutoff * 1000).changes;
   })();
 
   const total =

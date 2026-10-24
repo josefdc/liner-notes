@@ -11,19 +11,25 @@
  *   finished_at     unix seconds when it reached a final status; null while it is open
  *   model_available 1/0 whether the language model answered; null when unknown
  *   audio_available 1/0 whether audio was measured; null when unknown
- *   payload         JSON with anything else worth keeping about the run; null when none
- *   spotify_id      Spotify id of the analysed track, once the run has a result; else null
+ *   payload         JSON with anything else worth keeping about the run; null when none.
+ *                   `resultFrom: "another_run"` marks a run that sent a result another run
+ *                   composed (a cached one), which is not stored as this run's
+ *   spotify_id      Spotify id of the analysed track, once the run has a result of its own;
+ *                   else null
  *   mode            "live" (computed for the request) or "replay" (a recorded run served again)
- *   analysis        JSON of the result (a TrackAnalysis) once the run completed; else null
+ *   analysis        JSON of the run's own result (a TrackAnalysis, as the contract reads it,
+ *                   without preview URLs); null when it has none
  *
  * Columns of `run_events`:
  *   run_id          the run that sent the event
- *   stream          which of the run's streams sent it: 0 for the first, 1 for the stream of a
- *                   resume, and so on. Each stream numbers its events from 0, so
+ *   stream          the number of the stream that sent it among the run's stored streams, from
+ *                   0. A run started by GET /api/analyze/stream stores its first stream as 0 and
+ *                   a resume's stream as 1; a run started by POST /api/analyze stores no stream,
+ *                   so its resume's stream is 0. Each stream numbers its events from 0, so
  *                   (run_id, stream, seq) is the key.
  *   seq             the event's `seq`
  *   sent_at         unix milliseconds when it was sent
- *   event           the event as JSON, with runId and seq
+ *   event           the event as JSON, as the contract reads it, without preview URLs
  *
  * Rows are deleted by the retention job (retention.ts) once they are older than the run
  * retention period, a run's events with it. New columns are added by later numbered migrations.
@@ -151,15 +157,23 @@ export function getRun(db: Database.Database, runId: string): RunRecord | null {
   return row ? toRecord(row) : null;
 }
 
-/** The latest run of a track that has a stored result, or null. */
-export function latestRunForTrack(db: Database.Database, spotifyId: string): RunRecord | null {
-  const row = db
+/**
+ * The runs of a track that have a result of their own, latest first: by the time they finished
+ * (a resumed run finishes after runs started later), then by start, then by the order they were
+ * recorded. At most `limit` runs.
+ */
+export function latestRunsForTrack(
+  db: Database.Database,
+  spotifyId: string,
+  limit: number,
+): RunRecord[] {
+  const rows = db
     .prepare(
       `SELECT ${RUN_COLUMNS} FROM runs WHERE spotify_id = ?
-       ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+       ORDER BY finished_at DESC, created_at DESC, rowid DESC LIMIT ?`,
     )
-    .get(spotifyId) as RunRow | undefined;
-  return row ? toRecord(row) : null;
+    .all(spotifyId, limit) as RunRow[];
+  return rows.map(toRecord);
 }
 
 // =============================================================================
@@ -167,10 +181,25 @@ export function latestRunForTrack(db: Database.Database, spotifyId: string): Run
 // =============================================================================
 
 /**
- * A copy of `value` without its `previewUrl` fields. Preview URLs are signed and expire within
- * minutes, so a stored one would only fail later; a stored result or event never keeps one.
+ * Preview clips: Deezer's CDN and Spotify's preview host, and URLs signed with an expiring token
+ * (Akamai `hdnea`/`hdnts`, S3 `X-Amz-Signature`).
+ */
+const PREVIEW_URL =
+  /^https?:\/\/(?:[^/?#@]*\.)?(?:dzcdn\.net|p\.scdn\.co)(?:[:/?#]|$)|[?&;~](?:hdnea|hdnts|x-amz-signature)=/i;
+
+/** True for a preview clip URL (see PREVIEW_URL). */
+export function isPreviewUrl(value: string): boolean {
+  return PREVIEW_URL.test(value);
+}
+
+/**
+ * A copy of `value` without preview URLs: `previewUrl` fields are removed, and any other string
+ * that is a preview URL is blanked (it may be a required field). Preview URLs are signed and
+ * expire within minutes, so a stored one would only fail later; a stored result or event never
+ * keeps one.
  */
 export function withoutPreviewUrls(value: unknown): unknown {
+  if (typeof value === "string") return isPreviewUrl(value) ? "" : value;
   if (Array.isArray(value)) return value.map(withoutPreviewUrls);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
@@ -181,30 +210,49 @@ export function withoutPreviewUrls(value: unknown): unknown {
 }
 
 /**
- * Stores a completed run's result: the analysis as it was sent (without preview URLs), the
- * Spotify id of its track (null when the analysis does not carry a valid one) and the run's
- * mode. The mode is the analysis's own when it names one (a run whose model answers were
- * replayed says so), else `mode`. An analysis that fails the contract is not stored and false is
- * returned; so is a run that does not exist.
+ * What storeRunResult did:
+ *   stored        the run's own result was stored with its track and mode
+ *   another_run   the result carries another run's id, or none (a cached result): the run is
+ *                 marked as having sent another run's result, and nothing else is stored
+ *   invalid       the result fails the contract; nothing was stored
+ *   no_run        there is no such run
+ */
+export type StoreResultOutcome = "stored" | "another_run" | "invalid" | "no_run";
+
+/**
+ * Stores a completed run's result, as the contract reads it and without preview URLs, with the
+ * Spotify id of its track (null when the result does not carry a valid one) and the run's mode:
+ * replay when the caller or the result says so, else live.
+ *
+ * Only the run's own result is stored: one whose run information names this run. A result
+ * served from the cache was composed by an earlier run; storing it as this run's would present
+ * it as computed now, and put it ahead of the run that composed it.
  */
 export function storeRunResult(
   db: Database.Database,
   runId: string,
   analysis: unknown,
   mode: RunMode = "live",
-): boolean {
+): StoreResultOutcome {
   const parsed = TrackAnalysis.safeParse(analysis);
-  if (!parsed.success) return false;
-  const spotifyId = SPOTIFY_ID_PATTERN.test(parsed.data.id) ? parsed.data.id : null;
+  if (!parsed.success) return "invalid";
+  if (parsed.data.run?.id !== runId) {
+    const marked = db
+      .prepare(
+        `UPDATE runs SET payload = json_set(COALESCE(payload, '{}'), '$.resultFrom', 'another_run')
+         WHERE run_id = ?`,
+      )
+      .run(runId);
+    return marked.changes > 0 ? "another_run" : "no_run";
+  }
+  const stored = TrackAnalysis.safeParse(withoutPreviewUrls(parsed.data));
+  if (!stored.success) return "invalid";
+  const spotifyId = SPOTIFY_ID_PATTERN.test(stored.data.id) ? stored.data.id : null;
+  const replay = mode === "replay" || stored.data.run?.mode === "replay";
   const result = db
     .prepare("UPDATE runs SET spotify_id = ?, mode = ?, analysis = ? WHERE run_id = ?")
-    .run(
-      spotifyId,
-      parsed.data.run?.mode ?? mode,
-      JSON.stringify(withoutPreviewUrls(analysis)),
-      runId,
-    );
-  return result.changes > 0;
+    .run(spotifyId, replay ? "replay" : "live", JSON.stringify(stored.data), runId);
+  return result.changes > 0 ? "stored" : "no_run";
 }
 
 export interface StoredRunEvent {
@@ -222,17 +270,38 @@ export function nextEventStream(db: Database.Database, runId: string): number {
     .get(runId) as number;
 }
 
-/** Stores one event a run's stream sent (without preview URLs). */
+/** True when the run has a record. */
+export function runExists(db: Database.Database, runId: string): boolean {
+  return db.prepare("SELECT 1 FROM runs WHERE run_id = ?").get(runId) !== undefined;
+}
+
+/**
+ * How long an event write waits for another process's write lock, in milliseconds. Events are
+ * written as they are sent, so a write must not hold up the stream for the connection's
+ * usual busy timeout; one that cannot get the lock in time fails.
+ */
+export const EVENT_BUSY_TIMEOUT_MS = 50;
+
+/**
+ * Stores one event a run's stream sent (without preview URLs), waiting at most `busyTimeoutMs`
+ * for the write lock. The connection's own busy timeout is restored afterwards.
+ */
 export function appendRunEvent(
   db: Database.Database,
   runId: string,
   stream: number,
   event: { seq: number },
-  sentAt: number = Date.now(),
+  { sentAt = Date.now(), busyTimeoutMs = EVENT_BUSY_TIMEOUT_MS } = {},
 ): void {
-  db.prepare(
-    "INSERT INTO run_events (run_id, stream, seq, sent_at, event) VALUES (?, ?, ?, ?, ?)",
-  ).run(runId, stream, event.seq, sentAt, JSON.stringify(withoutPreviewUrls(event)));
+  const usual = db.pragma("busy_timeout", { simple: true }) as number;
+  db.pragma(`busy_timeout = ${Math.max(0, Math.floor(busyTimeoutMs))}`);
+  try {
+    db.prepare(
+      "INSERT INTO run_events (run_id, stream, seq, sent_at, event) VALUES (?, ?, ?, ?, ?)",
+    ).run(runId, stream, event.seq, sentAt, JSON.stringify(withoutPreviewUrls(event)));
+  } finally {
+    db.pragma(`busy_timeout = ${usual}`);
+  }
 }
 
 /** A run's stored events, stream by stream, each in the order it was sent. */

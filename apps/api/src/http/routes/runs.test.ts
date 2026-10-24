@@ -1,30 +1,45 @@
 /**
- * Route tests for /api/runs*: runs started through the real analysis routes and the real
- * compiled graph, on the app createApp builds, with the nodes that call outside services replaced
- * by stubs (as in analyze.test.ts). The clarification node is the real one, so a run that pauses
- * for a choice and is resumed goes through LangGraph's interrupt().
+ * Route tests for /api/runs* and for what the analysis routes store: runs started through the
+ * real analysis routes and the real compiled graph, on the app createApp builds, with the nodes
+ * that call outside services replaced by stubs (as in analyze.test.ts). The clarification node
+ * is the real one, so a run that pauses for a choice and is resumed goes through LangGraph's
+ * interrupt().
  *
- * The stub scout picks its path from the query: "ambiguous …" offers two candidates, so the run
- * pauses; anything else matches TRACK_ID. The composer reports a result for the matched track.
+ * The stub scout picks its path from the query:
+ *   "cachehit …"   the real scout, which serves a stored result from the cache
+ *   "ambiguous …"  two candidates, so the run pauses
+ *   "direct <id>"  matches track <id>
+ *   "invalid …"    also writes a progress event that fails the contract
+ *   "dropdb …"     also runs the test's `dropTable` hook
+ *   anything else  matches TRACK_ID
+ * The stub composer reports a result for the matched track, stamped with the run's id. It
+ * carries a preview URL (under `previewUrl` and as a genealogy image) and the typed query in a
+ * field the contract does not name. "badresult …" leaves out the title (fails the contract);
+ * "replayed …" says its model answers were replayed.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { RunResponse } from "@liner-notes/contract";
+import { AnalyzeStreamEvent, RunResponse } from "@liner-notes/contract";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../../agent/cacheKeys.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../../config/settings.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
-import { getRun, listRunEvents } from "../../store/runs.js";
+import { getRun, listRunEvents, withoutPreviewUrls } from "../../store/runs.js";
+import { SqliteStore } from "../../store/store.js";
 import { createApp } from "../app.js";
+import { unstoredStreamCount } from "./analyze.js";
 
 const TRACK_ID = "0RunsRouteTestTrack001";
 const CHOICE_A = "0RunsRouteTestTrackA01";
 const CHOICE_B = "0RunsRouteTestTrackB01";
+
+const hooks = vi.hoisted(() => ({ dropTable: null as null | (() => void) }));
 
 vi.mock("../../sources/spotify.js", () => ({
   getTrackDetails: {
@@ -51,6 +66,9 @@ vi.mock("../../agent/nodes/index.js", async () => {
   const { clarificationNode } = await vi.importActual<
     typeof import("../../agent/nodes/clarificationNode.js")
   >("../../agent/nodes/clarificationNode.js");
+  const { scoutNode: realScout } = await vi.importActual<
+    typeof import("../../agent/nodes/scoutNode.js")
+  >("../../agent/nodes/scoutNode.js");
 
   type State = SonicAgentStateType;
   type Config = LangGraphRunnableConfig;
@@ -60,8 +78,12 @@ vi.mock("../../agent/nodes/index.js", async () => {
   return {
     clarificationNode,
     scoutNode: async (state: State, config: Config) => {
+      const query = state.songQuery;
+      if (query.startsWith("cachehit")) return realScout(state, config);
       status(config, "scout", "searching");
-      if (state.songQuery.startsWith("ambiguous")) {
+      if (query.startsWith("dropdb")) hooks.dropTable?.();
+      if (query.startsWith("invalid")) config.writer?.({ type: "claim", nonsense: true });
+      if (query.startsWith("ambiguous")) {
         const candidates = ["0RunsRouteTestTrackA01", "0RunsRouteTestTrackB01"].map((id) => ({
           id,
           title: `Title ${id}`,
@@ -72,7 +94,8 @@ vi.mock("../../agent/nodes/index.js", async () => {
         }));
         return { candidates };
       }
-      return { spotifyData: { id: "0RunsRouteTestTrack001", title: "Title", artist: "Artist" } };
+      const id = query.startsWith("direct ") ? query.split(" ")[1] : "0RunsRouteTestTrack001";
+      return { spotifyData: { id, title: "Title", artist: "Artist" } };
     },
     engineerNode: async (_state: State, config: Config) => {
       status(config, "engineer", "measuring");
@@ -80,18 +103,30 @@ vi.mock("../../agent/nodes/index.js", async () => {
     },
     historianNode: async () => ({}),
     composerNode: async (state: State, config: Config) => {
-      const trackData = {
+      const preview = "https://cdnt-preview.dzcdn.net/stream/c-abc?hdnea=exp=1~hmac=secret";
+      const trackData: Record<string, unknown> = {
         id: state.spotifyData?.id,
         title: "Composed",
         artist: "Artist",
         album: "Album",
-        coverUrl: "",
-        previewUrl: "https://cdnt-preview.dzcdn.net/stream/c-abc?hdnea=exp=1~hmac=secret",
+        coverUrl: "https://i.scdn.co/image/cover",
+        previewUrl: preview,
         bpm: null,
-        genealogy: { nodes: [], links: [] },
-        // Not a TrackAnalysis field: the runs routes must never pass it on.
+        genealogy: {
+          nodes: [{ id: "self", group: 1, label: "Composed", size: 10, img: preview }],
+          links: [],
+        },
+        run: {
+          id: config.configurable?.thread_id,
+          mode: state.songQuery.startsWith("replayed") ? "replay" : "live",
+          recordedAt: null,
+          commit: null,
+          analyzerVersion: null,
+        },
+        // Not a TrackAnalysis field: never stored, never served.
         songQuery: state.songQuery,
       };
+      if (state.songQuery.startsWith("badresult")) delete trackData.title;
       config.writer?.({ type: "complete", data: trackData });
       return { trackData, statusMessages: ["done"] };
     },
@@ -145,12 +180,42 @@ async function analyze(query: string): Promise<{ runId: string; events: Event[] 
   return { runId: runId as string, events };
 }
 
-const storedEvents = (runId: string) =>
-  listRunEvents(getDb(), runId).map(({ stream, seq, event }) => ({
-    stream,
-    seq,
-    type: (event as Event).type,
-  }));
+/** What a stream's stored events must be: each sent event as the contract reads it, no previews. */
+const asStored = (events: Event[]) =>
+  events
+    .filter((event) => event.type !== "heartbeat")
+    .map((event) => withoutPreviewUrls(AnalyzeStreamEvent.parse(event)));
+
+const storedEvents = (runId: string, stream?: number) =>
+  listRunEvents(getDb(), runId)
+    .filter((row) => stream === undefined || row.stream === stream)
+    .map((row) => row.event);
+
+/** The raw stored rows of a run, as text: its result and every event. */
+function storedText(runId: string): string {
+  const row = getDb().prepare("SELECT analysis, payload FROM runs WHERE run_id = ?").get(runId);
+  const events = getDb()
+    .prepare("SELECT event FROM run_events WHERE run_id = ?")
+    .pluck()
+    .all(runId) as string[];
+  return JSON.stringify(row) + events.join("\n");
+}
+
+/** Runs `body` with a trigger that makes the matching writes fail, then drops it. */
+async function withFailingWrite(trigger: string, body: () => Promise<void>): Promise<void> {
+  getDb().exec(`CREATE TRIGGER fail_write ${trigger} BEGIN SELECT RAISE(ABORT, 'disk full'); END;`);
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await body();
+  } finally {
+    errors.mockRestore();
+    getDb().exec("DROP TRIGGER IF EXISTS fail_write");
+  }
+}
+
+const RUN_EVENTS_DDL = `CREATE TABLE IF NOT EXISTS run_events (
+  run_id TEXT NOT NULL, stream INTEGER NOT NULL, seq INTEGER NOT NULL,
+  sent_at INTEGER NOT NULL, event TEXT NOT NULL, PRIMARY KEY (run_id, stream, seq));`;
 
 // =============================================================================
 // Tests
@@ -168,12 +233,12 @@ describe("runs routes", () => {
     rmSync(dir, { recursive: true, force: true });
   });
   beforeEach(() => {
-    getDb().exec("DELETE FROM runs; DELETE FROM run_events;");
+    getDb().exec("DELETE FROM runs; DELETE FROM run_events; DELETE FROM store_items;");
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  it("serves the latest completed run of a track, without the typed query", async () => {
+  it("serves the latest completed run of a track, and stores neither the query nor previews", async () => {
     const typed = "midnight zebra typed words";
     await analyze(`${typed} first`);
     const { runId, events } = await analyze(typed);
@@ -181,8 +246,7 @@ describe("runs routes", () => {
 
     const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
     expect(res.status).toBe(200);
-    const parsed = RunResponse.safeParse(res.body);
-    expect(parsed.success).toBe(true);
+    expect(RunResponse.safeParse(res.body).success).toBe(true);
     expect(res.body.run).toMatchObject({
       id: runId,
       status: "completed",
@@ -190,26 +254,103 @@ describe("runs routes", () => {
       spotifyId: TRACK_ID,
       finishedAt: expect.any(String),
     });
-    expect(res.body.analysis).toMatchObject({ id: TRACK_ID, title: "Composed" });
+    expect(res.body.analysis).toMatchObject({
+      id: TRACK_ID,
+      title: "Composed",
+      coverUrl: "https://i.scdn.co/image/cover",
+    });
 
-    // Neither the query nor an expiring preview URL is served back.
-    expect(res.text).not.toContain("zebra");
-    expect(res.text).not.toContain("dzcdn");
-    expect(JSON.stringify(getRun(getDb(), runId)?.analysis)).not.toContain("dzcdn");
+    // Neither the typed query nor a preview URL is served, or kept in the database.
+    for (const text of [res.text, storedText(runId)]) {
+      expect(text).not.toContain("zebra");
+      expect(text).not.toMatch(/dzcdn|hdnea/);
+    }
+    expect(res.body.analysis.genealogy.nodes[0]).toMatchObject({ id: "self", img: "" });
 
     const byId = await request(app).get(`/api/runs/${runId}`);
     expect(byId.status).toBe(200);
     expect(byId.body).toEqual(res.body);
   });
 
-  it("stores the events the stream sent, in order", async () => {
+  it("stores each event the stream sent, as the contract reads it", async () => {
     const { runId, events } = await analyze("plain query");
-    const sent = events.filter((e) => e.type !== "heartbeat");
-    expect(storedEvents(runId)).toEqual(sent.map((e, i) => ({ stream: 0, seq: i, type: e.type })));
-    const complete = listRunEvents(getDb(), runId).find(
-      (e) => (e.event as Event).type === "complete",
-    );
-    expect(JSON.stringify(complete?.event)).not.toContain("dzcdn");
+    expect(events.map((e) => e.type)).toEqual([
+      "connected",
+      "status",
+      "status",
+      "complete",
+      "done",
+    ]);
+    expect(storedEvents(runId)).toEqual(asStored(events));
+  });
+
+  it("does not store a progress event that was dropped, and keeps the seqs contiguous", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { runId, events } = await analyze("invalid progress");
+    expect(events.map((e) => e.type)).not.toContain("claim");
+    expect(storedEvents(runId)).toEqual(asStored(events));
+    expect(listRunEvents(getDb(), runId).map((row) => row.seq)).toEqual(events.map((_, i) => i));
+  });
+
+  it("stores the error sent in place of a result that fails the contract, and no result", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { runId, events } = await analyze("badresult query");
+    expect(events.map((e) => e.type)).toEqual(["connected", "status", "status", "error", "done"]);
+    expect(storedEvents(runId)).toEqual(asStored(events));
+    expect(getRun(getDb(), runId)).toMatchObject({
+      status: "failed",
+      analysis: null,
+      spotifyId: null,
+    });
+  });
+
+  it("finishes the run normally when the events cannot be stored at all", async () => {
+    hooks.dropTable = () => getDb().exec("DROP TABLE run_events");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { runId, events } = await analyze("dropdb query");
+      expect(events.map((e) => e.type)).toEqual([
+        "connected",
+        "status",
+        "status",
+        "complete",
+        "done",
+      ]);
+      expect(getRun(getDb(), runId)).toMatchObject({ status: "completed", spotifyId: TRACK_ID });
+    } finally {
+      hooks.dropTable = null;
+      errors.mockRestore();
+      getDb().exec(RUN_EVENTS_DDL);
+    }
+  });
+
+  it("stops storing a stream at the first event it cannot store, so no event is missing", async () => {
+    const before = unstoredStreamCount();
+    await withFailingWrite("BEFORE INSERT ON run_events WHEN NEW.seq = 1", async () => {
+      const { runId, events } = await analyze("plain query");
+      expect(events.map((e) => e.type)).toEqual([
+        "connected",
+        "status",
+        "status",
+        "complete",
+        "done",
+      ]);
+      expect(storedEvents(runId)).toEqual(asStored(events).slice(0, 1));
+      expect(getRun(getDb(), runId)?.status).toBe("completed");
+    });
+    expect(unstoredStreamCount()).toBe(before + 1);
+  });
+
+  it("records the run as completed when its result cannot be written", async () => {
+    await withFailingWrite("BEFORE UPDATE OF analysis ON runs", async () => {
+      const { runId, events } = await analyze("plain query");
+      expect(events.map((e) => e.type)).toContain("complete");
+      expect(getRun(getDb(), runId)).toMatchObject({
+        status: "completed",
+        finishedAt: expect.any(Number),
+        analysis: null,
+      });
+    });
   });
 
   it("answers 404 for an unknown run or a track without a stored run", async () => {
@@ -250,11 +391,8 @@ describe("runs routes", () => {
     expect(first.events[0]).toMatchObject({ type: "connected", seq: 0 });
     expect(second[0]).toMatchObject({ type: "resuming", seq: 0, runId });
 
-    const strip = (events: Event[], stream: number) =>
-      events
-        .filter((e) => e.type !== "heartbeat")
-        .map((e, i) => ({ stream, seq: i, type: e.type }));
-    expect(storedEvents(runId)).toEqual([...strip(first.events, 0), ...strip(second, 1)]);
+    expect(storedEvents(runId, 0)).toEqual(asStored(first.events));
+    expect(storedEvents(runId, 1)).toEqual(asStored(second));
 
     // A refused resume of the finished run stores nothing.
     const refused = await sse(resumePath(runId, CHOICE_A));
@@ -266,6 +404,16 @@ describe("runs routes", () => {
     expect(res.body.run).toMatchObject({ id: runId, status: "completed", spotifyId: CHOICE_B });
   });
 
+  it("stores the resume of a run paused by POST as the run's first stream", async () => {
+    const posted = await request(app).post("/api/analyze").send({ query: "ambiguous posted" });
+    expect(posted.body.status).toBe("interrupted");
+    const runId = posted.body.threadId as string;
+    const resumed = await sse(resumePath(runId, CHOICE_B));
+    expect(resumed.map((e) => e.type)).toContain("complete");
+    expect(listRunEvents(getDb(), runId).map((row) => row.stream)).toEqual(resumed.map(() => 0));
+    expect(storedEvents(runId, 0)).toEqual(asStored(resumed));
+  });
+
   it("stores the result of a POST analysis", async () => {
     const res = await request(app).post("/api/analyze").send({ query: "posted query" });
     expect(res.status).toBe(200);
@@ -273,6 +421,83 @@ describe("runs routes", () => {
     expect(stored.status).toBe(200);
     expect(stored.body.run).toMatchObject({ status: "completed", spotifyId: TRACK_ID });
     expect(stored.body.analysis).toMatchObject({ id: TRACK_ID });
+  });
+
+  it("fails a POST analysis whose result fails the contract, as the stream does", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await request(app).post("/api/analyze").send({ query: "badresult posted" });
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ success: false, code: "failed" });
+    const [run] = getDb().prepare("SELECT run_id FROM runs").pluck().all() as string[];
+    expect(getRun(getDb(), run)).toMatchObject({ status: "failed", analysis: null });
+  });
+
+  it("does not store a cached result as the run's own", async () => {
+    const composed = await analyze("composed first");
+    const cached = { ...(getRun(getDb(), composed.runId)?.analysis as object) };
+    delete (cached as { run?: unknown }).run;
+    const query = "cachehit someone else typed";
+    await new SqliteStore(getDb()).put(
+      TRACKS_NAMESPACE,
+      resultCacheKey(query, configuredSources()),
+      { trackData: cached, timestamp: Date.now() },
+    );
+
+    const hit = await analyze(query);
+    expect(hit.events.map((e) => e.type)).toEqual(["connected", "status", "complete", "done"]);
+    expect(getRun(getDb(), hit.runId)).toMatchObject({
+      status: "completed",
+      spotifyId: null,
+      analysis: null,
+      payload: { resultFrom: "another_run" },
+    });
+
+    const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(res.body.run.id).toBe(composed.runId);
+    const own = await request(app).get(`/api/runs/${hit.runId}`);
+    expect(own.body).toMatchObject({ run: { status: "completed" }, analysis: null });
+  });
+
+  it("stores a run whose model answers were replayed as a replay", async () => {
+    const { runId } = await analyze("replayed query");
+    expect(getRun(getDb(), runId)?.mode).toBe("replay");
+  });
+
+  it("serves the run of a track that finished last, a resumed one included", async () => {
+    const paused = await analyze("ambiguous song");
+    const other = await analyze(`direct ${CHOICE_B}`);
+    // The other run started after the paused one and finished before it is resumed.
+    const now = Math.floor(Date.now() / 1000);
+    const setTimes = getDb().prepare(
+      "UPDATE runs SET created_at = ?, finished_at = ? WHERE run_id = ?",
+    );
+    setTimes.run(now - 20, null, paused.runId);
+    setTimes.run(now - 10, now - 5, other.runId);
+
+    await sse(resumePath(paused.runId, CHOICE_B));
+    const res = await request(app).get(`/api/runs/by-track/${CHOICE_B}`);
+    expect(res.body.run.id).toBe(paused.runId);
+  });
+
+  it("serves an older run of a track when the latest one's stored result no longer fits", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const older = await analyze("plain query");
+    const latest = await analyze("plain query again");
+    getDb()
+      .prepare("UPDATE runs SET finished_at = finished_at - 60 WHERE run_id = ?")
+      .run(older.runId);
+    const corrupt = getDb().prepare("UPDATE runs SET analysis = '{\"id\":1}' WHERE run_id = ?");
+    corrupt.run(latest.runId);
+
+    const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.body.run.id).toBe(older.runId);
+    expect((await request(app).get(`/api/runs/${latest.runId}`)).status).toBe(500);
+
+    corrupt.run(older.runId);
+    const none = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(none.status).toBe(500);
+    expect(none.body).toMatchObject({ success: false, code: "failed" });
   });
 
   it("removes a run's events when retention removes the run", async () => {

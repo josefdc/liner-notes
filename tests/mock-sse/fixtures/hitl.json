@@ -33,8 +33,7 @@
             "artist": "Johnny Cash",
             "album": "American IV: The Man Comes Around",
             "coverUrl": "",
-            "releaseYear": "2002",
-            "popularity": 0
+            "releaseYear": "2002"
           },
           {
             "id": "c2",
@@ -42,8 +41,7 @@
             "artist": "Nine Inch Nails",
             "album": "The Downward Spiral",
             "coverUrl": "",
-            "releaseYear": "1994",
-            "popularity": 0
+            "releaseYear": "1994"
           },
           {
             "id": "c3",
@@ -51,8 +49,7 @@
             "artist": "Christina Aguilera",
             "album": "Back to Basics",
             "coverUrl": "",
-            "releaseYear": "2006",
-            "popularity": 0
+            "releaseYear": "2006"
           }
         ],
         "message": "Please select the correct song"

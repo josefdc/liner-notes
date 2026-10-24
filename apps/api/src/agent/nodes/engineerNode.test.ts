@@ -102,7 +102,6 @@ function stateFor(id: string): SonicAgentStateType {
       album: "To the Extreme",
       releaseDate: "1990-09-10",
       coverUrl: "",
-      popularity: 70,
       duration: "4:30",
       durationMs: 270000,
       explicit: false,

@@ -3,13 +3,14 @@
  * Pauses execution until user selects a track
  */
 
-import { interrupt, getStore } from "@langchain/langgraph";
+import { interrupt } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getTrackDetails } from "../../sources/spotify.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
 import { isAbortError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
+import { matchTrack } from "../trackMatch.js";
 
 interface DisambiguationInterrupt {
   type: string;
@@ -23,7 +24,6 @@ export async function clarificationNode(
   runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   console.log("⏸️ [Clarification] Waiting for user to select track...");
-  const store = getStore();
 
   // Pauses the run: the first time through, interrupt() stops the graph and the route sends the
   // payload's candidates to the client. On resume (Command({ resume })) the node runs again from
@@ -62,24 +62,8 @@ export async function clarificationNode(
     timestamp: timestampOf(runtime),
   });
 
-  // Save disambiguation preference in long-term memory
-  config.signal?.throwIfAborted();
-  if (store && state.candidates) {
-    const normalizedQuery = state.songQuery.toLowerCase().trim();
-    const candidateIds = state.candidates
-      .map((c) => c.id)
-      .sort()
-      .join(",");
-    try {
-      await store.put(["disambiguation"], normalizedQuery, {
-        selectedTrackId: selectedId,
-        candidateIds,
-        timestamp: runtime.now().getTime(),
-      });
-    } catch (e) {
-      console.warn("⚠️ [Clarification] Store write error:", e);
-    }
-  }
+  // The pick is not remembered for the query's text: it is this user's choice, and the next
+  // search of the same text asks again.
 
   // Fetch full Spotify data for selected track
   try {
@@ -95,34 +79,42 @@ export async function clarificationNode(
     return {
       spotifyData,
       selectedTrackId: selectedId,
+      isrc: spotifyData.isrc ?? null,
+      selectedBy: "user",
+      queryMatch: matchTrack(state.songQuery, spotifyData).match,
       candidates: null, // Clear candidates
       statusMessages: [`✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`],
     };
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     // Fallback: minimal SpotifyData from the candidate. What the candidate does not carry is
-    // left unknown rather than guessed: the duration (0, shown as missing) and whether the
-    // track is explicit (null).
+    // left unknown rather than guessed: the duration (0, shown as missing), whether the track
+    // is explicit (null), its ISRC and its popularity.
+    const spotifyData: SpotifyData = {
+      id: selected.id,
+      title: selected.title,
+      artist: selected.artist,
+      // The separate artists when the candidate carried them; else the joined name is
+      // searched as one artist (it cannot be split: names contain commas too).
+      ...(selected.artistNames ? { artistNames: selected.artistNames } : {}),
+      artistIds: selected.artistIds ?? [],
+      album: selected.album,
+      releaseDate: selected.releaseYear || "",
+      coverUrl: selected.coverUrl,
+      ...(typeof selected.popularity === "number" ? { popularity: selected.popularity } : {}),
+      isrc: null,
+      duration: "",
+      durationMs: 0,
+      explicit: null,
+      spotifyUrl: `https://open.spotify.com/track/${selected.id}`,
+      previewUrl: null,
+    };
     return {
-      spotifyData: {
-        id: selected.id,
-        title: selected.title,
-        artist: selected.artist,
-        // The separate artists when the candidate carried them; else the joined name is
-        // searched as one artist (it cannot be split: names contain commas too).
-        ...(selected.artistNames ? { artistNames: selected.artistNames } : {}),
-        artistIds: selected.artistIds ?? [],
-        album: selected.album,
-        releaseDate: selected.releaseYear || "",
-        coverUrl: selected.coverUrl,
-        popularity: selected.popularity,
-        duration: "",
-        durationMs: 0,
-        explicit: null,
-        spotifyUrl: `https://open.spotify.com/track/${selected.id}`,
-        previewUrl: null,
-      },
+      spotifyData,
       selectedTrackId: selectedId,
+      isrc: null,
+      selectedBy: "user",
+      queryMatch: matchTrack(state.songQuery, spotifyData).match,
       candidates: null,
       statusMessages: [`✅ Selected: "${selected.title}"`],
     };

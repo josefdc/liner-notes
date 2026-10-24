@@ -131,16 +131,17 @@ function toFactoid(card: ComposerFactoid, id: string) {
 }
 
 /**
- * The factoids of a recording that the client does not have yet (by id), at most `count`,
- * numbered after the existing ids as the model's are, each with its recorded claim link.
+ * The factoids of a recording that the client does not have yet (by id), at most `count`, with
+ * their recorded ids and claim links: asking again with them as existing ids gives nothing new,
+ * so a client never shows a recorded fact twice.
  */
 export function recordedFactoids(record: ReplayRecord, existingIds: string[], count: number) {
   const known = new Set(existingIds);
   return record.analysis.factoids
     .filter((factoid) => !known.has(factoid.id))
     .slice(0, count)
-    .map((factoid, i) => ({
-      id: `f${existingIds.length + i + 1}`,
+    .map((factoid) => ({
+      id: factoid.id,
       title: factoid.title,
       content: factoid.content,
       type: factoid.type,

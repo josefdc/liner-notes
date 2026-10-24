@@ -6,9 +6,9 @@
  * What was recorded is never rewritten: text the pipeline or the model wrote is kept as it was
  * sent. The record changes only what describes the recording rather than the content:
  * - fields that hold a preview clip or an image: `previewUrl` is removed, and an image field
- *   (`coverUrl`, `img`, `image…`, …) or any field whose whole value is a preview or media URL is
- *   blanked (`coverUrl` becomes "", which the contract reads as unknown). Preview URLs are signed
- *   and expire; images are not ours to redistribute;
+ *   (`coverUrl`, `img`, `image…`, …) or any field whose whole value is a preview clip or a URL
+ *   on an image host is blanked (`coverUrl` becomes "", which the contract reads as unknown).
+ *   Preview URLs are signed and expire; images are not ours to redistribute;
  * - the run's id in the envelope (`runId`, `threadId`, `run.id`) becomes `recorded-<slug>` (each
  *   replay stamps its own id);
  * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
@@ -23,7 +23,8 @@
  * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
  * outside the allow-listed source sites, a preview or media URL inside text, the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
- * punctuation or URL encoding), an id that is none of the record's own (another run's), or that
+ * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
+ * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
  * fails the record's schema or says less than a replay must (`runIssues`). The result's other
  * producer checks (`analysisIssues`) are reported as warnings: live results do not pass them all
  * yet, and the record replays what was sent.
@@ -53,6 +54,8 @@ export interface RecordOptions {
   commit: string;
   /** Credential values that must not appear in the record (see knownSecrets). */
   secrets: readonly string[];
+  /** The ids of the database's other runs and threads, which must not appear either. */
+  otherRunIds?: readonly string[];
 }
 
 const SLUG = /^[a-z0-9-]+$/;
@@ -69,11 +72,26 @@ const URL_IN_TEXT = /(?:https?:)?\/\/[^\s"'<>()[\]{}]+/gi;
 /** Fields that hold an image, whatever their value. */
 const IMAGE_KEY = /^(?:img|images?|imageUrl|cover(?:Url|Art)?|picture|thumbnail|artwork|avatar)$/i;
 
-const isClipOrImage = (value: string) => isPreviewUrl(value) || isMediaUrl(value);
+/** Hosts that serve images and audio (album art, artist photos, previews), not pages. */
+const MEDIA_HOST =
+  /(?:^|\.)(?:scdn\.co|dzcdn\.net|coverartarchive\.org|archive\.org|lastfm\.freetls\.fastly\.net|mzstatic\.com|ytimg\.com|ggpht\.com|googleusercontent\.com|upload\.wikimedia\.org)$/i;
+
+/** True for a preview clip, or a URL on an image or audio host. */
+function isClipOrMediaHost(value: string): boolean {
+  if (isPreviewUrl(value)) return true;
+  try {
+    const url = new URL(value.startsWith("//") ? `https:${value}` : value);
+    return ["http:", "https:"].includes(url.protocol) && MEDIA_HOST.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 /**
- * A copy of `value` without preview and image fields: `previewUrl` removed, image fields and
- * fields whose whole value is a preview or media URL blanked. Nothing else changes.
+ * A copy of `value` without preview and image fields: `previewUrl` removed, image fields
+ * (by key) blanked, and any other field blanked only when its whole value is a preview clip or
+ * a URL on an image or audio host. Nothing else changes: a source page whose path merely looks
+ * like an image is kept (and checked by `leaks`).
  */
 export function withoutMediaFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutMediaFields);
@@ -83,7 +101,7 @@ export function withoutMediaFields(value: unknown): unknown {
       .filter(([key]) => key !== "previewUrl")
       .map(([key, inner]) => {
         if (typeof inner === "string") {
-          return [key, IMAGE_KEY.test(key) || isClipOrImage(inner.trim()) ? "" : inner];
+          return [key, IMAGE_KEY.test(key) || isClipOrMediaHost(inner.trim()) ? "" : inner];
         }
         return [key, withoutMediaFields(inner)];
       }),
@@ -103,7 +121,7 @@ function isUserAction(event: { type: string; [field: string]: unknown }): boolea
 // Checks
 // =============================================================================
 
-/** Text shaped like a credential, whatever its value. */
+/** Text shaped like a credential, whatever its value (allow-listed page URLs left out). */
 const SECRET_SHAPES: Array<[string, RegExp]> = [
   ["a bearer or basic credential", /\b(?:Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/],
   ["a key or token parameter", /\b(?:api[-_]?key|access_token|client_secret|token)\s*[:=]\s*\S/i],
@@ -112,13 +130,15 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
   ["a Spotify access token", /\bBQ[A-Za-z0-9_-]{40,}/],
   ["a JSON web token", /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./],
   ["a private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-  ["a signed URL", /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature)=/i],
   [
     "a long token",
     /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{40,}\b/,
   ],
   ["an e-mail address", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
 ];
+
+/** A URL signed with an expiring token, on any host. */
+const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature)=/i;
 
 /**
  * Sites a record may link to: the track's Spotify page and the sources the pipeline cites. Any
@@ -139,8 +159,9 @@ const ALLOWED_URL_HOSTS = new Set([
 ]);
 const WIKIPEDIA = /^[a-z-]+\.(?:m\.)?wikipedia\.org$/;
 
+/** True for a page on an allow-listed site (not signed). */
 function allowedUrl(url: string): boolean {
-  if (isClipOrImage(url)) return false;
+  if (SIGNED_URL.test(url)) return false;
   try {
     const { protocol, hostname } = new URL(url.startsWith("//") ? `https:${url}` : url);
     if (protocol !== "https:" && protocol !== "http:") return false;
@@ -151,20 +172,20 @@ function allowedUrl(url: string): boolean {
 }
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
-const ID_KEY = /(?:^id|Id)$/;
-const IDS_KEY = /Ids$/;
 
-/** Every string in `value`, with its path, and the values of its id fields. */
+/** Keys of id fields: a source's ids (record refs, slugs) may be long and token-like. */
+const ID_KEY = /^(?:id|recordRef)$|Ids?$/;
+
+/** Every string in `value`, with its path and whether it is an id field's value. */
 function strings(
   value: unknown,
   path = "",
-  out: { texts: Array<[string, string]>; ids: Set<string> } = { texts: [], ids: new Set() },
+  out: Array<{ path: string; text: string; isId: boolean }> = [],
   key = "",
 ) {
-  if (typeof value === "string") {
-    out.texts.push([path || "(record)", value]);
-    if (ID_KEY.test(key) || IDS_KEY.test(key)) out.ids.add(value.toLowerCase());
-  } else if (Array.isArray(value)) {
+  if (typeof value === "string")
+    out.push({ path: path || "(record)", text: value, isId: ID_KEY.test(key) });
+  else if (Array.isArray(value)) {
     for (const [i, item] of value.entries()) strings(item, `${path}[${i}]`, out, key);
   } else if (value && typeof value === "object") {
     for (const [name, inner] of Object.entries(value)) {
@@ -194,22 +215,26 @@ export interface LeakCheck {
   typedQuery: string;
   /** The track's own title, artist, album and their combinations. */
   publicTexts: readonly string[];
-  /** Ids that must not appear at all (the recorded run's own). */
-  forbiddenIds?: readonly string[];
+  /** The recorded run's own ids (run and thread), which the record replaces everywhere. */
+  ownRunIds?: readonly string[];
+  /** The ids of the other runs the database knows (runs and threads). */
+  otherRunIds?: readonly string[];
 }
 
 /**
  * What a record must not hold, by path (values are never echoed: they may be credentials).
+ * Ids the record's sources use (MusicBrainz MBIDs in evidence ids, record refs and page URLs,
+ * claim and evidence ids) are content; only the ids of runs are refused.
  */
 export function leaks(
   record: unknown,
-  { secrets, typedQuery, publicTexts, forbiddenIds = [] }: LeakCheck,
+  { secrets, typedQuery, publicTexts, ownRunIds = [], otherRunIds = [] }: LeakCheck,
 ): string[] {
   const found: string[] = [];
   const typed = normalizeQuery(typedQuery);
   const typedIsPublic = typed === "" || publicTexts.some((text) => containsWords(text, typed));
-  const { texts, ids } = strings(record);
-  for (const [path, text] of texts) {
+  const others = new Set(otherRunIds.map((id) => id.toLowerCase()));
+  for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
     if (
       secrets.some(
@@ -218,22 +243,28 @@ export function leaks(
     ) {
       found.push(`${path}: a configured credential`);
     }
+    // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
+    // those are their own); an id field's value may be a long source id.
+    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedUrl(url) ? " " : url));
     for (const [what, pattern] of SECRET_SHAPES) {
-      if (pattern.test(text) || pattern.test(plain)) found.push(`${path}: ${what}`);
+      if (isId && what === "a long token") continue;
+      if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
     }
+    if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
+      else if (allowedUrl(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
-      else if (!allowedUrl(url)) found.push(`${path}: a URL outside the allow-listed sites`);
+      else found.push(`${path}: a URL outside the allow-listed sites`);
     }
     if (!typedIsPublic && (containsWords(text, typed) || containsWords(plain, typed))) {
       found.push(`${path}: the query the user typed`);
     }
-    if (forbiddenIds.some((id) => id && plain.includes(id))) {
+    if (ownRunIds.some((id) => id && plain.includes(id))) {
       found.push(`${path}: the recorded run's own id`);
     }
-    for (const uuid of plain.match(UUID) ?? []) {
-      if (!ids.has(uuid.toLowerCase())) found.push(`${path}: an id that is not the record's own`);
+    if ((plain.match(UUID) ?? []).some((uuid) => others.has(uuid.toLowerCase()))) {
+      found.push(`${path}: another run's id`);
     }
   }
   return [...new Set(found)];
@@ -345,7 +376,7 @@ export function publicTextsOf(analysis: { title: string; artist: string; album: 
 export function buildRecord(
   run: RunRecord,
   events: StoredRunEvent[],
-  { slug, commit, secrets }: RecordOptions,
+  { slug, commit, secrets, otherRunIds = [] }: RecordOptions,
 ): BuiltRecord {
   const reasons: string[] = [];
   const refuse = (reason: string) => reasons.push(reason);
@@ -426,7 +457,8 @@ export function buildRecord(
     secrets,
     typedQuery: run.query,
     publicTexts: publicTextsOf(analysis),
-    forbiddenIds: [run.runId, run.threadId],
+    ownRunIds: [run.runId, run.threadId],
+    otherRunIds,
   };
   for (const leak of leaks(record, check)) refuse(leak);
   stop();

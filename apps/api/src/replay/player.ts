@@ -5,8 +5,9 @@
  * which commit it was recorded, so the progress that follows is never read as live work. The
  * result is the recorded one with the new run's id, still saying `mode: "replay"` with the
  * recording's date, commit and analyzer version, and with this run's own usage (none: a replay
- * calls no model; the recording's cost stays in the record). The recorded `done` is not sent:
- * the stream sends its own, and its own heartbeats.
+ * calls no model; the recording's cost stays in the record). Every event carries the time it is
+ * sent, so a stream's times never go back. The recorded `done` is not sent: the stream sends its
+ * own, and its own heartbeats.
  */
 
 import type { ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
@@ -71,7 +72,10 @@ export function replayNotice(record: ReplayRecord): EventBody {
   };
 }
 
-/** One recorded event as the body the new run's stream sends (without `runId` and `seq`). */
+/**
+ * One recorded event as the body the new run's stream sends (without `runId` and `seq`), stamped
+ * with this run's id and the time it is sent.
+ */
 export function replayedEvent(
   event: ReplayRecord["events"][number]["event"],
   record: ReplayRecord,
@@ -86,8 +90,10 @@ export function replayedEvent(
     seq?: unknown;
   };
   if (event.type === "complete") return { ...body, data: replayedAnalysis(record, runId) };
-  if ("threadId" in body) return { ...body, threadId: runId };
-  return body;
+  // Event times are this run's, like its notice and `done`: the recording's times stay in the
+  // record (`recordedAt`, and each event's `atMs`).
+  const stamped = "timestamp" in body ? { ...body, timestamp: new Date().toISOString() } : body;
+  return "threadId" in stamped ? { ...stamped, threadId: runId } : stamped;
 }
 
 const wait = (ms: number, signal: AbortSignal) =>

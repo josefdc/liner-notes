@@ -79,9 +79,17 @@ export function main(argv: string[]): number {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   let run: ReturnType<typeof getRun>;
   let events: ReturnType<typeof listRunEvents>;
+  let otherRunIds: string[];
   try {
     run = getRun(db, values.run);
     events = run ? listRunEvents(db, values.run) : [];
+    // Every other run's ids, which a record must not hold.
+    otherRunIds = db
+      .prepare(
+        "SELECT run_id FROM runs WHERE run_id != ? UNION SELECT thread_id FROM runs WHERE run_id != ?",
+      )
+      .pluck()
+      .all(values.run, values.run) as string[];
   } finally {
     db.close();
   }
@@ -103,7 +111,7 @@ export function main(argv: string[]): number {
   const secrets = knownSecrets({ ...settingsFileValues(), ...process.env });
   let record: ReturnType<typeof buildRecord>["record"];
   try {
-    const built = buildRecord(run, events, { slug: values.slug, commit, secrets });
+    const built = buildRecord(run, events, { slug: values.slug, commit, secrets, otherRunIds });
     record = built.record;
     for (const warning of built.warnings) console.warn(`Warning: the result breaks ${warning}`);
   } catch (err) {

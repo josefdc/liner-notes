@@ -70,7 +70,7 @@ export interface ReplaySet {
   readonly problems: readonly string[];
   /** Producer rules the records' results break (logged when loaded; the records are kept). */
   readonly warnings: readonly string[];
-  /** The sha256 of a loaded record's content. */
+  /** The sha256 of a loaded record's file content (its JSON, whitespace aside). */
   digest(record: ReplayRecord): string;
   /** The loaded record with this slug and content digest, or null. */
   forDigest(slug: string, digest: string): ReplayRecord | null;
@@ -160,7 +160,9 @@ export function loadReplays(dir: string): ReplaySet {
     for (const alias of aliases) byAlias.set(alias, record);
     byTrack.set(record.analysis.id, record);
     records.push(record);
-    digests.set(record, createHash("sha256").update(JSON.stringify(record)).digest("hex"));
+    // The digest of the file's JSON as written (whitespace aside), not of the parsed record: a
+    // contract change that parses it differently does not change what the record holds.
+    digests.set(record, createHash("sha256").update(JSON.stringify(raw)).digest("hex"));
     for (const issue of analysisIssues(record.analysis)) {
       if (!issues.includes(issue)) warnings.push(`${file}: the recorded result breaks ${issue}`);
     }

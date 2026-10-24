@@ -285,6 +285,47 @@ const content = (analysis: unknown) => {
   return rest;
 };
 
+/** A record's run as the stored live run it was recorded from, typed as `typed`. */
+function fixtureAsLiveRun(fixture: ReplayRecord, typed: string) {
+  const runId = "0f0e0d0c-aaaa-4bbb-8ccc-000000000001";
+  const analysis = {
+    ...fixture.analysis,
+    run: {
+      ...fixture.analysis.run!,
+      id: runId,
+      mode: "live" as const,
+      recordedAt: null,
+      commit: null,
+    },
+  };
+  const events = fixture.events.map(({ atMs, event }, seq) => ({
+    stream: 0,
+    seq,
+    sentAt: 1_000 + atMs,
+    event: {
+      ...event,
+      runId,
+      ...("threadId" in event && { threadId: runId }),
+      ...(event.type === "complete" && { data: analysis }),
+    },
+  }));
+  const run = {
+    runId,
+    threadId: runId,
+    query: typed,
+    status: "completed" as const,
+    createdAt: 1,
+    finishedAt: 2,
+    modelAvailable: null,
+    audioAvailable: null,
+    payload: null,
+    spotifyId: fixture.analysis.id,
+    mode: "live" as const,
+    analysis,
+  };
+  return { run, events };
+}
+
 describe("the recorder", () => {
   it("records a live run as it was sent: only previews, images and the run id are changed", async () => {
     const typed = "zebra typed words";
@@ -336,39 +377,8 @@ describe("the recorder", () => {
 
   it("records the dev fixture's content unchanged whatever public text was typed", () => {
     const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
-    const runId = "0f0e0d0c-aaaa-4bbb-8ccc-000000000001";
-    const analysis = {
-      ...fixture.analysis,
-      run: { ...fixture.analysis.run!, id: runId, mode: "live" as const },
-    };
-    analysis.run.recordedAt = null;
-    analysis.run.commit = null;
-    const events = fixture.events.map(({ atMs, event }, seq) => ({
-      stream: 0,
-      seq,
-      sentAt: 1_000 + atMs,
-      event: {
-        ...event,
-        runId,
-        ...("threadId" in event && { threadId: runId }),
-        ...(event.type === "complete" && { data: analysis }),
-      },
-    }));
     for (const typed of ["One More Time", "daft punk"]) {
-      const run = {
-        runId,
-        threadId: runId,
-        query: typed,
-        status: "completed" as const,
-        createdAt: 1,
-        finishedAt: 2,
-        modelAvailable: null,
-        audioAvailable: null,
-        payload: null,
-        spotifyId: fixture.analysis.id,
-        mode: "live" as const,
-        analysis,
-      };
+      const { run, events } = fixtureAsLiveRun(fixture, typed);
       const { record: built } = buildRecord(run, events, {
         slug: fixture.slug,
         commit: fixture.commit,
@@ -381,6 +391,80 @@ describe("the recorder", () => {
         fixture.events.map((e) => comparable(e.event as Event)),
       );
     }
+  });
+
+  it("records source evidence as it is: MusicBrainz ids and long source URLs are content", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const mbid = "4f5e6d7c-1111-4222-8333-944455566677";
+    const foreignRun = "9a8b7c6d-2222-4333-8444-a55566677788";
+    // As sources/identity.ts builds a MusicBrainz recording item, plus long Discogs and
+    // Wikipedia pages (long slugs, a path that looks like an image) cited the same way.
+    const evidence = [
+      {
+        id: `musicbrainz:track/recording/${mbid}`,
+        source: "musicbrainz",
+        sourceTier: "primary-record",
+        url: `https://musicbrainz.org/recording/${mbid}`,
+        title: "One More Time — MusicBrainz recording",
+        retrievedAt: "2026-10-24T16:23:30.000Z",
+        excerpt: 'MusicBrainz recording "One More Time" by Daft Punk (5:20), ISRC GBDUW0000059.',
+        recordRef: `track/recording/${mbid}`,
+      },
+      {
+        id: "discogs:track/master/12345",
+        source: "discogs",
+        sourceTier: "primary-record",
+        url: "https://www.discogs.com/master/12345-Daft-Punk-One-More-Time-Aerodynamic-Remixes",
+        title: "One More Time — Discogs master",
+        retrievedAt: "2026-10-24T16:23:30.000Z",
+        excerpt: "Discogs master release of One More Time.",
+        recordRef: "track/master/12345",
+      },
+      {
+        id: "wikipedia:track/List_of_UK_Singles_Chart_number_ones_of_the_2000s",
+        source: "tavily",
+        sourceTier: "editorial",
+        url: "https://en.wikipedia.org/wiki/File:Daft_Punk_logo.svg",
+        title: "List of UK Singles Chart number ones of the 2000s — Wikipedia",
+        retrievedAt: "2026-10-24T16:23:30.000Z",
+        excerpt:
+          "See https://en.wikipedia.org/wiki/List_of_UK_Singles_Chart_number_ones_of_the_2000s.",
+        recordRef: null,
+      },
+    ];
+    const withEvidence = (extra: string) => {
+      const analysis = structuredClone(fixture.analysis);
+      analysis.evidence = TrackAnalysis.parse({ ...analysis, evidence }).evidence;
+      expect(analysis.evidence).toHaveLength(3);
+      analysis.claims![0].evidenceIds = [evidence[0].id];
+      analysis.factoids[0].content = `${analysis.factoids[0].content}${extra}`;
+      return { ...fixture, analysis };
+    };
+
+    const sourced = withEvidence("");
+    const { run, events } = fixtureAsLiveRun(sourced, "One More Time Daft Punk");
+    const { record: built } = buildRecord(run, events, {
+      slug: fixture.slug,
+      commit: fixture.commit,
+      secrets: [],
+      otherRunIds: [foreignRun],
+    });
+    expect(built.analysis.evidence).toEqual(sourced.analysis.evidence);
+    expect(content(built.analysis)).toEqual(content(sourced.analysis));
+
+    // Another run's id in the content is refused.
+    const leaked = withEvidence(` (see run ${foreignRun})`);
+    const other = fixtureAsLiveRun(leaked, "One More Time Daft Punk");
+    expect(
+      refusal(() =>
+        buildRecord(other.run, other.events, {
+          slug: fixture.slug,
+          commit: fixture.commit,
+          secrets: [],
+          otherRunIds: [foreignRun],
+        }),
+      ),
+    ).toEqual(expect.arrayContaining(["analysis.factoids[0].content: another run's id"]));
   });
 
   it("joins a paused and resumed run into one stream numbered from 0, without the pause", async () => {
@@ -452,6 +536,7 @@ describe("the recorder", () => {
         secrets: [SECRET],
         typedQuery: "my  private's words",
         publicTexts: ["Recorded Song", "The Recorders"],
+        otherRunIds: [otherRun],
       },
     );
     expect(found).toEqual(
@@ -464,7 +549,7 @@ describe("the recorder", () => {
         "g: a configured credential",
         "h: an e-mail address",
         "i: a URL outside the allow-listed sites",
-        "j: an id that is not the record's own",
+        "j: another run's id",
         "k: the query the user typed",
       ]),
     );
@@ -683,7 +768,7 @@ describe("REPLAY_MODE", () => {
       });
     expect(more.status).toBe(200);
     expect(more.body.factoids).toEqual([
-      { id: "f2", title: "B fact", content: "Recorded fact two.", type: "trivia", entities: [] },
+      { id: "fb", title: "B fact", content: "Recorded fact two.", type: "trivia", entities: [] },
     ]);
 
     const other = await request(app)
@@ -772,6 +857,28 @@ describe("REPLAY_MODE", () => {
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(result?.run?.id).toBe("some-run");
     expect(sent.at(-1)).toBe("complete");
+  });
+
+  it("reports no result when the stream did not send the recorded one", async () => {
+    const dev = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const result = await playRecord(
+      dev,
+      "some-run",
+      (body) => body.type !== "complete",
+      new AbortController().signal,
+      { speed: 1, maxGapMs: 0 },
+    );
+    expect(result).toBeNull();
+  });
+
+  it("stamps every replayed event with the time it is sent, so times never go back", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    const before = new Date().toISOString();
+    const events = await sse(streamPath("Recorded Song The Recorders"));
+    const times = events.map((event) => event.timestamp).filter(Boolean) as string[];
+    expect(times.length).toBeGreaterThan(2);
+    expect(times.every((time) => time >= before)).toBe(true);
+    expect([...times].sort()).toEqual(times);
   });
 
   it("by-track: replays of a recording since changed do not hide an older live run", async () => {

@@ -7,10 +7,15 @@
  * - Energy level
  * - Perceptual features (valence, danceability, ...) when the Essentia models are installed
  *
- * Preview source priority: Deezer (primary) → Spotify (fallback).
+ * The clip is a preview of the chosen recording only (see resolvePreview): the Deezer entry for
+ * its ISRC, Spotify's own clip of the chosen track, or a Deezer search result that strictly
+ * matches it. Never another recording's clip: with no such preview nothing is measured.
  * Calls the Python audio analysis service for the measurement. When there is no preview or
  * the service cannot measure it, the result has source "unavailable", null values and a
  * reason; nothing is estimated.
+ *
+ * Preview URLs are signed and expire within minutes: they are returned for the run's player,
+ * never logged.
  *
  * @requires Audio analysis service running on AUDIO_ANALYSIS_URL
  */
@@ -18,7 +23,14 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { searchDeezerPreview, type DeezerSearchResult } from "./deezer.js";
+import {
+  type DeezerMatch,
+  type DeezerPreviewResult,
+  deezerFailure,
+  deezerPreviewByIsrc,
+  deezerPreviewBySearch,
+  type PreviewRequest,
+} from "./deezer.js";
 import { describeError, fetchJson, isSourceError } from "./http.js";
 import type { AudioUnavailableReason } from "../agent/state.js";
 
@@ -32,6 +44,17 @@ export interface KeyMoment {
   intensity: number; // 0-1 scale
   description: string;
 }
+
+/**
+ * How the run's preview clip was matched to the chosen track: a Deezer match (see DeezerMatch),
+ * or Spotify's own clip of the chosen track (`id`: no matching needed).
+ */
+export type PreviewSourceMatch = DeezerMatch | { provider: "spotify"; method: "id"; score: null };
+
+/** The chosen track's preview clip, or why there is none. */
+export type PreviewResolution =
+  | { previewUrl: string; match: PreviewSourceMatch }
+  | { previewUrl: null; match: null; detail: string; error?: string };
 
 /** Result of analyze_audio_preview. Every value is measured or null. */
 export interface AudioAnalysisResult {
@@ -53,6 +76,13 @@ export interface AudioAnalysisResult {
   reason?: AudioUnavailableReason;
   /** Error detail for reason */
   error?: string;
+  /**
+   * The clip used (or tried), for the run's player only: signed, never stored. null when no
+   * preview of the chosen recording was found.
+   */
+  previewUrl?: string | null;
+  /** How that clip was matched to the chosen track; null when there is none. */
+  previewMatch?: PreviewSourceMatch | null;
 }
 
 // What the service may return. It sends null bpm when no tempo is found and null key/mode
@@ -147,42 +177,67 @@ function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnaly
 }
 
 // =============================================================================
-// Deezer Preview (Primary Source)
+// The preview clip
 // =============================================================================
 
+/** What resolvePreview needs: the chosen track and Spotify's own clip of it, if any. */
+export interface TrackPreviewRequest extends PreviewRequest {
+  spotifyPreviewUrl?: string | null;
+}
+
+/** Why each turned-down Deezer entry was not used, for the "no preview" detail. */
+function rejectionSummary(results: DeezerPreviewResult[]): string {
+  const reasons = results.flatMap((result) => (result.found ? [] : result.rejected));
+  if (reasons.length === 0) return "";
+  const counts = new Map<string, number>();
+  for (const { reason } of reasons) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  return ` (entries turned down: ${[...counts].map(([r, n]) => `${n} ${r}`).join(", ")})`;
+}
+
 /**
- * Try to get a preview URL from Deezer (primary audio source).
- * Deezer provides more reliable preview availability than Spotify.
+ * The chosen track's preview clip, in this order: the Deezer entry for its ISRC (or that entry's
+ * readable alternative), Spotify's own clip of the chosen track, a Deezer search result that is
+ * strictly the same recording. Nothing else: with none of them there is no preview. A Deezer
+ * error (its quota, the network) is reported, never read as "not found".
  */
-async function tryDeezerFallback(
-  title: string,
-  artist: string,
+export async function resolvePreview(
+  request: TrackPreviewRequest,
   signal: AbortSignal | undefined,
-): Promise<string | null> {
-  if (!title && !artist) {
-    return null;
+): Promise<PreviewResolution> {
+  if (!request.title && !request.artist && !request.isrc) {
+    return { previewUrl: null, match: null, detail: "No track to find a preview for" };
   }
+  signal?.throwIfAborted();
 
-  try {
-    console.log("🔄 [Audio] Trying Deezer preview...");
-
-    signal?.throwIfAborted();
-    const result = await searchDeezerPreview.invoke({ title, artist }, { signal });
-    const data = JSON.parse(result) as DeezerSearchResult;
-
-    if (data.found && data.previewUrl) {
-      console.log(`✅ [Audio] Deezer preview found: ${data.previewUrl}`);
-      return data.previewUrl;
+  const lookup = async (find: typeof deezerPreviewByIsrc) => {
+    try {
+      return await find(request, signal);
+    } catch (error) {
+      return deezerFailure(error, signal);
     }
+  };
 
-    console.log("⚠️ [Audio] Deezer: no preview found");
-    return null;
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("❌ [Audio] Deezer preview error:", message);
-    return null;
+  const byIsrc = await lookup(deezerPreviewByIsrc);
+  if (byIsrc.found) return { previewUrl: byIsrc.previewUrl, match: byIsrc.match };
+
+  if (request.spotifyPreviewUrl) {
+    console.log("🎵 [Audio] Using Spotify's own preview of the chosen track");
+    return {
+      previewUrl: request.spotifyPreviewUrl,
+      match: { provider: "spotify", method: "id", score: null },
+    };
   }
+
+  // After a Deezer error a search would fail the same way.
+  const bySearch = byIsrc.error ? byIsrc : await lookup(deezerPreviewBySearch);
+  if (bySearch.found) return { previewUrl: bySearch.previewUrl, match: bySearch.match };
+
+  const error = bySearch.error ?? byIsrc.error;
+  const detail = error
+    ? "Deezer could not be read and Spotify has no preview of this track"
+    : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
+  console.log(`⚠️ [Audio] ${detail}`);
+  return { previewUrl: null, match: null, detail, ...(error ? { error } : {}) };
 }
 
 // =============================================================================
@@ -244,35 +299,50 @@ async function analyzeWithService(
 // =============================================================================
 
 /**
- * Analyze audio from Deezer (primary) or Spotify (fallback) preview URL
+ * Measures the chosen track from its preview clip (see resolvePreview). The result carries the
+ * clip and how it was matched, for the run's player; without a clip of the chosen recording
+ * nothing is measured.
  */
 export const analyzeAudioPreview = tool(
-  async ({ previewUrl, title, artist }, config): Promise<string> => {
+  async ({ previewUrl, title, artist, artistNames, album, isrc, durationMs }, config) => {
     // The run's signal stops every request below (Deezer, the service's health and analysis).
     const signal = config?.signal;
     console.log(`🎧 [Audio] Analyzing: "${title}" by ${artist}`);
 
-    // Deezer-first: always try Deezer regardless of Spotify preview availability
-    let effectivePreviewUrl = await tryDeezerFallback(title || "", artist || "", signal);
-
-    if (effectivePreviewUrl) {
-      console.log("🎵 [Audio] Using Deezer preview (primary source)");
-    } else if (previewUrl) {
-      // Spotify fallback: use provided preview URL if Deezer had nothing
-      effectivePreviewUrl = previewUrl;
-      console.log("🎵 [Audio] Deezer unavailable, using Spotify preview (fallback)");
-    } else {
-      console.log("⚠️ [Audio] No preview from Deezer or Spotify; audio not measured");
-      return JSON.stringify(
-        unavailable("no_preview", "No preview available from Deezer or Spotify"),
-      );
+    const preview = await resolvePreview(
+      {
+        title: title ?? "",
+        artist: artist ?? "",
+        artistNames,
+        album,
+        isrc,
+        durationMs,
+        spotifyPreviewUrl: previewUrl,
+      },
+      signal,
+    );
+    if (preview.previewUrl === null) {
+      console.log("⚠️ [Audio] No preview of the chosen recording; audio not measured");
+      const detail = preview.error ? `${preview.detail}: ${preview.error}` : preview.detail;
+      return JSON.stringify({
+        ...unavailable("no_preview", detail),
+        previewUrl: null,
+        previewMatch: null,
+      });
     }
+    const effectivePreviewUrl = preview.previewUrl;
+    // Every result below carries the clip and how it was matched, for the run's player.
+    const withPreview = (result: AudioAnalysisResult): string =>
+      JSON.stringify({ ...result, previewUrl: effectivePreviewUrl, previewMatch: preview.match });
 
     if (!isAllowedPreviewUrl(effectivePreviewUrl)) {
       console.log("⚠️ [Audio] Preview URL host not allowed; audio not measured");
-      return JSON.stringify(
-        unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
-      );
+      // Neither analysed nor given to the player.
+      return JSON.stringify({
+        ...unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
+        previewUrl: null,
+        previewMatch: null,
+      });
     }
 
     // Try the audio analysis service with the resolved preview URL
@@ -281,7 +351,7 @@ export const analyzeAudioPreview = tool(
 
       if (!serviceAvailable) {
         console.log("⚠️ [Audio] Analysis service unavailable; audio not measured");
-        return JSON.stringify(
+        return withPreview(
           unavailable("service_unavailable", "Audio analysis service did not respond"),
         );
       }
@@ -296,7 +366,7 @@ export const analyzeAudioPreview = tool(
 
       // Only a reply that says it analysed the clip is a measurement.
       if (result.source !== "analyzed") {
-        return JSON.stringify(
+        return withPreview(
           unavailable(
             "analysis_failed",
             `Service reply source is ${JSON.stringify(result.source)}`,
@@ -335,31 +405,33 @@ export const analyzeAudioPreview = tool(
         instrumentalness: unit("instrumentalness", result.instrumentalness),
       };
       if (outOfRange.length > 0) measured.outOfRange = outOfRange;
-      return JSON.stringify(measured);
+      return withPreview(measured);
     } catch (error) {
       // A cancelled run rejects: no "analysis failed" is reported for it.
       if (signal?.aborted) throw error;
       const message = error instanceof Error ? error.message : String(error);
       console.error("❌ [Audio] Analysis failed:", message);
-      return JSON.stringify(unavailable("analysis_failed", message));
+      return withPreview(unavailable("analysis_failed", message));
     }
   },
   {
     name: "analyze_audio_preview",
     description:
-      "Analyze an audio preview URL to measure BPM, key and energy. " +
-      "Tries Deezer first (more reliable previews), then Spotify as fallback. " +
-      "Returns null values and a reason when no measurement is possible.",
+      "Measure BPM, key and energy from a preview clip of the chosen recording: the Deezer " +
+      "entry for its ISRC, Spotify's own clip, or a Deezer search result that is strictly the " +
+      "same recording. Returns null values and a reason when no measurement is possible.",
     schema: z.object({
       previewUrl: z
         .string()
         .nullable()
         .optional()
-        .describe(
-          "The Spotify preview URL (30-second MP3). Can be null to trigger Deezer fallback.",
-        ),
-      title: z.string().optional().describe("Song title (used to find a Deezer preview)"),
-      artist: z.string().optional().describe("Artist name (used to find a Deezer preview)"),
+        .describe("Spotify's own preview clip of the chosen track, if it has one"),
+      title: z.string().optional().describe("Song title"),
+      artist: z.string().optional().describe("Artist name (the credited artists joined)"),
+      artistNames: z.array(z.string()).optional().describe("The credited artists one by one"),
+      album: z.string().optional().describe("The album the track is on"),
+      isrc: z.string().nullable().optional().describe("The recording's ISRC"),
+      durationMs: z.number().nullable().optional().describe("The track's duration in ms"),
     }),
   },
 );

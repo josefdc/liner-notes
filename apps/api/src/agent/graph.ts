@@ -20,7 +20,7 @@
 
 import type { BaseCheckpointSaver, BaseStore, LangGraphRunnableConfig } from "@langchain/langgraph";
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { PreviewFreeSqliteSaver } from "../store/checkpointer.js";
 import { getDb } from "../store/database.js";
 import { SqliteStore } from "../store/store.js";
 import {
@@ -106,11 +106,12 @@ export function buildSonicAgentGraph({
   return workflow.compile({ checkpointer, store });
 }
 
-// Persistent checkpointer — survives server restarts for HITL resume
-let globalCheckpointer: SqliteSaver | null = null;
-function getCheckpointer(): SqliteSaver {
+// Persistent checkpointer — survives server restarts for HITL resume. It never saves preview
+// URLs (store/checkpointer.ts).
+let globalCheckpointer: PreviewFreeSqliteSaver | null = null;
+function getCheckpointer(): PreviewFreeSqliteSaver {
   if (!globalCheckpointer) {
-    globalCheckpointer = new SqliteSaver(getDb());
+    globalCheckpointer = new PreviewFreeSqliteSaver(getDb());
   }
   return globalCheckpointer;
 }

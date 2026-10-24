@@ -4,12 +4,24 @@
  *
  * Every value it returns is measured by the audio analysis service or null. When no
  * measurement is possible the features carry `unavailableReason`, and nothing is cached.
- * Cached rows are only reused when they carry the `measured` marker; rows written before
- * estimates were removed have none and are measured again.
+ * Cached rows are only reused when they carry the `measured` marker and say how the measured
+ * clip was matched to the track; older rows are measured again.
+ *
+ * The clip is a preview of the chosen recording only (sources/audio.ts resolvePreview). The node
+ * writes it for the player (`previewUrl`, for this run only: it is signed and expires) and how
+ * it was matched (`preview`). On a cache hit a fresh clip is looked up for the player; without
+ * one the player has none, never another recording's clip.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { analyzeAudioPreview, type AudioAnalysisResult } from "../../sources/audio.js";
+import {
+  analyzeAudioPreview,
+  type AudioAnalysisResult,
+  isAllowedPreviewUrl,
+  type PreviewSourceMatch,
+  resolvePreview,
+  type TrackPreviewRequest,
+} from "../../sources/audio.js";
 import { getCache } from "../../store/cache.js";
 import type { SonicAgentStateType, AudioFeatures, AudioUnavailableReason } from "../state.js";
 import { isAbortError } from "../errors.js";
@@ -74,13 +86,45 @@ export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
     confidence: complete ? "high" : "low",
     measured: true,
     analyzer: "audio-service",
+    ...(analysis.previewMatch ? { previewMatch: analysis.previewMatch } : {}),
   };
 }
 
-/** True for a cached row this code wrote from a measurement. */
+/**
+ * How a clip was matched, in the result's terms (the contract's PreviewMatch). A Deezer entry
+ * read by id is reported as an ISRC match when it carries the requested ISRC, else as a search
+ * match with its score. Spotify's own clip of the chosen track needed no matching; the contract
+ * has no method for it, so it is reported as null (unknown), never as an ISRC or search match.
+ */
+export function previewProvenance(
+  match: PreviewSourceMatch | null | undefined,
+): SonicAgentStateType["preview"] {
+  if (match?.provider !== "deezer") return null;
+  if (match.method === "search" || (match.method === "id" && match.score !== null)) {
+    return { provider: "deezer", method: "search", score: match.score };
+  }
+  return { provider: "deezer", method: "isrc", score: null };
+}
+
+/** The chosen track, as resolvePreview needs it. */
+function previewRequest(state: SonicAgentStateType): TrackPreviewRequest {
+  const track = state.spotifyData;
+  return {
+    title: track?.title ?? "",
+    artist: track?.artist ?? "",
+    ...(track?.artistNames?.length ? { artistNames: track.artistNames } : {}),
+    ...(track?.album ? { album: track.album } : {}),
+    isrc: state.isrc ?? track?.isrc ?? null,
+    durationMs: track?.durationMs ?? null,
+    spotifyPreviewUrl: track?.previewUrl ?? null,
+  };
+}
+
+/** True for a cached row this code wrote from a measurement of a matched clip. */
 function isTrustedCacheRow(row: AudioFeatures | null | undefined): row is AudioFeatures {
   return (
     row?.measured === true &&
+    typeof row.previewMatch?.provider === "string" &&
     row.analyzer === "audio-service" &&
     typeof row.bpm === "number" &&
     row.bpm > 0 &&
@@ -101,28 +145,39 @@ export async function engineerNode(
   const writer = config.writer;
 
   // Check persistent audio cache first. Rows without the measured marker are ignored.
+  let cachedAudio: AudioFeatures | null = null;
   try {
-    const cache = getCache();
-    const cachedAudio = cache.getAudio(state.spotifyData.id);
-    if (cachedAudio && !isTrustedCacheRow(cachedAudio)) {
-      console.log("🎧 [Engineer] Ignoring unmarked cached audio for:", state.spotifyData.title);
-    }
-    if (isTrustedCacheRow(cachedAudio)) {
-      console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
-      writer?.({
-        type: "status",
-        code: "AUDIO-COMPLETE",
-        message: `Audio cache hit: ${cachedAudio.bpm} BPM // ${cachedAudio.key}`,
-        node: "engineer",
-        timestamp: timestampOf(runtime),
-      });
-      return {
-        audioFeatures: cachedAudio,
-        statusMessages: [`🎵 Audio (cached): ${cachedAudio.bpm} BPM, ${cachedAudio.key}`],
-      };
-    }
+    cachedAudio = getCache().getAudio(state.spotifyData.id);
   } catch {
     // Cache not available — proceed with fresh analysis
+  }
+  if (cachedAudio && !isTrustedCacheRow(cachedAudio)) {
+    console.log("🎧 [Engineer] Ignoring unmarked cached audio for:", state.spotifyData.title);
+  }
+  if (isTrustedCacheRow(cachedAudio)) {
+    console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
+    writer?.({
+      type: "status",
+      code: "AUDIO-COMPLETE",
+      message: `Audio cache hit: ${cachedAudio.bpm} BPM // ${cachedAudio.key}`,
+      node: "engineer",
+      timestamp: timestampOf(runtime),
+    });
+    // The cache keeps no clip URL (they expire): the player gets a fresh clip or none.
+    let previewUrl: string | null = null;
+    try {
+      const fresh = (await resolvePreview(previewRequest(state), config.signal)).previewUrl;
+      previewUrl = fresh && isAllowedPreviewUrl(fresh) ? fresh : null;
+    } catch (error) {
+      if (config.signal?.aborted || isAbortError(error)) throw error;
+      console.warn("⚠️ [Engineer] Could not look up a preview:", error);
+    }
+    return {
+      audioFeatures: cachedAudio,
+      preview: previewProvenance(cachedAudio.previewMatch),
+      previewUrl,
+      statusMessages: [`🎵 Audio (cached): ${cachedAudio.bpm} BPM, ${cachedAudio.key}`],
+    };
   }
 
   writer?.({
@@ -136,25 +191,29 @@ export async function engineerNode(
   console.log("🎧 [Engineer] Analyzing:", state.spotifyData.title);
 
   let audioFeatures: AudioFeatures;
+  let analysis: AudioAnalysisResult | null = null;
   try {
     // analyzeAudioPreview reports failures in its result (source "unavailable") instead of throwing.
     // The run's abort signal stops the analysis when the client leaves.
     config.signal?.throwIfAborted();
+    const { spotifyPreviewUrl, ...track } = previewRequest(state);
     const analysisResult = await analyzeAudioPreview.invoke(
-      {
-        previewUrl: state.spotifyData.previewUrl,
-        title: state.spotifyData.title,
-        artist: state.spotifyData.artist,
-      },
+      { ...track, previewUrl: spotifyPreviewUrl },
       { signal: config.signal },
     );
-    audioFeatures = toAudioFeatures(JSON.parse(analysisResult) as AudioAnalysisResult);
+    analysis = JSON.parse(analysisResult) as AudioAnalysisResult;
+    audioFeatures = toAudioFeatures(analysis);
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     console.error("❌ [Engineer] Error:", message);
     audioFeatures = unavailableFeatures("analysis_failed", message);
   }
+  // The clip measured (or tried), for the player, and how it was matched.
+  const previewOut = {
+    preview: previewProvenance(analysis?.previewMatch),
+    previewUrl: analysis?.previewUrl ?? null,
+  };
 
   if (audioFeatures.unavailableReason) {
     const reason = audioFeatures.unavailableReason;
@@ -174,6 +233,7 @@ export async function engineerNode(
     console.log(`⚠️ [Engineer] ${summary}`);
     return {
       audioFeatures,
+      ...previewOut,
       statusMessages: [`⚠️ ${summary}`],
     };
   }
@@ -201,6 +261,7 @@ export async function engineerNode(
 
   return {
     audioFeatures,
+    ...previewOut,
     statusMessages: [`🎵 Audio (measured): ${audioFeatures.bpm} BPM, ${audioFeatures.key}`],
   };
 }

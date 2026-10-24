@@ -683,6 +683,28 @@ describe("composerNode", () => {
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });
 
+    it("sends the engineer's clip of the chosen recording for the player and stores none", async () => {
+      const deezerClip = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/c.mp3?hdnea=exp=1~hmac=x";
+      const runtime = testRuntime(succeeding());
+      const writer = vi.fn();
+      const state = {
+        ...stateWith(measured),
+        previewUrl: deezerClip,
+        preview: { provider: "deezer", method: "isrc", score: null },
+      } as SonicAgentStateType;
+
+      await createComposerNode(runtime)(state, {
+        writer,
+        configurable: { thread_id: "run-2" },
+      } as never);
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data.previewUrl).toBe(deezerClip);
+      expect(complete.data.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+      expect(store.put).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(store.put.mock.calls[0][2])).not.toContain("dzcdn.net");
+    });
+
     it("sends the preview URLs with this run's result but stores none, so a cache hit shows none", async () => {
       const trackPreview = "https://p.scdn.co/mp3-preview/track";
       const nodePreview = "https://p.scdn.co/mp3-preview/node";

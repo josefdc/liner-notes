@@ -594,3 +594,66 @@ export function needsChoice(ranked: RankedTrack[]): boolean {
     );
   });
 }
+
+/**
+ * How a title tells one recording from another, for comparing entries of two catalogues (a
+ * Spotify track and a Deezer entry): the title proper and its alternative titles, and the words
+ * the full title adds beyond them once credits, "From …" parts and labels of the original
+ * release are left out ("Remastered 2011", "Radio Edit", "Single Version"), plus a live or
+ * unplugged album.
+ */
+interface RecordingTitle {
+  titles: string[][];
+  extra: string[];
+  albumMarkers: string[];
+}
+
+function recordingTitle(title: string, album: string): RecordingTitle {
+  const parts = titleParts(title);
+  let extra = parts.suffix;
+  for (const part of [...parts.sources, ...parts.alternatives]) extra = without(extra, part);
+  for (const label of RELEASE_LABELS) extra = without(extra, label);
+  const remastered = extra.some((word) => word === "remaster" || word === "remastered");
+  extra = extra.filter(
+    (word) =>
+      !RELEASE_WORDS.has(word) && !JOINERS.has(word) && !(remastered && /^\d{4}$/.test(word)),
+  );
+  const albumWords = without(words(album), parts.base);
+  return {
+    titles: [parts.base, ...parts.alternatives],
+    extra,
+    albumMarkers: ALBUM_MARKERS.filter((marker) => indexOf(albumWords, marker) >= 0).map((m) =>
+      m.join(" "),
+    ),
+  };
+}
+
+/**
+ * Whether two catalogue entries carry the same recording by their titles:
+ * - `title`: no title or alternative title of one is the title of the other;
+ * - `version`: the titles agree but one is another version: its title adds words the other
+ *   lacks ("Live Aid 1985", "Chromatics Remix", "Karaoke Version", "(2012)") or its album is a
+ *   live or unplugged one and the other's is not;
+ * - null: the same title and nothing that tells them apart.
+ * The comparison is strict on purpose: a version neither entry names can only be told apart by
+ * other means (the duration, the ISRC).
+ */
+export function recordingTitleDifference(
+  a: { title: string; album?: string },
+  b: { title: string; album?: string },
+): "title" | "version" | null {
+  const x = recordingTitle(a.title, a.album ?? "");
+  const y = recordingTitle(b.title, b.album ?? "");
+  if (!x.titles.some((t) => y.titles.some((u) => same(t, u)))) return "title";
+  const key = (list: string[]) => [...list].sort().join(" ");
+  if (key(x.extra) !== key(y.extra)) return "version";
+  if (key(x.albumMarkers) !== key(y.albumMarkers)) return "version";
+  return null;
+}
+
+/** Whether two artist names are the same name once normalised (a leading "The" may be left out). */
+export function sameArtistName(a: string, b: string): boolean {
+  const x = nameForms(a);
+  const y = nameForms(b);
+  return x.some((form) => y.some((other) => same(form, other)));
+}

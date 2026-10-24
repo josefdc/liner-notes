@@ -13,7 +13,9 @@ evals/
   scripts/coverage.test.mjs     tests for the coverage matcher and input checks
   reports/                      dated reports: preview coverage, audio accuracy
   audio/                        audio accuracy harness (Python, uv): tempo and key
-                                on annotated datasets, see audio/README.md
+                                on annotated datasets, the estimator bake-off, and
+                                agreement and style hit@k on this set's Deezer
+                                previews; see audio/README.md
 ```
 
 Counts (rows, strata sizes, live subset, edges, held-out domains) change as

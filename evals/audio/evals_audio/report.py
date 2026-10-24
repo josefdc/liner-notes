@@ -2,7 +2,8 @@
 The dated report: `evals/reports/audio-<date>.json` holds the runs of that date with the
 per-track results, and `audio-<date>.md` is rendered from it alone, so the tables can be
 re-derived from the JSON. A run replaces an earlier one only when suite, dataset, seeds,
-limit and estimators are all the same; otherwise both are kept.
+limit and estimators are all the same; otherwise both are kept. Results files of schema 4
+(tempo and key with two estimators) still render exactly as they were written.
 
 The JSON carries track ids (a short hash for datasets whose ids are file names), where each
 clip was cut, the service's estimates, confidences, per-track scores and withheld reasons. It
@@ -21,7 +22,11 @@ from .metrics import MIN_CURVE_ANSWERED
 from .runner import METRIC_LABELS, METRICS, SEVERAL_RULES
 from .storage import human
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+# The last schema before the bake-off, the golden suite and the cost suite; its reports keep
+# their original wording.
+LEGACY_SCHEMA = 4
+SUITE_ORDER = {"tempo": 0, "key": 1, "golden": 2, "cost": 3}
 
 
 class OlderResults(RuntimeError):
@@ -55,7 +60,7 @@ def run_key(run: dict) -> tuple:
         seeds["clips"],
         seeds["bootstrap"],
         run["limit"],
-        tuple(sorted(run["summaries"])),
+        tuple(sorted(run.get("estimators") or run["summaries"])),
     )
 
 
@@ -63,7 +68,7 @@ def add_run(doc: dict, run: dict) -> dict:
     key = run_key(run)
     runs = [r for r in doc["runs"] if run_key(r) != key]
     runs.append(run)
-    runs.sort(key=lambda r: (r["suite"] != "tempo", r["suite"], r["dataset"]["name"]))
+    runs.sort(key=lambda r: (SUITE_ORDER.get(r["suite"], 9), r["suite"], r["dataset"]["name"]))
     return {**doc, "runs": runs}
 
 
@@ -122,6 +127,13 @@ def table(head: list[str], rows: list[list[str]]) -> list[str]:
 # --- sections --------------------------------------------------------------------------------
 
 
+def label(run: dict, name: str) -> str:
+    """The estimator's name, marked when its model was trained on the run's dataset."""
+    return (
+        f"`{name}` (trained on this dataset)" if name in run.get("trainedOn", []) else f"`{name}`"
+    )
+
+
 def verdicts(run: dict) -> list[str]:
     """One line per estimator that names the coverage next to the over-n figure."""
     what = "tempo" if run["suite"] == "tempo" else "key"
@@ -145,28 +157,65 @@ def summary_table(run: dict) -> list[str]:
         head += [f"{METRIC_LABELS[m]}: correct / n", f"{METRIC_LABELS[m]}: correct / answered"]
     rows = []
     for name, s in run["summaries"].items():
-        row = [f"`{name}`", str(s["n"]), frac(s["coverage"]), str(s["withheld"]), str(s["failed"])]
+        row = [
+            label(run, name),
+            str(s["n"]),
+            frac(s["coverage"]),
+            str(s["withheld"]),
+            str(s["failed"]),
+        ]
         for m in metrics:
             row += [frac(s["overN"][m]), frac(s["overAnswered"][m])]
         rows.append(row)
     return table(head, rows)
 
 
-def paired_section(run: dict) -> list[str]:
-    paired = run.get("paired")
+def pair_list(paired) -> list[dict]:
+    """Schema 4 holds one pair (a dict), schema 5 a list of pairs."""
     if not paired:
         return []
-    first, second = paired["first"], paired["second"]
+    return [paired] if isinstance(paired, dict) else list(paired)
+
+
+def paired_section(run: dict) -> list[str]:
+    pairs = pair_list(run.get("paired"))
+    if not pairs:
+        return []
+    if len(pairs) == 1:
+        first, second = pairs[0]["first"], pairs[0]["second"]
+        out = [
+            "### Paired comparison",
+            "",
+            f"`{first}` and `{second}` on the same clips: the clips both answered, and all n "
+            "clips with a withheld answer counted as not correct. The columns above are not "
+            "comparable between estimators that answer different clips; compare them here.",
+            "",
+        ]
+        return out + pair_table(run["suite"], pairs[0])
     out = [
-        "### Paired comparison",
+        "### Paired comparisons",
         "",
-        f"`{first}` and `{second}` on the same clips: the clips both answered, and all n clips "
+        "Each pair of estimators on the same clips: the clips both answered, and all n clips "
         "with a withheld answer counted as not correct. The columns above are not comparable "
         "between estimators that answer different clips; compare them here.",
         "",
     ]
+    for pair in pairs:
+        trained = [n for n in (pair["first"], pair["second"]) if n in run.get("trainedOn", [])]
+        heading = f"`{pair['first']}` and `{pair['second']}`"
+        if trained:
+            heading += (
+                f" (`{trained[0]}` was trained on this dataset: this pair says nothing about "
+                "new music)"
+            )
+        out += [heading + ":", ""] + pair_table(run["suite"], pair)
+    return out
+
+
+def pair_table(suite: str, paired: dict) -> list[str]:
+    first, second = paired["first"], paired["second"]
     rows = []
-    for m in METRICS[run["suite"]]:
+    for m in METRICS[suite]:
         for label, key in (("both answered", "bothAnswered"), ("all n", "allN")):
             block = paired[key]
             r = block["metrics"][m]
@@ -207,7 +256,7 @@ def paired_section(run: dict) -> list[str]:
         f"pairs better for `{first}` / for `{second}`",
         "test",
     ]
-    return out + table(head, rows) + [""]
+    return table(head, rows) + [""]
 
 
 def source_lengths(run: dict) -> str:
@@ -312,6 +361,14 @@ def coverage_section(run: dict) -> list[str]:
         "",
     ]
     for name, curve in run["coverage"].items():
+        points = curve["points"]
+        if points and all(p["minConfidence"] is None for p in points):
+            out += [
+                f"`{name}` gives no confidence: its {points[-1]['answered']} answered clips "
+                "cannot be ranked, so it has no curve.",
+                "",
+            ]
+            continue
         head = ["coverage", "k", "min. confidence"] + [METRIC_LABELS[m] for m in metrics]
         rows = []
         for p in curve["points"]:
@@ -402,6 +459,20 @@ def decode_section(run: dict) -> list[str]:
     return out + [""]
 
 
+def grouped_decode_section(run: dict) -> list[str]:
+    """Decoder warnings with the previews that gave each (the same few repeat on many)."""
+    by_warning: dict[str, list[str]] = {}
+    for c in run["clips"]:
+        for warning in (c.get("window") or {}).get("decodeWarnings") or []:
+            by_warning.setdefault(warning, []).append(c["trackId"])
+    if not by_warning:
+        return []
+    out = ["Decoder warnings (the previews were still decoded and analysed):", ""]
+    for warning, ids in sorted(by_warning.items()):
+        out.append(f"- {warning}: {len(ids)} previews ({', '.join(ids)})")
+    return out + [""]
+
+
 P_VALUES = object()  # where the p-value bullet goes; it needs the count from the document
 
 
@@ -409,11 +480,15 @@ def count_p_values(doc: dict) -> int:
     """How many p-values the report prints: McNemar and sign-flip rows, and AUC lines."""
     count = 0
     for run in doc["runs"]:
-        paired = run.get("paired") or {}
-        for key in ("bothAnswered", "allN"):
-            count += len((paired.get(key) or {}).get("metrics", {}))
-        for curve in run["coverage"].values():
+        pairs = pair_list(run.get("paired"))
+        for block in (run.get("agreement") or {}).values():
+            pairs += pair_list(block.get("paired"))
+        for paired in pairs:
+            for key in ("bothAnswered", "allN"):
+                count += len((paired.get(key) or {}).get("metrics", {}))
+        for curve in (run.get("coverage") or {}).values():
             count += sum(1 for r in (curve.get("ranking") or {}).values() if r["p"] is not None)
+        count += len((run.get("styles") or {}).get("versusBaseline") or {})
     return count
 
 
@@ -429,7 +504,12 @@ def p_value_note(doc: dict) -> str:
 
 
 def guide(doc: dict) -> list[str]:
-    return [p_value_note(doc) if line is P_VALUES else line for line in GUIDE]
+    lines = GUIDE if is_legacy(doc) else GUIDE[:-2] + GUIDE_BAKEOFF + GUIDE[-2:]
+    return [p_value_note(doc) if line is P_VALUES else line for line in lines]
+
+
+def is_legacy(doc: dict) -> bool:
+    return doc.get("schemaVersion", SCHEMA_VERSION) <= LEGACY_SCHEMA
 
 
 GUIDE = [
@@ -467,62 +547,463 @@ GUIDE = [
     "",
 ]
 
+GUIDE_BAKEOFF = [
+    "- **beat-this** (checkpoint `final0`, CPU, no DBN) is not part of the service; the harness "
+    "runs it behind the service's estimator interface, so its tempo goes through the service's "
+    "own rules: the onset-periodicity minimum, 40-208 BPM, the tempo refined from the beats on "
+    "onsets, and the steadiness check. It gives no confidence (so no curve and no confidence "
+    "minimum) and no key. Its authors trained `final0` on every dataset they used except GTZAN, "
+    "Ballroom included: an estimator marked *trained on this dataset* is shown on its own "
+    "training data, and those cells and pairs are not evidence about new music.",
+    "- **Agreement** (golden set) is not accuracy. Deezer's `bpm` is Deezer's own estimate, a "
+    "sourced hint; the set's tempo and key labels are nominal sheet-music markings. A "
+    "disagreement can be either side's error. The tolerances are Acc1/Acc2's (within 4 %; up to "
+    "octave and meter) and MIREX/exact's.",
+    "- **hit@k**: the fingerprint's k strongest styles (`Genre---Style`) include one whose genre "
+    "and style are both on the Discogs master (or release) of the earliest single, EP or album "
+    "the recording is on. The constant baseline gives every track the same k styles, the ones "
+    "with the highest summed score over the run's fingerprints, so it uses no label. The style "
+    "model was trained on Discogs styles (Discogs-4M, about 3.3 million tracks), possibly of "
+    "these very releases: a hit can be recall rather than judgement.",
+    "- **Costs** are measured on one machine, each estimator in its own fresh process with one "
+    "thread; times vary from run to run. Install sizes are what an extra adds to the harness's "
+    "base install (installed bytes, as an image layer would hold them uncompressed, and wheel "
+    "bytes); no image was built.",
+]
+
+
+LEGACY_SCOPE = (
+    "This report covers the tempo and key suites with the librosa and Essentia estimators. "
+    "The estimator bake-off with beat-this, style hit@k against Discogs styles and the "
+    "agreement with Deezer's `bpm` come in the next part of this work and are not here."
+)
+
+
+def intro(doc: dict) -> list[str]:
+    results = (
+        f"Rendered from `audio-{doc['date']}.json`, which holds the per-clip results: track ids, "
+        "estimates and scores. It stores no reference labels and no audio file names, but an "
+        "estimate with its score often gives the reference away (a MIREX score of 1, 0.5, 0.3 "
+        "or 0.2 fixes the key; an Acc1 hit pins the tempo within 4 %), so those results are "
+        "derived from the annotations: the licence and credits under each dataset apply to them."
+    )
+    if is_legacy(doc):
+        return [
+            "Tempo and key accuracy of the audio service (`services/audio`) on annotated "
+            "datasets, measured by `evals/audio` (`uv run python -m evals_audio`). The harness "
+            "imports the service and calls its own `analyze_signals` on 30-second clips, so the "
+            "numbers are what the service returns, gate and withholding rules included. " + results,
+            "",
+            LEGACY_SCOPE,
+            "",
+        ]
+    return [
+        "Tempo and key accuracy of the audio service (`services/audio`) on annotated datasets, "
+        "its agreement with sourced tempo and key values on the golden set's Deezer previews, "
+        "its style fingerprint against Discogs styles, and what each tempo estimator costs, "
+        "measured by `evals/audio` (`uv run python -m evals_audio`). The harness imports the "
+        "service and calls its own `analyze_signals`, so the numbers are what the service "
+        "returns, gate and withholding rules included. " + results,
+        "",
+        scope(doc),
+        "",
+    ]
+
+
+def scope(doc: dict) -> str:
+    parts = []
+    for run in doc["runs"]:
+        names = ", ".join(run.get("estimators") or run.get("summaries") or [])
+        what = {
+            "tempo": f"tempo on {run['dataset']['title']}",
+            "key": f"key on {run['dataset']['title']}",
+            "golden": "the golden set's Deezer previews",
+            "cost": f"costs on {run['dataset']['title']} clips",
+        }[run["suite"]]
+        parts.append(f"{what} ({names})")
+    return (
+        "Runs in this report: " + "; ".join(parts) + ". beat-this is measured here only: the "
+        "service does not ship it, and the service's default estimator is not changed by this "
+        "report."
+    )
+
+
+def run_header(run: dict, models_note: str) -> list[str]:
+    return [
+        "```sh",
+        f"cd evals/audio && {run['command']}",
+        "```",
+        "",
+        f"- Run {run['startedAt']} on commit `{run['gitCommit']}`; "
+        f"{run['wallSeconds']:.0f} s wall"
+        + ("." if run["suite"] == "cost" else f" with {run['jobs']} worker processes."),
+        f"- Analyzer: `ANALYZER_VERSION` {run['analyzerVersion']} "
+        + ", ".join(f"`{v}`" for v in run["analyzerVersions"].values())
+        + f" ({models_note}).",
+        f"- Environment: {', '.join(f'{k} {v}' for k, v in run['environment'].items())}.",
+        f"- Seeds: {used_seeds(run)}. Selection: {run['selection']}.",
+    ]
+
+
+def used_seeds(run: dict) -> str:
+    """The seeds a golden or cost run uses: previews are whole, costs draw no bootstrap."""
+    seeds = run["seeds"]
+    if run["suite"] == "golden":
+        return (
+            f"selection {seeds['selection']}, bootstrap {seeds['bootstrap']} (previews are whole)"
+        )
+    return f"selection {seeds['selection']}, clip windows {seeds['clips']}"
+
+
+def bakeoff_section(doc: dict) -> list[str]:
+    """Every tempo estimator's figures side by side, taken from the runs below."""
+    tempo = [r for r in doc["runs"] if r["suite"] == "tempo"]
+    golden = next((r for r in doc["runs"] if r["suite"] == "golden"), None)
+    cost = next((r for r in doc["runs"] if r["suite"] == "cost"), None)
+    names: list[str] = []
+    for run in [*tempo, *([golden] if golden else []), *([cost] if cost else [])]:
+        names += [n for n in run.get("estimators") or run["summaries"] if n not in names]
+    if len(names) < 2:
+        return []
+    head, columns = ["estimator"], []
+    for run in tempo:
+        for m in ("acc1", "acc2"):
+            head.append(f"{run['dataset']['name']}: {METRIC_LABELS[m]} correct / n")
+            columns.append(("tempo", run, m))
+    if golden:
+        for m, what in (("acc1", "within 4 %"), ("acc2", "up to octave/meter")):
+            unseen = "deezer-bpm-unseen" in golden["agreement"]
+            head.append(
+                f"golden previews{' beat-this was not trained on' if unseen else ''}: agrees "
+                f"with Deezer `bpm` {what} / n"
+            )
+            columns.append(("golden", golden, m))
+    if cost:
+        head += ["peak RSS", "tempo per clip (median wall)", "adds to an install"]
+        columns += [("cost", cost, "rss"), ("cost", cost, "time"), ("cost", cost, "install")]
+    rows = []
+    for name in names:
+        row = [f"`{name}`"]
+        for kind, run, m in columns:
+            row.append(bakeoff_cell(kind, run, m, name))
+        rows.append(row)
+    return [
+        "## Tempo estimator bake-off",
+        "",
+        "Each estimator's figures from the runs below, side by side: correct / n counts a "
+        "withheld tempo as not correct, so estimators that answer different clips stay "
+        "comparable; the paired tests on the same clips are in each run. A cell for an "
+        "estimator trained on that dataset is marked and is not evidence about new music. The "
+        "golden-set columns are agreement with Deezer's own estimate, not accuracy.",
+        "",
+        *table(head, rows),
+        "",
+    ]
+
+
+def bakeoff_cell(kind: str, run: dict, metric: str, name: str) -> str:
+    if kind == "tempo":
+        s = run["summaries"].get(name)
+        if s is None:
+            return "not run"
+        cell = frac(s["overN"][metric])
+        return cell + " (trained on this dataset)" if name in run.get("trainedOn", []) else cell
+    if kind == "golden":
+        block = run["agreement"].get("deezer-bpm-unseen") or run["agreement"]["deezer-bpm"]
+        s = block["summaries"].get(name)
+        return "not run" if s is None else frac(s["overN"][metric])
+    m, i = run["memory"].get(name), run["install"].get(name)
+    if m is None:
+        return "not run"
+    if metric == "rss":
+        return human(m["peakRssBytes"])
+    if metric == "time":
+        return f"{m['perClip']['medianWallSeconds']:.2f} s"
+    models = (run.get("modelFiles") or {}).get(name)
+    extra = f" + {human(models['bytes'])} model" if models else ""
+    return f"{human(i['installedBytes'])} installed{extra}"
+
+
+def agreement_table(suite: str, block: dict) -> list[str]:
+    metrics = METRICS[suite]
+    head = ["estimator", "n", "answered (coverage)"]
+    for m in metrics:
+        head += [f"{METRIC_LABELS[m]}: agrees / n", f"{METRIC_LABELS[m]}: agrees / answered"]
+    rows = []
+    for name, s in block["summaries"].items():
+        row = [f"`{name}`", str(s["n"]), frac(s["coverage"])]
+        for m in metrics:
+            row += [frac(s["overN"][m]), frac(s["overAnswered"][m])]
+        rows.append(row)
+    return table(head, rows) + [""]
+
+
+AGREEMENT_SECTIONS = (
+    (
+        "deezer-bpm",
+        "tempo",
+        "Tempo agreement with Deezer's `bpm`",
+        "On the previews whose Deezer entry carries a `bpm` (0 counts as missing). Deezer does "
+        "not say how its value is made; it is a sourced hint, not a reference.",
+    ),
+    (
+        "deezer-bpm-unseen",
+        "tempo",
+        "Tempo agreement with Deezer's `bpm`, without the songs beat-this was trained on",
+        "The same, on the previews whose song is not in beat-this's training data (listed "
+        "under Data), for every estimator, so the pairs stay on the same tracks.",
+    ),
+    (
+        "sheet-music-bpm",
+        "tempo",
+        "Tempo agreement with the sheet-music tempo",
+        "On the golden rows with a tempo label: the metronome marking of the published sheet "
+        "music (nominal, not measured from the recording; `evals/golden.jsonl` names each "
+        "source).",
+    ),
+    (
+        "sheet-music-key",
+        "key",
+        "Key agreement with the sheet-music key",
+        "On the golden rows with a key label: the published sheet music's key (nominal). "
+        "beat-this has no key.",
+    ),
+)
+
+
+def golden_sections(run: dict) -> list[str]:
+    ds = run["dataset"]
+    out = [f"## {ds['title']}", ""]
+    out += run_header(
+        run, "the fingerprint models were loaded: the styles below come from them"
+    ) + [""]
+    unavailable = ds["previewUnavailable"]
+    rows = [
+        ["golden file", f"`{ds['file']}`, {ds['rows']} rows, SHA-256 `{ds['fileSha256']}`"],
+        ["selected", str(ds["selected"])],
+        ["previews analysed", str(ds["previewsAnalysed"])],
+        [
+            "no preview",
+            str(len(unavailable))
+            + (
+                " (" + "; ".join(f"{k}: {v}" for k, v in unavailable.items()) + ")"
+                if unavailable
+                else ""
+            ),
+        ],
+        ["previews with a Deezer `bpm`", str(ds["deezerBpm"])],
+        *[[f"source: {what}", url] for what, url in ds["sources"]],
+        ["audio", ds["audioRights"]],
+        ["labels", ds["labelRights"]],
+        ["Discogs labels cached in", f"`{ds['labelSource']}` (outside the repository)"],
+    ]
+    for name, songs in (run.get("trainedOn") or {}).items():
+        if songs:
+            rows.append(
+                [
+                    f"selected songs in `{name}`'s training data",
+                    f"{len(songs)}: " + "; ".join(f"{k} ({v})" for k, v in songs.items()),
+                ]
+            )
+    out += ["### Data", ""] + table(["", ""], rows) + [""]
+    out += ["Credits:", ""] + [f"- {c}" for c in ds["credits"]] + [""]
+    if run.get("failed"):
+        out += ["Failed analyses:", ""]
+        out += [f"- {f['trackId']}: {f['error']}" for f in run["failed"]] + [""]
+    out += grouped_decode_section(run)
+    for key, suite, title, note in AGREEMENT_SECTIONS:
+        if key not in run["agreement"]:
+            continue
+        block = run["agreement"][key]
+        out += [f"### {title}", "", note + f" n = {block['n']}.", ""]
+        if not block["n"] or not block["summaries"]:
+            out += ["Nothing to compare.", ""]
+            continue
+        out += agreement_table(suite, block)
+        for pair in pair_list(block.get("paired")):
+            out += [f"`{pair['first']}` and `{pair['second']}` on the same tracks:", ""]
+            out += pair_table(suite, pair)
+    out += styles_section(run["styles"])
+    return out
+
+
+def styles_section(st: dict) -> list[str]:
+    out = [
+        "### Styles: hit@k against Discogs",
+        "",
+        f"`{st['model']}`'s styles on {st['n']} previews whose release has Discogs styles; "
+        f"the service returned a fingerprint for {frac(st['coverage'])}. Over n, a preview "
+        "without a fingerprint counts as no hit.",
+        "",
+    ]
+    if st["noLabel"]:
+        out += [
+            "Previews left out (no Discogs styles): "
+            + "; ".join(f"{k}: {v}" for k, v in st["noLabel"].items())
+            + ".",
+            "",
+        ]
+    if not st["n"]:
+        return out + ["Nothing to score.", ""]
+    head = [
+        "k",
+        "hit@k over n",
+        "hit@k over answered",
+        "constant baseline over n",
+        "tracks only the model / only the baseline hits",
+        "test",
+    ]
+    rows = []
+    for k, h in st["hits"].items():
+        v = st["versusBaseline"][k]
+        rows.append(
+            [
+                k,
+                frac(h["overN"]),
+                frac(h["overAnswered"]),
+                frac(h["baselineOverN"]),
+                f"{v['onlyModel']} / {v['onlyBaseline']}",
+                f"McNemar exact p = {v['mcnemarP']:.3f}",
+            ]
+        )
+    out += table(head, rows) + [""]
+    out += [
+        "- The constant baseline's styles, strongest first: "
+        + ", ".join(f"`{s}`" for s in st["baseline"])
+        + ".",
+        f"- {st['outsideTaxonomy']} of the {st['n']} releases have no genre and style pair "
+        "among the model's 400 styles, so no top-k can hit them.",
+    ]
+    differ = sum(1 for t in st["tracks"] if t["stylesDiffer"])
+    if differ:
+        out.append(f"- The fingerprint differed between estimator runs on {differ} previews.")
+    return out + [""]
+
+
+def cost_section(run: dict) -> list[str]:
+    ds = run["dataset"]
+    machine = run["machine"]
+    out = [f"## Cost: tempo estimators on {ds['title']} clips", ""]
+    out += run_header(run, "the fingerprint models were not loaded") + [
+        f"- Machine: {machine['cpu']}, {machine['cpus']} CPUs, {machine['system']}; each "
+        "estimator in its own fresh process, one thread, one after the other.",
+        "",
+    ]
+    head = [
+        "estimator",
+        "RSS, service imported",
+        "RSS, estimator ready",
+        "peak RSS",
+        "ready in",
+        "first call (wall / CPU)",
+        "per clip: median wall / CPU, max wall",
+        "packages added",
+        "installed",
+        "wheels",
+        "model files",
+    ]
+    rows = []
+    for name, m in run["memory"].items():
+        i = run["install"][name]
+        later = m["perClip"]
+        models = (run.get("modelFiles") or {}).get(name)
+        wheels = "unknown" if i["wheelBytes"] is None else human(i["wheelBytes"])
+        rows.append(
+            [
+                f"`{name}`",
+                human(m["rssServiceBytes"]),
+                human(m["rssReadyBytes"]),
+                human(m["peakRssBytes"]),
+                f"{m['readySeconds']:.2f} s",
+                f"{m['firstCall']['wallSeconds']:.2f} / {m['firstCall']['cpuSeconds']:.2f} s",
+                f"{later['medianWallSeconds']:.2f} / {later['medianCpuSeconds']:.2f} s, "
+                f"max {later['maxWallSeconds']:.2f} s (n = {later['n']})",
+                str(len(i["packages"])),
+                human(i["installedBytes"]),
+                wheels,
+                f"{models['file']}, {human(models['bytes'])}" if models else "none",
+            ]
+        )
+    out += table(head, rows) + [""]
+    out += [
+        f"Measured on {len(run['clips'])} clips ({run['selection']}). Each clip's tempo is "
+        "computed on freshly decoded signals, so a call includes what the estimator needs (the "
+        "onset envelope, its model). A first call on the first clip is shown apart, then every "
+        "clip is timed; one-time costs (numba compilation for librosa) fall on whichever call "
+        "first needs them, so they show in the maximum, not the median. A clip "
+        "the periodicity minimum stops never reaches the estimator's own work, which is what "
+        "the service would do too. The service's own process also holds the fingerprint "
+        "models and computes the gate, loudness and sections, which are not counted here. "
+        "RSS is the resident memory of the process; the service figure includes Essentia's "
+        "libraries when they are installed.",
+        "",
+    ]
+    for name, i in run["install"].items():
+        if i["packages"]:
+            out.append(
+                f"- `{name}` (extra `{i['extra']}`) adds: "
+                + ", ".join(
+                    f"{p['name']} {p['version']} ({human(p['installedBytes'])})"
+                    for p in i["packages"]
+                )
+                + "."
+            )
+    return out + [""]
+
+
+def tempo_key_sections(run: dict, legacy: bool) -> list[str]:
+    seeds = run["seeds"]
+    out = [
+        f"## {run['suite'].capitalize()}: {run['dataset']['title']}",
+        "",
+        "```sh",
+        f"cd evals/audio && {run['command']}",
+        "```",
+        "",
+        f"- Run {run['startedAt']} on commit `{run['gitCommit']}`; "
+        f"{run['wallSeconds']:.0f} s wall with {run['jobs']} worker processes.",
+        f"- Analyzer: `ANALYZER_VERSION` {run['analyzerVersion']} "
+        + ", ".join(f"`{v}`" for v in run["analyzerVersions"].values())
+        + " (the fingerprint models were not loaded; tempo and key do not use them).",
+        f"- Environment: {', '.join(f'{k} {v}' for k, v in run['environment'].items())}.",
+        f"- Seeds: selection {seeds['selection']}, clip windows {seeds['clips']}, bootstrap "
+        f"{seeds['bootstrap']}. Selection: {run['selection']}. Clips: "
+        f"{run['clipSeconds']:g} s, the start fixed by the clip seed and the track id "
+        "(SHA-256); a recording of 30 s or less is used whole." + source_lengths(run),
+        "",
+    ]
+    out += dataset_section(run)
+    out += ["### Accuracy", ""] + verdicts(run) + [""]
+    if run.get("estimatorNotes"):
+        out += [f"- {note}" for note in run["estimatorNotes"]] + [""]
+    out += summary_table(run) + [""]
+    failed = [
+        f"`{name}` {r['trackId']}: {r['error']}"
+        for name, rows in run["tracks"].items()
+        for r in rows
+        if r.get("failed")
+    ]
+    if failed:
+        out += ["Failed analyses:", ""] + [f"- {f}" for f in failed] + [""]
+    out += decode_section(run)
+    out += paired_section(run)
+    out += withheld_section(run)
+    out += coverage_section(run)
+    return out
+
 
 def render(doc: dict) -> str:
-    out = [
-        f"# Audio accuracy, {doc['date']}",
-        "",
-        "Tempo and key accuracy of the audio service (`services/audio`) on annotated datasets, "
-        "measured by `evals/audio` (`uv run python -m evals_audio`). The harness imports the "
-        "service and calls its own `analyze_signals` on 30-second clips, so the numbers are "
-        "what the service returns, gate and withholding rules included. Rendered from "
-        f"`audio-{doc['date']}.json`, which holds the per-clip results: track ids, estimates "
-        "and scores. It stores no reference labels and no audio file names, but an estimate "
-        "with its score often gives the reference away (a MIREX score of 1, 0.5, 0.3 or 0.2 "
-        "fixes the key; an Acc1 hit pins the tempo within 4 %), so those results are derived "
-        "from the annotations: the licence and credits under each dataset apply to them.",
-        "",
-        "This report covers the tempo and key suites with the librosa and Essentia estimators. "
-        "The estimator bake-off with beat-this, style hit@k against Discogs styles and the "
-        "agreement with Deezer's `bpm` come in the next part of this work and are not here.",
-        "",
-        *guide(doc),
-    ]
+    legacy = is_legacy(doc)
+    out = [f"# Audio accuracy, {doc['date']}", "", *intro(doc), *guide(doc)]
+    if not legacy:
+        out += bakeoff_section(doc)
     for run in doc["runs"]:
-        seeds = run["seeds"]
-        out += [
-            f"## {run['suite'].capitalize()}: {run['dataset']['title']}",
-            "",
-            "```sh",
-            f"cd evals/audio && {run['command']}",
-            "```",
-            "",
-            f"- Run {run['startedAt']} on commit `{run['gitCommit']}`; "
-            f"{run['wallSeconds']:.0f} s wall with {run['jobs']} worker processes.",
-            f"- Analyzer: `ANALYZER_VERSION` {run['analyzerVersion']} "
-            + ", ".join(f"`{v}`" for v in run["analyzerVersions"].values())
-            + " (the fingerprint models were not loaded; tempo and key do not use them).",
-            f"- Environment: {', '.join(f'{k} {v}' for k, v in run['environment'].items())}.",
-            f"- Seeds: selection {seeds['selection']}, clip windows {seeds['clips']}, bootstrap "
-            f"{seeds['bootstrap']}. Selection: {run['selection']}. Clips: "
-            f"{run['clipSeconds']:g} s, the start fixed by the clip seed and the track id "
-            "(SHA-256); a recording of 30 s or less is used whole." + source_lengths(run),
-            "",
-        ]
-        out += dataset_section(run)
-        out += ["### Accuracy", ""] + verdicts(run) + [""] + summary_table(run) + [""]
-        failed = [
-            f"`{name}` {r['trackId']}: {r['error']}"
-            for name, rows in run["tracks"].items()
-            for r in rows
-            if r.get("failed")
-        ]
-        if failed:
-            out += ["Failed analyses:", ""] + [f"- {f}" for f in failed] + [""]
-        out += decode_section(run)
-        out += paired_section(run)
-        out += withheld_section(run)
-        out += coverage_section(run)
+        if run["suite"] == "golden":
+            out += golden_sections(run)
+        elif run["suite"] == "cost":
+            out += cost_section(run)
+        else:
+            out += tempo_key_sections(run, legacy)
     out += [
         "## Reproducing",
         "",

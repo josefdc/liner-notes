@@ -8,9 +8,12 @@ tempo check and the key evidence rules, and no network or server in between. The
 dependencies are this project's dependencies at the versions the service's lock pins
 (pyproject.toml; tests/test_service_pins.py checks they agree).
 
-The model fingerprint (Discogs styles, moods) is not loaded: tempo and key do not use it, and
-the style comparison belongs to a later suite. `analyzer_version` therefore carries no model
-tag here.
+The model fingerprint (Discogs styles, moods) is not loaded for the tempo and key suites: they
+do not use it, and `analyzer_version` then carries no model tag. The golden suite loads it
+(load_models) to score the styles.
+
+Besides the service's own estimators, the tempo suites can run beat-this (evals_audio.beatthis),
+a beat tracker the service does not ship, behind the same interface and the same rules.
 """
 
 from __future__ import annotations
@@ -24,11 +27,21 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SERVICE_DIR = REPO_ROOT / "services" / "audio"
-ESTIMATOR_NAMES = ("librosa", "essentia")
+ESTIMATOR_NAMES = ("librosa", "essentia", "beat-this")
+# The estimators each suite can run: beat-this tracks beats and has no key.
+SUITE_ESTIMATORS = {
+    "tempo": ESTIMATOR_NAMES,
+    "key": ("librosa", "essentia"),
+    "golden": ESTIMATOR_NAMES,
+    "cost": ESTIMATOR_NAMES,
+}
 
 
 class EstimatorUnavailable(RuntimeError):
     pass
+
+
+_real_fingerprint_load: list = []
 
 
 @cache
@@ -41,7 +54,9 @@ def load():
         sys.path.insert(0, str(SERVICE_DIR))
     import fingerprint
 
-    # main loads the models at import time; tempo and key never read them.
+    # main loads the models at import time; tempo and key never read them. load_models() loads
+    # them afterwards for the suites that score the fingerprint.
+    _real_fingerprint_load.append(fingerprint.load)
     fingerprint.load = lambda: False
     import estimators
     import main
@@ -51,17 +66,48 @@ def load():
     return main, estimators
 
 
+def load_models(directory: str) -> bool:
+    """
+    Load the service's fingerprint models from `directory` (the files download_models.py pins,
+    checked by their SHA-256) into the imported service, as its startup does. True when they
+    loaded; the service then returns a fingerprint and its analyzer version carries the model
+    tag.
+    """
+    main, _ = load()
+    os.environ["MODELS_DIR"] = directory
+    main.MODELS_LOADED = bool(_real_fingerprint_load[0]())
+    return main.MODELS_LOADED
+
+
 def estimator(name: str):
     """The named estimator; never the fallback select_estimator() would quietly pick."""
     _, estimators = load()
     if name not in ESTIMATOR_NAMES:
         raise ValueError(f"unknown estimator {name!r}")
+    if name == "beat-this":
+        from . import beatthis
+
+        return beatthis.estimator()
     if name == "essentia" and not estimators.ESSENTIA_AVAILABLE:
         raise EstimatorUnavailable(
             "the essentia estimator needs essentia-tensorflow: run `uv sync --extra models` "
             "in evals/audio"
         )
     return estimators.ESTIMATORS[name]()
+
+
+def check_estimator(name: str) -> None:
+    """Raise EstimatorUnavailable when the named estimator cannot run (nothing is loaded)."""
+    if name == "beat-this":
+        from . import beatthis
+
+        if not beatthis.available():
+            raise EstimatorUnavailable(
+                "the beat-this estimator needs the beat-this extra: run "
+                "`uv sync --extra beat-this` in evals/audio"
+            )
+        return
+    estimator(name)
 
 
 def analyzer_versions(names) -> dict[str, str]:
@@ -78,6 +124,12 @@ def decode(wav: bytes):
     """The service's own decoder (downmix, guards) on an in-memory clip."""
     main, _ = load()
     return main.decode(io.BytesIO(wav))
+
+
+def decode_file(path: str):
+    """The service's own decoder on a file, as the service decodes a preview it downloads."""
+    main, _ = load()
+    return main.decode(path)
 
 
 def analyze(signals, est) -> dict:

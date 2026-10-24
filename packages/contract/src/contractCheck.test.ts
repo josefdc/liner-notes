@@ -6,8 +6,10 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  type Dirent,
   copyFileSync,
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -27,6 +29,7 @@ import { packageDir, repoDir } from "./testing/samples.js";
 // the package's node_modules, so the build resolves the same zod as packages/contract/dist does.
 const builds = join(packageDir, "node_modules", ".cache");
 let build = "";
+let distBefore = "";
 let script = "";
 let repo = "";
 
@@ -69,13 +72,29 @@ function withExtraField() {
   writeFileSync(file, JSON.stringify(snapshot));
 }
 
+/** Every file under packages/contract/dist with its modification time ("" when there is none). */
+function distStamp(): string {
+  const dist = join(packageDir, "dist");
+  return (readdirSync(dist, { recursive: true, withFileTypes: true }) as Dirent[])
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const file = join(entry.parentPath, entry.name);
+      return `${file}:${statSync(file).mtimeMs}`;
+    })
+    .sort()
+    .join("\n");
+}
+
 beforeAll(() => {
+  distBefore = existsSync(join(packageDir, "dist")) ? distStamp() : "";
   mkdirSync(builds, { recursive: true });
   // A run that was killed leaves its build behind; remove those, but not ones a run in
   // progress may still be using.
   for (const name of readdirSync(builds)) {
     const old = join(builds, name);
-    if (name.startsWith("contract-check-") && Date.now() - statSync(old).mtimeMs > 3_600_000) {
+    // Another run starting at the same time may already have removed it.
+    const modified = statSync(old, { throwIfNoEntry: false })?.mtimeMs;
+    if (name.startsWith("contract-check-") && modified && Date.now() - modified > 3_600_000) {
       rmSync(old, { recursive: true, force: true });
     }
   }
@@ -85,6 +104,8 @@ beforeAll(() => {
     ["-p", "tsconfig.build.json", "--outDir", join(build, "dist")],
     { cwd: packageDir },
   );
+  // Under node_modules Node does not see the package's own package.json, so say the build is ESM.
+  writeFileSync(join(build, "package.json"), '{ "type": "module" }\n');
   script = join(build, "scripts", "contract-check.mjs");
   mkdirSync(dirname(script));
   copyFileSync(join(packageDir, "scripts", "contract-check.mjs"), script);
@@ -99,6 +120,10 @@ afterAll(() => {
 
 // Each test spawns node and git several times: allow well beyond the 5 s default.
 describe("contract-check", { timeout: 30_000 }, () => {
+  it("builds without touching packages/contract/dist, which other test files import", () => {
+    expect(existsSync(join(packageDir, "dist")) ? distStamp() : "").toBe(distBefore);
+  });
+
   it("passes when the base has no snapshots yet, and fails on an unknown base", () => {
     const empty = commit("empty");
     expect(check(empty)).toMatchObject({ status: 0 });

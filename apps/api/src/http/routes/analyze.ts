@@ -191,6 +191,13 @@ class RunControl {
 /** A graph node's writer payload, or the result the route reports once (`complete`). */
 type AgentEvent = { type: string; [field: string]: unknown };
 
+/**
+ * Where a run's events go. It returns false only for a result the client was not sent because
+ * it fails the contract (the client got an error instead), so the run is not recorded as
+ * completed.
+ */
+type Emit = (event: AgentEvent) => boolean;
+
 /** A new run's initial state, or a Command({ resume }) that continues a paused one. */
 type GraphInput = Parameters<ReturnType<typeof createSonicAgentGraph>["stream"]>[0];
 
@@ -230,24 +237,25 @@ export function classifyNodeError(node: string, error: string): FailureCode {
  * payloads go to `emit` as they are (the stream adapter translates them). `complete` is emitted
  * exactly once, from here, whichever node produced the result: nodes report it both through the
  * writer and in their state update. A result that was already sent counts as complete even if
- * the run is aborted afterwards.
+ * the run is aborted afterwards; one refused by the contract check is a failure.
  */
 async function runGraph(
   input: GraphInput,
   threadId: string,
   signal: AbortSignal,
-  emit: (event: AgentEvent) => void,
+  emit: Emit,
 ): Promise<RunOutcome> {
   const seen: {
     trackData: TrackData | null;
+    refused: boolean;
     interrupt: DisambiguationPayload | null;
     failure: FailureCode | null;
-  } = { trackData: null, interrupt: null, failure: null };
+  } = { trackData: null, refused: false, interrupt: null, failure: null };
 
   const completeWith = (data: TrackData) => {
     if (seen.trackData) return;
     seen.trackData = data;
-    emit({ type: "complete", data });
+    if (!emit({ type: "complete", data })) seen.refused = true;
   };
 
   let threw: unknown = null;
@@ -292,6 +300,10 @@ async function runGraph(
     threw = err;
   }
 
+  if (seen.refused) {
+    console.error(`[Run ${threadId}] The result fails the contract; run failed`);
+    return { kind: "failed", code: "failed" };
+  }
   if (seen.trackData) return { kind: "complete", trackData: seen.trackData };
   if (seen.interrupt) return { kind: "interrupted", candidates: seen.interrupt.candidates ?? [] };
   if (signal.aborted) return { kind: "cancelled" };
@@ -320,7 +332,7 @@ async function executeRun(
   input: GraphInput,
   threadId: string,
   control: RunControl,
-  emit: (event: AgentEvent) => void = () => {},
+  emit: Emit = () => true,
 ): Promise<RunOutcome> {
   control.startDeadline();
   let outcome = await runGraph(input, threadId, control.signal, emit);
@@ -407,7 +419,7 @@ async function claimResume(threadId: string, selectedTrackId: string): Promise<R
 interface ResumeReply {
   refuse(code: ErrorCode): void;
   started(): void;
-  emit?: (event: AgentEvent) => void;
+  emit?: Emit;
   finish(outcome: RunOutcome): void;
 }
 
@@ -469,10 +481,19 @@ function openEventStream(res: Response, runId?: string) {
   const stream = openAnalysisStream(res, runId);
   return {
     stream,
-    /** Sends a graph node's writer payload, translated to a contract event. */
-    emit(payload: AgentEvent) {
-      const event = payload?.type === "complete" ? payload : nodeEvent(payload);
+    /**
+     * Sends a graph node's writer payload, translated to a contract event. False when the
+     * result (`complete`) failed the contract and the client was sent an error in its place; a
+     * result not written because the client has gone is not a failure.
+     */
+    emit(payload: AgentEvent): boolean {
+      if (payload?.type === "complete") {
+        stream.send(payload);
+        return stream.outcome !== "error";
+      }
+      const event = nodeEvent(payload);
       if (event) stream.send(event);
+      return true;
     },
     error: (code: ErrorCode) => stream.error(code, ERRORS[code].message),
     done: () => stream.done(),

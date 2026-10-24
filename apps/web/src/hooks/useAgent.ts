@@ -11,7 +11,8 @@
  * belong to it. Events are handled only while their stream is the run's current stream and
  * the run is the latest one, so a stale stream can never close or overwrite a newer one.
  * Each message is parsed with the contract's schema (agent/events.ts): unknown types, invalid
- * events, repeats, events of another run and a second `complete` of the run are skipped.
+ * progress events, repeats, events of another run and a second `complete` of the run are
+ * skipped; an outcome this page cannot read ends the run with a hint to reload the page.
  * A broken stream ends the run with an error the user can retry; it never starts the
  * analysis again by itself.
  */
@@ -24,6 +25,8 @@ import { API_BASE_URL } from './agent/types';
 import { fetchSuggestions } from './agent/apiClient';
 import {
   type AnalysisEvent,
+  eventSchemasLoaded,
+  loadEventSchemas,
   newRunEvents,
   parseAnalysisEvent,
   parseFactoidEvent,
@@ -41,6 +44,22 @@ export type { SearchCandidate, UseAgentReturn } from './agent/types';
  * a server that sends none is never timed out, so a slow step is not cut off.
  */
 export const STREAM_INACTIVITY_TIMEOUT_MS = 45_000;
+
+/**
+ * The error of a run this page cannot follow: the API sent an outcome it cannot read, or the
+ * code that reads the streams could not be loaded (both happen after a newer version was
+ * deployed). The code is the app's own, not one the API sends.
+ */
+export const OUTDATED_ERROR = {
+  code: 'outdated_client',
+  message:
+    'This page is out of date and cannot show the analysis. Reload the page, then search again.',
+} as const;
+
+/** Loads the code that reads the streams, unless it is loaded already. */
+function readersReady(): Promise<void> | null {
+  return eventSchemasLoaded() ? null : loadEventSchemas();
+}
 
 const INITIAL_STATE: AgentState = {
   status: 'idle',
@@ -120,6 +139,12 @@ export function useAgent(): UseAgentReturn {
   const runRef = useRef<Run>(initialRun);
   // The run's open stream and the function that closes it (and stops its watchdog).
   const streamRef = useRef<{ source: EventSource; close: () => void } | null>(null);
+
+  // Fetch the stream reader as soon as the app is up, so the first search does not wait for it.
+  // A failure is reported by the search that needs it, which tries again.
+  useEffect(() => {
+    if (!eventSchemasLoaded()) loadEventSchemas().catch(() => {});
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -252,6 +277,11 @@ export function useAgent(): UseAgentReturn {
           fail(run, data.error || 'The analysis failed.', data.code);
           break;
 
+        case 'unreadable':
+          close();
+          fail(run, OUTDATED_ERROR.message, OUTDATED_ERROR.code);
+          break;
+
         case 'done':
           close();
           // A stream that ends without a result, an error or a picker has nothing to show.
@@ -329,6 +359,20 @@ export function useAgent(): UseAgentReturn {
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
       addLog(`🔍 Searching for "${query}"...`);
+
+      // Waits only on the first search: once the reader is loaded the stream opens at once.
+      const ready = readersReady();
+      if (ready) {
+        try {
+          await ready;
+        } catch (error) {
+          console.error('[useAgent] Could not load the stream reader:', error);
+          fail(run, OUTDATED_ERROR.message, OUTDATED_ERROR.code);
+          return;
+        }
+        // A newer analysis may have started while the reader loaded.
+        if (runRef.current !== run) return;
+      }
 
       try {
         const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}`;
@@ -411,73 +455,89 @@ export function useAgent(): UseAgentReturn {
           return;
         }
 
-        const params = new URLSearchParams({
-          trackTitle,
-          trackArtist: trackArtist || '',
-          existingIds: existingIds.join(','),
-        });
+        const open = () => {
+          const params = new URLSearchParams({
+            trackTitle,
+            trackArtist: trackArtist || '',
+            existingIds: existingIds.join(','),
+          });
 
-        const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;
-        const eventSource = new EventSource(url);
-        const accept = streamGuard(newRunEvents());
-        let active = true;
+          const url = `${API_BASE_URL}/factoids/decrypt/stream?${params}`;
+          const eventSource = new EventSource(url);
+          const accept = streamGuard(newRunEvents());
+          let active = true;
 
-        const stop = () => {
-          active = false;
-          watchdog.stop();
-          eventSource.close();
-          runSignal.removeEventListener('abort', onAbort);
-          signal?.removeEventListener('abort', onAbort);
+          const stop = () => {
+            active = false;
+            watchdog.stop();
+            eventSource.close();
+            runSignal.removeEventListener('abort', onAbort);
+            signal?.removeEventListener('abort', onAbort);
+          };
+          const onAbort = () => {
+            stop();
+            reject(abortError());
+          };
+          const watchdog = inactivityWatchdog(() => {
+            stop();
+            reject(new Error('Factoid stream stopped responding'));
+          });
+          runSignal.addEventListener('abort', onAbort, { once: true });
+          signal?.addEventListener('abort', onAbort, { once: true });
+
+          eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
+          eventSource.onmessage = (event) => {
+            // Nothing reaches the caller once the stream is closed or aborted.
+            if (!active) return;
+            watchdog.activity();
+            const data = parseFactoidEvent(event.data);
+            if (!data || !accept(data)) return;
+
+            switch (data.type) {
+              case 'factoid':
+                // Emit factoid immediately to callback
+                onFactoid(data.data as Factoid);
+                break;
+
+              case 'heartbeat':
+                watchdog.heartbeat();
+                break;
+
+              case 'done':
+                stop();
+                resolve();
+                break;
+
+              case 'error':
+                console.warn('[useAgent] Factoid stream error:', data.error);
+                // The rate limit and a paused budget are reported to the caller; the stream
+                // goes on (one failed fact does not fail the others).
+                if (data.code === 'rate_limited' || data.code === 'budget_exhausted') {
+                  onUnavailable?.(data.code);
+                }
+                break;
+            }
+          };
+
+          eventSource.onerror = () => {
+            stop();
+            reject(new Error('Factoid stream connection failed'));
+          };
         };
-        const onAbort = () => {
-          stop();
-          reject(abortError());
-        };
-        const watchdog = inactivityWatchdog(() => {
-          stop();
-          reject(new Error('Factoid stream stopped responding'));
-        });
-        runSignal.addEventListener('abort', onAbort, { once: true });
-        signal?.addEventListener('abort', onAbort, { once: true });
 
-        eventSource.addEventListener('heartbeat', () => watchdog.heartbeat());
-        eventSource.onmessage = (event) => {
-          // Nothing reaches the caller once the stream is closed or aborted.
-          if (!active) return;
-          watchdog.activity();
-          const data = parseFactoidEvent(event.data);
-          if (!data || !accept(data)) return;
-
-          switch (data.type) {
-            case 'factoid':
-              // Emit factoid immediately to callback
-              onFactoid(data.data as Factoid);
-              break;
-
-            case 'heartbeat':
-              watchdog.heartbeat();
-              break;
-
-            case 'done':
-              stop();
-              resolve();
-              break;
-
-            case 'error':
-              console.warn('[useAgent] Factoid stream error:', data.error);
-              // The rate limit and a paused budget are reported to the caller; the stream
-              // goes on (one failed fact does not fail the others).
-              if (data.code === 'rate_limited' || data.code === 'budget_exhausted') {
-                onUnavailable?.(data.code);
-              }
-              break;
-          }
-        };
-
-        eventSource.onerror = () => {
-          stop();
-          reject(new Error('Factoid stream connection failed'));
-        };
+        // The stream is opened once the code that reads it is loaded.
+        const ready = readersReady();
+        if (!ready) {
+          open();
+          return;
+        }
+        ready.then(
+          () => {
+            if (runSignal.aborted || signal?.aborted) reject(abortError());
+            else open();
+          },
+          (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
+        );
       });
     },
     [],

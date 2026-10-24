@@ -7,9 +7,10 @@
  * The app is the real one (createApp) with a scripted stub in place of the compiled graph, so
  * each path of a run can be driven on demand: cache hit, pause for a choice and resume,
  * fallback result, each failure and refusal, client disconnect, run deadline and heartbeat.
- * The stub also emits what the route must never pass on as it is (a malformed progress event,
- * an invalid result, a writer event the contract does not know): the route sends a typed
- * `error` instead, so an invalid event written by the route fails these tests.
+ * The stub also emits what the route must never pass on as it is: an invalid result (the
+ * client gets a typed `error` in its place and the run is recorded as failed), and a malformed
+ * progress event or a writer event a node may not send (dropped, and the run goes on). An
+ * invalid event written by the route fails these tests.
  */
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -32,6 +33,7 @@ import { getRun } from "../../store/runs.js";
 import { createApp } from "../app.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "../routes/analyze.js";
 import { createFactoidsRouter } from "../routes/factoids.js";
+import { droppedEventCount } from "../sse.js";
 
 // =============================================================================
 // Stub graph
@@ -203,6 +205,13 @@ graph.scripts = {
   },
   async *mystery() {
     yield ["custom", { type: "mystery", detail: "a writer event the contract does not know" }];
+    yield* result("composer", COMPOSED);
+  },
+  /** A node writes one of the stream's own events (`writer <type>`), then the run completes. */
+  async *writer(_signal, threadId) {
+    const type = graph.threads.get(threadId)?.query.split(" ")[1];
+    yield ["custom", { type, threadId, code: "failed", error: "from a node", candidates: [] }];
+    yield status("composer", "Composing", { code: "LLM-RESPONSE" });
     yield* result("composer", COMPOSED);
   },
 };
@@ -507,29 +516,66 @@ describe("event streams follow the contract", () => {
       expect(types(events)).toEqual(["connected", "status"]);
     });
 
-    it("never writes an event that fails the contract: a malformed progress event is an error", async () => {
-      const events = expectAnalysis(await sse(streamPath("badstatus hurt")));
+    it("drops a malformed progress event, counts it and goes on to the result", async () => {
+      const dropped = droppedEventCount();
 
-      expect(types(events)).toEqual(["connected", "error", "done"]);
-      expect(events[1].code).toBe("failed");
+      const body = await sse(streamPath("badstatus hurt"));
+      const events = expectAnalysis(body);
+
+      expect(types(events)).toEqual(["connected", "complete", "done"]);
+      expect(events.find((event) => event.type === "complete")?.data).toEqual(COMPOSED);
+      expect(droppedEventCount()).toBe(dropped + 1);
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("not sent"),
+        expect.stringContaining("status event dropped"),
         expect.anything(),
       );
+      expect(runStatus(events[0].threadId as string)).toBe("completed");
     });
 
-    it("never writes an event that fails the contract: an invalid result is an error", async () => {
+    it("never writes a result that fails the contract: an error instead, and the run failed", async () => {
       const events = expectAnalysis(await sse(streamPath("badresult hurt")));
 
       expect(types(events)).toEqual(["connected", "status", "error", "done"]);
       expect(events[2].code).toBe("failed");
+      await vi.waitFor(() => expect(runStatus(events[0].threadId as string)).toBe("failed"));
     });
 
-    it("never writes an event that fails the contract: an unknown writer event is an error", async () => {
+    it("drops a writer event the contract does not know and goes on to the result", async () => {
       const events = expectAnalysis(await sse(streamPath("mystery hurt")));
 
-      expect(types(events)).toEqual(["connected", "error", "done"]);
-      expect(events[1].code).toBe("failed");
+      expect(types(events)).toEqual(["connected", "complete", "done"]);
+    });
+
+    it.each(["done", "error", "heartbeat", "connected", "resuming", "interrupt"])(
+      "drops a node's %s event: it neither ends the stream nor takes a seq",
+      async (type) => {
+        const dropped = droppedEventCount();
+
+        const events = expectAnalysis(await sse(streamPath(`writer ${type}`)));
+
+        expect(types(events)).toEqual(["connected", "status", "complete", "done"]);
+        expect(events.filter((event) => event.type === "heartbeat")).toEqual([]);
+        expect(droppedEventCount()).toBe(dropped + 1);
+        expect(runStatus(events[0].threadId as string)).toBe("completed");
+      },
+    );
+
+    it("ends with done and no error when the route fails after the result was sent", async () => {
+      // The run's bookkeeping throws once the result is out: the stream still ends cleanly, and
+      // nothing follows the outcome but done.
+      vi.mocked(console.log).mockImplementation((message: unknown) => {
+        if (String(message).includes("recorded completed")) throw new Error("secret-bookkeeping");
+      });
+
+      const body = await sse(streamPath("plain hurt"));
+      const events = expectAnalysis(body);
+
+      expect(types(events).slice(-2)).toEqual(["complete", "done"]);
+      expect(body).not.toContain("secret");
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("Stream route failed"),
+        expect.any(Error),
+      );
     });
 
     it("a refusal by the rate limit is a typed error, then done", async () => {
@@ -546,6 +592,8 @@ describe("event streams follow the contract", () => {
         expectWellFormed(events);
         expect(types(events)).toEqual(["error", "done"]);
         expect(events[0].code).toBe("rate_limited");
+        // A refused resume carries the run id of the thread it names.
+        if (path.includes("/resume")) expect(events[0].runId).toBe("thread-1");
       }
     });
   });
@@ -656,7 +704,7 @@ describe("event streams follow the contract", () => {
       const events = expectFactoids(await sse(factoidPath({ trackTitle: "Hurt" })));
 
       expect(types(events)).toEqual(["connected", "factoid", "error", "factoid", "done"]);
-      expect(events[2].code).toBe("failed");
+      expect(events[2]).toMatchObject({ code: "failed", index: 1 });
     });
 
     it("sends heartbeats without seq while a call takes 40 s", async () => {

@@ -326,8 +326,10 @@ export function createFactoidsRouter({
           }
 
           // An empty answer is valid (nothing documented the model is sure of): no card, no error.
-          // A card that fails the contract is not sent; the adapter sends an error for it.
-          if (card) stream.send({ type: "factoid", data: toFactoid(card, factoidId) });
+          // A card that fails the contract is not sent; the adapter sends an error for its
+          // index instead.
+          if (card)
+            stream.send({ type: "factoid", data: toFactoid(card, factoidId) }, { index: i });
           else console.log(`[Factoids] Factoid ${i + 1}: nothing documented`);
         }
       } finally {

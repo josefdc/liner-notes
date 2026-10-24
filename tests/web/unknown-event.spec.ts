@@ -5,6 +5,10 @@ import { collectProblems, fullResultData, loadFixture, streamLog, useMockApi } f
 // not know, or one that does not fit the contract, is skipped (and logged once); repeats of an
 // event (same run, same seq), events of another run and a second `complete` of the run are
 // ignored. The mocked API adds the run id and seq the API sends (../mock-sse/envelope.ts).
+//
+// Once a run has its result the app ignores everything else its streams send, so a second
+// `complete` of the same run changes nothing whatever the stream guard does; the guard is what
+// keeps out a `complete` of another run that arrives first.
 const ANALYZE = "/api/analyze/stream";
 const RESUME = "/api/analyze/stream/resume";
 const RUN = "3f6c1d2e-0000-4000-8000-0000000000aa";
@@ -100,6 +104,88 @@ test("a duplicate complete for the same run is ignored", async ({ page }) => {
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Duplicate Result")).toHaveCount(0);
   expect(problems).toEqual([]);
+});
+
+test("a complete of another run that arrives before the run's own is ignored", async ({ page }) => {
+  const problems = collectProblems(page);
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: RUN },
+        { type: "status", node: "composer", message: "Composing", code: "LLM-RESPONSE" },
+        // A result of an older run on this connection, then the run's own.
+        {
+          type: "complete",
+          runId: "older-run",
+          seq: 2,
+          data: { ...result, title: "Older Run Result" },
+        },
+        { type: "complete", runId: RUN, seq: 3, data: result },
+        { type: "done", runId: RUN, seq: 4 },
+      ],
+    },
+  });
+  await search(page, "Hurt");
+
+  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect
+    .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} done`))
+    .toHaveLength(1);
+  await expect(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await openDashboard(page);
+  await expect(page.getByText(result.title).first()).toBeVisible();
+  await expect(page.getByText("Older Run Result")).toHaveCount(0);
+  expect(problems).toEqual([]);
+});
+
+test("a result from a newer API that this page reads leniently is shown", async ({ page }) => {
+  const problems = collectProblems(page);
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: RUN },
+        // A run mode added by a newer API: additive in the contract, unknown to this page.
+        {
+          $unchecked: {
+            type: "complete",
+            data: { ...result, run: { id: RUN, mode: "replay-v2", fallback: false } },
+          },
+        },
+        { type: "done" },
+      ],
+    },
+  });
+  await search(page, "Hurt");
+
+  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
+  expect(problems).toEqual([
+    expect.stringMatching(/^warning: .*\(complete\): does not fit the contract; read leniently/),
+  ]);
+  await openDashboard(page);
+  await expect(page.getByText(result.title).first()).toBeVisible();
+});
+
+test("a result this page cannot read asks for a reload", async ({ page }) => {
+  collectProblems(page);
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: RUN },
+        { $unchecked: { type: "complete", data: "not a result" } },
+        { type: "done" },
+      ],
+    },
+  });
+  await search(page, "Hurt");
+
+  await expect(page.getByText("SIGNAL LOST")).toBeVisible();
+  await expect(page.getByText(/This page is out of date/)).toBeVisible();
+  await expect(page.getByText("Reload the page to get it.", { exact: false })).toBeVisible();
+  await expect(page.getByText("The analysis ended without a result.")).toHaveCount(0);
 });
 
 test("a repeated event and an event of another run are ignored on the resume stream", async ({

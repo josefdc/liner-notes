@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetSkippedReports } from './agent/events';
-import { STREAM_INACTIVITY_TIMEOUT_MS, useAgent } from './useAgent';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadEventSchemas, resetSkippedReports } from './agent/events';
+import { OUTDATED_ERROR, STREAM_INACTIVITY_TIMEOUT_MS, useAgent } from './useAgent';
 
 /**
  * An EventSource the test drives by hand. `send` adds what the API's stream adds to each event:
@@ -93,6 +93,9 @@ const completeLogs = (logs: Array<{ message: string }>) =>
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 
+// The stream reader is a chunk of its own; once it is loaded, streams open at once.
+beforeAll(() => loadEventSchemas());
+
 beforeEach(() => {
   FakeEventSource.instances = [];
   resetSkippedReports();
@@ -147,15 +150,15 @@ describe('useAgent stream errors', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('skips a complete event without data, so the run ends without a result', () => {
+  it('ends the run with the reload hint on a complete event it cannot read', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result } = startAnalysis();
     lastStream().send({ type: 'complete' });
 
-    expect(result.current.status).not.toBe('complete');
-    expect(result.current.trackData).toBeNull();
-    lastStream().send({ type: 'done' });
     expect(result.current.status).toBe('error');
+    expect(result.current.trackData).toBeNull();
+    expect(result.current.errorCode).toBe(OUTDATED_ERROR.code);
+    expect(result.current.error).toMatch(/out of date.*Reload/);
     expect(lastStream().closed).toBe(true);
   });
 
@@ -498,18 +501,16 @@ describe('useAgent typed events', () => {
     analysis.send({ type: 'mystery', detail: 'again' });
     analysis.send({ type: 'status', node: 'engineer' });
     analysis.send({ type: 'status', node: 'engineer', message: 'Analyzing' }, { raw: true });
-    analysis.send({ type: 'complete', data: { title: 'Not a result' } });
 
     expect(result.current.status).not.toBe('error');
     expect(result.current.logs.map((log) => log.message)).toEqual([
       '🔍 Searching for "Hurt"...',
       'Connected to agent',
     ]);
-    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls.map(([message]) => message)).toEqual([
       expect.stringContaining('(mystery): unknown type'),
       expect.stringContaining('(status): does not fit the contract'),
-      expect.stringContaining('(complete): does not fit the contract'),
     ]);
 
     analysis.send({ type: 'complete', data: track });
@@ -558,6 +559,49 @@ describe('useAgent typed events', () => {
     expect(completeLogs(hook.result.current.logs)).toBe(1);
   });
 
+  it('shows a result from a newer API that this page reads leniently', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      type: 'complete',
+      data: { ...track, run: { id: 't1', mode: 'replay-v2', fallback: false } },
+    });
+
+    expect(result.current.status).toBe('complete');
+    expect(result.current.trackData?.title).toBe('Hurt');
+  });
+
+  it('opens the picker on an interrupt from a newer API', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      ...interrupt(),
+      reason: 'disambiguation-v2',
+      candidates: candidates.map((candidate) => ({ ...candidate, coverUrl: null })),
+    });
+
+    expect(result.current.status).toBe('disambiguation');
+    expect(result.current.candidates?.map((candidate) => candidate.id)).toEqual(['c1', 'c2']);
+  });
+
+  it('shows a refused resume that carries a run id of its own', async () => {
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    const resume = lastStream();
+    resume.send({ type: 'error', code: 'invalid_input', error: 'Bad request', runId: 'fresh' });
+    resume.send({ type: 'done', runId: 'fresh' });
+
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.errorCode).toBe('invalid_input');
+    expect(hook.result.current.error).toBe('Bad request');
+  });
+
   it('skips a factoid that does not fit the contract and goes on', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { result } = renderHook(() => useAgent());
@@ -572,5 +616,47 @@ describe('useAgent typed events', () => {
 
     await pending;
     expect(onFactoid.mock.calls.map(([data]) => data.id)).toEqual(['f2']);
+  });
+});
+
+describe('useAgent before the stream reader is loaded', () => {
+  // A fresh copy of the modules, so the reader is not loaded yet.
+  async function freshHook() {
+    vi.resetModules();
+    const { useAgent: fresh } = await import('./useAgent');
+    return renderHook(() => fresh());
+  }
+
+  afterEach(() => {
+    vi.doUnmock('./agent/eventSchemas');
+    vi.resetModules();
+  });
+
+  it('opens the stream once the reader has loaded', async () => {
+    const { result } = await freshHook();
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.analyze('Hurt');
+    });
+    expect(streams()).toHaveLength(0);
+    await act(() => pending);
+
+    expect(streams()).toHaveLength(1);
+    lastStream().send({ type: 'connected', threadId: 't1' });
+    lastStream().send({ type: 'complete', data: track });
+    expect(result.current.status).toBe('complete');
+  });
+
+  it('ends the run with the reload hint when the reader cannot be loaded', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.doMock('./agent/eventSchemas', () => {
+      throw new Error('Failed to fetch dynamically imported module');
+    });
+    const { result } = await freshHook();
+    await act(() => result.current.analyze('Hurt'));
+
+    expect(streams()).toHaveLength(0);
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('outdated_client');
   });
 });

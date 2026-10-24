@@ -4,6 +4,7 @@
 
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+import { SearchCandidate as SearchCandidateSchema, TrackAnalysis } from "@liner-notes/contract";
 import { searchMultipleTracks } from "../../sources/spotify.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { isAbortError, withRetry, TransientError } from "../errors.js";
@@ -30,10 +31,15 @@ export async function scoutNode(
         TRACKS_NAMESPACE,
         resultCacheKey(normalizedQuery, configuredSources()),
       );
-      if (
-        cached?.value?.trackData &&
-        runtime.now().getTime() - cached.value.timestamp < CACHE_TTL_MS
-      ) {
+      const fresh =
+        cached?.value?.trackData && runtime.now().getTime() - cached.value.timestamp < CACHE_TTL_MS;
+      // A stored result the contract no longer accepts would be refused on every search until
+      // it expires: it is composed again instead.
+      const usable = fresh && TrackAnalysis.safeParse(cached.value.trackData).success;
+      if (fresh && !usable) {
+        console.warn("⚠️ [Scout] Stored result does not fit the contract; composing again");
+      }
+      if (usable) {
         console.log("📦 [Scout] Cache hit for:", normalizedQuery);
         writer?.({
           type: "status",
@@ -158,18 +164,38 @@ export async function scoutNode(
         reason: `Top: ${topTrack.popularity} < threshold ${disambiguationThreshold} AND no significant gap`,
       });
 
-      // Convert to candidates for human selection (limited by maxCandidates config)
-      const candidates: SearchCandidate[] = tracks.slice(0, maxCandidates).map((t) => ({
-        id: t.id,
-        title: t.title,
-        artist: t.artist,
-        ...(t.artistNames ? { artistNames: t.artistNames } : {}),
-        ...(t.artistIds ? { artistIds: t.artistIds } : {}),
-        album: t.album,
-        coverUrl: t.coverUrl,
-        releaseYear: t.releaseDate?.split("-")[0],
-        popularity: t.popularity,
-      }));
+      // Convert to candidates for human selection (limited by maxCandidates config). One the
+      // contract does not accept is left out rather than failing the whole choice.
+      const candidates: SearchCandidate[] = tracks
+        .slice(0, maxCandidates)
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          ...(t.artistNames ? { artistNames: t.artistNames } : {}),
+          ...(t.artistIds ? { artistIds: t.artistIds } : {}),
+          album: t.album,
+          coverUrl: t.coverUrl,
+          releaseYear: t.releaseDate?.split("-")[0],
+          popularity: t.popularity,
+        }))
+        .filter((candidate) => {
+          const checked = SearchCandidateSchema.safeParse(candidate);
+          if (!checked.success) {
+            console.warn(
+              "⚠️ [Scout] Candidate left out, it does not fit the contract:",
+              candidate.id,
+              checked.error.issues.map((issue) => issue.path.join(".")),
+            );
+          }
+          return checked.success;
+        });
+      if (candidates.length === 0) {
+        return {
+          error: "No candidate fits the contract",
+          statusMessages: ["❌ No usable matches"],
+        };
+      }
 
       writer?.({
         type: "candidates",

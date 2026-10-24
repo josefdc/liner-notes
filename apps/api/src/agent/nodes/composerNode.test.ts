@@ -362,6 +362,27 @@ describe("composerNode", () => {
     expect(out.usage).toEqual([expect.objectContaining({ callSite: "composer", status: "ok" })]);
   });
 
+  it.each([
+    ["a composed result", succeeding],
+    ["the fallback", () => failing("rate_limited")],
+  ])(
+    "neither sends nor stores %s that does not fit the contract, and fails the run",
+    async (_name, llm) => {
+      const writer = vi.fn();
+      // A cover URL the contract cannot carry (it is a string, empty when unknown).
+      const out = await createComposerNode(testRuntime(llm()))(
+        stateWith(measured, { coverUrl: null }),
+        config({ writer }),
+      );
+
+      expect(writer.mock.calls.map(([event]) => event.type)).not.toContain("complete");
+      expect(store.put).not.toHaveBeenCalled();
+      expect(out.trackData).toBeUndefined();
+      expect(out.error).toMatch(/does not fit the contract.*coverUrl/);
+      expect(out.usage).toHaveLength(1);
+    },
+  );
+
   describe("on a provider failure", () => {
     it.each<[LlmErrorKind, string]>([
       ["budget_exceeded", "budget_exhausted"],

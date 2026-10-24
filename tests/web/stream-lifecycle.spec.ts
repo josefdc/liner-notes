@@ -158,7 +158,7 @@ test("a duplicate complete for the thread is ignored when the picker times out",
       [RESUME]: [
         { type: "resuming", threadId: "thread-hitl" },
         { type: "complete", data: result },
-        { type: "complete", data: result },
+        { $unchecked: { type: "complete", data: result } },
         { type: "done" },
       ],
     },
@@ -181,4 +181,68 @@ test("a duplicate complete for the thread is ignored when the picker times out",
   expect((await streamLog(page)).filter((entry) => entry === `${RESUME} complete`)).toHaveLength(2);
   await expect.soft(page.getByText(COMPLETE_LOG)).toHaveCount(1);
   expect(problems).toEqual([]);
+});
+
+// The browser's own EventSource (not the mocked one): a stream the app leaves open is opened
+// again by the browser once the response ends, which would start the analysis again on the
+// server. The response comes from a route with a short `retry:`, so a reconnect would show up
+// within a few hundred milliseconds.
+test.describe("with the browser's EventSource", () => {
+  const sse = (events: object[]) =>
+    `retry: 50\n\n${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}`;
+  const run = "3f6c1d2e-0000-4000-8000-0000000000bb";
+
+  async function serveStream(page: Page, body: string) {
+    const opened: string[] = [];
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+    await page.route("**/api/search/suggest**", (route) =>
+      route.fulfill({ json: { success: true, suggestions: [] } }),
+    );
+    await page.route("**/api/analyze/stream?**", (route) => {
+      opened.push(route.request().url());
+      return route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+        body,
+      });
+    });
+    return opened;
+  }
+
+  test("an error closes the stream: the analysis is not requested again", async ({ page }) => {
+    const opened = await serveStream(
+      page,
+      sse([
+        { type: "connected", runId: run, seq: 0, threadId: run },
+        {
+          type: "error",
+          runId: run,
+          seq: 1,
+          code: "timeout",
+          error: "The analysis took too long.",
+        },
+        { type: "done", runId: run, seq: 2 },
+      ]),
+    );
+    await search(page, "Hurt");
+
+    await expect(page.getByText("The analysis took too long.")).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(opened).toHaveLength(1);
+  });
+
+  test("a connection that drops mid-run is not opened again", async ({ page }) => {
+    const opened = await serveStream(
+      page,
+      sse([
+        { type: "connected", runId: run, seq: 0, threadId: run },
+        { type: "status", runId: run, seq: 1, node: "scout", message: "Searching" },
+      ]),
+    );
+    await search(page, "Hurt");
+
+    await expect(page.getByText("Lost the connection to the analysis.")).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(opened).toHaveLength(1);
+  });
 });

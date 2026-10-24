@@ -94,3 +94,43 @@ export function contractMisfits(
   }
   return misfits;
 }
+
+const OUTCOMES = new Set(["complete", "interrupt", "error"]);
+
+/**
+ * The streams of a configuration that break the rules the API keeps on every stream it sends,
+ * as "<path> (opening <n>): <problem>": one run id, `seq` 0, 1, 2… on every event but
+ * heartbeats, at most one `done` and nothing after it, and on an analysis stream at most one
+ * outcome (`complete`, `interrupt` or `error`), exactly one when the stream ends with `done`,
+ * and none after `done`. A stream that holds an `$unchecked` event, or an event that names its
+ * own `runId` or `seq`, sends something the API would not on purpose and is not checked.
+ */
+export function streamRuleBreaks(config: MockConfig): string[] {
+  const breaks: string[] = [];
+  for (const [path, entry] of Object.entries(config.streams ?? {})) {
+    listsOf(entry).forEach((list, opening) => {
+      const where = `${path} (opening ${opening + 1})`;
+      if (list.some((event) => event.$unchecked)) return;
+      const events = list.filter(isEvent);
+      if (events.some((event) => "runId" in event || "seq" in event)) return;
+      const enveloped = withEnvelope({ streams: { [path]: events } }).streams?.[path] as Event[];
+
+      if (new Set(enveloped.map((event) => event.runId)).size > 1) {
+        breaks.push(`${where}: more than one run id`);
+      }
+      const numbered = enveloped.filter((event) => event.type !== "heartbeat");
+      if (numbered.some((event, index) => event.seq !== index)) {
+        breaks.push(`${where}: seq is not 0, 1, 2…`);
+      }
+      const done = events.findIndex((event) => event.type === "done");
+      if (done !== -1 && done !== events.length - 1) {
+        breaks.push(`${where}: events after done`);
+      }
+      if (isFactoidPath(path)) return;
+      const outcomes = events.filter((event) => OUTCOMES.has(String(event.type))).length;
+      if (outcomes > 1) breaks.push(`${where}: ${outcomes} outcomes`);
+      if (done !== -1 && outcomes === 0) breaks.push(`${where}: done without an outcome`);
+    });
+  }
+  return breaks;
+}

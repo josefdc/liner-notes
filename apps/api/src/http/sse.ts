@@ -4,9 +4,11 @@
  *
  * A stream stamps each event with its run's id (`runId`) and its position in the stream (`seq`,
  * from 0, one per event written; heartbeats carry none), checks it against the contract and
- * writes it with `encodeSseEvent`. An event that fails the check is a bug: it is logged and a
- * typed `error` (code `failed`) is sent in its place, so nothing unchecked reaches a client.
- * Once the client has gone nothing more is written, and `done` is always the last event.
+ * writes it with `encodeSseEvent`. An event that fails the check is a bug and is never sent.
+ * When it is the run's outcome (`complete`, `interrupt`) or a factoid, a typed `error` (code
+ * `failed`) takes its place, so the client is not left waiting; any other event (progress) is
+ * logged, counted and dropped, and the run goes on. Once the client has gone nothing more is
+ * written, and `done` is always the last event.
  */
 
 import { randomUUID } from "node:crypto";
@@ -35,24 +37,60 @@ interface StreamKind {
    * (`complete`, `interrupt` or `error`), so a client sees exactly one of them.
    */
   outcomes: ReadonlySet<string>;
+  /**
+   * Events that are replaced by an `error` (code `failed`) when they fail the contract: the
+   * client is waiting for them. Any other event that fails is dropped.
+   */
+  replaced: ReadonlySet<string>;
 }
 
 const ANALYSIS: StreamKind = {
   name: "analysis",
   schema: AnalyzeStreamEvent,
   outcomes: new Set(["complete", "interrupt", "error"]),
+  replaced: new Set(["complete", "interrupt"]),
 };
 // On the factoid stream an error is one factoid's: the others still follow.
-const FACTOIDS: StreamKind = { name: "factoids", schema: FactoidStreamEvent, outcomes: new Set() };
+const FACTOIDS: StreamKind = {
+  name: "factoids",
+  schema: FactoidStreamEvent,
+  outcomes: new Set(),
+  replaced: new Set(["factoid"]),
+};
+
+/** Events dropped because they failed the contract (or a node may not send them). */
+let droppedEvents = 0;
+
+/** How many events this process has dropped instead of sending; for logs and tests. */
+export function droppedEventCount(): number {
+  return droppedEvents;
+}
+
+function dropEvent(stream: string, type: string, reason: string, detail?: unknown): void {
+  droppedEvents += 1;
+  console.error(
+    `[SSE ${stream}] ${type} event dropped: ${reason} (${droppedEvents} dropped since start)`,
+    detail ?? "",
+  );
+}
 
 export interface EventStream {
   readonly runId: string | null;
+  /**
+   * The outcome event the client was sent (`complete`, `interrupt` or `error`), or null. An
+   * outcome that failed the contract reads `error`: the client got the error in its place.
+   */
+  readonly outcome: string | null;
   /** True once the client has gone (the response closed before it was ended). */
   readonly closed: boolean;
   /** Aborts when the client goes away. */
   readonly signal: AbortSignal;
-  /** Sends one event; false when it was not written (client gone, after the outcome, invalid). */
-  send(event: EventBody): boolean;
+  /**
+   * Sends one event; false when it was not written (client gone, after the outcome, invalid).
+   * `replacedWith` is added to the `error` sent in place of an event that fails the contract
+   * (a factoid's `index`).
+   */
+  send(event: EventBody, replacedWith?: Record<string, unknown>): boolean;
   /** Sends an `error` event with a code and a short message for the user. */
   error(code: ErrorCode, message: string, detail?: Record<string, unknown>): boolean;
   /** Sends `done` (once) and ends the response. */
@@ -89,40 +127,60 @@ function openStream(
   const writable = () =>
     !ended && !disconnect.signal.aborted && !res.writableEnded && !res.destroyed;
 
-  /** Checks an event against the contract and writes it; false when it was not written. */
-  const write = (event: Record<string, unknown> & { type: string }): boolean => {
+  /**
+   * The event as one SSE message, or the reason it cannot be sent: it fails the contract, or
+   * it cannot be encoded.
+   */
+  const encode = (
+    event: Record<string, unknown> & { type: string },
+  ): { line: string } | { problem: string; detail: unknown } => {
     const checked = kind.schema.safeParse(event);
-    let line: string | null = null;
-    if (checked.success) {
-      try {
-        line = encodeSseEvent(event as AnalyzeStreamEvent);
-      } catch (err) {
-        console.error(
-          `[SSE ${kind.name}] ${event.type} event could not be encoded; not sent:`,
-          err,
-        );
-        return false;
-      }
-    } else {
-      console.error(
-        `[SSE ${kind.name}] ${event.type} event fails the contract; not sent:`,
-        checked.error.issues.map(
+    if (!checked.success) {
+      return {
+        problem: "it fails the contract",
+        detail: checked.error.issues.map(
           (issue) => `${issue.path.join(".") || "(event)"}: ${issue.message}`,
         ),
+      };
+    }
+    try {
+      return { line: encodeSseEvent(event as AnalyzeStreamEvent) };
+    } catch (err) {
+      return { problem: "it cannot be encoded", detail: err };
+    }
+  };
+
+  /** Writes a control event built here (`done`, `heartbeat`); false when it was not written. */
+  const write = (event: Record<string, unknown> & { type: string }): boolean => {
+    const encoded = encode(event);
+    if ("problem" in encoded) {
+      console.error(
+        `[SSE ${kind.name}] ${event.type} event not sent: ${encoded.problem}`,
+        encoded.detail,
       );
       return false;
     }
-    res.write(line);
+    res.write(encoded.line);
     return true;
   };
 
-  const sendNumbered = (body: EventBody): boolean => {
-    const event = { ...body, runId, seq };
-    if (!write(event)) {
-      // A bug, not the run's outcome: the client is told the request failed.
-      if (body.type !== "error") sendError("failed", INVALID_EVENT_MESSAGE);
+  const sendNumbered = (body: EventBody, replacedWith?: Record<string, unknown>): boolean => {
+    const encoded = encode({ ...body, runId, seq });
+    if ("problem" in encoded) {
+      if (kind.replaced.has(body.type)) {
+        // The client is waiting for this event: it is told the request failed instead.
+        console.error(
+          `[SSE ${kind.name}] ${body.type} event not sent: ${encoded.problem}; sending an error`,
+          encoded.detail,
+        );
+        sendError("failed", INVALID_EVENT_MESSAGE, replacedWith);
+      } else {
+        // Progress the client can do without: the run goes on, and the event takes no seq.
+        dropEvent(kind.name, body.type, encoded.problem, encoded.detail);
+      }
       return false;
     }
+    res.write(encoded.line);
     seq += 1;
     if (kind.outcomes.has(body.type)) outcome = body.type;
     return true;
@@ -154,11 +212,14 @@ function openStream(
 
   return {
     runId,
+    get outcome() {
+      return outcome;
+    },
     get closed() {
       return disconnect.signal.aborted;
     },
     signal: disconnect.signal,
-    send(body) {
+    send(body, replacedWith) {
       if (!writable()) return false;
       if (body.type === "done") {
         done();
@@ -168,11 +229,16 @@ function openStream(
         const { code, error, ...detail } = body;
         return sendError(code as ErrorCode, String(error), detail);
       }
+      if (body.type === "heartbeat") {
+        // Heartbeats come from the stream's own timer and never take a seq.
+        dropEvent(kind.name, body.type, "only the stream sends heartbeats");
+        return false;
+      }
       if (outcome) {
         console.log(`[SSE ${kind.name}] ${body.type} event after ${outcome}; not sent`);
         return false;
       }
-      return sendNumbered(body);
+      return sendNumbered(body, replacedWith);
     },
     error: sendError,
     done,
@@ -220,26 +286,28 @@ export function refuseStream(
 // Node writer events
 // =============================================================================
 
-/** Writer events of the contract that the nodes may send as they are. */
-const PASSED_ON = new Set(["status", "evidence", "claim", "audio"]);
+/** Writer events of the contract that the nodes may send (`status` is narrowed first). */
+const NODE_EVENTS = new Set(["status", "evidence", "claim", "audio"]);
 
 /**
  * The stream event for one payload a graph node wrote (LangGraph's custom stream mode), or
- * null for one the route sends otherwise: `complete` (sent once, by the route) and
- * `candidates` (sent once, in the `interrupt`). A `status` keeps only the fields the contract
- * names. Any other payload is passed on as it is and fails the contract check, which reports
- * the bug.
+ * null for one that is not sent as it is. `complete` and `candidates` are sent by the route
+ * (the result once, the candidates in the `interrupt`). A `status` keeps only the fields the
+ * contract names. Nodes report progress only: any other payload (a stream's own events such as
+ * `connected`, `heartbeat`, `error` or `done`, an outcome, a type the contract does not know)
+ * is a bug in the node; it is logged, counted and dropped, and the run goes on.
  */
 export function nodeEvent(payload: unknown): EventBody | null {
-  if (typeof payload !== "object" || payload === null) {
-    return { type: "invalid", payload };
-  }
-  const { type } = payload as { type?: unknown };
+  const type =
+    typeof payload === "object" && payload !== null
+      ? (payload as { type?: unknown }).type
+      : undefined;
   if (type === "complete" || type === "candidates") return null;
   if (type === "status") {
     const { message, code, node, timestamp } = payload as Record<string, unknown>;
     return { type, message, code, node, timestamp };
   }
-  if (typeof type === "string" && PASSED_ON.has(type)) return payload as EventBody;
-  return { ...(payload as Record<string, unknown>), type: String(type) };
+  if (typeof type === "string" && NODE_EVENTS.has(type)) return payload as EventBody;
+  dropEvent(ANALYSIS.name, String(type), "a node may not send this event");
+  return null;
 }

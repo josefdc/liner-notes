@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  eventSchemasLoaded,
+  loadEventSchemas,
   newRunEvents,
   parseAnalysisEvent,
   parseFactoidEvent,
@@ -26,6 +28,11 @@ const result = {
 const complete = (seq: number, runId = 'run-1') => ({ type: 'complete', runId, seq, data: result });
 
 let warn: ReturnType<typeof vi.spyOn>;
+beforeAll(async () => {
+  expect(eventSchemasLoaded()).toBe(false);
+  await loadEventSchemas();
+  expect(eventSchemasLoaded()).toBe(true);
+});
 beforeEach(() => {
   resetSkippedReports();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -49,11 +56,78 @@ describe('parseAnalysisEvent', () => {
     ['no seq', { type: 'status', runId: 'run-1', message: 'x' }],
     ['a negative seq', status(-1)],
     ['an error without a code', { type: 'error', runId: 'run-1', seq: 0, error: 'x' }],
-    ['an interrupt without candidates', { type: 'interrupt', runId: 'r', seq: 0, threadId: 'r' }],
-    ['a result that is not a TrackAnalysis', { ...complete(1), data: { title: 'x' } }],
+    [
+      'an audio reason this page does not know',
+      {
+        type: 'audio',
+        runId: 'run-1',
+        seq: 3,
+        audio: null,
+        unavailableReason: 'reason-from-a-newer-api',
+      },
+    ],
   ])('skips an event with %s', (_what, event) => {
     expect(parseAnalysisEvent(json(event))).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  // What the contract calls additive (a new enum value, a wider type, a looser bound) must not
+  // cost the user the result: the outcome is read by its envelope and handed to the app.
+  it.each([
+    ['a new run mode', { run: { id: 'r', mode: 'replay-v2', fallback: false } }],
+    ['a null preview URL', { previewUrl: null }],
+    ['no bpm', { bpm: undefined }],
+    ['credits without writers', { credits: { producers: ['X'] } }],
+  ])('uses a result with %s, logged once', (_what, change) => {
+    const event = { ...complete(3), data: { ...result, ...change } };
+    expect(parseAnalysisEvent(json(event))).toEqual(JSON.parse(json(event)));
+    parseAnalysisEvent(json(event));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain(
+      '(complete): does not fit the contract; read leniently',
+    );
+  });
+
+  it('uses an interrupt with a candidate this page cannot fully read, and keeps what it can', () => {
+    const candidate = { id: 'c1', title: 'Hurt', artist: 'NIN', album: 'A', coverUrl: '' };
+    const event = {
+      type: 'interrupt',
+      runId: 'run-1',
+      seq: 2,
+      reason: 'disambiguation-v2',
+      threadId: 'run-1',
+      message: 'Pick one',
+      candidates: [
+        { ...candidate, coverUrl: null, popularity: 120 },
+        { ...candidate, id: 'c2', releaseYear: '1994' },
+        { title: 'No id' },
+      ],
+    };
+    expect(parseAnalysisEvent(json(event))).toEqual({
+      ...event,
+      // A wider bound is kept as sent; a field of the wrong type reads as missing.
+      candidates: [
+        { ...candidate, popularity: 120 },
+        { ...candidate, id: 'c2', releaseYear: '1994' },
+      ],
+    });
+  });
+
+  it.each([
+    ['a result that is not an object', { ...complete(1), data: 'Hurt' }],
+    ['a result without a seq', { type: 'complete', runId: 'run-1', data: result }],
+    ['an interrupt without candidates', { type: 'interrupt', runId: 'r', seq: 0, threadId: 'r' }],
+    [
+      'an interrupt whose candidates cannot be shown',
+      { type: 'interrupt', runId: 'r', seq: 0, threadId: 'r', candidates: [{ id: 'c1' }] },
+    ],
+  ])('marks an outcome with %s as unreadable', (_what, event) => {
+    expect(parseAnalysisEvent(json(event))).toMatchObject({
+      type: 'unreadable',
+      event: event.type,
+      runId: event.runId,
+    });
+    expect(warn.mock.calls[0][0]).toContain('cannot be read');
   });
 
   it('skips a message that is not JSON', () => {
@@ -126,6 +200,23 @@ describe('streamGuard', () => {
     expect(resume(complete(1))).toBe(true);
     expect(resume(complete(2))).toBe(false);
     expect(analysis(complete(1))).toBe(false);
+  });
+
+  it('takes a refusal (error at seq 0, then done) under a run id of its own', () => {
+    const run = newRunEvents();
+    run.runId = 'run-1';
+    const resume = streamGuard(run);
+    const refusal = { type: 'error', runId: 'fresh-id', seq: 0 };
+    expect(resume(refusal)).toBe(true);
+    expect(resume({ type: 'done', runId: 'fresh-id', seq: 1 })).toBe(true);
+    expect(run.runId).toBe('run-1');
+
+    // Anything else of another run is still dropped.
+    const other = streamGuard(run);
+    expect(other(status(0))).toBe(true);
+    expect(other({ ...refusal, seq: 1 })).toBe(false);
+    expect(streamGuard(run)({ type: 'done', runId: 'fresh-id', seq: 1 })).toBe(false);
+    expect(streamGuard(run)(complete(0, 'fresh-id'))).toBe(false);
   });
 
   it('matches any run for a factoid stream that does not know its run', () => {

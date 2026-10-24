@@ -132,7 +132,7 @@ test("a complete event without a result shows an error with a retry", async ({ p
       [ANALYZE]: [
         { type: "connected", threadId: "thread-empty" },
         { type: "status", node: "composer", message: "Composing", code: "GEMINI-CONNECT" },
-        // Not an event the API sends: the app skips it, so the run ends without a result.
+        // Not an event the API sends: the app cannot read it, so the run fails and asks for a reload.
         { $unchecked: { type: "complete" } },
         { type: "done" },
       ],

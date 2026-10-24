@@ -201,6 +201,19 @@ describe("scoutNode's track picker", () => {
     expect(out.error ?? null).toBeNull();
   });
 
+  it("matches a remembered choice against the candidates that were offered", async () => {
+    spotify.answer = async () => JSON.stringify(ambiguous);
+    const store = new InMemoryStore();
+    // What the clarification node saves after a pick from the offered rows (b was left out).
+    await store.put(["disambiguation"], "song", { selectedTrackId: "c", candidateIds: "a,c" });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song" });
+
+    expect(out.selectedTrackId).toBe("c");
+    expect(out.candidates ?? null).toBeNull();
+  });
+
   it("fails the search when no candidate fits the contract", async () => {
     spotify.answer = async () =>
       JSON.stringify(ambiguous.map((candidate) => ({ ...candidate, coverUrl: null })));

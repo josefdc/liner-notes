@@ -161,12 +161,15 @@ describe("web mock fixtures", () => {
         path,
       ).toEqual(numbered.map((_, index) => index));
       expect(all.filter((event) => event.type === "heartbeat" && "seq" in event)).toEqual([]);
-      // The picker is announced by `interrupt` alone (#8); one result at most; `done` last.
+      // The picker is announced by `interrupt` alone (#8); one outcome at most; `done` last.
       expect(
         all.filter((event) => event.type === "candidates"),
         path,
       ).toEqual([]);
-      expect(all.filter((event) => event.type === "complete").length).toBeLessThanOrEqual(1);
+      const outcomes = all.filter((event) =>
+        ["complete", "interrupt", "error"].includes(event.type),
+      );
+      expect(outcomes.length, path).toBeLessThanOrEqual(1);
       expect(all.filter((event) => event.type === "done").length, path).toBe(1);
       expect(all.at(-1)?.type, path).toBe("done");
     }

@@ -115,14 +115,40 @@ export async function scoutNode(
     const isAmbiguous = tracks.length > 1 && !isTopTrackDominant && !hasSignificantGap;
 
     if (isAmbiguous) {
+      // Convert to candidates for human selection (limited by maxCandidates config). One the
+      // contract does not accept is left out rather than failing the whole choice.
+      const candidates: SearchCandidate[] = tracks
+        .slice(0, maxCandidates)
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          ...(t.artistNames ? { artistNames: t.artistNames } : {}),
+          ...(t.artistIds ? { artistIds: t.artistIds } : {}),
+          album: t.album,
+          coverUrl: t.coverUrl,
+          releaseYear: t.releaseDate?.split("-")[0],
+          popularity: t.popularity,
+        }))
+        .filter((candidate) => {
+          const checked = SearchCandidateSchema.safeParse(candidate);
+          if (!checked.success) {
+            console.warn(
+              "⚠️ [Scout] Candidate left out, it does not fit the contract:",
+              candidate.id,
+              checked.error.issues.map((issue) => issue.path.join(".")),
+            );
+          }
+          return checked.success;
+        });
       // Check stored disambiguation preference before interrupting
       if (store) {
         try {
           const pref = await store.get(["disambiguation"], normalizedQuery);
           if (pref?.value?.selectedTrackId) {
-            const currentIds = tracks
-              .slice(0, maxCandidates)
-              .map((t) => t.id)
+            // The same list the clarification node remembers, so a left-out row cannot block a match.
+            const currentIds = candidates
+              .map((c) => c.id)
               .sort()
               .join(",");
             if (pref.value.candidateIds === currentIds) {
@@ -164,32 +190,6 @@ export async function scoutNode(
         reason: `Top: ${topTrack.popularity} < threshold ${disambiguationThreshold} AND no significant gap`,
       });
 
-      // Convert to candidates for human selection (limited by maxCandidates config). One the
-      // contract does not accept is left out rather than failing the whole choice.
-      const candidates: SearchCandidate[] = tracks
-        .slice(0, maxCandidates)
-        .map((t) => ({
-          id: t.id,
-          title: t.title,
-          artist: t.artist,
-          ...(t.artistNames ? { artistNames: t.artistNames } : {}),
-          ...(t.artistIds ? { artistIds: t.artistIds } : {}),
-          album: t.album,
-          coverUrl: t.coverUrl,
-          releaseYear: t.releaseDate?.split("-")[0],
-          popularity: t.popularity,
-        }))
-        .filter((candidate) => {
-          const checked = SearchCandidateSchema.safeParse(candidate);
-          if (!checked.success) {
-            console.warn(
-              "⚠️ [Scout] Candidate left out, it does not fit the contract:",
-              candidate.id,
-              checked.error.issues.map((issue) => issue.path.join(".")),
-            );
-          }
-          return checked.success;
-        });
       if (candidates.length === 0) {
         return {
           error: "No candidate fits the contract",

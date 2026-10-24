@@ -13,10 +13,14 @@
  *   reads without rewriting, so their age says nothing about whether they are still used.
  * - Run records are deleted when they finished (or, if never finished, started) longer ago than
  *   the run retention, and the events their streams sent with them.
+ * - Stored stream events are deleted once they were sent longer ago than the event retention,
+ *   whatever their run. They are kept only to record a run as a replay soon after it ran; the
+ *   run's result stays with the run. The event retention is never longer than the run retention.
  *
- * Defaults: checkpoints 24 hours, store items 30 days, runs 30 days. Override with
- * CHECKPOINT_RETENTION_HOURS (at least 1), STORE_RETENTION_DAYS and RUN_RETENTION_DAYS (at
- * least 1 each); smaller values are raised to the minimum with a warning.
+ * Defaults: checkpoints 24 hours, store items 30 days, runs 30 days, run events 7 days.
+ * Override with CHECKPOINT_RETENTION_HOURS (at least 1), STORE_RETENTION_DAYS,
+ * RUN_RETENTION_DAYS and RUN_EVENT_RETENTION_DAYS (at least 1 each); smaller values are raised
+ * to the minimum with a warning.
  */
 
 import type Database from "better-sqlite3";
@@ -29,12 +33,14 @@ export interface RetentionPolicy {
   checkpointRetentionMs: number;
   storeRetentionMs: number;
   runRetentionMs: number;
+  runEventRetentionMs: number;
 }
 
 export const DEFAULT_RETENTION: RetentionPolicy = {
   checkpointRetentionMs: 24 * HOUR_MS,
   storeRetentionMs: 30 * DAY_MS,
   runRetentionMs: 30 * DAY_MS,
+  runEventRetentionMs: 7 * DAY_MS,
 };
 
 /** Store namespaces that age pruning never touches (see the comment at the top). */
@@ -78,6 +84,13 @@ export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): Retentio
         "RUN_RETENTION_DAYS",
         env.RUN_RETENTION_DAYS,
         DEFAULT_RETENTION.runRetentionMs / DAY_MS,
+        1,
+      ) * DAY_MS,
+    runEventRetentionMs:
+      setting(
+        "RUN_EVENT_RETENTION_DAYS",
+        env.RUN_EVENT_RETENTION_DAYS,
+        DEFAULT_RETENTION.runEventRetentionMs / DAY_MS,
         1,
       ) * DAY_MS,
   };
@@ -169,23 +182,16 @@ export function pruneDatabase(
       .prepare(`DELETE FROM store_items WHERE updated_at < ? AND namespace NOT IN (${kept})`)
       .run(storeCutoff, ...KEPT_NAMESPACES).changes;
 
-    // A run's events go with it.
+    // A run's events go with it; events older than the event retention go whatever their run
+    // (this also removes the events of a run whose record could not be written).
     const expired = "SELECT run_id FROM runs WHERE COALESCE(finished_at, created_at) <= ?";
+    const eventCutoffMs = now - Math.min(policy.runEventRetentionMs, policy.runRetentionMs);
     result.runEvents = db
-      .prepare(`DELETE FROM run_events WHERE run_id IN (${expired})`)
-      .run(runCutoff).changes;
+      .prepare(`DELETE FROM run_events WHERE sent_at <= ? OR run_id IN (${expired})`)
+      .run(eventCutoffMs, runCutoff).changes;
     result.runs = db
       .prepare("DELETE FROM runs WHERE COALESCE(finished_at, created_at) <= ?")
       .run(runCutoff).changes;
-    // Events whose run has no record (it could not be written) go once they are as old as a run
-    // that would be pruned, so a run still sending them keeps them.
-    result.runEvents += db
-      .prepare(
-        `DELETE FROM run_events
-         WHERE sent_at <= ?
-           AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.run_id = run_events.run_id)`,
-      )
-      .run(runCutoff * 1000).changes;
   })();
 
   const total =

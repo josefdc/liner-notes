@@ -16,7 +16,11 @@
  *                   composed (a cached one), which is not stored as this run's
  *   spotify_id      Spotify id of the analysed track, once the run has a result of its own;
  *                   else null
- *   mode            "live" (computed for the request) or "replay" (a recorded run served again)
+ *   mode            how the result the run sent was produced: "live", computed by this run, or
+ *                   "replay", a recorded result served again (a replayed run, or a cached
+ *                   result an earlier run composed). A run that sent no result (open, failed,
+ *                   cancelled) or was recorded before modes were kept reads "live", the
+ *                   column's default, which then says nothing about how a result was produced
  *   analysis        JSON of the run's own result (a TrackAnalysis, as the contract reads it,
  *                   without preview URLs); null when it has none
  *
@@ -32,7 +36,9 @@
  *   event           the event as JSON, as the contract reads it, without preview URLs
  *
  * Rows are deleted by the retention job (retention.ts) once they are older than the run
- * retention period, a run's events with it. New columns are added by later numbered migrations.
+ * retention period, a run's events with it; events also go once they are older than the shorter
+ * event retention. A run that sent another run's result keeps no events (see
+ * deleteRunEvents). New columns are added by later numbered migrations.
  */
 
 import { SPOTIFY_ID_PATTERN, TrackAnalysis } from "@liner-notes/contract";
@@ -58,7 +64,11 @@ export interface RunRecord {
   payload: unknown;
   spotifyId: string | null;
   mode: RunMode;
-  /** The stored result as JSON-parsed; null until the run has completed. */
+  /**
+   * The run's own stored result, JSON-parsed; null when it has none: it has not completed, it
+   * sent a result another run composed (a cached one), its result could not be stored, or it
+   * completed before results were stored.
+   */
   analysis: unknown;
 }
 
@@ -181,15 +191,18 @@ export function latestRunsForTrack(
 // =============================================================================
 
 /**
- * Preview clips: Deezer's CDN and Spotify's preview host, and URLs signed with an expiring token
- * (Akamai `hdnea`/`hdnts`, S3 `X-Amz-Signature`).
+ * Preview clips, as whole URLs: Deezer's preview hosts (cdns-preview-*, e-cdns-preview-*,
+ * cdnt-preview under dzcdn.net; not its image host), Spotify's preview host, and any URL signed
+ * with an expiring token (Akamai `hdnea`/`hdnts`, S3 `X-Amz-Signature`). Text that only mentions
+ * such a URL or token is not one.
  */
-const PREVIEW_URL =
-  /^https?:\/\/(?:[^/?#@]*\.)?(?:dzcdn\.net|p\.scdn\.co)(?:[:/?#]|$)|[?&;~](?:hdnea|hdnts|x-amz-signature)=/i;
+const PREVIEW_HOST =
+  /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
+const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
 
-/** True for a preview clip URL (see PREVIEW_URL). */
+/** True for a preview clip URL (see PREVIEW_HOST and SIGNED_URL). */
 export function isPreviewUrl(value: string): boolean {
-  return PREVIEW_URL.test(value);
+  return PREVIEW_HOST.test(value) || SIGNED_URL.test(value);
 }
 
 /**
@@ -213,7 +226,8 @@ export function withoutPreviewUrls(value: unknown): unknown {
  * What storeRunResult did:
  *   stored        the run's own result was stored with its track and mode
  *   another_run   the result carries another run's id, or none (a cached result): the run is
- *                 marked as having sent another run's result, and nothing else is stored
+ *                 marked as having sent another run's result, with mode "replay" (it computed
+ *                 nothing), and the result is not stored
  *   invalid       the result fails the contract; nothing was stored
  *   no_run        there is no such run
  */
@@ -222,7 +236,9 @@ export type StoreResultOutcome = "stored" | "another_run" | "invalid" | "no_run"
 /**
  * Stores a completed run's result, as the contract reads it and without preview URLs, with the
  * Spotify id of its track (null when the result does not carry a valid one) and the run's mode:
- * replay when the caller or the result says so, else live.
+ * replay when the caller or the result says so, else live. When the caller says replay, the
+ * stored result's own run information says replay too, so the two never disagree. The result's
+ * `run.id` must be this run's id (a replayed record is stamped with the new run's id first).
  *
  * Only the run's own result is stored: one whose run information names this run. A result
  * served from the cache was composed by an earlier run; storing it as this run's would present
@@ -239,7 +255,8 @@ export function storeRunResult(
   if (parsed.data.run?.id !== runId) {
     const marked = db
       .prepare(
-        `UPDATE runs SET payload = json_set(COALESCE(payload, '{}'), '$.resultFrom', 'another_run')
+        `UPDATE runs SET mode = 'replay',
+           payload = json_set(COALESCE(payload, '{}'), '$.resultFrom', 'another_run')
          WHERE run_id = ?`,
       )
       .run(runId);
@@ -249,10 +266,23 @@ export function storeRunResult(
   if (!stored.success) return "invalid";
   const spotifyId = SPOTIFY_ID_PATTERN.test(stored.data.id) ? stored.data.id : null;
   const replay = mode === "replay" || stored.data.run?.mode === "replay";
+  const own =
+    replay && stored.data.run
+      ? { ...stored.data, run: { ...stored.data.run, mode: "replay" as const } }
+      : stored.data;
   const result = db
     .prepare("UPDATE runs SET spotify_id = ?, mode = ?, analysis = ? WHERE run_id = ?")
-    .run(spotifyId, replay ? "replay" : "live", JSON.stringify(stored.data), runId);
+    .run(spotifyId, replay ? "replay" : "live", JSON.stringify(own), runId);
   return result.changes > 0 ? "stored" : "no_run";
+}
+
+/**
+ * Deletes the events a run's streams sent. A run that sent a result another run composed keeps
+ * none: the result belongs to the run that composed it, and a copy per cache hit would only
+ * fill the disk.
+ */
+export function deleteRunEvents(db: Database.Database, runId: string): number {
+  return db.prepare("DELETE FROM run_events WHERE run_id = ?").run(runId).changes;
 }
 
 export interface StoredRunEvent {

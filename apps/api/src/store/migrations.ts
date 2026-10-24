@@ -251,7 +251,8 @@ export const MIGRATIONS: readonly Migration[] = [
       // A run keeps its result, the track it is about and whether it was live or replayed, and
       // the events its streams sent. A resumed run sends a second stream whose `seq` starts at 0
       // again, so an event is keyed by its run, the stream's number within the run and its seq.
-      // Runs recorded before this migration were computed live and have no stored result.
+      // Runs recorded before this migration have no stored result; their mode is the column's
+      // default, live, which says nothing about how their result was produced.
       db.exec(`
         ALTER TABLE runs ADD COLUMN spotify_id TEXT;
         ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'live';

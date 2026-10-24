@@ -181,8 +181,15 @@ describe("withoutPreviewUrls", () => {
     });
   });
 
-  it("keeps hosts that only resemble a preview host", () => {
-    const kept = ["https://dzcdn.net.example.com/x", "https://notp.scdn.co.example/x"];
+  it("keeps Deezer images, look-alike hosts and text that only mentions a token", () => {
+    const kept = [
+      "https://cdn-images.dzcdn.net/images/cover/0a1b2c/250x250-000000-80-0-0.jpg",
+      "https://e-cdns-images.dzcdn.net/images/artist/0a1b2c/500x500.jpg",
+      "https://dzcdn.net.example.com/x",
+      "https://notp.scdn.co.example/x",
+      "Signed links end in ?hdnts=… and expire",
+      "see https://example.com/a?hdnea=x for details",
+    ];
     expect(withoutPreviewUrls(kept)).toEqual(kept);
   });
 });
@@ -212,6 +219,7 @@ describe("storeRunResult", () => {
     expect(storeRunResult(db, "r", result("earlier"))).toBe("another_run");
     expect(getRun(db, "r")).toMatchObject({
       spotifyId: null,
+      mode: "replay",
       analysis: null,
       payload: { resultFrom: "another_run" },
     });
@@ -239,6 +247,12 @@ describe("storeRunResult", () => {
       "replay",
       "live",
     ]);
+    // The stored result's own run information agrees with the run's mode.
+    expect(
+      ["caller", "result", "neither"].map(
+        (id) => (getRun(db, id)?.analysis as { run?: { mode: string } } | undefined)?.run?.mode,
+      ),
+    ).toEqual(["replay", "replay", "live"]);
   });
 });
 

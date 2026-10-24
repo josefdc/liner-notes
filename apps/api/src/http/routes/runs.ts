@@ -45,9 +45,11 @@ function runResponse(record: RunRecord): RunResponse | null {
  * GET /api/runs/:id
  * Returns RunResponse: the run (never the typed query) and its own result; the result is null
  * until the run has completed, and for a run that sent a result another run composed (a cached
- * one) or completed before results were stored. 404 not_found for an unknown run (or one removed
- * by retention); 400 invalid_input for an id that is not 1-100 letters, digits, '-' or '_';
- * 500 failed when the stored result no longer fits the contract.
+ * one; its mode is replay) or completed before results were stored. The mode describes the
+ * result the run sent; a live run without a result says nothing about one (see StoredRun).
+ * 404 not_found for an unknown run (or one removed by retention); 400 invalid_input for an id
+ * that is not 1-100 letters, digits, '-' or '_'; 500 failed when the stored result no longer
+ * fits the contract.
  */
 router.get("/api/runs/:id", (req, res) => {
   const id = req.params.id;

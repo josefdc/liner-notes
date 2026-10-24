@@ -134,6 +134,7 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   CHECKPOINT_RETENTION_HOURS: "",
   STORE_RETENTION_DAYS: "",
   RUN_RETENTION_DAYS: "",
+  RUN_EVENT_RETENTION_DAYS: "",
   SOURCE_CASSETTE: "",
   // No model call can be live or billed: no key, cassettes replayed, no spend log.
   AZURE_OPENAI_API_KEY: "",

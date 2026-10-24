@@ -8,6 +8,7 @@ import { llm } from "../../llm/invoke.js";
 import { getDb } from "../../store/database.js";
 import {
   appendRunEvent,
+  deleteRunEvents,
   getRun,
   nextEventStream,
   type RunStatus,
@@ -213,7 +214,8 @@ type Emit = (event: AgentEvent) => boolean;
 type GraphInput = Parameters<ReturnType<typeof createSonicAgentGraph>["stream"]>[0];
 
 type RunOutcome =
-  | { kind: "complete"; trackData: TrackData }
+  /** `fromAnotherRun`: the result was composed by an earlier run (a cached one). */
+  | { kind: "complete"; trackData: TrackData; fromAnotherRun?: boolean }
   | { kind: "interrupted"; candidates: SearchCandidate[] }
   | { kind: "failed"; code: FailureCode }
   | { kind: "cancelled" };
@@ -364,7 +366,9 @@ async function executeRun(
       console.error(`[Run ${threadId}] Could not read the thread:`, err);
     }
   }
-  recordOutcome(threadId, status, outcome);
+  if (recordOutcome(threadId, status, outcome) && outcome.kind === "complete") {
+    outcome = { ...outcome, fromAnotherRun: true };
+  }
   // A finished run's model calls are no longer counted; a paused one keeps its count, so the
   // per-run cap still covers it when it is resumed.
   if (status !== "interrupted") endModelRun(threadId);
@@ -375,9 +379,11 @@ async function executeRun(
 /**
  * Records a run's status and, for a completed run, its result, in one transaction, so GET
  * /api/runs can serve the result again. When the result cannot be written the status is
- * recorded on its own: the client has the result, and the run must not stay open.
+ * recorded on its own: the client has the result, and the run must not stay open. A run that
+ * sent a result another run composed keeps no events (deleteRunEvents). Returns true for such a
+ * run.
  */
-function recordOutcome(runId: string, status: RunStatus, outcome: RunOutcome): void {
+function recordOutcome(runId: string, status: RunStatus, outcome: RunOutcome): boolean {
   const trackData = outcome.kind === "complete" ? outcome.trackData : null;
   let stored: StoreResultOutcome | null = null;
   try {
@@ -385,17 +391,19 @@ function recordOutcome(runId: string, status: RunStatus, outcome: RunOutcome): v
       const db = getDb();
       updateRun(db, runId, { status });
       if (trackData) stored = storeRunResult(db, runId, trackData);
+      if (stored === "another_run") deleteRunEvents(db, runId);
     })();
   } catch (err) {
     console.error(`[Runs] Could not record the outcome of run ${runId}:`, err);
     recordRun("update a run", (db) => updateRun(db, runId, { status }));
-    return;
+    return false;
   }
   if (stored === "another_run") {
     console.log(`[Run ${runId}] Sent a result composed by another run; not stored as its own`);
-  } else if (stored && stored !== "stored") {
-    console.error(`[Run ${runId}] Result not stored: ${stored}`);
+    return true;
   }
+  if (stored && stored !== "stored") console.error(`[Run ${runId}] Result not stored: ${stored}`);
+  return false;
 }
 
 /** Forgets a finished run's call count in the provider layer. Never fails the run. */
@@ -557,6 +565,10 @@ function openEventStream(res: Response, runId?: string) {
   });
   return {
     stream,
+    /** Stores no more of this stream's events. */
+    stopStoringEvents(): void {
+      storedAs = null;
+    },
     storeEvents(): void {
       if (!runId) return;
       recordRun("number a stream", (db) => {
@@ -589,10 +601,12 @@ type AnalysisStream = ReturnType<typeof openEventStream>;
  * gone, so it only closes the stream.
  */
 function sendStreamOutcome(
-  { stream, error, done }: AnalysisStream,
+  { stream, error, done, stopStoringEvents }: AnalysisStream,
   outcome: RunOutcome,
   threadId: string,
 ): void {
+  // Its events were deleted with the outcome; the closing `done` is not stored either.
+  if (outcome.kind === "complete" && outcome.fromAnotherRun) stopStoringEvents();
   if (outcome.kind === "interrupted") {
     stream.send({
       type: "interrupt",
@@ -722,7 +736,8 @@ router.post(
  * - error { code, error }: a code from ERRORS and a short message
  * - done: the stream is over
  *
- * The events sent and the result are stored with the run; GET /api/runs/:id serves them again.
+ * The run's result is stored with it and served by GET /api/runs/:id; the events sent are stored
+ * for recording the run as a replay (not for a run that sent another run's result).
  */
 router.get(
   "/api/analyze/stream",

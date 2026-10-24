@@ -447,15 +447,52 @@ describe("runs routes", () => {
     expect(hit.events.map((e) => e.type)).toEqual(["connected", "status", "complete", "done"]);
     expect(getRun(getDb(), hit.runId)).toMatchObject({
       status: "completed",
+      mode: "replay",
       spotifyId: null,
       analysis: null,
       payload: { resultFrom: "another_run" },
     });
+    // The result belongs to the run that composed it: the cache hit keeps no events.
+    expect(listRunEvents(getDb(), hit.runId)).toEqual([]);
+    expect(storedEvents(composed.runId)).toEqual(asStored(composed.events));
 
     const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
     expect(res.body.run.id).toBe(composed.runId);
     const own = await request(app).get(`/api/runs/${hit.runId}`);
-    expect(own.body).toMatchObject({ run: { status: "completed" }, analysis: null });
+    expect(RunResponse.safeParse(own.body).success).toBe(true);
+    expect(own.body).toMatchObject({
+      run: { status: "completed", mode: "replay" },
+      analysis: null,
+    });
+  });
+
+  it("stores no events for a run whose record could not be written", async () => {
+    await withFailingWrite("BEFORE INSERT ON runs", async () => {
+      const { runId, events } = await analyze("plain query");
+      expect(events.map((e) => e.type)).toEqual([
+        "connected",
+        "status",
+        "status",
+        "complete",
+        "done",
+      ]);
+      expect(getRun(getDb(), runId)).toBeNull();
+      expect(listRunEvents(getDb(), runId)).toEqual([]);
+    });
+  });
+
+  it("records and stores the resume of a paused run that has no record", async () => {
+    const paused = await analyze("ambiguous song");
+    getDb().prepare("DELETE FROM runs WHERE run_id = ?").run(paused.runId);
+    getDb().prepare("DELETE FROM run_events WHERE run_id = ?").run(paused.runId);
+
+    const resumed = await sse(resumePath(paused.runId, CHOICE_B));
+    expect(resumed.map((e) => e.type)).toContain("complete");
+    expect(getRun(getDb(), paused.runId)).toMatchObject({
+      status: "completed",
+      spotifyId: CHOICE_B,
+    });
+    expect(storedEvents(paused.runId, 0)).toEqual(asStored(resumed));
   });
 
   it("stores a run whose model answers were replayed as a replay", async () => {

@@ -349,6 +349,22 @@ async function withArtwork(
   }
 }
 
+/**
+ * The result without its preview URLs (the track's and the genealogy nodes'). Preview links
+ * are handed out for one run and are not kept: a result served from the store shows the
+ * preview as missing.
+ */
+function withoutPreviewUrls(result: Omit<TrackData, "run">): Omit<TrackData, "run"> {
+  const { previewUrl: _previewUrl, ...rest } = result;
+  return {
+    ...rest,
+    genealogy: {
+      ...result.genealogy,
+      nodes: result.genealogy.nodes.map(({ previewUrl: _nodePreview, ...node }) => node),
+    },
+  };
+}
+
 /** The fields every result takes from Spotify, the measurement and the evidence state. */
 function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
   return {
@@ -366,7 +382,8 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     ...measuredAudioFields(state.audioFeatures),
-    // No node writes isrc, preview or evidence yet (#24, #27): they are null and empty today.
+    // The ISRC is the one Spotify gave for the chosen track. No node writes preview or
+    // evidence yet (#24, #27): they are null and empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
     evidence: state.evidence,
@@ -452,7 +469,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     status("LLM-CONNECT", "Composing the liner notes...");
     console.log("🎼 [Composer] Synthesizing data for:", spotify.title);
 
-    // state.isrc is null until the scout records the ISRC (#24): no lookup is made then.
+    // state.isrc is null when Spotify gave no ISRC: no lookup is made then.
     const { recording, errors: sourceErrors } = await musicBrainzRecording(
       spotify,
       state.isrc,
@@ -530,7 +547,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       try {
         signal?.throwIfAborted();
         await store.put(TRACKS_NAMESPACE, resultCacheKey(normalizedQuery, configuredSources()), {
-          trackData: cached,
+          trackData: withoutPreviewUrls(cached),
           timestamp: runtime.now().getTime(),
         });
       } catch (e) {

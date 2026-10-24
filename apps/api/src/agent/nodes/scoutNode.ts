@@ -1,5 +1,6 @@
 /**
- * Scout Node — Searches Spotify and returns multiple candidates if ambiguous
+ * Scout Node — Searches Spotify, picks the result that matches the query, and returns the
+ * candidates instead when the user has to choose (see trackMatch.ts).
  */
 
 import { getStore } from "@langchain/langgraph";
@@ -11,6 +12,7 @@ import { isAbortError, withRetry, TransientError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
+import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -71,7 +73,9 @@ export async function scoutNode(
     const searchResult = await withRetry(
       async () => {
         const result = await searchMultipleTracks.invoke(
-          { query: state.songQuery, limit: 5 },
+          // As many results as Spotify gives (10): a version or a cover ranked high by Spotify
+          // must not push the original recording out of the choice.
+          { query: state.songQuery, limit: 10 },
           { signal: config.signal },
         );
         // Spotify tools return error strings, not thrown exceptions
@@ -102,24 +106,24 @@ export async function scoutNode(
       };
     }
 
-    // Check for ambiguity: multiple results with similar popularity
-    // Auto-select ONLY if: top track is VERY popular OR has a HUGE gap over #2
-    // Thresholds are now configurable via state.hitlConfig
-    const topTrack = tracks[0];
-    const secondTrack = tracks[1];
-    const { disambiguationThreshold, popularityGap, maxCandidates } = state.hitlConfig;
+    // Spotify gives this app no popularity, so the results are judged on how their title and
+    // artists match the query: the best match first, and a choice only when another song
+    // matches as well, or when nothing matches at all.
+    const ranked = rankTracks(state.songQuery, tracks);
+    const best = ranked[0];
+    const topTrack = best.track;
+    const { maxCandidates } = state.hitlConfig;
+    const queryMatch = best.match;
+    if (queryMatch === "none") {
+      console.warn("⚠️ [Scout] No result matches the query by title or artist:", state.songQuery);
+    }
 
-    const isTopTrackDominant = topTrack.popularity >= disambiguationThreshold;
-    const hasSignificantGap =
-      !secondTrack || secondTrack.popularity < topTrack.popularity * popularityGap;
-    const isAmbiguous = tracks.length > 1 && !isTopTrackDominant && !hasSignificantGap;
-
-    if (isAmbiguous) {
+    if (needsChoice(ranked)) {
       // Convert to candidates for human selection (limited by maxCandidates config). One the
       // contract does not accept is left out rather than failing the whole choice.
-      const candidates: SearchCandidate[] = tracks
+      const candidates: SearchCandidate[] = ranked
         .slice(0, maxCandidates)
-        .map((t) => ({
+        .map(({ track: t }) => ({
           id: t.id,
           title: t.title,
           artist: t.artist,
@@ -128,7 +132,8 @@ export async function scoutNode(
           album: t.album,
           coverUrl: t.coverUrl,
           releaseYear: t.releaseDate?.split("-")[0],
-          popularity: t.popularity,
+          // Only a score Spotify gave; none is invented when it is missing.
+          ...(typeof t.popularity === "number" ? { popularity: t.popularity } : {}),
         }))
         .filter((candidate) => {
           const checked = SearchCandidateSchema.safeParse(candidate);
@@ -169,6 +174,8 @@ export async function scoutNode(
                 return {
                   spotifyData: remembered,
                   selectedTrackId: remembered.id,
+                  isrc: remembered.isrc ?? null,
+                  queryMatch: matchTrack(state.songQuery, remembered).match,
                   statusMessages: [`✅ Remembered: "${remembered.title}" by ${remembered.artist}`],
                 };
               }
@@ -179,15 +186,10 @@ export async function scoutNode(
         }
       }
 
-      // Debug: Log HITL trigger details
-      console.log("⚠️ [Scout] HITL triggered:", {
+      console.log("⚠️ [Scout] Choice needed:", {
         query: state.songQuery,
-        topPopularity: topTrack.popularity,
-        secondPopularity: secondTrack?.popularity ?? 0,
-        threshold: disambiguationThreshold,
-        gapRatio: popularityGap,
+        queryMatch,
         candidateCount: tracks.length,
-        reason: `Top: ${topTrack.popularity} < threshold ${disambiguationThreshold} AND no significant gap`,
       });
 
       if (candidates.length === 0) {
@@ -207,6 +209,7 @@ export async function scoutNode(
 
       return {
         candidates,
+        queryMatch,
         statusMessages: [`⚠️ Found ${candidates.length} matches - please select`],
       };
     }
@@ -224,6 +227,8 @@ export async function scoutNode(
     return {
       spotifyData: topTrack,
       selectedTrackId: topTrack.id,
+      isrc: topTrack.isrc ?? null,
+      queryMatch,
       statusMessages: [`✅ Found: "${topTrack.title}" by ${topTrack.artist}`],
     };
   } catch (error) {

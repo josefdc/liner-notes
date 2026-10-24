@@ -17,6 +17,7 @@ import {
   type Shape,
   SourceError,
 } from "./http.js";
+import { normalizeIsrc } from "./musicbrainz.js";
 
 // =============================================================================
 // TypeScript Interfaces for Spotify API Responses
@@ -50,10 +51,10 @@ interface SpotifyTrack {
   name: string;
   artists: SpotifyArtist[];
   album: SpotifyAlbum;
-  popularity: number;
   duration_ms: number;
   explicit: boolean;
   external_urls: { spotify: string };
+  external_ids?: { isrc?: string | null };
   preview_url?: string | null;
 }
 
@@ -92,7 +93,8 @@ export interface SpotifyTrackSummary {
   album: string;
   releaseDate: string;
   coverUrl: string;
-  popularity: number;
+  /** The recording's ISRC, or null when Spotify gave no valid one. */
+  isrc: string | null;
   duration: string;
   durationMs: number;
   explicit: boolean;
@@ -106,10 +108,10 @@ const TRACK_SHAPE: Shape = {
   name: true,
   artists: [{ id: true, name: true }],
   album: { name: true, release_date: true },
-  popularity: true,
   duration_ms: true,
   explicit: true,
   external_urls: { spotify: true },
+  external_ids: { isrc: true },
 };
 const SEARCH_SHAPE: Shape = { tracks: { items: [TRACK_SHAPE], total: true } };
 const TOKEN_SHAPE: Shape = { access_token: true, token_type: true, expires_in: true };
@@ -281,7 +283,7 @@ function summarize(track: SpotifyTrack): SpotifyTrackSummary {
     album: track.album.name,
     releaseDate: track.album.release_date,
     coverUrl: track.album.images?.[0]?.url || "",
-    popularity: track.popularity,
+    isrc: normalizeIsrc(track.external_ids?.isrc),
     duration: formatDuration(track.duration_ms),
     durationMs: track.duration_ms,
     explicit: track.explicit,
@@ -365,7 +367,7 @@ export const searchTrack = tool(
         album: track.album,
         releaseDate: track.releaseDate,
         coverUrl: track.coverUrl,
-        popularity: track.popularity,
+        isrc: track.isrc,
         duration: track.duration,
         explicit: track.explicit,
         spotifyUrl: track.spotifyUrl,
@@ -380,7 +382,7 @@ export const searchTrack = tool(
     description:
       "Search for a song by title and/or artist to get its Spotify ID and metadata. " +
       "Use this tool FIRST before getting audio features. " +
-      "Returns: id, title, artist, album, popularity (0-100), duration, and Spotify URL.",
+      "Returns: id, title, artist, album, ISRC, duration, and Spotify URL.",
     schema: z.object({
       query: z
         .string()
@@ -416,7 +418,7 @@ export const getTrackDetails = tool(
     description:
       "Get detailed information about a Spotify track. " +
       "Requires a Spotify Track ID (use spotify_search first). " +
-      "Returns: title, artist, artistIds, album, release date, popularity, duration, and preview URL.",
+      "Returns: title, artist, artistIds, album, release date, ISRC, duration, and preview URL.",
     schema: z.object({
       trackId: z
         .string()
@@ -464,9 +466,7 @@ export const getAudioFeatures = getTrackDetails;
 export const searchMultipleTracks = tool(
   async ({ query, limit = 5 }, config): Promise<string> => {
     try {
-      const tracks = await searchTracks(query, limit, config?.signal);
-      // Search results carry no preview; the engineer looks one up separately.
-      return JSON.stringify(tracks.map((track) => ({ ...track, previewUrl: null })));
+      return JSON.stringify(await searchTracks(query, limit, config?.signal));
     } catch (error) {
       if (config?.signal?.aborted) throw error;
       console.error("❌ [Spotify] Multi-search error:", describeError(error));

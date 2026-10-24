@@ -453,7 +453,12 @@ export const SearchCandidateSchema = z.object({
   album: z.string().describe("Album name"),
   coverUrl: z.string().url().describe("Album cover URL"),
   releaseYear: z.string().optional().describe("Year of release"),
-  popularity: z.number().min(0).max(100).describe("Spotify popularity score 0-100"),
+  popularity: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Spotify popularity score 0-100, when Spotify gave one"),
 });
 
 export type SearchCandidate = z.infer<typeof SearchCandidateSchema>;

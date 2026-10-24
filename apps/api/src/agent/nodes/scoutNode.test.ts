@@ -44,12 +44,11 @@ import { scoutNode } from "./scoutNode.js";
 
 const track = {
   id: "t1",
-  title: "T",
+  title: "Song",
   artist: "A",
   album: "",
   releaseDate: "",
   coverUrl: "",
-  popularity: 90,
   duration: "",
   durationMs: 1,
   explicit: false,
@@ -184,11 +183,12 @@ describe("scoutNode's stored results", () => {
 });
 
 describe("scoutNode's track picker", () => {
+  // Three songs with the query's title by different artists: the user has to choose.
   const ambiguous = [
-    { ...track, id: "a", popularity: 50 },
+    { ...track, id: "a", artist: "A" },
     // A candidate the contract does not accept (the cover URL is a string, empty when unknown).
-    { ...track, id: "b", popularity: 49, coverUrl: null },
-    { ...track, id: "c", popularity: 48 },
+    { ...track, id: "b", artist: "B", coverUrl: null },
+    { ...track, id: "c", artist: "C" },
   ];
 
   it("leaves out a candidate the contract does not accept and offers the others", async () => {

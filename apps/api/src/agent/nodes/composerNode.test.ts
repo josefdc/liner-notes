@@ -16,13 +16,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmError, type LlmErrorKind } from "../../llm/errors.js";
 import { messagesOf, stubLlm, testRuntime } from "../testing/stubLlm.js";
 
-const store = vi.hoisted(() => ({ put: vi.fn() }));
-const enrich = vi.hoisted(() => ({ during: null as null | (() => void) }));
+const store = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn() }));
+const enrich = vi.hoisted(() => ({
+  during: null as null | (() => void),
+  /** A preview URL the enricher gives every genealogy node, when set. */
+  nodePreview: null as string | null,
+}));
 const mb = vi.hoisted(() => ({ lookupIsrc: vi.fn() }));
 vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: unknown) => {
+  enrichGenealogyWithArtwork: async (genealogy: { nodes: object[] }) => {
     enrich.during?.();
-    return genealogy;
+    const previewUrl = enrich.nodePreview;
+    if (!previewUrl) return genealogy;
+    return { ...genealogy, nodes: genealogy.nodes.map((node) => ({ ...node, previewUrl })) };
   },
 }));
 vi.mock("@langchain/langgraph", async (importOriginal) => ({
@@ -37,6 +43,7 @@ vi.mock("../../sources/musicbrainz.js", async (importOriginal) => ({
 import { SourceError } from "../../sources/http.js";
 import type { AudioFeatures, SonicAgentStateType } from "../state.js";
 import { createComposerNode, modelErrorCategory } from "./composerNode.js";
+import { scoutNode } from "./scoutNode.js";
 
 const output: ComposerOutput = {
   claims: [
@@ -163,6 +170,8 @@ const failing = (kind: LlmErrorKind) =>
 describe("composerNode", () => {
   beforeEach(() => {
     store.put.mockReset();
+    store.get.mockReset();
+    enrich.nodePreview = null;
     mb.lookupIsrc.mockReset();
     for (const method of ["log", "warn", "error"] as const) {
       vi.spyOn(console, method).mockImplementation(() => {});
@@ -633,6 +642,42 @@ describe("composerNode", () => {
       expect(store.put.mock.calls[0][1]).toMatch(/^ice ice baby\|lastfm=[01]:tavily=[01]$/);
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
+    });
+
+    it("sends the preview URLs with this run's result but stores none, so a cache hit shows none", async () => {
+      const trackPreview = "https://p.scdn.co/mp3-preview/track";
+      const nodePreview = "https://p.scdn.co/mp3-preview/node";
+      enrich.nodePreview = nodePreview;
+      const runtime = testRuntime(succeeding());
+      const writer = vi.fn();
+
+      await createComposerNode(runtime)(stateWith(measured, { previewUrl: trackPreview }), {
+        writer,
+        configurable: { thread_id: "run-1" },
+      } as never);
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data.previewUrl).toBe(trackPreview);
+      expect(complete.data.genealogy.nodes[0].previewUrl).toBe(nodePreview);
+      expect(store.put).toHaveBeenCalledTimes(1);
+      const [namespace, key, value] = store.put.mock.calls[0];
+      expect(JSON.stringify(value)).not.toContain("mp3-preview");
+      expect(value.trackData).not.toHaveProperty("previewUrl");
+
+      // The next search of the song is served from the store.
+      store.get.mockImplementation(async (ns: string[], k: string) =>
+        JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
+      );
+      const served = vi.fn();
+      const out = await scoutNode(
+        { songQuery: "Ice Ice Baby" } as SonicAgentStateType,
+        { writer: served } as never,
+        runtime,
+      );
+      expect(out.trackData).toBeTruthy();
+      expect(out.trackData).not.toHaveProperty("previewUrl");
+      const hit = served.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(JSON.stringify(hit.data)).not.toContain("mp3-preview");
     });
   });
 

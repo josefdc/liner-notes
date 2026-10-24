@@ -88,7 +88,7 @@ server.listen(settings.port, settings.host, () => {
   console.log(
     `[Server] CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
   );
-  if (settings.replayOnly) console.log("[Server] REPLAY_MODE=only");
+  if (settings.replayMode !== "off") console.log(`[Server] REPLAY_MODE=${settings.replayMode}`);
 
   // Runs left "running" by a process that stopped are not running any more.
   void gate.until(

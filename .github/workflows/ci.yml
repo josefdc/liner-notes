@@ -72,6 +72,14 @@ jobs:
             LLM_CASSETTE=record LLM_SPEND_LOG=/nonexistent/llm-spend.jsonl >> apps/api/.env
           npx vitest run --project api
           rm apps/api/.env
+      # Replay mode on a fresh checkout with no settings file: the API is started with
+      # REPLAY_MODE=only, dummy keys and every outbound connection refused and counted
+      # (tests/deny-network.mjs); it must replay the recorded runs with 0 attempts.
+      - name: Replay with the network denied
+        if: matrix.node == 24
+        run: |
+          test ! -e apps/api/.env || { printf 'apps/api/.env exists\n' >&2; exit 1; }
+          npm run test:replay
       - run: npm run build
       # vite build exits 0 with invalid or unprocessed CSS; check what it wrote.
       - name: Built CSS

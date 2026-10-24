@@ -27,8 +27,24 @@ export interface HttpSettings {
   searchRateLimit: RateLimitSettings;
 }
 
+/**
+ * REPLAY_MODE: "off" (default) analyses live; "fallback" analyses live and serves recorded runs
+ * of the showcase tracks when live analysis is unavailable; "only" serves recorded runs and
+ * never calls a live service.
+ */
+export const REPLAY_MODES = ["off", "fallback", "only"] as const;
+export type ReplayMode = (typeof REPLAY_MODES)[number];
+
+/** The replay mode REPLAY_MODE names (unset or empty: "off"), or null for any other value. */
+export function parseReplayMode(raw: string | undefined): ReplayMode | null {
+  const value = raw?.trim() ?? "";
+  if (value === "") return "off";
+  return REPLAY_MODES.find((mode) => mode === value) ?? null;
+}
+
 export interface Settings {
   production: boolean;
+  replayMode: ReplayMode;
   /** REPLAY_MODE=only (replaying recorded runs): no Spotify or model keys are required. */
   replayOnly: boolean;
   host: string;
@@ -384,7 +400,10 @@ export type SettingsResult =
   | { ok: true; settings: Settings; warnings: string[] }
   | { ok: false; errors: string[] };
 
-/** Keys the API cannot start without, outside REPLAY_MODE=only. */
+/**
+ * Keys live analysis needs. The API cannot start without them when REPLAY_MODE is off; with
+ * "fallback" it starts and serves only recorded runs until they are set; "only" never uses them.
+ */
 export const REQUIRED_KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"] as const;
 
 /**
@@ -473,17 +492,19 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
   const errors: string[] = [];
   const warnings: string[] = [];
   const production = env.NODE_ENV === "production";
-  const replayMode = env.REPLAY_MODE?.trim() ?? "";
-  if (!["", "off", "only"].includes(replayMode)) {
-    errors.push('REPLAY_MODE: expected "only" or "off"');
-  }
+  const parsedReplayMode = parseReplayMode(env.REPLAY_MODE);
+  if (!parsedReplayMode) errors.push('REPLAY_MODE: expected "off", "fallback" or "only"');
+  const replayMode = parsedReplayMode ?? "off";
   const replayOnly = replayMode === "only";
 
-  if (!replayOnly) {
-    const missing = REQUIRED_KEYS.filter((key) => !env[key]);
-    if (missing.length > 0) {
-      errors.push(`Missing required environment variables: ${missing.join(", ")}`);
-    }
+  const missing = REQUIRED_KEYS.filter((key) => !env[key]);
+  if (missing.length > 0 && replayMode === "off") {
+    errors.push(`Missing required environment variables: ${missing.join(", ")}`);
+  } else if (missing.length > 0 && replayMode === "fallback") {
+    warnings.push(
+      `REPLAY_MODE=fallback without ${missing.join(", ")}: live analysis is unavailable, ` +
+        "only recorded runs are served",
+    );
   }
 
   const host = env.HOST?.trim() || DEFAULT_HOST;
@@ -565,6 +586,7 @@ export function readSettings(env: NodeJS.ProcessEnv): SettingsResult {
     warnings,
     settings: {
       production,
+      replayMode,
       replayOnly,
       host,
       port,

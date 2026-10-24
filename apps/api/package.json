@@ -20,6 +20,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretest": "npm run build -w @liner-notes/contract",
     "test": "vitest run --root ../.. --project api",
+    "prereplay:record": "npm run build -w @liner-notes/contract",
+    "replay:record": "tsx src/replay/record.ts",
     "presmoke:llm": "npm run build -w @liner-notes/contract",
     "smoke:llm": "tsx src/scripts/smokeLlm.ts"
   },

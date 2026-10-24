@@ -1,10 +1,13 @@
 """
-uv run python -m evals_audio --suite tempo|key [--dataset NAME] [--limit N]
-                             [--estimator librosa|essentia|all] [--seed S] [--jobs J]
+uv run python -m evals_audio --suite tempo|key|golden|cost [--dataset NAME] [--limit N]
+                             [--estimator librosa|essentia|beat-this|all] [--seed S] [--jobs J]
 
 Fetches the selected tracks (storage.py caps the data directory), runs the service on a
 30-second clip of each, prints coverage and accuracy per estimator (over all n clips and over
 the answered ones, with 95 % intervals), and writes evals/reports/audio-<date>.md and .json.
+The golden suite runs the service on the golden set's Deezer previews (agreement with Deezer's
+bpm and the sheet-music labels, style hit@k against Discogs); the cost suite measures each
+tempo estimator's memory, time and install size.
 """
 
 from __future__ import annotations
@@ -15,9 +18,11 @@ import logging
 import os
 import platform
 import shlex
+import signal
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.error
 import zipfile
@@ -27,8 +32,14 @@ from pathlib import Path
 
 import httpx
 
-from . import clips, datasets, report, runner, service
-from .metrics import BINARY_METRICS, acc1, compare, coverage_curve, ranking_auc, summarize
+from . import beatthis, clips, costs, datasets, golden, report, runner, service
+from .metrics import (
+    BINARY_METRICS,
+    acc1,
+    coverage_curve,
+    ranking_auc,
+    summarize,
+)
 from .storage import (
     DataCapExceeded,
     DataDirBusy,
@@ -55,7 +66,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="python -m evals_audio", description=__doc__.split("\n\n")[1], allow_abbrev=False
     )
     p.add_argument("--suite", choices=sorted(datasets.SUITE_DATASETS))
-    p.add_argument("--dataset", choices=sorted(datasets.DATASETS))
+    p.add_argument("--dataset", choices=sorted([*datasets.DATASETS, "golden"]))
     p.add_argument("--limit", type=int, help="tracks to draw at the seed (default: all usable)")
     p.add_argument("--estimator", default="all", choices=[*service.ESTIMATOR_NAMES, "all"])
     p.add_argument(
@@ -90,8 +101,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     if args.render is not None:
         return args
     if args.lookup is not None:
-        if args.dataset is None:
-            p.error("--lookup needs --dataset")
+        if args.dataset is None or args.dataset not in datasets.DATASETS:
+            p.error("--lookup needs --dataset with an annotated dataset")
         return args
     if args.suite is None:
         p.error("--suite is required (or --render JSON)")
@@ -104,6 +115,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         )
     if args.limit is not None and args.limit <= 0:
         p.error("--limit must be positive")
+    if args.estimator != "all" and args.estimator not in service.SUITE_ESTIMATORS[args.suite]:
+        p.error(f"the {args.suite} suite does not run {args.estimator}")
     for name in ("selection_seed", "clip_seed", "bootstrap_seed"):
         if getattr(args, name) is None:
             setattr(args, name, args.seed)
@@ -164,6 +177,8 @@ def environment(names: list[str]) -> dict[str, str]:
     packages = ["librosa", "numpy", "scipy", "mirdata"]
     if "essentia" in names:
         packages.append("essentia-tensorflow")
+    if "beat-this" in names:
+        packages += ["beat-this", "torch"]
     for package in packages:
         try:
             env[package] = version(package)
@@ -239,8 +254,14 @@ def reference_stats(spec, by_id: dict, tracks: dict) -> dict | None:
     }
 
 
+def stop_on_sigterm(signum, frame) -> None:
+    """SIGTERM unwinds like Ctrl-C, so temporary directories (the previews) are removed."""
+    raise SystemExit(143)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
     args = parse_args(argv)
     if args.render is not None:
         print(f"report: {report.rerender(args.render)}")
@@ -251,17 +272,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.lookup is not None:
         return lookup(args)
-    names = list(service.ESTIMATOR_NAMES) if args.estimator == "all" else [args.estimator]
+    if args.estimator == "all":
+        names = list(service.SUITE_ESTIMATORS[args.suite])
+    else:
+        names = [args.estimator]
     try:
         for name in names:
-            service.estimator(name)
+            service.check_estimator(name)
         root = data_dir(args.data_dir)
         check_outside(root, service.REPO_ROOT)
         budget = DiskBudget(root, cap_bytes())
         with exclusive(root):
+            if "beat-this" in names:
+                os.environ[beatthis.CHECKPOINT_ENV] = str(fetch_checkpoint(root, budget))
+            if args.suite == "golden":
+                return run_golden(args, argv, names, root, budget)
+            if args.suite == "cost":
+                return run_cost(args, argv, names, root, budget)
             return run(args, argv, names, root, budget)
     except (
         service.EstimatorUnavailable,
+        beatthis.Unavailable,
+        golden.ModelsUnavailable,
         SettingError,
         DataCapExceeded,
         DataDirBusy,
@@ -301,6 +333,24 @@ DOWNLOAD_ERRORS = (
     zipfile.BadZipFile,
     EOFError,
 )
+
+
+def trained_on_dataset(names: list[str], dataset: str) -> list[str]:
+    """The estimators of a run whose model was trained on `dataset` (shown, never compared)."""
+    return [n for n in names if n == "beat-this" and dataset in beatthis.TRAINED_ON]
+
+
+def without_training_songs(values: dict) -> dict:
+    """Golden values without the songs beat-this was trained on (beatthis.GOLDEN_IN_TRAINING)."""
+    return {i: v for i, v in values.items() if i not in beatthis.GOLDEN_IN_TRAINING}
+
+
+def fetch_checkpoint(root: Path, budget: DiskBudget) -> Path:
+    """beat-this's checkpoint in the data directory; network failures as DownloadFailed."""
+    try:
+        return beatthis.ensure_checkpoint(root, budget)
+    except DOWNLOAD_ERRORS as e:
+        raise DownloadFailed(f"{type(e).__name__}: {e}") from e
 
 
 def fetch(spec, home: Path, args, budget: DiskBudget):
@@ -353,11 +403,11 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
         {**a, "trackId": pid[a["trackId"]]} for a in runner.analyze_all(tasks, args.jobs, progress)
     ]
     metric_names = runner.METRICS[args.suite]
-    items, summaries, curves, tracks, costs = {}, {}, {}, {}, {}
+    items, summaries, curves, tracks, withheld = {}, {}, {}, {}, {}
     for name in names:
         items[name], tracks[name] = runner.items_for(args.suite, by_id, analysed, name)
         summaries[name] = summarize(items[name], metric_names, args.bootstrap_seed)
-        costs[name] = runner.withheld_cost(tracks[name], metric_names, args.bootstrap_seed)
+        withheld[name] = runner.withheld_cost(tracks[name], metric_names, args.bootstrap_seed)
         points, unranked = coverage_curve(items[name], metric_names, args.bootstrap_seed)
         curves[name] = {
             "points": [
@@ -377,13 +427,13 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
             },
         }
     print_summary(args.suite, spec.name, summaries)
-    paired = None
-    if len(names) == 2:
-        paired = {
-            "first": names[0],
-            "second": names[1],
-            **compare(items[names[0]], items[names[1]], metric_names, args.bootstrap_seed),
-        }
+    paired = runner.compare_pairs(items, names, metric_names, args.bootstrap_seed)
+    trained_on = trained_on_dataset(names, spec.name)
+    lifted = (
+        runner.lifted_views(tracks, names, metric_names, args.bootstrap_seed)
+        if args.suite == "tempo" and len(names) > 1
+        else {}
+    )
 
     usage = disk_usage(root)
     print(f"\ndata directory {root}: {human(usage)} (cap {human(budget.cap)})")
@@ -436,9 +486,17 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
             "audioUnavailable": unavailable,
             "audioSources": source_counts({r.track_id: r for r in measured}, fetched),
         },
+        "estimators": names,
+        # Estimators whose model was trained on this dataset: shown, never compared.
+        "trainedOn": trained_on,
+        "estimatorNotes": [beatthis.TRAINING_DATA_NOTE] if trained_on else [],
+        "serviceDefault": service.default_estimator(),
+        "estimatorCredits": [beatthis.REFERENCE] if "beat-this" in names else [],
+        # The same comparison with withholding rules lifted (calibration, never served).
+        "lifted": lifted,
         "summaries": {name: s.as_dict() for name, s in summaries.items()},
         "paired": paired,
-        "withheldCost": costs,
+        "withheldCost": withheld,
         "coverage": curves,
         # Track ids and where each clip was cut; the reference labels and the audio file
         # names stay in the local data directory.
@@ -447,5 +505,258 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
     }
     date = started_at.date().isoformat()
     md_path, json_path = report.write(args.report_dir, date, run_doc)
+    print(f"report: {md_path}\nresults: {json_path}")
+    return 0
+
+
+def common_fields(args, argv, names, started, started_at, root, budget) -> dict:
+    """The fields every run records: how it was run, on what code, with what libraries."""
+    return {
+        "suite": args.suite,
+        "command": recorded_command(argv),
+        "startedAt": started_at.isoformat().replace("+00:00", "Z"),
+        "wallSeconds": round(time.monotonic() - started, 1),
+        "seeds": {
+            "selection": args.selection_seed,
+            "clips": args.clip_seed,
+            "bootstrap": args.bootstrap_seed,
+        },
+        "limit": args.limit,
+        "gitCommit": git_commit(),
+        "analyzerVersion": service.base_version(),
+        "estimators": names,
+        "environment": environment(names),
+        "dataUsageBytes": disk_usage(root),
+        "dataCapBytes": budget.cap,
+    }
+
+
+def print_agreement(title: str, block: dict) -> None:
+    print(f"\n{title}: n={block['n']}; agrees over n, then over answered (95% Wilson)")
+    for name, s in block["summaries"].items():
+        parts = []
+        for m in ("acc1", "acc2", "exact"):
+            if m in s["overN"]:
+                over_n, over_answered = s["overN"][m], s["overAnswered"][m]
+                parts.append(
+                    f"{runner.METRIC_LABELS[m]} {report.frac(over_n)} | {report.frac(over_answered)}"
+                )
+        print(f"  {name:<9} answered {s['answered']}/{s['n']}: " + "; ".join(parts))
+
+
+def run_golden(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget) -> int:
+    started = time.monotonic()
+    started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    today = started_at.date().isoformat()
+    if not args.no_report:
+        report.load(args.report_dir / f"audio-{today}.json")
+    rows = golden.read_rows()
+    selected = golden.select(rows, args.limit, args.selection_seed)
+    try:
+        models = golden.ensure_models(root, budget)
+        labels = golden.ensure_labels(
+            selected, root / "golden", lambda: golden.Paced(golden.client()), today
+        )
+    except DOWNLOAD_ERRORS as e:
+        raise DownloadFailed(f"{type(e).__name__}: {e}") from e
+    if not service.load_models(str(models)):
+        raise golden.ModelsUnavailable(f"the fingerprint models in {models} did not load")
+    key_names = [n for n in names if n in service.SUITE_ESTIMATORS["key"]]
+
+    def progress(k: int, total: int) -> None:
+        if k == total or k % 10 == 0:
+            print(f"  analysed {k}/{total}", file=sys.stderr)
+
+    # Previews live only in this temporary directory (the system's, never the data
+    # directory), for this run; it is removed on success, error, Ctrl-C and SIGTERM.
+    with tempfile.TemporaryDirectory(prefix=PREVIEW_DIR_PREFIX) as tmp:
+        if Path(tmp).resolve().is_relative_to(root):
+            raise SettingError(f"the temporary directory {tmp} is inside the data directory")
+        previews = {}
+        try:
+            with golden.client() as http:
+                paced = golden.Paced(http)
+                for row in selected:
+                    previews[row.isrc] = golden.fetch_preview(paced, row, Path(tmp))
+        except DOWNLOAD_ERRORS as e:
+            # The type only: a message can carry a signed preview URL.
+            raise DownloadFailed(type(e).__name__) from e
+        tasks = [
+            ("golden", row.isrc, previews[row.isrc]["path"], 0, tuple(names), GOLDEN_OPTIONS)
+            for row in selected
+            if previews[row.isrc]["path"]
+        ]
+        if not tasks:
+            print("error: no Deezer preview could be fetched; nothing to measure", file=sys.stderr)
+            return 3
+        analysed = runner.analyze_all(tasks, args.jobs, progress, models_dir=str(models))
+    by_isrc = {row.isrc: row for row in selected}
+    deezer_bpm = {isrc: p["bpm"] for isrc, p in previews.items()}
+    blocks = {
+        "deezer-bpm": golden.agreement("tempo", deezer_bpm, analysed, names, args.bootstrap_seed),
+        "sheet-music-bpm": golden.agreement(
+            "tempo", {i: r.bpm for i, r in by_isrc.items()}, analysed, names, args.bootstrap_seed
+        ),
+        "sheet-music-key": golden.agreement(
+            "key", {i: r.key for i, r in by_isrc.items()}, analysed, key_names, args.bootstrap_seed
+        ),
+    }
+    # beat-this was trained on some of these songs: the same comparison without them, for
+    # every estimator, so the pairs stay on the same tracks.
+    seen = {i: v for i, v in beatthis.GOLDEN_IN_TRAINING.items() if i in by_isrc}
+    if "beat-this" in names:
+        blocks["deezer-bpm-unseen"] = golden.agreement(
+            "tempo",
+            without_training_songs(deezer_bpm),
+            analysed,
+            names,
+            args.bootstrap_seed,
+        )
+    service.load()  # services/audio is on sys.path from here
+    from model_labels import DISCOGS_STYLES
+
+    styles = golden.styles_table(analysed, labels, DISCOGS_STYLES)
+    print_agreement("tempo agreement with Deezer's bpm", blocks["deezer-bpm"])
+    if "deezer-bpm-unseen" in blocks:
+        print_agreement(
+            "the same without the songs beat-this was trained on", blocks["deezer-bpm-unseen"]
+        )
+    print_agreement("tempo agreement with the sheet-music bpm", blocks["sheet-music-bpm"])
+    print_agreement("key agreement with the sheet-music key", blocks["sheet-music-key"])
+    print(
+        f"\nstyles: n={styles['n']} tracks with Discogs styles, fingerprint for "
+        f"{styles['answered']}; "
+        + "; ".join(
+            f"hit@{k} {report.frac(h['overN'])} (constant baseline "
+            f"{report.frac(h['baselineOverN'])})"
+            for k, h in styles["hits"].items()
+        )
+    )
+    usage = disk_usage(root)
+    print(f"\ndata directory {root}: {human(usage)} (cap {human(budget.cap)})")
+    if args.no_report:
+        return 0
+    unavailable = {i: p["unavailable"] for i, p in previews.items() if p["unavailable"]}
+    run_doc = {
+        **common_fields(args, argv, names, started, started_at, root, budget),
+        "jobs": max(1, min(args.jobs, runner.MAX_JOBS)),
+        "selection": (
+            f"{len(selected)} of {len(rows)} rows"
+            + (
+                ""
+                if args.limit is None
+                else f" drawn with numpy default_rng({args.selection_seed})"
+            )
+        ),
+        "analyzerVersions": service.analyzer_versions(names),
+        "dataset": {
+            **golden.DATASET,
+            "fileSha256": golden.golden_sha256(),
+            "rows": len(rows),
+            "selected": len(selected),
+            "previewsAnalysed": len(tasks),
+            "previewUnavailable": dict(sorted(unavailable.items())),
+            "deezerBpm": sum(1 for t in tasks if deezer_bpm[t[1]] is not None),
+            "labelSource": "<data dir>/golden/discogs.json",
+        },
+        "clips": [
+            {
+                "trackId": a["trackId"],
+                "stratum": by_isrc[a["trackId"]].stratum,
+                "deezerId": previews[a["trackId"]]["deezerId"],
+                "deezerBpm": deezer_bpm[a["trackId"]],
+                "window": a.get("window"),
+            }
+            for a in sorted(analysed, key=lambda a: a["trackId"])
+        ],
+        "agreement": blocks,
+        "trainedOn": {"beat-this": seen} if "beat-this" in names else {},
+        "trainedOnNote": beatthis.GOLDEN_TRAINING_NOTE if "beat-this" in names else None,
+        "estimatorCredits": [beatthis.REFERENCE, beatthis.HARMONIX_REFERENCE]
+        if "beat-this" in names
+        else [],
+        "serviceDefault": service.default_estimator(),
+        "styles": {"model": "discogs-effnet-bs64-1", "topK": len(styles["baseline"]), **styles},
+        "failed": [
+            {"trackId": a["trackId"], "error": a["error"]} for a in analysed if a.get("error")
+        ],
+    }
+    md_path, json_path = report.write(args.report_dir, today, run_doc)
+    print(f"report: {md_path}\nresults: {json_path}")
+    return 0
+
+
+PREVIEW_DIR_PREFIX = "evals-audio-previews-"
+# Golden previews are analysed whole, as the service gets them, with the fingerprint's styles.
+GOLDEN_OPTIONS = {"whole": True, "styles": True}
+
+
+def content_length(url: str) -> int | None:
+    """The size the index reports for a file (a HEAD request), or None."""
+    try:
+        response = httpx.head(url, follow_redirects=True, timeout=30.0)
+        response.raise_for_status()
+        return int(response.headers["content-length"])
+    except (httpx.HTTPError, KeyError, ValueError):
+        return None
+
+
+def run_cost(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget) -> int:
+    started = time.monotonic()
+    started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    if not args.no_report:
+        report.load(args.report_dir / f"audio-{started_at.date().isoformat()}.json")
+    spec = datasets.DATASETS[args.dataset]
+    home = root / spec.mirdata_name
+    refs, selected, present, _ = fetch(spec, home, args, budget)
+    pid = datasets.public_ids(spec, refs)
+    measured = [r for r in selected if r.track_id in present]
+    if not measured:
+        print(f"error: no {spec.name} audio to measure on", file=sys.stderr)
+        return 3
+    tasks = [
+        (spec.name, r.track_id, str(home / r.audio_rel), args.clip_seed, pid[r.track_id])
+        for r in measured
+    ]
+    print(f"measuring {', '.join(names)} on {len(tasks)} {spec.name} clips", file=sys.stderr)
+    with tempfile.TemporaryDirectory(prefix="evals-audio-numba-") as numba_cache:
+        memory = costs.measure(names, tasks, numba_cache)
+    install = costs.install_cost(names, content_length)
+    model_files = {}
+    if "beat-this" in names:
+        model_files["beat-this"] = {
+            "file": f"{beatthis.CHECKPOINT_NAME}.ckpt",
+            "bytes": beatthis.CHECKPOINT_BYTES,
+        }
+    for name in names:
+        m, i = memory[name], install[name]
+        first, per = m["firstAnalysed"], m["perClip"]
+        print(
+            f"{name:<9} RSS service {human(m['rssServiceBytes'])}, ready "
+            f"{human(m['rssReadyBytes'])}, peak {human(m['peakRssBytes'])}; tempo median "
+            f"{per['medianWallSeconds']} s/clip over {per['n']} (first analysed clip "
+            f"{first and first['wallSeconds']} s); adds "
+            f"{human(i['serviceImage']['installedBytes'])} to the service image"
+        )
+    if args.no_report:
+        return 0
+    run_doc = {
+        **common_fields(args, argv, names, started, started_at, root, budget),
+        "jobs": 1,
+        "selection": (
+            f"{len(selected)} {spec.name} tracks drawn with numpy default_rng("
+            f"{args.selection_seed}), 30 s windows at clip seed {args.clip_seed}"
+        ),
+        "analyzerVersions": service.analyzer_versions(names),
+        "machine": {**costs.machine(), "threads": costs.thread_settings()},
+        "estimatorCredits": [beatthis.REFERENCE] if "beat-this" in names else [],
+        "serviceDefault": service.default_estimator(),
+        "dataset": {"name": spec.name, "title": spec.title},
+        "clips": [{"trackId": pid[r.track_id]} for r in measured],
+        "memory": memory,
+        "install": install,
+        "modelFiles": model_files,
+    }
+    md_path, json_path = report.write(args.report_dir, started_at.date().isoformat(), run_doc)
     print(f"report: {md_path}\nresults: {json_path}")
     return 0

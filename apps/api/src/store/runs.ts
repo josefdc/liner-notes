@@ -13,7 +13,10 @@
  *   audio_available 1/0 whether audio was measured; null when unknown
  *   payload         JSON with anything else worth keeping about the run; null when none.
  *                   `resultFrom: "another_run"` marks a run that sent a result another run
- *                   composed (a cached one), which is not stored as this run's
+ *                   composed (a cached one), which is not stored as this run's.
+ *                   `replayOf: { slug, recordedAt, digest }` names the recording a replayed
+ *                   run served (see storeReplayOf): its result is the record's, not stored
+ *                   again
  *   spotify_id      Spotify id of the analysed track, once the run has a result of its own;
  *                   else null
  *   mode            how the result the run sent was produced: "live", computed by this run, or
@@ -170,19 +173,24 @@ export function getRun(db: Database.Database, runId: string): RunRecord | null {
 /**
  * The runs of a track that have a result of their own, latest first: by the time they finished
  * (a resumed run finishes after runs started later), then by start, then by the order they were
- * recorded. At most `limit` runs.
+ * recorded. At most `limit` runs. A run that replayed a recording (storeReplayOf) counts only
+ * when the recording it was sent is one of `servedDigests` (one still served as it was), so
+ * replays of a recording since changed or removed never fill the window.
  */
 export function latestRunsForTrack(
   db: Database.Database,
   spotifyId: string,
   limit: number,
+  servedDigests: readonly string[] = [],
 ): RunRecord[] {
   const rows = db
     .prepare(
       `SELECT ${RUN_COLUMNS} FROM runs WHERE spotify_id = ?
+         AND (analysis IS NOT NULL
+              OR json_extract(payload, '$.replayOf.digest') IN (SELECT value FROM json_each(?)))
        ORDER BY finished_at DESC, created_at DESC, rowid DESC LIMIT ?`,
     )
-    .all(spotifyId, limit) as RunRow[];
+    .all(spotifyId, JSON.stringify(servedDigests), limit) as RunRow[];
   return rows.map(toRecord);
 }
 
@@ -274,6 +282,58 @@ export function storeRunResult(
     .prepare("UPDATE runs SET spotify_id = ?, mode = ?, analysis = ? WHERE run_id = ?")
     .run(spotifyId, replay ? "replay" : "live", JSON.stringify(own), runId);
   return result.changes > 0 ? "stored" : "no_run";
+}
+
+/**
+ * The recording a replayed run served: the record's slug, when it was recorded and the digest of
+ * its content (records.ts), so the run is served again only from that same content.
+ */
+export interface ReplayOf {
+  slug: string;
+  recordedAt: string;
+  digest: string;
+}
+
+/**
+ * Records that a run replays a recorded run: mode "replay" and which recording (`payload.replayOf`),
+ * written when the replay starts, so the run never reads as live whatever its outcome. Once it
+ * has completed, `spotifyId` (the recording's track) is set too, which makes it the track's run
+ * for GET /api/runs/by-track. The result itself is not copied: it is the record's, with this
+ * run's id, and the runs routes rebuild it while that same recording is served. A copy per
+ * replay would only fill the disk.
+ */
+export function storeReplayOf(
+  db: Database.Database,
+  runId: string,
+  replayOf: ReplayOf,
+  spotifyId: string | null = null,
+): boolean {
+  const result = db
+    .prepare(
+      `UPDATE runs SET spotify_id = ?, mode = 'replay', analysis = NULL,
+         payload = json_set(COALESCE(payload, '{}'), '$.replayOf', json(?))
+       WHERE run_id = ?`,
+    )
+    .run(
+      spotifyId && SPOTIFY_ID_PATTERN.test(spotifyId) ? spotifyId : null,
+      JSON.stringify({
+        slug: replayOf.slug,
+        recordedAt: replayOf.recordedAt,
+        digest: replayOf.digest,
+      }),
+      runId,
+    );
+  return result.changes > 0;
+}
+
+/** The recording a replayed run served (storeReplayOf), or null. */
+export function replayOfRun(run: RunRecord): ReplayOf | null {
+  const replayOf = (run.payload as { replayOf?: Partial<ReplayOf> } | null)?.replayOf;
+  return typeof replayOf?.slug === "string" &&
+    typeof replayOf.recordedAt === "string" &&
+    typeof replayOf.digest === "string"
+    ? { slug: replayOf.slug, recordedAt: replayOf.recordedAt, digest: replayOf.digest }
+    : null;
 }
 
 /**

@@ -33,13 +33,30 @@ describe("readSettings", () => {
     expect(settings.replayOnly).toBe(true);
   });
 
-  it("accepts REPLAY_MODE only as only, off or unset", () => {
-    expect(settingsOf({ ...KEYS, REPLAY_MODE: "off" }).replayOnly).toBe(false);
-    expect(settingsOf({ ...KEYS, REPLAY_MODE: "" }).replayOnly).toBe(false);
-    expect(settingsOf(KEYS).replayOnly).toBe(false);
-    for (const value of ["on", "ONLY", "true", "1"]) {
+  it("accepts REPLAY_MODE only as off, fallback, only or unset", () => {
+    expect(settingsOf({ ...KEYS, REPLAY_MODE: "off" })).toMatchObject({
+      replayMode: "off",
+      replayOnly: false,
+    });
+    expect(settingsOf({ ...KEYS, REPLAY_MODE: "" }).replayMode).toBe("off");
+    expect(settingsOf(KEYS).replayMode).toBe("off");
+    expect(settingsOf({ ...KEYS, REPLAY_MODE: " fallback " })).toMatchObject({
+      replayMode: "fallback",
+      replayOnly: false,
+    });
+    expect(settingsOf({ REPLAY_MODE: "only" }).replayMode).toBe("only");
+    for (const value of ["on", "ONLY", "Fallback", "true", "1"]) {
       expect(errorsOf({ ...KEYS, REPLAY_MODE: value })).toContain("REPLAY_MODE");
     }
+  });
+
+  it("starts in fallback mode without the Spotify keys, with a warning", () => {
+    const result = readSettings({ REPLAY_MODE: "fallback" });
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.warnings.join(" ")).toContain(
+      "live analysis is unavailable, only recorded runs are served",
+    );
+    expect(readSettings({ ...KEYS, REPLAY_MODE: "fallback" })).toMatchObject({ warnings: [] });
   });
 
   it("warns when CORS_ORIGINS is set but empty", () => {

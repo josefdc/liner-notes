@@ -1,0 +1,2387 @@
+{
+  "schemaVersion": 4,
+  "runs": [
+    {
+      "suite": "tempo",
+      "command": "uv run python -m evals_audio --suite tempo --dataset ballroom --limit 50 --seed 1",
+      "startedAt": "2026-10-24T14:53:41Z",
+      "wallSeconds": 33.0,
+      "jobs": 4,
+      "seeds": {
+        "selection": 1,
+        "clips": 1,
+        "bootstrap": 1
+      },
+      "limit": 50,
+      "selection": "50 of 698 usable tracks drawn with numpy default_rng(1)",
+      "clipSeconds": 30.0,
+      "gitCommit": "1c0cfd2",
+      "analyzerVersion": "2.0.0",
+      "analyzerVersions": {
+        "librosa": "2.0.0+librosa",
+        "essentia": "2.0.0+essentia"
+      },
+      "environment": {
+        "python": "3.12.3",
+        "librosa": "1.0.0",
+        "numpy": "2.3.5",
+        "scipy": "1.16.3",
+        "mirdata": "1.0.0",
+        "essentia-tensorflow": "2.1b6.dev1389"
+      },
+      "dataUsageBytes": 315674624,
+      "dataCapBytes": 2000000000,
+      "dataset": {
+        "name": "ballroom",
+        "mirdataName": "ballroom",
+        "title": "Ballroom (ISMIR 2004 tempo induction contest)",
+        "annotationLicence": "CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/), per mirdata 1.0.0 (ballroom.LICENSE_INFO); not stated by the dataset: the contest page states no licence",
+        "audioRights": "commercial excerpts (BallroomDancers.com, credited on the contest page); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio and no audio file names.",
+        "credits": [
+          "Gouyon, F., Klapuri, A., Dixon, S., Alonso, M., Tzanetakis, G., Uhle, C., Cano, P. (2006). An experimental comparison of audio tempo induction algorithms. IEEE Transactions on Audio, Speech, and Language Processing 14(5), 1832-1844. doi:10.1109/TSA.2005.858509"
+        ],
+        "sources": [
+          ["audio", "https://mtg.upf.edu/ismir2004/contest/tempoContest/data1.tar.gz"],
+          ["tempo", "https://mtg.upf.edu/ismir2004/contest/tempoContest/data2.tar.gz"],
+          ["index", "https://zenodo.org/records/13993346 (mirdata index 1.0)"]
+        ],
+        "referenceNote": "the contest's ground-truth tempo (one value per excerpt)",
+        "referenceStats": null,
+        "notes": [
+          "698 excerpts of about 30 s from BallroomDancers.com, eight dance styles, so the 30 s window covers nearly all of each excerpt.",
+          "Published Ballroom figures use all 698 excerpts; a sample of n clips is only comparable within its interval.",
+          "Ballroom's track ids are its file names (album names included), so the results use the first 10 hex digits of a SHA-256 of the dataset name and the id; `uv run python -m evals_audio --lookup ID --dataset ballroom` maps one back from the local index."
+        ],
+        "tracksInIndex": 698,
+        "usable": 698,
+        "excluded": {},
+        "selected": 50,
+        "audioPresent": 50,
+        "audioUnavailable": [],
+        "audioSources": {
+          "https://mtg.upf.edu/ismir2004/contest/tempoContest/data1.tar.gz": 50
+        }
+      },
+      "summaries": {
+        "librosa": {
+          "n": 50,
+          "answered": 37,
+          "withheld": 13,
+          "failed": 0,
+          "coverage": {
+            "n": 50,
+            "total": 37.0,
+            "mean": 0.74,
+            "ciLow": 0.6044684273515117,
+            "ciHigh": 0.8412847250644762,
+            "method": "Wilson",
+            "note": null
+          },
+          "overN": {
+            "acc1": {
+              "n": 50,
+              "total": 28.0,
+              "mean": 0.56,
+              "ciLow": 0.4230602802165686,
+              "ciHigh": 0.6883780078874284,
+              "method": "Wilson",
+              "note": null
+            },
+            "acc2": {
+              "n": 50,
+              "total": 36.0,
+              "mean": 0.72,
+              "ciLow": 0.5833487630404344,
+              "ciHigh": 0.8252582933408878,
+              "method": "Wilson",
+              "note": null
+            }
+          },
+          "overAnswered": {
+            "acc1": {
+              "n": 37,
+              "total": 28.0,
+              "mean": 0.7567567567567568,
+              "ciLow": 0.5988270787855735,
+              "ciHigh": 0.8663864701088361,
+              "method": "Wilson",
+              "note": null
+            },
+            "acc2": {
+              "n": 37,
+              "total": 36.0,
+              "mean": 0.972972972972973,
+              "ciLow": 0.861759301362695,
+              "ciHigh": 0.9952130255480596,
+              "method": "Wilson",
+              "note": null
+            }
+          }
+        },
+        "essentia": {
+          "n": 50,
+          "answered": 30,
+          "withheld": 20,
+          "failed": 0,
+          "coverage": {
+            "n": 50,
+            "total": 30.0,
+            "mean": 0.6,
+            "ciLow": 0.4618143774758936,
+            "ciHigh": 0.7239161026974346,
+            "method": "Wilson",
+            "note": null
+          },
+          "overN": {
+            "acc1": {
+              "n": 50,
+              "total": 26.0,
+              "mean": 0.52,
+              "ciLow": 0.38511744890044614,
+              "ciHigh": 0.6520286471342196,
+              "method": "Wilson",
+              "note": null
+            },
+            "acc2": {
+              "n": 50,
+              "total": 29.0,
+              "mean": 0.58,
+              "ciLow": 0.4423344176857823,
+              "ciHigh": 0.7062499664528802,
+              "method": "Wilson",
+              "note": null
+            }
+          },
+          "overAnswered": {
+            "acc1": {
+              "n": 30,
+              "total": 26.0,
+              "mean": 0.8666666666666667,
+              "ciLow": 0.703186733179637,
+              "ciHigh": 0.9469034451594526,
+              "method": "Wilson",
+              "note": null
+            },
+            "acc2": {
+              "n": 30,
+              "total": 29.0,
+              "mean": 0.9666666666666667,
+              "ciLow": 0.8332960900859082,
+              "ciHigh": 0.9940914096183874,
+              "method": "Wilson",
+              "note": null
+            }
+          }
+        }
+      },
+      "paired": {
+        "first": "librosa",
+        "second": "essentia",
+        "bothAnswered": {
+          "n": 29,
+          "metrics": {
+            "acc1": {
+              "firstCorrect": 25,
+              "secondCorrect": 25,
+              "onlyFirst": 0,
+              "onlySecond": 0,
+              "mcnemarP": 1.0
+            },
+            "acc2": {
+              "firstCorrect": 28,
+              "secondCorrect": 28,
+              "onlyFirst": 0,
+              "onlySecond": 0,
+              "mcnemarP": 1.0
+            }
+          }
+        },
+        "allN": {
+          "n": 50,
+          "metrics": {
+            "acc1": {
+              "firstCorrect": 28,
+              "secondCorrect": 26,
+              "onlyFirst": 3,
+              "onlySecond": 1,
+              "mcnemarP": 0.625
+            },
+            "acc2": {
+              "firstCorrect": 36,
+              "secondCorrect": 29,
+              "onlyFirst": 8,
+              "onlySecond": 1,
+              "mcnemarP": 0.0390625
+            }
+          }
+        }
+      },
+      "withheldCost": {
+        "librosa": {
+          "n": 50,
+          "returned": 37,
+          "unreturned": 13,
+          "rules": [
+            {
+              "rule": "several rules",
+              "count": 5,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 1.0,
+                    "mean": 0.2,
+                    "ciLow": 0.03622410863243014,
+                    "ciHigh": 0.6244653702374747,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 29.0,
+                    "mean": 0.58,
+                    "ciLow": 0.4423344176857823,
+                    "ciHigh": 0.7062499664528802,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 3.0,
+                    "mean": 0.6,
+                    "ciLow": 0.2307242812760128,
+                    "ciHigh": 0.882379225767352,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 39.0,
+                    "mean": 0.78,
+                    "ciLow": 0.6475845041874634,
+                    "ciHigh": 0.8724608402978559,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "confidence under the estimator's minimum",
+              "count": 4,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 4,
+                    "total": 3.0,
+                    "mean": 0.75,
+                    "ciLow": 0.30064184258240184,
+                    "ciHigh": 0.9544127391902995,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 31.0,
+                    "mean": 0.62,
+                    "ciLow": 0.4815044693099298,
+                    "ciHigh": 0.7413721068980641,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 4,
+                    "total": 3.0,
+                    "mean": 0.75,
+                    "ciLow": 0.30064184258240184,
+                    "ciHigh": 0.9544127391902995,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 39.0,
+                    "mean": 0.78,
+                    "ciLow": 0.6475845041874634,
+                    "ciHigh": 0.8724608402978559,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "tempo does not hold over the window",
+              "count": 4,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 4,
+                    "total": 3.0,
+                    "mean": 0.75,
+                    "ciLow": 0.30064184258240184,
+                    "ciHigh": 0.9544127391902995,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 31.0,
+                    "mean": 0.62,
+                    "ciLow": 0.4815044693099298,
+                    "ciHigh": 0.7413721068980641,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 4,
+                    "total": 3.0,
+                    "mean": 0.75,
+                    "ciLow": 0.30064184258240184,
+                    "ciHigh": 0.9544127391902995,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 39.0,
+                    "mean": 0.78,
+                    "ciLow": 0.6475845041874634,
+                    "ciHigh": 0.8724608402978559,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "all",
+              "count": 13,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 13,
+                    "total": 7.0,
+                    "mean": 0.5384615384615384,
+                    "ciLow": 0.29143795714506004,
+                    "ciHigh": 0.7679393219046169,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 35.0,
+                    "mean": 0.7,
+                    "ciLow": 0.562496495355466,
+                    "ciHigh": 0.8089644649911906,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 13,
+                    "total": 9.0,
+                    "mean": 0.6923076923076923,
+                    "ciLow": 0.42369343180549035,
+                    "ciHigh": 0.8731929634428948,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 45.0,
+                    "mean": 0.9,
+                    "ciLow": 0.7863976856252035,
+                    "ciHigh": 0.9565242350681096,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "essentia": {
+          "n": 50,
+          "returned": 30,
+          "unreturned": 20,
+          "rules": [
+            {
+              "rule": "confidence under the estimator's minimum",
+              "count": 11,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 11,
+                    "total": 8.0,
+                    "mean": 0.7272727272727273,
+                    "ciLow": 0.43435469882387084,
+                    "ciHigh": 0.902539407099751,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 34.0,
+                    "mean": 0.68,
+                    "ciLow": 0.5418970269185592,
+                    "ciHigh": 0.7924178373934316,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 11,
+                    "total": 11.0,
+                    "mean": 1.0,
+                    "ciLow": 0.7411670330319684,
+                    "ciHigh": 1.0,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 40.0,
+                    "mean": 0.8,
+                    "ciLow": 0.6696289406777459,
+                    "ciHigh": 0.887562499842239,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "several rules",
+              "count": 5,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 1.0,
+                    "mean": 0.2,
+                    "ciLow": 0.03622410863243014,
+                    "ciHigh": 0.6244653702374747,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 27.0,
+                    "mean": 0.54,
+                    "ciLow": 0.40398871399157477,
+                    "ciHigh": 0.6703034780777566,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 2.0,
+                    "mean": 0.4,
+                    "ciLow": 0.11762077423264783,
+                    "ciHigh": 0.769275718723987,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 31.0,
+                    "mean": 0.62,
+                    "ciLow": 0.4815044693099298,
+                    "ciHigh": 0.7413721068980641,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "tempo does not hold over the window",
+              "count": 4,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 4,
+                    "total": 4.0,
+                    "mean": 1.0,
+                    "ciLow": 0.5101091635454027,
+                    "ciHigh": 1.0,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 30.0,
+                    "mean": 0.6,
+                    "ciLow": 0.4618143774758936,
+                    "ciHigh": 0.7239161026974346,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 4,
+                    "total": 4.0,
+                    "mean": 1.0,
+                    "ciLow": 0.5101091635454027,
+                    "ciHigh": 1.0,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 33.0,
+                    "mean": 0.66,
+                    "ciLow": 0.521538260502326,
+                    "ciHigh": 0.7756305077749992,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "all",
+              "count": 20,
+              "metrics": {
+                "acc1": {
+                  "unreturned": {
+                    "n": 20,
+                    "total": 13.0,
+                    "mean": 0.65,
+                    "ciLow": 0.43285427668523624,
+                    "ciHigh": 0.818808175898918,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 39.0,
+                    "mean": 0.78,
+                    "ciLow": 0.6475845041874634,
+                    "ciHigh": 0.8724608402978559,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                },
+                "acc2": {
+                  "unreturned": {
+                    "n": 20,
+                    "total": 17.0,
+                    "mean": 0.85,
+                    "ciLow": 0.6395811352592431,
+                    "ciHigh": 0.9476312541037835,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 46.0,
+                    "mean": 0.92,
+                    "ciLow": 0.8116175308165717,
+                    "ciHigh": 0.968450485911407,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "coverage": {
+        "librosa": {
+          "points": [
+            {
+              "coverage": 0.2,
+              "answered": 10,
+              "minConfidence": 0.655,
+              "accuracy": {
+                "acc1": {
+                  "n": 10,
+                  "total": 9.0,
+                  "mean": 0.9,
+                  "ciLow": 0.5958499732047615,
+                  "ciHigh": 0.9821237869049271,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 10,
+                  "total": 10.0,
+                  "mean": 1.0,
+                  "ciLow": 0.7224672001371107,
+                  "ciHigh": 0.9999999999999999,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.3,
+              "answered": 15,
+              "minConfidence": 0.596,
+              "accuracy": {
+                "acc1": {
+                  "n": 15,
+                  "total": 13.0,
+                  "mean": 0.8666666666666667,
+                  "ciLow": 0.6211801716767764,
+                  "ciHigh": 0.9626387408969346,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 15,
+                  "total": 15.0,
+                  "mean": 1.0,
+                  "ciLow": 0.7961166989641515,
+                  "ciHigh": 1.0,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.4,
+              "answered": 20,
+              "minConfidence": 0.565,
+              "accuracy": {
+                "acc1": {
+                  "n": 20,
+                  "total": 16.0,
+                  "mean": 0.8,
+                  "ciLow": 0.5839825677481064,
+                  "ciHigh": 0.919342337420202,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 20,
+                  "total": 20.0,
+                  "mean": 1.0,
+                  "ciLow": 0.8388748419471806,
+                  "ciHigh": 1.0,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.5,
+              "answered": 25,
+              "minConfidence": 0.452,
+              "accuracy": {
+                "acc1": {
+                  "n": 25,
+                  "total": 20.0,
+                  "mean": 0.8,
+                  "ciLow": 0.6086904963045967,
+                  "ciHigh": 0.9113941531319742,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 25,
+                  "total": 25.0,
+                  "mean": 1.0,
+                  "ciLow": 0.8668077490609515,
+                  "ciHigh": 0.9999999999999999,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.6,
+              "answered": 30,
+              "minConfidence": 0.402,
+              "accuracy": {
+                "acc1": {
+                  "n": 30,
+                  "total": 25.0,
+                  "mean": 0.8333333333333334,
+                  "ciLow": 0.6643564949358398,
+                  "ciHigh": 0.9266345762815145,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 30,
+                  "total": 30.0,
+                  "mean": 1.0,
+                  "ciLow": 0.8864866068260312,
+                  "ciHigh": 0.9999999999999999,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.7,
+              "answered": 35,
+              "minConfidence": 0.343,
+              "accuracy": {
+                "acc1": {
+                  "n": 35,
+                  "total": 28.0,
+                  "mean": 0.8,
+                  "ciLow": 0.6410838693433439,
+                  "ciHigh": 0.8995755352620137,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 35,
+                  "total": 34.0,
+                  "mean": 0.9714285714285714,
+                  "ciLow": 0.8546691276638632,
+                  "ciHigh": 0.9949385081445556,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.74,
+              "answered": 37,
+              "minConfidence": 0.337,
+              "accuracy": {
+                "acc1": {
+                  "n": 37,
+                  "total": 28.0,
+                  "mean": 0.7567567567567568,
+                  "ciLow": 0.5988270787855735,
+                  "ciHigh": 0.8663864701088361,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 37,
+                  "total": 36.0,
+                  "mean": 0.972972972972973,
+                  "ciLow": 0.861759301362695,
+                  "ciHigh": 0.9952130255480596,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            }
+          ],
+          "unranked": [],
+          "ranking": {
+            "acc1": {
+              "correct": 28,
+              "wrong": 9,
+              "auc": 0.6785714285714286,
+              "p": 0.056869431305686946,
+              "pMethod": "Monte Carlo, 100,000 permutations"
+            },
+            "acc2": {
+              "correct": 36,
+              "wrong": 1,
+              "auc": 0.8611111111111112,
+              "p": 0.16216216216216217,
+              "pMethod": "exact permutation"
+            }
+          }
+        },
+        "essentia": {
+          "points": [
+            {
+              "coverage": 0.2,
+              "answered": 10,
+              "minConfidence": 0.646,
+              "accuracy": {
+                "acc1": {
+                  "n": 10,
+                  "total": 9.0,
+                  "mean": 0.9,
+                  "ciLow": 0.5958499732047615,
+                  "ciHigh": 0.9821237869049271,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 10,
+                  "total": 10.0,
+                  "mean": 1.0,
+                  "ciLow": 0.7224672001371107,
+                  "ciHigh": 0.9999999999999999,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.3,
+              "answered": 15,
+              "minConfidence": 0.609,
+              "accuracy": {
+                "acc1": {
+                  "n": 15,
+                  "total": 14.0,
+                  "mean": 0.9333333333333333,
+                  "ciLow": 0.7018347012621998,
+                  "ciHigh": 0.9881331045067315,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 15,
+                  "total": 15.0,
+                  "mean": 1.0,
+                  "ciLow": 0.7961166989641515,
+                  "ciHigh": 1.0,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.4,
+              "answered": 20,
+              "minConfidence": 0.533,
+              "accuracy": {
+                "acc1": {
+                  "n": 20,
+                  "total": 18.0,
+                  "mean": 0.9,
+                  "ciLow": 0.6989663547715128,
+                  "ciHigh": 0.9721335187862319,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 20,
+                  "total": 20.0,
+                  "mean": 1.0,
+                  "ciLow": 0.8388748419471806,
+                  "ciHigh": 1.0,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.5,
+              "answered": 25,
+              "minConfidence": 0.424,
+              "accuracy": {
+                "acc1": {
+                  "n": 25,
+                  "total": 22.0,
+                  "mean": 0.88,
+                  "ciLow": 0.7004420607907267,
+                  "ciHigh": 0.9583318284955964,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 25,
+                  "total": 25.0,
+                  "mean": 1.0,
+                  "ciLow": 0.8668077490609515,
+                  "ciHigh": 0.9999999999999999,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.6,
+              "answered": 30,
+              "minConfidence": 0.343,
+              "accuracy": {
+                "acc1": {
+                  "n": 30,
+                  "total": 26.0,
+                  "mean": 0.8666666666666667,
+                  "ciLow": 0.703186733179637,
+                  "ciHigh": 0.9469034451594526,
+                  "method": "Wilson",
+                  "note": null
+                },
+                "acc2": {
+                  "n": 30,
+                  "total": 29.0,
+                  "mean": 0.9666666666666667,
+                  "ciLow": 0.8332960900859082,
+                  "ciHigh": 0.9940914096183874,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            }
+          ],
+          "unranked": [],
+          "ranking": {
+            "acc1": {
+              "correct": 26,
+              "wrong": 4,
+              "auc": 0.6634615384615384,
+              "p": 0.16383871556285348,
+              "pMethod": "exact permutation"
+            },
+            "acc2": {
+              "correct": 29,
+              "wrong": 1,
+              "auc": 0.896551724137931,
+              "p": 0.13333333333333333,
+              "pMethod": "exact permutation"
+            }
+          }
+        }
+      },
+      "clips": [
+        {
+          "trackId": "67f42ea20c",
+          "window": {
+            "offsetSeconds": 0.023,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 30.144,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "5a780ee438",
+          "window": {
+            "offsetSeconds": 0.074,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 30.144,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "29d5a70b51",
+          "window": {
+            "offsetSeconds": 0.322,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 31.788,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "0e587caa8d",
+          "window": {
+            "offsetSeconds": 0.033,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 30.144,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "73e3200e16",
+          "window": {
+            "offsetSeconds": 0.136,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 30.144,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "a774113ece",
+          "window": {
+            "offsetSeconds": 0.139,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 30.144,
+            "sampleRate": 44100
+          }
+        }
+      ],
+      "tracks": {
+        "librosa": [
+          {
+            "trackId": "67f42ea20c",
+            "estimate": "123.73",
+            "confidence": 0.655,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "5a780ee438",
+            "estimate": "95.73",
+            "confidence": 0.834,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "29d5a70b51",
+            "estimate": "121",
+            "confidence": 0.565,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "0e587caa8d",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "tempo does not hold over the window",
+            "unreturned": {
+              "estimate": "103.81",
+              "confidence": 0.378,
+              "steady": false,
+              "rules": ["tempo does not hold over the window"],
+              "scores": {
+                "acc1": 1.0,
+                "acc2": 1.0
+              }
+            }
+          },
+          {
+            "trackId": "73e3200e16",
+            "estimate": "100.06",
+            "confidence": 0.59,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "a774113ece",
+            "estimate": "103.88",
+            "confidence": 0.513,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          }
+        ],
+        "essentia": [
+          {
+            "trackId": "67f42ea20c",
+            "estimate": "123.7",
+            "confidence": 0.676,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "5a780ee438",
+            "estimate": "95.77",
+            "confidence": 0.768,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "29d5a70b51",
+            "estimate": "120.98",
+            "confidence": 0.609,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "0e587caa8d",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "tempo does not hold over the window",
+            "unreturned": {
+              "estimate": "103.48",
+              "confidence": 0.684,
+              "steady": false,
+              "rules": ["tempo does not hold over the window"],
+              "scores": {
+                "acc1": 1.0,
+                "acc2": 1.0
+              }
+            }
+          },
+          {
+            "trackId": "73e3200e16",
+            "estimate": "100.06",
+            "confidence": 0.68,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          },
+          {
+            "trackId": "a774113ece",
+            "estimate": "103.72",
+            "confidence": 0.518,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "acc1": 1.0,
+              "acc2": 1.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "suite": "key",
+      "command": "uv run python -m evals_audio --suite key --dataset giantsteps-key --limit 50 --seed 1",
+      "startedAt": "2026-10-24T14:54:49Z",
+      "wallSeconds": 30.3,
+      "jobs": 4,
+      "seeds": {
+        "selection": 1,
+        "clips": 1,
+        "bootstrap": 1
+      },
+      "limit": 50,
+      "selection": "50 of 476 usable tracks drawn with numpy default_rng(1)",
+      "clipSeconds": 30.0,
+      "gitCommit": "1c0cfd2",
+      "analyzerVersion": "2.0.0",
+      "analyzerVersions": {
+        "librosa": "2.0.0+librosa",
+        "essentia": "2.0.0+essentia"
+      },
+      "environment": {
+        "python": "3.12.3",
+        "librosa": "1.0.0",
+        "numpy": "2.3.5",
+        "scipy": "1.16.3",
+        "mirdata": "1.0.0",
+        "essentia-tensorflow": "2.1b6.dev1389"
+      },
+      "dataUsageBytes": 315674624,
+      "dataCapBytes": 2000000000,
+      "dataset": {
+        "name": "giantsteps-key",
+        "mirdataName": "giantsteps_key",
+        "title": "GiantSteps Key, as GiantSteps+ (Faraldo 2017 revision)",
+        "annotationLicence": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), stated in the Zenodo record (10.5281/zenodo.1095691); mirdata 1.0.0 agrees",
+        "audioRights": "commercial excerpts (Beatport two-minute previews; the record says the audio belongs to Beatport); no licence is stated for the audio. Fetched into the local data directory for evaluation only and never redistributed: the repository holds no audio and no audio file names.",
+        "credits": [
+          "Faraldo, Á. (2017). GiantSteps+ EDM Key Dataset. Zenodo. doi:10.5281/zenodo.1095691",
+          "Faraldo, Á. (2017). Tonality Estimation in Electronic Dance Music: A Computational and Musically Informed Examination. PhD thesis, Universitat Pompeu Fabra, Barcelona",
+          "Knees, P., Faraldo, Á., Herrera, P., Vogl, R., Böck, S., Hörschläger, F., Le Goff, M. (2015). Two data sets for tempo estimation and key detection in electronic dance music annotated from user corrections. Proc. ISMIR 2015, 364-370. doi:10.5281/zenodo.1414996 (the original GiantSteps Key dataset)",
+          "The record's description asks for 10.5281/zenodo.1101082, but that DOI resolves to a different record (the Beatport EDM Key Dataset, 1,486 excerpts); the record used here is cited above"
+        ],
+        "sources": [
+          ["audio", "https://zenodo.org/records/1095691/files/audio.zip"],
+          ["keys", "https://zenodo.org/records/1095691/files/keys.zip"],
+          ["metadata", "https://zenodo.org/records/1095691/files/original_metadata.zip"],
+          ["index", "https://zenodo.org/records/13993357 (mirdata index '+')"]
+        ],
+        "referenceNote": "the GiantSteps+ single-key label (keys_gs+), tonic and major/minor",
+        "referenceStats": null,
+        "notes": [
+          "600 two-minute Beatport previews of electronic dance music. mirdata's giantsteps_key loader is the GiantSteps+ revision of the original GiantSteps Key labels, with the audio published on Zenodo.",
+          "Labels with two keys ('E major | E minor'), 'other' modes, 'X' or a misspelt tonic are not scored and are counted as unusable; modal labels keep their major/minor word ('F minor dorian' is scored as F minor).",
+          "Published GiantSteps Key figures are computed on the whole two-minute previews, mostly against the original 2015 labels; here one 30 s window per preview is scored against GiantSteps+ with the ambiguous labels left out. Not comparable."
+        ],
+        "tracksInIndex": 600,
+        "usable": 476,
+        "excluded": {
+          "two keys": 93,
+          "mode other than major/minor": 26,
+          "no mode": 3,
+          "unparseable": 2
+        },
+        "selected": 50,
+        "audioPresent": 50,
+        "audioUnavailable": [],
+        "audioSources": {
+          "https://zenodo.org/records/1095691/files/audio.zip": 50
+        }
+      },
+      "summaries": {
+        "librosa": {
+          "n": 50,
+          "answered": 11,
+          "withheld": 39,
+          "failed": 0,
+          "coverage": {
+            "n": 50,
+            "total": 11.0,
+            "mean": 0.22,
+            "ciLow": 0.1275391597021442,
+            "ciHigh": 0.3524154958125367,
+            "method": "Wilson",
+            "note": null
+          },
+          "overN": {
+            "mirex": {
+              "n": 50,
+              "total": 8.3,
+              "mean": 0.166,
+              "ciLow": 0.086,
+              "ciHigh": 0.28200000000000003,
+              "method": "BCa bootstrap",
+              "note": null
+            },
+            "exact": {
+              "n": 50,
+              "total": 7.0,
+              "mean": 0.14,
+              "ciLow": 0.06950833427016294,
+              "ciHigh": 0.2618619371058554,
+              "method": "Wilson",
+              "note": null
+            }
+          },
+          "overAnswered": {
+            "mirex": {
+              "n": 11,
+              "total": 8.3,
+              "mean": 0.7545454545454546,
+              "ciLow": 0.5,
+              "ciHigh": 0.9090909090909091,
+              "method": "BCa bootstrap",
+              "note": null
+            },
+            "exact": {
+              "n": 11,
+              "total": 7.0,
+              "mean": 0.6363636363636364,
+              "ciLow": 0.35380117450784887,
+              "ciHigh": 0.8483352890463243,
+              "method": "Wilson",
+              "note": null
+            }
+          }
+        },
+        "essentia": {
+          "n": 50,
+          "answered": 11,
+          "withheld": 39,
+          "failed": 0,
+          "coverage": {
+            "n": 50,
+            "total": 11.0,
+            "mean": 0.22,
+            "ciLow": 0.1275391597021442,
+            "ciHigh": 0.3524154958125367,
+            "method": "Wilson",
+            "note": null
+          },
+          "overN": {
+            "mirex": {
+              "n": 50,
+              "total": 8.5,
+              "mean": 0.17,
+              "ciLow": 0.086,
+              "ciHigh": 0.29200000000000004,
+              "method": "BCa bootstrap",
+              "note": null
+            },
+            "exact": {
+              "n": 50,
+              "total": 8.0,
+              "mean": 0.16,
+              "ciLow": 0.08337420678033404,
+              "ciHigh": 0.2851421606303499,
+              "method": "Wilson",
+              "note": null
+            }
+          },
+          "overAnswered": {
+            "mirex": {
+              "n": 11,
+              "total": 8.5,
+              "mean": 0.7727272727272727,
+              "ciLow": 0.4818181818181818,
+              "ciHigh": 0.9363636363636364,
+              "method": "BCa bootstrap",
+              "note": null
+            },
+            "exact": {
+              "n": 11,
+              "total": 8.0,
+              "mean": 0.7272727272727273,
+              "ciLow": 0.43435469882387084,
+              "ciHigh": 0.902539407099751,
+              "method": "Wilson",
+              "note": null
+            }
+          }
+        }
+      },
+      "paired": {
+        "first": "librosa",
+        "second": "essentia",
+        "bothAnswered": {
+          "n": 11,
+          "metrics": {
+            "mirex": {
+              "firstMean": 0.7545454545454546,
+              "secondMean": 0.7727272727272727,
+              "firstHigher": 1,
+              "secondHigher": 3,
+              "difference": {
+                "n": 11,
+                "total": -0.2,
+                "mean": -0.018181818181818184,
+                "ciLow": -0.3828801224252874,
+                "ciHigh": 0.34651648606165103,
+                "method": "paired t, ±1 pseudo-differences",
+                "note": null
+              },
+              "differenceCoverage": {
+                "draws": 2000,
+                "coverage": 0.998
+              },
+              "signFlipP": 1.0,
+              "signFlipMethod": "exact"
+            },
+            "exact": {
+              "firstCorrect": 7,
+              "secondCorrect": 8,
+              "onlyFirst": 1,
+              "onlySecond": 2,
+              "mcnemarP": 1.0
+            }
+          }
+        },
+        "allN": {
+          "n": 50,
+          "metrics": {
+            "mirex": {
+              "firstMean": 0.166,
+              "secondMean": 0.17,
+              "firstHigher": 1,
+              "secondHigher": 3,
+              "difference": {
+                "n": 50,
+                "total": -0.19999999999999996,
+                "mean": -0.003999999999999999,
+                "ciLow": -0.07886636253268157,
+                "ciHigh": 0.07086636253268157,
+                "method": "paired t, ±1 pseudo-differences",
+                "note": null
+              },
+              "differenceCoverage": {
+                "draws": 2000,
+                "coverage": 1.0
+              },
+              "signFlipP": 1.0,
+              "signFlipMethod": "exact"
+            },
+            "exact": {
+              "firstCorrect": 7,
+              "secondCorrect": 8,
+              "onlyFirst": 1,
+              "onlySecond": 2,
+              "mcnemarP": 1.0
+            }
+          }
+        }
+      },
+      "withheldCost": {
+        "librosa": {
+          "n": 50,
+          "returned": 11,
+          "unreturned": 39,
+          "rules": [
+            {
+              "rule": "no sustained pitch",
+              "count": 26,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 26,
+                    "total": 12.3,
+                    "mean": 0.4730769230769231,
+                    "ciLow": 0.3076923076923077,
+                    "ciHigh": 0.6499999999999999,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 20.6,
+                    "mean": 0.41200000000000003,
+                    "ciLow": 0.292,
+                    "ciHigh": 0.5379999999999999,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 26,
+                    "total": 10.0,
+                    "mean": 0.38461538461538464,
+                    "ciLow": 0.22428594435712798,
+                    "ciHigh": 0.5746514991488447,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 17.0,
+                    "mean": 0.34,
+                    "ciLow": 0.2243694922250009,
+                    "ciHigh": 0.478461739497674,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "fewer than three pitch classes",
+              "count": 5,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 2.6,
+                    "mean": 0.52,
+                    "ciLow": 0.2,
+                    "ciHigh": 0.8400000000000001,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 10.899999999999999,
+                    "mean": 0.21799999999999997,
+                    "ciLow": 0.124,
+                    "ciHigh": 0.33799999999999997,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 2.0,
+                    "mean": 0.4,
+                    "ciLow": 0.11762077423264783,
+                    "ciHigh": 0.769275718723987,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 9.0,
+                    "mean": 0.18,
+                    "ciLow": 0.09770192670234178,
+                    "ciHigh": 0.30796053674300783,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "one voice without stable notes (speech-like)",
+              "count": 5,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 2.6,
+                    "mean": 0.52,
+                    "ciLow": 0.24,
+                    "ciHigh": 0.86,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 10.9,
+                    "mean": 0.218,
+                    "ciLow": 0.126,
+                    "ciHigh": 0.348,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 2.0,
+                    "mean": 0.4,
+                    "ciLow": 0.11762077423264783,
+                    "ciHigh": 0.769275718723987,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 9.0,
+                    "mean": 0.18,
+                    "ciLow": 0.09770192670234178,
+                    "ciHigh": 0.30796053674300783,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "several rules",
+              "count": 2,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 2,
+                    "total": 0.0,
+                    "mean": 0.0,
+                    "ciLow": null,
+                    "ciHigh": null,
+                    "method": "BCa bootstrap",
+                    "note": "all scores equal"
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 8.3,
+                    "mean": 0.166,
+                    "ciLow": 0.08199999999999999,
+                    "ciHigh": 0.28,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 2,
+                    "total": 0.0,
+                    "mean": 0.0,
+                    "ciLow": 0.0,
+                    "ciHigh": 0.6576197724933469,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 7.0,
+                    "mean": 0.14,
+                    "ciLow": 0.06950833427016294,
+                    "ciHigh": 0.2618619371058554,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "one held pitch over the beat (a drone or one bass note)",
+              "count": 1,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 1,
+                    "total": 0.0,
+                    "mean": 0.0,
+                    "ciLow": null,
+                    "ciHigh": null,
+                    "method": "BCa bootstrap",
+                    "note": "all scores equal"
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 8.3,
+                    "mean": 0.166,
+                    "ciLow": 0.08474268202617362,
+                    "ciHigh": 0.282,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 1,
+                    "total": 0.0,
+                    "mean": 0.0,
+                    "ciLow": 0.0,
+                    "ciHigh": 0.7934506856227626,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 7.0,
+                    "mean": 0.14,
+                    "ciLow": 0.06950833427016294,
+                    "ciHigh": 0.2618619371058554,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "all",
+              "count": 39,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 39,
+                    "total": 17.5,
+                    "mean": 0.44871794871794873,
+                    "ciLow": 0.31538461538461543,
+                    "ciHigh": 0.5871794871794872,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 25.799999999999997,
+                    "mean": 0.5159999999999999,
+                    "ciLow": 0.3940000000000001,
+                    "ciHigh": 0.634,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 39,
+                    "total": 14.0,
+                    "mean": 0.358974358974359,
+                    "ciLow": 0.22742085458992867,
+                    "ciHigh": 0.5158185144045146,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 21.0,
+                    "mean": 0.42,
+                    "ciLow": 0.2937500335471198,
+                    "ciHigh": 0.5576655823142176,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "essentia": {
+          "n": 50,
+          "returned": 11,
+          "unreturned": 39,
+          "rules": [
+            {
+              "rule": "no sustained pitch",
+              "count": 28,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 28,
+                    "total": 20.9,
+                    "mean": 0.7464285714285713,
+                    "ciLow": 0.5821428571428572,
+                    "ciHigh": 0.8678571428571429,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 29.4,
+                    "mean": 0.588,
+                    "ciLow": 0.45799999999999996,
+                    "ciHigh": 0.71,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 28,
+                    "total": 19.0,
+                    "mean": 0.6785714285714286,
+                    "ciLow": 0.49338843180857617,
+                    "ciHigh": 0.8206675307750504,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 27.0,
+                    "mean": 0.54,
+                    "ciLow": 0.40398871399157477,
+                    "ciHigh": 0.6703034780777566,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "fewer than three pitch classes",
+              "count": 5,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 5.0,
+                    "mean": 1.0,
+                    "ciLow": null,
+                    "ciHigh": null,
+                    "method": "BCa bootstrap",
+                    "note": "all scores equal"
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 13.5,
+                    "mean": 0.27,
+                    "ciLow": 0.16,
+                    "ciHigh": 0.406,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 5.0,
+                    "mean": 1.0,
+                    "ciLow": 0.5655175352168251,
+                    "ciHigh": 1.0,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 13.0,
+                    "mean": 0.26,
+                    "ciLow": 0.15871527493552393,
+                    "ciHigh": 0.39553157264848837,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "one voice without stable notes (speech-like)",
+              "count": 5,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 2.1,
+                    "mean": 0.42000000000000004,
+                    "ciLow": 0.18,
+                    "ciHigh": 0.76,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 10.6,
+                    "mean": 0.212,
+                    "ciLow": 0.12,
+                    "ciHigh": 0.33799999999999997,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 5,
+                    "total": 1.0,
+                    "mean": 0.2,
+                    "ciLow": 0.03622410863243014,
+                    "ciHigh": 0.6244653702374747,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 9.0,
+                    "mean": 0.18,
+                    "ciLow": 0.09770192670234178,
+                    "ciHigh": 0.30796053674300783,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "one held pitch over the beat (a drone or one bass note)",
+              "count": 1,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 1,
+                    "total": 0.0,
+                    "mean": 0.0,
+                    "ciLow": null,
+                    "ciHigh": null,
+                    "method": "BCa bootstrap",
+                    "note": "all scores equal"
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 8.5,
+                    "mean": 0.17,
+                    "ciLow": 0.08504536652531045,
+                    "ciHigh": 0.29252093020040776,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 1,
+                    "total": 0.0,
+                    "mean": 0.0,
+                    "ciLow": 0.0,
+                    "ciHigh": 0.7934506856227626,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 8.0,
+                    "mean": 0.16,
+                    "ciLow": 0.08337420678033404,
+                    "ciHigh": 0.2851421606303499,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            },
+            {
+              "rule": "all",
+              "count": 39,
+              "metrics": {
+                "mirex": {
+                  "unreturned": {
+                    "n": 39,
+                    "total": 28.0,
+                    "mean": 0.717948717948718,
+                    "ciLow": 0.5798804138487605,
+                    "ciHigh": 0.8307692307692307,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 36.5,
+                    "mean": 0.73,
+                    "ciLow": 0.6140000000000001,
+                    "ciHigh": 0.8319999999999999,
+                    "method": "BCa bootstrap",
+                    "note": null
+                  }
+                },
+                "exact": {
+                  "unreturned": {
+                    "n": 39,
+                    "total": 25.0,
+                    "mean": 0.6410256410256411,
+                    "ciLow": 0.4841814855954854,
+                    "ciHigh": 0.7725791454100714,
+                    "method": "Wilson",
+                    "note": null
+                  },
+                  "ifReturnedOverN": {
+                    "n": 50,
+                    "total": 33.0,
+                    "mean": 0.66,
+                    "ciLow": 0.521538260502326,
+                    "ciHigh": 0.7756305077749992,
+                    "method": "Wilson",
+                    "note": null
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "coverage": {
+        "librosa": {
+          "points": [
+            {
+              "coverage": 0.2,
+              "answered": 10,
+              "minConfidence": 0.431,
+              "accuracy": {
+                "mirex": {
+                  "n": 10,
+                  "total": 7.3,
+                  "mean": 0.73,
+                  "ciLow": 0.45999999999999996,
+                  "ciHigh": 0.9,
+                  "method": "BCa bootstrap",
+                  "note": null
+                },
+                "exact": {
+                  "n": 10,
+                  "total": 6.0,
+                  "mean": 0.6,
+                  "ciLow": 0.31267376973365824,
+                  "ciHigh": 0.8318196702937638,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.22,
+              "answered": 11,
+              "minConfidence": 0.415,
+              "accuracy": {
+                "mirex": {
+                  "n": 11,
+                  "total": 8.3,
+                  "mean": 0.7545454545454546,
+                  "ciLow": 0.5,
+                  "ciHigh": 0.9090909090909091,
+                  "method": "BCa bootstrap",
+                  "note": null
+                },
+                "exact": {
+                  "n": 11,
+                  "total": 7.0,
+                  "mean": 0.6363636363636364,
+                  "ciLow": 0.35380117450784887,
+                  "ciHigh": 0.8483352890463243,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            }
+          ],
+          "unranked": [],
+          "ranking": {
+            "exact": {
+              "correct": 7,
+              "wrong": 4,
+              "auc": 0.75,
+              "p": 0.11515151515151516,
+              "pMethod": "exact permutation"
+            }
+          }
+        },
+        "essentia": {
+          "points": [
+            {
+              "coverage": 0.2,
+              "answered": 10,
+              "minConfidence": 0.812,
+              "accuracy": {
+                "mirex": {
+                  "n": 10,
+                  "total": 7.5,
+                  "mean": 0.75,
+                  "ciLow": 0.44000000000000006,
+                  "ciHigh": 0.93,
+                  "method": "BCa bootstrap",
+                  "note": null
+                },
+                "exact": {
+                  "n": 10,
+                  "total": 7.0,
+                  "mean": 0.7,
+                  "ciLow": 0.39677814746114537,
+                  "ciHigh": 0.8922087325936989,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            },
+            {
+              "coverage": 0.22,
+              "answered": 11,
+              "minConfidence": 0.793,
+              "accuracy": {
+                "mirex": {
+                  "n": 11,
+                  "total": 8.5,
+                  "mean": 0.7727272727272727,
+                  "ciLow": 0.4818181818181818,
+                  "ciHigh": 0.9363636363636364,
+                  "method": "BCa bootstrap",
+                  "note": null
+                },
+                "exact": {
+                  "n": 11,
+                  "total": 8.0,
+                  "mean": 0.7272727272727273,
+                  "ciLow": 0.43435469882387084,
+                  "ciHigh": 0.902539407099751,
+                  "method": "Wilson",
+                  "note": null
+                }
+              }
+            }
+          ],
+          "unranked": [],
+          "ranking": {
+            "exact": {
+              "correct": 8,
+              "wrong": 3,
+              "auc": 0.5416666666666666,
+              "p": 0.46060606060606063,
+              "pMethod": "exact permutation"
+            }
+          }
+        }
+      },
+      "clips": [
+        {
+          "trackId": "109",
+          "window": {
+            "offsetSeconds": 85.059,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 120.085,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "11",
+          "window": {
+            "offsetSeconds": 40.758,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 120.085,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "116",
+          "window": {
+            "offsetSeconds": 71.8,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 120.085,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "118",
+          "window": {
+            "offsetSeconds": 52.238,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 120.085,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "133",
+          "window": {
+            "offsetSeconds": 52.324,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 120.085,
+            "sampleRate": 44100
+          }
+        },
+        {
+          "trackId": "14",
+          "window": {
+            "offsetSeconds": 55.882,
+            "durationSeconds": 30.0,
+            "sourceSeconds": 120.085,
+            "sampleRate": 44100
+          }
+        }
+      ],
+      "tracks": {
+        "librosa": [
+          {
+            "trackId": "109",
+            "estimate": "G minor",
+            "confidence": 0.431,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "mirex": 0.5,
+              "exact": 0.0
+            }
+          },
+          {
+            "trackId": "11",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "one held pitch over the beat (a drone or one bass note)",
+            "unreturned": {
+              "estimate": "F major",
+              "confidence": 0.394,
+              "rules": ["one held pitch over the beat (a drone or one bass note)"],
+              "scores": {
+                "mirex": 0.0,
+                "exact": 0.0
+              }
+            }
+          },
+          {
+            "trackId": "116",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "no sustained pitch",
+            "unreturned": {
+              "estimate": "A minor",
+              "confidence": 0.381,
+              "rules": ["no sustained pitch"],
+              "scores": {
+                "mirex": 0.0,
+                "exact": 0.0
+              }
+            }
+          },
+          {
+            "trackId": "118",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "one voice without stable notes (speech-like)",
+            "unreturned": {
+              "estimate": "C major",
+              "confidence": 0.512,
+              "rules": ["one voice without stable notes (speech-like)"],
+              "scores": {
+                "mirex": 0.3,
+                "exact": 0.0
+              }
+            }
+          },
+          {
+            "trackId": "133",
+            "estimate": "C minor",
+            "confidence": 0.721,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "mirex": 1.0,
+              "exact": 1.0
+            }
+          },
+          {
+            "trackId": "14",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "no sustained pitch",
+            "unreturned": {
+              "estimate": "F# minor",
+              "confidence": 0.374,
+              "rules": ["no sustained pitch"],
+              "scores": {
+                "mirex": 0.0,
+                "exact": 0.0
+              }
+            }
+          }
+        ],
+        "essentia": [
+          {
+            "trackId": "109",
+            "estimate": "C minor",
+            "confidence": 0.793,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "mirex": 1.0,
+              "exact": 1.0
+            }
+          },
+          {
+            "trackId": "11",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "one held pitch over the beat (a drone or one bass note)",
+            "unreturned": {
+              "estimate": "C minor",
+              "confidence": 0.742,
+              "rules": ["one held pitch over the beat (a drone or one bass note)"],
+              "scores": {
+                "mirex": 0.0,
+                "exact": 0.0
+              }
+            }
+          },
+          {
+            "trackId": "116",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "no sustained pitch",
+            "unreturned": {
+              "estimate": "F minor",
+              "confidence": 0.882,
+              "rules": ["no sustained pitch"],
+              "scores": {
+                "mirex": 1.0,
+                "exact": 1.0
+              }
+            }
+          },
+          {
+            "trackId": "118",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "one voice without stable notes (speech-like)",
+            "unreturned": {
+              "estimate": "C major",
+              "confidence": 0.605,
+              "rules": ["one voice without stable notes (speech-like)"],
+              "scores": {
+                "mirex": 0.3,
+                "exact": 0.0
+              }
+            }
+          },
+          {
+            "trackId": "133",
+            "estimate": "C minor",
+            "confidence": 0.952,
+            "withheld": false,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": {
+              "mirex": 1.0,
+              "exact": 1.0
+            }
+          },
+          {
+            "trackId": "14",
+            "estimate": null,
+            "confidence": null,
+            "withheld": true,
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "scores": null,
+            "withheldReason": "no sustained pitch",
+            "unreturned": {
+              "estimate": "A minor",
+              "confidence": 0.824,
+              "rules": ["no sustained pitch"],
+              "scores": {
+                "mirex": 1.0,
+                "exact": 1.0
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "date": "2026-10-24"
+}

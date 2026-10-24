@@ -16,9 +16,10 @@ from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from functools import cache
+from itertools import combinations
 
 from . import clips, service
-from .metrics import Item, acc1, acc2, estimate, mirex_key_score, parse_key
+from .metrics import Item, acc1, acc2, compare, estimate, mirex_key_score, parse_key
 
 MAX_JOBS = 4  # the box is shared
 METRICS = {"tempo": ("acc1", "acc2"), "key": ("mirex", "exact")}
@@ -50,17 +51,30 @@ def _estimators(names: tuple[str, ...]) -> dict:
 
 
 def analyze_track(task: tuple) -> dict:
-    """One track: the clip window and, per estimator, the service's tempo/key/gate blocks."""
-    dataset, track_id, path, seed, names = task
+    """
+    One track: the clip window and, per estimator, the service's tempo/key/gate blocks.
+
+    The task is (dataset, track id, path, clip seed, estimator names[, options]). Options:
+    "whole" has the service's decoder read the file itself (a Deezer preview, as the service
+    gets it) instead of cutting a 30 s window; "styles" keeps the fingerprint's
+    Discogs styles (the models must be loaded, see analyze_all).
+    """
+    dataset, track_id, path, seed, names = task[:5]
+    options = task[5] if len(task) > 5 else {}
     try:
         with captured_stderr() as warnings:
-            wav, window = clips.read_clip(path, seed, dataset, track_id)
-            signals = service.decode(wav)
+            if options.get("whole"):
+                window = clips.whole_window(path)
+                signals = service.decode_file(path)
+            else:
+                wav, window = clips.read_clip(path, seed, dataset, track_id)
+                signals = service.decode(wav)
     except Exception as e:  # a broken file is recorded, not fatal
         return {"trackId": track_id, "error": f"{type(e).__name__}: {e}"}
     if warnings:
         window["decodeWarnings"] = warnings
     results = {}
+    record: dict = {"trackId": track_id, "window": window, "results": results}
     for name, est in _estimators(tuple(names)).items():
         try:
             v2 = service.analyze(signals, est)
@@ -68,6 +82,14 @@ def analyze_track(task: tuple) -> dict:
             results[name] = {"error": f"{type(e).__name__}: {e}"}
             continue
         results[name] = {"gate": v2["gate"], "tempo": v2["tempo"], "key": v2["key"]}
+        if options.get("styles"):
+            # The fingerprint does not depend on the estimator: kept once, and checked to be
+            # the same for every estimator.
+            styles = styles_of(v2.get("fingerprint"))
+            if "styles" not in record:
+                record["styles"] = styles
+            elif styles != record["styles"]:
+                record["stylesDiffer"] = True
         # Calibration only: a failure here never touches the answer the service gave.
         if v2["gate"]["passed"] and v2["tempo"] is None:
             try:
@@ -88,7 +110,15 @@ def analyze_track(task: tuple) -> dict:
                     keyUnreturned=None,
                     calibrationError=f"{type(e).__name__}: {e}",
                 )
-    return {"trackId": track_id, "window": window, "results": results}
+    return record
+
+
+def styles_of(fingerprint: dict | None) -> list[dict] | None:
+    """The fingerprint's Discogs styles, highest first ({label, score}), or None."""
+    styles = (fingerprint or {}).get("styles")
+    if not styles:
+        return None
+    return [{"label": e["label"], "score": e["score"]} for e in styles["top"]]
 
 
 def _tempo_block(tempo, rules: list[str], steady: bool) -> dict:
@@ -176,15 +206,20 @@ def captured_stderr():
             lines.extend(f"{line} (x{n})" if n > 1 else line for line, n in counts.items())
 
 
-def _worker_init(numba_cache: str) -> None:
+def _worker_init(numba_cache: str, models_dir: str | None = None) -> None:
     # Each worker compiles librosa's numba functions into its own cache directory, made for
     # this run. Workers sharing one cache (librosa's default, inside the environment) can
     # leave it in a state that crashes a later run with a segmentation fault.
     os.environ["NUMBA_CACHE_DIR"] = os.path.join(numba_cache, str(os.getpid()))
     service.load()
+    if models_dir is not None and not service.load_models(models_dir):
+        raise RuntimeError(f"the fingerprint models in {models_dir} did not load")
 
 
-def analyze_all(tasks: list[tuple], jobs: int, progress=None) -> list[dict]:
+def analyze_all(
+    tasks: list[tuple], jobs: int, progress=None, models_dir: str | None = None
+) -> list[dict]:
+    """Every task in worker processes; `models_dir` loads the fingerprint models in each."""
     jobs = max(1, min(jobs, MAX_JOBS))
     for var in THREAD_ENV:
         os.environ.setdefault(var, "1")
@@ -193,7 +228,10 @@ def analyze_all(tasks: list[tuple], jobs: int, progress=None) -> list[dict]:
     with (
         tempfile.TemporaryDirectory(prefix="evals-audio-numba-") as numba_cache,
         ProcessPoolExecutor(
-            jobs, mp_context=context, initializer=_worker_init, initargs=(numba_cache,)
+            jobs,
+            mp_context=context,
+            initializer=_worker_init,
+            initargs=(numba_cache, models_dir),
         ) as pool,
     ):
         for k, result in enumerate(pool.map(analyze_track, tasks), 1):
@@ -330,3 +368,49 @@ def withheld_cost(rows: list[dict], metric_names, seed: int) -> dict:
             for k, (rule, scores) in enumerate(groups)
         ],
     }
+
+
+def compare_pairs(items: dict, names: list[str], metric_names, seed: int) -> list[dict]:
+    """Every pair of estimators compared on the same clips (metrics.compare), in name order."""
+    return [
+        {"first": a, "second": b, **compare(items[a], items[b], metric_names, seed)}
+        for a, b in combinations(names, 2)
+    ]
+
+
+def lifted_items(rows: list[dict], only: str | None = None) -> list[Item]:
+    """
+    One estimator's Items with withheld estimates counted as if returned: every unreturned
+    estimate (`only` None), or only those that the rule `only` alone withholds. Calibration:
+    what the estimator would give without the rules, never what the service serves.
+    """
+    items = []
+    for r in rows:
+        if r.get("scores") is not None:
+            items.append(Item(r["trackId"], r.get("confidence"), r["scores"]))
+            continue
+        un = r.get("unreturned")
+        if un and (only is None or (un.get("rules") or [r.get("withheldReason")]) == [only]):
+            items.append(Item(r["trackId"], un.get("confidence"), un["scores"]))
+        else:
+            items.append(Item(r["trackId"], None, None, failed=bool(r.get("failed"))))
+    return items
+
+
+# The lifted views a tempo run records, by key.
+LIFTED_VIEWS = {"everyRule": None, "steadinessOnly": TEMPO_UNSTEADY}
+
+
+def lifted_views(tracks: dict, names: list[str], metric_names, seed: int) -> dict:
+    """Correct / n and the paired tests with the withholding rules lifted (LIFTED_VIEWS)."""
+    from .metrics import summarize
+
+    out = {}
+    for key, only in LIFTED_VIEWS.items():
+        items = {n: lifted_items(tracks[n], only) for n in names}
+        out[key] = {
+            "rule": only,
+            "summaries": {n: summarize(items[n], metric_names, seed).as_dict() for n in names},
+            "paired": compare_pairs(items, names, metric_names, seed),
+        }
+    return out

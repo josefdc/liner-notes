@@ -9,6 +9,7 @@ from evals_audio.metrics import Key, summarize
 from evals_audio.runner import (
     CALIBRATION_UNAVAILABLE,
     KEY_WEAK,
+    LIFTED_VIEWS,
     NO_ESTIMATE,
     SEVERAL_RULES,
     TEMPO_LOW_CONFIDENCE,
@@ -17,6 +18,8 @@ from evals_audio.runner import (
     captured_stderr,
     items_for,
     key_withheld,
+    lifted_items,
+    lifted_views,
     tempo_withheld,
     withheld_cost,
 )
@@ -360,3 +363,59 @@ def test_decoder_messages_on_stderr_are_recorded(lines):
             os.write(2, b"[mpg123] dequantization failed!\n")
     expected = "[mpg123] dequantization failed!" + (f" (x{lines})" if lines > 1 else "")
     assert warnings == [expected]
+
+
+# --- lifted views (the default-estimator evidence) ------------------------------------------
+
+
+def lifted_row(tid, scores=None, rules=None, unreturned_hit=None, failed=False, reason=None):
+    row = {"trackId": tid, "scores": scores, "withheld": scores is None}
+    if failed:
+        return {"trackId": tid, "failed": True, "error": "x"}
+    if reason:
+        row["withheldReason"] = reason
+    if rules is not None:
+        row["withheldReason"] = rules[0]
+        row["unreturned"] = {
+            "rules": rules,
+            "scores": {"acc1": unreturned_hit, "acc2": unreturned_hit},
+            "confidence": None,
+        }
+    return row
+
+
+LIFT_ROWS = [
+    lifted_row("served", scores={"acc1": 1.0, "acc2": 1.0}),
+    lifted_row("unsteady", rules=[TEMPO_UNSTEADY], unreturned_hit=1.0),
+    lifted_row("both", rules=[TEMPO_LOW_CONFIDENCE, TEMPO_UNSTEADY], unreturned_hit=1.0),
+    lifted_row("confidence", rules=[TEMPO_LOW_CONFIDENCE], unreturned_hit=1.0),
+    lifted_row("gate", reason="gate: silent"),
+    lifted_row("none", reason=NO_ESTIMATE),
+    lifted_row("broken", failed=True),
+]
+
+
+def correct(items):
+    return sorted(i.track_id for i in items if i.answered and i.scores["acc1"] == 1.0)
+
+
+def test_the_steadiness_view_lifts_only_clips_that_rule_alone_withholds():
+    items = lifted_items(LIFT_ROWS, TEMPO_UNSTEADY)
+    assert correct(items) == ["served", "unsteady"]
+    assert [i.failed for i in items if i.track_id == "broken"] == [True]
+
+
+def test_the_every_rule_view_lifts_every_unreturned_estimate_and_nothing_else():
+    items = lifted_items(LIFT_ROWS, None)
+    assert correct(items) == ["both", "confidence", "served", "unsteady"]
+    assert not any(i.answered for i in items if i.track_id in ("gate", "none", "broken"))
+
+
+def test_the_lifted_views_are_named_for_what_they_lift():
+    assert LIFTED_VIEWS == {"everyRule": None, "steadinessOnly": TEMPO_UNSTEADY}
+    other = [lifted_row(r["trackId"], scores={"acc1": 0.0, "acc2": 0.0}) for r in LIFT_ROWS]
+    views = lifted_views({"x": LIFT_ROWS, "y": other}, ["x", "y"], ["acc1", "acc2"], 1)
+    assert views["steadinessOnly"]["rule"] == TEMPO_UNSTEADY
+    assert views["steadinessOnly"]["summaries"]["x"]["overN"]["acc1"]["total"] == 2
+    assert views["everyRule"]["summaries"]["x"]["overN"]["acc1"]["total"] == 4
+    assert views["everyRule"]["paired"][0]["allN"]["metrics"]["acc1"]["onlyFirst"] == 4

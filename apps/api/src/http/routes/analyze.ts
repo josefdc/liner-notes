@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { TrackAnalysis } from "@liner-notes/contract";
+import { type ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
 import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import { llm } from "../../llm/invoke.js";
+import { chooseReplay, liveRefused } from "../../replay/mode.js";
+import { playRecord, replayedAnalysis } from "../../replay/player.js";
+import { replays } from "../../replay/records.js";
 import { getDb } from "../../store/database.js";
 import {
   appendRunEvent,
@@ -15,6 +18,7 @@ import {
   runExists,
   type StoreResultOutcome,
   startRun,
+  storeReplayOf,
   storeRunResult,
   updateRun,
 } from "../../store/runs.js";
@@ -67,6 +71,7 @@ const ERRORS = {
   upstream_unavailable: HTTP_ERRORS.upstream_unavailable,
   timeout: { status: 504, message: "The analysis took too long. Please try again." },
   failed: HTTP_ERRORS.failed,
+  live_disabled: HTTP_ERRORS.live_disabled,
 } as const;
 
 type ErrorCode = keyof typeof ERRORS;
@@ -679,6 +684,95 @@ function sendJsonOutcome(
 }
 
 // =============================================================================
+// Replays (REPLAY_MODE)
+// =============================================================================
+
+/** The recording a replay of `record` serves (see storeReplayOf). */
+const replayOf = (record: ReplayRecord) => ({
+  slug: record.slug,
+  recordedAt: record.recordedAt,
+  digest: replays().digest(record),
+});
+
+/**
+ * Starts a replay of `record`: a fresh run, claimed and recorded as a replay from the start
+ * (storeReplayOf), so it never reads as live whatever its outcome.
+ */
+function startReplay(query: string, record: ReplayRecord): string {
+  const runId = randomUUID();
+  activeThreads.add(runId);
+  recordRun("record a replay", (db) =>
+    db.transaction(() => {
+      startRun(db, { runId, threadId: runId, query });
+      storeReplayOf(db, runId, replayOf(record));
+    })(),
+  );
+  return runId;
+}
+
+/**
+ * Records a replayed run's outcome: its status and, once it completed, its track, so GET
+ * /api/runs/by-track serves it as the track's latest run. Neither the result nor the events are
+ * copied: the record holds them. A failure to record is logged.
+ */
+function recordReplay(runId: string, status: RunStatus, record: ReplayRecord): void {
+  recordRun("record a replay", (db) =>
+    db.transaction(() => {
+      updateRun(db, runId, { status });
+      if (status === "completed") {
+        storeReplayOf(db, runId, replayOf(record), record.analysis.id);
+      }
+    })(),
+  );
+}
+
+/**
+ * Serves a recorded run as a new run, with its own run id (startReplay, recordReplay). The events
+ * the stream sends are not stored.
+ */
+async function replayStreamRun(res: Response, query: string, record: ReplayRecord): Promise<void> {
+  const runId = startReplay(query, record);
+  const stream = openEventStream(res, runId);
+  console.log(`[Run ${runId}] Replaying the recorded run ${record.slug}`);
+  await guardStream(stream, async () => {
+    try {
+      const analysis = await playRecord(
+        record,
+        runId,
+        (body) => (body.type === "complete" ? stream.emit(body) : stream.stream.send(body)),
+        stream.stream.signal,
+      );
+      const outcome: RunOutcome = analysis
+        ? { kind: "complete", trackData: analysis as unknown as TrackData }
+        : stream.stream.closed
+          ? { kind: "cancelled" }
+          : { kind: "failed", code: "failed" };
+      recordReplay(runId, OUTCOME_STATUS[outcome.kind], record);
+      console.log(
+        `[Run ${runId}] Replay ${outcome.kind}; recorded ${OUTCOME_STATUS[outcome.kind]}`,
+      );
+      sendStreamOutcome(stream, outcome, runId);
+    } finally {
+      activeThreads.delete(runId);
+    }
+  });
+}
+
+/** POST /api/analyze for a recorded track: the recorded result as a new, completed run. */
+function replayJsonRun(res: Response, query: string, record: ReplayRecord): void {
+  const runId = startReplay(query, record);
+  try {
+    const analysis = replayedAnalysis(record, runId);
+    const outcome: RunOutcome = { kind: "complete", trackData: analysis as unknown as TrackData };
+    recordReplay(runId, "completed", record);
+    console.log(`[Run ${runId}] Served the recorded run ${record.slug}`);
+    sendJsonOutcome(res, outcome, runId, { query, durationMs: 0 });
+  } finally {
+    activeThreads.delete(runId);
+  }
+}
+
+// =============================================================================
 // Routes
 // =============================================================================
 
@@ -692,7 +786,9 @@ router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHe
  * Body: { "query": "Song name Artist" }
  * Returns { status: "complete", threadId, data } or, when the song is ambiguous,
  * { status: "interrupted", threadId, interrupt: { candidates } }; resume with
- * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS.
+ * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS. Under
+ * REPLAY_MODE (as for the stream below) a recorded track is answered with its recorded result
+ * as a new run, and any other query with 503 live_disabled.
  */
 router.post(
   "/api/analyze",
@@ -704,6 +800,16 @@ router.post(
         detail: QUERY_ERROR,
         example: { query: "Midnight City M83" },
       });
+      return;
+    }
+
+    const replay = chooseReplay((records) => records.forQuery(query));
+    if (replay.kind === "refused") {
+      sendJsonError(res, "live_disabled");
+      return;
+    }
+    if (replay.kind === "replay") {
+      replayJsonRun(res, query, replay.record);
       return;
     }
 
@@ -738,6 +844,11 @@ router.post(
  *
  * The run's result is stored with it and served by GET /api/runs/:id; the events sent are stored
  * for recording the run as a replay (not for a run that sent another run's result).
+ *
+ * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) a query that names a
+ * recorded track replays its recording as a new run (the same messages; the result says
+ * `mode: "replay"` with when and from which commit it was recorded), and any other query gets
+ * one `error` with code live_disabled, then done.
  */
 router.get(
   "/api/analyze/stream",
@@ -748,6 +859,19 @@ router.get(
       markFailed(res);
       stream.error("invalid_input");
       stream.done();
+      return;
+    }
+
+    // Decided before anything live is built: under REPLAY_MODE=only nothing live ever runs.
+    const replay = chooseReplay((records) => records.forQuery(query));
+    if (replay.kind === "refused") {
+      const stream = openEventStream(res);
+      stream.error("live_disabled");
+      stream.done();
+      return;
+    }
+    if (replay.kind === "replay") {
+      await replayStreamRun(res, query, replay.record);
       return;
     }
 
@@ -776,7 +900,8 @@ router.get(
  * POST /api/analyze/resume
  * Body: { "threadId": "...", "selectedTrackId": "spotify_track_id" }
  * Refusals: 409 resume_in_progress; 404 choice_expired, not_waiting or run_interrupted;
- * 400 invalid_selection or invalid_input.
+ * 400 invalid_selection or invalid_input; 503 live_disabled when live services may not be used
+ * (REPLAY_MODE).
  */
 router.post(
   "/api/analyze/resume",
@@ -788,6 +913,11 @@ router.post(
         detail: RESUME_ERROR,
         example: { threadId: "<threadId>", selectedTrackId: "6GyFP1nfCDB8lbD2bG0Hq9" },
       });
+      return;
+    }
+    // A recorded run never pauses; a paused live run cannot go on without live services.
+    if (liveRefused()) {
+      sendJsonError(res, "live_disabled");
       return;
     }
 
@@ -817,6 +947,11 @@ router.get(
     if (!threadId || !selectedTrackId) {
       markFailed(res);
       stream.error("invalid_input");
+      stream.done();
+      return;
+    }
+    if (liveRefused()) {
+      stream.error("live_disabled");
       stream.done();
       return;
     }

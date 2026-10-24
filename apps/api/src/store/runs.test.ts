@@ -1,10 +1,23 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Annotation, Command, END, interrupt, START, StateGraph } from "@langchain/langgraph";
 import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "./migrations.js";
-import { getRun, settleOpenRuns, startRun, updateRun } from "./runs.js";
+import {
+  appendRunEvent,
+  EVENT_BUSY_TIMEOUT_MS,
+  getRun,
+  latestRunsForTrack,
+  settleOpenRuns,
+  startRun,
+  storeRunResult,
+  updateRun,
+  withoutPreviewUrls,
+} from "./runs.js";
 import { isWaitingAtInterrupt } from "./threads.js";
 
 /** A one-node graph that pauses for a choice when the query is "ambiguous". */
@@ -120,5 +133,174 @@ describe("settleOpenRuns", () => {
 
     expect(settled).toEqual({ interrupted: 0, cancelled: 0 });
     expect(getRun(db, "r")?.status).toBe("completed");
+  });
+});
+
+// =============================================================================
+// Results and events
+// =============================================================================
+
+const TRACK = "4uLU6hMCjMI75M1A2tKUQC";
+
+/** A result of run `runId` that fits the contract, with any extra fields. */
+const result = (runId: string, extra: Record<string, unknown> = {}) => ({
+  id: TRACK,
+  title: "T",
+  artist: "A",
+  album: "B",
+  coverUrl: "",
+  bpm: null,
+  genealogy: { nodes: [], links: [] },
+  run: { id: runId, mode: "live", recordedAt: null, commit: null, analyzerVersion: null },
+  ...extra,
+});
+
+describe("withoutPreviewUrls", () => {
+  it("removes previewUrl fields and blanks preview URLs anywhere else", () => {
+    expect(
+      withoutPreviewUrls({
+        previewUrl: "https://example.com/anything.mp3",
+        cover: "https://i.scdn.co/image/abc",
+        page: "https://open.spotify.com/track/abc",
+        deezer: "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/0/x.mp3?hdnea=exp=1~hmac=f",
+        spotify: "https://p.scdn.co/mp3-preview/abc",
+        signed: "https://cdn.example.com/a.mp3?hdnea=exp=1~acl=x",
+        s3: "https://bucket.s3.amazonaws.com/a.mp3?X-Amz-Signature=abc",
+        list: ["https://e-cdns-preview-1.dzcdn.net/stream/x", "plain text"],
+        nested: { previewUrl: null, keep: 1 },
+      }),
+    ).toEqual({
+      cover: "https://i.scdn.co/image/abc",
+      page: "https://open.spotify.com/track/abc",
+      deezer: "",
+      spotify: "",
+      signed: "",
+      s3: "",
+      list: ["", "plain text"],
+      nested: { keep: 1 },
+    });
+  });
+
+  it("keeps Deezer images, look-alike hosts and text that only mentions a token", () => {
+    const kept = [
+      "https://cdn-images.dzcdn.net/images/cover/0a1b2c/250x250-000000-80-0-0.jpg",
+      "https://e-cdns-images.dzcdn.net/images/artist/0a1b2c/500x500.jpg",
+      "https://dzcdn.net.example.com/x",
+      "https://notp.scdn.co.example/x",
+      "Signed links end in ?hdnts=… and expire",
+      "see https://example.com/a?hdnea=x for details",
+    ];
+    expect(withoutPreviewUrls(kept)).toEqual(kept);
+  });
+});
+
+describe("storeRunResult", () => {
+  it("stores the result as the contract reads it, without previews or unknown fields", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "typed words" });
+    const stored = storeRunResult(
+      db,
+      "r",
+      result("r", { previewUrl: "https://p.scdn.co/mp3-preview/x", songQuery: "typed words" }),
+    );
+    expect(stored).toBe("stored");
+    const row = db.prepare("SELECT analysis FROM runs WHERE run_id = 'r'").pluck().get() as string;
+    expect(row).not.toMatch(/typed words|p\.scdn\.co|previewUrl/);
+    expect(getRun(db, "r")).toMatchObject({
+      spotifyId: TRACK,
+      mode: "live",
+      analysis: { id: TRACK, segments: [], samples: [], factoids: [] },
+    });
+  });
+
+  it("marks a result composed by another run instead of storing it as the run's own", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "q" });
+    const { run: _run, ...cached } = result("earlier");
+    expect(storeRunResult(db, "r", cached)).toBe("another_run");
+    expect(storeRunResult(db, "r", result("earlier"))).toBe("another_run");
+    expect(getRun(db, "r")).toMatchObject({
+      spotifyId: null,
+      mode: "replay",
+      analysis: null,
+      payload: { resultFrom: "another_run" },
+    });
+  });
+
+  it("refuses a result that fails the contract, and a run that does not exist", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "q" });
+    expect(storeRunResult(db, "r", { ...result("r"), title: undefined })).toBe("invalid");
+    expect(storeRunResult(db, "missing", result("missing"))).toBe("no_run");
+    expect(getRun(db, "r")?.analysis).toBeNull();
+  });
+
+  it("stores a replay when either the caller or the result says so", () => {
+    for (const id of ["caller", "result", "neither"])
+      startRun(db, { runId: id, threadId: id, query: "q" });
+    storeRunResult(db, "caller", result("caller"), "replay");
+    storeRunResult(
+      db,
+      "result",
+      result("result", { run: { ...result("result").run, mode: "replay" } }),
+    );
+    storeRunResult(db, "neither", result("neither"));
+    expect(["caller", "result", "neither"].map((id) => getRun(db, id)?.mode)).toEqual([
+      "replay",
+      "replay",
+      "live",
+    ]);
+    // The stored result's own run information agrees with the run's mode.
+    expect(
+      ["caller", "result", "neither"].map(
+        (id) => (getRun(db, id)?.analysis as { run?: { mode: string } } | undefined)?.run?.mode,
+      ),
+    ).toEqual(["replay", "replay", "live"]);
+  });
+});
+
+describe("latestRunsForTrack", () => {
+  /** A completed run of TRACK with the given times (unix seconds), recorded in call order. */
+  function completedRun(runId: string, createdAt: number, finishedAt: number) {
+    startRun(db, { runId, threadId: runId, query: "q" });
+    storeRunResult(db, runId, result(runId));
+    db.prepare(
+      "UPDATE runs SET status = 'completed', created_at = ?, finished_at = ? WHERE run_id = ?",
+    ).run(createdAt, finishedAt, runId);
+  }
+
+  it("orders by finish time, then start time, then recording order", () => {
+    completedRun("started-first-finished-last", 100, 300);
+    completedRun("tie-recorded-first", 150, 200);
+    completedRun("tie-recorded-second", 150, 200);
+    completedRun("same-finish-started-later", 160, 200);
+    expect(latestRunsForTrack(db, TRACK, 10).map((run) => run.runId)).toEqual([
+      "started-first-finished-last",
+      "same-finish-started-later",
+      "tie-recorded-second",
+      "tie-recorded-first",
+    ]);
+    expect(latestRunsForTrack(db, TRACK, 1)).toHaveLength(1);
+  });
+});
+
+describe("appendRunEvent", () => {
+  it("gives up quickly when another connection holds the write lock", () => {
+    const dir = mkdtempSync(join(tmpdir(), "run-events-"));
+    const file = new Database(join(dir, "test.db"));
+    const other = new Database(join(dir, "test.db"));
+    try {
+      runMigrations(file);
+      file.pragma("busy_timeout = 5000");
+      startRun(file, { runId: "r", threadId: "r", query: "q" });
+      other.exec("BEGIN IMMEDIATE");
+      const started = Date.now();
+      expect(() => appendRunEvent(file, "r", 0, { seq: 0 })).toThrow(/locked|busy/i);
+      expect(Date.now() - started).toBeLessThan(EVENT_BUSY_TIMEOUT_MS + 1000);
+      expect(file.pragma("busy_timeout", { simple: true })).toBe(5000);
+      other.exec("ROLLBACK");
+      appendRunEvent(file, "r", 0, { seq: 0 });
+    } finally {
+      other.close();
+      file.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

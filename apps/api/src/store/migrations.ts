@@ -244,6 +244,32 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "run_results",
+    up(db) {
+      // A run keeps its result, the track it is about and whether it was live or replayed, and
+      // the events its streams sent. A resumed run sends a second stream whose `seq` starts at 0
+      // again, so an event is keyed by its run, the stream's number within the run and its seq.
+      // Runs recorded before this migration have no stored result; their mode is the column's
+      // default, live, which says nothing about how their result was produced.
+      db.exec(`
+        ALTER TABLE runs ADD COLUMN spotify_id TEXT;
+        ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'live';
+        ALTER TABLE runs ADD COLUMN analysis TEXT;
+        CREATE INDEX runs_spotify_id ON runs (spotify_id, finished_at);
+
+        CREATE TABLE run_events (
+          run_id TEXT NOT NULL,
+          stream INTEGER NOT NULL,
+          seq INTEGER NOT NULL,
+          sent_at INTEGER NOT NULL,
+          event TEXT NOT NULL,
+          PRIMARY KEY (run_id, stream, seq)
+        );
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

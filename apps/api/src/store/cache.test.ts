@@ -31,6 +31,7 @@ function measured(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
     keyMoments: [],
     measured: true,
     analyzer: "audio-service",
+    previewMatch: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
     ...overrides,
   };
 }
@@ -118,6 +119,17 @@ describe("SonicCache audio", () => {
     cache.putAudio("expired", measured({ bpm: 100 }), 0);
     cache.putAudio("expired", measured({ bpm: 90, ...PARTIAL }));
     expect(cache.getAudio("expired")).toMatchObject({ bpm: 90, confidence: "low" });
+  });
+
+  it("lets a matched partial measurement replace a complete row that does not say how its clip was matched", () => {
+    const { previewMatch: _matched, ...unmatched } = measured({ bpm: 120 });
+    cache.putAudio("old", unmatched as AudioFeatures);
+    cache.putAudio("old", measured({ bpm: 95, ...PARTIAL }));
+    expect(cache.getAudio("old")).toMatchObject({
+      bpm: 95,
+      confidence: "low",
+      previewMatch: { provider: "deezer", method: "isrc" },
+    });
   });
 
   it("lets a real measurement replace a stored row that is not a valid measurement", () => {

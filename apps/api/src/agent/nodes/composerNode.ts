@@ -360,7 +360,9 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     album: spotify.album,
     coverUrl: spotify.coverUrl,
     ...(spotify.spotifyUrl ? { spotifyUrl: spotify.spotifyUrl } : {}),
-    ...(spotify.previewUrl ? { previewUrl: spotify.previewUrl } : {}),
+    // The engineer's clip of the chosen recording, for the player; none when it found none (a
+    // clip it turned down is never sent).
+    ...(state.previewUrl ? { previewUrl: state.previewUrl } : {}),
     ...(spotify.releaseDate?.split("-")[0]
       ? { releaseYear: spotify.releaseDate.split("-")[0] }
       : {}),
@@ -368,8 +370,9 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     ...measuredAudioFields(state.audioFeatures),
-    // The ISRC is the one Spotify gave for the chosen track. No node writes preview or
-    // evidence yet (#24, #27): they are null and empty today.
+    // The ISRC is the one Spotify gave for the chosen track; `preview` is how the clip the audio
+    // values were measured on was matched to it (none when nothing was measured). No node writes
+    // evidence yet (#27): it is empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
     evidence: state.evidence,
@@ -389,6 +392,7 @@ function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
     sourceErrors: state.sourceErrors ?? [],
     isrc: state.isrc ?? null,
     preview: state.preview ?? null,
+    previewUrl: state.previewUrl ?? null,
   };
 }
 

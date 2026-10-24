@@ -43,6 +43,19 @@ interface Stub {
   analyzeHeaders: Array<Record<string, string>>;
 }
 
+/** What Deezer answers for the ISRC lookup and the search (by default "no data" and one hit). */
+const deezer: { isrc: unknown; search: unknown[] | null } = { isrc: null, search: null };
+
+const deezerEntry = (id: number, title: string, artist: string, preview: string) => ({
+  id,
+  title,
+  preview,
+  readable: true,
+  duration: 270,
+  artist: { id: 1, name: artist },
+  album: { id: 1, title: "To the Extreme", cover_medium: "" },
+});
+
 function stubNetwork(
   mode: ServiceMode,
   preview: string | null = PREVIEW,
@@ -52,22 +65,13 @@ function stubNetwork(
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     stub.calls.push(url);
+    if (url.startsWith("https://api.deezer.com/track/isrc:")) {
+      return Response.json(deezer.isrc ?? { error: { code: 800, message: "no data" } });
+    }
     if (url.startsWith("https://api.deezer.com/search/track")) {
-      return Response.json({
-        total: preview ? 1 : 0,
-        data: preview
-          ? [
-              {
-                id: 1,
-                title: "Ice Ice Baby",
-                preview,
-                duration: 270,
-                artist: { id: 1, name: "Vanilla Ice" },
-                album: { id: 1, title: "To the Extreme", cover_medium: "" },
-              },
-            ]
-          : [],
-      });
+      const data =
+        deezer.search ?? (preview ? [deezerEntry(1, "Ice Ice Baby", "Vanilla Ice", preview)] : []);
+      return Response.json({ total: data.length, data });
     }
     if (url === `${AUDIO_URL}/health`) {
       if (mode === "down") throw new TypeError("fetch failed");
@@ -92,8 +96,9 @@ function stubNetwork(
   return stub;
 }
 
-function stateFor(id: string): SonicAgentStateType {
+function stateFor(id: string, isrc: string | null = null): SonicAgentStateType {
   return {
+    isrc,
     spotifyData: {
       id,
       title: "Ice Ice Baby",
@@ -112,12 +117,12 @@ function stateFor(id: string): SonicAgentStateType {
 }
 
 /** Runs the node and collects the status text it writes and returns. */
-async function run(id: string) {
+async function run(id: string, isrc: string | null = null) {
   const written: string[] = [];
   const config = {
     writer: (event: { message?: string }) => written.push(event.message ?? ""),
   } as never;
-  const out = await engineerNode(stateFor(id), config);
+  const out = await engineerNode(stateFor(id, isrc), config);
   return { out, text: [...written, ...(out.statusMessages ?? [])].join("\n") };
 }
 
@@ -133,6 +138,8 @@ describe("engineerNode", () => {
     cache.getAudio.mockReset();
     cache.getAudio.mockReturnValue(null);
     cache.putAudio.mockReset();
+    deezer.isrc = null;
+    deezer.search = null;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -195,6 +202,7 @@ describe("engineerNode", () => {
       keyMoments: [],
       measured: true,
       analyzer: "audio-service",
+      previewMatch: { provider: "deezer", method: "search", deezerId: 1, score: 1 },
     };
     expect(out.audioFeatures).toEqual(expected);
     expect(cache.putAudio).toHaveBeenCalledTimes(1);
@@ -255,19 +263,153 @@ describe("engineerNode", () => {
       expect(out.audioFeatures).toMatchObject({ bpm: null, key: null });
     });
 
-    it("reuses a cached row that carries the marker", async () => {
+    const matchedRow = {
+      ...oldRandomRow,
+      bpm: 116,
+      key: "D Minor",
+      measured: true,
+      analyzer: "audio-service",
+      previewMatch: { provider: "deezer", method: "isrc", deezerId: 1, score: null },
+    };
+
+    it("reuses a cached row that carries the marker and looks up a fresh clip for the player", async () => {
       const stub = stubNetwork("down");
-      const row = {
-        ...oldRandomRow,
-        bpm: 116,
-        key: "D Minor",
-        measured: true,
-        analyzer: "audio-service",
-      };
-      cache.getAudio.mockReturnValue(row);
+      cache.getAudio.mockReturnValue(matchedRow);
       const { out } = await run("NEW");
-      expect(out.audioFeatures).toEqual(row);
-      expect(stub.calls).toEqual([]);
+      expect(out.audioFeatures).toEqual(matchedRow);
+      expect(out.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+      expect(out.previewUrl).toBe(PREVIEW);
+      expect(stub.calls.some((url) => url.startsWith(AUDIO_URL))).toBe(false);
+      expect(cache.putAudio).not.toHaveBeenCalled();
+    });
+
+    it("gives the player no fresh clip from a host the service would refuse", async () => {
+      stubNetwork("down", "http://cdnt-preview.dzcdn.net/api/1/x.mp3");
+      cache.getAudio.mockReturnValue(matchedRow);
+      const { out } = await run("HOST");
+      expect(out.audioFeatures).toEqual(matchedRow);
+      expect(out.previewUrl).toBeNull();
+    });
+
+    it("reports a Deezer outage on a cache hit as a source error", async () => {
+      stubNetwork("down");
+      deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
+      cache.getAudio.mockReturnValue(matchedRow);
+      const { out } = await run("HITQ", "USSB29000129");
+      expect(out.audioFeatures).toEqual(matchedRow);
+      expect(out.previewUrl).toBeNull();
+      expect(out.sourceErrors).toEqual([
+        { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
+      ]);
+    });
+
+    it("keeps the cached measurement but gives the player no clip when none matches now", async () => {
+      stubNetwork("down");
+      deezer.search = [deezerEntry(2, "Ice Ice Baby (Live)", "Vanilla Ice", PREVIEW)];
+      cache.getAudio.mockReturnValue(matchedRow);
+      const { out } = await run("NEW");
+      expect(out.audioFeatures).toEqual(matchedRow);
+      expect(out.previewUrl).toBeNull();
+    });
+
+    it("measures again a cached row that does not say how its clip was matched", async () => {
+      const stub = stubNetwork("librosa-only");
+      const { previewMatch: _unknown, ...looselyMatched } = matchedRow;
+      cache.getAudio.mockReturnValue(looselyMatched);
+      const { out } = await run("LOOSE");
+      expect(out.audioFeatures).toMatchObject({
+        bpm: 116,
+        previewMatch: { provider: "deezer", method: "search" },
+      });
+      expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
+    });
+  });
+
+  describe("the preview clip", () => {
+    it("writes the measured clip for the player and how it was matched", async () => {
+      stubNetwork("librosa-only");
+      const { out } = await run("P");
+      expect(out.previewUrl).toBe(PREVIEW);
+      expect(out.preview).toEqual({ provider: "deezer", method: "search", score: 1 });
+    });
+
+    it("looks the clip up by the track's ISRC first", async () => {
+      const stub = stubNetwork("librosa-only");
+      const clip = "https://cdnt-preview.dzcdn.net/api/1/isrc.mp3?hdnea=exp=1";
+      deezer.isrc = {
+        ...deezerEntry(9, "Ice Ice Baby", "Vanilla Ice", clip),
+        isrc: "USSB29000129",
+      };
+      const { out } = await run("I", "USSB29000129");
+      expect(stub.calls[0]).toBe("https://api.deezer.com/track/isrc:USSB29000129");
+      expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(false);
+      expect(out.previewUrl).toBe(clip);
+      expect(out.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+      expect(out.audioFeatures?.previewMatch).toEqual({
+        provider: "deezer",
+        method: "isrc",
+        deezerId: 9,
+        score: null,
+      });
+    });
+
+    it("gives no clip and no measurement when only other recordings have previews", async () => {
+      const stub = stubNetwork("full");
+      deezer.search = [
+        deezerEntry(3, "Ice Ice Baby (Karaoke Version)", "Vanilla Ice", PREVIEW),
+        deezerEntry(4, "Ice Ice Baby", "Ice Ice Baby Tribute Band", PREVIEW),
+        deezerEntry(5, "Ninja Rap", "Vanilla Ice", PREVIEW),
+      ];
+      const { out, text } = await run("U", "USSB29000129");
+      expect(out.audioFeatures).toMatchObject({
+        bpm: null,
+        key: null,
+        energy: null,
+        unavailableReason: "no_preview",
+      });
+      expect(out.audioFeatures?.measured).toBeUndefined();
+      expect(out.previewUrl).toBeNull();
+      expect(out.preview).toBeNull();
+      expect(stub.calls.some((url) => url.startsWith(AUDIO_URL))).toBe(false);
+      expect(cache.putAudio).not.toHaveBeenCalled();
+      expect(text).not.toMatch(/\d+ BPM/);
+    });
+
+    it("still gives the player the matched clip when the service is down, with no provenance", async () => {
+      stubNetwork("down");
+      const { out } = await run("D2");
+      expect(out.audioFeatures).toMatchObject({ unavailableReason: "service_unavailable" });
+      expect(out.previewUrl).toBe(PREVIEW);
+      expect(out.preview).toBeNull();
+    });
+
+    it("records Spotify's own clip as matched by id", async () => {
+      stubNetwork("librosa-only", null);
+      const spotifyClip = "https://p.scdn.co/mp3-preview/own";
+      const state = stateFor("S", "USSB29000129");
+      state.spotifyData = { ...state.spotifyData, previewUrl: spotifyClip } as never;
+      const out = await engineerNode(state, { writer: () => {} } as never);
+      expect(out.previewUrl).toBe(spotifyClip);
+      expect(out.preview).toEqual({ provider: "spotify", method: "id", score: null });
+    });
+
+    it("reports a Deezer outage as a source error, apart from the missing clip", async () => {
+      const stub = stubNetwork("full");
+      deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
+      const { out } = await run("Q", "USSB29000129");
+      expect(out.audioFeatures).toMatchObject({ bpm: null, unavailableReason: "no_preview" });
+      expect(out.sourceErrors).toEqual([
+        { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
+      ]);
+      // After the quota error no search is made.
+      expect(stub.calls.filter((url) => url.startsWith("https://api.deezer.com/"))).toHaveLength(1);
+    });
+
+    it("records no source error when Deezer only has no clip of the recording", async () => {
+      stubNetwork("full", null);
+      const { out } = await run("N2", "USSB29000129");
+      expect(out.audioFeatures).toMatchObject({ unavailableReason: "no_preview" });
+      expect(out.sourceErrors).toBeUndefined();
     });
   });
 

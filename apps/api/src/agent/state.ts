@@ -17,6 +17,7 @@ import type {
 import type { z } from "zod";
 import type { LlmTier } from "../config/settings.js";
 import type { LlmErrorKind } from "../llm/errors.js";
+import type { PreviewSourceMatch } from "../sources/audio.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import type { QueryMatch } from "./trackMatch.js";
 
@@ -123,7 +124,8 @@ export interface KeyMoment {
 
 /**
  * Why measured audio values are missing:
- * - no_preview: neither Deezer nor Spotify returned a preview clip
+ * - no_preview: no preview clip of the chosen recording was found (by its ISRC on Deezer, as
+ *   Spotify's own clip, or as a Deezer search result that is strictly the same recording)
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed
@@ -173,6 +175,11 @@ export interface AudioFeatures {
   measured?: true;
   /** What produced the measurement (the audio analysis service) */
   analyzer?: "audio-service";
+  /**
+   * How the measured clip was matched to the track (never its URL). Cached rows without it were
+   * measured before previews were matched strictly and are not trusted.
+   */
+  previewMatch?: PreviewSourceMatch;
 }
 
 export interface ResearchData {
@@ -423,8 +430,19 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // Where the analysed preview came from and how it was matched; null when unknown.
+  // Where the clip the audio values were measured on came from and how it was matched to the
+  // track; null when nothing was measured. On an audio-cache hit it describes the cached
+  // measurement's clip, which may be another entry of the recording than the player's clip.
   preview: Annotation<PreviewMatchValue | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // The run's preview clip of the chosen recording, for the player; null when there is none.
+  // Spotify's own clip is used here only when the engineer chose it.
+  // The URL is signed and expires within minutes: the checkpointer never saves it
+  // (store/checkpointer.ts) and stored results drop it.
+  previewUrl: Annotation<string | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),

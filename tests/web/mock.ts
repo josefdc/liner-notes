@@ -3,7 +3,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AnalyzeStreamEvent, FactoidStreamEvent } from "@liner-notes/contract";
 import { expect, type Page } from "@playwright/test";
-import { contractMisfits, type MockConfig, withEnvelope } from "../mock-sse/envelope";
+import {
+  contractMisfits,
+  type MockConfig,
+  streamRuleBreaks,
+  withEnvelope,
+} from "../mock-sse/envelope";
 
 const mockDir = join(dirname(fileURLToPath(import.meta.url)), "..", "mock-sse");
 
@@ -14,11 +19,16 @@ export function loadFixture(name: string) {
 
 /**
  * The configuration the mocked API replays: every stream event with the run id and `seq` the
- * API adds (../mock-sse/envelope.ts), checked against the contract's event unions. A stream
- * event the API could not send fails the test here, so the mock cannot drift from the server;
- * one sent on purpose goes in `{ "$unchecked": event }`.
+ * API adds (../mock-sse/envelope.ts), checked against the contract's event unions, and every
+ * stream checked against the rules the API keeps (one outcome, `done` last, `seq` 0, 1, 2…).
+ * A stream event or a stream the API could not send fails the test here, so the mock cannot
+ * drift from the server; one sent on purpose goes in `{ "$unchecked": event }`.
  */
 export function mockConfig(fixture: unknown): MockConfig {
+  const breaks = streamRuleBreaks(fixture as MockConfig);
+  if (breaks.length > 0) {
+    throw new Error(`Mock streams the API cannot send:\n${breaks.join("\n")}`);
+  }
   const config = withEnvelope(fixture as MockConfig);
   const misfits = contractMisfits(config, {
     analysis: AnalyzeStreamEvent,
@@ -85,6 +95,24 @@ export function collectProblems(page: Page) {
   return problems;
 }
 
+/**
+ * Waits until every finite animation and transition on the page has finished: a view that just
+ * mounted plays its entrance animations (fades, slides, staggered cards) for up to about a
+ * second, and a size, position or colour read before then depends on how fast the page got
+ * there. Looping animations (spinners, glows) are left running.
+ */
+export async function animationsSettled(page: Page) {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          animation.playState !== "running" ||
+          animation.effect?.getComputedTiming().iterations === Number.POSITIVE_INFINITY,
+      ),
+  );
+}
+
 /** Runs a search against the mocked stream and continues to the Dashboard. */
 export async function analyzeAndOpenDashboard(
   page: Page,
@@ -96,10 +124,12 @@ export async function analyzeAndOpenDashboard(
   await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
   await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+  await animationsSettled(page);
 }
 
 /** Opens the Player from the Dashboard. */
 export async function openPlayer(page: Page) {
   await page.getByRole("button", { name: "VIEW FULL ANALYSIS" }).click();
   await expect(page.getByRole("button", { name: /BACK TO BASE/ })).toBeVisible();
+  await animationsSettled(page);
 }

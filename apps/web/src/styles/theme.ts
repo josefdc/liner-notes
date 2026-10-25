@@ -20,9 +20,9 @@ export const colors = {
   text: {
     primary: 'rgba(255, 255, 255, 0.95)',
     secondary: 'rgba(255, 255, 255, 0.7)',
-    tertiary: 'rgba(255, 255, 255, 0.5)',
-    muted: 'rgba(255, 255, 255, 0.5)',
-    chip: 'rgba(255, 255, 255, 0.5)',
+    tertiary: 'rgba(255, 255, 255, 0.55)',
+    muted: 'rgba(255, 255, 255, 0.55)',
+    chip: 'rgba(255, 255, 255, 0.55)',
   },
   cyber: '#00f0ff',
   cyberDim: 'rgba(0, 240, 255, 0.1)',
@@ -33,8 +33,8 @@ export const colors = {
   prov: {
     measured: '#00f0ff',
     sourced: '#ffb000',
-    inferred: '#c084fc',
-    missing: 'rgba(255, 255, 255, 0.5)',
+    inferred: '#cbd5e1',
+    missing: 'rgba(255, 255, 255, 0.55)',
   },
   viz: {
     cyan: '#00f0ff',
@@ -46,17 +46,27 @@ export const colors = {
     green: '#22c55e',
     neutral: '#9ca3af',
   },
-  success: '#22c55e',
-  warning: '#ffb000',
-  error: '#f87171',
-  info: '#60a5fa',
+  cyan: '#00f0ff',
+  amber: '#ffb000',
   purple: '#a855f7',
   pink: '#ec4899',
-  green: '#22c55e',
-  indigo: '#6366f1',
-  amber: '#ffb000',
   blue: '#3b82f6',
-  spotify: '#1db954',
+  indigo: '#6366f1',
+  green: '#22c55e',
+  neutral: '#9ca3af',
+  success: '#22c55e',
+  warning: '#fb923c',
+  error: '#ff8a8a',
+  info: '#60a5fa',
+  accent: {
+    purple: '#d8b4fe',
+    pink: '#f9a8d4',
+    green: '#22c55e',
+    indigo: '#a5b4fc',
+    amber: '#ffb000',
+    blue: '#93c5fd',
+  },
+  spotify: '#1ed760',
   gray: {
     300: '#d1d5db',
     400: '#9ca3af',
@@ -72,25 +82,25 @@ export const colors = {
 export const genealogyColors = {
   current: colors.cyber,
   origin: colors.analog,
-  sampler: colors.purple,
-  influence: colors.green,
+  sampler: colors.viz.purple,
+  influence: colors.viz.green,
   default: colors.gray[500],
 } as const;
 
 /** Genealogy graph: link colours by type (the graph itself uses genealogy/linkStyle.ts). */
 export const linkColors = {
   sample: colors.analog,
-  cover: colors.purple,
-  remix: colors.pink,
+  cover: colors.viz.purple,
+  remix: colors.viz.pink,
   influence: colors.gray[600],
   default: colors.gray[600],
 } as const;
 
-/** SmartTimeline: key moment marker colours. */
+/** SmartTimeline: key moment colours, for the marker and for the moment's description. */
 export const keyMomentColors = {
   energy_peak: colors.cyber,
-  energy_drop: colors.pink,
-  onset: colors.indigo,
+  energy_drop: colors.accent.pink,
+  onset: colors.accent.indigo,
   harmonic_change: colors.analog,
-  silence: colors.gray[500],
+  silence: colors.gray[400],
 } as const;

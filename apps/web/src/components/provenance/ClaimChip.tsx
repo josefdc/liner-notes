@@ -25,8 +25,12 @@ export const KIND_TEXT: Record<ClaimKind, string> = {
   inferred: 'Model inference',
 };
 
-/** The provenance lines carry the meaning of the claim: text-chip keeps them at WCAG AA. */
-export const LINE = 'text-chrome font-mono text-text-chip';
+/**
+ * The provenance lines carry the meaning of the claim: text-chip keeps them at WCAG AA. They wrap
+ * anywhere, so an analyser name or a source id wider than a narrow column breaks instead of being
+ * cut off at its edge.
+ */
+export const LINE = 'min-w-0 max-w-full wrap-anywhere text-chrome font-mono text-text-chip';
 
 /** The measured value a claim's field names (tempo → BPM, key → key). */
 export function readingFor(claim: Claim, readings: readonly Reading[]): Reading | null {
@@ -202,8 +206,8 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
         <div className="flex flex-wrap items-center gap-1.5">
           <KindBadge kind={kind} origin={claim.origin} />
           {partial && <Badge variant="gray">Partly supported</Badge>}
-          {unsupported && <Badge variant="amber">Not supported</Badge>}
-          {conflict && <Badge variant="amber">Conflict</Badge>}
+          {unsupported && <Badge variant="warning">Not supported</Badge>}
+          {conflict && <Badge variant="warning">Conflict</Badge>}
           {status && <span className={LINE}>{status}</span>}
         </div>
       )}

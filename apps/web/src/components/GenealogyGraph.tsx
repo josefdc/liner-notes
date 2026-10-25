@@ -910,8 +910,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
         {/* Enhanced Instructions Overlay - Hidden on mobile for cleaner UX */}
         {!active && (
-          <div className="absolute bottom-4 left-4 pointer-events-none opacity-50 hidden md:block">
-            <div className="flex flex-col gap-1 text-[9px] font-mono text-gray-500">
+          <div className="absolute bottom-4 left-4 pointer-events-none hidden md:block">
+            <div className="flex flex-col gap-1 text-[9px] font-mono text-text-tertiary">
               <span>SCROLL TO ZOOM</span>
               <span>DRAG TO PAN</span>
               <span className="text-cyber flex items-center gap-1">
@@ -924,7 +924,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
         {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
         <div className="absolute top-2 right-2 pointer-events-none md:hidden">
-          <div className="text-[8px] font-mono text-white/40">PINCH • DRAG • TAP</div>
+          <div className="text-[8px] font-mono text-text-tertiary">PINCH • DRAG • TAP</div>
         </div>
       </div>
 

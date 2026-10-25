@@ -3,43 +3,87 @@
 // Shared by theme.mjs (writes styles/theme.ts) and contrast.mjs (checks text contrast). It lives
 // under apps/web/ because the web image's build context holds apps/web and not scripts/.
 
-/** The custom properties declared at the top level of every `@theme` block, in order. */
+/**
+ * The custom properties declared at the top level of every `@theme` block, in order. Comments,
+ * quoted strings and parentheses (url(), var()) are read as such, so a `;`, `{` or `}` inside
+ * them does not end a declaration or a block. Throws on an unclosed comment, string or block.
+ */
 export function readTokens(css) {
-  const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const tokens = new Map();
-  const theme = /@theme\b[^{;]*\{/g;
-  for (let match = theme.exec(source); match; match = theme.exec(source)) {
-    let depth = 0;
-    let statement = '';
-    let i = match.index + match[0].length;
-    for (; i < source.length; i += 1) {
-      const char = source[i];
-      if (char === '{') {
-        depth += 1;
-        statement = '';
-      } else if (char === '}') {
-        if (depth === 0) break;
-        depth -= 1;
-        statement = '';
-      } else if (depth > 0) {
-        // inside a nested rule
-      } else if (char === ';') {
-        addDeclaration(tokens, statement);
-        statement = '';
-      } else {
-        statement += char;
-      }
+  const stack = []; // 'theme' | 'nested' | 'other', one per open block
+  let text = ''; // the prelude or declaration being read, whitespace collapsed outside strings
+  let quote = null;
+  let parens = 0;
+  const flush = () => {
+    if (stack.at(-1) === 'theme') addDeclaration(tokens, text);
+    text = '';
+  };
+  for (let i = 0; i < css.length; i += 1) {
+    const char = css[i];
+    if (quote) {
+      text += char;
+      if (char === '\\') text += css[++i] ?? '';
+      else if (char === quote) quote = null;
+      else if (char === '\n') throw new Error(`unclosed string at offset ${i}`);
+      continue;
     }
-    addDeclaration(tokens, statement);
-    theme.lastIndex = i;
+    if (char === '/' && css[i + 1] === '*') {
+      const close = css.indexOf('*/', i + 2);
+      if (close === -1) throw new Error(`unclosed comment at offset ${i}`);
+      i = close + 1;
+      if (!text.endsWith(' ')) text += ' ';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      text += char;
+    } else if (char === '(') {
+      parens += 1;
+      text += char;
+    } else if (char === ')') {
+      parens = Math.max(0, parens - 1);
+      text += char;
+    } else if (parens > 0) {
+      text += /\s/.test(char) ? (text.endsWith(' ') ? '' : ' ') : char;
+    } else if (char === ';') {
+      flush();
+    } else if (char === '{') {
+      const parent = stack.at(-1);
+      const theme = /^\s*@theme\b/.test(text) && parent !== 'theme' && parent !== 'nested';
+      stack.push(theme ? 'theme' : parent === 'theme' || parent === 'nested' ? 'nested' : 'other');
+      text = '';
+    } else if (char === '}') {
+      if (stack.length === 0) throw new Error(`unmatched "}" at offset ${i}`);
+      flush();
+      stack.pop();
+    } else {
+      text += /\s/.test(char) ? (text.endsWith(' ') ? '' : ' ') : char;
+    }
   }
+  if (quote) throw new Error('unclosed string at the end of the sheet');
+  if (stack.length > 0)
+    throw new Error(`${stack.length} block(s) not closed at the end of the sheet`);
   return tokens;
 }
 
 function addDeclaration(tokens, statement) {
   const declaration = /^\s*(--[\w-]+)\s*:([\s\S]*)$/.exec(statement);
   if (!declaration) return;
-  tokens.set(declaration[1], declaration[2].trim().replace(/\s+/g, ' '));
+  tokens.set(declaration[1], declaration[2].trim());
+}
+
+/** Throws, naming each one, when a token's var() points at a token that is not defined. */
+export function validateTokens(tokens) {
+  const problems = [];
+  for (const name of tokens.keys()) {
+    try {
+      resolveToken(tokens, name);
+    } catch (error) {
+      problems.push(`${name}: ${error.message}`);
+    }
+  }
+  if (problems.length > 0)
+    throw new Error(`tokens that do not resolve:\n  ${problems.join('\n  ')}`);
 }
 
 /** A token's value with every `var(--x)` / `var(--x, fallback)` replaced by what it points at. */

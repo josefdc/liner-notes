@@ -2,13 +2,17 @@
  * Design tokens: the one place the app's colours, type, spacing, radii, shadows and motion are
  * defined. Tailwind makes each one a utility (--color-cyber gives text-cyber, bg-cyber/10, ...).
  *
+ * - This is the only sheet that declares tokens: another @theme block (index.css) may hold
+ *   @keyframes only, and the build fails otherwise.
  * - apps/web/config/theme.mjs writes the --color-* tokens to styles/theme.ts for D3 and Recharts
  *   (`npm run theme -w apps/web`, also run before every build); scripts/check-theme-sync.mjs
  *   fails when theme.ts is out of date.
- * - scripts/contrast.mjs checks every text colour (--color-text-*, --color-prov-*,
- *   --color-status-*, cyber and analog) at 4.5:1 or more on every surface (--color-void*,
- *   --color-surface*, a translucent one as drawn on --color-void), and the data-visualisation
- *   colours (--color-viz-*) at 3:1 or more.
+ * - apps/web/config/contrast.mjs (scripts/contrast.mjs; also run before every build) checks every
+ *   colour used as text at 4.5:1 or more: the text, prov, status and accent families, cyber,
+ *   analog, spotify and white, and any colour a text-* class in apps/web/src names. It checks
+ *   them on every surface: a void base, a translucent surface panel on it, and a hover or active
+ *   state (or the class string's own bg tint) on that. Data-visualisation colours (--color-viz-*)
+ *   are checked at 3:1 or more.
  *
  * A token that only points at another (`var(--color-...)`) is an alias kept for code that still
  * uses the old name.
@@ -35,10 +39,11 @@
   /* ===== Text ===== */
   --color-text-primary: rgba(255, 255, 255, 0.95);
   --color-text-secondary: rgba(255, 255, 255, 0.7);
-  /* The dimmest text: 4.5:1 on the lightest surface (surface-active) */
-  --color-text-tertiary: rgba(255, 255, 255, 0.5);
-  /* Aliases of the dimmest text. Muted was 0.25 (2.07:1 on the page); badge text must also stay
-     at 4.5:1 on a badge's own tint, which tertiary does (component-styles.spec.ts measures it) */
+  /* The dimmest text: 4.5:1 on the lightest surface (surface-active on a surface panel on
+     void-lighter, or a white/10 tint there) */
+  --color-text-tertiary: rgba(255, 255, 255, 0.55);
+  /* Aliases of the dimmest text. Muted was 0.25 (2.07:1 on the page): below the dimmest text
+     there is no readable step, so muted text is set apart by size or place, not by alpha */
   --color-text-muted: var(--color-text-tertiary);
   --color-text-chip: var(--color-text-tertiary);
 
@@ -47,8 +52,8 @@
   --color-cyber-dim: rgba(0, 240, 255, 0.1);
   --color-cyber-muted: rgba(0, 240, 255, 0.5);
 
-  /* The one amber. Tailwind's amber-500 (#f59e0b), used by accent-amber and status-warning, is
-     now this colour too */
+  /* The one amber, for history and sources. Tailwind's amber-500 (#f59e0b), which accent-amber
+     used, is now this colour; warnings are orange (status-warning) */
   --color-analog: #ffb000;
   --color-analog-dim: rgba(255, 176, 0, 0.1);
   --color-analog-muted: rgba(255, 176, 0, 0.5);
@@ -56,7 +61,9 @@
   /* ===== Provenance: how a value is known. Colour is never the only cue (chips carry text) ===== */
   --color-prov-measured: var(--color-cyber);
   --color-prov-sourced: var(--color-analog);
-  --color-prov-inferred: #c084fc;
+  /* No hue of its own: colour marks what has evidence (measured, sourced); an inference is a
+     light neutral, set apart from missing (dimmer) by its text and icon */
+  --color-prov-inferred: #cbd5e1;
   --color-prov-missing: var(--color-text-tertiary);
 
   /* ===== Data visualisation: series and relation colours for charts and the graph ===== */
@@ -71,22 +78,26 @@
 
   /* ===== Status ===== */
   --color-status-success: var(--color-viz-green);
-  --color-status-warning: var(--color-analog);
-  --color-status-error: #f87171;
+  /* Orange, apart from the sourced amber: "its source contradicts it" must not look like "it has
+     a source" */
+  --color-status-warning: #fb923c;
+  --color-status-error: #ff8a8a;
   --color-status-info: #60a5fa;
 
-  /* ===== Accents: aliases of the data-visualisation colours ===== */
-  --color-accent-purple: var(--color-viz-purple);
-  --color-accent-pink: var(--color-viz-pink);
+  /* ===== Accents: the data-visualisation hues for text and badges, lighter where the chart
+     value is under 4.5:1 as text ===== */
+  --color-accent-purple: #d8b4fe;
+  --color-accent-pink: #f9a8d4;
   --color-accent-green: var(--color-viz-green);
-  --color-accent-indigo: var(--color-viz-indigo);
+  --color-accent-indigo: #a5b4fc;
   --color-accent-amber: var(--color-analog);
-  --color-accent-blue: var(--color-viz-blue);
+  --color-accent-blue: #93c5fd;
 
   /* ===== Spotify brand ===== */
-  --color-spotify: #1db954;
+  --color-spotify: #1ed760; /* Spotify's current brand green */
 
-  /* ===== Opaque grey scale (backgrounds, borders, chart grids; not text) ===== */
+  /* ===== Opaque grey scale (backgrounds, borders, chart grids; a grey used as text is checked
+     as text) ===== */
   --color-gray-300: #d1d5db;
   --color-gray-400: #9ca3af;
   --color-gray-500: #6b7280;

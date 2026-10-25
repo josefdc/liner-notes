@@ -149,6 +149,28 @@ describe("MusicBrainz client", () => {
     expect(data).toMatchObject({ found: true, mbid: RECORDING_ID });
   });
 
+  it.each([
+    ["(radio edit)", 5],
+    ["(single version)", 1],
+  ])(
+    "for a plain title, picks the recording filed without a label over one titled %s",
+    async (label, releases) => {
+      const EDIT_ID = "6c22f4ce-a62d-471e-81fc-a69a8278c7db";
+      const edit = {
+        ...recording(`Ice Ice Baby ${label}`, "Vanilla Ice", EDIT_ID),
+        // On more releases (compilations) than the original, or as many.
+        releases: Array.from({ length: releases }, () => ORIGINAL_RELEASE),
+      };
+      musicbrainz([recording("Ice Ice Baby", "Vanilla Ice"), edit]);
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+      );
+
+      expect(data).toMatchObject({ found: true, mbid: RECORDING_ID });
+    },
+  );
+
   it.each(["Ice Ice Baby - Live", "Ice Ice Baby - Remix", "Ice Ice Baby (Extended Mix)"])(
     "keeps %j, another recording, from matching the original",
     async (title) => {

@@ -706,10 +706,10 @@ describe("composerNode", () => {
     });
 
     it.each([
-      ["clicked", "click", undefined],
-      ["picked by the countdown", "countdown", "partial"],
-      ["picked by a client that does not say", null, "partial"],
-    ])("for a track %s, the result's search match is %s", async (_label, pickedBy, shown) => {
+      ["clicked", "carries no search match", "click", undefined],
+      ["picked by the countdown", "keeps the search match", "countdown", "partial"],
+      ["picked by a client that does not say", "keeps the search match", null, "partial"],
+    ])("for a track %s, the result %s", async (_label, _outcome, pickedBy, shown) => {
       const writer = vi.fn();
       await createComposerNode(testRuntime(succeeding()))(
         {
@@ -769,7 +769,7 @@ describe("composerNode", () => {
       // Versioned: results cached by older code are not served. The key names the configured
       // sources: adding a key later composes the result again.
       // Keyed by the track (its Spotify id), never by the search text.
-      expect(namespace).toEqual(["tracks", "v4"]);
+      expect(namespace).toEqual(["tracks", "v5"]);
       expect(store.put.mock.calls[0][1]).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));

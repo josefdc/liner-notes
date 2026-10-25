@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { failureOf } from "./analyze.js";
+import { failureOf, rateLimitMessage } from "./analyze.js";
 
 describe("failureOf", () => {
   it.each([
@@ -26,5 +26,17 @@ describe("failureOf", () => {
   it("an error from another node is a plain failure", () => {
     expect(failureOf("historian", { scoutFailure: { kind: "no_match" } })).toBe("failed");
     expect(failureOf("composer", {})).toBe("failed");
+  });
+});
+
+describe("rateLimitMessage", () => {
+  it.each([
+    [null, "Spotify is limiting requests right now. Please try again in a moment."],
+    [0, "Spotify is limiting requests right now. Please try again in a moment."],
+    [1_200, "Spotify is limiting requests right now. Please try again in about 2 s."],
+    [90_000, "Spotify is limiting requests right now. Please try again in about 90 s."],
+    [600_000, "Spotify is limiting requests right now. Please try again in about 10 min."],
+  ])("says a wait of %j as %j", (retryAfterMs, message) => {
+    expect(rateLimitMessage(retryAfterMs)).toBe(message);
   });
 });

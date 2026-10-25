@@ -276,6 +276,16 @@ describe("scoutNode's stored results", () => {
     expect(out.trackData ?? null).toBeNull();
   });
 
+  it("does not serve a result stored by the code before genealogy ids were strict", async () => {
+    const store = new InMemoryStore();
+    await store.put(["tracks", "v4"], keyOf(track.id), stored);
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData ?? null).toBeNull();
+  });
+
   it("does not serve a result stored when another set of sources was configured", async () => {
     const store = new InMemoryStore();
     const now = configuredSources();
@@ -372,6 +382,45 @@ describe("scoutNode's Spotify failures", () => {
     expect(out.scoutFailure).toEqual({ kind: "rate_limited", retryAfterMs: 60_000 });
   });
 
+  it("tries a Spotify outage 3 times, saying each wait, then says Spotify could not answer", async () => {
+    spotify.answer = async () => {
+      throw new SourceError("spotify", "http", "HTTP 503", { status: 503 });
+    };
+    const statuses: string[] = [];
+    const { graph } = scoutGraph();
+
+    const out = await graph.invoke({ songQuery: "Song A" }, {
+      streamMode: "values",
+      // The writer the scout reports progress through.
+      writer: (event: { type?: string; message?: string }) => {
+        if (event.type === "status" && event.message) statuses.push(event.message);
+      },
+    } as never);
+
+    expect(spotify.calls).toBe(3);
+    expect(out.scoutFailure).toEqual({ kind: "upstream_unavailable" });
+    expect(statuses.filter((m) => m.startsWith("Spotify did not answer"))).toHaveLength(2);
+  }, 10_000);
+
+  it("says each rate-limit wait in a status line", async () => {
+    spotify.answer = async () => {
+      if (spotify.calls === 1) {
+        throw new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 50 });
+      }
+      return JSON.stringify([track]);
+    };
+    const statuses: string[] = [];
+    const { graph } = scoutGraph();
+
+    await graph.invoke({ songQuery: "Song A" }, {
+      writer: (event: { type?: string; message?: string }) => {
+        if (event.type === "status" && event.message) statuses.push(event.message);
+      },
+    } as never);
+
+    expect(statuses).toContain("Spotify is rate limiting requests; trying again in 1 s...");
+  });
+
   it("says nothing matched when Spotify finds nothing", async () => {
     spotify.answer = async () => "[]";
     const { graph } = scoutGraph();
@@ -399,11 +448,11 @@ describe("scoutNode for a request by track id", () => {
   const ID = "6GyFP1nfCDB8lbD2bG0Hq9";
   const requested = { ...track, id: ID, title: "Midnight City", artist: "M83" };
 
-  it("reads that track instead of searching, as the user's own choice", async () => {
+  it("reads that track instead of searching; a suggestion's own text matches it exactly", async () => {
     spotify.track = async () => requested;
     const { graph } = scoutGraph();
 
-    const out = await graph.invoke({ songQuery: "midnight city", requestedTrackId: ID });
+    const out = await graph.invoke({ songQuery: "Midnight City M83", requestedTrackId: ID });
 
     expect(spotify.calls).toBe(0);
     expect(spotify.fetched).toEqual([ID]);
@@ -411,13 +460,56 @@ describe("scoutNode for a request by track id", () => {
       spotifyData: { id: ID },
       selectedTrackId: ID,
       selectedBy: "user",
-      pickedBy: "click",
-      queryMatch: null,
+      pickedBy: null,
+      queryMatch: "exact",
     });
     expect(out.candidates ?? null).toBeNull();
   });
 
-  it("serves the result stored for that track, with no search match", async () => {
+  it("says how the request's text matches the track when they disagree", async () => {
+    // A genealogy node whose id names another recording than its label.
+    spotify.track = async () => requested;
+    const { graph } = scoutGraph();
+
+    const out = await graph.invoke({ songQuery: "Hurt Nine Inch Nails", requestedTrackId: ID });
+
+    expect(out.spotifyData).toMatchObject({ id: ID });
+    expect(out.queryMatch).toBe("none");
+  });
+
+  it.each([
+    ["click", "click"],
+    ["countdown", "countdown"],
+  ] as const)(
+    "keeps how a picker row asked for by id was picked (%s)",
+    async (pickedBy, expected) => {
+      spotify.track = async () => requested;
+      const { graph } = scoutGraph();
+
+      const out = await graph.invoke({ songQuery: "midnight", requestedTrackId: ID, pickedBy });
+
+      expect(out.pickedBy).toBe(expected);
+    },
+  );
+
+  it("tries the read again after a rate limit", async () => {
+    let reads = 0;
+    spotify.track = async () => {
+      reads += 1;
+      if (reads === 1) {
+        throw new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 0 });
+      }
+      return requested;
+    };
+    const { graph } = scoutGraph();
+
+    const out = await graph.invoke({ songQuery: "Midnight City M83", requestedTrackId: ID });
+
+    expect(spotify.fetched).toEqual([ID, ID]);
+    expect(out.spotifyData).toMatchObject({ id: ID });
+  });
+
+  it("serves the result stored for that track, with this request's search match", async () => {
     spotify.track = async () => requested;
     const store = new InMemoryStore();
     const { run: _run, ...analysis } = JSON.parse(
@@ -435,16 +527,28 @@ describe("scoutNode for a request by track id", () => {
     });
     const { graph } = scoutGraph(store);
 
-    const out = await graph.invoke({ songQuery: "midnight city", requestedTrackId: ID });
+    const out = await graph.invoke({ songQuery: "Midnight City M83", requestedTrackId: ID });
+    expect(out.trackData).toMatchObject({ id: ID, queryMatch: "exact" });
 
-    expect(out.trackData).toMatchObject({ id: ID });
-    expect(out.trackData).not.toHaveProperty("queryMatch");
+    // A deliberate click shows no match.
+    const clicked = await scoutGraph(store).graph.invoke({
+      songQuery: "midnight",
+      requestedTrackId: ID,
+      pickedBy: "click",
+    });
+    expect(clicked.trackData).toMatchObject({ id: ID });
+    expect(clicked.trackData).not.toHaveProperty("queryMatch");
   });
 
   it.each([
     [
       "Spotify has no such track",
       new SourceError("spotify", "http", "HTTP 404", { status: 404 }),
+      "no_match",
+    ],
+    [
+      "Spotify does not know the id",
+      new SourceError("spotify", "http", "HTTP 400", { status: 400 }),
       "no_match",
     ],
     [

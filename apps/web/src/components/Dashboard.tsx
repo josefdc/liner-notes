@@ -64,6 +64,8 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   id: string;
   /** The Spotify track the node was strictly matched to, when there is one. */
   spotifyId?: string;
+  /** The text a click searches (or sends with the id): the node's track title and artist. */
+  query: string;
   title: string;
   artist: string;
   reason: string;
@@ -84,6 +86,7 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   return relatedNodes.map((node) => ({
     id: node.id,
     ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
+    query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
     title: node.label,
     artist: '', // Genealogy nodes don't have separate artist field
     reason: groupLabels[node.group] || 'Related',
@@ -192,11 +195,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [handleUndo]);
 
   const handleCardClick = useCallback(
-    (rec: { id: string; spotifyId?: string; title: string; artist: string }) => {
+    (rec: { id: string; spotifyId?: string; query: string; title: string; artist: string }) => {
       if (onAnalyzeTrack) {
         // The node's own id is the graph's, not Spotify's: the track is searched by its text
-        // unless the node was matched to a Spotify track.
-        onAnalyzeTrack(rec.spotifyId ?? 'search', rec.title, rec.artist);
+        // unless the node was matched to a Spotify track. The text is the node's track title
+        // and artist, which the matched track's own title and artist match.
+        onAnalyzeTrack(rec.spotifyId ?? 'search', rec.query, '');
         startUndoTimeout(rec.title);
       } else {
         onNavigate(AppPhase.PLAYER);

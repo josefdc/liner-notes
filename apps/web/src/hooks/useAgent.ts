@@ -102,6 +102,8 @@ interface Run {
   expectedTrackId: string | null;
   /** The Spotify track the run asked for by id (a clicked suggestion), for a retry. */
   trackId: string | null;
+  /** How the picker row the run asked for by id was picked, for a retry. */
+  pickedBy: PickedBy | null;
 }
 
 /** How `analyze` was asked for: the request's own options, and the hook's own ones. */
@@ -124,6 +126,7 @@ function newRun(query: string): Run {
     replay: false,
     expectedTrackId: null,
     trackId: null,
+    pickedBy: null,
   };
 }
 
@@ -442,6 +445,7 @@ export function useAgent(): UseAgentReturn {
       const run = newRun(query);
       run.expectedTrackId = options.expectedTrackId ?? null;
       run.trackId = isSpotifyTrackId(options.trackId) ? options.trackId : null;
+      run.pickedBy = run.trackId ? (options.pickedBy ?? null) : null;
       runRef.current = run;
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
@@ -466,10 +470,10 @@ export function useAgent(): UseAgentReturn {
       try {
         // With a track id (a clicked suggestion) the API analyses that very track.
         // An id that is not a Spotify track id (a placeholder) is not sent: the text is searched.
-        const trackId = isSpotifyTrackId(options.trackId)
-          ? `&trackId=${encodeURIComponent(options.trackId)}`
-          : '';
-        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}`;
+        const byId = isSpotifyTrackId(options.trackId);
+        const trackId = byId ? `&trackId=${encodeURIComponent(options.trackId as string)}` : '';
+        const how = byId && options.pickedBy ? `&pickedBy=${options.pickedBy}` : '';
+        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}${how}`;
         openRunStream(url, run, () =>
           setState((prev) =>
             prev.status === 'connecting' ? { ...prev, status: 'searching' } : prev,
@@ -501,8 +505,13 @@ export function useAgent(): UseAgentReturn {
       streamRef.current?.close();
 
       if (!run.threadId) {
-        // Without a thread there is nothing to resume: analyse the chosen track by its id.
-        await analyze(`${candidate.title} ${candidate.artist}`, { trackId: candidate.id });
+        // Without a thread there is nothing to resume: analyse the chosen track by its id, with
+        // the text the user searched (the result says how it matches) and how the row was
+        // picked, as a resume would.
+        await analyze(run.query || `${candidate.title} ${candidate.artist}`, {
+          trackId: candidate.id,
+          ...(pickedBy ? { pickedBy } : {}),
+        });
         return;
       }
 
@@ -530,8 +539,8 @@ export function useAgent(): UseAgentReturn {
    * Run the last analysis again (the error screen's retry).
    */
   const retry = useCallback(() => {
-    const { query, trackId } = runRef.current;
-    if (query) analyze(query, trackId ? { trackId } : {});
+    const { query, trackId, pickedBy } = runRef.current;
+    if (query) analyze(query, trackId ? { trackId, ...(pickedBy ? { pickedBy } : {}) } : {});
   }, [analyze]);
 
   /**

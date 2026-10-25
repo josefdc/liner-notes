@@ -8,6 +8,7 @@
  *   "ambiguous …"  two candidates, so the run pauses for a choice
  *   "nomatch …"    Spotify found nothing
  *   "outage …"     Spotify could not be reached
+ *   "ratelimited …" Spotify kept rate limiting; "ratelimited-unsaid …" without saying how long
  *   "odd …"        an error the route does not recognise
  *   anything else  one match; the composer then reports `complete` both ways, and a query
  *                  containing "fallback" takes the composer's model-unavailable path
@@ -47,7 +48,11 @@ const stub = vi.hoisted(() => ({
   detailsStep: null as null | (() => Promise<void>),
   detailsFail: false,
   /** The requested track id each run's scout saw, and how the composer's track was picked. */
-  seen: { requestedTrackId: [] as unknown[], pickedBy: [] as unknown[] },
+  seen: {
+    requestedTrackId: [] as unknown[],
+    pickedBy: [] as unknown[],
+    requestPickedBy: [] as unknown[],
+  },
   /**
    * A result the stream can send (a TrackAnalysis: the stream checks every event against the
    * contract), with the title the test looks for and any extra fields.
@@ -101,6 +106,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
     scoutNode: async (state: State, config: Config) => {
       stub.calls.scout++;
       stub.seen.requestedTrackId.push(state.requestedTrackId);
+      stub.seen.requestPickedBy.push(state.pickedBy);
       status(config, "scout", "searching");
       const query = state.songQuery;
       if (query.startsWith("cached")) {
@@ -115,6 +121,15 @@ vi.mock("../../agent/nodes/index.js", async () => {
         return {
           error: "Spotify search failed: spotify: HTTP 503 — secret-upstream-detail",
           scoutFailure: { kind: "upstream_unavailable" as const },
+        };
+      }
+      if (query.startsWith("ratelimited")) {
+        return {
+          error: "Spotify search failed: spotify: HTTP 429",
+          scoutFailure: {
+            kind: "rate_limited" as const,
+            retryAfterMs: query.startsWith("ratelimited-unsaid") ? null : 30_000,
+          },
         };
       }
       if (query.startsWith("odd")) return { error: "secret-odd-detail" };
@@ -297,7 +312,7 @@ describe("analyze routes", () => {
     stub.composerAfterComplete = null;
     stub.detailsStep = null;
     stub.detailsFail = false;
-    stub.seen = { requestedTrackId: [], pickedBy: [] };
+    stub.seen = { requestedTrackId: [], pickedBy: [], requestPickedBy: [] };
   });
   let restoreDeadline: (() => void) | null = null;
   afterEach(() => {
@@ -467,6 +482,16 @@ describe("analyze routes", () => {
       expect(stub.seen.requestedTrackId).toEqual([ID, null]);
     });
 
+    it("hands how a picker row asked for by id was picked to the scout, only with an id", async () => {
+      await sse(`${streamPath("midnight city m83")}&trackId=${ID}&pickedBy=countdown`);
+      await request(app)
+        .post("/api/analyze")
+        .send({ query: "midnight city m83", trackId: ID, pickedBy: "click" });
+      await request(app).post("/api/analyze").send({ query: "midnight", pickedBy: "click" });
+
+      expect(stub.seen.requestPickedBy).toEqual(["countdown", "click", null]);
+    });
+
     it.each(["short", "6GyFP1nfCDB8lbD2bG0Hq9x", "6GyFP1nfCDB8lbD2bG0H/9"])(
       "refuses %j as a track id, without starting a run",
       async (trackId) => {
@@ -507,6 +532,37 @@ describe("analyze routes", () => {
 
       expect(res.status).toBe(200);
       expect(stub.seen.pickedBy).toEqual(["click"]);
+    });
+  });
+
+  describe("a Spotify rate limit", () => {
+    it("is answered with a message naming it, the wait and a Retry-After header", async () => {
+      const res = await request(app).post("/api/analyze").send({ query: "ratelimited hurt" });
+
+      expect(res.status).toBe(502);
+      expect(res.headers["retry-after"]).toBe("30");
+      expect(res.body).toMatchObject({
+        success: false,
+        code: "upstream_unavailable",
+        retryAfterMs: 30_000,
+        error: "Spotify is limiting requests right now. Please try again in about 30 s.",
+      });
+    });
+
+    it("says so on the stream too, and without a wait when Spotify did not say one", async () => {
+      const { events } = await sse(streamPath("ratelimited hurt"));
+      const unsaid = await request(app)
+        .post("/api/analyze")
+        .send({ query: "ratelimited-unsaid hurt" });
+
+      expect(ofType(events, "error")[0]).toMatchObject({
+        code: "upstream_unavailable",
+        error: "Spotify is limiting requests right now. Please try again in about 30 s.",
+      });
+      expect(unsaid.headers["retry-after"]).toBeUndefined();
+      expect(unsaid.body.error).toBe(
+        "Spotify is limiting requests right now. Please try again in a moment.",
+      );
     });
   });
 

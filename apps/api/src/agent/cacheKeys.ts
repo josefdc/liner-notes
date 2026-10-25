@@ -16,13 +16,16 @@
  * served for a text that now finds another track, nor for another user's text that happened to
  * lead to a pick. Stored results carry no preview URL and no search match (both belong to one
  * run).
+ * v5: results whose genealogy nodes carry a Spotify id only for a strict match of the track the
+ * model named. Earlier results may carry the top search hit's id (a cover, another song), and a
+ * click on such a node now analyses that id: they are not served.
  */
 
 import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
-export const TRACKS_NAMESPACE: string[] = ["tracks", "v4"];
+export const TRACKS_NAMESPACE: string[] = ["tracks", "v5"];
 
 /** The optional research sources that are configured (have a key). */
 export interface ConfiguredSources {

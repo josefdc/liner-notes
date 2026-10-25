@@ -266,6 +266,26 @@ describe('useAgent track picker', () => {
     expect(resume.url).toContain(`selectedTrackId=c2${param}`);
   });
 
+  it('without a thread, asks for the picked row by id with the searched text and how it was picked', async () => {
+    const hook = startAnalysis('Hurt');
+    const analysis = lastStream();
+    const rows = candidates.map((c, i) => ({ ...c, id: `28cnXtME493VX9NOw9cIU${i}` }));
+    analysis.send({ type: 'connected', threadId: '' });
+    analysis.send({ ...interrupt(rows), threadId: '' });
+
+    await act(async () => {
+      await hook.result.current.selectCandidate(rows[1].id, 'countdown');
+    });
+
+    expect(lastStream().url).toContain(
+      `/api/analyze/stream?query=Hurt&trackId=${rows[1].id}&pickedBy=countdown`,
+    );
+    // A retry asks the same way.
+    lastStream().fail();
+    act(() => hook.result.current.retry());
+    expect(lastStream().url).toContain(`&trackId=${rows[1].id}&pickedBy=countdown`);
+  });
+
   it('opens one resume per picker and closes the analysis stream', async () => {
     const { hook, analysis } = openPicker();
     await act(async () => {

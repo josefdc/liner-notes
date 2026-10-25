@@ -105,6 +105,7 @@ export function retryAfterWait(error: unknown, maxWaitMs: number): number | null
  *
  * `retryDelay` may choose the wait for an error instead of the backoff (a source's
  * Retry-After): a number of milliseconds, null to give up at once, or undefined for the backoff.
+ * `onWait` is told each wait before it starts (to say so to the user).
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -114,6 +115,7 @@ export async function withRetry<T>(
     backoffFactor?: number;
     signal?: AbortSignal;
     retryDelay?: (error: unknown) => number | null | undefined;
+    onWait?: (ms: number, error: unknown) => void;
   } = {},
 ): Promise<T> {
   const { maxAttempts = 3, initialInterval = 1000, backoffFactor = 2, signal } = opts;
@@ -126,10 +128,12 @@ export async function withRetry<T>(
       const chosen = opts.retryDelay?.(error);
       if (chosen === null) throw error;
       if (chosen !== undefined) {
+        opts.onWait?.(chosen, error);
         await sleep(chosen, signal);
         continue;
       }
       const delay = initialInterval * backoffFactor ** (attempt - 1);
+      opts.onWait?.(delay, error);
       await sleep(delay + Math.random() * delay * 0.1, signal); // guard-allow: random-values-api — retry backoff jitter
     }
   }

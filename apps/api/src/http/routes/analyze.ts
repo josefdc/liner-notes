@@ -120,7 +120,7 @@ function parseId(value: unknown): string | null {
 }
 
 /**
- * The optional Spotify track id of an analysis request (a clicked suggestion): absent is
+ * The optional Spotify track id of an analysis request (a suggestion or a node): absent is
  * `undefined`; anything that is not a Spotify id (22 base-62 characters) is `null`, refused.
  */
 function parseTrackId(value: unknown): string | null | undefined {
@@ -261,7 +261,8 @@ type RunOutcome =
   /** `fromAnotherRun`: the result was composed by an earlier run (a cached one). */
   | { kind: "complete"; trackData: TrackData; fromAnotherRun?: boolean }
   | { kind: "interrupted"; candidates: SearchCandidate[] }
-  | { kind: "failed"; code: FailureCode }
+  /** `rateLimit`: Spotify kept rate limiting the run; how long it asked to wait, when it said. */
+  | { kind: "failed"; code: FailureCode; rateLimit?: { retryAfterMs: number | null } }
   | { kind: "cancelled" };
 
 const OUTCOME_STATUS: Record<RunOutcome["kind"], RunStatus> = {
@@ -289,6 +290,19 @@ export function failureOf(
 }
 
 /**
+ * What the user is told when Spotify kept rate limiting the run: the service and, when it said,
+ * how long to wait (the code stays upstream_unavailable).
+ */
+export function rateLimitMessage(retryAfterMs: number | null): string {
+  if (retryAfterMs === null || retryAfterMs <= 0) {
+    return "Spotify is limiting requests right now. Please try again in a moment.";
+  }
+  const seconds = Math.ceil(retryAfterMs / 1000);
+  const wait = seconds < 120 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`;
+  return `Spotify is limiting requests right now. Please try again in about ${wait}.`;
+}
+
+/**
  * Runs the graph on one thread until it ends or pauses at an interrupt. The nodes' writer
  * payloads go to `emit` as they are (the stream adapter translates them). `complete` is emitted
  * exactly once, from here, whichever node produced the result: nodes report it both through the
@@ -306,7 +320,8 @@ async function runGraph(
     refused: boolean;
     interrupt: DisambiguationPayload | null;
     failure: FailureCode | null;
-  } = { trackData: null, refused: false, interrupt: null, failure: null };
+    rateLimit: { retryAfterMs: number | null } | null;
+  } = { trackData: null, refused: false, interrupt: null, failure: null, rateLimit: null };
 
   const completeWith = (data: TrackData) => {
     if (seen.trackData) return;
@@ -352,6 +367,9 @@ async function runGraph(
         if (state?.trackData) completeWith(state.trackData);
         if (state?.error) {
           console.error(`[Run ${threadId}] ${node} reported an error:`, state.error);
+          if (!seen.failure && node === "scout" && state.scoutFailure?.kind === "rate_limited") {
+            seen.rateLimit = { retryAfterMs: state.scoutFailure.retryAfterMs };
+          }
           seen.failure ??= failureOf(node, state);
         }
       }
@@ -369,7 +387,11 @@ async function runGraph(
   if (signal.aborted) return { kind: "cancelled" };
   if (threw) console.error(`[Run ${threadId}] Graph error:`, threw);
   else if (!seen.failure) console.error(`[Run ${threadId}] Graph ended without a result`);
-  return { kind: "failed", code: seen.failure ?? "failed" };
+  return {
+    kind: "failed",
+    code: seen.failure ?? "failed",
+    ...(seen.rateLimit ? { rateLimit: seen.rateLimit } : {}),
+  };
 }
 
 /** The clarification interrupt the thread is paused at, or null. */
@@ -642,7 +664,7 @@ function openEventStream(res: Response, runId?: string) {
       if (event) stream.send(event);
       return true;
     },
-    error: (code: ErrorCode) => stream.error(code, ERRORS[code].message),
+    error: (code: ErrorCode, message: string = ERRORS[code].message) => stream.error(code, message),
     done: () => stream.done(),
   };
 }
@@ -669,7 +691,8 @@ function sendStreamOutcome(
       message: DISAMBIGUATION_MESSAGE,
     });
   } else if (outcome.kind === "failed") {
-    error(outcome.code);
+    if (outcome.rateLimit) error(outcome.code, rateLimitMessage(outcome.rateLimit.retryAfterMs));
+    else error(outcome.code);
   }
   done();
 }
@@ -688,10 +711,14 @@ async function guardStream(stream: AnalysisStream, body: () => Promise<void>): P
   }
 }
 
-function sendJsonError(res: Response, code: ErrorCode, detail?: Record<string, unknown>): void {
+function sendJsonError(
+  res: Response,
+  code: ErrorCode,
+  detail?: Record<string, unknown>,
+  message: string = ERRORS[code].message,
+): void {
   if (res.writableEnded || res.destroyed) return;
-  const { status, message } = ERRORS[code];
-  res.status(status).json({ success: false, code, error: message, ...detail });
+  res.status(ERRORS[code].status).json({ success: false, code, error: message, ...detail });
 }
 
 function sendJsonOutcome(
@@ -724,6 +751,15 @@ function sendJsonOutcome(
       });
       return;
     case "failed":
+      if (outcome.rateLimit) {
+        // Retry-After, in seconds, when Spotify said how long to wait.
+        const { retryAfterMs } = outcome.rateLimit;
+        if (retryAfterMs !== null && retryAfterMs > 0) {
+          res.setHeader("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+        }
+        sendJsonError(res, outcome.code, { retryAfterMs }, rateLimitMessage(retryAfterMs));
+        return;
+      }
       sendJsonError(res, outcome.code);
       return;
     case "cancelled":
@@ -821,11 +857,16 @@ function replayJsonRun(res: Response, query: string, record: ReplayRecord): void
 }
 
 /**
- * A new run's input: the query, and the Spotify track it asks for when a suggestion was
- * clicked (the scout then reads that track instead of searching the text).
+ * A new run's input: the query, and the Spotify track it asks for when one was chosen (a
+ * suggestion, a genealogy node, a picker row without a thread): the scout then reads that track
+ * instead of searching the text. `pickedBy` says how a picker row was picked, as on a resume.
  */
-function runInput(query: string, trackId: string | undefined) {
-  return { songQuery: query, ...(trackId ? { requestedTrackId: trackId } : {}) };
+function runInput(query: string, trackId: string | undefined, pickedBy: PickedBy | null) {
+  return {
+    songQuery: query,
+    ...(trackId ? { requestedTrackId: trackId } : {}),
+    ...(trackId && pickedBy ? { pickedBy } : {}),
+  };
 }
 
 /**
@@ -855,8 +896,10 @@ router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHe
  * Analyze a song (non-streaming)
  *
  * POST /api/analyze
- * Body: { "query": "Song name Artist", "trackId"?: "<Spotify track id>" }. With `trackId` (a
- * clicked suggestion) that track is analysed, without searching the query.
+ * Body: { "query": "Song name Artist", "trackId"?: "<Spotify track id>", "pickedBy"?: "click" |
+ * "countdown" }. With `trackId` that track is analysed, without searching the query; the result
+ * still says how the query matches it. A Spotify rate limit is answered 502 upstream_unavailable
+ * with a message naming it, `retryAfterMs` and a Retry-After header when Spotify said how long.
  * Returns { status: "complete", threadId, data } or, when the song is ambiguous,
  * { status: "interrupted", threadId, interrupt: { candidates } }; resume with
  * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS. Under
@@ -891,7 +934,11 @@ router.post(
     console.log(`[Run ${threadId}] Analysis: "${query}"`);
     const control = new RunControl(req, res, threadId);
     try {
-      const outcome = await executeRun(runInput(query, trackId), threadId, control);
+      const outcome = await executeRun(
+        runInput(query, trackId, parsePickedBy(req.body?.pickedBy)),
+        threadId,
+        control,
+      );
       sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
     } finally {
       control.dispose();
@@ -960,7 +1007,12 @@ router.get(
     await guardStream(stream, async () => {
       try {
         stream.stream.send({ type: "connected", threadId, timestamp: timestamp() });
-        const outcome = await executeRun(runInput(query, trackId), threadId, control, stream.emit);
+        const outcome = await executeRun(
+          runInput(query, trackId, parsePickedBy(req.query.pickedBy)),
+          threadId,
+          control,
+          stream.emit,
+        );
         sendStreamOutcome(stream, outcome, threadId);
       } finally {
         control.dispose();

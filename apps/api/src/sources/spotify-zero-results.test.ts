@@ -1,6 +1,6 @@
 /**
- * A Spotify search with no match (stubbed): the tool returns `[]` as JSON, and the suggest
- * route answers 200 with no suggestions instead of failing to parse a sentence.
+ * A Spotify search with no match (stubbed): the client returns `[]`, and the suggest route
+ * answers 200 with no suggestions.
  */
 
 import request from "supertest";
@@ -14,7 +14,7 @@ vi.hoisted(() => {
 
 import searchRouter from "../http/routes/search.js";
 import { createTestApp } from "../http/testApp.js";
-import { SpotifyAuthManager, searchMultipleTracks } from "./spotify.js";
+import { SpotifyAuthManager, searchTracks } from "./spotify.js";
 
 function emptySpotify() {
   return stubFetch((call) => {
@@ -39,13 +39,10 @@ describe("a Spotify search with no match", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns [] as JSON", async () => {
+  it("returns []", async () => {
     emptySpotify();
 
-    const result = await searchMultipleTracks.invoke({ query: "zzzz no such song", limit: 5 });
-
-    expect(result).toBe("[]");
-    expect(JSON.parse(result)).toEqual([]);
+    expect(await searchTracks("zzzz no such song", 5)).toEqual([]);
   });
 
   it("the suggest route answers 200 with no suggestions", async () => {

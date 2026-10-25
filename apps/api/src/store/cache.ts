@@ -39,7 +39,10 @@ export interface SpotifySearchResult {
   spotifyUrl: string | null;
   spotifyId: string | null;
   trackTitle: string | null;
+  /** The lead artist. */
   trackArtist: string | null;
+  /** Every credited artist, lead first; null when unknown (rows written before migration 9). */
+  trackArtists?: string[] | null;
 }
 
 // =============================================================================
@@ -88,6 +91,13 @@ function parseJson(text: string): unknown {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
+/** A stored JSON list of artist names, or null when there is none or it cannot be read. */
+function artistList(text: string | null): string[] | null {
+  if (!text) return null;
+  const parsed = stringList.safeParse(parseJson(text));
+  return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+}
+
 // =============================================================================
 // SonicCache
 // =============================================================================
@@ -129,14 +139,15 @@ function prepareStatements(db: Database.Database) {
         spotify_id: string | null;
         track_title: string | null;
         track_artist: string | null;
+        track_artists: string | null;
         expires_at: number;
       }
     >(
-      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
+      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at FROM artwork_cache WHERE search_key = ?",
     ),
     putArtwork: db.prepare(
-      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(search_key) DO UPDATE SET
          cover_url = excluded.cover_url,
          spotify_url = excluded.spotify_url,
@@ -144,6 +155,7 @@ function prepareStatements(db: Database.Database) {
          spotify_id = excluded.spotify_id,
          track_title = excluded.track_title,
          track_artist = excluded.track_artist,
+         track_artists = excluded.track_artists,
          expires_at = excluded.expires_at`,
     ),
     purgeAudio: db.prepare("DELETE FROM audio_cache WHERE expires_at <= ?"),
@@ -269,6 +281,7 @@ export class SonicCache {
         spotifyId: row.spotify_id,
         trackTitle: row.track_title,
         trackArtist: row.track_artist,
+        ...(artistList(row.track_artists) ? { trackArtists: artistList(row.track_artists) } : {}),
       };
     } catch (err) {
       console.error("[SonicCache] getArtwork error:", err);
@@ -285,6 +298,7 @@ export class SonicCache {
         result.spotifyId,
         result.trackTitle,
         result.trackArtist,
+        result.trackArtists?.length ? JSON.stringify(result.trackArtists) : null,
         nowSec() + Math.floor(ttlMs / 1000),
       );
     } catch (err) {

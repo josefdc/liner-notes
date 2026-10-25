@@ -305,9 +305,9 @@ describe("clarificationNode's record of how the track was picked", () => {
   });
 
   it.each([
-    ["click", undefined],
-    ["countdown", "none"],
-  ])("serves a stored result picked by %s with search match %s", async (pickedBy, shown) => {
+    ["click", "no search match", undefined],
+    ["countdown", "its search match", "none"],
+  ])("serves a stored result picked by %s with %s", async (pickedBy, _outcome, shown) => {
     const store = new InMemoryStore();
     const { run: _run, ...analysis } = JSON.parse(
       readFileSync(

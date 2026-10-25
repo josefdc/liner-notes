@@ -375,7 +375,7 @@ export const SonicAgentState = Annotation.Root({
     default: () => "",
   }),
 
-  // The Spotify track the request asked for by id (a clicked suggestion), or null for a search
+  // The Spotify track the request asked for by id (a suggestion or a node), or null for a search
   // by text. With an id the scout reads that track instead of searching.
   requestedTrackId: Annotation<string | null>({
     reducer: (_, next) => next,

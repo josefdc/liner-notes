@@ -128,6 +128,7 @@ import {
   responseBody,
   testSettings,
 } from "../llm/testing/providerStub.js";
+import { TRACKS_NAMESPACE } from "./cacheKeys.js";
 import { buildSonicAgentGraph } from "./graph.js";
 import { engineerNode } from "./nodes/engineerNode.js";
 import type { SonicAgentStateType } from "./state.js";
@@ -807,14 +808,14 @@ describe("the analysis graph's stored results", () => {
     expect(result?.run?.sourceErrors).toEqual(
       expect.arrayContaining([expect.objectContaining({ source: "spotify" })]),
     );
-    expect(await store.search(["tracks", "v4"])).toEqual([]);
+    expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);
 
     // A later run that finds the track with its full details composes it, and stores that.
     const llm = stubModel(["done"]);
     const later = await drive(llm, { store });
     expect(llm.calls.map((call) => call.callSite)).toContain("composer");
     expect(complete(later.events)?.data.run?.sourceErrors ?? []).toEqual([]);
-    expect(await store.search(["tracks", "v4"])).toHaveLength(1);
+    expect(await store.search(TRACKS_NAMESPACE)).toHaveLength(1);
   });
 
   it("does not serve a result stored for another track", async () => {

@@ -1231,6 +1231,39 @@ describe("migrations", () => {
     ]);
   });
 
+  it("adds the credited artists to the artwork cache, keeping the rows it has", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "artwork_credits");
+    expect(migration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        `INSERT INTO artwork_cache (search_key, cover_url, spotify_id, track_title, track_artist, expires_at)
+         VALUES ('under pressure - queen', 'https://i.scdn.co/image/c', 'u', 'Under Pressure', 'Queen', unixepoch() + 86400)`,
+      )
+      .run();
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    const cache = new SonicCache(db);
+
+    expect(cache.getArtwork("under pressure - queen")).toMatchObject({ trackArtist: "Queen" });
+    expect(cache.getArtwork("under pressure - queen")).not.toHaveProperty("trackArtists");
+    cache.putArtwork("under pressure - queen", {
+      coverUrl: "https://i.scdn.co/image/c",
+      spotifyUrl: null,
+      spotifyId: "u",
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen",
+      trackArtists: ["Queen", "David Bowie"],
+    });
+    expect(cache.getArtwork("under pressure - queen")?.trackArtists).toEqual([
+      "Queen",
+      "David Bowie",
+    ]);
+  });
+
   it("requires migrations numbered 1..n in order", () => {
     const db = new Database(":memory:");
     expect(() => runMigrations(db, [MIGRATIONS[1]])).toThrow(/numbered 1\.\.n/);

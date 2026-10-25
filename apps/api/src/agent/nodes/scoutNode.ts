@@ -1,14 +1,19 @@
 /**
  * Scout Node — Searches Spotify, picks the result that matches the query, and returns the
  * candidates instead when the user has to choose (see trackMatch.ts). A request for a track by
- * its Spotify id (a clicked suggestion) reads that track instead of searching. A result stored
+ * its Spotify id (a suggestion or a node) reads that track instead of searching. A result stored
  * for the chosen track is served without composing it again (storedResults.ts): the search
  * always runs first, so what is served is about the track this query finds now.
  *
  * When no track is found the scout says why as a type (`scoutFailure`): nothing matched, Spotify
- * kept rate limiting, or Spotify could not answer. Spotify's errors are typed (sources/http.ts);
- * a transient one is tried again, after the wait a rate limit asks for (Retry-After) when it
- * says one, up to MAX_RETRY_WAIT_MS, else after a short backoff.
+ * kept rate limiting, or Spotify could not answer. Spotify's errors are typed (sources/http.ts).
+ *
+ * Retries (each Spotify call, at most 3 attempts in all): a rate limit (429), a 408 or 5xx
+ * answer, a timeout (SOURCE_TIMEOUT_MS per request) or a network error is tried again; any other
+ * error is not. A rate limit that says how long to wait (Retry-After) is waited out when that is
+ * at most MAX_RETRY_WAIT_MS, and ends the search at once when it is longer; any other wait is a
+ * 1 s, then 2 s backoff. Each wait is said in a status line, and a cancelled run cuts it short.
+ * In a Spotify outage that is 3 requests and up to about 33 s before the run fails.
  */
 
 import { getStore } from "@langchain/langgraph";
@@ -20,19 +25,35 @@ import { isAbortError, retryAfterWait, withRetry } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { ScoutFailure, SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
-import { readStoredResult, servedResult } from "../storedResults.js";
-import { needsChoice, rankTracks } from "../trackMatch.js";
+import { readStoredResult, servedResult, shownQueryMatch } from "../storedResults.js";
+import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
 
 /** The longest Retry-After the scout waits out before trying Spotify again. */
 export const MAX_RETRY_WAIT_MS = 10_000;
 
 type Update = Partial<SonicAgentStateType>;
 
-/** A Spotify call with the scout's retries: transient errors, Retry-After honoured. */
-function withSpotifyRetry<T>(fn: () => Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+/** A Spotify call with the scout's retries (see the top of this file), each wait said. */
+function withSpotifyRetry<T>(
+  fn: () => Promise<T>,
+  config: LangGraphRunnableConfig,
+  runtime: AgentRuntime,
+): Promise<T> {
   return withRetry(fn, {
-    signal,
+    signal: config.signal,
     retryDelay: (error) => retryAfterWait(error, MAX_RETRY_WAIT_MS),
+    onWait: (ms, error) => {
+      const seconds = Math.max(1, Math.ceil(ms / 1000));
+      config.writer?.({
+        type: "status",
+        code: "SYS-WARN",
+        message: isSourceError(error, "rate_limited")
+          ? `Spotify is rate limiting requests; trying again in ${seconds} s...`
+          : `Spotify did not answer; trying again in ${seconds} s...`,
+        node: "scout",
+        timestamp: timestampOf(runtime),
+      });
+    },
   });
 }
 
@@ -61,7 +82,7 @@ async function selectedTrack(
   config.signal?.throwIfAborted();
   if (stored) {
     console.log("📦 [Scout] Stored result for:", track.id);
-    const trackData = servedResult(stored, selected.queryMatch ?? null);
+    const trackData = servedResult(stored, shownQueryMatch(selected));
     config.writer?.({
       type: "status",
       code: "NET-200",
@@ -85,11 +106,15 @@ async function selectedTrack(
 }
 
 /**
- * The track the request asked for by id. The user chose it themselves (a click on a
- * suggestion), so no search text decided it: it carries no search match. A track Spotify does
- * not have (404) is "no match".
+ * The track the request asked for by id (a suggestion, a genealogy node, a picker row when the
+ * picker had no thread to resume). The id decides the track; how the request's text matches it
+ * is still recorded, so a result whose id and text disagree (a node's id that names another
+ * recording than its label) says so. A suggestion's own text matches its track exactly. The
+ * request says how a picker row was picked (`pickedBy`), as a resume does. A track Spotify does
+ * not have (404, or 400 for an id it does not know) is "no match".
  */
 async function requestedTrack(
+  state: SonicAgentStateType,
   trackId: string,
   config: LangGraphRunnableConfig,
   runtime: AgentRuntime,
@@ -97,12 +122,12 @@ async function requestedTrack(
   console.log("🔍 [Scout] Reading the requested track:", trackId);
   let track: SpotifyData;
   try {
-    track = await withSpotifyRetry(() => fetchTrack(trackId, config.signal), config.signal);
+    track = await withSpotifyRetry(() => fetchTrack(trackId, config.signal), config, runtime);
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     const missing =
       isSourceError(error, "invalid_input") ||
-      (isSourceError(error, "http") && error.status === 404);
+      (isSourceError(error, "http") && (error.status === 404 || error.status === 400));
     return missing
       ? failed({ kind: "no_match" }, `No Spotify track ${trackId}`, "❌ Track not found")
       : failed(failureOf(error), `Spotify track ${trackId} not read`, "❌ Error reading Spotify");
@@ -112,9 +137,9 @@ async function requestedTrack(
       spotifyData: track,
       selectedTrackId: track.id,
       isrc: track.isrc ?? null,
-      queryMatch: null,
+      queryMatch: matchTrack(state.songQuery, track).match,
       selectedBy: "user",
-      pickedBy: "click",
+      pickedBy: state.pickedBy ?? null,
     },
     config,
     runtime,
@@ -136,7 +161,9 @@ export async function scoutNode(
     timestamp: timestampOf(runtime),
   });
 
-  if (state.requestedTrackId) return requestedTrack(state.requestedTrackId, config, runtime);
+  if (state.requestedTrackId) {
+    return requestedTrack(state, state.requestedTrackId, config, runtime);
+  }
 
   console.log("🔍 [Scout] Searching for:", state.songQuery);
 
@@ -147,7 +174,8 @@ export async function scoutNode(
       // not push the original recording out of the choice.
       tracks = await withSpotifyRetry(
         () => searchTracks(state.songQuery, 10, config.signal),
-        config.signal,
+        config,
+        runtime,
       );
     } catch (error) {
       if (config.signal?.aborted || isAbortError(error)) throw error;

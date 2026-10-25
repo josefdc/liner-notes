@@ -312,6 +312,16 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 9,
+    name: "artwork_credits",
+    up(db) {
+      // The artwork cache keeps every credited artist of the track it found (a JSON list), not
+      // only the lead, so a cached answer is judged against the node's credit as a fresh search
+      // is. Rows written before have none and are judged on the lead artist.
+      db.exec("ALTER TABLE artwork_cache ADD COLUMN track_artists TEXT");
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

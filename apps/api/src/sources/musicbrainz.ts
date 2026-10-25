@@ -340,9 +340,10 @@ const RELEASE_LABEL_DASHED = new RegExp(String.raw`\s+-\s+${RELEASE_LABEL}\s*$`,
 const RELEASE_LABEL_BRACKETED = new RegExp(String.raw`\s*[([]\s*${RELEASE_LABEL}\s*[)\]]`, "gi");
 
 /**
- * A track title as MusicBrainz files it: without a featured-artist note (see withoutFeatured)
- * and without a release label of the same recording ("Song - Radio Edit", "Song - Remastered
- * 2011", "Song (2009 Remaster)"). A title that would be left empty is kept as it was.
+ * A Spotify track title as MusicBrainz files the recording: without a featured-artist note (see
+ * withoutFeatured) and without a release label of the same recording ("Song - Radio Edit",
+ * "Song - Remastered 2011", "Song (2009 Remaster)"). A title that would be left empty is kept
+ * as it was. Only for the Spotify side: MusicBrainz's own titles keep their labels.
  */
 export function recordingTitle(title: string, artists: readonly string[] = []): string {
   const bare = withoutFeatured(title, artists)
@@ -492,8 +493,10 @@ function compareCandidates(a: MBRecording, b: MBRecording): number {
 /**
  * The original recording of a song, or why there is none.
  *
- * A candidate's title (without a featured-artist note or a release label, see recordingTitle)
- * and credited artists must match exactly; a near title or a partial credit never matches. Popular songs have many exact
+ * The track's title is searched without a featured-artist note or a Spotify release label (see
+ * recordingTitle). A candidate's title (without a featured-artist note only: MusicBrainz files
+ * "(radio edit)" or "(single version)" recordings apart, and those are not the original) and
+ * credited artists must match it exactly; a near title or a partial credit never matches. Popular songs have many exact
  * matches (compilations, live and DJ-mix recordings), so the pick is the candidate with no
  * disambiguation comment that is on an original release (not a compilation, live, DJ-mix or
  * remix release), with the most releases and then the earliest release date. With `album` the
@@ -533,7 +536,7 @@ async function searchRecording(
     (r) =>
       isMbid(r?.id) &&
       typeof r.title === "string" &&
-      normalizeName(recordingTitle(r.title, parts)) === wantedTitle &&
+      normalizeName(withoutFeatured(r.title, parts)) === wantedTitle &&
       creditedTo(r, artist, artistNames),
   );
   if (exact.length === 0) {

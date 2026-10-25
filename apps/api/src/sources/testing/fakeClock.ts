@@ -10,18 +10,21 @@ import { expect, onTestFinished, vi } from "vitest";
 import { MusicBrainzRateLimiter } from "../musicbrainz.js";
 
 /**
- * Fakes setTimeout and Date and sets the queue's interval to `intervalMs` until the test ends.
- * However the test ends (a timeout included), the real timers and the interval come back, and
- * the queue forgets its last request, which was timed on the fake clock.
+ * Fakes setTimeout, Date and performance and sets the queue's interval to `intervalMs` until the
+ * test ends. It assumes the queue times its requests with those clocks and waits with
+ * setTimeout. However the test ends (a timeout included), the real timers and the interval come
+ * back and the queue is reset to idle and empty: a wait the fake clock dropped would otherwise
+ * leave it jammed for the rest of the file. The fake timers are not run out there, because the
+ * test's fetch stub is already gone by then.
  */
 export function queueOnFakeClock(intervalMs: number): void {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
   const limiter = MusicBrainzRateLimiter.getInstance();
   const restoreInterval = limiter.setIntervalForTests(intervalMs);
   onTestFinished(() => {
     vi.useRealTimers();
     restoreInterval();
-    (limiter as unknown as { lastRequestTime: number }).lastRequestTime = 0;
+    limiter.resetForTests();
   });
 }
 

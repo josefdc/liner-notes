@@ -186,6 +186,20 @@ describe("scoutNode's stored results", () => {
     expect(out.spotifyData).toMatchObject({ id: "t1" });
   });
 
+  it("does not serve a result stored before results carried their audio measurement", async () => {
+    const store = new InMemoryStore();
+    // A v5 result: measured copies without the block they come from.
+    const { audio: _audio, ...withoutBlock } = stored.trackData;
+    await store.put(["tracks", "v5"], keyOf(track.id), { ...stored, trackData: withoutBlock });
+    const { graph } = scoutGraph(store);
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(TRACKS_NAMESPACE).toEqual(["tracks", "v6"]);
+    expect(out.trackData ?? null).toBeNull();
+    expect(out.spotifyData).toMatchObject({ id: "t1" });
+  });
+
   it("does not serve a result stored under the track's key that is about another track", async () => {
     const store = new InMemoryStore();
     await store.put(TRACKS_NAMESPACE, keyOf(track.id), {

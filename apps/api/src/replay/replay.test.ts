@@ -19,6 +19,7 @@ import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   AnalyzeStreamEvent,
+  measuredCopyIssues,
   ReplayRecord,
   ReplaysResponse,
   RunResponse,
@@ -27,7 +28,10 @@ import {
 } from "@liner-notes/contract";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { finalizeResult } from "../agent/finalize.js";
+import type { TrackData } from "../agent/schema.js";
 import type { SonicAgentStateType } from "../agent/state.js";
+import { ANALYZER_VERSION, audioV2, measurementOf } from "../agent/testing/measuredAudio.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
 import { runningCommit } from "../config/checkoutCommit.js";
 import { main as recordMain } from "./record.js";
@@ -500,6 +504,34 @@ describe("the recorder", () => {
     });
     expect(built.analysis).not.toHaveProperty("queryMatch");
     expect(JSON.stringify(built.events)).not.toContain("queryMatch");
+  });
+
+  it("records a measured result's audio block and analyzer version unchanged, and replays them", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    // The fixture's result as the API finalises it today: with the measurement it came from.
+    const measured = {
+      ...fixture,
+      analysis: finalizeResult(
+        fixture.analysis as TrackData,
+        measurementOf(audioV2()),
+      ) as TrackAnalysis,
+    };
+    const { run, events } = fixtureAsLiveRun(measured, "daft punk one more");
+    const { record: built, warnings } = buildRecord(run, events, {
+      slug: fixture.slug,
+      commit: fixture.commit,
+      secrets: [],
+    });
+
+    expect(built.analysis.audio).toEqual(audioV2());
+    expect(built.analyzerVersion).toBe(ANALYZER_VERSION);
+    expect(built.analysis.run?.analyzerVersion).toBe(ANALYZER_VERSION);
+    expect(measuredCopyIssues(built.analysis)).toEqual([]);
+    expect(warnings.filter((w) => /measured|audio|bpm|energy|keyMoments/.test(w))).toEqual([]);
+    const served = replayedAnalysis(built, "0f0e0d0c-aaaa-4bbb-8ccc-000000000003");
+    expect(served.audio).toEqual(audioV2());
+    expect(served.run?.analyzerVersion).toBe(ANALYZER_VERSION);
+    expect(runIssues(served.run!, served.audio)).toEqual([]);
   });
 
   it("records source evidence as it is: MusicBrainz ids and long source URLs are content", () => {

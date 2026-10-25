@@ -68,7 +68,8 @@ vi.mock("../../sources/musicbrainz.js", async (importOriginal) => ({
   lookupIsrc: mb.lookupIsrc,
 }));
 
-import type { AudioFeatures, SonicAgentStateType } from "../state.js";
+import type { AudioMeasurement, SonicAgentStateType } from "../state.js";
+import { ANALYZER_VERSION, audioV2, measurementOf } from "../testing/measuredAudio.js";
 import { createComposerNode, modelErrorCategory } from "./composerNode.js";
 import { scoutNode } from "./scoutNode.js";
 
@@ -136,20 +137,11 @@ const evidence: Evidence[] = [
   },
 ];
 
-const measured: AudioFeatures = {
-  bpm: 116,
-  key: "D Minor",
-  energy: 0.72,
-  valence: null,
-  danceability: null,
-  acousticness: null,
-  instrumentalness: null,
-  confidence: "low",
-  keyMoments: [],
-};
+/** The engineer's measurement: tempo 115.8 (116 shown), D minor, the models' mood heads. */
+const measured: AudioMeasurement = measurementOf(audioV2());
 
 function stateWith(
-  audioFeatures: AudioFeatures | null,
+  audioFeatures: AudioMeasurement | null,
   spotify: Record<string, unknown> = {},
 ): SonicAgentStateType {
   return {
@@ -269,10 +261,12 @@ describe("composerNode", () => {
       releaseYear: "1990",
       bpm: 116,
       key: "D Minor",
-      energy: 0.72,
+      energy: 0.64,
       audioSource: "analyzed",
       segmentsSource: "template",
     });
+    expect(out.trackData?.audio).toEqual(audioV2());
+    expect(out.trackData?.run?.analyzerVersion).toBe(ANALYZER_VERSION);
     expect(out.trackData).not.toHaveProperty("genreProfile");
     expect(out.trackData?.modelUnavailable).toBeUndefined();
   });
@@ -418,16 +412,50 @@ describe("composerNode", () => {
     expect(llm.calls).toHaveLength(1);
   });
 
-  // With audio measured, the contract also wants the measurement itself (`audio`), which the
-  // engineer does not write yet: these checks run on a result without a measurement.
-  it("returns a result the contract accepts", async () => {
+  it("returns a measured result the contract accepts, with the measurement and its analyzer", async () => {
+    const out = await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
+
+    const parsed = TrackAnalysis.safeParse(out.trackData);
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    expect(analysisIssues(parsed.data!)).toEqual([]);
+    expect(parsed.data?.audio).toEqual(audioV2());
+    expect(parsed.data?.run).toMatchObject({ id: "run-1", mode: "live", fallback: false });
+    expect(parsed.data?.run?.analyzerVersion).toBe(parsed.data?.audio?.analyzerVersion);
+    expect(out.usage).toEqual([expect.objectContaining({ callSite: "composer", status: "ok" })]);
+  });
+
+  it("returns an unmeasured result the contract accepts, with no block and null copies", async () => {
     const out = await createComposerNode(testRuntime(succeeding()))(stateWith(null), config());
 
     const parsed = TrackAnalysis.safeParse(out.trackData);
     expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
     expect(analysisIssues(parsed.data!)).toEqual([]);
-    expect(parsed.data?.run).toMatchObject({ id: "run-1", mode: "live", fallback: false });
-    expect(out.usage).toEqual([expect.objectContaining({ callSite: "composer", status: "ok" })]);
+    expect(out.trackData).not.toHaveProperty("audio");
+    expect(out.trackData).toMatchObject({ bpm: null, key: null, energy: null });
+    expect(parsed.data?.run?.analyzerVersion).toBeNull();
+  });
+
+  it("takes no measured value from a model answer that carries them", async () => {
+    // ComposerOutput has no measured field: such an answer is refused (the fallback is sent),
+    // and the result's copies come from the measurement either way (finalize.test.ts checks a
+    // composed draft that holds them).
+    const llm = stubLlm(
+      () =>
+        ({
+          ...output,
+          bpm: 999,
+          key: "C Major",
+          energy: 1,
+          audio: { ...audioV2(), analyzerVersion: "9.9.9" },
+        }) as unknown as ComposerOutput,
+    );
+    const out = await createComposerNode(testRuntime(llm))(stateWith(measured), config());
+
+    expect(out.trackData?.run?.fallback).toBe(true);
+    expect(out.trackData).toMatchObject({ bpm: 116, key: "D Minor", energy: 0.64 });
+    expect(out.trackData?.audio).toEqual(audioV2());
+    expect(out.trackData?.run?.analyzerVersion).toBe(ANALYZER_VERSION);
+    expect(analysisIssues(TrackAnalysis.parse(out.trackData))).toEqual([]);
   });
 
   it.each([
@@ -495,12 +523,18 @@ describe("composerNode", () => {
       },
     );
 
-    it("returns a fallback the contract accepts", async () => {
+    it.each([
+      ["without a measurement", null],
+      ["with a measurement", measured],
+    ])("returns a fallback the contract accepts, %s", async (_name, audio) => {
       const out = await createComposerNode(testRuntime(failing("rate_limited")))(
-        stateWith(null),
+        stateWith(audio),
         config(),
       );
-      expect(analysisIssues(TrackAnalysis.parse(out.trackData))).toEqual([]);
+      const result = TrackAnalysis.parse(out.trackData);
+      expect(analysisIssues(result)).toEqual([]);
+      expect(result.audio ?? null).toEqual(audio?.audio ?? null);
+      expect(result.run?.analyzerVersion).toBe(audio?.audio?.analyzerVersion ?? null);
     });
 
     it("rejects an answer that breaks the ComposerOutput rules", async () => {
@@ -648,11 +682,8 @@ describe("composerNode", () => {
   });
 
   describe("long-term store", () => {
-    const unavailable = (reason: AudioFeatures["unavailableReason"]): AudioFeatures => ({
-      ...measured,
-      bpm: null,
-      key: null,
-      energy: null,
+    const unavailable = (reason: AudioMeasurement["unavailableReason"]): AudioMeasurement => ({
+      audio: null,
       unavailableReason: reason,
     });
 
@@ -666,6 +697,17 @@ describe("composerNode", () => {
         expect(store.put).not.toHaveBeenCalled();
       },
     );
+
+    it("does not store a result built on a measurement served while the service could not say its version", async () => {
+      const out = await createComposerNode(testRuntime(succeeding()))(
+        stateWith({ ...measured, servedUnversioned: true }),
+        config(),
+      );
+      // Sent with the measurement it was built on, never stored: a later run measures again,
+      // and the note that the service was unavailable is never served without it.
+      expect(out.trackData?.audio).toEqual(audioV2());
+      expect(store.put).not.toHaveBeenCalled();
+    });
 
     it("does not store a result when audio analysis did not run", async () => {
       await createComposerNode(testRuntime(succeeding()))(stateWith(null), config());
@@ -904,7 +946,7 @@ describe("composerNode", () => {
       // Versioned: results cached by older code are not served. The key names the configured
       // sources: adding a key later composes the result again.
       // Keyed by the track (its Spotify id), never by the search text.
-      expect(namespace).toEqual(["tracks", "v5"]);
+      expect(namespace).toEqual(["tracks", "v6"]);
       expect(store.put.mock.calls[0][1]).toMatch(
         /^x\|lastfm=[01]:tavily=[01]:discogs=[01]:genius=[01]$/,
       );

@@ -263,7 +263,10 @@ describe("MusicBrainz client", () => {
     expect(net.calls.filter((c) => c.url.startsWith(`${MB}/recording?`))).toHaveLength(2);
   });
 
-  it("waits at most 2 s for a long Retry-After before the retry", { timeout: 6000 }, async () => {
+  it("waits at most 2 s for a long Retry-After before the retry", async () => {
+    // On a fake clock the gap is the wait the client chose, however late the machine sent the
+    // retry: only the client's timers move the clock (the queue spaces nothing here).
+    queueOnFakeClock(0);
     const at: number[] = [];
     stubFetch((call) => {
       if (!call.url.startsWith(`${MB}/recording?`)) return undefined;
@@ -271,11 +274,12 @@ describe("MusicBrainz client", () => {
       return json({ error: "busy" }, { status: 503, headers: { "Retry-After": "30" } });
     });
 
-    await getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" });
+    await settleOnFakeClock(
+      getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
+    );
 
     expect(at).toHaveLength(2);
-    expect(at[1] - at[0]).toBeGreaterThanOrEqual(1900);
-    expect(at[1] - at[0]).toBeLessThan(3000);
+    expect(at[1] - at[0]).toBe(2000);
   });
 
   it("a request that never answers times out and the queue moves on", {

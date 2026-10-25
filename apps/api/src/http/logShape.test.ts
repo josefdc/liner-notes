@@ -232,10 +232,11 @@ describe("the log of one analysis", () => {
     const nodeLines = entries.filter((entry) => typeof entry.threadId === "string");
     expect(nodeLines.length).toBe(3 * 3);
     for (const entry of nodeLines) expect(entry.runId).toBe(entry.threadId);
-    // Each run's node timings carry its own id.
+    // Each run's node timings carry its own id. The first run of the file also has the line
+    // saying the graph was compiled (no node), whichever test that is.
     for (const runId of runIds) {
       const timings = entries.filter(
-        (entry) => entry.component === "Graph" && entry.runId === runId,
+        (entry) => entry.component === "Graph" && "node" in entry && entry.runId === runId,
       );
       expect(timings.map((entry) => entry.node).sort()).toEqual(
         ["composer", "engineer", "historian", "scout"].sort(),

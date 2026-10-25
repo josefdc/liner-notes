@@ -24,6 +24,7 @@ import {
   type ProviderRoute,
   providerFetch,
   responseBody,
+  settledWithin,
   testSettings,
   untilSentOrSettled,
 } from "./testing/providerStub.js";
@@ -478,20 +479,23 @@ describe("aborts", () => {
   });
 
   it("leaves the queue at once when aborted while waiting for a slot, charging nothing", async () => {
+    // The first call holds the only slot until the test lets it answer: the queued call has to
+    // leave on its abort while the slot is still taken, however long the machine takes.
+    let answerFirst!: () => void;
+    const firstMayAnswer = new Promise<void>((resolve) => {
+      answerFirst = resolve;
+    });
     let first = true;
-    const { llm, net } = setup(
-      (call) => {
-        if (!first) return hang(call);
-        first = false;
-        return new Promise((resolve) =>
-          setTimeout(() => resolve(Response.json(responseBody({ ok: true }, null))), 500),
-        );
-      },
-      { LLM_CONCURRENCY: "1" },
-    );
+    const { route, received } = onReceipt(async (call) => {
+      if (!first) return hang(call);
+      first = false;
+      await firstMayAnswer;
+      return Response.json(responseBody({ ok: true }, null));
+    });
+    const { llm, net } = setup(route, { LLM_CONCURRENCY: "1" });
     const running = llm.invoke("a", "research", "hi", Schema, { ...OPTIONS, runId: "rA" });
+    await untilSentOrSettled(received, running);
     const controller = new AbortController();
-    const started = performance.now();
     const queued = llm
       .invoke("b", "research", "hi", Schema, {
         ...OPTIONS,
@@ -500,9 +504,9 @@ describe("aborts", () => {
       })
       .catch((e) => e);
     setTimeout(() => controller.abort(), 20);
-    const error = await queued;
+    const error = await settledWithin(queued, "the queued call waited for the slot");
     expect(isLlmError(error, "aborted")).toBe(true);
-    expect(performance.now() - started).toBeLessThan(300);
+    answerFirst();
     await running;
     expect(net.calls).toHaveLength(1);
     expect(lines().filter((l) => l.callSite === "b")).toEqual([]);
@@ -516,19 +520,20 @@ describe("aborts", () => {
       settings: testSettings({ LLM_SPEND_LOG: log }),
       fetch: net.fetch,
       recordUsage: () => {},
-      sleep: () =>
-        new Promise((resolve) => {
-          controller.abort();
-          setTimeout(resolve, 1000);
-        }),
+      // Aborts at the start of the retry wait, which never ends: the call has to stop on the
+      // abort, without waiting it out.
+      sleep: () => {
+        controller.abort();
+        return new Promise<void>(() => {});
+      },
     });
-    const started = performance.now();
-    const error = await llm
-      .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
-      .catch((e) => e);
+    const error = await settledWithin(
+      llm
+        .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+        .catch((e) => e),
+      "the call waited out the retry wait",
+    );
     expect(isLlmError(error, "aborted")).toBe(true);
-    // Without waiting out the 1 s retry wait.
-    expect(performance.now() - started).toBeLessThan(500);
     expect(net.calls).toHaveLength(1);
     expect(reserves()).toHaveLength(1);
     expect(llm.callsForRun("run-1")).toBe(1);
@@ -587,20 +592,23 @@ describe("aborts", () => {
 
 describe("an abort while waiting for the spend log's lock", () => {
   it("returns at once, sending and charging nothing", async () => {
+    // The lock stays taken until the call has returned: it has to return without it.
     const release = await acquireLock(await resolveSpendLogPath(log));
-    setTimeout(() => void release(), 1500);
     const { llm, net } = setup(hang);
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 50);
-    const started = performance.now();
-    const error = await llm
-      .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
-      .catch((e) => e);
+    const error = await settledWithin(
+      llm
+        .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+        .catch((e) => e),
+      "the call waited for the lock after its abort",
+    );
+    await release();
     expect(isLlmError(error, "aborted")).toBe(true);
-    expect(performance.now() - started).toBeLessThan(1000);
     expect(net.calls).toHaveLength(0);
     expect(llm.callsForRun("run-1")).toBe(0);
-    await new Promise((r) => setTimeout(r, 1500));
+    // Nor does it write once the lock is free.
+    await new Promise((r) => setTimeout(r, 200));
     expect(readFileSync(log, "utf8")).toBe("");
   });
 });

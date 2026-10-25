@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { ReadyResponse } from "@liner-notes/contract";
 import Database from "better-sqlite3";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { resetBudgetStateForTests } from "../../llm/budgetState.js";
 import { captureLogsForTests } from "../../logger.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
@@ -354,6 +354,12 @@ describe("GET /api/ready", () => {
   });
 
   it("reports a configured provider and an available budget, with no key, endpoint or amount", async () => {
+    // The answer's timestamp is read on a pinned clock: at a wall-clock time such as
+    // hh:mm:10.5xx, it would hold the amount's digits by chance.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-25T12:00:00.000Z") });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     openDatabase();
     process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
     const spendLog = liveProvider(0.5);

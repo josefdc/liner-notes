@@ -11,12 +11,14 @@
  *
  * The search goes through the Spotify source (sources/spotify.ts): every request has a timeout
  * and fails with a typed error, and a failed search leaves the node without artwork. A node gets
- * the cover of the track found; its Spotify id and a preview only when that track is strictly
- * the one the model named (see `strictlyMatches`) on a release that can be the node's recording
- * (see `releaseFits`), so a click on a node whose search found a cover, a remix, a live album or
- * another song searches the node's text instead. The search's answer is cached for a week by
- * the node's label (without the track's identity when its release does not fit); a preview is
- * never cached.
+ * the cover of the track found; its Spotify id only when that track is strictly the one the
+ * model named (see `strictlyMatches`: not on a release named as a live, unplugged, re-recorded,
+ * karaoke, tribute or covers one), so a click on a node whose search found a cover, a remix, a
+ * live album or another song searches the node's text instead. A preview needs more: the
+ * release must also date from within a year of the year the node's label names, if it names
+ * one (see `releaseYearFits`). The search's answer is cached for a week by the node's label
+ * (without the track's identity when its release names another recording); a preview is never
+ * cached.
  *
  * A strictly matched node's preview is Spotify's own clip of the track found, when it has one
  * the player may load (sources/audio.ts isAllowedPreviewUrl); else the Deezer entry for that
@@ -25,9 +27,9 @@
  * and a duration within 3 s). There is no Deezer search for a node, so a node gets no preview of
  * another recording. A preview is optional, so its cost is bounded (see deezerPreviews): one
  * lookup per strictly matched node without a Spotify clip, a few at once, at most
- * MAX_DEEZER_LOOKUPS per run, a time budget for them all after which the remaining nodes simply
- * get none (the run goes on), and none after Deezer failed (see `stops`). A node served from the
- * cache gets none (the cache keeps no ISRC). Preview links are signed and expire: they are
+ * MAX_DEEZER_LOOKUPS per run, a time budget for the Deezer lookups after which the remaining
+ * nodes simply get none (the run goes on), and none after Deezer failed (see `stops`). A node
+ * served from the cache gets none (the cache keeps no ISRC). Preview links are signed and expire: they are
  * returned for this run's player only, never cached or logged.
  *
  * Features:
@@ -105,7 +107,10 @@ interface NodeLookup {
 const DEEZER_CONCURRENCY = 2;
 /** At most this many nodes of one enrichment are looked up on Deezer. */
 export const MAX_DEEZER_LOOKUPS = 20;
-/** How long the Deezer lookups of one enrichment may take in all, from the first one. */
+/**
+ * How long the Deezer lookups of one enrichment may take in all: the time while at least one of
+ * them is under way (the Spotify searches between them do not count).
+ */
 export const PREVIEW_BUDGET_MS = 8_000;
 /** How long one node's lookup (its ISRC entry, and that entry's alternative) may take. */
 export const LOOKUP_TIMEOUT_MS = 4_000;
@@ -162,6 +167,36 @@ function deadline(ms: number) {
 }
 
 /**
+ * A time budget that runs only while a lookup is under way (`begin` and `end` around each
+ * one): its signal aborts as a deadline once `ms` of such time is spent.
+ */
+function lookupBudget(ms: number) {
+  const controller = new AbortController();
+  let left = ms;
+  let since = 0;
+  let active = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const spend = () =>
+    controller.abort(new DOMException(`preview budget of ${ms} ms spent`, "TimeoutError"));
+  return {
+    signal: controller.signal,
+    begin() {
+      if (active++ > 0) return;
+      since = Date.now();
+      timer = setTimeout(spend, Math.max(0, left));
+      timer.unref?.();
+    },
+    end() {
+      if (--active > 0) return;
+      clearTimeout(timer);
+      left -= Date.now() - since;
+      if (left <= 0 && !controller.signal.aborted) spend();
+    },
+    clear: () => clearTimeout(timer),
+  };
+}
+
+/**
  * Whether a failure ends the lookups at once: a rate limit (Deezer's quota is per address, and
  * the analysed track's own lookup needs it), a timeout (the next would most likely wait as
  * long), or a request a replay has no answer for.
@@ -176,17 +211,19 @@ const withoutLinks = (text: string) => text.replace(/\bhttps?:\/\/\S+/gi, "[link
 /**
  * Deezer previews by ISRC for one enrichment. A preview is optional, so its cost is bounded:
  * - at most DEEZER_CONCURRENCY lookups at once and MAX_DEEZER_LOOKUPS in all;
- * - each lookup within LOOKUP_TIMEOUT_MS, and all of them within PREVIEW_BUDGET_MS from the
- *   first; a node whose turn comes after that gets no preview, and the run goes on;
- * - none after a rate limit or a timeout, nor after MAX_FAILURES other failures. A lookup that
- *   finds no usable entry is not a failure.
+ * - each lookup within LOOKUP_TIMEOUT_MS, and all of them within PREVIEW_BUDGET_MS of lookup
+ *   time; a node whose turn comes after that gets no preview, and the run goes on. A spent
+ *   budget is said once in the log; it is not a Deezer failure;
+ * - none after a rate limit or a timeout of Deezer's, nor after MAX_FAILURES other failures. A
+ *   lookup that finds no usable entry is not a failure.
  * A lookup gives the preview only of an entry deezerPreviewByIsrc accepts and the player may
- * load; anything else is no preview. The first failure is reported (`report`) as a source error
- * of the run. A cancelled run rejects. `done` clears the budget's timer.
+ * load; anything else is no preview. The first Deezer failure is reported (`report`) as a
+ * source error of the run. A cancelled run rejects. `done` clears the budget's timer.
  */
 function deezerPreviews(signal: AbortSignal | undefined, report?: (error: SourceError) => void) {
   const run = limiter(DEEZER_CONCURRENCY);
-  let budget: ReturnType<typeof deadline> | null = null;
+  const budget = lookupBudget(PREVIEW_BUDGET_MS);
+  let budgetSaid = false;
   let started = 0;
   let failures = 0;
   let stopped = false;
@@ -206,30 +243,46 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
     });
   };
 
+  /** The budget is spent: said once, and no more lookups are made. */
+  const budgetSpent = () => {
+    stopped = true;
+    if (budgetSaid) return;
+    budgetSaid = true;
+    console.log(
+      `ℹ️ [Enricher] Genealogy previews: the ${PREVIEW_BUDGET_MS / 1000} s budget for Deezer ` +
+        "lookups is spent; the remaining nodes get none",
+    );
+  };
+
   const lookUp = (request: PreviewRequest): Promise<string | null> =>
     run(async () => {
       signal?.throwIfAborted();
+      if (budget.signal.aborted) budgetSpent();
       if (stopped || started >= MAX_DEEZER_LOOKUPS) return null;
-      budget ??= deadline(PREVIEW_BUDGET_MS);
-      if (budget.signal.aborted) return null;
       started++;
       const own = deadline(LOOKUP_TIMEOUT_MS);
       const signals = [budget.signal, own.signal, ...(signal ? [signal] : [])];
+      budget.begin();
       try {
         const result = await deezerPreviewByIsrc(request, AbortSignal.any(signals));
         return result.found && isAllowedPreviewUrl(result.previewUrl) ? result.previewUrl : null;
       } catch (error) {
         if (signal?.aborted) throw error;
-        const timedOut = budget.signal.aborted || own.signal.aborted;
+        if (budget.signal.aborted) {
+          budgetSpent();
+          return null;
+        }
+        const timedOut = own.signal.aborted;
         if (!timedOut && isAbortError(error)) throw error;
         failed(error, timedOut);
         return null;
       } finally {
+        budget.end();
         own.clear();
       }
     });
 
-  return { lookUp, done: () => budget?.clear() };
+  return { lookUp, done: () => budget.clear() };
 }
 
 /** The artists a credit names: "Queen & David Bowie", "Daft Punk feat. Pharrell Williams". */
@@ -256,10 +309,11 @@ function sameCredit(nodeArtist: string, lead: string, credited: readonly string[
 
 /**
  * Whether the track found is strictly the one the model named: the node names both a title and
- * an artist, the node's credit is the track's (sameCredit), and nothing in the titles tells
- * them apart as recordings (no other title, version or take; a featured-artist note is not a
- * difference; see trackMatch.ts). A label alone is never enough: a search for it can find a
- * cover, a remix or another song.
+ * an artist, the node's credit is the track's (sameCredit), nothing in the titles tells them
+ * apart as recordings (no other title, version or take; a featured-artist note is not a
+ * difference; see trackMatch.ts), and its album, when known, is not named as another recording
+ * (marksOtherRecording). A label alone is never enough: a search for it can find a cover, a
+ * remix or another song.
  */
 export function strictlyMatches(
   node: Pick<GenealogyNode, "trackTitle" | "trackArtist">,
@@ -272,11 +326,39 @@ export function strictlyMatches(
   const lead = credited[0] ?? found.artist;
   return (
     sameCredit(artist, lead, credited) &&
-    recordingTitleDifference({ title }, { title: found.title, album: found.album }) === null
+    recordingTitleDifference({ title }, { title: found.title }) === null &&
+    !marksOtherRecording(found.album, found.title)
   );
 }
 
-/** The year a node's label names for its recording ("Respect - Aretha Franklin (1967)"), or null. */
+/**
+ * Phrases that name a release as one of other recordings: live, unplugged, in concert,
+ * re-recorded, karaoke, tribute, covers. A bare "live" or "sessions" inside a name is not one
+ * ("Long Live the Kane", "Live Through This", "The Sun Sessions" are studio albums).
+ */
+const OTHER_RECORDING_PHRASES = [
+  /\blive (?:at|in|from|on)\b/,
+  /\(live\b/,
+  /\s[-–—]\s*live\b/,
+  /\bunplugged\b/,
+  /\bin concert\b/,
+  /\bre-?recorded\b/,
+  /\bkaraoke\b/,
+  /\btribute\b/,
+  /\bcovers?\b/,
+];
+
+/**
+ * Whether an album's name says its tracks are other recordings than the studio one (see
+ * OTHER_RECORDING_PHRASES); a phrase the track's own title carries does not count.
+ */
+export function marksOtherRecording(album: string | undefined, title: string): boolean {
+  const name = (album ?? "").toLowerCase();
+  const own = title.toLowerCase();
+  return OTHER_RECORDING_PHRASES.some((phrase) => phrase.test(name) && !phrase.test(own));
+}
+
+/** The last year in parentheses a node's label names ("Respect - Aretha Franklin (1967)"). */
 function labelYear(label: string): number | null {
   const years = [...label.matchAll(/\((\d{4})\)/g)]
     .map((match) => Number(match[1]))
@@ -285,23 +367,18 @@ function labelYear(label: string): number | null {
 }
 
 /**
- * Whether the release a track was found on can hold the recording a node's label names: its
- * album name marks no other recording (live, unplugged, re-recorded, karaoke, tribute and the
- * like; see trackMatch.ts), and when the label names a year, the release came out within a year
- * of it. A live album whose name says nothing of it ("Aretha at Fillmore West" for a 1967
- * "Respect") is told apart only by its date; a later compilation or remaster of the recording is
- * then turned down too, as missing is better than another recording.
+ * Whether a release dates from within a year of the year a node's label names (always, when it
+ * names none). This decides the preview only: a release from years later may be the recording
+ * reissued (a compilation) or another recording whose album name says nothing of it ("Aretha at
+ * Fillmore West" for a 1967 "Respect"), so it keeps its Spotify id (a click analyses that track,
+ * which shows its own album and date) but plays no clip, as missing is better than another
+ * recording. A label without a year cannot tell such a live album apart.
  */
-export function releaseFits(
-  label: string,
-  found: Pick<SpotifyTrackSummary, "title" | "album" | "releaseDate">,
-): boolean {
-  const own = { title: found.title };
-  if (recordingTitleDifference(own, { ...own, album: found.album }) !== null) return false;
+export function releaseYearFits(label: string, releaseDate: string | undefined): boolean {
   const named = labelYear(label);
   if (named === null) return true;
-  const released = Number.parseInt(found.releaseDate?.slice(0, 4) ?? "", 10);
-  return Number.isFinite(released) && Math.abs(released - named) <= 1;
+  const released = Number.parseInt(releaseDate?.slice(0, 4) ?? "", 10);
+  return released > 0 && Math.abs(released - named) <= 1;
 }
 
 /**
@@ -362,13 +439,16 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
       }
     : NO_ARTWORK;
   signal?.throwIfAborted();
-  // A track on another release is never the node's, whatever the node names: its row keeps the
-  // cover only, so a later run cannot take its id from the cache either.
-  const fits = !found || releaseFits(node.label, found);
-  setCachedArtwork(node.label, fits ? artwork : withoutId(artwork));
+  // A track on a release named as other recordings is never the node's, whatever the node
+  // names: its row keeps the cover only, so a later run cannot take its id from the cache.
+  const other = !!found && marksOtherRecording(found.album, found.title);
+  setCachedArtwork(node.label, other ? withoutId(artwork) : artwork);
   if (!found) return { artwork: NO_ARTWORK, previewUrl: null, byIsrc: null };
-  if (!fits || !strictlyMatches(node, found)) {
+  if (!strictlyMatches(node, found)) {
     return { artwork: withoutId(artwork), previewUrl: null, byIsrc: null };
+  }
+  if (!releaseYearFits(node.label, found.releaseDate)) {
+    return { artwork, previewUrl: null, byIsrc: null };
   }
   if (found.previewUrl && isAllowedPreviewUrl(found.previewUrl)) {
     return { artwork, previewUrl: found.previewUrl, byIsrc: null };

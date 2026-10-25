@@ -541,7 +541,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // A cancelled run reports nothing and stores nothing.
     signal?.throwIfAborted();
     const problems = contractProblems(trackData);
-    if (problems) return unusable(problems, [call]);
+    if (problems) return unusable(problems, [call], runErrors);
     writer?.({ type: "complete", data: trackData });
 
     // Cache the result in long-term memory under its track (storedResults.ts), unless a later
@@ -549,8 +549,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // (an outage, a timeout, a rate limit, a rejected key), or a research planner call failed. A
     // source that is only not configured does not block it: the key names the configured
     // sources. Nor does a source read only for the genealogy previews (enriched.sourceErrors):
-    // a stored result never carries a preview. The run information, the preview links and the search match belong to this run,
-    // not to a later one served from the cache.
+    // a stored result never carries a preview. The run information, the preview links and the
+    // search match belong to this run, not to a later one served from the cache.
     const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
     const transientSources = [...state.sourceErrors, ...sourceErrors].some(
@@ -589,13 +589,20 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       statusMessages: ["🎼 Analysis complete!"],
     };
 
-    /** A result that does not fit the contract: the run fails, its calls still count. */
-    function unusable(problems: string, calls: LlmCallRecord[]): Partial<SonicAgentStateType> {
+    /**
+     * A result that does not fit the contract: the run fails, its calls and the sources it could
+     * not read (`errors`) still count.
+     */
+    function unusable(
+      problems: string,
+      calls: LlmCallRecord[],
+      errors: SourceError[],
+    ): Partial<SonicAgentStateType> {
       console.error(`❌ [Composer] The result does not fit the contract: ${problems}`);
       return {
         error: `Composer result does not fit the contract: ${problems}`,
         usage: calls,
-        sourceErrors,
+        sourceErrors: errors,
         statusMessages: ["❌ The analysis could not be completed"],
       };
     }
@@ -629,7 +636,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       };
       signal?.throwIfAborted();
       const problems = contractProblems(trackData);
-      if (problems) return unusable(problems, [failed]);
+      if (problems) return unusable(problems, [failed], runErrors);
       writer?.({ type: "complete", data: trackData });
       return {
         trackData,

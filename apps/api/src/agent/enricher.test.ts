@@ -19,8 +19,9 @@ import {
   LOOKUP_TIMEOUT_MS,
   limiter,
   MAX_DEEZER_LOOKUPS,
+  marksOtherRecording,
   PREVIEW_BUDGET_MS,
-  releaseFits,
+  releaseYearFits,
   strictlyMatches,
 } from "./enricher.js";
 import type { Genealogy } from "./schema.js";
@@ -313,6 +314,8 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     spotify: unknown | ((query: string) => unknown);
     byIsrc?: (isrc: string, call: FetchCall) => unknown | Promise<unknown>;
     byId?: (id: number) => unknown;
+    /** How long each Spotify search takes, in ms (none when unset). */
+    spotifyMs?: number;
   }) {
     const noData = { error: { type: "DataException", message: "no data", code: 800 } };
     return stubFetch(async (call: FetchCall) => {
@@ -321,6 +324,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       }
       if (call.url.startsWith(SEARCH_URL)) {
         const query = new URL(call.url).searchParams.get("q") ?? "";
+        if (routes.spotifyMs) await new Promise((resolve) => setTimeout(resolve, routes.spotifyMs));
         return json(typeof routes.spotify === "function" ? routes.spotify(query) : routes.spotify);
       }
       const url = new URL(call.url);
@@ -467,9 +471,9 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       ["Rock the Boat", "The Hues Corporation", "Greatest Hits (Re-Recorded Versions)", "2004"],
     ],
     [
-      "a live album",
-      "Bohemian Rhapsody - Queen (1975)",
-      ["Bohemian Rhapsody", "Queen", "Live Killers", "1979-06-22"],
+      "a live album named so",
+      "Under Pressure - Queen (1981)",
+      ["Under Pressure", "Queen", "Live at Wembley '86", "1992-05-26"],
     ],
     [
       "an unplugged album",
@@ -480,11 +484,6 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       "a karaoke album credited to the artist",
       "Rock the Boat - The Hues Corporation",
       ["Rock the Boat", "The Hues Corporation", "Karaoke Hits", "2010"],
-    ],
-    [
-      "a live album whose name says nothing of it, years after the label's",
-      "Respect - Aretha Franklin (1967)",
-      ["Respect", "Aretha Franklin", "Aretha at Fillmore West", "1971-05-19"],
     ],
   ])(
     "gives no Spotify id or preview for a plain title on %s, and keeps the cover",
@@ -514,6 +513,52 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
   );
 
   it.each([
+    [
+      "a compilation",
+      "Funky Drummer - James Brown (1970)",
+      ["Funky Drummer", "James Brown", "In the Jungle Groove", "1986-08-01"],
+    ],
+    [
+      "a greatest hits album",
+      "Bohemian Rhapsody - Queen (1975)",
+      ["Bohemian Rhapsody", "Queen", "Greatest Hits", "1981-10-26"],
+    ],
+    [
+      "a live album whose name has no live phrase",
+      "Bohemian Rhapsody - Queen (1975)",
+      ["Bohemian Rhapsody", "Queen", "Live Killers", "1979-06-22"],
+    ],
+    [
+      "a live album whose name says nothing of it",
+      "Respect - Aretha Franklin (1967)",
+      ["Respect", "Aretha Franklin", "Aretha at Fillmore West", "1971-05-19"],
+    ],
+  ])(
+    "keeps the Spotify id but plays no clip of %s from years after the label's year",
+    async (_label, label, release) => {
+      const [title, artist, album, released] = release;
+      const net = stub({
+        spotify: onRelease(title, artist, album, released),
+        byIsrc: () => entryOn(title, artist, album),
+      });
+
+      const node = await enrichOne({
+        id: "n1",
+        group: 4,
+        label,
+        trackTitle: title,
+        trackArtist: artist,
+      });
+
+      expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+      expect(node.previewUrl).toBeUndefined();
+      expect(deezerCalls(net)).toHaveLength(0);
+      const [, cached] = cache.putArtwork.mock.calls[0];
+      expect(cached).toMatchObject({ spotifyId: "x", trackTitle: title });
+    },
+  );
+
+  it.each([
     ["Under Pressure - Queen (1981)", ["Under Pressure", "Queen", "Hot Space", "1982-05-21"]],
     ["Live and Let Die - Wings (1973)", ["Live And Let Die", "Wings", "Live And Let Die", "1973"]],
     [
@@ -526,6 +571,11 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       ],
     ],
     ["Alive - Pearl Jam (1991)", ["Alive", "Pearl Jam", "Ten", "1991-08-27"]],
+    [
+      "Ain't No Half-Steppin' - Big Daddy Kane (1988)",
+      ["Ain't No Half-Steppin'", "Big Daddy Kane", "Long Live the Kane", "1988-06-21"],
+    ],
+    ["Doll Parts - Hole (1994)", ["Doll Parts", "Hole", "Live Through This", "1994-04-12"]],
   ])("keeps the id and the preview of the studio recording for %j", async (label, release) => {
     const [title, artist, album, released] = release;
     stub({
@@ -741,8 +791,9 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       // Each answer takes 3 s: within a lookup's time, but two rounds of two fill most of the
       // budget, and the third is cut off by it.
       const net = stub({ spotify, byIsrc: (isrc, call) => slowly(call, 3_000, isrcEntry(isrc)) });
+      const report = vi.fn();
 
-      const { out, elapsed, run } = await timed(nodes);
+      const { out, elapsed, run } = await timed(nodes, report);
 
       expect(run.aborted).toBe(false);
       expect(out.nodes).toHaveLength(10);
@@ -750,6 +801,25 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       expect(previews(out)).toBe(4);
       expect(deezerCalls(net)).toHaveLength(5);
       expect(elapsed).toBeLessThan(PREVIEW_BUDGET_MS + 1_000);
+      // A spent budget is not a Deezer failure: it is said once, in the log only.
+      expect(report).not.toHaveBeenCalled();
+      const said = vi
+        .mocked(console.log)
+        .mock.calls.filter(([line]) => String(line).includes("budget for Deezer lookups"));
+      expect(said).toHaveLength(1);
+    });
+
+    it("does not count the Spotify searches against the previews' budget", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(15);
+      // Each batch of Spotify searches takes 4.5 s; Deezer answers at once.
+      stub({ spotify, spotifyMs: 4_500, byIsrc: (isrc) => isrcEntry(isrc) });
+      const report = vi.fn();
+
+      const { out, elapsed } = await timed(nodes, report);
+
+      expect(elapsed).toBeGreaterThan(PREVIEW_BUDGET_MS);
+      expect(previews(out)).toBe(15);
+      expect(report).not.toHaveBeenCalled();
     });
   });
 
@@ -848,54 +918,45 @@ describe("limiter", () => {
   });
 });
 
-describe("releaseFits", () => {
-  const release = (album: string, releaseDate: string, title = "Respect") => ({
-    title,
-    album,
-    releaseDate,
-  });
-
+describe("marksOtherRecording", () => {
   it.each([
-    [
-      "no year named, a plain album",
-      "Respect - Aretha Franklin",
-      release("I Never Loved a Man", "1967"),
-      true,
-    ],
-    [
-      "the named year",
-      "Respect - Aretha Franklin (1967)",
-      release("I Never Loved a Man", "1967-03-10"),
-      true,
-    ],
-    [
-      "a year after the named one",
-      "Respect - Aretha Franklin (1967)",
-      release("Singles", "1968"),
-      true,
-    ],
-    [
-      "four years after",
-      "Respect - Aretha Franklin (1967)",
-      release("Aretha at Fillmore West", "1971-05-19"),
-      false,
-    ],
-    ["years before", "Respect - Aretha Franklin (1967)", release("Early Takes", "1960"), false],
-    ["an unknown release date", "Respect - Aretha Franklin (1967)", release("Singles", ""), false],
-    [
-      "a live album, no year named",
-      "Respect - Aretha Franklin",
-      release("Live in Paris", "1968"),
-      false,
-    ],
-    [
-      "an album named like the song",
-      "Live And Let Die - Wings",
-      release("Live And Let Die", "1973", "Live And Let Die"),
-      true,
-    ],
-  ])("for %s: %s", (_label, label, found, fits) => {
-    expect(releaseFits(label, found)).toBe(fits);
+    ["Live at Wembley '86", "Under Pressure", true],
+    ["Live in Paris", "Respect", true],
+    ["Alive (Live)", "Alive", true],
+    ["Greatest Hits - Live", "Respect", true],
+    ["MTV Unplugged In New York", "About A Girl", true],
+    ["Elvis in Concert", "Hound Dog", true],
+    ["Greatest Hits (Re-Recorded Versions)", "Rock the Boat", true],
+    ["Karaoke Hits", "Rock the Boat", true],
+    ["A Tribute to Queen", "Under Pressure", true],
+    ["Covers", "Respect", true],
+    // A bare "live" or "sessions" in a studio album's name.
+    ["Long Live the Kane", "Ain't No Half-Steppin'", false],
+    ["Live Through This", "Doll Parts", false],
+    ["Long Live Rock 'n' Roll", "Kill the King", false],
+    ["The Sun Sessions", "That's All Right", false],
+    ["Live Killers", "Bohemian Rhapsody", false],
+    // A phrase the title itself carries.
+    ["Live in the Moment", "Live in the Moment", false],
+    [undefined, "Respect", false],
+  ])("%j for %j: %s", (album, title, marked) => {
+    expect(marksOtherRecording(album, title)).toBe(marked);
+  });
+});
+
+describe("releaseYearFits", () => {
+  it.each([
+    ["no year named", "Respect - Aretha Franklin", "1971", true],
+    ["the named year", "Respect - Aretha Franklin (1967)", "1967-03-10", true],
+    ["a year after the named one", "Respect - Aretha Franklin (1967)", "1968", true],
+    ["four years after", "Respect - Aretha Franklin (1967)", "1971-05-19", false],
+    ["years before", "Respect - Aretha Franklin (1967)", "1960", false],
+    ["an unknown release date", "Respect - Aretha Franklin (1967)", "", false],
+    ["a release date of zeros", "Respect - Aretha Franklin (1967)", "0000", false],
+    ["the last of two years named", "1999 (1982) - Prince (1983)", "1983", true],
+    ["not the first of two years named", "1999 (1982) - Prince (1990)", "1982", false],
+  ])("for %s: %j released %j: %s", (_label, label, released, fits) => {
+    expect(releaseYearFits(label, released)).toBe(fits);
   });
 });
 
@@ -936,11 +997,12 @@ describe("strictlyMatches", () => {
     expect(strictlyMatches(node, track(title, names))).toBe(expected);
   });
 
-  it("refuses a plain title on an album that marks another recording", () => {
-    const found = { ...track("Bohemian Rhapsody", ["Queen"]), album: "Live Killers" };
+  it("refuses a plain title on an album named as other recordings", () => {
+    const found = { ...track("Bohemian Rhapsody", ["Queen"]), album: "Live at Wembley '86" };
     const node = { trackTitle: "Bohemian Rhapsody", trackArtist: "Queen" };
     expect(strictlyMatches(node, found)).toBe(false);
     expect(strictlyMatches(node, { ...found, album: "A Night at the Opera" })).toBe(true);
+    expect(strictlyMatches(node, { ...found, album: "Long Live Queen" })).toBe(true);
   });
 
   it("refuses a featured artist's track, another version and a missing title or artist", () => {

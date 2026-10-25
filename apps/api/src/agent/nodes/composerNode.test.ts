@@ -408,6 +408,12 @@ describe("composerNode", () => {
     "neither sends nor stores %s that does not fit the contract, and fails the run",
     async (_name, llm) => {
       const writer = vi.fn();
+      const deezer = {
+        source: "deezer",
+        code: "rate_limited",
+        message: "Genealogy previews: quota",
+      };
+      enrich.reports = deezer;
       // A cover URL the contract cannot carry (it is a string, empty when unknown).
       const out = await createComposerNode(testRuntime(llm()))(
         stateWith(measured, { coverUrl: null }),
@@ -419,6 +425,8 @@ describe("composerNode", () => {
       expect(out.trackData).toBeUndefined();
       expect(out.error).toMatch(/does not fit the contract.*coverUrl/);
       expect(out.usage).toHaveLength(1);
+      // The sources the run could not read still count, the genealogy previews' included.
+      expect(out.sourceErrors).toEqual([deezer]);
     },
   );
 

@@ -61,6 +61,17 @@ describe('useAudioPreview', () => {
     expect(result.current.isPlaying).toBe(true);
   });
 
+  it('clears the unavailable node when the preview stops (the pointer leaves)', async () => {
+    const { result } = renderHook(() => useAudioPreview());
+
+    nextPlay = 'NotSupportedError';
+    await act(async () => result.current.playPreview(clip, 'n1'));
+    expect(result.current.unavailableNodeId).toBe('n1');
+    await act(async () => result.current.stopPreview());
+
+    expect(result.current.unavailableNodeId).toBeNull();
+  });
+
   it('marks a clip that fails while loading unavailable', async () => {
     const { result } = renderHook(() => useAudioPreview());
 

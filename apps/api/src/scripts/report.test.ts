@@ -22,6 +22,8 @@ import {
 } from "./report.js";
 
 const NOW = Date.UTC(2026, 9, 25, 12, 0, 0);
+const DAY_S = 24 * 60 * 60;
+const DAY_MS = DAY_S * 1000;
 const TYPED = "a typed query nobody should see";
 const TRACK = "4uLU6hMCjMI75M1A2tKUQC";
 
@@ -104,6 +106,7 @@ function recordUsage(
   db: Database.Database,
   rows: Array<{
     at: string;
+    runId?: string;
     purpose?: string;
     mode?: "live" | "replay";
     status?: string;
@@ -111,13 +114,15 @@ function recordUsage(
     output: number | null;
     usd: number;
     estimated?: boolean;
+    /** Default: sent unless replayed, as invoke.ts records it. */
+    sent?: boolean;
   }>,
 ): void {
   rows.forEach((row, i) => {
     const id = `usage-${db.prepare("SELECT COUNT(*) FROM llm_usage").pluck().get()}-${i}`;
     recordLlmUsage(db, {
       id,
-      runId: "run-id-a",
+      runId: row.runId ?? "run-id-a",
       callSite: "composer",
       tier: "main",
       deployment: "deployment",
@@ -131,6 +136,7 @@ function recordUsage(
       priceMultiplier: 1,
       estimated: row.estimated ?? false,
       latencyMs: 100,
+      sent: row.sent ?? row.mode !== "replay",
     });
     db.prepare("UPDATE llm_usage SET created_at = ? WHERE id = ?").run(
       Date.parse(row.at) / 1000,
@@ -198,6 +204,15 @@ function seed(db: Database.Database): void {
     },
     // Part of the usage reported: estimated, its partial tokens left out.
     { at: "2026-10-23T12:00:10Z", input: 70, output: null, usd: 0.004, estimated: true },
+    // Stopped before its request left (or no connection made): an attempt, not a call sent.
+    {
+      at: "2026-10-23T12:00:20Z",
+      status: "error:aborted",
+      input: null,
+      output: null,
+      usd: 0,
+      sent: false,
+    },
     // Answered from stored answers: never sent, the recorded tokens are not this run's.
     { at: "2026-10-23T15:00:01Z", mode: "replay", input: 5000, output: 3000, usd: 0 },
     { at: "2026-10-25T08:00:00Z", purpose: "eval", input: 1000, output: 10, usd: 0.5 },
@@ -295,7 +310,7 @@ describe("buildReport", () => {
     expect(report.total.fallback).toEqual({ runs: 2, fallback: 1, unknown: 1, rate: 0.5 });
   });
 
-  it("sums model calls sent, tokens of the unestimated ones and estimated USD, apart from replayed calls", () => {
+  it("sums model calls sent, tokens of the unestimated ones and estimated USD, apart from replayed and unsent attempts", () => {
     const [oct23, oct24, oct25] = report.perDay.map(kept);
     expect(oct23.model).toMatchObject({
       calls: 4,
@@ -304,6 +319,8 @@ describe("buildReport", () => {
       outputTokens: 150,
       estimatedCalls: 2,
       replayedCalls: 1,
+      unsentCalls: 1,
+      sentUnknownCalls: 0,
     });
     expect(oct23.model?.usdEstimate).toBeCloseTo(0.039, 10);
     expect(oct24.model).toEqual({
@@ -314,6 +331,8 @@ describe("buildReport", () => {
       usdEstimate: 0,
       estimatedCalls: 0,
       replayedCalls: 0,
+      unsentCalls: 0,
+      sentUnknownCalls: 0,
     });
     expect(oct25.model).toMatchObject({ calls: 1, inputTokens: 1000, usdEstimate: 0.5 });
     expect(report.total.model).toMatchObject({
@@ -323,6 +342,8 @@ describe("buildReport", () => {
       outputTokens: 160,
       estimatedCalls: 2,
       replayedCalls: 1,
+      unsentCalls: 1,
+      sentUnknownCalls: 0,
     });
     expect(report.total.model?.usdEstimate).toBeCloseTo(0.539, 10);
     expect(Object.keys(report.modelByPurpose ?? {})).toEqual(["dev", "eval"]);
@@ -366,8 +387,22 @@ describe("buildReport", () => {
     expect(text).toContain("2 are marked estimated");
     expect(text).toContain("the token columns leave them out, USD (est.) counts their estimate");
     expect(text).toContain("1 calls answered from stored answers are not counted");
+    expect(text).toContain(
+      "1 attempts not sent (stopped before the request left, or no connection made) are not " +
+        "counted as calls; they cost nothing.",
+    );
+    expect(text).not.toContain("before schema v12");
     expect(text).toContain("Model by purpose: dev 4 calls $0.0390, eval 1 calls $0.5000.");
-    expect(text).not.toContain("Retention:");
+    // Never pruned: marked from the setting, and it says so.
+    expect(report).toMatchObject({ cutoffSource: "setting", retentionDays: 30 });
+    expect(text).toContain(
+      "Retention: the database has not been pruned since it began to record the cutoffs " +
+        "retention applies, so days are marked from the current RUN_RETENTION_DAYS=30: none in " +
+        "this window is past it.",
+    );
+    // A new database: no prune can have deleted anything unrecorded.
+    expect(report.unrecordedUntil).toBeNull();
+    expect(text).not.toContain("marked ?");
     expect(text).not.toContain(TYPED);
     expect(text).not.toContain("run-id-");
     expect(JSON.stringify(report)).not.toMatch(new RegExp(`${TYPED}|run-id-`));
@@ -392,7 +427,12 @@ describe("buildReport past the run retention", () => {
       const report = buildReport(db, { days: 40, now: NOW, retentionDays: 30 });
 
       // The cutoff is 2026-09-25 12:00: earlier days are pruned, that day partly.
-      expect(report).toMatchObject({ retentionDays: 30, keptFrom: "2026-09-26" });
+      expect(report).toMatchObject({
+        retentionDays: 30,
+        cutoffSource: "recorded",
+        cutoff: "2026-09-25T12:00:00.000Z",
+        keptFrom: "2026-09-26",
+      });
       const byDay = new Map(report.perDay.map((row) => [row.day, row]));
       expect(byDay.get("2026-09-16")).toEqual({ day: "2026-09-16", retention: "pruned" });
       expect(byDay.get("2026-09-20")).toEqual({ day: "2026-09-20", retention: "pruned" });
@@ -408,9 +448,266 @@ describe("buildReport past the run retention", () => {
       expect(text).toMatch(/^2026-09-25\*\s+0\s/m);
       expect(text).not.toMatch(/^2026-09-20\s+0/m);
       expect(text).toContain(
-        "Retention: runs and usage rows are deleted after RUN_RETENTION_DAYS=30; records are " +
-          "complete from 2026-09-26. 9 pruned days are not counted, in the total either. * " +
-          "partly pruned.",
+        "Retention: runs and usage rows up to 2026-09-25 12:00 UTC have been deleted (the latest " +
+          "cutoff retention applied); records are complete from 2026-09-26. 9 pruned days are " +
+          "not counted, in the total either. * partly pruned.",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("marks the days a shorter retention deleted as pruned after the setting is raised", () => {
+    const db = new Database(":memory:");
+    try {
+      runMigrations(db);
+      recordRuns(db, [
+        { id: "20d", status: "completed", start: "2026-10-05T10:00:00Z", seconds: 30 },
+        { id: "10d", status: "completed", start: "2026-10-15T10:00:00Z", seconds: 30 },
+        { id: "1d", status: "completed", start: "2026-10-24T10:00:00Z", seconds: 30 },
+      ]);
+      recordUsage(db, [
+        { at: "2026-10-05T10:00:10Z", runId: "run-id-20d", input: 10, output: 10, usd: 0.25 },
+        { at: "2026-10-15T10:00:10Z", runId: "run-id-10d", input: 10, output: 10, usd: 0.25 },
+        { at: "2026-10-24T10:00:10Z", runId: "run-id-1d", input: 10, output: 10, usd: 0.25 },
+      ]);
+      const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+      expect(pruneDatabase(db, sevenDays, NOW - DAY_MS)).toMatchObject({ runs: 2, llmUsage: 2 });
+      // RUN_RETENTION_DAYS raised to 30: the next prune deletes nothing, and keeps the mark.
+      expect(pruneDatabase(db, DEFAULT_RETENTION, NOW)).toMatchObject({ runs: 0 });
+
+      const report = buildReport(db, { days: 21, now: NOW, retentionDays: 30 });
+
+      // Pruned at 2026-10-24 12:00 less 7 days.
+      expect(report).toMatchObject({
+        retentionDays: 30,
+        cutoffSource: "recorded",
+        cutoff: "2026-10-17T12:00:00.000Z",
+        keptFrom: "2026-10-18",
+      });
+      const byDay = new Map(report.perDay.map((row) => [row.day, row]));
+      expect(byDay.get("2026-10-05")).toEqual({ day: "2026-10-05", retention: "pruned" });
+      expect(byDay.get("2026-10-15")).toEqual({ day: "2026-10-15", retention: "pruned" });
+      expect(byDay.get("2026-10-17")).toMatchObject({ retention: "partly_pruned", runs: 0 });
+      expect(byDay.get("2026-10-18")).toMatchObject({ retention: "kept", runs: 0 });
+      expect(report.perDay.filter(isPrunedDay)).toHaveLength(12);
+      expect(report.total).toMatchObject({ retention: "partly_pruned", runs: 1 });
+
+      const text = formatReport(report);
+      expect(text).toMatch(/^2026-10-05\s+pruned$/m);
+      expect(text).toMatch(/^2026-10-15\s+pruned$/m);
+      expect(text).not.toMatch(/^2026-10-15\s+0\s/m);
+      expect(text).toContain("12 pruned days are not counted");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("leaves out of the total the records still kept on a pruned day", () => {
+    const db = new Database(":memory:");
+    try {
+      runMigrations(db);
+      // Started on 2026-10-15 and waited at the picker until yesterday: retention keeps a run
+      // until it finished longer ago than the retention, and its usage rows with it.
+      recordRuns(db, [
+        {
+          id: "long",
+          status: "completed",
+          start: "2026-10-15T10:00:00Z",
+          wait: { at: 5, for: 9 * DAY_S },
+          seconds: 9 * DAY_S + 30,
+        },
+        { id: "new", status: "completed", start: "2026-10-25T10:00:00Z", seconds: 30 },
+      ]);
+      recordUsage(db, [
+        { at: "2026-10-15T10:00:01Z", runId: "run-id-long", input: 10, output: 10, usd: 0.5 },
+        { at: "2026-10-25T10:00:10Z", runId: "run-id-new", input: 10, output: 10, usd: 0.25 },
+      ]);
+      const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+      expect(pruneDatabase(db, sevenDays, NOW)).toMatchObject({ runs: 0, llmUsage: 0 });
+
+      const report = buildReport(db, { days: 14, now: NOW });
+
+      expect(report.perDay.find((row) => row.day === "2026-10-15")).toEqual({
+        day: "2026-10-15",
+        retention: "pruned",
+      });
+      expect(report.total).toMatchObject({ runs: 1, completed: 1 });
+      expect(report.total.model).toMatchObject({ calls: 1, inputTokens: 10 });
+      expect(report.total.model?.usdEstimate).toBe(0.25);
+      expect(report.modelByPurpose?.dev).toMatchObject({ calls: 1, usdEstimate: 0.25 });
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("buildReport on a database pruned before it recorded its cutoffs", () => {
+  it("marks the days an unrecorded prune may have emptied as unknown, with a note", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(Date.parse("2026-10-01T00:00:00Z"));
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      recordRuns(db, [
+        { id: "oct05", status: "completed", start: "2026-10-05T10:00:00Z", seconds: 30 },
+        { id: "oct12", status: "completed", start: "2026-10-12T10:00:00Z", seconds: 30 },
+        { id: "oct20", status: "completed", start: "2026-10-20T10:00:00Z", seconds: 30 },
+      ]);
+      // Schema 11 at RUN_RETENTION_DAYS=7, on 2026-10-22 12:00: oct05 and oct12 are deleted.
+      const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+      const pruned = pruneDatabase(db, sevenDays, Date.parse("2026-10-22T12:00:00Z"));
+      expect(pruned).toMatchObject({ runs: 2 });
+      // Upgraded on 2026-10-23 12:00 with RUN_RETENTION_DAYS=30, and pruned at once.
+      vi.setSystemTime(Date.parse("2026-10-23T12:00:00Z"));
+      expect(runMigrations(db)).toEqual([12]);
+      expect(pruneDatabase(db, DEFAULT_RETENTION, Date.parse("2026-10-23T12:00:01Z")).runs).toBe(0);
+      recordRuns(db, [
+        { id: "oct24", status: "completed", start: "2026-10-24T10:00:00Z", seconds: 30 },
+      ]);
+
+      const report = buildReport(db, { days: 21, now: NOW, retentionDays: 30 });
+
+      // The unrecorded prunes deleted only what ended a day (the shortest retention) before
+      // the migration: up to 2026-10-22 12:00.
+      expect(report).toMatchObject({
+        cutoffSource: "recorded",
+        cutoff: "2026-09-23T12:00:01.000Z",
+        unrecordedUntil: "2026-10-22T12:00:00.000Z",
+        keptFrom: "2026-10-23",
+      });
+      const byDay = new Map(report.perDay.map((row) => [row.day, row]));
+      expect(byDay.get("2026-10-05")).toMatchObject({ retention: "unknown", runs: 0 });
+      expect(byDay.get("2026-10-12")).toMatchObject({ retention: "unknown", runs: 0 });
+      expect(byDay.get("2026-10-20")).toMatchObject({ retention: "unknown", runs: 1 });
+      expect(byDay.get("2026-10-22")).toMatchObject({ retention: "unknown" });
+      expect(byDay.get("2026-10-23")).toMatchObject({ retention: "kept" });
+      expect(report.perDay.filter((row) => row.retention === "unknown")).toHaveLength(18);
+      expect(report.perDay.filter(isPrunedDay)).toHaveLength(0);
+      expect(report.total).toMatchObject({ retention: "unknown", runs: 2 });
+
+      const text = formatReport(report);
+      expect(text).toMatch(/^2026-10-12\?\s+0\s/m);
+      expect(text).toMatch(/^2026-10-20\?\s+1\s/m);
+      expect(text).toMatch(/^2026-10-23\s+0\s/m);
+      expect(text).toContain(
+        "Retention before schema v12 was not recorded: prunes made then may have deleted runs " +
+          "and usage rows up to 2026-10-22 12:00 UTC. The 18 days marked ? show what is left: " +
+          "they may have had more, and so may the total.",
+      );
+
+      // Over 40 days the window also reaches past the recorded cutoff: those days are pruned,
+      // whatever an unrecorded prune did.
+      const longer = buildReport(db, { days: 40, now: NOW, retentionDays: 30 });
+      const longerByDay = new Map(longer.perDay.map((row) => [row.day, row]));
+      expect(longerByDay.get("2026-09-20")).toEqual({ day: "2026-09-20", retention: "pruned" });
+      expect(longerByDay.get("2026-09-22")).toEqual({ day: "2026-09-22", retention: "pruned" });
+      expect(longerByDay.get("2026-09-23")).toMatchObject({ retention: "unknown" });
+      expect(longer.perDay.filter(isPrunedDay)).toHaveLength(7);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("marks days unknown on a database pruned to empty before the upgrade", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(Date.parse("2026-10-01T00:00:00Z"));
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      // Migrated first on 2026-10-01 (the runner stamps the real time).
+      db.prepare("UPDATE schema_migrations SET applied_at = ?").run(
+        Date.parse("2026-10-01T00:00:00Z") / 1000,
+      );
+      recordRuns(db, [{ id: "only", status: "completed", start: "2026-10-15T10:00:00Z" }]);
+      // RUN_RETENTION_DAYS=7 on 2026-10-22 12:00: its only run is deleted, so it is empty.
+      const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+      expect(pruneDatabase(db, sevenDays, Date.parse("2026-10-22T12:00:00Z")).runs).toBe(1);
+      expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
+      vi.setSystemTime(Date.parse("2026-10-23T12:00:00Z"));
+      runMigrations(db);
+      pruneDatabase(db, DEFAULT_RETENTION, Date.parse("2026-10-23T12:00:01Z"));
+
+      const report = buildReport(db, { days: 21, now: NOW, retentionDays: 30 });
+
+      expect(report.unrecordedUntil).toBe("2026-10-22T12:00:00.000Z");
+      const oct15 = report.perDay.find((row) => row.day === "2026-10-15");
+      expect(oct15).toMatchObject({ retention: "unknown", runs: 0 });
+      expect(formatReport(report)).toMatch(/^2026-10-15\?\s+0\s/m);
+      expect(formatReport(report)).toContain("Retention before schema v12 was not recorded");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("marks no day unknown once the recorded cutoff has passed the migration", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(Date.parse("2026-09-01T00:00:00Z"));
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      recordRuns(db, [{ id: "a", status: "completed", start: "2026-09-02T10:00:00Z" }]);
+      vi.setSystemTime(Date.parse("2026-09-10T00:00:00Z"));
+      runMigrations(db);
+      // RUN_RETENTION_DAYS=7 since: the cutoff is past the migration's time.
+      pruneDatabase(db, { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS }, NOW);
+      const report = buildReport(db, { days: 10, now: NOW, retentionDays: 7 });
+      expect(report.unrecordedUntil).toBe("2026-09-09T00:00:00.000Z");
+      expect(report.perDay.some((row) => row.retention === "unknown")).toBe(false);
+      expect(formatReport(report)).not.toContain("marked ?");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("buildReport on usage rows recorded before sends were kept", () => {
+  it("counts their tokens and cost but not as calls sent, and says so", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(NOW);
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      db.prepare(
+        `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
+           input_tokens, output_tokens, usd_est, price_multiplier, estimated, latency_ms,
+           created_at)
+         VALUES ('old', 'run-id-a', 'composer', 'main', 'd', 'dev', 'live', 'ok', 100, 20, 0.1,
+           1, 0, 5, ?)`,
+      ).run(Date.parse("2026-10-24T10:00:00Z") / 1000);
+      const before = buildReport(db, { days: 2, now: NOW });
+      expect(before.schemaVersion).toBe(11);
+      // Read unmigrated: no cutoff is recorded, and the report says what that means.
+      expect(before.cutoffSource).toBe("setting");
+      expect(formatReport(before)).toContain(
+        "Retention: the database is at schema v11, which records no cutoff applied by retention " +
+          "(start the API once to migrate it), so days are marked from the current " +
+          "RUN_RETENTION_DAYS=30: none in this window is past it. Days deleted under a shorter " +
+          "setting would show as kept.",
+      );
+      expect(before.total.model).toMatchObject({
+        calls: 0,
+        sentUnknownCalls: 1,
+        unsentCalls: 0,
+        inputTokens: 100,
+        usdEstimate: 0.1,
+      });
+
+      runMigrations(db);
+      recordUsage(db, [{ at: "2026-10-25T10:00:00Z", input: 10, output: 10, usd: 0.25 }]);
+      const report = buildReport(db, { days: 2, now: NOW });
+      expect(report.total.model).toMatchObject({
+        calls: 1,
+        sentUnknownCalls: 1,
+        inputTokens: 110,
+      });
+      expect(report.total.model?.usdEstimate).toBeCloseTo(0.35, 10);
+      const text = formatReport(report);
+      expect(text).toContain(
+        "1 attempts recorded before schema v12 do not say whether they were sent: not counted " +
+          "as calls (shown as +N? in calls), their tokens and USD are.",
+      );
+      // Not "0 calls" or "1 calls": the attempts not known to be sent are shown as such.
+      expect(text).toMatch(/^2026-10-24\S*(\s+\S+){11}\s+0\+1\?\s/m);
+      expect(text).toMatch(/^total(\s+\S+){11}\s+1\+1\?\s/m);
+      expect(text).toContain(
+        "Model by purpose: dev 1 calls (and 1 attempts not known to be sent) $0.3500.",
       );
     } finally {
       db.close();
@@ -518,6 +815,91 @@ describe("openForReading", () => {
       api.close();
     }
   });
+
+  /** A closed database at `path` with one run, in rollback-journal mode unless `wal`. */
+  const closedDatabase = (path: string, wal = false) => {
+    const api = new Database(path);
+    if (wal) api.pragma("journal_mode = WAL");
+    runMigrations(api);
+    insertRun(api);
+    api.close();
+  };
+
+  it("reads a database that is the same after the read into memory", () => {
+    const path = join(dir, "api.db");
+    closedDatabase(path);
+    const db = openForReading(path, { readFile: (file) => readFileSync(file) });
+    expect(db.readonly).toBe(false);
+    expect(db.memory).toBe(true);
+    db.close();
+  });
+
+  it("drops the copy and opens read-only when the file changed while it was read", () => {
+    const path = join(dir, "api.db");
+    closedDatabase(path);
+    const db = openForReading(path, {
+      readFile: (file) => {
+        const image = readFileSync(file);
+        // The API started and wrote while the file was read (rollback journal: no -wal).
+        const api = new Database(path);
+        api
+          .prepare(
+            "INSERT INTO runs (run_id, thread_id, query, status) VALUES ('r2', 't', 'q', 'running')",
+          )
+          .run();
+        api.close();
+        expect(readdirSync(dir)).toEqual(["api.db"]);
+        return image;
+      },
+    });
+    try {
+      expect(db.readonly).toBe(true);
+      expect(db.memory).toBe(false);
+      expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(2);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("drops the copy and opens read-only when a -wal appeared while the file was read", () => {
+    const path = join(dir, "api.db");
+    closedDatabase(path, true);
+    let api: Database.Database | null = null;
+    try {
+      const db = openForReading(path, {
+        readFile: (file) => {
+          const image = readFileSync(file);
+          api = new Database(path);
+          api.pragma("wal_autocheckpoint = 0");
+          api
+            .prepare(
+              "INSERT INTO runs (run_id, thread_id, query, status) VALUES ('r2', 't', 'q', 'running')",
+            )
+            .run();
+          return image;
+        },
+      });
+      expect(db.readonly).toBe(true);
+      expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(2);
+      db.close();
+    } finally {
+      (api as Database.Database | null)?.close();
+    }
+  });
+
+  it("opens a file above the in-memory limit read-only, without reading it", () => {
+    const path = join(dir, "api.db");
+    closedDatabase(path);
+    const readFile = vi.fn((file: string) => readFileSync(file));
+    const db = openForReading(path, { maxInMemoryBytes: 1024, readFile });
+    try {
+      expect(readFile).not.toHaveBeenCalled();
+      expect(db.readonly).toBe(true);
+      expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("main", () => {
@@ -578,12 +960,55 @@ describe("main", () => {
     expect(out).not.toContain(TYPED);
   });
 
-  it("marks the days past RUN_RETENTION_DAYS as pruned", () => {
+  it("marks the days past RUN_RETENTION_DAYS as pruned when the database records no cutoff", () => {
     const { code, out } = run(["--days", "7"], { SQLITE_DB_PATH: dbPath, RUN_RETENTION_DAYS: "5" });
     expect(code).toBe(0);
     expect(out).toMatch(/^2026-10-19\s+pruned$/m);
     expect(out).toMatch(/^2026-10-20\*\s/m);
-    expect(out).toContain("RUN_RETENTION_DAYS=5; records are complete from 2026-10-21.");
+    expect(out).toContain(
+      "Retention: the database has not been pruned since it began to record the cutoffs " +
+        "retention applies, so days are marked from the current RUN_RETENTION_DAYS=5: records " +
+        "are complete from 2026-10-21.",
+    );
+  });
+
+  it("marks the days pruned at 7 days as pruned after RUN_RETENTION_DAYS is raised to 30", () => {
+    const db = new Database(dbPath);
+    const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+    // Pruned at 2026-10-20 12:00: the run started 2026-10-12 is deleted.
+    recordRuns(db, [{ id: "old", status: "completed", start: "2026-10-12T10:00:00Z", seconds: 5 }]);
+    expect(pruneDatabase(db, sevenDays, NOW - 5 * DAY_MS).runs).toBe(1);
+    db.close();
+
+    const { code, out } = run(["--days", "21", "--json"], {
+      SQLITE_DB_PATH: dbPath,
+      RUN_RETENTION_DAYS: "30",
+    });
+    expect(code).toBe(0);
+    const report = JSON.parse(out) as RunReport;
+    expect(report).toMatchObject({
+      retentionDays: 30,
+      cutoffSource: "recorded",
+      cutoff: "2026-10-13T12:00:00.000Z",
+      keptFrom: "2026-10-14",
+    });
+    expect(report.perDay.find((row) => row.day === "2026-10-12")).toEqual({
+      day: "2026-10-12",
+      retention: "pruned",
+    });
+    expect(run(["--days", "21"], { SQLITE_DB_PATH: dbPath, RUN_RETENTION_DAYS: "30" }).out).toMatch(
+      /^2026-10-12\s+pruned$/m,
+    );
+  });
+
+  it("writes a warning about RUN_RETENTION_DAYS to stderr, keeping --json output JSON", () => {
+    const { code, out, err } = run(["--json"], {
+      SQLITE_DB_PATH: dbPath,
+      RUN_RETENTION_DAYS: "abc",
+    });
+    expect(code).toBe(0);
+    expect((JSON.parse(out) as RunReport).retentionDays).toBe(30);
+    expect(err).toBe('report: Ignoring RUN_RETENTION_DAYS="abc": expected a positive number.');
   });
 
   it("prints its usage with --help", () => {

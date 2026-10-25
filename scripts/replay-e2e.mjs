@@ -484,7 +484,9 @@ check(
   reportRun.status === 0 &&
     reportTotal?.replay >= 2 &&
     reportTotal.live === 0 &&
-    reportTotal.model?.calls === 0,
+    reportTotal.model?.calls === 0 &&
+    reportTotal.model.unsentCalls === 0 &&
+    reportTotal.model.sentUnknownCalls === 0,
   "report: counts the replays the API served, and no live run or model call",
   reportRun.status === 0
     ? ""

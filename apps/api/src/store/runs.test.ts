@@ -227,6 +227,8 @@ describe("time waiting for the user's choice", () => {
       throw new Error("unreadable");
     });
     expect(getRun(db, "r")?.status).toBe("cancelled");
+    // Unknown already: whether it was waiting, and since when, could not be read.
+    expect(pauseOf("r")).toEqual({ since: null, seconds: null, duration: null });
     // The thread was in fact waiting: the choice is still pending, and it is resumed.
     at(310);
     updateRun(db, "r", { status: "running" });

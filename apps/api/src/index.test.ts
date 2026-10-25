@@ -170,7 +170,8 @@ function logged(output: string, component: string, message: string): boolean {
 /**
  * Resolves once `child`'s output passes `test`. A line the child wrote around an answer (the
  * request line is written once the answer is sent) can reach this process after the answer
- * does. Fails, with the output, when nothing passes within `ms`.
+ * does. Fails, with the output, as soon as the child has exited and closed its output without
+ * it, or when nothing passes within `ms`.
  */
 function untilOutput(child: Child, test: (output: string) => boolean, ms = 4000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -178,6 +179,7 @@ function untilOutput(child: Child, test: (output: string) => boolean, ms = 4000)
     const stop = () => {
       clearTimeout(timer);
       for (const stream of streams) stream?.off("data", check);
+      child.process.off("close", closed);
     };
     // Registered after start()'s own listener, so the output already holds the chunk.
     function check() {
@@ -185,12 +187,23 @@ function untilOutput(child: Child, test: (output: string) => boolean, ms = 4000)
       stop();
       resolve();
     }
+    function closed() {
+      if (test(child.output())) return check();
+      stop();
+      reject(
+        new Error(
+          `exited (${child.process.exitCode ?? child.process.signalCode}) first:\n${child.output()}`,
+        ),
+      );
+    }
     const timer = setTimeout(() => {
       stop();
       reject(new Error(`not in the output within ${ms} ms:\n${child.output()}`));
     }, ms);
     for (const stream of streams) stream?.on("data", check);
+    child.process.once("close", closed);
     check();
+    if (child.process.exitCode !== null && child.process.stdout?.readableEnded) closed();
   });
 }
 
@@ -338,9 +351,7 @@ describe("an API process stopped by SIGTERM", () => {
     // soon as the first has been handled (two pending signals would be delivered as one).
     const signalledAt = Date.now();
     api.process.kill("SIGTERM");
-    while (!api.output().includes("SIGTERM received")) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
+    await untilOutput(api, (output) => output.includes("SIGTERM received"));
     api.process.kill("SIGTERM");
     // Exit 0 means the drain, not the 8 s shutdown timeout, closed the open connection.
     expect(await api.exit).toBe(0);
@@ -348,9 +359,19 @@ describe("an API process stopped by SIGTERM", () => {
     expect(logged(api.output(), "Server", "still open after the shutdown timeout")).toBe(false);
     // The process drains for 3 s and gives up after 8 s; lifecycle.test.ts checks on a fake
     // clock that the drain closes the connections exactly then.
-    expect(
-      logEntries(api.output()).find((entry) => String(entry.msg).startsWith("SIGTERM received")),
-    ).toMatchObject({ drainMs: 3_000, timeoutMs: 8_000 });
+    const entries = logEntries(api.output());
+    const signalled = entries.find((entry) => String(entry.msg).startsWith("SIGTERM received"));
+    const stopped = entries.find(
+      (entry) => entry.component === "Server" && entry.msg === "Stopped",
+    );
+    expect(signalled).toMatchObject({ drainMs: 3_000, timeoutMs: 8_000 });
+    // The whole shutdown, by the process's own clock: the drain, then at most half of what is
+    // left before the shutdown timeout for settling the runs and closing the store.
+    const { drainMs, timeoutMs } = signalled as { drainMs: number; timeoutMs: number };
+    const tookMs = Date.parse(String(stopped?.time)) - Date.parse(String(signalled?.time));
+    expect(tookMs, "SIGTERM to Stopped, in the process's log").toBeLessThan(
+      drainMs + (timeoutMs - drainMs) / 2,
+    );
     // The open connection was given the drain.
     expect(Date.now() - signalledAt).toBeGreaterThanOrEqual(2900);
     expect(received()).toBe(CONTINUE); // held until the drain closed it, never answered
@@ -359,7 +380,7 @@ describe("an API process stopped by SIGTERM", () => {
     expect(logged(api.output(), "Database", "Connection closed.")).toBe(true);
     expect(logged(api.output(), "Server", "Stopped")).toBe(true);
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
-  }, 50_000);
+  }, 20_000);
 });
 
 describe("an API process stopped by SIGINT", () => {

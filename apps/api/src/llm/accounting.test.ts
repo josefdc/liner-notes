@@ -69,6 +69,8 @@ function setup(route: ProviderRoute, env: Record<string, string> = {}) {
 }
 
 const realSetTimeout = globalThis.setTimeout;
+/** How often a waiter tries the spend log's lock again (fileLock.ts POLL_MS). */
+const LOCK_POLL_MS = 5;
 const PENDING = Symbol("pending");
 /** What `call` has settled with so far: PENDING until it settles. */
 function outcome<T>(call: Promise<T>): () => T | typeof PENDING {
@@ -629,7 +631,7 @@ describe("aborts", () => {
 describe("an abort while waiting for the spend log's lock", () => {
   it("returns at once, sending and charging nothing", async () => {
     // The lock stays taken until the call has returned: it has to return without it, at its
-    // next try for the lock.
+    // next try for the lock, one poll (5 ms, fileLock.ts) after the abort on the fake clock.
     const release = await acquireLock(await resolveSpendLogPath(log));
     onFakeClock();
     const { llm, net } = setup(hang);
@@ -639,22 +641,29 @@ describe("an abort while waiting for the spend log's lock", () => {
         .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
         .catch((e) => e),
     );
-    // Waits (on the real clock) until the call waits for its next try, a timer on the fake one.
-    for (let i = 0; vi.getTimerCount() === 0; i++) {
-      if (i === 4000) throw new Error("the call never waited for the lock");
+    // Waits (at most 2 s of real time) until the call waits for its next try: a timer on the
+    // fake clock, the only one before a request is sent.
+    const waitFrom = process.hrtime.bigint();
+    while (vi.getTimerCount() === 0) {
+      if (process.hrtime.bigint() - waitFrom > 2_000_000_000n) {
+        throw new Error("the call never waited for the lock");
+      }
       await new Promise((resolve) => realSetTimeout(resolve, 1));
     }
     controller.abort();
-    await vi.advanceTimersToNextTimerAsync();
+    await vi.advanceTimersByTimeAsync(LOCK_POLL_MS);
     const error = call();
-    vi.useRealTimers();
-    await release();
-    expect(error, "returned at its next try, the lock still taken").not.toBe(PENDING);
+    expect(error, "returned within one poll, the lock still taken").not.toBe(PENDING);
     expect(isLlmError(error, "aborted")).toBe(true);
     expect(net.calls).toHaveLength(0);
     expect(llm.callsForRun("run-1")).toBe(0);
-    // Nor does it write once the lock is free.
-    await new Promise((r) => setTimeout(r, 200));
+    // Nor does it write once the lock is free. Still on the fake clock, so a try it scheduled
+    // there is run: the clock is stepped well past any next try, with real time for the files.
+    await release();
+    for (let i = 0; i < 50; i++) {
+      await vi.advanceTimersByTimeAsync(LOCK_POLL_MS);
+      await new Promise((resolve) => realSetTimeout(resolve, 1));
+    }
     expect(readFileSync(log, "utf8")).toBe("");
   });
 });

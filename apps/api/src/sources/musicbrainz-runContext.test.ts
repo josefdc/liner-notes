@@ -6,6 +6,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { type CapturedLogs, captureLogsForTests, withRun } from "../logger.js";
 import { lookupIsrc, MusicBrainzRateLimiter, withMusicBrainzPriority } from "./musicbrainz.js";
+import { queueOnFakeClock, settleOnFakeClock } from "./testing/fakeClock.js";
 import { json, stubFetch } from "./testing/fetchStub.js";
 
 let restoreInterval: () => void;
@@ -49,9 +50,12 @@ it("logs each queued request under the run that asked for it", async () => {
 });
 
 it("serves the primary-source chain's requests ahead of others, and still under their run", async () => {
+  // On a fake clock the next request still waits its turn however long the machine takes to
+  // queue the others: only the queue's own timer moves the clock.
+  queueOnFakeClock(30);
   const net = stubFetch(() => json({ recordings: [] }));
   // A request just made: the next one waits its turn.
-  await lookupIsrc("GBAYE0000351");
+  await settleOnFakeClock(lookupIsrc("GBAYE0000351"));
   net.calls.length = 0;
   // Another run's research queues three requests first; a chain then asks for two.
   const research = withRun("run-research", () =>
@@ -62,7 +66,7 @@ it("serves the primary-source chain's requests ahead of others, and still under 
       Promise.all(["USCA29001716", "USAT29900609"].map((isrc) => lookupIsrc(isrc))),
     ),
   );
-  await Promise.all([research, chain]);
+  await settleOnFakeClock(Promise.all([research, chain]));
 
   const order = net.calls.map((c) => new URL(c.url).pathname.replace("/ws/2/isrc/", ""));
   // The chain's go first, then the research's in their order.

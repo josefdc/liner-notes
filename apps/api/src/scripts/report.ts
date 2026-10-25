@@ -8,10 +8,12 @@
  * The database is SQLITE_DB_PATH, and the retention RUN_RETENTION_DAYS, read as the API reads
  * them: from the environment when set there (a blank value means the default, as for the API),
  * else from apps/api/.env (those two values only); else data/sonic-agent.db and 30 days.
- * Nothing is called and nothing is written: when the database has no -wal file (the API is not
- * running) the file is read into memory, so no -wal or -shm file is created next to it; while
- * the API runs (its -wal exists) the file is opened read-only and reads the API's -wal and -shm.
- * Run it as the API's user (in the image, `docker compose exec` does).
+ * Nothing is called. Nothing is written when the database has both its -wal and -shm files (the
+ * API is running: the file is opened read-only and reads them) or no -wal (the API is stopped:
+ * a file of at most 1 GiB is read into memory, and kept only if it did not change meanwhile).
+ * Otherwise it is opened read-only, and SQLite creates the missing -wal or -shm next to it (a
+ * larger file, a file that changed while it was read, or a -wal a crash left without -shm). Run
+ * it as the API's user (in the image, `docker compose exec` does).
  *
  * Runs are counted by the UTC day each started; model use by the UTC day of each call:
  *   runs        every run recorded: live (computed for the request), replay (a recording served
@@ -26,29 +28,60 @@
  *               that says neither is counted apart
  *   model       model call attempts sent to the provider, their tokens and their cost estimated
  *               at the price table, from the database's usage rows (llm_usage): the app's own
- *               accounting. Calls answered from stored answers are counted apart and cost
- *               nothing. Token columns leave out the attempts marked estimated (tokens unknown
- *               or partial); USD counts those at their estimate. The spend log (LLM_SPEND_LOG)
- *               stays the authoritative record
+ *               accounting. Calls answered from stored answers, attempts stopped before their
+ *               request left or that made no connection, and attempts recorded before schema 12
+ *               (which do not say whether they were sent) are counted apart. Token columns leave
+ *               out the attempts marked estimated (tokens unknown or partial); USD counts those
+ *               at their estimate. The spend log (LLM_SPEND_LOG) stays the authoritative record
  *
- * Days older than the run retention are shown as pruned: their runs and usage rows have been
- * deleted (retention.ts), so they are not counted, and the total leaves them out. The day the
- * retention ends in is marked as partly pruned.
+ * Days before the cutoff retention last applied are shown as pruned: their runs and usage rows
+ * have been deleted (retention.ts records the cutoff), so they are not counted, and the total
+ * leaves them out. The day of the cutoff is marked as partly pruned (*). A database that records
+ * no cutoff (schema before 12, or not pruned since) is marked from RUN_RETENTION_DAYS, and the
+ * report says so. On a database that may have been pruned before it was migrated to 12 (it
+ * held runs or usage rows, or was first migrated more than a day before), the prunes made then
+ * were not recorded: the days they may have emptied (up to a day, the shortest retention,
+ * before the migration) are marked unknown (?) until the recorded cutoff passes them; their
+ * counts are what is left.
+ *
+ * Known limits:
+ *   - A prune under a clock that was ahead records a cutoff in the future, and the latest cutoff
+ *     is kept: days after it read as pruned (though their records exist) until real time passes
+ *     it. Correct the clock before the API prunes.
+ *   - Retention keeps a run until it finished longer ago than the retention, with its usage
+ *     rows, but the report counts runs by the day each started: such a run (a long wait at the
+ *     picker) on a pruned day is left out, though it is still stored.
+ *   - The read-only open needs to create -wal or -shm when one is missing, so in a directory the
+ *     user running the report cannot write it fails ("attempt to write a readonly database"):
+ *     run it as the API's user.
+ *   - Reading the file into memory takes about 2.3 times its size at peak (some 2.3 GiB for a
+ *     file just under the 1 GiB limit).
+ *   - Attempts whose request left the process count as sent unless the failure shows no
+ *     connection was made; an abort or LLM_TIMEOUT_MS firing while the connection was being made
+ *     cannot be told apart from one after the request was sent, and counts as sent.
+ *   - A database is taken as new when it was migrated to 12 holding no runs or usage rows and
+ *     within a day of its first migration: no day is marked unknown. It can have had no record
+ *     old enough to prune, unless records were written with times in the past.
  *
  * Never prints what anyone typed, a run id, a key or an endpoint. Exits 1 when the database
  * cannot be read, 2 for a bad option.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { existsSync, readFileSync, type Stats, statSync } from "node:fs";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
 import { getDefaultDbPath } from "../store/database.js";
-import { DEFAULT_RETENTION, retentionFromEnv } from "../store/retention.js";
+import {
+  DEFAULT_RETENTION,
+  MIN_RUN_RETENTION_MS,
+  retentionFromEnv,
+  retentionRecord,
+} from "../store/retention.js";
 import { runDurationSql } from "../store/runs.js";
+import { isMainModule } from "./isMain.js";
 
 const DAY_SECONDS = 24 * 60 * 60;
 export const DEFAULT_DAYS = 7;
@@ -84,7 +117,10 @@ export interface Fallbacks {
 }
 
 export interface ModelUse {
-  /** Call attempts sent to the provider. */
+  /**
+   * Call attempts sent to the provider: the request left the process and did not fail in a way
+   * that shows no connection was made (llm_usage.sent).
+   */
   calls: number;
   /** Of those, the attempts that ended in an error. */
   errors: number;
@@ -100,10 +136,23 @@ export interface ModelUse {
   estimatedCalls: number;
   /** Calls answered from stored answers: never sent, no cost, not in the counts above. */
   replayedCalls: number;
+  /**
+   * Attempts not sent: stopped before the request left, or no connection made. Not in `calls`;
+   * they cost nothing.
+   */
+  unsentCalls: number;
+  /**
+   * Attempts recorded before schema 12, which do not say whether they were sent. Not in
+   * `calls`; their tokens and cost are counted.
+   */
+  sentUnknownCalls: number;
 }
 
-/** How much of a day's records the retention has kept. */
-export type DayRetention = "kept" | "partly_pruned" | "pruned";
+/**
+ * How much of a day's records the retention has kept: all, part (the day of the cutoff), none,
+ * or not known (a prune that was not recorded may have deleted some: see `unrecordedUntil`).
+ */
+export type DayRetention = "kept" | "partly_pruned" | "pruned" | "unknown";
 
 export interface ReportRow {
   /** YYYY-MM-DD (UTC), or "total". */
@@ -136,8 +185,22 @@ export interface RunReport {
   from: string;
   to: string;
   days: number;
-  /** The run retention the report assumes, in days (RUN_RETENTION_DAYS). */
+  /** The run retention setting, in days (RUN_RETENTION_DAYS). */
   retentionDays: number;
+  /**
+   * Where the cutoff that marks pruned days comes from: "recorded", the latest one retention
+   * applied to this database (retention_state); "setting", now less `retentionDays`, used only
+   * when the database records none (schema before 12, or not pruned since).
+   */
+  cutoffSource: "recorded" | "setting";
+  /** Runs and usage rows at or before this time (ISO 8601) may have been deleted. */
+  cutoff: string;
+  /**
+   * Prunes made before the database recorded its cutoffs (migration 12) may have deleted runs
+   * and usage rows at or before this time (ISO 8601): a day not pruned that starts at or before
+   * it is "unknown". Null when none can have been (a database created at schema 12 or later).
+   */
+  unrecordedUntil: string | null;
   /** The first day whose records are all kept. */
   keptFrom: string;
   /** The database's schema version (PRAGMA user_version). */
@@ -198,6 +261,8 @@ const emptyModelUse = (): ModelUse => ({
   usdEstimate: 0,
   estimatedCalls: 0,
   replayedCalls: 0,
+  unsentCalls: 0,
+  sentUnknownCalls: 0,
 });
 
 function addModelUse(into: ModelUse, row: ModelUse): void {
@@ -208,6 +273,8 @@ function addModelUse(into: ModelUse, row: ModelUse): void {
   into.usdEstimate += row.usdEstimate;
   into.estimatedCalls += row.estimatedCalls;
   into.replayedCalls += row.replayedCalls;
+  into.unsentCalls += row.unsentCalls;
+  into.sentUnknownCalls += row.sentUnknownCalls;
 }
 
 function summarise(
@@ -254,7 +321,8 @@ function summarise(
 
 /**
  * The report of the `days` days up to `now` (unix ms), today included, from an API database at
- * schema 2 or later, with runs kept for `retentionDays`. Reads only.
+ * schema 2 or later. Days are marked pruned from the cutoff retention recorded in the database,
+ * or, when it records none, from `retentionDays` before `now`. Reads only.
  */
 export function buildReport(
   db: Database.Database,
@@ -268,12 +336,26 @@ export function buildReport(
   const today = Math.floor(now / 1000 / DAY_SECONDS) * DAY_SECONDS;
   const fromSec = today - (days - 1) * DAY_SECONDS;
   // Runs and usage rows at or before the cutoff may have been deleted (retention.ts).
-  const cutoffSec = Math.floor(now / 1000 - retentionDays * DAY_SECONDS);
+  const record = retentionRecord(db);
+  const recordedCutoff = record?.runCutoff ?? null;
+  const cutoffSec = recordedCutoff ?? Math.floor(now / 1000 - retentionDays * DAY_SECONDS);
+  // A prune before cutoffs were recorded deleted only records that ended at least the shortest
+  // run retention before it ran, so at or before this time.
+  const unrecordedUntil =
+    record?.recordedSince == null
+      ? null
+      : record.recordedSince - Math.floor(MIN_RUN_RETENTION_MS / 1000);
+  const unknownUntil =
+    unrecordedUntil !== null && unrecordedUntil > cutoffSec ? unrecordedUntil : null;
   const dayStarts = Array.from({ length: days }, (_, i) => fromSec + i * DAY_SECONDS);
-  const retentionOf = (start: number): DayRetention =>
-    start + DAY_SECONDS <= cutoffSec + 1 ? "pruned" : start <= cutoffSec ? "partly_pruned" : "kept";
+  const retentionOf = (start: number): DayRetention => {
+    if (start + DAY_SECONDS <= cutoffSec + 1) return "pruned";
+    if (unknownUntil !== null && start <= unknownUntil) return "unknown";
+    return start <= cutoffSec ? "partly_pruned" : "kept";
+  };
   const firstKept = dayStarts.find((start) => retentionOf(start) !== "pruned") ?? today;
-  const keptFrom = utcDay(Math.floor(cutoffSec / DAY_SECONDS) * DAY_SECONDS + DAY_SECONDS);
+  const lastDeletable = Math.max(cutoffSec, unknownUntil ?? cutoffSec);
+  const keptFrom = utcDay(Math.floor(lastDeletable / DAY_SECONDS) * DAY_SECONDS + DAY_SECONDS);
 
   const pausesKept = hasColumn(db, "runs", "paused_seconds");
   const replayOf = jsonField("payload", "$.replayOf");
@@ -312,8 +394,11 @@ export function buildReport(
   let modelByDay: Map<string, ModelUse> | null = null;
   let modelByPurpose: Record<string, ModelUse> | null = null;
   if (hasTable(db, "llm_usage")) {
-    const sent = "mode <> 'replay'";
-    const counted = `${sent} AND estimated = 0`;
+    // Replayed calls were never sent; of the others, `sent` says (null before schema 12).
+    const attempt = "mode <> 'replay'";
+    const sentKept = hasColumn(db, "llm_usage", "sent");
+    const sent = sentKept ? `${attempt} AND sent = 1` : "0";
+    const counted = `${attempt} AND estimated = 0`;
     const usage = db
       .prepare(
         `SELECT date(created_at, 'unixepoch') AS day, purpose,
@@ -321,9 +406,12 @@ export function buildReport(
            COALESCE(SUM(${sent} AND status <> 'ok'), 0) AS errors,
            COALESCE(SUM(CASE WHEN ${counted} THEN input_tokens END), 0) AS inputTokens,
            COALESCE(SUM(CASE WHEN ${counted} THEN output_tokens END), 0) AS outputTokens,
-           COALESCE(SUM(CASE WHEN ${sent} THEN usd_est END), 0) AS usdEstimate,
-           COALESCE(SUM(${sent} AND estimated <> 0), 0) AS estimatedCalls,
-           COALESCE(SUM(mode = 'replay'), 0) AS replayedCalls
+           COALESCE(SUM(CASE WHEN ${attempt} THEN usd_est END), 0) AS usdEstimate,
+           COALESCE(SUM(${attempt} AND estimated <> 0), 0) AS estimatedCalls,
+           COALESCE(SUM(mode = 'replay'), 0) AS replayedCalls,
+           COALESCE(SUM(${sentKept ? `${attempt} AND sent = 0` : "0"}), 0) AS unsentCalls,
+           COALESCE(SUM(${sentKept ? `${attempt} AND sent IS NULL` : attempt}), 0)
+             AS sentUnknownCalls
          FROM llm_usage WHERE created_at >= ? GROUP BY day, purpose ORDER BY day, purpose`,
       )
       .all(firstKept) as Array<ModelUse & { day: string; purpose: string }>;
@@ -359,13 +447,21 @@ export function buildReport(
     to: utcDay(today),
     days,
     retentionDays,
+    cutoffSource: recordedCutoff === null ? "setting" : "recorded",
+    cutoff: new Date(cutoffSec * 1000).toISOString(),
+    unrecordedUntil:
+      unrecordedUntil === null ? null : new Date(unrecordedUntil * 1000).toISOString(),
     keptFrom,
     schemaVersion: db.pragma("user_version", { simple: true }) as number,
     pausesKept,
     perDay,
     total: summarise(
       "total",
-      perDay.some((row) => row.retention !== "kept") ? "partly_pruned" : "kept",
+      perDay.some((row) => row.retention === "unknown")
+        ? "unknown"
+        : perDay.some((row) => row.retention !== "kept")
+          ? "partly_pruned"
+          : "kept",
       facts,
       totalModel,
     ),
@@ -378,6 +474,10 @@ export function buildReport(
 // =============================================================================
 
 const usd = (value: number) => `$${value.toFixed(4)}`;
+const when = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
+/** Calls sent, and the attempts not known to be sent (before schema 12) as +N?. */
+const calls = (use: ModelUse) =>
+  use.sentUnknownCalls > 0 ? `${use.calls}+${use.sentUnknownCalls}?` : String(use.calls);
 const seconds = (value: number | null) => (value === null ? "-" : String(value));
 const rate = ({ fallback, runs, rate }: Fallbacks) =>
   rate === null ? "-" : `${fallback}/${runs} ${Math.round(rate * 100)}%`;
@@ -403,7 +503,9 @@ export function formatReport(report: RunReport): string {
     "USD (est.)",
   ];
   const line = (row: ReportRow): string[] => [
-    row.retention === "partly_pruned" && row.day !== "total" ? `${row.day}*` : row.day,
+    row.day === "total"
+      ? row.day
+      : `${row.day}${row.retention === "partly_pruned" ? "*" : row.retention === "unknown" ? "?" : ""}`,
     String(row.runs),
     String(row.live),
     String(row.replay),
@@ -417,7 +519,7 @@ export function formatReport(report: RunReport): string {
     rate(row.fallback),
     ...(row.model
       ? [
-          String(row.model.calls),
+          calls(row.model),
           String(row.model.inputTokens),
           String(row.model.outputTokens),
           usd(row.model.usdEstimate),
@@ -469,26 +571,66 @@ export function formatReport(report: RunReport): string {
           ? ` ${total.model.replayedCalls} calls answered from stored answers are not counted ` +
             "(never sent, no cost)."
           : "") +
+        (total.model.unsentCalls > 0
+          ? ` ${total.model.unsentCalls} attempts not sent (stopped before the request left, ` +
+            "or no connection made) are not counted as calls; they cost nothing."
+          : "") +
+        (total.model.sentUnknownCalls > 0
+          ? ` ${total.model.sentUnknownCalls} attempts recorded before schema v12 do not say ` +
+            "whether they were sent: not counted as calls (shown as +N? in calls), their " +
+            "tokens and USD are."
+          : "") +
         " The spend log (LLM_SPEND_LOG) is the authoritative record."
       : "Model: the database keeps no usage rows.",
   ];
   if (report.modelByPurpose && Object.keys(report.modelByPurpose).length > 0) {
     notes.push(
       `Model by purpose: ${Object.entries(report.modelByPurpose)
-        .map(([purpose, use]) => `${purpose} ${use.calls} calls ${usd(use.usdEstimate)}`)
+        .map(
+          ([purpose, use]) =>
+            `${purpose} ${use.calls} calls` +
+            (use.sentUnknownCalls > 0
+              ? ` (and ${use.sentUnknownCalls} attempts not known to be sent)`
+              : "") +
+            ` ${usd(use.usdEstimate)}`,
+        )
         .join(", ")}.`,
     );
   }
-  if (pruned > 0 || partly) {
+  const unknown = report.perDay.filter((row) => row.retention === "unknown").length;
+  const past =
+    `records are complete from ${report.keptFrom}.` +
+    (pruned > 0 ? ` ${pruned} pruned days are not counted, in the total either.` : "") +
+    (partly ? " * partly pruned." : "");
+  const fromSetting =
+    `days are marked from the current RUN_RETENTION_DAYS=${report.retentionDays}: ` +
+    (pruned > 0 || partly || unknown > 0 ? past : "none in this window is past it.");
+  if (report.cutoffSource === "setting" && report.schemaVersion < 12) {
     notes.push(
-      `Retention: runs and usage rows are deleted after RUN_RETENTION_DAYS=` +
-        `${report.retentionDays}; records are complete from ${report.keptFrom}.` +
-        (pruned > 0 ? ` ${pruned} pruned days are not counted, in the total either.` : "") +
-        (partly ? " * partly pruned." : ""),
+      `Retention: the database is at schema v${report.schemaVersion}, which records no cutoff ` +
+        `applied by retention (start the API once to migrate it), so ${fromSetting} Days ` +
+        "deleted under a shorter setting would show as kept.",
+    );
+  } else if (report.cutoffSource === "setting") {
+    notes.push(
+      "Retention: the database has not been pruned since it began to record the cutoffs " +
+        `retention applies, so ${fromSetting}`,
+    );
+  } else if (pruned > 0 || partly || unknown > 0) {
+    notes.push(
+      `Retention: runs and usage rows up to ${when(report.cutoff)} have been deleted (the ` +
+        `latest cutoff retention applied); ${past}`,
+    );
+  }
+  if (unknown > 0 && report.unrecordedUntil) {
+    notes.push(
+      "Retention before schema v12 was not recorded: prunes made then may have deleted runs " +
+        `and usage rows up to ${when(report.unrecordedUntil)}. The ${unknown} days marked ? ` +
+        "show what is left: they may have had more, and so may the total.",
     );
   }
   return [
-    `Runs ${report.from} to ${report.to} (UTC, ${report.days} days): runs by the day each ` +
+    `Runs ${report.from} to ${report.to} (UTC, ${report.days} ${report.days === 1 ? "day" : "days"}): runs by the day each ` +
       "started, model use by the day of the call",
     "",
     render(header),
@@ -532,17 +674,44 @@ export function reportSettings(
 /** SQLite's header bytes 18 and 19: 2 for a database in WAL mode, 1 for rollback journal. */
 const WAL_VERSION_OFFSETS = [18, 19];
 
+/** A database larger than this is opened read-only rather than read into memory. */
+export const MAX_IN_MEMORY_BYTES = 1024 ** 3;
+
+export interface OpenForReadingOptions {
+  /** Default MAX_IN_MEMORY_BYTES. */
+  maxInMemoryBytes?: number;
+  /** Reads the file into memory (default readFileSync); for tests. */
+  readFile?: (path: string) => Buffer;
+}
+
+const sameFile = (a: Stats, b: Stats) =>
+  a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs;
+
 /**
- * Opens the database without writing anything next to it. With no -wal file, the file is read
- * into memory (a copy set to rollback-journal mode, since an in-memory database cannot use WAL;
- * the file is not changed). With one, the API is running (or stopped without checkpointing) and
- * the file is opened read-only, reading the API's -wal and -shm.
+ * Opens the database to read it. With no -wal file (the API is not running) and at most
+ * `maxInMemoryBytes`, the file is read into memory: a copy set to rollback-journal mode, since
+ * an in-memory database cannot use WAL, and nothing is written next to the file. The copy is
+ * kept only if the file is the same after the read (inode, size and modification time) and no
+ * -wal appeared meanwhile (the API started).
+ *
+ * Otherwise the file is opened read-only, reading the API's -wal and -shm when it runs. SQLite
+ * then creates whichever of -wal and -shm is missing (a larger file with the API stopped, a file
+ * that changed while it was read, or a -wal a crash left without its -shm), as the user running
+ * the report, and leaves them.
  */
-export function openForReading(dbPath: string): Database.Database {
-  if (existsSync(`${dbPath}-wal`)) {
-    return new Database(dbPath, { readonly: true, fileMustExist: true });
+export function openForReading(
+  dbPath: string,
+  { maxInMemoryBytes = MAX_IN_MEMORY_BYTES, readFile = readFileSync }: OpenForReadingOptions = {},
+): Database.Database {
+  const readOnly = () => new Database(dbPath, { readonly: true, fileMustExist: true });
+  const wal = `${dbPath}-wal`;
+  if (existsSync(wal)) return readOnly();
+  const before = statSync(dbPath);
+  if (before.size > maxInMemoryBytes) return readOnly();
+  const image = readFile(dbPath);
+  if (existsSync(wal) || image.length !== before.size || !sameFile(before, statSync(dbPath))) {
+    return readOnly();
   }
-  const image = readFileSync(dbPath);
   for (const offset of WAL_VERSION_OFFSETS) if (image[offset] === 2) image[offset] = 1;
   return new Database(image);
 }
@@ -608,6 +777,6 @@ export function main(argv: string[], deps: ReportDependencies = {}): number {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta)) {
   process.exitCode = main(process.argv.slice(2));
 }

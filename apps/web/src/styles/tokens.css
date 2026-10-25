@@ -1,0 +1,197 @@
+/*
+ * Design tokens: the one place the app's colours, type, spacing, radii, shadows and motion are
+ * defined. Tailwind makes each one a utility (--color-cyber gives text-cyber, bg-cyber/10, ...).
+ *
+ * - apps/web/config/theme.mjs writes the --color-* tokens to styles/theme.ts for D3 and Recharts
+ *   (`npm run theme -w apps/web`, also run before every build); scripts/check-theme-sync.mjs
+ *   fails when theme.ts is out of date.
+ * - scripts/contrast.mjs checks every text colour (--color-text-*, --color-prov-*,
+ *   --color-status-*, cyber and analog) at 4.5:1 or more on every surface (--color-void*,
+ *   --color-surface*, a translucent one as drawn on --color-void), and the data-visualisation
+ *   colours (--color-viz-*) at 3:1 or more.
+ *
+ * A token that only points at another (`var(--color-...)`) is an alias kept for code that still
+ * uses the old name.
+ */
+@theme {
+  /* ===== Surfaces ===== */
+  --color-void: #050505; /* the page */
+  --color-void-light: #0a0a0a;
+  --color-void-lighter: #121212;
+  --color-surface: rgba(255, 255, 255, 0.05);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-active: rgba(255, 255, 255, 0.12);
+  --color-surface-subtle: rgba(255, 255, 255, 0.03);
+  --color-surface-overlay: rgba(0, 0, 0, 0.95); /* dropdowns, modals */
+
+  /* ===== Neutrals (also Tailwind's own white and black) ===== */
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* ===== Borders ===== */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.2);
+
+  /* ===== Text ===== */
+  --color-text-primary: rgba(255, 255, 255, 0.95);
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  /* The dimmest text: 4.5:1 on the lightest surface (surface-active) */
+  --color-text-tertiary: rgba(255, 255, 255, 0.5);
+  /* Aliases of the dimmest text. Muted was 0.25 (2.07:1 on the page); badge text must also stay
+     at 4.5:1 on a badge's own tint, which tertiary does (component-styles.spec.ts measures it) */
+  --color-text-muted: var(--color-text-tertiary);
+  --color-text-chip: var(--color-text-tertiary);
+
+  /* ===== Brand: cyan for what was measured, amber for history and its sources ===== */
+  --color-cyber: #00f0ff;
+  --color-cyber-dim: rgba(0, 240, 255, 0.1);
+  --color-cyber-muted: rgba(0, 240, 255, 0.5);
+
+  /* The one amber. Tailwind's amber-500 (#f59e0b), used by accent-amber and status-warning, is
+     now this colour too */
+  --color-analog: #ffb000;
+  --color-analog-dim: rgba(255, 176, 0, 0.1);
+  --color-analog-muted: rgba(255, 176, 0, 0.5);
+
+  /* ===== Provenance: how a value is known. Colour is never the only cue (chips carry text) ===== */
+  --color-prov-measured: var(--color-cyber);
+  --color-prov-sourced: var(--color-analog);
+  --color-prov-inferred: #c084fc;
+  --color-prov-missing: var(--color-text-tertiary);
+
+  /* ===== Data visualisation: series and relation colours for charts and the graph ===== */
+  --color-viz-cyan: var(--color-cyber);
+  --color-viz-amber: var(--color-analog);
+  --color-viz-purple: #a855f7;
+  --color-viz-pink: #ec4899;
+  --color-viz-blue: #3b82f6;
+  --color-viz-indigo: #6366f1;
+  --color-viz-green: #22c55e;
+  --color-viz-neutral: #9ca3af;
+
+  /* ===== Status ===== */
+  --color-status-success: var(--color-viz-green);
+  --color-status-warning: var(--color-analog);
+  --color-status-error: #f87171;
+  --color-status-info: #60a5fa;
+
+  /* ===== Accents: aliases of the data-visualisation colours ===== */
+  --color-accent-purple: var(--color-viz-purple);
+  --color-accent-pink: var(--color-viz-pink);
+  --color-accent-green: var(--color-viz-green);
+  --color-accent-indigo: var(--color-viz-indigo);
+  --color-accent-amber: var(--color-analog);
+  --color-accent-blue: var(--color-viz-blue);
+
+  /* ===== Spotify brand ===== */
+  --color-spotify: #1db954;
+
+  /* ===== Opaque grey scale (backgrounds, borders, chart grids; not text) ===== */
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  /* ===== Type ===== */
+  /* Inter for headings and body; IBM Plex Mono for measured values and log lines (fonts.css) */
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* Chrome text (badges, status bars, metadata), with its own line height so a small badge is
+     the same height wherever it sits */
+  --text-chrome: 12px;
+  --text-chrome--line-height: 16px;
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight: -0.01em;
+  --tracking-wide: 0.04em;
+  --tracking-wider: 0.08em;
+  --tracking-widest: 0.12em;
+
+  /* Text shadows (text-shadow-dark, text-shadow-glow-cyber, text-shadow-glow-analog) */
+  --text-shadow-dark: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.8);
+  --text-shadow-glow-cyber: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
+  --text-shadow-glow-analog: 0 0 10px rgba(255, 176, 0, 0.5), 0 0 20px rgba(255, 176, 0, 0.3);
+
+  /* ===== Effects ===== */
+  /* The console's CRT texture: dark scanlines over a faint red, green and blue fringe */
+  --crt-scanlines:
+    linear-gradient(transparent 50%, rgba(0, 0, 0, 0.35) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.08), rgba(0, 255, 0, 0.04), rgba(0, 0, 255, 0.08));
+
+  /* ===== Spacing ===== */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* ===== Radii ===== */
+  --radius-xs: 2px;
+  --radius-sm: 4px; /* inputs, badges, buttons, chips */
+  --radius-md: 8px; /* cards, factoids, dropdowns */
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ===== Shadows ===== */
+  --shadow-glow-cyber: 0 0 20px rgba(0, 240, 255, 0.25);
+  --shadow-glow-analog: 0 0 20px rgba(255, 176, 0, 0.25);
+  --shadow-glow-purple: 0 0 20px rgba(168, 85, 247, 0.25);
+  --shadow-glow-pink: 0 0 20px rgba(236, 72, 153, 0.25);
+  --shadow-glow-green: 0 0 20px rgba(34, 197, 94, 0.25);
+  --shadow-glow-spotify: 0 0 20px rgba(29, 185, 84, 0.25);
+  --shadow-glow-indigo: 0 0 20px rgba(99, 102, 241, 0.25);
+  --shadow-glow-amber: var(--shadow-glow-analog);
+  --shadow-glow-cyber-subtle: 0 0 12px rgba(0, 240, 255, 0.15);
+  --shadow-glow-analog-subtle: 0 0 12px rgba(255, 176, 0, 0.15);
+  --shadow-glow-purple-subtle: 0 0 12px rgba(168, 85, 247, 0.15);
+  --shadow-glow-green-subtle: 0 0 12px rgba(34, 197, 94, 0.15);
+  --shadow-glow-pink-subtle: 0 0 12px rgba(236, 72, 153, 0.15);
+  --shadow-glow-spotify-subtle: 0 0 12px rgba(29, 185, 84, 0.15);
+  --shadow-glow-indigo-subtle: 0 0 12px rgba(99, 102, 241, 0.15);
+  --shadow-glow-amber-subtle: var(--shadow-glow-analog-subtle);
+  --shadow-glow-white: 0 0 20px rgba(255, 255, 255, 0.15); /* play button */
+  --shadow-glow-white-hover: 0 0 30px rgba(255, 255, 255, 0.3);
+  --shadow-elevated: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-elevated-lg: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-input-focus: 0 0 0 1px rgba(0, 240, 255, 0.4), 0 0 30px rgba(0, 240, 255, 0.08);
+
+  /* ===== Motion ===== */
+  --duration-focus: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --duration-dramatic: 700ms;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Entrances fill `both`: during a delay (stagger-*) the element already shows its first frame,
+     instead of showing at rest, vanishing when the animation starts and fading back in. The
+     keyframes are in index.css. */
+  --animate-scan-vertical: scan-vertical 1.5s ease-in-out infinite;
+  --animate-scan-horizontal: scan-horizontal 2s ease-in-out infinite;
+  --animate-spin-slow: spin-slow 3s linear infinite;
+  --animate-fade-in-right: fade-in-right 0.3s ease-out both;
+  --animate-fade-in-up: fade-in-up 0.4s ease-out both;
+  --animate-fade-in: fade-in 0.2s ease-out both;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-pulse-slow: pulse 4s ease-in-out infinite;
+  --animate-stagger-in: stagger-in 0.3s ease-out both;
+  --animate-spin-reverse: spin-reverse 3s linear infinite;
+  --animate-completion-reveal: completion-reveal 600ms ease-out both;
+  --animate-progress-shimmer: progress-shimmer 1.5s linear infinite;
+  --animate-glow-breathe: glow-breathe 3s ease-in-out infinite;
+  --animate-scale-in: scale-in 200ms var(--ease-out-expo) both;
+  --animate-slide-up-fade: slide-up-fade 400ms var(--ease-out-expo) both;
+}

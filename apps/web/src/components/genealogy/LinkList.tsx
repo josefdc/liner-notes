@@ -19,7 +19,7 @@ export const LinkList: React.FC<{
       </summary>
       <ul
         aria-label="Genealogy links"
-        className="absolute bottom-full left-0 right-0 z-30 flex flex-col gap-1.5 max-h-60 overflow-y-auto border-t border-white/10 bg-void px-4 py-3"
+        className="absolute bottom-full left-0 right-0 z-30 flex flex-col gap-1.5 max-h-[min(15rem,35dvh)] overflow-y-auto border-t border-white/10 bg-void px-4 py-3"
       >
         {links.map((link, index) => (
           <li

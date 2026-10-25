@@ -88,7 +88,8 @@ test("small badges have one height wherever they sit", async ({ page }) => {
   await analyzeAndOpenDashboard(page, "Bright Lines");
   const badges = await smallBadges(page);
   expect(badges.map((badge) => badge.text)).toContain("EXPLICIT");
-  for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 24 });
+  // 16 px of chrome text (12 px type), 4 px padding above and below, a 1 px border.
+  for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 26 });
 });
 
 // An all-white album cover, the worst case behind the translucent hero and Player backgrounds.

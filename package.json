@@ -20,6 +20,8 @@
     "format": "biome format --write .",
     "guard:honest": "node scripts/guard-honest.mjs",
     "check:css": "node scripts/check-built-css.mjs",
+    "check:theme": "node scripts/check-theme-sync.mjs",
+    "check:contrast": "node scripts/contrast.mjs apps/web/src/styles/tokens.css",
     "test:e2e": "playwright test",
     "test:replay": "node scripts/replay-e2e.mjs && REPLAY_INTERRUPT_TEST=1 vitest run --project scripts replay-interrupt",
     "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs"

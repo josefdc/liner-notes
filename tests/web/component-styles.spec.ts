@@ -149,6 +149,9 @@ async function backgroundSettled(page: Page) {
   await animationsSettled(page);
 }
 
+/** The widest spread between a colour's channels for it to count as grey (see below). */
+const NEUTRAL_SPREAD = 40;
+
 /** Batched elements keep at least this many pixels apart (see neutralBadgeContrast). */
 const MEASURE_GAP = 8;
 
@@ -156,7 +159,8 @@ const MEASURE_GAP = 8;
  * WCAG contrast of the grey text in each neutral badge, against what the page actually draws
  * behind it: the badge's text and icons are hidden, the area inside its border is screenshotted
  * (cover image, blur and every translucent layer included), and its brightest pixel is the
- * background. Coloured values inside a badge (cyan, amber, pink) are not measured here.
+ * background. Coloured values inside a badge (cyan, amber, pink) are not measured here; a
+ * colour that cannot be read is an error.
  *
  * The pointer is first moved off the page's content and focus is dropped, so every badge is
  * measured at rest: a test that hovers or focuses on purpose says so with `keepHover` or
@@ -199,6 +203,19 @@ async function neutralBadgeContrast(
     // read as drawn now, then they are hidden together.
     const picked = await badges.evaluateAll(
       (elements, { pending, gap, keepHover, keepFocus }) => {
+        // A computed colour as rgb()/rgba(): one the browser reports otherwise (oklab() for
+        // text-white/40) is drawn on a 1 px canvas and read back in sRGB.
+        const asRgb = (color: string) => {
+          if (/^rgba?\(/.test(color)) return color;
+          const context = new OffscreenCanvas(1, 1).getContext("2d");
+          if (!context) throw new Error("no 2d context");
+          context.fillStyle = "rgb(1, 2, 3)";
+          context.fillStyle = color;
+          if (context.fillStyle === "#010203") throw new Error(`cannot read the colour ${color}`);
+          context.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+          return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+        };
         const inView = (element: Element, box: DOMRect) => {
           if (box.top < 0 || box.left < 0) return false;
           if (box.bottom > innerHeight || box.right > innerWidth) return false;
@@ -238,7 +255,7 @@ async function neutralBadgeContrast(
             if (!text.textContent?.trim() || !text.parentElement) continue;
             found.push({
               text: text.textContent.trim(),
-              color: getComputedStyle(text.parentElement).color,
+              color: asRgb(getComputedStyle(text.parentElement).color),
             });
           }
           element.setAttribute("data-measuring", "");
@@ -315,13 +332,15 @@ async function neutralBadgeContrast(
   texts.forEach((found, i) => {
     const background = backgrounds[i] as Rgba;
     for (const { text, color } of found ?? []) {
-      const match = /rgba?\(([^)]+)\)/.exec(color);
-      if (!match) continue;
+      const match = /^rgba?\(([^)]+)\)$/.exec(color);
+      if (!match) throw new Error(`"${text}": cannot read its colour ${color}`);
       const [r, g, b, a = 1] = match[1]
         .split(/[\s,/]+/)
         .filter(Boolean)
         .map(Number);
-      if (!(r === g && g === b)) continue;
+      // Coloured text (cyan, amber, green, pink) is not measured here; grey, even a slightly
+      // tinted one (Tailwind's gray-400 is rgb(156, 163, 175)), is.
+      if (Math.max(r, g, b) - Math.min(r, g, b) > NEUTRAL_SPREAD) continue;
       const foreground = over({ r, g, b, a }, background);
       const [light, dark] = [luminance(foreground), luminance(background)].sort((x, y) => y - x);
       result.push({ text, ratio: Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100 });
@@ -469,15 +488,29 @@ for (const cover of ["no cover", "a white cover"]) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
     const dashboard = await neutralBadgeContrast(page, GENEALOGY_TEXT.dashboard);
-    // A hovered card lightens behind its badge.
-    const inferred = page
-      .getByRole("button")
-      .filter({ has: page.locator('[data-link-kind="inferred"]') });
-    await inferred.first().hover();
-    await animationsSettled(page);
-    dashboard.push(
-      ...(await neutralBadgeContrast(page, 'span[data-link-kind="inferred"]', { keepHover: true })),
-    );
+    // A hovered card lightens behind its badge, relation and provenance: each card, hovered.
+    const cards = page.getByRole("button").filter({ has: page.locator("[data-link-kind]") });
+    const hoveredText = `[data-hovered] :is(${GENEALOGY_TEXT.dashboard})`;
+    for (let i = 0; i < (await cards.count()); i += 1) {
+      const card = cards.nth(i);
+      await card.scrollIntoViewIfNeeded();
+      const box = await card.boundingBox();
+      if (!box) throw new Error("a connected card has no box");
+      const pointer = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await page.mouse.move(pointer.x, pointer.y);
+      await expect(card).toHaveAttribute("data-hovered", "true");
+      await animationsSettled(page);
+      const hovered = await neutralBadgeContrast(page, hoveredText, { keepHover: true });
+      expect(hovered.length, `card ${i + 1}, hovered`).toBeGreaterThan(0);
+      // Measured hovered: the card is still the one under the pointer.
+      const stillHovered = await card.evaluate(
+        (element, { x, y }) =>
+          element.matches(":hover") && element.contains(document.elementFromPoint(x, y)),
+        pointer,
+      );
+      expect(stillHovered, `card ${i + 1} stays under the pointer`).toBe(true);
+      dashboard.push(...hovered);
+    }
     await page.mouse.move(0, 0);
     await openPlayer(page);
     // The list opens over the graph; then, closed again, a focused link's detail.

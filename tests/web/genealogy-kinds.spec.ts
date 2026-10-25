@@ -90,26 +90,36 @@ const fitScale = (page: Page) =>
 /** Page time that covers the force layout (about 300 ticks) and the fit's half-second ease. */
 const LAYOUT_MS = 15_000;
 
+/** Marks the graph drawn now, so graphFitted waits for the one a resize draws in its place. */
+async function graphToBeRedrawn(page: Page) {
+  await graphOf(page)
+    .locator(":scope > g")
+    .evaluate((g) => g.setAttribute("data-redraw-pending", ""));
+}
+
 /**
  * Waits until the layout has settled and the graph has fitted itself to the panel: the fit's
  * transform is set and holds still (it eases in over half a second). The layout runs on the
- * page's clock (installed in beforeEach), which is first run forward through the force ticks and
- * the fit: on a loaded machine, waiting for them frame by frame takes most of a minute.
+ * page's clock (installed in beforeEach), which every check first runs forward through the force
+ * ticks and the fit, so a graph drawn again meanwhile (after a resize) settles on it too: on a
+ * loaded machine, waiting for them frame by frame takes most of a minute.
  */
 async function graphFitted(page: Page) {
-  await page.clock.runFor(LAYOUT_MS);
-  const transform = () =>
-    graphOf(page)
+  const fitted = async () => {
+    await page.clock.runFor(LAYOUT_MS);
+    return graphOf(page)
       .locator(":scope > g")
       .evaluate(async (g) => {
+        if (g.hasAttribute("data-redraw-pending")) return null;
         const before = g.getAttribute("transform");
         await new Promise((resolve) => setTimeout(resolve, 400));
         const after = g.getAttribute("transform");
         return before !== null && before === after && after.includes("scale(") ? after : null;
       });
-  // Well inside the test's 30 s, so a graph that never settles fails here, with this message.
+  };
+  // Inside the test's 30 s, so a graph that never settles fails here, with this message.
   await expect
-    .poll(transform, { message: "the graph's fit holds still", timeout: 10_000 })
+    .poll(fitted, { message: "the graph is drawn and its fit holds still", timeout: 15_000 })
     .not.toBeNull();
 }
 
@@ -260,6 +270,8 @@ test.describe("the genealogy graph", () => {
     const tracks = graph.locator("g.nodes > g");
     const targets = graph.locator("g.link-targets line");
     const detail = page.getByTestId("link-detail");
+    // Keys act on the settled graph, not on one still being laid out.
+    await graphFitted(page);
     await expect(graph.locator('[tabindex="0"]')).toHaveCount(1);
 
     // Tab into the graph from what comes before it, and out of it in one press.
@@ -376,6 +388,7 @@ test.describe("the genealogy graph", () => {
     test(`on a ${width}×${height} phone the graph fills the tab, readable, list above the tab bar`, async ({
       page,
     }, testInfo) => {
+      await graphToBeRedrawn(page);
       await page.setViewportSize({ width, height });
       await page.getByRole("tab", { name: "Network" }).click();
       const panel = page.locator("#panel-genealogy");

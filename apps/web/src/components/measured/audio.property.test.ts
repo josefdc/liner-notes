@@ -1,6 +1,35 @@
-import { AudioFeatures } from '@liner-notes/contract';
+import {
+  AudioFeatures,
+  AudioGateReason,
+  KeyMode,
+  KeyMoment,
+  ModelBasis,
+  MoodHeads,
+  PitchClass,
+  SignalBasis,
+} from '@liner-notes/contract';
 import { describe, expect, it } from 'vitest';
-import { isAudioFeatures, readAudio } from './audio';
+import {
+  GATE_REASONS,
+  isAudioFeatures,
+  KEY_MODES,
+  MODEL_BASIS,
+  MOMENT_TYPES,
+  MOOD_HEADS,
+  type MeasuredAudio,
+  PITCH_CLASSES,
+  readAudio,
+  SIGNAL_BASIS,
+  WINDOW_KIND,
+} from './audio';
+
+// The contract's own enums: the generator draws from them, so a value the contract adds is
+// drawn too, and the page's mirrored sets must equal them.
+const TONICS = PitchClass.options;
+const MODES = KeyMode.options;
+const MOMENT_KINDS = KeyMoment.shape.type.options;
+const GATES = AudioGateReason.options;
+const WINDOW = AudioFeatures.shape.window.shape.kind.value;
 
 // The page reads an `audio` block exactly as the contract does: the whole block or nothing.
 // Generated valid blocks, and every single-field fault of each, are read by both and must get
@@ -22,7 +51,10 @@ type Json = unknown;
 
 function validBlock(seed: number): Record<string, Json> {
   const r = random(seed);
-  const pick = <T>(items: T[]): T => items[Math.floor(r() * items.length)] as T;
+  const pick = <T>(items: readonly T[]): T => items[Math.floor(r() * items.length)] as T;
+  // Every value of each enum comes up across the seeds, whatever the generator draws.
+  const cycle = <T>(items: readonly T[], offset = 0): T =>
+    items[(seed + offset) % items.length] as T;
   const maybe = <T>(value: () => T, p = 0.8): T | null => (r() < p ? value() : null);
   const unit = () => pick([0, 1, Math.round(r() * 100) / 100]);
   const model = () => ({
@@ -42,8 +74,8 @@ function validBlock(seed: number): Record<string, Json> {
   const block: Record<string, Json> = {
     version: 2,
     analyzerVersion: '2.1.0+essentia.models-5c5c0c7f',
-    window: { kind: 'preview-30s', durationSeconds: pick([0, 22.4, 29.75, 30]) },
-    gate: { passed, reason: passed ? null : pick(['silence', 'noise', 'too_short']) },
+    window: { kind: WINDOW, durationSeconds: pick([0, 22.4, 29.75, 30]) },
+    gate: { passed, reason: passed ? null : cycle(GATES) },
     tempo: maybe(() => ({
       bpm: 60 + r() * 120,
       confidence: maybe(unit, 0.7),
@@ -54,8 +86,8 @@ function validBlock(seed: number): Record<string, Json> {
       basis: 'signal',
     })),
     key: maybe(() => ({
-      tonic: pick(['C', 'F#', 'A#', 'B']),
-      mode: pick(['major', 'minor']),
+      tonic: cycle(TONICS),
+      mode: cycle(MODES),
       strength: maybe(unit, 0.7),
       profile: 'edma',
       method: 'essentia.KeyExtractor',
@@ -78,9 +110,9 @@ function validBlock(seed: number): Record<string, Json> {
       method: 'novelty',
       basis: 'signal',
     })),
-    keyMoments: Array.from({ length: Math.floor(r() * 3) }, () => ({
+    keyMoments: Array.from({ length: 1 + Math.floor(r() * 3) }, (_, i) => ({
       time: r() * 30,
-      type: pick(['onset', 'energy_peak', 'silence']),
+      type: cycle(MOMENT_KINDS, i),
       intensity: unit(),
       description: pick(['', 'Peak']),
     })),
@@ -156,6 +188,46 @@ function* singleFaults(block: Json): Generator<Json> {
 
 const SEEDS = Array.from({ length: 60 }, (_, i) => i + 1);
 
+/** What readAudio should give for a block the contract parsed. */
+function fromContract(parsed: AudioFeatures): MeasuredAudio {
+  const sorted = (items: { label: string; score: number }[]) =>
+    [...items].sort((a, b) => b.score - a.score);
+  const read = {
+    analyzerVersion: parsed.analyzerVersion,
+    windowSeconds: parsed.window.durationSeconds,
+    gate: parsed.gate,
+  };
+  if (!parsed.gate.passed) {
+    return { ...read, tempo: null, key: null, loudness: null, fingerprint: null, keyMoments: [] };
+  }
+  const f = parsed.fingerprint;
+  return {
+    ...read,
+    tempo: parsed.tempo,
+    key: parsed.key,
+    loudness: parsed.loudness,
+    fingerprint: f && {
+      styles: f.styles && { ...f.styles, top: sorted(f.styles.top) },
+      tags: f.tags && { ...f.tags, scores: sorted(f.tags.scores) },
+      moods: f.moods,
+    },
+    keyMoments: parsed.keyMoments,
+  };
+}
+
+describe("the page's copy of the contract's enums", () => {
+  it('equals the contract', () => {
+    expect([...PITCH_CLASSES].sort()).toEqual([...TONICS].sort());
+    expect([...KEY_MODES].sort()).toEqual([...MODES].sort());
+    expect([...MOMENT_TYPES].sort()).toEqual([...MOMENT_KINDS].sort());
+    expect([...GATE_REASONS].sort()).toEqual([...GATES].sort());
+    expect(WINDOW_KIND).toBe(WINDOW);
+    expect(SIGNAL_BASIS).toBe(SignalBasis.value);
+    expect(MODEL_BASIS).toBe(ModelBasis.value);
+    expect([...MOOD_HEADS].sort()).toEqual(Object.keys(MoodHeads.shape).sort());
+  });
+});
+
 describe('readAudio against the contract', () => {
   it('accepts exactly the blocks the contract accepts (valid and single-fault blocks)', () => {
     const disagreements: string[] = [];
@@ -170,6 +242,13 @@ describe('readAudio against the contract', () => {
           (readAudio(candidate) !== null) !== contract
         ) {
           disagreements.push(`seed ${seed}: contract ${contract}: ${JSON.stringify(candidate)}`);
+        } else if (contract) {
+          // A block both accept, faulted or not, gives the same values (key moments the
+          // contract drops are dropped too).
+          const expected = fromContract(AudioFeatures.parse(candidate));
+          if (JSON.stringify(readAudio(candidate)) !== JSON.stringify(expected)) {
+            disagreements.push(`seed ${seed}: values differ: ${JSON.stringify(candidate)}`);
+          }
         }
       }
     }

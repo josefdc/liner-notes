@@ -187,7 +187,8 @@ describe('estimated audio values', () => {
     const stats = screen.getByRole('list', { name: 'Audio values' }).textContent;
     expect(stats).toContain('BPM not measured');
     expect(stats).toContain('C Major');
-    expect(stats).toContain('50%');
+    // The first analyzer's energy, on its own 0-1 scale: never a percentage, never "Measured".
+    expect(stats).toContain('Energy 0.50v1 energy score');
   });
 });
 

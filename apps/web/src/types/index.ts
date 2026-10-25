@@ -201,11 +201,14 @@ export interface TrackData {
   genreProfile?: GenreProfileItem[];
   /**
    * The audio measurement itself (the contract's AudioFeatures v2): each value with its method,
-   * confidence and basis, the preview window and the gate. As the server sent it, unchecked:
-   * read it with `measuredAudioOf` (constants.ts). Absent from results of APIs that do not
-   * send it; null when nothing was measured.
+   * confidence and basis, the preview window and the gate. The stream reader hands on the
+   * contract's reading of it: null when nothing was measured or when the contract cannot read
+   * the block (then `audioUnreadable` is true). Read it with `measuredAudioOf` (constants.ts).
+   * Absent from results of APIs that do not send it.
    */
   audio?: unknown;
+  /** True when the result sent an `audio` block the contract cannot read. */
+  audioUnreadable?: boolean;
   // Audio provenance: 'analyzed' when tempo and key were measured, 'unavailable' otherwise.
   // 'estimated' is sent by the API before audio values were measured only, and by results it
   // cached: those values were estimated from the genre or at random and are never shown.

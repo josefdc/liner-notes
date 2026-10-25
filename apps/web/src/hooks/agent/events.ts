@@ -58,9 +58,10 @@ type Envelope = { runId: string; seq: number };
 
 /**
  * An analysis event as sent. The result (`complete`) is handed to the app as the server wrote
- * it: the app's own readers keep values the contract's reader drops (such as an older result's
- * estimated audio, which is shown as estimated, never as measured). `unreadable` stands for an
- * outcome this page cannot use.
+ * it, except for its measurement (`audio`), which is the contract's reading of it (see
+ * withContractAudio): the app's own readers keep values the contract's reader drops (such as an
+ * older result's estimated audio, which is shown as estimated, never as measured).
+ * `unreadable` stands for an outcome this page cannot use.
  */
 export type AnalysisEvent =
   | Exclude<AnalyzeStreamEvent, { type: 'complete' | 'interrupt' }>
@@ -144,7 +145,12 @@ export function withContractAudio(
   read: (audio: unknown) => unknown,
 ): TrackData {
   if (!('audio' in data) || data.audio === undefined) return data as unknown as TrackData;
-  return { ...data, audio: data.audio === null ? null : read(data.audio) } as unknown as TrackData;
+  if (data.audio === null) return { ...data, audio: null } as unknown as TrackData;
+  const audio = read(data.audio);
+  // A block the contract cannot read is null, and the result says it was unreadable.
+  return (audio === null
+    ? { ...data, audio: null, audioUnreadable: true }
+    : { ...data, audio }) as unknown as TrackData;
 }
 
 /**

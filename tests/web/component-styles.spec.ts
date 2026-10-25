@@ -250,9 +250,12 @@ const PROVENANCE_TEXT = [
   "[data-value-kind] > span.max-w-60",
   'section[aria-label$="(model estimate)"] > p',
   'p:text-is("Audio-model estimates (scores, not probabilities)")',
+  // The timeline's preview-lane header and its notes ("No key moments — <reason>").
+  '[aria-label="Song structure"] [role="group"] > div:first-child > span',
+  '[aria-label="Song structure"] > p',
 ].join(", ");
 
-for (const fixture of ["measured-v2", "partly-measured-v2"]) {
+for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
   for (const cover of ["no cover", "a white cover"]) {
     test(`provenance and missing-value lines meet 4.5:1 (${fixture}, ${cover})`, async ({
       page,

@@ -5,8 +5,8 @@ import type { AudioFeatures, KeyMoment, ModelScore } from '@liner-notes/contract
 //
 // The stream reader hands the app the contract's own reading of the block (hooks/agent/events.ts:
 // null when the contract cannot read it). This reader decides the same way on its own, so a
-// result from anywhere else (a restored session, a test) is read as the contract reads it: the
-// whole block or nothing. A block the contract rejects anywhere (a malformed section, a model
+// result that did not come through it (a component given a result directly, as in the tests)
+// is read as the contract reads it: the whole block or nothing. A block the contract rejects anywhere (a malformed section, a model
 // without a licence, an unknown gate reason) is not a measurement, and nothing in it is shown as
 // measured. Its key moments are the one tolerant list: entries it cannot read are dropped, as
 // the contract does. audio.property.test.ts checks this against the contract's schema.
@@ -69,22 +69,47 @@ const listOf =
   (value) =>
     Array.isArray(value) && value.every(check);
 
-const PITCH_CLASSES = new Set(['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']);
-const MOMENT_TYPES = new Set(['energy_peak', 'energy_drop', 'onset', 'harmonic_change', 'silence']);
-const GATE_REASONS = new Set(['silence', 'noise', 'too_short']);
+// The contract's enums, mirrored here so the page loads no schema; audio.property.test.ts checks
+// that each equals the contract's own.
+export const PITCH_CLASSES: ReadonlySet<string> = new Set([
+  'C',
+  'C#',
+  'D',
+  'D#',
+  'E',
+  'F',
+  'F#',
+  'G',
+  'G#',
+  'A',
+  'A#',
+  'B',
+]);
+export const KEY_MODES: ReadonlySet<string> = new Set(['major', 'minor']);
+export const MOMENT_TYPES: ReadonlySet<string> = new Set([
+  'energy_peak',
+  'energy_drop',
+  'onset',
+  'harmonic_change',
+  'silence',
+]);
+export const GATE_REASONS: ReadonlySet<string> = new Set(['silence', 'noise', 'too_short']);
+export const WINDOW_KIND = 'preview-30s';
+export const SIGNAL_BASIS = 'signal';
+export const MODEL_BASIS = 'model';
 
 /** A signal block: its own fields, a method, and basis "signal". */
 const signal =
   (fields: (block: Obj) => boolean): Check =>
   (value) =>
-    isObject(value) && value.basis === 'signal' && isText(value.method) && fields(value);
+    isObject(value) && value.basis === SIGNAL_BASIS && isText(value.method) && fields(value);
 
 const isModelRef: Check = (value) => isObject(value) && isText(value.id) && isText(value.licence);
 const isLabelScore: Check = (value) =>
   isObject(value) && isText(value.label) && isNumber(value.score);
 const isModelScore: Check = (value) =>
   isObject(value) &&
-  value.basis === 'model' &&
+  value.basis === MODEL_BASIS &&
   isNumber(value.value) &&
   isRange(value.range) &&
   isModelRef(value.model);
@@ -101,7 +126,8 @@ const isKey = signal(
   (b) =>
     typeof b.tonic === 'string' &&
     PITCH_CLASSES.has(b.tonic) &&
-    (b.mode === 'major' || b.mode === 'minor') &&
+    typeof b.mode === 'string' &&
+    KEY_MODES.has(b.mode) &&
     nullable(isUnit)(b.strength) &&
     isText(b.profile),
 );
@@ -128,7 +154,7 @@ const modelList =
   (field: string): Check =>
   (value) =>
     isObject(value) &&
-    value.basis === 'model' &&
+    value.basis === MODEL_BASIS &&
     isModelRef(value.model) &&
     listOf(isLabelScore)(value[field]);
 const isMoods: Check = (value) =>
@@ -150,7 +176,7 @@ export function isAudioFeatures(value: unknown): value is AudioFeatures {
     value.version === 2 &&
     isText(value.analyzerVersion) &&
     isObject(window) &&
-    window.kind === 'preview-30s' &&
+    window.kind === WINDOW_KIND &&
     isSeconds(window.durationSeconds) &&
     isObject(gate) &&
     typeof gate.passed === 'boolean' &&

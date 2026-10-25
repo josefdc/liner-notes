@@ -151,6 +151,17 @@ describe('audio values from a measurement', () => {
   });
 });
 
+describe('mood scores missing while style and tag scores are shown', () => {
+  it('say "mood scores", not "model scores"', () => {
+    const block = audioBlock();
+    const track = measuredTrack(audioBlock({ fingerprint: { ...block.fingerprint, moods: null } }));
+    render(<AudioStats track={track} />);
+    expect(screen.getByRole('list', { name: 'Audio-model estimates' }).textContent).toBe(
+      'Mood scores not available',
+    );
+  });
+});
+
 describe('the fingerprint from a measurement', () => {
   it('lists the style and tag scores as model estimates', () => {
     const { fingerprint } = audioReadings(measuredTrack());

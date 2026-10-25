@@ -2,8 +2,8 @@ import type React from 'react';
 import { Badge } from '../ui/Badge';
 
 // One audio value as shown on the result screens, with where it comes from: measured from the
-// signal, an audio model's score (an estimate, never called measured), or a copy no measurement
-// confirms. Its confidence and basis are on one line, its method and analyzer on the next, as
+// signal, an audio model's score (an estimate, never called measured), a copy no measurement
+// confirms, or a score on the first analyzer's own scale. Its confidence and basis are on one line, its method and analyzer on the next, as
 // text (not only a tooltip). A result that does not say how a value was measured shows that as
 // unknown.
 
@@ -12,9 +12,9 @@ export interface MeasuredValueProps {
   value: React.ReactNode;
   /**
    * measured: from the signal; estimate: an audio model's score; unverified: a copy whose
-   * measurement could not be read.
+   * measurement could not be read; score: the first analyzer's 0-1 energy, on its own scale.
    */
-  kind: 'measured' | 'estimate' | 'unverified';
+  kind: 'measured' | 'estimate' | 'unverified' | 'score';
   /** The estimator's confidence, with its nature; null when the result does not say. */
   confidence?: string | null;
   /** What the value rests on (signal or model, and the preview window); null when unknown. */
@@ -33,6 +33,7 @@ export const KIND_TEXT: Record<MeasuredValueProps['kind'], string> = {
   measured: 'Measured',
   estimate: 'Model estimate',
   unverified: 'Not confirmed as measured',
+  score: 'v1 energy score (0–1, saturates on loud masters)',
 };
 
 /** The provenance line: kind, confidence and basis, each said to be unknown when it is. */

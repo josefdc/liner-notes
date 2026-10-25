@@ -135,19 +135,42 @@ export function measuredAudioOf(track: TrackData): MeasuredAudio | null {
 }
 
 /**
- * How a result carries its measurement: a block this page reads ("measured"); a block that is
- * null or that the contract cannot read ("unreadable": the result sent one, so its copies are
- * not confirmed by it); or no block at all ("none": an API from before the block).
+ * How a result carries its measurement: a block this page reads ("measured"); a null block
+ * ("null": the producer measured nothing); a block the contract cannot read ("unreadable": the
+ * stream reader turns it into null and says so with `audioUnreadable`); or no block at all
+ * ("none": an API from before the block). Copies next to a null or unreadable block are not
+ * confirmed by any measurement.
  */
 type AudioState =
   | { kind: 'measured'; audio: MeasuredAudio }
+  | { kind: 'null' }
   | { kind: 'unreadable' }
   | { kind: 'none' };
 
 function audioStateOf(track: TrackData): AudioState {
   const audio = measuredAudioOf(track);
   if (audio) return { kind: 'measured', audio };
-  return track.audio === undefined ? { kind: 'none' } : { kind: 'unreadable' };
+  if (track.audio === undefined) return { kind: 'none' };
+  return track.audio === null && !track.audioUnreadable ? { kind: 'null' } : { kind: 'unreadable' };
+}
+
+/**
+ * True when the result's own fields say its analysis ran: audioSource "analyzed", or
+ * "unavailable" because the analysis ran but did not detect the tempo or the key
+ * ("not_detected"), or found them below the confidence needed ("low_confidence").
+ */
+function fieldsSayRan(track: TrackData): boolean {
+  return (
+    track.audioSource === 'analyzed' ||
+    (track.audioSource === 'unavailable' &&
+      (track.audioUnavailableReason === 'not_detected' ||
+        track.audioUnavailableReason === 'low_confidence'))
+  );
+}
+
+/** True when the result says its values were estimated: "estimated", none, or an unknown source. */
+function sourceSaysEstimated(track: TrackData): boolean {
+  return track.audioSource !== 'analyzed' && track.audioSource !== 'unavailable';
 }
 
 /**
@@ -238,14 +261,15 @@ export function audioValues(track: TrackData): AudioValues {
 
 /**
  * True when the result carries audio values that were estimated rather than measured: values
- * with no `audio` block under audioSource "estimated", a missing source or one this page does
- * not know. Values under "unavailable" were not estimated: the analysis did not run.
+ * without a readable `audio` block under audioSource "estimated", a missing source or one this
+ * page does not know. Values under "unavailable" were not estimated: the analysis did not run.
  */
 export function hasEstimatedAudio(track: TrackData): boolean {
+  // A readable measurement decides; next to a null or unreadable block, or without one, values
+  // the result says were estimated are estimates.
   return (
-    track.audio === undefined &&
-    !legacyMeasured(track) &&
-    track.audioSource !== 'unavailable' &&
+    audioStateOf(track).kind !== 'measured' &&
+    sourceSaysEstimated(track) &&
     Object.values(rawAudioValues(track)).some((value) => value !== null)
   );
 }
@@ -264,7 +288,7 @@ export function measuredKeyMoments(track: TrackData): KeyMoment[] {
 export function noKeyMomentsReason(track: TrackData): string | null {
   const state = audioStateOf(track);
   if (state.kind === 'measured') return gateText(state.audio);
-  if (state.kind === 'unreadable') return 'the audio was not measured';
+  if (state.kind === 'unreadable') return UNREADABLE_TEXT;
   if (legacyMeasured(track)) return null;
   if (track.audioSource === 'unavailable') {
     return unavailableShort(track.audioUnavailableReason) ?? 'the audio was not analysed';
@@ -330,6 +354,9 @@ export const MODELS_NOT_LOADED_TEXT = 'the audio models are not loaded';
 /** Why the values of a result whose `audio` block is null or unreadable are not confirmed. */
 export const UNREADABLE_AUDIO_TEXT = "the result's measurement is missing or could not be read";
 
+/** Why a value is missing when the result's measurement could not be read. */
+const UNREADABLE_TEXT = 'the measurement could not be read';
+
 export type AudioField =
   | 'bpm'
   | 'key'
@@ -342,14 +369,15 @@ export type AudioField =
   | 'instrumental';
 
 /**
- * A value shown: measured from the signal, an audio model's score (an estimate), or a copy whose
- * measurement could not be read ("unverified": never called measured).
+ * A value shown: measured from the signal, an audio model's score (an estimate), a copy whose
+ * measurement could not be read ("unverified": never called measured), or the first analyzer's
+ * 0-1 energy ("score": on its own scale, how it was measured unknown).
  */
 export interface ShownReading {
   field: AudioField;
   label: string;
   state: 'shown';
-  kind: 'measured' | 'estimate' | 'unverified';
+  kind: 'measured' | 'estimate' | 'unverified' | 'score';
   value: string;
   /** The estimator's confidence, with its nature; null when the result does not say. */
   confidence: string | null;
@@ -574,17 +602,25 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
 }
 
 /**
- * Readings from a result without a readable `audio` block: its copies. Without any block they
- * are measured when its analysis ran, with their confidence and basis unknown. With a null or
- * unreadable block they are not confirmed by any measurement ("unverified").
+ * Readings from a result without a readable `audio` block: its copies.
+ * - Without any block ("none"), they are measured when its analysis ran, with their confidence
+ *   and basis unknown; the older 0-1 energy is shown on its own scale, never as a measurement.
+ * - Next to a null or unreadable block, a copy is shown only when the result's own fields say
+ *   its analysis ran, and then as not confirmed by any measurement ("unverified"); loudness
+ *   cannot be read from a copy and is missing.
+ * Values a result says were estimated, or whose analysis did not run, are missing with why;
+ * model scores are always estimates.
  */
-function copyReadings(track: TrackData, recorded: boolean, unreadable: boolean): AudioReadings {
+function copyReadings(track: TrackData, recorded: boolean, state: AudioState): AudioReadings {
   const raw = rawAudioValues(track);
   const title = recorded ? RECORDED_TITLE : MEASURED_TITLE;
-  const ran = legacyMeasured(track);
-  const reason = (value: unknown) => {
+  const withBlock = state.kind !== 'none';
+  const ran = withBlock ? fieldsSayRan(track) : legacyMeasured(track);
+  const estimated = sourceSaysEstimated(track);
+  const reason = (value: unknown): string | null => {
     if (track.audioSource === 'unavailable') return unavailableShort(track.audioUnavailableReason);
-    return !ran && !unreadable && value !== null ? ESTIMATED_TEXT : null;
+    if (estimated && value !== null) return ESTIMATED_TEXT;
+    return state.kind === 'unreadable' ? UNREADABLE_TEXT : null;
   };
   const shown = (
     field: AudioField,
@@ -605,36 +641,43 @@ function copyReadings(track: TrackData, recorded: boolean, unreadable: boolean):
         ? `Not confirmed as measured: ${UNREADABLE_AUDIO_TEXT}`
         : kind === 'estimate'
           ? `${label} score from an audio model (0–1): an estimate, not a probability`
-          : title,
+          : kind === 'score'
+            ? `Energy on the first analyzer's 0–1 scale (scaled RMS, saturates on loud masters): ${title.toLowerCase()}, how is not known`
+            : title,
   });
-  // A copy is shown when the analysis ran (measured), or, next to a block that cannot be read,
-  // as a copy no measurement confirms.
-  const signalKind = unreadable ? 'unverified' : 'measured';
-  const modelKind = unreadable ? 'unverified' : 'estimate';
-  const show = ran || unreadable;
+  const signalKind = withBlock ? 'unverified' : 'measured';
 
-  const signal: Reading[] = [
-    show && raw.bpm !== null
-      ? shown('bpm', 'BPM', formatBpm(raw.bpm), signalKind)
-      : missing('bpm', 'BPM', reason(raw.bpm)),
-    show && raw.key !== null
-      ? shown('key', 'Key', raw.key, signalKind)
-      : missing('key', 'Key', reason(raw.key)),
-    !show || raw.energy === null
+  const energy: Reading = withBlock
+    ? // Results with a block carry loudness in it; a copy cannot stand in for it.
+      missing('loudness', 'Loudness', reason(null))
+    : !ran || raw.energy === null
       ? missing('energy', 'Energy', reason(raw.energy))
       : raw.energy >= 1
         ? missing('energy', 'Energy', SATURATED_ENERGY_TEXT, NOT_SHOWN)
-        : shown('energy', 'Energy', `${Math.round(raw.energy * 100)}%`, signalKind),
+        : shown('energy', 'Energy', formatScore(raw.energy), 'score');
+  const signal: Reading[] = [
+    ran && raw.bpm !== null
+      ? shown('bpm', 'BPM', formatBpm(raw.bpm), signalKind)
+      : missing('bpm', 'BPM', reason(raw.bpm)),
+    ran && raw.key !== null
+      ? shown('key', 'Key', raw.key, signalKind)
+      : missing('key', 'Key', reason(raw.key)),
+    energy,
   ];
   const model: Reading[] = [
-    show && raw.valence !== null
-      ? shown('valence', 'Mood', `${moodLabel(raw.valence)} ${formatScore(raw.valence)}`, modelKind)
+    ran && raw.valence !== null
+      ? shown(
+          'valence',
+          'Mood',
+          `${moodLabel(raw.valence)} ${formatScore(raw.valence)}`,
+          'estimate',
+        )
       : missing('valence', 'Mood', reason(raw.valence), NOT_AVAILABLE),
-    show && raw.danceability !== null
-      ? shown('danceability', 'Dance', formatScore(raw.danceability), modelKind)
+    ran && raw.danceability !== null
+      ? shown('danceability', 'Dance', formatScore(raw.danceability), 'estimate')
       : missing('danceability', 'Dance', reason(raw.danceability), NOT_AVAILABLE),
-    show && raw.acousticness !== null
-      ? shown('acousticness', 'Acoustic', formatScore(raw.acousticness), modelKind)
+    ran && raw.acousticness !== null
+      ? shown('acousticness', 'Acoustic', formatScore(raw.acousticness), 'estimate')
       : missing('acousticness', 'Acoustic', reason(raw.acousticness), NOT_AVAILABLE),
   ];
   return { signal, model, showMissingModel: false, fingerprint: null };
@@ -650,7 +693,7 @@ export function audioReadings(track: TrackData): AudioReadings {
   const state = audioStateOf(track);
   return state.kind === 'measured'
     ? measuredReadings(track, state.audio, recorded)
-    : copyReadings(track, recorded, state.kind === 'unreadable');
+    : copyReadings(track, recorded, state);
 }
 
 // How the notices name each value.
@@ -669,18 +712,13 @@ const NOTICE_LABELS: Record<AudioField, string> = {
 const missingOf = (readings: Reading[]) =>
   readings.filter((reading): reading is MissingReading => reading.state === 'missing');
 
-/** Names of the signal values that are not shown, in order. */
-export function missingAudioValues(track: TrackData): string[] {
-  return missingOf(audioReadings(track).signal).map((reading) => NOTICE_LABELS[reading.field]);
-}
-
 /** Names of the audio-model estimates that are not available, with their shared reason. */
 export function missingModelEstimates(track: TrackData): {
   names: string[];
   reason: string | null;
 } {
   const { model, fingerprint } = audioReadings(track);
-  const gone = missingOf(model);
+  const gone = missingOf(model).filter((reading) => reading.status === NOT_AVAILABLE);
   const names = gone.map((reading) => NOTICE_LABELS[reading.field]);
   const reasons = gone.map((reading) => reading.reason);
   for (const [list, name] of [
@@ -722,14 +760,25 @@ export interface AudioNotice {
   lines: string[];
 }
 
+const lineOf = (head: string, readings: MissingReading[], withReasons: boolean) =>
+  readings.length > 0
+    ? `${head}: ${readings
+        .map((r) => `${NOTICE_LABELS[r.field]}${withReasons && r.reason ? ` (${r.reason})` : ''}`)
+        .join(', ')}.`
+    : null;
+
 export function audioNoticeOf(track: TrackData): AudioNotice | null {
   const state = audioStateOf(track);
-  const { signal } = audioReadings(track);
+  const { signal, model } = audioReadings(track);
   const signalMissing = missingOf(signal);
-  const notMeasured =
-    signalMissing.length > 0
-      ? `Not measured: ${signalMissing.map((r) => NOTICE_LABELS[r.field]).join(', ')}.`
-      : null;
+  // Values the result has but that say nothing (saturated, zero, out of range) are "not shown",
+  // with why; the rest of the missing signal values were not measured.
+  const notMeasuredReadings = signalMissing.filter((r) => r.status === NOT_MEASURED);
+  const notShownReadings = [...signalMissing, ...missingOf(model)].filter(
+    (r) => r.status === NOT_SHOWN,
+  );
+  const notMeasured = lineOf('Not measured', notMeasuredReadings, false);
+  const notShown = lineOf('Not shown', notShownReadings, true);
   const estimates = missingModelEstimates(track);
   const estimatesLine =
     estimates.names.length > 0
@@ -749,7 +798,11 @@ export function audioNoticeOf(track: TrackData): AudioNotice | null {
       lines: [`Nothing was measured on the preview: ${gateText(state.audio)}.`],
     };
   }
-  if (state.kind === 'unreadable' && signal.some((r) => r.state === 'shown')) {
+  if (
+    state.kind !== 'measured' &&
+    state.kind !== 'none' &&
+    signal.some((r) => r.state === 'shown')
+  ) {
     return {
       title: 'Audio values not confirmed',
       lines: [
@@ -758,40 +811,63 @@ export function audioNoticeOf(track: TrackData): AudioNotice | null {
       ],
     };
   }
-  if (!notMeasured && !estimatesLine) return null;
-  if (!notMeasured)
-    return { title: 'Audio-model estimates not available', lines: lines(estimatesLine) };
+  if (!notMeasured && !notShown && !estimatesLine) return null;
 
-  const missingField = (field: AudioField) => signalMissing.some((r) => r.field === field);
-  const reason =
-    detectionText(track.audioUnavailableReason, missingField('bpm'), missingField('key')) ??
-    (track.audioUnavailableReason &&
-    track.audioUnavailableReason !== 'not_detected' &&
-    track.audioUnavailableReason !== 'low_confidence'
-      ? audioUnavailableText(track.audioUnavailableReason)
-      : signalMissing.some((r) => r.reason !== null)
-        ? 'Each missing value says why.'
-        : audioUnavailableText(undefined));
-  const all = signalMissing.length === signal.length;
-  const title = !all
-    ? 'Audio partly measured'
-    : state.kind === 'none'
-      ? 'Audio not analysed'
-      : 'Audio not measured';
-  return { title, lines: lines(reason, notMeasured, estimatesLine) };
+  // Anything measured that is shown: a signal value, or key moments.
+  const somethingMeasured =
+    signal.some((r) => r.state === 'shown') || measuredKeyMoments(track).length > 0;
+  let title: string;
+  if (!notMeasured && !notShown) title = 'Audio-model estimates not available';
+  else if (!notMeasured) title = 'Some audio values not shown';
+  else if (somethingMeasured) title = 'Audio partly measured';
+  else title = state.kind === 'none' ? 'Audio not analysed' : 'Audio not measured';
+
+  let reason: string | null = null;
+  if (notMeasured) {
+    const missingField = (field: AudioField) => notMeasuredReadings.some((r) => r.field === field);
+    const detection = detectionText(
+      track.audioUnavailableReason,
+      missingField('bpm'),
+      missingField('key'),
+    );
+    // With a measurement, a result-level reason other than detection is not about its values.
+    const resultReason =
+      state.kind !== 'measured' &&
+      track.audioUnavailableReason &&
+      track.audioUnavailableReason !== 'not_detected' &&
+      track.audioUnavailableReason !== 'low_confidence'
+        ? audioUnavailableText(track.audioUnavailableReason)
+        : null;
+    reason =
+      detection ??
+      resultReason ??
+      (state.kind === 'unreadable'
+        ? "The result's measurement could not be read."
+        : notMeasuredReadings.some((r) => r.reason !== null)
+          ? 'Each missing value says why.'
+          : audioUnavailableText(undefined));
+  }
+  return { title, lines: lines(reason, notMeasured, notShown, estimatesLine) };
 }
 
 /** What the Sonic Fingerprint panel shows, in words, for its subtitle. */
 export function fingerprintSubtitle(track: TrackData, hasGenreProfile: boolean): string {
   const { fingerprint } = audioReadings(track);
   const genre = 'genre affinity written by the model';
-  if (!fingerprint)
+  if (!fingerprint) {
     return hasGenreProfile ? 'Genre affinity written by the model' : 'Genre affinity';
-  const shown = fingerprint.styles.state === 'shown' || fingerprint.tags.state === 'shown';
-  const reason = fingerprint.styles.state === 'missing' ? fingerprint.styles.reason : null;
-  const scores = shown
-    ? 'Style and tag scores from audio models run on the preview'
-    : `Style and tag scores not available${reason ? `: ${reason}` : ''}`;
+  }
+  const { styles, tags } = fingerprint;
+  const names = [styles.state === 'shown' && 'style', tags.state === 'shown' && 'tag'].filter(
+    Boolean,
+  );
+  const reason = styles.state === 'missing' ? styles.reason : null;
+  const scores =
+    names.length > 0
+      ? `${names.join(' and ')} scores from audio models run on the preview`.replace(/^./, (c) =>
+          c.toUpperCase(),
+        )
+      : `Style and tag scores not available${reason ? `: ${reason}` : ''}`;
   return hasGenreProfile ? `${scores}; ${genre}` : scores;
 }
 

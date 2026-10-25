@@ -99,8 +99,10 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
 }) => {
   const { signal, model, showMissingModel, fingerprint } = audioReadings(track);
   const modelShown = model.filter((reading) => reading.state === 'shown');
-  // With an `audio` block but no audio models, one line says so instead of one per score.
+  // With an `audio` block but no mood scores, one line says so instead of one per score: "model
+  // scores" when no model score is shown anywhere, "mood scores" when style or tag scores are.
   const modelsMissing = fingerprint !== null && modelShown.length === 0;
+  const listsShown = fingerprint?.styles.state === 'shown' || fingerprint?.tags.state === 'shown';
   const modelRows = showMissingModel ? model : modelShown;
   const firstModel = model[0];
 
@@ -129,7 +131,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
             {modelsMissing ? (
               <li>
                 <MissingValue
-                  label="Model scores"
+                  label={listsShown ? 'Mood scores' : 'Model scores'}
                   status="not available"
                   reason={firstModel?.state === 'missing' ? firstModel.reason : null}
                   size={size}

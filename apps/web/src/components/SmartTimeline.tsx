@@ -117,9 +117,7 @@ const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, 
 );
 
 const Note: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p className="mt-2 text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
-    {children}
-  </p>
+  <p className="mt-2 text-chrome font-mono text-text-chip uppercase tracking-widest">{children}</p>
 );
 
 const SmartTimeline: React.FC<SmartTimelineProps> = ({
@@ -240,7 +238,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       {/* Key moments on their own lane, scaled to the preview they were measured in */}
       {momentMarkers.inside.length > 0 ? (
         <div className="mt-6" role="group" aria-label={previewLabel}>
-          <div className="flex justify-between gap-3 text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+          <div className="flex justify-between gap-3 text-chrome font-mono text-text-chip uppercase tracking-widest">
             <span>
               {previewLabel} — key moments measured
               {measuredPreview !== null && ', position in the song unknown'}

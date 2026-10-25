@@ -262,6 +262,70 @@ test("a measurement the contract cannot read is not shown as measured", async ({
   await screenshot(page, testInfo, "unreadable-dashboard");
 });
 
+test("a measurement without mood scores, and with a zero level, says exactly that", async ({
+  page,
+}, testInfo) => {
+  const fixture = structuredClone(measured);
+  const data = resultOf(fixture) as { audio: Record<string, unknown> } & Record<string, unknown>;
+  const fingerprint = data.audio.fingerprint as Record<string, unknown>;
+  data.audio.fingerprint = { ...fingerprint, styles: null, moods: null };
+  data.audio.loudness = { rmsMean: 0, method: "essentia.RMS", basis: "signal" };
+  Object.assign(data, { danceability: null, acousticness: null });
+  expect(analysisIssues(TrackAnalysis.parse(data))).toEqual([]);
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+
+  const values = page.getByRole("list", { name: "Audio values" });
+  await expect(valueItem(values, "Loudness")).toHaveText(
+    "Loudness not shown— a level of zero has no dBFS value",
+  );
+  // Tag scores are shown: the missing ones are the mood scores, not every model score.
+  await expect(page.getByRole("list", { name: "Audio-model estimates" })).toHaveText(
+    "Mood scores not available",
+  );
+  const panel = page.getByRole("region", { name: "Sonic Fingerprint" });
+  await expect(panel).toContainText("Tag scores from audio models run on the preview");
+  await expect(panel).not.toContainText("Style and tag scores from");
+  const notices = page.getByRole("region", { name: "Missing data" });
+  await expect(notices).toContainText("Not shown: loudness (a level of zero has no dBFS value).");
+  await expect(notices).not.toContainText("Not measured: loudness");
+  await screenshot(page, testInfo, "mood-missing-zero-level-dashboard");
+});
+
+test.describe("a result with a null audio block", () => {
+  test("keeps the values it says were estimated as estimates", async ({ page }, testInfo) => {
+    await useMockApi(page, withResult({ audio: null, audioSource: "estimated" }));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    const values = page.getByRole("list", { name: "Audio values" });
+    await expect(valueItem(values, "BPM")).toHaveText("BPM not measured— estimated, not measured");
+    await expect(page.getByRole("region", { name: "Missing data" })).toContainText(
+      "Estimated, not measured — not shown.",
+    );
+    await expect(page.locator("#root")).not.toContainText("105");
+    await screenshot(page, testInfo, "null-estimated-dashboard");
+  });
+
+  test("shows the copies of an analysis that ran as not confirmed, model scores as estimates", async ({
+    page,
+  }, testInfo) => {
+    await useMockApi(page, withResult({ audio: null }));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    const values = page.getByRole("list", { name: "Audio values" });
+    await expect(valueItem(values, "BPM")).toHaveText(
+      "BPM 105Not confirmed as measured · confidence and basis unknown",
+    );
+    await expect(valueItem(values, "Loudness")).toHaveText("Loudness not measured");
+    const scores = page.getByRole("list", { name: "Audio-model estimates" });
+    await expect(valueItem(scores, "Mood")).toContainText("Model estimate");
+    await expect(page.locator('[data-value-kind="measured"]')).toHaveCount(0);
+    await openPlayer(page);
+    await expect(page.getByRole("group", { name: "Song structure" })).toContainText(
+      "No key moments — the audio was not measured",
+    );
+    await screenshot(page, testInfo, "null-analyzed-dashboard-player");
+  });
+});
+
 test.describe("a result without the audio block", () => {
   test('shows no value as measured when audioSource is "unavailable" and nothing ran', async ({
     page,
@@ -293,16 +357,20 @@ test.describe("a result without the audio block", () => {
     await screenshot(page, testInfo, "unavailable-player");
   });
 
-  test("shows its measured values with their confidence and basis unknown", async ({ page }) => {
+  test("shows its measured values with their confidence and basis unknown", async ({
+    page,
+  }, testInfo) => {
     await useMockApi(page, loadFixture("full-result"));
     await analyzeAndOpenDashboard(page, "Bright Lines");
     const values = page.getByRole("list", { name: "Audio values" });
     await expect(valueItem(values, "BPM")).toHaveText(
       "BPM 105Measured · confidence and basis unknown",
     );
+    // The first analyzer's energy: on its own 0-1 scale, never a percentage or "Measured".
     await expect(valueItem(values, "Energy")).toHaveText(
-      "Energy 71%Measured · confidence and basis unknown",
+      "Energy 0.71v1 energy score (0–1, saturates on loud masters) · confidence and basis unknown",
     );
+    await screenshot(page, testInfo, "legacy-dashboard");
     // Its model scores are estimates, never measured.
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
     await expect(valueItem(scores, "Mood")).toHaveText(

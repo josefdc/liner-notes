@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { liveRefused } from "../../replay/mode.js";
 import { replays } from "../../replay/records.js";
-import { searchMultipleTracks } from "../../sources/spotify.js";
+import { describeError } from "../../sources/http.js";
+import { searchTracks } from "../../sources/spotify.js";
 import { asyncRoute, sendError } from "../middleware/errors.js";
 import { boundedText, describeIssues } from "../validation.js";
 
@@ -55,18 +56,9 @@ router.get(
     }
 
     try {
-      const result = await searchMultipleTracks.invoke({ query, limit });
-
-      // Tool returns JSON string or error message
-      if (typeof result === "string" && result.startsWith("Error")) {
-        console.error(`[Search] Suggest failed: ${result}`);
-        sendError(res, "upstream_unavailable", { suggestions: [] });
-        return;
-      }
-
       // Suggestions carry no preview link: the contract's SearchCandidate has none, and a
       // preview is looked up for the track that is analysed.
-      const suggestions = (JSON.parse(result as string) as Record<string, unknown>[]).map(
+      const suggestions = (await searchTracks(query, limit)).map(
         ({ previewUrl: _previewUrl, ...suggestion }) => suggestion,
       );
 
@@ -80,7 +72,8 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("[Search] Suggest failed:", error);
+      // Spotify's errors are typed (sources/http.ts); the client gets a generic message.
+      console.error("[Search] Suggest failed:", describeError(error));
       sendError(res, "upstream_unavailable", { suggestions: [] });
     }
   }),

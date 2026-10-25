@@ -19,7 +19,7 @@ import { getLastfmTrackTags } from "./lastfm.js";
 import { getListenBrainzSimilarArtists } from "./listenbrainz.js";
 import { getMusicBrainzRelations, MusicBrainzRateLimiter } from "./musicbrainz.js";
 import { searchProductionHistory, searchSamples } from "./search.js";
-import { getTrackDetails, SpotifyAuthManager, searchMultipleTracks } from "./spotify.js";
+import { fetchTrack, SpotifyAuthManager, searchTracks } from "./spotify.js";
 
 const SERVICE = "http://audio.test:3002";
 const PREVIEW_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3?hdnea=exp=1";
@@ -172,16 +172,8 @@ describe("tools stop their requests when the run is cancelled", () => {
   });
 
   it.each([
-    [
-      "searchMultipleTracks",
-      (signal: AbortSignal) =>
-        searchMultipleTracks.invoke({ query: "ice ice baby", limit: 5 }, { signal }),
-    ],
-    [
-      "getTrackDetails",
-      (signal: AbortSignal) =>
-        getTrackDetails.invoke({ trackId: "3Fcfwhm8oRrBvBZ8KGhtea" }, { signal }),
-    ],
+    ["searchTracks", (signal: AbortSignal) => searchTracks("ice ice baby", 5, signal)],
+    ["fetchTrack", (signal: AbortSignal) => fetchTrack("3Fcfwhm8oRrBvBZ8KGhtea", signal)],
   ])("%s: the Spotify Web API request", async (_name, run) => {
     const { sent, outcome } = await cancelDuring(
       (url) => url.startsWith("https://api.spotify.com/v1/"),

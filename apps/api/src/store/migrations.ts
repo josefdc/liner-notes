@@ -300,6 +300,28 @@ export const MIGRATIONS: readonly Migration[] = [
       db.exec("ALTER TABLE runs ADD COLUMN code_commit TEXT");
     },
   },
+  {
+    version: 8,
+    name: "no_remembered_choices",
+    up(db) {
+      // Track choices that earlier versions remembered under the typed text, for every user who
+      // typed it. Nothing reads them since a pick became one user's choice, and choices are not
+      // remembered across users; they are deleted, and retention no longer keeps them.
+      db.prepare("DELETE FROM store_items WHERE namespace = ?").run(
+        JSON.stringify(["disambiguation"]),
+      );
+    },
+  },
+  {
+    version: 9,
+    name: "artwork_credits",
+    up(db) {
+      // The artwork cache keeps every credited artist of the track it found (a JSON list), not
+      // only the lead, so a cached answer is judged against the node's credit as a fresh search
+      // is. Rows written before have none and are judged on the lead artist.
+      db.exec("ALTER TABLE artwork_cache ADD COLUMN track_artists TEXT");
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

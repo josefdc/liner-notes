@@ -18,7 +18,9 @@ import { runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tools = vi.hoisted(() => {
-  const tool = (answer: () => string) => ({ invoke: vi.fn(async () => answer()) });
+  const tool = (answer: () => string) => ({
+    invoke: vi.fn(async (..._args: unknown[]) => answer()),
+  });
   const track = {
     id: "3Fcfwhm8oRrBvBZ8KGhtea",
     title: "Ice Ice Baby",
@@ -41,7 +43,7 @@ const tools = vi.hoisted(() => {
       results: [{ title: "Page", url: "https://example.test/", content }],
     });
   return {
-    searchMultipleTracks: tool(() => JSON.stringify([track])),
+    spotifySearch: tool(() => JSON.stringify([track])),
     analyzeAudioPreview: tool(() =>
       JSON.stringify({ source: "unavailable", reason: "no_preview" }),
     ),
@@ -62,9 +64,11 @@ const tools = vi.hoisted(() => {
     getListenBrainzSimilarArtists: tool(none),
   };
 });
+// The scout's search: the stub answers as the tool would, and the client gives its tracks.
 vi.mock("../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/spotify.js")>()),
-  searchMultipleTracks: tools.searchMultipleTracks,
+  searchTracks: async (query: string, limit: number, signal?: AbortSignal) =>
+    JSON.parse(await tools.spotifySearch.invoke({ query, limit }, { signal })),
 }));
 vi.mock("../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/audio.js")>()),
@@ -124,6 +128,7 @@ import {
   responseBody,
   testSettings,
 } from "../llm/testing/providerStub.js";
+import { TRACKS_NAMESPACE } from "./cacheKeys.js";
 import { buildSonicAgentGraph } from "./graph.js";
 import { engineerNode } from "./nodes/engineerNode.js";
 import type { SonicAgentStateType } from "./state.js";
@@ -661,7 +666,7 @@ describe("the analysis graph under failure", () => {
     expect(audioSignal?.aborted).toBe(true);
     expect(hooks.putAudio).not.toHaveBeenCalled();
     expect(hooks.putResearch).not.toHaveBeenCalled();
-    const scoutOptions = tools.searchMultipleTracks.invoke.mock.calls[0] as unknown[];
+    const scoutOptions = tools.spotifySearch.invoke.mock.calls[0] as unknown[];
     expect((scoutOptions[1] as { signal?: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -752,7 +757,7 @@ describe("the analysis graph's stored results", () => {
     expect(second.threw).toBeNull();
     expect(llm.calls).toEqual([]);
     expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(1);
-    expect(tools.searchMultipleTracks.invoke).toHaveBeenCalledTimes(2);
+    expect(tools.spotifySearch.invoke).toHaveBeenCalledTimes(2);
     const served = complete(second.events)?.data;
     expect(served).toMatchObject({ id: TRACK_ID, queryMatch: "exact" });
     expect(served).not.toHaveProperty("run");
@@ -803,23 +808,23 @@ describe("the analysis graph's stored results", () => {
     expect(result?.run?.sourceErrors).toEqual(
       expect.arrayContaining([expect.objectContaining({ source: "spotify" })]),
     );
-    expect(await store.search(["tracks", "v4"])).toEqual([]);
+    expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);
 
     // A later run that finds the track with its full details composes it, and stores that.
     const llm = stubModel(["done"]);
     const later = await drive(llm, { store });
     expect(llm.calls.map((call) => call.callSite)).toContain("composer");
     expect(complete(later.events)?.data.run?.sourceErrors ?? []).toEqual([]);
-    expect(await store.search(["tracks", "v4"])).toHaveLength(1);
+    expect(await store.search(TRACKS_NAMESPACE)).toHaveLength(1);
   });
 
   it("does not serve a result stored for another track", async () => {
     const store = new InMemoryStore();
     await drive(stubModel(["done"]), { store });
     // The same text now finds another track: its result is composed, not the stored one.
-    const answer = tools.searchMultipleTracks.invoke.getMockImplementation();
+    const answer = tools.spotifySearch.invoke.getMockImplementation();
     const [track] = JSON.parse(String(await answer?.()));
-    tools.searchMultipleTracks.invoke.mockImplementationOnce(async () =>
+    tools.spotifySearch.invoke.mockImplementationOnce(async () =>
       JSON.stringify([{ ...track, id: "4Fcfwhm8oRrBvBZ8KGhteb" }]),
     );
 

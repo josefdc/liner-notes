@@ -1,22 +1,10 @@
 /**
- * Spotify client and the LangGraph tools built on it.
- *
- * The typed functions (searchTracks, fetchTrack) resolve with data or reject with a
- * SourceError. The tools wrap them and return strings: JSON on success, and text starting
- * "Error:" when Spotify could not answer. A search with no match is `[]`, not an error. Ids are
- * checked before they reach a URL.
+ * Spotify client. The typed functions (searchTracks, fetchTrack) resolve with data or reject with
+ * a SourceError (sources/http.ts). A search with no match is `[]`, not an error. Ids are checked
+ * before they reach a URL.
  */
 
-import { tool } from "@langchain/core/tools";
-import { z } from "zod";
-import {
-  credential,
-  describeError,
-  fetchJson,
-  isSourceError,
-  type Shape,
-  SourceError,
-} from "./http.js";
+import { credential, fetchJson, isSourceError, type Shape, SourceError } from "./http.js";
 import { normalizeIsrc } from "./musicbrainz.js";
 
 // =============================================================================
@@ -292,19 +280,6 @@ function summarize(track: SpotifyTrack): SpotifyTrackSummary {
   };
 }
 
-/**
- * The text a tool returns when Spotify could not answer; it always starts "Error:". A rate
- * limit names "Rate limit" and 429, which the scout's retry looks for.
- */
-function errorText(action: string, error: unknown): string {
-  if (isSourceError(error, "rate_limited")) {
-    const after = error.retryAfterMs;
-    const wait = after === undefined ? "" : `; retry after ${Math.ceil(after / 1000)} s`;
-    return `Error: Rate limited by Spotify (429) while ${action}${wait}`;
-  }
-  return `Error: ${action} failed: ${describeError(error)}`;
-}
-
 // =============================================================================
 // Typed client
 // =============================================================================
@@ -343,147 +318,6 @@ export async function fetchTrack(
   if (!track?.id) throw new SourceError("spotify", "parse", "track response has no id");
   return summarize(track);
 }
-
-// =============================================================================
-// LangGraph Tools
-// =============================================================================
-
-/**
- * Tool 1: Search for a track by name/artist
- *
- * Use this tool first to find a song's Spotify ID before getting audio features.
- */
-export const searchTrack = tool(
-  async ({ query }): Promise<string> => {
-    try {
-      const [track] = await searchTracks(query, 1);
-      if (!track) {
-        return `No track found for "${query}". Try a different spelling or include the artist name.`;
-      }
-      return JSON.stringify({
-        id: track.id,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        releaseDate: track.releaseDate,
-        coverUrl: track.coverUrl,
-        isrc: track.isrc,
-        duration: track.duration,
-        explicit: track.explicit,
-        spotifyUrl: track.spotifyUrl,
-      });
-    } catch (error) {
-      console.error("❌ [Spotify] Search error:", describeError(error));
-      return errorText("searching for track", error);
-    }
-  },
-  {
-    name: "spotify_search",
-    description:
-      "Search for a song by title and/or artist to get its Spotify ID and metadata. " +
-      "Use this tool FIRST before getting audio features. " +
-      "Returns: id, title, artist, album, ISRC, duration, and Spotify URL.",
-    schema: z.object({
-      query: z
-        .string()
-        .describe(
-          'The song title and optionally artist name, e.g. "Midnight City M83" or "Bohemian Rhapsody"',
-        ),
-    }),
-  },
-);
-
-/**
- * Tool 2: Get detailed track information
- *
- * Requires a Spotify Track ID (from searchTrack).
- * Returns extended track metadata including artist IDs for further exploration.
- *
- * NOTE: Spotify deprecated audio-features endpoint for new apps (Nov 2024).
- * We use the /tracks endpoint which provides useful metadata.
- */
-export const getTrackDetails = tool(
-  async ({ trackId }, config): Promise<string> => {
-    try {
-      return JSON.stringify(await fetchTrack(trackId, config?.signal));
-    } catch (error) {
-      // A cancelled run rejects: nothing is reported for it.
-      if (config?.signal?.aborted) throw error;
-      console.error("❌ [Spotify] Track details error:", describeError(error));
-      return errorText("getting track details", error);
-    }
-  },
-  {
-    name: "get_track_details",
-    description:
-      "Get detailed information about a Spotify track. " +
-      "Requires a Spotify Track ID (use spotify_search first). " +
-      "Returns: title, artist, artistIds, album, release date, ISRC, duration, and preview URL.",
-    schema: z.object({
-      trackId: z
-        .string()
-        .describe("The Spotify Track ID (22 character string like '6GyFP1nfCDB8lbD2bG0Hq9')"),
-    }),
-  },
-);
-
-/**
- * Tool 3: Get artist's top tracks
- *
- * Spotify removed `GET /artists/{id}/top-tracks` for development-mode apps (February 2026), so
- * this makes no request and reports the source as unavailable. The answer is JSON with an empty
- * `topTracks`, which the researcher reads as "nothing found".
- */
-export const getArtistTopTracks = tool(
-  async ({ artistId }): Promise<string> =>
-    JSON.stringify({
-      artistId,
-      topTracks: [],
-      found: false,
-      unavailable: true,
-      reason: "Spotify no longer offers artist top tracks to this app",
-    }),
-  {
-    name: "get_artist_top_tracks",
-    description:
-      "Unavailable: Spotify no longer offers artist top tracks to this app, so this always " +
-      "returns no tracks.",
-    schema: z.object({
-      artistId: z.string().describe("The Spotify Artist ID (22 character string)"),
-      market: z.string().optional().describe("ISO 3166-1 alpha-2 country code (default: US)"),
-    }),
-  },
-);
-
-// Legacy alias for compatibility
-export const getAudioFeatures = getTrackDetails;
-
-/**
- * Tool 4: Search for multiple tracks (for disambiguation)
- *
- * Returns a JSON array of up to `limit` candidates; `[]` when nothing matches.
- */
-export const searchMultipleTracks = tool(
-  async ({ query, limit = 5 }, config): Promise<string> => {
-    try {
-      return JSON.stringify(await searchTracks(query, limit, config?.signal));
-    } catch (error) {
-      if (config?.signal?.aborted) throw error;
-      console.error("❌ [Spotify] Multi-search error:", describeError(error));
-      return errorText("searching for tracks", error);
-    }
-  },
-  {
-    name: "spotify_search_multiple",
-    description:
-      "Search for multiple tracks by query. " +
-      "Returns up to `limit` candidates (default 5, at most 10) for choosing among them.",
-    schema: z.object({
-      query: z.string().describe("The song title and/or artist name"),
-      limit: z.number().optional().describe("Max results to return (1-10, default 5)"),
-    }),
-  },
-);
 
 // =============================================================================
 // Exports

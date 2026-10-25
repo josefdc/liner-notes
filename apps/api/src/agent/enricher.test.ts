@@ -176,13 +176,54 @@ describe("enrichGenealogyWithArtwork's previews", () => {
   it.each([
     ["the model named no title or artist", { trackTitle: undefined, trackArtist: undefined }],
     ["another artist's track (a cover)", { trackArtist: "David Bowie" }],
-  ])("gives no preview when %s, but keeps the artwork", async (_label, named) => {
+  ])("keeps the cover but gives no Spotify id or preview when %s", async (_label, named) => {
     spotifyAnswers(() => json(found("Under Pressure", ["My Chemical Romance"], PREVIEW)));
 
     const node = await enrichOne({ ...underPressure, ...named });
 
     expect(node.img).toBe(COVER);
+    expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
+    // The search's answer is still cached, so the next run does not search again.
+    expect(cache.putArtwork).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["a strict match", "Under Pressure", "Queen", true],
+    ["another artist's track", "Under Pressure", "My Chemical Romance", false],
+    ["another version", "Under Pressure (Rah Mix)", "Queen", false],
+  ])(
+    "takes the cached cover always, its Spotify id only for %s",
+    async (_label, title, artist, strict) => {
+      const net = spotifyAnswers(() => json(hit));
+      cache.getArtwork.mockReturnValue({
+        coverUrl: COVER,
+        spotifyUrl: "https://open.spotify.com/track/x",
+        spotifyId: "x",
+        trackTitle: title,
+        trackArtist: artist,
+      });
+
+      const node = await enrichOne(underPressure);
+
+      expect(node.img).toBe(COVER);
+      expect(node.spotifyId).toBe(strict ? "x" : undefined);
+      expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+    },
+  );
+
+  it("judges a cached answer on the track's whole credit, as a fresh search does", async () => {
+    const collaboration = { ...underPressure, trackArtist: "Queen, David Bowie" };
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen", "David Bowie"], PREVIEW)));
+
+    const fresh = await enrichOne(collaboration);
+    const [, cached] = cache.putArtwork.mock.calls[0];
+    expect(cached).toMatchObject({ trackArtists: ["Queen", "David Bowie"] });
+    cache.getArtwork.mockReturnValue(cached);
+    const again = await enrichOne(collaboration);
+
+    expect(fresh.spotifyId).toBe("x");
+    expect(again.spotifyId).toBe("x");
   });
 
   it.each([
@@ -244,6 +285,24 @@ describe("strictlyMatches", () => {
         track("Under Pressure - Remastered 2011", ["Queen", "David Bowie"]),
       ),
     ).toBe(true);
+  });
+
+  it.each([
+    ["Queen & David Bowie", "Under Pressure", ["Queen", "David Bowie"], true],
+    ["Queen and David Bowie", "Under Pressure", ["Queen", "David Bowie"], true],
+    [
+      "Daft Punk feat. Pharrell Williams",
+      "Get Lucky (feat. Pharrell Williams & Nile Rodgers)",
+      ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
+      true,
+    ],
+    ["Earth, Wind & Fire", "September", ["Earth, Wind & Fire"], true],
+    // The credit's first artist must be the lead, and every one of them credited.
+    ["David Bowie & Queen", "Under Pressure", ["Queen", "David Bowie"], false],
+    ["Queen & Freddie Mercury", "Under Pressure", ["Queen", "David Bowie"], false],
+  ])("matches the credit %j against %j by %j: %s", (artist, title, names, expected) => {
+    const node = { trackTitle: title.replace(/ \(feat\..*\)$/, ""), trackArtist: artist };
+    expect(strictlyMatches(node, track(title, names))).toBe(expected);
   });
 
   it("refuses a featured artist's track, another version and a missing title or artist", () => {

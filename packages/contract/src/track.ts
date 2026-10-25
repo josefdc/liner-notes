@@ -333,7 +333,9 @@ export const TrackAnalysis = z.object({
   queryMatch: QueryMatch.nullable()
     .optional()
     .catch(null)
-    .describe("How this run's search text matched the track; null or absent when unknown"),
+    .describe(
+      "How this run's search text matched the track; null or absent when unknown, or when the user chose the track with a click",
+    ),
   evidence: tolerantList(Evidence).optional(),
   claims: tolerantList(Claim).optional(),
   run: RunInfo.optional(),

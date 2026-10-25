@@ -900,7 +900,8 @@ describe("migrations", () => {
     expect(notNull).toMatchObject({ bpm: 0, key_signature: 0, energy: 0 });
 
     const namespaces = db.prepare("SELECT namespace FROM store_items").pluck().all();
-    expect(namespaces).toEqual(['["disambiguation"]']);
+    // Track choices of earlier versions are deleted too (migration 8).
+    expect(namespaces).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM research_cache").pluck().get()).toBe(1);
     expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
   });
@@ -1187,7 +1188,7 @@ describe("migrations", () => {
     });
     expect(
       db.prepare("SELECT namespace FROM store_items ORDER BY namespace").pluck().all(),
-    ).toEqual(['["disambiguation"]', '["tracks","v4"]']);
+    ).toEqual(['["tracks","v4"]']);
   });
 
   it("keeps the commit a run ran at; runs stored before say none", () => {
@@ -1208,6 +1209,59 @@ describe("migrations", () => {
     expect(getRun(db, "new")).toMatchObject({ commit: "abc123def456-dirty" });
     startRun(db, { runId: "unknown", threadId: "unknown", query: "q" });
     expect(getRun(db, "unknown")).toMatchObject({ commit: null });
+  });
+
+  it("deletes the track choices earlier versions remembered for every user", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "no_remembered_choices");
+    expect(migration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    const now = new Date().toISOString();
+    const putItem = raw.prepare("INSERT INTO store_items VALUES (?, ?, ?, ?, ?)");
+    putItem.run('["disambiguation"]', "hurt", '{"selectedTrackId":"abc"}', now, now);
+    putItem.run('["tracks","v4"]', "x|lastfm=0:tavily=0", '{"trackData":{}}', now, now);
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(db.prepare("SELECT namespace FROM store_items").pluck().all()).toEqual([
+      '["tracks","v4"]',
+    ]);
+  });
+
+  it("adds the credited artists to the artwork cache, keeping the rows it has", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "artwork_credits");
+    expect(migration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        `INSERT INTO artwork_cache (search_key, cover_url, spotify_id, track_title, track_artist, expires_at)
+         VALUES ('under pressure - queen', 'https://i.scdn.co/image/c', 'u', 'Under Pressure', 'Queen', unixepoch() + 86400)`,
+      )
+      .run();
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    const cache = new SonicCache(db);
+
+    expect(cache.getArtwork("under pressure - queen")).toMatchObject({ trackArtist: "Queen" });
+    expect(cache.getArtwork("under pressure - queen")).not.toHaveProperty("trackArtists");
+    cache.putArtwork("under pressure - queen", {
+      coverUrl: "https://i.scdn.co/image/c",
+      spotifyUrl: null,
+      spotifyId: "u",
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen",
+      trackArtists: ["Queen", "David Bowie"],
+    });
+    expect(cache.getArtwork("under pressure - queen")?.trackArtists).toEqual([
+      "Queen",
+      "David Bowie",
+    ]);
   });
 
   it("requires migrations numbered 1..n in order", () => {

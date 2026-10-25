@@ -212,6 +212,16 @@ describe("SonicCache artwork", () => {
     expect(cache.getArtwork("k")).toEqual(artwork);
   });
 
+  it("keeps every credited artist of the track, and none for a row without them", () => {
+    cache.putArtwork("k", { ...artwork, trackArtists: ["Queen", "David Bowie"] });
+    expect(cache.getArtwork("k")).toEqual({ ...artwork, trackArtists: ["Queen", "David Bowie"] });
+
+    db.prepare(
+      "INSERT INTO artwork_cache (search_key, track_artist, track_artists, expires_at) VALUES ('old', 'Queen', 'not json', unixepoch() + 60)",
+    ).run();
+    expect(cache.getArtwork("old")).not.toHaveProperty("trackArtists");
+  });
+
   it("clears a preview URL stored for the key by older code when it writes the row again", () => {
     db.prepare(
       "INSERT INTO artwork_cache (search_key, preview_url, expires_at) VALUES ('k', 'https://p.scdn.co/mp3-preview/old', unixepoch() + 60)",

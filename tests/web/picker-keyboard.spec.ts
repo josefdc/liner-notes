@@ -12,7 +12,8 @@ const candidates = hitl.streams[ANALYZE].find(
 ).candidates as Array<{ id: string; title: string; artist: string; releaseYear: string }>;
 
 const resumes = (log: string[]) => log.filter((entry) => entry.startsWith(`stream ${RESUME}`));
-const resumeWith = (id: string) => `stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${id}`;
+const resumeWith = (id: string, pickedBy = "click") =>
+  `stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${id}&pickedBy=${pickedBy}`;
 
 async function openPicker(page: Page) {
   await page.goto("/");
@@ -118,6 +119,17 @@ test.describe("with three candidates", () => {
     await expect
       .poll(async () => resumes(await apiRequests(page)))
       .toEqual([resumeWith(candidates[2].id)]);
+  });
+
+  test("the countdown picks the highlighted row and says the countdown picked it", async ({
+    page,
+  }) => {
+    await openPicker(page);
+    // The pointer is kept off the picker, so the countdown runs to zero.
+    await page.mouse.move(0, 0);
+    await expect
+      .poll(async () => resumes(await apiRequests(page)), { timeout: 9000 })
+      .toEqual([resumeWith(candidates[0].id, "countdown")]);
   });
 
   test("hovering over the picker pauses the countdown", async ({ page }) => {

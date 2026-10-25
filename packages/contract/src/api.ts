@@ -38,15 +38,30 @@ export type ApiError = z.infer<typeof ApiError>;
 // Analysis
 // =============================================================================
 
-/** POST /api/analyze; GET /api/analyze/stream takes the same `query` as a query parameter. */
+/**
+ * How the user picked a track in the track picker: a click (or Enter) on a row, or the
+ * picker's countdown, which takes the highlighted row.
+ */
+export const PickedBy = z.enum(["click", "countdown"]);
+export type PickedBy = z.infer<typeof PickedBy>;
+
+/**
+ * POST /api/analyze; GET /api/analyze/stream takes the same fields as query parameters.
+ * `trackId`, a Spotify track id, asks for that very track (a suggestion, a genealogy node): it
+ * is analysed without searching the query, and the result says how the query matches it.
+ * `pickedBy`, with `trackId`, says how a picker row was picked when it is asked for this way.
+ */
 export const AnalyzeRequest = z.object({
   query: z.string().min(1).max(MAX_QUERY_LENGTH),
+  trackId: z.string().regex(SPOTIFY_ID_PATTERN).optional(),
+  pickedBy: PickedBy.optional(),
 });
 
 /** POST /api/analyze/resume; the stream route takes the same fields as query parameters. */
 export const ResumeRequest = z.object({
   threadId: ResourceId,
   selectedTrackId: ResourceId,
+  pickedBy: PickedBy.optional(),
 });
 
 export const Interrupt = z.object({

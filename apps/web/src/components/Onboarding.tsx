@@ -21,7 +21,7 @@ import {
   ArrowRight,
   ArrowLeft,
 } from 'lucide-react';
-import type { SearchCandidate, AgentStatus } from '../hooks/agent/types';
+import type { AgentStatus, AnalyzeOptions, PickedBy, SearchCandidate } from '../hooks/agent/types';
 import SystemConsole from './SystemConsole';
 import {
   isLiveUnavailable,
@@ -243,8 +243,8 @@ interface OnboardingProps {
   /** The run replays a recorded run (the status line says so instead of the live steps). */
   isReplay?: boolean;
   candidates: SearchCandidate[] | null;
-  analyze: (query: string) => Promise<void>;
-  selectCandidate: (candidateId: string) => Promise<void>;
+  analyze: (query: string, options?: AnalyzeOptions) => Promise<void>;
+  selectCandidate: (candidateId: string, pickedBy?: PickedBy) => Promise<void>;
   /** Runs the failed analysis again. */
   retry: () => void;
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
@@ -376,7 +376,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
         artist: candidate.artist,
         coverUrl: candidate.coverUrl,
       });
-      analyze(query);
+      // The suggestion's own track is analysed, by its id: not whatever its text finds (a
+      // re-recording or a cover with the same title). It is a deliberate click on that track,
+      // so the result does not warn that the text matched it loosely (a self-titled song, such
+      // as "Black Sabbath" by Black Sabbath, reads as a partial match of its own text).
+      analyze(query, { trackId: candidate.id, pickedBy: 'click' });
     },
     [analyze],
   );
@@ -478,9 +482,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
     }
   }, [status, candidates]);
 
-  // HITL candidate selection handler
+  // HITL candidate selection handler: a click or Enter on a row, or the countdown at zero.
   const handleHitlSelect = useCallback(
-    (index: number) => {
+    (index: number, pickedBy: PickedBy) => {
       const candidate = candidates?.[index];
       if (!candidate) return;
       // Update preview (P1:10)
@@ -491,7 +495,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       });
       setHitlSelectedIndex(index);
       setHitlCountdown(null);
-      selectCandidate(candidate.id);
+      selectCandidate(candidate.id, pickedBy);
     },
     [candidates, selectCandidate],
   );
@@ -501,7 +505,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   useEffect(() => {
     if (hitlCountdown === null || hitlPaused) return;
     if (hitlCountdown <= 0) {
-      handleHitlSelect(hitlSelectedIndex);
+      handleHitlSelect(hitlSelectedIndex, 'countdown');
       return;
     }
     const timer = setTimeout(
@@ -518,7 +522,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       if (!candidates || candidates.length === 0) return;
       if (e.key === 'Enter') {
         e.preventDefault();
-        handleHitlSelect(hitlSelectedIndex);
+        handleHitlSelect(hitlSelectedIndex, 'click');
         return;
       }
       const next = pickerTarget(e.key, hitlSelectedIndex, candidates.length);
@@ -869,7 +873,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       hitlRowRefs.current[index] = el;
                     }}
                     aria-current={index === hitlSelectedIndex ? 'true' : undefined}
-                    onClick={() => handleHitlSelect(index)}
+                    onClick={() => handleHitlSelect(index, 'click')}
                     onFocus={(e) => {
                       // Keyboard focus (Tab) moves the highlight there and stops the
                       // countdown, as the arrow keys do. A mouse press is left alone: the

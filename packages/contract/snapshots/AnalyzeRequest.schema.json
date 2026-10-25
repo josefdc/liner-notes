@@ -3,14 +3,22 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "AnalyzeRequest.schema.json",
     "type": "object",
-    "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200 } },
+    "properties": {
+      "query": { "type": "string", "minLength": 1, "maxLength": 200 },
+      "trackId": { "type": "string", "pattern": "^[0-9A-Za-z]{22}$" },
+      "pickedBy": { "type": "string", "enum": ["click", "countdown"] }
+    },
     "required": ["query"]
   },
   "output": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "AnalyzeRequest.schema.json",
     "type": "object",
-    "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200 } },
+    "properties": {
+      "query": { "type": "string", "minLength": 1, "maxLength": 200 },
+      "trackId": { "type": "string", "pattern": "^[0-9A-Za-z]{22}$" },
+      "pickedBy": { "type": "string", "enum": ["click", "countdown"] }
+    },
     "required": ["query"],
     "additionalProperties": false
   },

@@ -61,29 +61,24 @@ const SECRET = "configured-secret-value-123456";
 const live = vi.hoisted(() => ({ scout: 0, search: 0, model: 0 }));
 
 vi.mock("../sources/spotify.js", () => ({
-  getTrackDetails: {
-    invoke: async ({ trackId }: { trackId: string }) =>
-      JSON.stringify({
-        id: trackId,
-        title: `Title ${trackId}`,
-        artist: "Artist",
-        artistIds: [],
-        album: "Album",
-        releaseDate: "1994",
-        coverUrl: "",
-        popularity: 50,
-        duration: "3:38",
-        durationMs: 218000,
-        explicit: false,
-        spotifyUrl: `https://open.spotify.com/track/${trackId}`,
-        previewUrl: null,
-      }),
-  },
-  searchMultipleTracks: {
-    invoke: async () => {
-      live.search += 1;
-      return JSON.stringify([]);
-    },
+  fetchTrack: async (trackId: string) => ({
+    id: trackId,
+    title: `Title ${trackId}`,
+    artist: "Artist",
+    artistIds: [],
+    album: "Album",
+    releaseDate: "1994",
+    coverUrl: "",
+    popularity: 50,
+    duration: "3:38",
+    durationMs: 218000,
+    explicit: false,
+    spotifyUrl: `https://open.spotify.com/track/${trackId}`,
+    previewUrl: null,
+  }),
+  searchTracks: async () => {
+    live.search += 1;
+    return [];
   },
 }));
 
@@ -824,6 +819,21 @@ describe("REPLAY_MODE", () => {
     const post = await request(app).post("/api/analyze").send({ query: "Another Song" });
     expect(post.status).toBe(503);
     expect(post.body.code).toBe("live_disabled");
+    noLiveCalls();
+  });
+
+  it("only: a request by track id replays that track's recording, never another track's", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    // The query need not name it: the id does.
+    const byId = await sse(`${streamPath("anything at all")}&trackId=${TRACK_ID}`);
+    expect(byId.find((e) => e.type === "complete")?.data).toMatchObject({ id: TRACK_ID });
+
+    // The text names the recording, but the id asks for another track.
+    const other = await request(app)
+      .post("/api/analyze")
+      .send({ query: "Recorded Song The Recorders", trackId: CHOICE_A });
+    expect(other.status).toBe(503);
+    expect(other.body.code).toBe("live_disabled");
     noLiveCalls();
   });
 

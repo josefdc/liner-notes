@@ -14,7 +14,8 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Player = lazy(() => import('./components/Player'));
 import { AppPhase, type TrackData, type AgentLog } from './types';
 import { useAgent } from './hooks/useAgent';
-import type { AgentStatus, ResultMode, SearchCandidate } from './hooks/agent/types';
+import { isSpotifyTrackId } from './utils/spotify';
+import type { AgentStatus, AnalyzeOptions, ResultMode, SearchCandidate } from './hooks/agent/types';
 import type { Factoid, FactoidUnavailableCode } from './types';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
@@ -259,11 +260,14 @@ const App: React.FC = () => {
   const effectiveTrackData = overrideTrackData || trackData;
 
   // ─── P1:13 Replace setTimeout hack with pendingQuery + useEffect ──────────
-  const [pendingQuery, setPendingQuery] = useState<string | null>(null);
+  // The track's Spotify id goes with the text when it is known: that very track is analysed.
+  const [pendingQuery, setPendingQuery] = useState<{ query: string; trackId?: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (pendingQuery && phase === AppPhase.ONBOARDING) {
-      analyze(pendingQuery);
+      analyze(pendingQuery.query, pendingQuery.trackId ? { trackId: pendingQuery.trackId } : {});
       setPendingQuery(null);
     }
   }, [pendingQuery, phase, analyze]);
@@ -341,13 +345,16 @@ const App: React.FC = () => {
 
   // Handle analyzing a track from Dashboard (Discovered Gems) — P1:13 fix
   const handleAnalyzeTrack = useCallback(
-    (_trackId: string, title: string, artist: string) => {
+    (trackId: string, title: string, artist: string) => {
       // Save current trackData for undo (Item 2)
       previousTrackDataRef.current = effectiveTrackData;
       setOverrideTrackData(null);
       setIsRestoredSession(false);
       reset();
-      setPendingQuery(`${title} ${artist}`.trim());
+      setPendingQuery({
+        query: `${title} ${artist}`.trim(),
+        ...(isSpotifyTrackId(trackId) ? { trackId } : {}),
+      });
       startTransition(() => setPhase(AppPhase.ONBOARDING));
     },
     [reset, effectiveTrackData],
@@ -429,9 +436,9 @@ const App: React.FC = () => {
   }, [writeHistory]);
 
   const startSearch = useCallback(
-    (query: string) => {
+    (query: string, options?: AnalyzeOptions) => {
       markSearchEntry();
-      return analyze(query);
+      return analyze(query, options);
     },
     [markSearchEntry, analyze],
   );

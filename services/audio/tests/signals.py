@@ -666,6 +666,193 @@ ONE_PITCH_CLASS_SEEDED = {
     "synth-note-over-drums": seeded_synth_note,
 }
 ONE_PITCH_CLASS_SEEDS = range(500, 530)
+# Seeds 600-629 of these families are kept out of every test and every threshold choice: they
+# are an evaluation set (evals/audio controls), not pins.
+
+
+# --- chords that keep their key, at many seeds ------------------------------------------------
+# Music in one key whose spectrum hardly changes or whose level moves as a whole: a held chord
+# faded in and out, swelling, getting louder, with tremolo or pumped by a sidechain, chord stabs
+# on one chord, a bass and chord riff on one chord, a one-bar I-V-vi-IV riff. Its lines are a
+# chord, not one pitched source, so whatever key the other rules let through must stay.
+# CHORD_KEYED_SEEDED maps each family to (signal, its key as (tonic, mode)).
+
+PITCH_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+_TIMBRES = {
+    "pad": [(1, 1.0), (2, 0.5), (3, 0.3), (4, 0.2)],
+    "organ": [(0.5, 0.5), (1, 1.0), (2, 0.7), (3, 0.4), (4, 0.3), (6, 0.15)],
+    "saw": [(k, 1.0 / k) for k in range(1, 9)],
+}
+
+
+def _chord_tone(midi_notes, t: np.ndarray, timbre: str) -> np.ndarray:
+    return sum(
+        w * np.sin(2 * np.pi * hz(m) * r * t)
+        for m in midi_notes
+        for r, w in _TIMBRES[timbre]
+        if hz(m) * r < 5000
+    )
+
+
+def _key_draw(rng, mode: str | None = None) -> tuple[int, str]:
+    root = int(rng.integers(0, 12))
+    if mode is None:
+        mode = "minor" if rng.uniform() < 0.5 else "major"
+    return root, mode
+
+
+def _triad(root: int, mode: str, base: int = 48) -> list[int]:
+    return [base + root, base + root + (3 if mode == "minor" else 4), base + root + 7]
+
+
+def _held_chord(seed: int) -> tuple[np.ndarray, tuple[str, str], np.random.Generator]:
+    """A chord held for 30 s (root doubled an octave down on even seeds), 50 ms edges."""
+    rng = np.random.default_rng(seed)
+    root, mode = _key_draw(rng)
+    notes = _triad(root, mode)
+    if seed % 2 == 0:
+        notes = notes + [notes[0] - 12]
+    timbre = ("pad", "organ", "saw")[int(rng.integers(0, 3))]
+    t = seconds_of(30.0)
+    y = _chord_tone(notes, t, timbre) * np.minimum(1, t / 0.05) * np.minimum(1, (30 - t) / 0.05)
+    return y, (PITCH_NAMES[root], mode), rng
+
+
+def _with_drums(y: np.ndarray, seed: int, db: float = -6.0) -> np.ndarray:
+    return normalise(_db(y, 0.0) + _db(_drums_at(seed), db))
+
+
+def seeded_faded_pad(seed: int):
+    """A held chord faded in and out over 1-2 s each, over drums on odd seeds."""
+    y, key, rng = _held_chord(seed)
+    t = seconds_of(30.0)
+    fade_in, fade_out = rng.uniform(1.0, 2.0, 2)
+    y = y * np.minimum(1, t / fade_in) * np.minimum(1, (30 - t) / fade_out)
+    return (_with_drums(y, seed) if seed % 2 else normalise(y)), key
+
+
+def seeded_swelling_pad(seed: int):
+    """A held chord swelling and fading every 5-12 s."""
+    y, key, rng = _held_chord(seed)
+    t = seconds_of(30.0)
+    depth = rng.uniform(0.2, 0.45)
+    swell = 1 - depth + depth * np.sin(2 * np.pi * rng.uniform(0.08, 0.2) * t + rng.uniform(0, 6))
+    return normalise(y * swell), key
+
+
+def seeded_crescendo_pad(seed: int):
+    """A held chord getting louder over the window (quieter on odd seeds), 10-20 dB."""
+    y, key, rng = _held_chord(seed)
+    t = seconds_of(30.0)
+    level = 10 ** (-rng.uniform(10, 20) * (1 - t / 30) / 20)
+    return normalise(y * (level[::-1] if seed % 2 else level)), key
+
+
+def seeded_tremolo_pad(seed: int):
+    """A held chord with a 5.5-6.5 Hz tremolo, 40-60 % deep."""
+    y, key, rng = _held_chord(seed)
+    t = seconds_of(30.0)
+    depth = rng.uniform(0.4, 0.6)
+    return normalise(
+        y * (1 - depth * (0.5 + 0.5 * np.sin(2 * np.pi * rng.uniform(5.5, 6.5) * t)))
+    ), key
+
+
+def seeded_pumped_pad(seed: int):
+    """A held chord ducked by a 128 BPM sidechain (70-90 %), with the kick on odd seeds."""
+    y, key, rng = _held_chord(seed)
+    t = seconds_of(30.0)
+    beat = 60.0 / 128.0
+    pump = 1 - rng.uniform(0.7, 0.9) * np.exp(-(t % beat) / rng.uniform(0.08, 0.15))
+    y = normalise(y * pump).astype(float)
+    if seed % 2:
+        kick = np.zeros(30 * SR)
+        for start in grid(128.0):
+            place(kick, start, Kit(seed=seed).kick)
+        y = normalise(_db(y, 0.0) + _db(kick, -3.0))
+    return y, key
+
+
+def _stabs(chords, rng, bpm: float, seconds: float = 30.0) -> np.ndarray:
+    """Each bar: the chords of `chords` in turn on a hit pattern, decaying stabs."""
+    beat = 60.0 / bpm
+    hits = ([0, 1, 2, 3], [0.5, 1.5, 2.5, 3.5], [0, 1.5, 2.5, 3.5])[int(rng.integers(0, 3))]
+    decay = rng.uniform(0.08, 0.35)
+    timbre = ("pad", "organ", "saw")[int(rng.integers(0, 3))]
+    length = min(beat, 3 * decay)
+    t = seconds_of(length)
+    shaped = np.exp(-t / decay) * np.minimum(1, t / 0.004) * np.minimum(1, (length - t) / 0.01)
+    sounds = [_chord_tone(c, t, timbre) * shaped for c in chords]
+    y = np.zeros(int(seconds * SR))
+    for start in np.arange(0.0, seconds, 4 * beat):
+        for j, h in enumerate(hits):
+            place(y, float(start + h * beat), sounds[j % len(sounds)])
+    return y
+
+
+def seeded_c_major_stabs(seed: int):
+    """C major stabs (one of three voicings) on a one-bar pattern, over drums on odd seeds."""
+    rng = np.random.default_rng(seed)
+    voicing = ([48, 52, 55, 60, 64], [60, 64, 67], [55, 60, 64, 67])[int(rng.integers(0, 3))]
+    bpm = rng.uniform(110.0, 130.0)
+    y = _stabs([voicing], rng, bpm)
+    return (_with_drums(y, seed, -3.0) if seed % 2 else normalise(y)), ("C", "major")
+
+
+def seeded_one_chord_riff(seed: int):
+    """A bass and a chord on eighths together (one envelope), on one chord, over drums."""
+    rng = np.random.default_rng(seed)
+    root, mode = _key_draw(rng)
+    bpm = rng.uniform(100.0, 130.0)
+    eighth = 30.0 / bpm
+    chord = _triad(root, mode, 55)
+    t = seconds_of(0.9 * eighth)
+    envelope = np.exp(-t / rng.uniform(0.08, 0.2)) * np.minimum(1, t / 0.004)
+    bass = sum(np.sin(2 * np.pi * hz(chord[0] - 24) * k * t) / k for k in range(1, 11))
+    sound = (_chord_tone(chord, t, "saw") + 1.5 * bass) * envelope
+    y = np.zeros(30 * SR)
+    for start in np.arange(0.0, 30.0, eighth):
+        place(y, float(start), sound)
+    return _with_drums(y, seed, -4.0), (PITCH_NAMES[(chord[0]) % 12], mode)
+
+
+def seeded_one_bar_riff(seed: int):
+    """I-V-vi-IV stabs within one bar at 118-140 BPM, drums at -12 to -3 dB or none."""
+    rng = np.random.default_rng(seed)
+    root, _ = _key_draw(rng, "major")
+    bpm = rng.uniform(118.0, 140.0)
+    chords = [[60 + root + i for i in c] for c in ([0, 4, 7], [-5, -1, 2], [-3, 0, 4], [-7, -3, 0])]
+    chords = [c + [c[0] - 12] for c in chords]
+    y = _stabs(chords, rng, bpm)
+    drums_db = (None, -12.0, -6.0, -3.0)[int(rng.integers(0, 4))]
+    y = normalise(y) if drums_db is None else _with_drums(y, seed, drums_db)
+    return y, (PITCH_NAMES[root], "major")
+
+
+CHORD_KEYED_SEEDED = {
+    "faded-pad": seeded_faded_pad,
+    "swelling-pad": seeded_swelling_pad,
+    "crescendo-pad": seeded_crescendo_pad,
+    "tremolo-pad": seeded_tremolo_pad,
+    "pumped-pad": seeded_pumped_pad,
+    "c-major-stabs": seeded_c_major_stabs,
+    "one-chord-riff": seeded_one_chord_riff,
+    "one-bar-riff": seeded_one_bar_riff,
+}
+CHORD_KEYED_SEEDS = range(700, 730)
+
+
+def chord_key(family: str, seed: int) -> tuple[str, str]:
+    """The key of CHORD_KEYED_SEEDED[family](seed), without making the signal."""
+    if family == "c-major-stabs":
+        return ("C", "major")
+    rng = np.random.default_rng(seed)
+    if family == "one-bar-riff":
+        return (PITCH_NAMES[_key_draw(rng, "major")[0]], "major")
+    root, mode = _key_draw(rng)
+    if family == "one-chord-riff":
+        return (PITCH_NAMES[_triad(root, mode, 55)[0] % 12], mode)
+    return (PITCH_NAMES[root], mode)
 
 
 def probes() -> dict[str, np.ndarray]:

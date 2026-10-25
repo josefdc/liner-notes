@@ -784,6 +784,7 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
     assert v2["beats"] is not None
 
 
+@pytest.mark.seeded
 @pytest.mark.parametrize("family", signals.PITCHLESS_SEEDED)
 def test_no_key_for_pitchless_material_at_control_seeds(family):
     """
@@ -804,20 +805,32 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 
 # One pitched source, 30 seeds each (signals.ONE_PITCH_CLASS_SEEDED): a note's overtones, its
 # octaves or a bell's or a drum's partials can spell three pitch classes. The single-source rule
-# (estimators.SourceEvidence) withholds the keys that analyzer 2.1.0 gave the one-note basses,
-# the bells, alone and over drums, and the cowbells. What still gets a key is pinned seed by
-# seed: toms (two or three drums, each with its own envelope) and tabla whose strokes alternate
-# partials are not one source by that rule, and the strength minimum lets these keys through.
+# (estimators.SourceEvidence) withholds the keys that analyzer 2.1.0 gave most cowbells and
+# one-note basses. The seeds that get a key are pinned exactly, in both directions: a change
+# that keys one more or one fewer fails here. Still keyed: bells, alone and over drums (the
+# tierce is a minor third over the hum: two notes a third apart, as in a chord); two cowbells
+# whose oscillators are a sixth apart; two basses whose harmonics the notes test does not fold
+# within its tolerance; toms (two or three drums, each with its own envelope) and tabla whose
+# strokes alternate partials, which do not move together. Seeds 600-629 are an evaluation set
+# (evals/audio controls) and are kept out of these tests.
 ONE_PITCH_CLASS_KEYED = {
-    ("tabla", "essentia"): {500, 503, 505, 512, 513, 515, 521, 526, 527},
-    ("tabla", "librosa"): {500, 503, 505, 512, 513, 515, 519, 526, 527},
+    ("one-note-bass", "essentia"): {500, 501},
+    ("bell", "essentia"): {503, 507, 509, 513, 514, 521, 527},
+    ("bell", "librosa"): {503, 507, 509, 513, 514, 521, 527},
+    ("bell-over-drums", "essentia"): {509, 513, 514, 522},
+    ("bell-over-drums", "librosa"): {509, 513, 514, 522},
+    ("tabla", "essentia"): {500, 503, 504, 505, 512, 513, 515, 516, 521, 526, 527},
+    ("tabla", "librosa"): {500, 503, 505, 512, 513, 515, 516, 519, 526, 527},
     ("toms", "essentia"): {502, 507, 509, 514, 515, 517, 521, 522, 526},
     ("toms", "librosa"): {502, 507, 509, 517, 522, 526, 529},
+    ("cowbell", "essentia"): {508, 515},
+    ("cowbell", "librosa"): {508},
 }
 
 
+@pytest.mark.seeded
 @pytest.mark.parametrize("family", signals.ONE_PITCH_CLASS_SEEDED)
-def test_one_pitch_class_material_gets_no_more_keys_than_measured(family):
+def test_one_pitch_class_material_gets_exactly_the_pinned_keys(family):
     """Both estimators on the same signals (they share the representations)."""
     make = signals.ONE_PITCH_CLASS_SEEDED[family]
     keyed = {name: {} for name in KEY_ESTIMATORS}
@@ -828,19 +841,20 @@ def test_one_pitch_class_material_gets_no_more_keys_than_measured(family):
             if key is not None:
                 keyed[name][seed] = (key.tonic, key.mode, round(key.strength, 2))
     for name in KEY_ESTIMATORS:
-        allowed = ONE_PITCH_CLASS_KEYED.get((family, name), set())
-        assert set(keyed[name]) <= allowed, (name, keyed[name])
+        expected = ONE_PITCH_CLASS_KEYED.get((family, name), set())
+        assert set(keyed[name]) == expected, (name, keyed[name])
 
 
 @pytest.mark.parametrize(
     "family, seed",
-    [("cowbell", 500), ("bell", 509), ("bell-over-drums", 509), ("one-note-bass", 504)],
+    [("cowbell", 500), ("cowbell", 502), ("one-note-bass", 504), ("one-note-bass", 507)],
 )
 def test_one_pitched_source_has_no_key(family, seed):
     """
     Material that every other key rule lets through (analyzer 2.1.0 keyed these seeds): its
-    partials hold still and rise and fall together, so the key is withheld as one source. The
-    reason does not judge the input not music: the fingerprint is kept.
+    lines hold still, move together and spell one note, or two a fifth or a tritone apart, so
+    the key is withheld as one source. The reason does not judge the input not music: the
+    fingerprint is kept.
     """
     signals_ = estimators.Signals(signals.ONE_PITCH_CLASS_SEEDED[family](seed), FIXTURE_SR)
     evidence = signals_.source_evidence
@@ -852,24 +866,81 @@ def test_one_pitched_source_has_no_key(family, seed):
         assert estimators.select_estimator(name).key(signals_) is None
 
 
-@pytest.mark.parametrize(
-    "make, why",
-    [(music.ambient_pad, "depth"), (lambda: music.band_mix("C-vamp", False), "shared")],
-    ids=["held-pad", "C-vamp"],
-)
-def test_a_held_chord_or_a_vamp_is_not_one_source(make, why):
+def test_a_bell_holds_still_but_spells_a_minor_third():
+    """A tolling bell's lines move together, but its hum and tierce are a minor third apart."""
+    evidence = estimators.Signals(signals.seeded_bell(509), FIXTURE_SR).source_evidence
+    assert evidence.still and evidence.chord and not evidence.single, evidence
+    assert len(evidence.notes) == 2
+
+
+@pytest.mark.seeded
+@pytest.mark.parametrize("family", signals.CHORD_KEYED_SEEDED)
+def test_chords_keep_the_key_the_other_rules_give_them(family):
     """
-    A pad held for the whole window does not move either, but it is not struck; in a one-chord
-    vamp the bass and the chords keep their own rhythms. Both keep their key
-    (MUSIC_WITHOUT_A_BEAT).
+    Held chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs,
+    a bass and chord riff on one chord and one-bar riffs (signals.CHORD_KEYED_SEEDED, seeds
+    700-729): many hold still and move together, but their lines spell a chord, so the
+    single-source rule withholds none of their keys, and what the other rules decide is left
+    as analyzer 2.1.0 had it.
     """
-    evidence = estimators.Signals(make(), FIXTURE_SR).source_evidence
-    assert not evidence.single
-    if why == "depth":
-        assert evidence.movement <= estimators.SOURCE_MAX_MOVEMENT
-        assert evidence.depth < estimators.SOURCE_MIN_DEPTH
-    else:
-        assert evidence.shared < estimators.SOURCE_MIN_SHARED
+    make = signals.CHORD_KEYED_SEEDED[family]
+    fired, still = [], 0
+    for seed in signals.CHORD_KEYED_SEEDS:
+        y, _ = make(seed)
+        signals_ = estimators.Signals(y, FIXTURE_SR)
+        still += signals_.source_evidence.still
+        if str(signals_.key_withheld()) == estimators.ONE_SOURCE:
+            fired.append(seed)
+    assert fired == []
+    if family != "one-bar-riff":  # its chords change within a bar: the lines move
+        assert still > 0  # the notes test, not time, keeps these keys
+
+
+def test_chord_key_names_each_family_s_key():
+    for family, make in signals.CHORD_KEYED_SEEDED.items():
+        assert make(700)[1] == signals.chord_key(family, 700), family
+
+
+def test_held_and_struck_lines_by_the_numbers():
+    """The rule's values, one measurement at a time across its limit (literal, not the names)."""
+    one_note = {"bins": 12, "movement": 0.01, "shared": 0.9, "depth": 0.4, "notes": (98.0,)}
+    assert estimators.SourceEvidence(**one_note).single
+    for field, value in (("bins", 5), ("movement", 0.06), ("shared", 0.55), ("depth", 0.1)):
+        evidence = estimators.SourceEvidence(**{**one_note, field: value})
+        assert not evidence.still and not evidence.single, field
+    # The notes decide once time says one source.
+    for notes, chord in (
+        ((98.0,), False),
+        ((540.0, 800.0), False),  # 680 cents: a cowbell's two oscillators
+        ((220.0, 330.0), False),  # a fifth
+        ((73.42, 174.61), True),  # D2 and F3: a minor third over the root
+        ((65.41, 329.63), True),  # C2 and E4: a major third (not C2's fifth harmonic)
+        ((261.63, 440.0), True),  # a major sixth
+        ((130.81, 164.81, 196.0), True),
+    ):
+        evidence = estimators.SourceEvidence(**{**one_note, "notes": notes})
+        assert evidence.chord == chord and evidence.single == (not chord), notes
+    assert not estimators.SourceEvidence(**{**one_note, "notes": None}).single
+
+
+def test_source_notes_folds_overtones_and_keeps_chord_tones():
+    """source_notes on 30 s made up for the test, through the shared STFT."""
+    t = np.arange(30 * FIXTURE_SR) / FIXTURE_SR
+
+    def tone(f, harmonics=8):
+        return sum(np.sin(2 * np.pi * f * k * t) / k for k in range(1, harmonics + 1))
+
+    def notes_of(y):
+        s = estimators.Signals((0.2 * y).astype(np.float32), FIXTURE_SR)
+        return estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
+
+    # One note repeated every sixteenth at 120 BPM: its repetition leaves no extra notes.
+    step = t % 0.125
+    assert len(notes_of(tone(98.0) * (step < 0.1) * np.exp(-step / 0.05))) == 1
+    triad = notes_of(tone(130.81) + tone(164.81) + tone(196.0))
+    assert len(triad) == 3 and estimators.spells_chord(triad)
+    over_root = notes_of(2 * tone(65.41) + tone(261.63) + tone(329.63) + tone(392.0))
+    assert estimators.spells_chord(over_root), over_root  # C2 + C4 E4 G4: E4 is a note
 
 
 def _lines(hz: np.ndarray) -> estimators.Tonality:
@@ -877,7 +948,7 @@ def _lines(hz: np.ndarray) -> estimators.Tonality:
 
 
 def test_source_evidence_needs_partials_that_share_one_struck_envelope():
-    """SourceEvidence on lines and STFT magnitudes made up for the test (2048-point STFT)."""
+    """The time half of SourceEvidence on lines and STFT magnitudes made up for the test."""
     sr, hop, frames = FIXTURE_SR, 512, 1300
     bins = np.arange(10, 90, 10)  # eight lines, one per STFT bin
     hz = bins * sr / 2048
@@ -886,18 +957,18 @@ def test_source_evidence_needs_partials_that_share_one_struck_envelope():
     stft = np.zeros((1025, frames))
     stft[bins] = strokes * rng.uniform(0.5, 1.0, (bins.size, 1))
     one = estimators.source_evidence(_lines(hz), stft, sr, hop)
-    assert one.bins == bins.size and one.single, one
+    assert one.bins == bins.size and one.still and one.notes is None, one
     # Each line struck on its own pattern: no shared envelope.
     for k, b in enumerate(bins):
         stft[b] = np.exp(-(np.arange(frames) % (7 + 2 * k)) / 2.0)
-    assert not estimators.source_evidence(_lines(hz), stft, sr, hop).single
+    assert not estimators.source_evidence(_lines(hz), stft, sr, hop).still
     # Too few lines to tell: two lines struck together.
     stft[bins] = strokes
     two = estimators.source_evidence(_lines(hz[:2]), stft, sr, hop)
-    assert two.bins == 2 and two.shared > 0.99 and not two.single
+    assert two.bins == 2 and two.shared > 0.99 and not two.still
     # Held, not struck.
     stft[bins] = 1.0 + 0.01 * rng.standard_normal((bins.size, frames))
-    assert not estimators.source_evidence(_lines(hz), stft, sr, hop).single
+    assert not estimators.source_evidence(_lines(hz), stft, sr, hop).still
     assert estimators.source_evidence(_lines(np.zeros(0)), stft, sr, hop) == (
         estimators.NO_SOURCE_EVIDENCE
     )

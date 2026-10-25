@@ -147,35 +147,60 @@ def test_the_key_evidence_and_strength_are_applied_to_the_recorded_key():
 
 
 def test_one_pitched_source_is_withheld_under_the_rules_that_have_the_rule():
-    """The single-source rule at the service's values, applied after the other key rules."""
+    """The single-source rule at the values the run recorded, applied after the other rules."""
     stats = {"tonic": "C", "mode": "major", "strength": 0.8}
-    single = {"bins": 12, "movement": 0.01, "shared": 0.9, "depth": 0.4}
+    single = {
+        "bins": 12,
+        "movement": 0.01,
+        "shared": 0.9,
+        "depth": 0.4,
+        "notes": [98.0],
+        "chord": False,
+    }
     ev = {**evidence(), "source": single}
-    with_rule = cal.BASELINE.set("one_source", True)
     _, est = cal.service.load()
+    values = cal.source_values(est)
+    assert values is not None and values["minBins"] == est.SOURCE_MIN_BINS
+    with_rule = cal.BASELINE.set("one_source", values)
     assert cal.evidence_withheld(ev, with_rule, "essentia") == est.ONE_SOURCE
     assert cal.derive_key(True, ev, stats, "librosa", with_rule) is None
     # Before the rule, and for runs recorded without its measurements: the key stays.
-    assert not cal.BASELINE.one_source
+    assert cal.BASELINE.one_source is None
     assert cal.derive_key(True, ev, stats, "essentia", cal.BASELINE) == ["C", "major"]
     assert cal.derive_key(True, evidence(), stats, "essentia", with_rule) == ["C", "major"]
-    # Each measurement on its own side of the service's value keeps the key.
+    # A chord, or notes not measured (time did not say one source), keeps the key.
+    for source in ({**single, "chord": True}, {**single, "notes": None, "chord": None}):
+        assert cal.evidence_withheld({**ev, "source": source}, with_rule, "essentia") is None
+    # Each time measurement on its own side of the recorded value keeps the key.
     for field, value in (
-        ("bins", est.SOURCE_MIN_BINS - 1),
-        ("movement", est.SOURCE_MAX_MOVEMENT * 1.01),
-        ("shared", est.SOURCE_MIN_SHARED * 0.99),
-        ("depth", est.SOURCE_MIN_DEPTH * 0.99),
+        ("bins", values["minBins"] - 1),
+        ("movement", values["maxMovement"] * 1.01),
+        ("shared", values["minShared"] * 0.99),
+        ("depth", values["minDepth"] * 0.99),
     ):
         apart = {**ev, "source": {**single, field: value}}
         assert cal.evidence_withheld(apart, with_rule, "essentia") is None, field
+    # The recorded values decide, not the service's at render time.
+    stricter = cal.BASELINE.set("one_source", {**values, "minShared": 0.95})
+    assert cal.evidence_withheld(ev, stricter, "essentia") is None
     # Another rule's reason comes first.
     weak = {**evidence(ratio=0.01), "source": single}
     assert cal.evidence_withheld(weak, with_rule, "essentia") == "no sustained pitch"
     # The service's values have the rule; rules recorded before it load without it.
-    assert cal.service_rules().one_source
+    assert cal.service_rules().one_source == values
     recorded = cal.BASELINE.as_dict()
     del recorded["one_source"]
     assert cal.Rules.from_dict(recorded) == cal.BASELINE
+
+
+def test_the_choice_does_not_see_the_evaluation_controls():
+    kept = cal.choice_controls(
+        [
+            {"name": "a", "group": "one-pitch-class-seeded"},
+            {"name": "b", "group": "held-out-seeded"},
+        ]
+    )
+    assert [c["name"] for c in kept] == ["a"]
 
 
 def test_a_derivation_that_disagrees_with_the_service_is_reported():

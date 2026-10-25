@@ -137,8 +137,32 @@ jobs:
           uv run --frozen --only-group dev ruff check .
           uv run --frozen --only-group dev ruff format --check .
       # Without the "models" extra: the suite covers the service as it runs without Essentia.
+      # The seeded control families (pytest marker "seeded") run in python-seeded, in parallel.
       - run: uv sync --frozen
       - name: Pytest
         run: |
           uv run --frozen python -VV
-          uv run --frozen pytest -rsxX
+          uv run --frozen pytest -rsxX -m "not seeded"
+
+  python-seeded:
+    name: audio service, seeded control families (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/audio
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/audio/uv.lock
+      # Drums, one pitched source and chords that keep their key, 30 seeds each: what the key
+      # rules give or withhold, pinned seed by seed (librosa here; Essentia in audio-models).
+      - run: uv sync --frozen
+      - name: Pytest
+        run: |
+          uv run --frozen python -VV
+          uv run --frozen pytest -rsxX -m seeded

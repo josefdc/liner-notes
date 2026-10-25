@@ -318,7 +318,19 @@ GROUPS = {
     "tempo": "a known tempo (octave and meter)",
     "key": "a known key the service lost or changed",
     "noise": "noise: nothing to measure",
+    "chord-keyed-seeded": "a key: chords that keep the key the other rules give them (held "
+    "chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs, "
+    "a bass and chord riff on one chord, one-bar I-V-vi-IV riffs), 30 seeds each",
+    "held-out-seeded": "evaluation only: the one-pitch-class families at seeds 600-629 and the "
+    "chord families at 800-829; no rule value is chosen on them",
 }
+# Groups the calibration's choice never sees (calibration.select and confirm leave them out).
+EVALUATION_GROUPS = frozenset({"held-out-seeded"})
+
+
+# Seeds no test pins and no value is chosen on (EVALUATION_GROUPS).
+HELD_OUT_ONE_PITCH_SEEDS = range(600, 630)
+HELD_OUT_CHORD_SEEDS = range(800, 830)
 
 
 def controls() -> list[Control]:
@@ -615,6 +627,41 @@ def controls() -> list[Control]:
             )
             for family, make in s.ONE_PITCH_CLASS_SEEDED.items()
             for seed in s.ONE_PITCH_CLASS_SEEDS
+        ),
+        # chords that keep their key (services/audio/tests/signals.py CHORD_KEYED_SEEDED)
+        *(
+            c(
+                f"{family}-s{seed}",
+                "chord-keyed-seeded",
+                f"a chord in one key: {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed)[0],
+                key=s.chord_key(family, seed),
+            )
+            for family, make in s.CHORD_KEYED_SEEDED.items()
+            for seed in s.CHORD_KEYED_SEEDS
+        ),
+        # evaluation only: unseen seeds of both
+        *(
+            c(
+                f"{family}-s{seed}",
+                "held-out-seeded",
+                f"held out: one pitch class, {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed),
+                key=NONE,
+            )
+            for family, make in s.ONE_PITCH_CLASS_SEEDED.items()
+            for seed in HELD_OUT_ONE_PITCH_SEEDS
+        ),
+        *(
+            c(
+                f"{family}-s{seed}",
+                "held-out-seeded",
+                f"held out: a chord in one key, {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed)[0],
+                key=s.chord_key(family, seed),
+            )
+            for family, make in s.CHORD_KEYED_SEEDED.items()
+            for seed in HELD_OUT_CHORD_SEEDS
         ),
         # the service's own probe sets (tests/test_v2.py)
         *one_source_controls(),

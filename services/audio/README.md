@@ -200,14 +200,18 @@ times are seconds from the start of the preview. Every block is `null` when it w
   triad); when the lines and the notes of a single voice spell fewer than three pitch classes;
   or when its strength is under the estimator's minimum (0.4 for both). One pitched source has
   no key either, whatever its strength: when the harmonic part's spectral lines keep the same
-  proportions over the whole window (followed in 2 s steps) and rise and fall together at each
-  stroke, as a cowbell, a bell or one note repeated on a bass do, the key is withheld as "one
-  pitched source"; a held pad, whose lines do not move at all, keeps its key, and so does a
-  single chord vamp whose bass and chords keep their own rhythms. A single chord struck the same
-  way for the whole window counts as one source too. Several sources that never change (toms,
-  or tabla strokes with partials of their own) are not caught by it. Neither strength separates
-  atonal material from tonal music: random chromatic notes or a twelve-tone row can still get a
-  key, and so can a few tuned drums whose partials spell three classes. The spectral-line rules are
+  proportions over the whole window (followed in 2 s steps) and rise and fall together, and
+  what they spell is one note, or two a fourth, a fifth or a tritone apart, the key is withheld
+  as "one pitched source". That is a cowbell or one note repeated on a bass. A chord keeps its
+  key, however its level moves: three pitch classes, or two a third or a sixth apart (a third
+  over its root, whose fifth is the root's own third harmonic), are a chord. So a pad faded in
+  and out, swelling or pumped by a sidechain, chord stabs and a bass and chord riff on one chord
+  keep theirs. A bell is not caught (its tierce is a minor third over the hum, as in a chord),
+  nor are several drums (toms, tabla strokes with partials of their own), and a major third
+  sung or played 8 cents flat or more over its root two octaves down reads as the root's fifth
+  harmonic, so such a chord, if it also holds still, counts as one source. Neither strength
+  separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
+  still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are
   what keep keys off pitchless sound, and they also withhold many keys of electronic dance
   music, whose synthesizers leave few narrow lines (the calibration section of
   `evals/reports/audio-*.md` has the numbers). Without a beat, a pitch track of the harmonic part also
@@ -332,7 +336,13 @@ pins the v1 fields. `tests/test_v2.py` covers the `v2` block with both estimator
 (noise, silence, short input, and music under noise or with human timing, from
 `tests/signals.py`), music without a beat and single held pitches or speech (sung and played
 lines with vibrato, band mixes with and without drums, a pad, a drone, speech with irregular
-syllables, from `tests/music.py`), loudness, key moments, sections and the fingerprint. Every
+syllables, from `tests/music.py`), loudness, key moments, sections and the fingerprint. Service tests pin exactly which one-pitch-class seeds get a key (equality, both directions)
+and that the single-source rule withholds no key of the chord families at seeds 700-729 (held
+chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs, riffs on
+one chord and one-bar riffs); seeds 600-629 and 800-829 are evaluation-only `evals/audio`
+controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
+marker `seeded`, and CI runs them in a job of their own (`uv run pytest -m seeded`, next to
+`uv run pytest -m "not seeded"`); a plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round
 trip, and for v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model
 tests are reported as skipped without the `models` extra and the models; run

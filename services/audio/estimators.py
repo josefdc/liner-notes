@@ -200,45 +200,65 @@ MOVEMENT_WINDOW_S = 0.5  # the chromagram is averaged over this before it is com
 # keep keys off pitchless sound.
 ESSENTIA_MIN_KEY_STRENGTH = 0.4
 LIBROSA_MIN_KEY_STRENGTH = 0.4
-# One pitched source (SourceEvidence) is no key, whatever its strength: a cowbell, a bell, one
-# note repeated on a bass. Its overtones or partials can spell three pitch classes that the
-# series and pitch-class rules let through, and the estimators then find a key in them. What
-# gives one source away is time, not the spectrum: its partials keep the same proportions from
-# one second to the next (the pitch content never changes) and rise and fall together at each
-# stroke. The harmonic part's spectral lines are grouped into the bins of the shared STFT (10.8
-# Hz, so that the sidebands of a note repeated every sixteenth fall into the note's bin), and the
-# bins holding SOURCE_COVER of the line amplitude are followed through the window by their STFT
-# magnitude. The source is single when there are at least SOURCE_MIN_BINS of them (with fewer,
-# a large shared component is close to chance) and
-# (1) movement: their envelopes, averaged over SOURCE_WINDOW_S and normalised per frame, stay
-#     within SOURCE_MAX_MOVEMENT of their mean proportions (total-variation distance, weighted
-#     by level);
-# (2) shared: the first principal component of their envelopes (each centred and normalised)
-#     holds at least SOURCE_MIN_SHARED of the variance;
-# (3) depth: their summed envelope varies (coefficient of variation at least SOURCE_MIN_DEPTH):
-#     the source is struck, not held.
-# Measured on the one-pitch-class controls of tests/signals.py (seeds 500-529) that analyzer
-# 2.1.0 keyed, on the 48 GiantSteps+ clips it keyed (evals/audio key suite, --limit 250 --seed
-# 1) and on the music controls of evals/audio:
-# - movement: bells, bells over drums, cowbells and one-note basses 0.003-0.032, tabla
-#   0.010-0.095, toms 0.019-0.082; the keyed GiantSteps+ clips 0.068 and 0.072 (the second
-#   with two bins), all others 0.104-0.393; a C major vamp 0.085-0.101, band mixes with chord
-#   changes 0.22 and more, a held A minor pad 0.012;
-# - shared: bells 0.86-0.94, bells over drums 0.70-0.90, cowbells 0.83-0.97, one-note basses
-#   0.64-0.81, tabla 0.49-0.67, toms 0.37-0.55 (two or three drums, each with its own
-#   envelope); the C vamp 0.16 (bass and chords keep their own rhythms), the held pad 0.78;
-# - depth: the struck controls 0.21-7.1, the held pad 0.09 (it keeps its key);
-# - bins: the struck controls 12-37, toms 6-8; a sung line with vibrato leaves 2.
-# Toms, and tabla whose strokes alternate partials, keep the key the other rules give them:
-# several drums, or strokes with envelopes of their own, are not one source by this measure.
-# A single chord struck the same way for the whole window is one source by it too: of the 250
-# GiantSteps+ clips it holds for one, whose key the spectral-line rule already withholds.
+# One pitched source (SourceEvidence) is no key, whatever its strength: a cowbell, one note
+# repeated on a bass. Its overtones can spell three pitch classes that the series and
+# pitch-class rules let through, and the estimators then find a key in them. Two questions
+# decide, in this order:
+# 1. Time (SourceEvidence.still): the harmonic part's spectral lines keep their proportions and
+#    rise and fall together. The lines are grouped into the bins of the shared STFT (10.8 Hz),
+#    and the bins holding SOURCE_COVER of the line amplitude are followed by their STFT
+#    magnitude: at least SOURCE_MIN_BINS of them (with fewer, a large shared component is close
+#    to chance); their envelopes, averaged over SOURCE_WINDOW_S and normalised per frame, within
+#    SOURCE_MAX_MOVEMENT of their mean proportions (total-variation distance, weighted by
+#    level); the first principal component of their centred, normalised envelopes holding at
+#    least SOURCE_MIN_SHARED of the variance; their summed level varying by a coefficient of
+#    variation of at least SOURCE_MIN_DEPTH. A struck source passes; so does a chord that is
+#    struck, faded, swelled, pumped or played with tremolo, since time cannot tell one sound
+#    from several sounding together.
+# 2. Notes (SourceEvidence.chord, source_notes): what the lines spell. The line spectrum is
+#    taken from the phase of the shared STFT, frame by frame, so that a note repeated every
+#    sixteenth gives its partials and not the comb of lines its repetition leaves in a long-term
+#    spectrum. A line is an overtone when it lies within SOURCE_NOTE_TOLERANCE of a whole
+#    multiple of a lower note: the fifth of a chord over its root in the bass is the root's own
+#    third harmonic, but an equal-tempered major third is 0.79 % off the fifth harmonic and stays
+#    a note (a third sung or played 8 cents flat or more folds into the root). Three pitch
+#    classes, or two a third or a sixth apart (within SOURCE_THIRD_CENTS), are a chord and keep
+#    the key; one note, or two a fourth, fifth or tritone apart, is one source.
+# Measured on the controls of tests/signals.py, with analyzer 2.1.0 as the reference:
+# - the chords of CHORD_KEYED_SEEDED (seeds 700-729): held chords faded, swelling, getting
+#   louder or pumped by a 128 BPM sidechain pass the time test at all 30 seeds, with tremolo at
+#   26, and so do C major stabs and the bass and chord riffs on one chord at all 30 (the one-bar
+#   riffs move: 0). Their notes are three classes or more, or a root with its third over it (the
+#   fifth folded into a root doubled below): the rule withholds none of their keys (none at
+#   seeds 800-829 either, an evaluation set);
+# - the one-pitch-class controls (seeds 500-529): of the keys analyzer 2.1.0 gave, it withholds
+#   17 of 19 cowbells' with Essentia and 8 of 9 with librosa (two oscillators a fourth to a
+#   minor sixth apart; the two kept are read as a sixth), and 4 of 6 one-note basses' with
+#   Essentia (in the two kept, lines next to the fundamental, or harmonics 0.37-0.46 % from where
+#   the fundamental puts them, count as notes). Bells, alone and over drums, pass the time test
+#   but keep their key: the tierce is a minor third over the hum, as in a chord. Toms do not
+#   pass the time test (two or three drums, each with its own envelope: shared 0.37-0.55), nor
+#   do 27 of 30 tabla (strokes with envelopes of their own); the other three spell three
+#   classes or more;
+# - GiantSteps+ (evals/audio key suite, --limit 250, clip seeds 1-3, 750 windows): no window
+#   whose key the other rules let through passes the time test: the stillest of the 155 keyed
+#   windows moves 0.049 but shares 0.41, the next ones move 0.057 and more.
 SOURCE_COVER = 0.9
 SOURCE_MIN_BINS = 6
 SOURCE_WINDOW_S = 2.0
 SOURCE_MAX_MOVEMENT = 0.05
 SOURCE_MIN_SHARED = 0.6
 SOURCE_MIN_DEPTH = 0.15
+# The notes test (source_notes): the harmonic part's line spectrum from the phase of the shared
+# STFT, peaks within SOURCE_NOTE_MERGE_CENTS of a stronger one merged, then every peak of at
+# least SOURCE_NOTE_LEVEL of the strongest that is not within SOURCE_NOTE_TOLERANCE of harmonic
+# 2-SOURCE_NOTE_MAX_HARMONIC of a lower note is a note.
+SOURCE_NOTE_CENTS_BIN = 2.0
+SOURCE_NOTE_MERGE_CENTS = 70.0
+SOURCE_NOTE_LEVEL = 0.28
+SOURCE_NOTE_TOLERANCE = 0.003
+SOURCE_NOTE_MAX_HARMONIC = 16
+SOURCE_THIRD_CENTS = 30.0
 ONE_SOURCE = "one pitched source (its partials hold still and rise and fall together)"
 
 # The harmonic part is separated below this frequency (see Signals.harmonic).
@@ -362,15 +382,26 @@ class SourceEvidence:
     movement: float  # change of their proportions over SOURCE_WINDOW_S (0 = none)
     shared: float  # share of their envelopes' variance in one component, 0..1
     depth: float  # coefficient of variation of their summed envelope
+    # The notes the lines spell (Hz, see source_notes), measured only when the four above hold.
+    notes: tuple[float, ...] | None = None
 
     @property
-    def single(self) -> bool:
+    def still(self) -> bool:
+        """The lines hold still and move together: what time says (the four measurements)."""
         return (
             self.bins >= SOURCE_MIN_BINS
             and self.movement <= SOURCE_MAX_MOVEMENT
             and self.shared >= SOURCE_MIN_SHARED
             and self.depth >= SOURCE_MIN_DEPTH
         )
+
+    @property
+    def chord(self) -> bool:
+        return self.notes is not None and spells_chord(self.notes)
+
+    @property
+    def single(self) -> bool:
+        return self.still and self.notes is not None and not self.chord
 
 
 NO_SOURCE_EVIDENCE = SourceEvidence(0, 1.0, 0.0, 0.0)
@@ -572,7 +603,13 @@ class Signals:
     @cached_property
     def source_evidence(self) -> SourceEvidence:
         """Whether the harmonic part's lines behave as one source (see SOURCE_COVER)."""
-        return source_evidence(self.harmonic_tonality, self.harmonic_stft, self.sr, self.hop)
+        evidence = source_evidence(self.harmonic_tonality, self.harmonic_stft, self.sr, self.hop)
+        if not evidence.still:
+            return evidence
+        notes = source_notes(self.harmonic_stft, self.sr, self.hop)
+        return SourceEvidence(
+            evidence.bins, evidence.movement, evidence.shared, evidence.depth, notes
+        )
 
     def key_withheld(self) -> Withheld | None:
         """
@@ -646,13 +683,98 @@ def source_evidence(lines: Tonality, stft: np.ndarray, sr: int, hop: int) -> Sou
 
     centred = envelopes - envelopes.mean(axis=1, keepdims=True)
     centred /= np.maximum(np.linalg.norm(centred, axis=1, keepdims=True), 1e-12)
-    singular = np.linalg.svd(centred, compute_uv=False)
-    total = float(np.sum(singular**2))
-    shared = float(singular[0] ** 2 / total) if total > 0 else 0.0
+    # The first principal component's share from the bins x bins Gram matrix (the squared
+    # singular values are its eigenvalues); einsum keeps it off the threaded BLAS.
+    gram = np.einsum("it,jt->ij", centred, centred)
+    eigen = np.linalg.eigvalsh(gram)
+    total = float(np.sum(eigen))
+    shared = float(eigen[-1] / total) if total > 0 else 0.0
 
     summed = envelopes.sum(axis=0)
     depth = float(summed.std() / summed.mean()) if summed.mean() > 0 else 0.0
     return SourceEvidence(count, movement, shared, depth)
+
+
+def source_notes(stft: np.ndarray, sr: int, hop: int) -> tuple[float, ...]:
+    """
+    The notes (Hz, lowest first) that the spectral peaks of `stft` spell. Each frame's peak
+    frequencies come from the phase advance between frames (a 93 ms frame holds less than one
+    repetition of a note played every sixteenth, so they are the note's partials, without the
+    comb of lines its repetition puts into a long-term spectrum). Their magnitudes are summed
+    in a histogram of SOURCE_NOTE_CENTS_BIN cents, whose peaks are the lines; a line is a note
+    when it is not an overtone of a lower note (see SOURCE_NOTE_TOLERANCE).
+    """
+    lo, hi = SERIES_LOW_HZ, HARMONIC_MAX_HZ
+    n_fft = 2 * (stft.shape[0] - 1)
+    rows = int(min(stft.shape[0], np.ceil(hi * n_fft / sr) + 2))
+    if stft.shape[1] < 2 or rows < 3:
+        return ()
+    spectrum = stft[:rows]
+    k = np.arange(rows)[:, None]
+    advance = np.angle(spectrum[:, 1:]) - np.angle(spectrum[:, :-1]) - 2 * np.pi * k * hop / n_fft
+    advance = (advance + np.pi) % (2 * np.pi) - np.pi
+    freqs = (k + advance * n_fft / (2 * np.pi * hop)) * sr / n_fft
+    magnitude = np.abs(spectrum)
+    weight = np.sqrt(magnitude[:, 1:] * magnitude[:, :-1])
+    if not weight.max() > 0:
+        return ()
+    peak = np.zeros_like(weight, dtype=bool)
+    peak[1:-1] = (weight[1:-1] >= weight[:-2]) & (weight[1:-1] > weight[2:])
+    peak &= (weight > 1e-3 * weight.max()) & (freqs >= lo) & (freqs <= hi)
+    position = 1200 * np.log2(freqs[peak] / lo) / SOURCE_NOTE_CENTS_BIN
+    size = int(1200 * np.log2(hi / lo) / SOURCE_NOTE_CENTS_BIN) + 1
+    histogram = np.bincount(position.astype(int), weights=weight[peak], minlength=size)
+    smooth = scipy.ndimage.gaussian_filter1d(histogram, 2.0)
+    if not smooth.max() > 0:
+        return ()
+    found, _ = scipy.signal.find_peaks(smooth, prominence=0.01 * smooth.max())
+    lines = [
+        (
+            lo * 2 ** ((i + 0.5) * SOURCE_NOTE_CENTS_BIN / 1200),
+            float(histogram[max(0, i - 7) : i + 8].sum()),
+        )
+        for i in found
+    ]
+    kept: list[tuple[float, float]] = []
+    for f, a in sorted(lines, key=lambda line: -line[1]):
+        if all(abs(1200 * np.log2(f / g)) > SOURCE_NOTE_MERGE_CENTS for g, _ in kept):
+            kept.append((f, a))
+    if not kept:
+        return ()
+    level = SOURCE_NOTE_LEVEL * kept[0][1]
+    notes: list[float] = []
+    for f, a in sorted(kept):
+        if a < level:
+            continue
+        overtone = any(
+            2 <= round(f / f0) <= SOURCE_NOTE_MAX_HARMONIC
+            and abs(f - round(f / f0) * f0) <= SOURCE_NOTE_TOLERANCE * f
+            for f0 in notes
+        )
+        if not overtone:
+            notes.append(f)
+    return tuple(notes)
+
+
+def spells_chord(notes: tuple[float, ...]) -> bool:
+    """
+    Three pitch classes or more, or two a third or a sixth apart (within SOURCE_THIRD_CENTS of
+    equal temperament): a chord, or the third over a root whose fifth is the root's own third
+    harmonic. Fewer, or two a fourth, fifth or tritone apart (two oscillators of a cowbell), is
+    one source.
+    """
+    midi = [69 + 12 * np.log2(f / 440.0) for f in notes]
+    classes = {int(round(m)) % 12: m for m in midi}
+    if len(classes) >= 3:
+        return True
+    if len(classes) < 2:
+        return False
+    low, high = classes.values()
+    apart = (high - low) % 12
+    interval = min(apart, 12 - apart)
+    return int(round(interval)) in (3, 4) and abs(interval - round(interval)) * 100 <= (
+        SOURCE_THIRD_CENTS
+    )
 
 
 def chroma_movement(chroma: np.ndarray, sr: int, hop: int) -> float:

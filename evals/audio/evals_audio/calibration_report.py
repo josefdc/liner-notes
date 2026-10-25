@@ -90,11 +90,13 @@ PROTOCOL_NOTES = (
 
 # Shown when the runs were made with the single-source rule (Rules.one_source).
 ONE_SOURCE_NOTE = (
-    "The single-source rule (no key for one pitched source, whose spectral lines keep their "
-    "proportions over the window and rise and fall together: a cowbell, a bell, one note "
-    "repeated on a bass) was added after this calibration, from the one-pitch-class controls "
-    "and the GiantSteps+ keys the service gave without it. The procedure does not vary it: "
-    "before is without it, after with it, and the choice below is made without it."
+    "The single-source rule (no key for one pitched source: spectral lines that keep their "
+    "proportions over the window, rise and fall together and spell one note, or two that are "
+    "not a third or a sixth apart, as a cowbell or one note repeated on a bass) was added after "
+    "this calibration, from the one-pitch-class and chord controls and the GiantSteps+ keys the "
+    "service gave without it. The procedure does not vary it: before is without it, after with "
+    "it at the values each run recorded, and the choice below is made without it. The held-out "
+    "controls are evaluation only: the choice does not see them."
 )
 
 
@@ -125,6 +127,7 @@ def section(doc: dict) -> list[str]:
         return []
     after = after_rules(runs)
     agree = all(r["rules"] == runs[0]["rules"] for r in [*runs, controls])
+    versions = sorted({r["analyzerVersion"] for r in [*runs, controls] if r.get("analyzerVersion")})
     commits = sorted({r["gitCommit"] for r in [*runs, controls]})
     choice = cal.select(runs, controls["controls"])
     confirmation = cal.confirm(runs, controls["controls"], choice)
@@ -175,7 +178,14 @@ def section(doc: dict) -> list[str]:
         + ".",
         "- Before means the service's values at commit `ec7d24b`; after means the values the "
         f"runs were made with (commit {', '.join(f'`{c}`' for c in commits)})."
-        + ("" if agree else " The runs were not all made with the same values: see each run."),
+        + ("" if agree else " The runs were not all made with the same values: see each run.")
+        + (
+            ""
+            if len(versions) < 2
+            else f" **They were made with different analyzer versions ({', '.join(versions)}):** "
+            "the derivation check and the controls table use each run's own values, the "
+            "choice and the tables of annotated clips the first run's."
+        ),
         "",
     ]
     out += clips_table(runs, controls)
@@ -539,6 +549,9 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
     from .controls import GROUPS
 
     names = controls["estimators"]
+    # The controls run's own values: a controls run added to a report of older runs is shown
+    # as the service that made it served it.
+    after = cal.Rules.from_dict(controls["rules"]) if controls.get("rules") else after
     table_rows = cal.controls_table(controls["controls"], names, cal.BASELINE, after)
     counts = []
     for name in names:
@@ -590,7 +603,8 @@ def controls_section(controls: dict, after: cal.Rules) -> list[str]:
                 )
                 row.append(text + mark)
         rows.append(row)
-    groups = "; ".join(f"**{k}**: {v}" for k, v in GROUPS.items())
+    present = {ctl["group"] for ctl in controls["controls"]}
+    groups = "; ".join(f"**{k}**: {v}" for k, v in GROUPS.items() if k in present)
     return [
         "### Controls",
         "",

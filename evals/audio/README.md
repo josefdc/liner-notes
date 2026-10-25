@@ -92,9 +92,15 @@ probe sets of the service's own tests, whose generators they reuse
 seeds each (two drum kits, noise with a beat, a siren over drums, clicks), on which no value was
 set beforehand: none of it may get a key. One-pitch-class material (a one-note bass, octave
 riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way. The service's
-single-source rule, added after this calibration, withholds the keys of the one-note basses,
-bells and cowbells; toms and some tabla still get one. The calibration records what that rule
-measures and applies it at the service's values (`Rules.one_source`); it does not vary it.
+single-source rule, added after this calibration, withholds the keys of most cowbells and
+one-note basses; bells, toms and tabla still get one. Chord controls drawn at 30 seeds each
+(held chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs,
+a bass and chord riff on one chord, one-bar riffs) carry their key as truth: that rule must not
+take it. The calibration records what the rule measures and the values the run was made with
+(`Rules.one_source`), and derives each run at its own values; it does not vary them. The
+`held-out-seeded` group (the same families at seeds 600-629 and 800-829) is evaluation only:
+the choice does not see it and no test pins it. A report whose runs were made with different
+analyzer versions says so at the top.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

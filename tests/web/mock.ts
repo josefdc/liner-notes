@@ -43,8 +43,6 @@ export function mockConfig(fixture: unknown): MockConfig {
 /** Installs the mocked API (tests/mock-sse/mock-api.js) configured with a fixture. */
 export async function useMockApi(page: Page, fixture: unknown) {
   const config = mockConfig(fixture);
-  // Keep the tests off the network: web fonts are not needed to check behaviour.
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await page.addInitScript((value) => {
     (window as unknown as { __mockApi: unknown }).__mockApi = value;
   }, config);
@@ -79,14 +77,10 @@ export function fullResultData() {
   return events.find((event) => event.type === "complete")?.data;
 }
 
-/**
- * Collects console errors and warnings, and uncaught page errors. Failed resource loads are
- * left out: the font requests are aborted on purpose (see useMockApi).
- */
+/** Collects console errors and warnings, and uncaught page errors. */
 export function collectProblems(page: Page) {
   const problems: string[] = [];
   page.on("console", (message) => {
-    if (message.text().startsWith("Failed to load resource")) return;
     if (message.type() === "error" || message.type() === "warning") {
       problems.push(`${message.type()}: ${message.text()}`);
     }

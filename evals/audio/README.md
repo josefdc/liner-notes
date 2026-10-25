@@ -91,8 +91,19 @@ probe sets of the service's own tests, whose generators they reuse
 (`services/audio/tests/signals.py` and `music.py`, loaded by path). They include pitchless material drawn at 30
 seeds each (two drum kits, noise with a beat, a siren over drums, clicks), on which no value was
 set beforehand: none of it may get a key. One-pitch-class material (a one-note bass, octave
-riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way; the service
-still keys some of it, as before this calibration.
+riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way. The service's
+single-source rule, added after this calibration, withholds the keys analyzer 2.1.0 gave most
+cowbells: 16 of 19 (Essentia) and 7 of 9 (librosa) at the pinned seeds 500-529, 13 of 16 and
+10 of 12 at the held-out seeds 600-629. Of the one-note basses it withholds 4 of 6 (Essentia)
+at the pinned seeds and none at the held-out seeds (0 of 5 Essentia, 0 of 2 librosa): that
+part does not generalise. Bells, toms and tabla still get a key. Chord controls drawn at 30 seeds each
+(held chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs,
+a bass and chord riff on one chord, one-bar riffs) carry their key as truth: that rule must not
+take it. The calibration records what the rule measures and the values the run was made with
+(`Rules.one_source`), and derives each run at its own values; it does not vary them. The
+`held-out-seeded` group (the same families at seeds 600-629 and 800-829) is evaluation only:
+the choice does not see it and no test pins it. A report whose runs were made with different
+analyzer versions says so at the top.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

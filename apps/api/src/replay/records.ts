@@ -28,6 +28,7 @@ import {
 } from "@liner-notes/contract";
 import { API_ROOT } from "../config/apiPackage.js";
 import { logger } from "../logger.js";
+import { archiveCoverOf } from "./cover.js";
 
 const log = logger("Replay");
 
@@ -90,7 +91,10 @@ export interface ReplaySet {
   suggestions(query: string, limit: number): SearchCandidate[];
 }
 
-/** A record as a search suggestion (no image: recordings keep no image URLs). */
+/**
+ * A record as a search suggestion, with the one image a recording keeps: its Cover Art Archive
+ * cover, or "" (replay/recorder.ts, archiveCoverOf).
+ */
 function suggestion(record: ReplayRecord): SearchCandidate {
   const { id, title, artist, album, coverUrl, releaseYear, isrc } = record.analysis;
   return {
@@ -139,6 +143,16 @@ export function loadReplays(dir: string): ReplaySet {
       continue;
     }
     const record = parsed.data;
+    // The one cover a record may carry is the Cover Art Archive link its own evidence gives
+    // (replay/cover.ts); any other is not served, in the result or its complete event.
+    const cover = archiveCoverOf(record.analysis);
+    if (record.analysis.coverUrl && record.analysis.coverUrl !== cover) {
+      warnings.push(`${file}: its cover is not the one its evidence gives; served without it`);
+      record.analysis.coverUrl = "";
+    }
+    for (const { event } of record.events) {
+      if (event.type === "complete" && event.data.coverUrl !== cover) event.data.coverUrl = "";
+    }
     const issues = record.analysis.run
       ? runIssues(record.analysis.run, record.analysis.audio, "analysis.run")
       : ["analysis.run: missing"];

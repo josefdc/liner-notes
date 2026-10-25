@@ -21,6 +21,7 @@ import type { CachedEvidence } from "../../store/cache.js";
 import {
   collectPrimarySources,
   DATES_INCOMPLETE,
+  RELEASES_INCOMPLETE,
   type IdentifiedRecording,
   type PrimarySources,
 } from "../../sources/identity.js";
@@ -86,6 +87,7 @@ export function startPrimarySources(
       title: spotify.title,
       artists: names,
       durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
+      album: spotify.album || null,
     },
     { signal, now: runtime.now, onRecording: (found) => identified(found) },
   ).then(
@@ -175,6 +177,13 @@ const notAskedNote = (source: SourceId, why: "pace" | "deadline") =>
 const cachedNotAskedNote = (source: SourceId, readAt: string) =>
   `📇 ${SOURCE_NAMES[source]} not asked: the research cached on ${readAt.slice(0, 10)} did not ask it; a later run asks it`;
 
+/**
+ * The status line of a run whose MusicBrainz releases could not be read: no release is named
+ * for the recording (its cover in a recording), and a later run reads them again.
+ */
+const RELEASES_NOTE =
+  "MusicBrainz: releases incomplete, the recording's releases could not be read, so no release is named for it; a later run reads them";
+
 const DATES_NOTE =
   "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
 
@@ -229,6 +238,11 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(DATES_INCOMPLETE)) {
     incomplete.push({ source: "musicbrainz", part: "dates" });
     warnings.push(DATES_NOTE);
+  }
+  // Nothing was lost but the release that stands for the recording: no error, a later run reads it.
+  if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(RELEASES_INCOMPLETE)) {
+    incomplete.push({ source: "musicbrainz", part: "releases" });
+    warnings.push(RELEASES_NOTE);
   }
   for (const { source, why } of notAskedSources(read.sources)) {
     incomplete.push({ source, part: "not_asked" });
@@ -299,8 +313,11 @@ export async function runEvidence(
  */
 export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
 
-/** The version of `CachedEvidence` this code writes; a row of another is a miss. */
-export const CACHED_EVIDENCE_FORMAT = 2;
+/**
+ * The version of `CachedEvidence` this code writes; a row of another is a miss. 3: the pack
+ * names the release that stands for the recording (a row of 2 never read it).
+ */
+export const CACHED_EVIDENCE_FORMAT = 3;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the
@@ -490,7 +507,11 @@ export function cachedRunEvidence(
     warnings: [
       ...unreadableStatus(cached.errors),
       ...cached.incomplete.map((part) =>
-        part.part === "dates" ? DATES_NOTE : cachedNotAskedNote(part.source, cached.readAt),
+        part.part === "dates"
+          ? DATES_NOTE
+          : part.part === "releases"
+            ? RELEASES_NOTE
+            : cachedNotAskedNote(part.source, cached.readAt),
       ),
     ],
   };

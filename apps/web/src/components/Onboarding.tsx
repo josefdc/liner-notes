@@ -14,7 +14,6 @@ import {
   Network,
   Cpu,
   Search,
-  Music,
   Check,
   CircleAlert,
   RotateCcw,
@@ -23,6 +22,7 @@ import {
 } from 'lucide-react';
 import type { AgentStatus, AnalyzeOptions, PickedBy, SearchCandidate } from '../hooks/agent/types';
 import SystemConsole from './SystemConsole';
+import { CoverThumb } from './AlbumCover';
 import {
   isLiveUnavailable,
   LIVE_UNAVAILABLE_COPY,
@@ -675,17 +675,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       }`}
                       style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
                     >
-                      {candidate.coverUrl ? (
-                        <img
-                          src={candidate.coverUrl}
-                          alt=""
-                          className="w-10 h-10 rounded object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
-                          <Music size={16} className="text-text-muted" />
-                        </div>
-                      )}
+                      <CoverThumb url={candidate.coverUrl} className="w-10 h-10 rounded" />
                       <div className="flex-1 min-w-0">
                         <div className="text-white font-mono text-sm truncate">
                           {candidate.title}
@@ -833,13 +823,12 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {/* Currently Analyzing — P1:10 uses previewTrack || trackData */}
           {displayTrack && (
             <div className="flex flex-col items-center justify-center gap-4 mb-6 animate-fade-in">
-              {displayTrack.coverUrl && (
-                <img
-                  src={displayTrack.coverUrl}
-                  alt={displayTrack.title}
-                  className="w-20 h-20 rounded-md shadow-lg border border-white/10"
-                />
-              )}
+              {/* No cover, or one that fails to load: nothing, as for a track without one */}
+              <CoverThumb
+                url={displayTrack.coverUrl}
+                className="w-20 h-20 rounded-md shadow-lg border border-border"
+                fallback={null}
+              />
               <div className="text-center">
                 <div className="text-white font-bold">{displayTrack.title}</div>
                 <div className="text-text-tertiary text-sm">{displayTrack.artist}</div>
@@ -889,17 +878,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
                         : 'bg-white/5 border border-transparent hover:bg-white/10'
                     }`}
                   >
-                    {candidate.coverUrl ? (
-                      <img
-                        src={candidate.coverUrl}
-                        alt=""
-                        className="w-8 h-8 rounded object-cover flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
-                        <Music size={12} className="text-text-muted" />
-                      </div>
-                    )}
+                    <CoverThumb
+                      url={candidate.coverUrl}
+                      className="w-8 h-8 rounded"
+                      iconSize={12}
+                    />
                     <div className="flex-1 min-w-0">
                       <span className="text-white text-sm font-mono truncate block">
                         {candidate.title}

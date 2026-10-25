@@ -31,6 +31,8 @@ export interface TrackRef {
   /** The credited artists one by one. */
   artists: string[];
   durationMs: number | null;
+  /** The album the track is shown with (Spotify's), when known: its cover release is preferred. */
+  album?: string | null;
 }
 
 // =============================================================================

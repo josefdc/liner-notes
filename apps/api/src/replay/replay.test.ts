@@ -11,7 +11,7 @@
  * genealogy node's clip), a cover URL and the typed query in a field the contract does not name.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -44,8 +44,10 @@ import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
 import { playRecord, replayedAnalysis, setReplayPacingForTests } from "./player.js";
 import {
+  archiveCoverOf,
   buildRecord,
   leaks,
+  publicTextsOf,
   RecordRefused,
   recordedRunId,
   withoutMediaFields,
@@ -799,6 +801,208 @@ describe("the recorder", () => {
   });
 });
 
+describe("the recorded cover from the Cover Art Archive", () => {
+  const RELEASE = "ae103b0a-b932-4009-acb6-388db1cf890b";
+  const ARCHIVE = `https://coverartarchive.org/release/${RELEASE}/front-500`;
+  const OTHER = "5a260489-c99d-485b-902e-24751e5b1c69";
+  const SPOTIFY_COVER = "https://i.scdn.co/image/ab67616d0000b273spotifycover";
+  /** A MusicBrainz release item as sources/identity.ts builds it. */
+  const releaseItem = (mbid = RELEASE) => ({
+    id: `musicbrainz:release/${mbid}`,
+    source: "musicbrainz" as const,
+    sourceTier: "primary-record" as const,
+    url: `https://musicbrainz.org/release/${mbid}`,
+    title: "Discovery — MusicBrainz release",
+    retrievedAt: "2026-10-24T16:23:30.000Z",
+    excerpt:
+      'MusicBrainz: "One More Time" by Daft Punk appears on the official album "Discovery" (2001-03-07).',
+    recordRef: `release/${mbid}`,
+  });
+
+  /** The dev fixture as a live run that showed Spotify's cover and cited `evidence`. */
+  function liveRunWith(evidence: unknown[], extraText = "") {
+    const fixture = structuredClone(loadReplays(DEFAULT_REPLAY_DIR).records[0]);
+    const analysis = TrackAnalysis.parse({ ...fixture.analysis, evidence });
+    analysis.coverUrl = SPOTIFY_COVER;
+    analysis.genealogy.nodes[0].img = SPOTIFY_COVER;
+    analysis.factoids[0].content = `${analysis.factoids[0].content}${extraText}`;
+    return fixtureAsLiveRun({ ...fixture, analysis }, "One More Time Daft Punk");
+  }
+  const build = ({ run, events }: ReturnType<typeof liveRunWith>) =>
+    buildRecord(run, events, { slug: "one-more-time-daft-punk", commit: "abc1234", secrets: [] });
+
+  it("keeps the Cover Art Archive cover of the run's MusicBrainz release, and no other image", () => {
+    const { record: built } = build(liveRunWith([releaseItem()]));
+    expect(built.analysis.coverUrl).toBe(ARCHIVE);
+    const complete = built.events.find((e) => e.event.type === "complete")?.event as
+      | { data: TrackAnalysis }
+      | undefined;
+    expect(complete?.data.coverUrl).toBe(ARCHIVE);
+    // Spotify's cover of the same run is gone, as the cover and as a genealogy image.
+    expect(built.analysis.genealogy.nodes[0].img).toBe("");
+    const text = JSON.stringify(built);
+    expect(text).not.toMatch(/i\.scdn|spotifycover/);
+    // The link appears as the two covers only.
+    expect(text.split("coverartarchive.org").length - 1).toBe(2);
+    // The evidence it comes from is kept as it was.
+    expect(built.analysis.evidence).toEqual([releaseItem()]);
+  });
+
+  it("keeps no Cover Art Archive cover without exactly one MusicBrainz release item", () => {
+    const discogs = {
+      ...releaseItem(),
+      id: "discogs:release/599648/credit/0",
+      source: "discogs" as const,
+      url: "https://www.discogs.com/release/599648",
+      recordRef: "release/599648/credit/0",
+    };
+    const other = "5a260489-c99d-485b-902e-24751e5b1c69";
+    for (const [what, evidence] of [
+      ["no evidence", []],
+      ["a Discogs release only", [discogs]],
+      ["two MusicBrainz releases", [releaseItem(), releaseItem(other)]],
+      [
+        "a release item on another release's page",
+        [{ ...releaseItem(), url: releaseItem(other).url }],
+      ],
+    ] as const) {
+      const { record: built } = build(liveRunWith([...evidence]));
+      expect(built.analysis.coverUrl, what).toBe("");
+      expect(JSON.stringify(built), what).not.toMatch(/coverartarchive|i\.scdn/);
+    }
+    expect(archiveCoverOf({})).toBe("");
+    expect(archiveCoverOf({ evidence: [releaseItem()] })).toBe(ARCHIVE);
+    // Upper case is not how the sources name a release.
+    expect(archiveCoverOf({ evidence: [releaseItem(RELEASE.toUpperCase())] })).toBe("");
+  });
+
+  it("refuses a Cover Art Archive link anywhere but the kept cover", () => {
+    // In the text of a fact, the recorder refuses the run rather than editing it.
+    expect(refusal(() => build(liveRunWith([releaseItem()], ` See ${ARCHIVE}.`)))).toEqual(
+      expect.arrayContaining(["analysis.factoids[0].content: an image or media URL"]),
+    );
+    const check = { secrets: [], typedQuery: "", publicTexts: [], allowedCover: ARCHIVE };
+    const otherCover = ARCHIVE.replace(RELEASE, "5a260489-c99d-485b-902e-24751e5b1c69");
+    const found = leaks(
+      {
+        analysis: {
+          coverUrl: ARCHIVE,
+          genealogy: { nodes: [{ img: ARCHIVE, coverUrl: ARCHIVE }, { coverUrl: otherCover }] },
+          factoids: [{ content: ARCHIVE }],
+          foo: { bar: { coverUrl: ARCHIVE } },
+        },
+        events: [
+          { event: { type: "status", coverUrl: ARCHIVE, data: { coverUrl: ARCHIVE } } },
+          { event: { type: "complete", data: { coverUrl: ARCHIVE } } },
+          { event: { type: "interrupt", candidates: [{ coverUrl: ARCHIVE }] } },
+        ],
+        coverUrl: ARCHIVE,
+        coverUrlNote: ARCHIVE,
+        suggestion: { coverUrl: `${ARCHIVE}?size=big` },
+      },
+      check,
+    );
+    // Allowed only as the result's cover and the complete event's: any other cover field,
+    // at any depth, is refused.
+    expect(found.sort()).toEqual([
+      "analysis.factoids[0].content: an image or media URL",
+      "analysis.foo.bar.coverUrl: an image or media URL",
+      "analysis.genealogy.nodes[0].coverUrl: an image or media URL",
+      "analysis.genealogy.nodes[0].img: an image or media URL",
+      "analysis.genealogy.nodes[1].coverUrl: an image or media URL",
+      "coverUrl: an image or media URL",
+      "coverUrlNote: an image or media URL",
+      "events[0].event.coverUrl: an image or media URL",
+      "events[0].event.data.coverUrl: an image or media URL",
+      "events[2].event.candidates[0].coverUrl: an image or media URL",
+      "suggestion.coverUrl: an image or media URL",
+    ]);
+    // Only the 500 px front image is the kept cover: no other size, nor the plain front.
+    for (const size of ["front-250", "front-1200", "front"]) {
+      const other = ARCHIVE.replace("front-500", size);
+      expect(leaks({ analysis: { coverUrl: other } }, { ...check, allowedCover: other })).toEqual([
+        "analysis.coverUrl: an image or media URL",
+      ]);
+    }
+    // Without a kept cover, the cover field is refused too.
+    expect(leaks({ analysis: { coverUrl: ARCHIVE } }, { ...check, allowedCover: "" })).toEqual([
+      "analysis.coverUrl: an image or media URL",
+    ]);
+    // Only an archive link can be the allowed cover.
+    expect(
+      leaks({ analysis: { coverUrl: SPOTIFY_COVER } }, { ...check, allowedCover: SPOTIFY_COVER }),
+    ).toEqual(["analysis.coverUrl: an image or media URL"]);
+  });
+
+  it("says why a record keeps no Cover Art Archive cover, and replay:record prints it", async () => {
+    expect(build(liveRunWith([releaseItem()]))).not.toHaveProperty("noCover");
+    expect(build(liveRunWith([])).noCover).toBe(
+      "the evidence names no MusicBrainz recording, so no release was read: the track has no ISRC, MusicBrainz matched no recording to it, or MusicBrainz could not be read",
+    );
+    const recordingItem = {
+      ...releaseItem(),
+      id: `musicbrainz:track/recording/${OTHER}`,
+      url: `https://musicbrainz.org/recording/${OTHER}`,
+      title: "One More Time — MusicBrainz recording",
+      excerpt: 'MusicBrainz recording "One More Time" by Daft Punk (5:20), ISRC GBDUW0000059.',
+      recordRef: `track/recording/${OTHER}`,
+    };
+    expect(build(liveRunWith([recordingItem])).noCover).toBe(
+      "the evidence names the MusicBrainz recording but no release: its releases could not be read in time, none is an official album, EP or single the Cover Art Archive holds a front image of, or the run was made by earlier code (before releases were read, or before the evidence pack's size cap always kept the release)",
+    );
+    expect(build(liveRunWith([releaseItem(), releaseItem(OTHER)])).noCover).toBe(
+      "the evidence names 2 MusicBrainz releases, not one",
+    );
+
+    // The stub run cites no release: the recording command says the record keeps no cover.
+    const runId = await liveRun("source run");
+    vi.stubEnv("SQLITE_DB_PATH", join(dir, "test.db"));
+    const out = join(dir, "no-cover");
+    const deps = { settingsFileValues: () => ({}), checkout: () => runningCommit() ?? "abc1234" };
+    expect(recordMain(["--run", runId, "--slug", "no-cover", "--out", out], deps)).toBe(0);
+    expect(vi.mocked(console.warn).mock.calls.map(([m]) => String(m))).toContain(
+      "Warning: no cover kept: the evidence names no MusicBrainz recording, so no release was read: the track has no ISRC, MusicBrainz matched no recording to it, or MusicBrainz could not be read",
+    );
+  });
+
+  it("serves no cover from a record but the Cover Art Archive link its evidence gives", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "replay-cover-"));
+    try {
+      const kept = build(liveRunWith([releaseItem()])).record;
+      const edited = structuredClone(build(liveRunWith([])).record);
+      // A record edited by hand to show Spotify's cover: never served.
+      edited.slug = "edited";
+      edited.analysis.id = "0EditedRecordTrack0001";
+      edited.analysis.title = "Edited Song";
+      edited.analysis.artist = "Edit Artist";
+      edited.analysis.album = "Edit Album";
+      edited.request.query = "Edited Song Edit Artist";
+      edited.analysis.coverUrl = SPOTIFY_COVER;
+      for (const { event } of edited.events) {
+        if (event.type === "complete") event.data = { ...edited.analysis };
+      }
+      writeFileSync(join(scratch, `${kept.slug}.json`), JSON.stringify(kept));
+      writeFileSync(join(scratch, "edited.json"), JSON.stringify(edited));
+      const set = loadReplays(scratch);
+      expect(set.problems, set.problems.join("\n")).toEqual([]);
+      const served = (slug: string) => {
+        const record = set.records.find((r) => r.slug === slug);
+        const complete = record?.events.find((e) => e.event.type === "complete")?.event as
+          | { data: TrackAnalysis }
+          | undefined;
+        return [record?.analysis.coverUrl, complete?.data.coverUrl];
+      };
+      expect(served(kept.slug)).toEqual([ARCHIVE, ARCHIVE]);
+      expect(served("edited")).toEqual(["", ""]);
+      expect(set.warnings).toContain(
+        "edited.json: its cover is not the one its evidence gives; served without it",
+      );
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the player", () => {
   it("serves no search match from a record: it belonged to the recorded run", () => {
     const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
@@ -807,6 +1011,33 @@ describe("the player", () => {
     const served = replayedAnalysis(older, "0f0e0d0c-aaaa-4bbb-8ccc-000000000002");
     expect(served).not.toHaveProperty("queryMatch");
     expect(served.run).toMatchObject({ mode: "replay" });
+  });
+});
+
+describe("the committed records", () => {
+  it("keep only the cover their evidence gives, and hold nothing a record must not", () => {
+    const files = readdirSync(DEFAULT_REPLAY_DIR).filter((file) => file.endsWith(".json"));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      // As committed, not as the loader serves it.
+      const record = ReplayRecord.parse(
+        JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, file), "utf8")),
+      );
+      const cover = archiveCoverOf(record.analysis);
+      expect(record.analysis.coverUrl, file).toBe(cover);
+      for (const { event } of record.events) {
+        if (event.type === "complete") expect(event.data.coverUrl, file).toBe(cover);
+      }
+      expect(
+        leaks(record, {
+          secrets: [],
+          typedQuery: "",
+          publicTexts: publicTextsOf(record.analysis),
+          allowedCover: cover,
+        }),
+        file,
+      ).toEqual([]);
+    }
   });
 });
 

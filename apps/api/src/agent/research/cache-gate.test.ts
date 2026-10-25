@@ -334,6 +334,8 @@ describe("the research key and what a hit trusts", () => {
 
   const crafted: Array<[string, (row: CachedResearch) => CachedResearch]> = [
     ["of another format", (row) => withEvidence(row, { format: CACHED_EVIDENCE_FORMAT + 1 })],
+    // Written before the pack named the recording's release: read again, so it can name one.
+    ["of the format before releases were read", (row) => withEvidence(row, { format: 2 })],
     [
       "holding a timeout as lasting",
       (row) =>
@@ -431,8 +433,10 @@ describe("what is not cached, or cached for a later run to complete", () => {
       vi.useRealTimers();
     }
     expect((first.out.sourceErrors ?? []).filter((e) => e.code !== "not_configured")).toEqual([]);
+    // The releases are read last, on the dating signal: cut with the dating.
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
       { source: "musicbrainz", part: "dates" },
+      { source: "musicbrainz", part: "releases" },
     ]);
 
     // The dating answers now: the hit asks no model, reads the primary sources and completes the row.
@@ -443,6 +447,36 @@ describe("what is not cached, or cached for a later run to complete", () => {
     expect(ids(hit.out.evidence)).toContain(WEB_ID);
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([]);
     // Then a hit asks nothing.
+    expect((await historian(LATER)).requests).toEqual([]);
+  });
+});
+
+describe("a run whose MusicBrainz releases could not be read", () => {
+  const releaseRead = (call: FetchCall) => call.url.startsWith(`${MB}/release?`);
+
+  it("is cached for a later run to complete, with no source error, and a hit names the release", async () => {
+    net = stubFetch((call) =>
+      releaseRead(call) ? json({ error: "boom" }, { status: 500 }) : route(call),
+    );
+    const first = await historian();
+    expect((first.out.sourceErrors ?? []).filter((e) => e.code !== "not_configured")).toEqual([]);
+    expect(ids(first.out.evidence).some((id) => id.startsWith("musicbrainz:release/"))).toBe(false);
+    expect(statusOf(first.events)).toContain(
+      "MusicBrainz: releases incomplete, the recording's releases could not be read, so no release is named for it; a later run reads them",
+    );
+    expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
+      { source: "musicbrainz", part: "releases" },
+    ]);
+
+    // The releases answer now: the hit reads the primary sources again and names the release.
+    net = stubFetch(route);
+    const hit = await historian(LATER);
+    expect(hit.llm.calls).toEqual([]);
+    expect(hit.requests.filter(releaseRead)).toHaveLength(1);
+    expect(ids(hit.out.evidence)).toContain(
+      "musicbrainz:release/ae103b0a-b932-4009-acb6-388db1cf890b",
+    );
+    expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([]);
     expect((await historian(LATER)).requests).toEqual([]);
   });
 });
@@ -484,8 +518,10 @@ describe("a row left for a later run", () => {
   it("is never served past the research's own time, however often a hit reads it again", async () => {
     net = stubFetch(undated);
     await onFakeTimers(() => historian(AT));
+    // The releases are read last, on the dating signal: cut with the dating.
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
       { source: "musicbrainz", part: "dates" },
+      { source: "musicbrainz", part: "releases" },
     ]);
     // At +47 h a hit reads the primary sources again (the dating still fails) and asks no model.
     const late = await onFakeTimers(() => historian("2026-10-22T11:00:00.000Z"));

@@ -1077,6 +1077,8 @@ export interface MbReleaseSummary {
   date?: string;
   status?: string | null;
   "release-group"?: { "primary-type"?: string | null; "secondary-types"?: string[] };
+  /** Whether the Cover Art Archive holds a front image of the release. */
+  "cover-art-archive"?: { front?: boolean };
   relations?: MbDetailRelation[];
 }
 
@@ -1123,6 +1125,7 @@ const RELEASE_BROWSE_SHAPE: Shape = {
       date: true,
       status: true,
       "release-group": { "primary-type": true, "secondary-types": true },
+      "cover-art-archive": { front: true },
       relations: URL_RELATION_SHAPE,
     },
   ],
@@ -1186,7 +1189,8 @@ const RELEASE_PAGE = 100;
 
 /**
  * The official album, single and EP releases a recording is on, with their URL relationships
- * (Discogs links) and release-group types. Reads at most `maxPages` pages of 100.
+ * (Discogs links), release-group types and whether the Cover Art Archive holds a front image of
+ * each. Reads at most `maxPages` pages of 100.
  */
 export async function browseRecordingReleases(
   mbid: string,

@@ -16,6 +16,9 @@ import work from "./fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
 import { DISCOGS_PACE, discogsTrackCredits } from "./discogs.js";
 import { isSourceError, MAX_RETRY_WAIT_MS, pacedFetchJson } from "./http.js";
 import {
+  type Lane,
+  type LanePace,
+  LanePacer,
   MAX_HOLD_MS,
   type Pace,
   PaceRefused,
@@ -181,6 +184,106 @@ describe("a pacer", () => {
     await pacer.slot();
     vi.setSystemTime(START - 3600_000);
     expect(await slots(pacer, 1, 1000)).toEqual([1000]);
+  });
+});
+
+describe("a lane pacer", () => {
+  const lanePace = (p: Partial<LanePace> = {}): LanePace => ({
+    windowMs: 5000,
+    max: 4,
+    backgroundMax: 3,
+    maxWaitMs: 10_000,
+    ...p,
+  });
+  /** Starts `n` requests of `lane` at once; when each started, or "refused". */
+  const starts = (pacer: LanePacer, n: number, lane: Lane, options: { notAfter?: number } = {}) => {
+    const out: Array<number | string> = [];
+    const all = Promise.all(
+      Array.from({ length: n }, () =>
+        pacer.slot({ lane, ...options }).then(
+          () => out.push(elapsed()),
+          (error: unknown) => out.push(error instanceof PaceRefused ? "refused" : String(error)),
+        ),
+      ),
+    );
+    return { out, all };
+  };
+
+  it("starts at most `max` requests in any window, and at most `backgroundMax` background ones", async () => {
+    const pacer = new LanePacer("Test", () => lanePace());
+    const background = starts(pacer, 4, "background");
+    await vi.advanceTimersByTimeAsync(0);
+    const priority = starts(pacer, 2, "priority");
+    await vi.advanceTimersByTimeAsync(11_000);
+    await Promise.all([background.all, priority.all]);
+
+    expect(background.out).toEqual([0, 0, 0, 5000]);
+    // One slot of the first window was left; the other priority request takes the next.
+    expect(priority.out).toEqual([0, 5000]);
+  });
+
+  it("starts a waiting priority request before the background ones that waited longer", async () => {
+    const pacer = new LanePacer("Test", () => lanePace({ backgroundMax: 4 }));
+    const first = starts(pacer, 4, "background");
+    const waiting = starts(pacer, 2, "background");
+    await vi.advanceTimersByTimeAsync(1000);
+    const order: string[] = [];
+    void waiting.all.then(() => order.push("background"));
+    const priority = pacer.slot({ lane: "priority" }).then(() => {
+      order.push(`priority at ${elapsed()}`);
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.all([first.all, waiting.all, priority]);
+
+    expect(order[0]).toBe("priority at 5000");
+    expect(waiting.out).toEqual([5000, 5000]);
+  });
+
+  it("refuses at once a request whose slot is later than its deadline or too far away", async () => {
+    const pacer = new LanePacer("Test", () => lanePace({ maxWaitMs: 4000 }));
+    await starts(pacer, 4, "priority").all;
+
+    const late = starts(pacer, 1, "background", { notAfter: pacingClock() + 4000 });
+    const far = starts(pacer, 1, "priority");
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.all([late.all, far.all]);
+
+    expect(late.out).toEqual(["refused"]);
+    expect(far.out).toEqual(["refused"]);
+    // Neither took a slot.
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await pacer.slot().then(() => elapsed())).toBe(5000);
+  });
+
+  it("refuses a background request that priority ones kept waiting past its deadline", async () => {
+    const pacer = new LanePacer("Test", () => lanePace({ max: 2 }));
+    await starts(pacer, 2, "priority").all;
+    const background = starts(pacer, 1, "background", { notAfter: pacingClock() + 6000 });
+    await vi.advanceTimersByTimeAsync(1000);
+    // Two priority requests come ahead of it: the next window is theirs.
+    const priority = starts(pacer, 2, "priority");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.all([background.all, priority.all]);
+
+    expect(priority.out).toEqual([5000, 5000]);
+    expect(background.out).toEqual(["refused"]);
+  });
+
+  it("lets a waiting request leave at once when its signal aborts, taking no slot", async () => {
+    const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
+    await pacer.slot();
+    const controller = new AbortController();
+    const waiting = pacer.slot({ signal: controller.signal }).then(
+      () => "started",
+      () => `left at ${elapsed()}`,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    controller.abort();
+    expect(await waiting).toBe("left at 1000");
+    expect(pacer.waiting).toBe(0);
+    const next = pacer.slot().then(() => elapsed());
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await next).toBe(5000);
   });
 });
 

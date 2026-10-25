@@ -94,7 +94,7 @@ describe("llm_usage", () => {
          usd_est, price_multiplier, estimated, latency_ms)
        VALUES ('old', 'run-1', 'composer', 'main', 'd', 'dev', 'live', 'ok', 0, 1, 0, 5)`,
     ).run();
-    expect(runMigrations(db)).toEqual([12]);
+    expect(runMigrations(db, MIGRATIONS.slice(0, 12))).toEqual([12]);
     recordLlmUsage(db, row({ id: "new" }));
     expect(listLlmUsage(db, "run-1").map((r) => [r.id, r.sent])).toEqual([
       ["old", null],

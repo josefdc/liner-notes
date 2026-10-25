@@ -559,7 +559,7 @@ describe("buildReport on a database pruned before it recorded its cutoffs", () =
       expect(pruned).toMatchObject({ runs: 2 });
       // Upgraded on 2026-10-23 12:00 with RUN_RETENTION_DAYS=30, and pruned at once.
       vi.setSystemTime(Date.parse("2026-10-23T12:00:00Z"));
-      expect(runMigrations(db)).toEqual([12]);
+      expect(runMigrations(db)).toEqual(MIGRATIONS.slice(11).map((m) => m.version));
       expect(pruneDatabase(db, DEFAULT_RETENTION, Date.parse("2026-10-23T12:00:01Z")).runs).toBe(0);
       recordRuns(db, [
         { id: "oct24", status: "completed", start: "2026-10-24T10:00:00Z", seconds: 30 },

@@ -1,7 +1,8 @@
 /**
- * Client-side pacing of one source's requests (Discogs, SecondHandSongs; MusicBrainz has its
- * own queue in musicbrainz.ts): at most one request every `intervalMs` and, for each budget the
- * source sets, at most `max` requests in any window of `windowMs`. Each request reserves the
+ * Client-side pacing of one source's requests (Discogs, SecondHandSongs; Deezer's two lanes are
+ * paced by LanePacer below; MusicBrainz has its own queue in musicbrainz.ts): at most one request
+ * every `intervalMs` and, for each budget the source sets, at most `max` requests in any window
+ * of `windowMs`. Each request reserves the
  * next free slot and waits for it. A request is refused at once (`PaceRefused`, with the wait),
  * and takes no slot, when its slot is more than `maxWaitMs` away, or is not free now and comes
  * later than the caller's `notAfter` (the time by which a request must start to be answered
@@ -58,7 +59,7 @@ export class PaceRefused extends Error {
 export const pacingClock = (): number => performance.now();
 
 /** Every pacer, for the tests' switch. */
-const pacers = new Set<RequestPacer>();
+const pacers = new Set<{ clear(): void }>();
 let unpaced = false;
 
 /**
@@ -193,5 +194,216 @@ export class RequestPacer {
     const held = Math.min(ms, MAX_HOLD_MS);
     this.#heldUntil = Math.max(this.#heldUntil, pacingClock() + held);
     return held;
+  }
+}
+
+// =============================================================================
+// A pacer with a priority lane (Deezer)
+// =============================================================================
+
+/**
+ * The pace of a source whose requests come in two lanes: at most `max` requests start in any
+ * window of `windowMs`, of which at most `backgroundMax` from the background lane.
+ */
+export interface LanePace {
+  windowMs: number;
+  max: number;
+  backgroundMax: number;
+  /** The longest a request may wait for its slot; a later slot is refused. */
+  maxWaitMs: number;
+}
+
+/** "priority" requests always start before waiting "background" ones. */
+export type Lane = "priority" | "background";
+
+export interface LaneSlotOptions extends SlotOptions {
+  lane?: Lane;
+}
+
+interface Start {
+  at: number;
+  lane: Lane;
+}
+
+interface Waiter {
+  lane: Lane;
+  go: () => void;
+}
+
+/**
+ * When a request of `lane` may start, at or after `from`, given the starts so far (in order).
+ * Within a window, a slot frees when the oldest start that keeps it full leaves it.
+ */
+function earliestStart(starts: readonly Start[], lane: Lane, from: number, pace: LanePace): number {
+  let at = from;
+  for (;;) {
+    const inside = starts.filter((start) => start.at > at - pace.windowMs);
+    if (inside.length >= pace.max) {
+      at = inside[inside.length - pace.max].at + pace.windowMs;
+      continue;
+    }
+    if (lane === "background") {
+      const background = inside.filter((start) => start.lane === "background");
+      if (background.length >= pace.backgroundMax) {
+        at = background[background.length - pace.backgroundMax].at + pace.windowMs;
+        continue;
+      }
+    }
+    return at;
+  }
+}
+
+/**
+ * A pacer for one source with two lanes (LanePace). Unlike RequestPacer, a request reserves no
+ * slot ahead: it waits in its lane's queue, first come, first served, and starts when the window
+ * has room; a waiting priority request always goes first, so it never waits behind background
+ * requests, which only take the room priority ones leave.
+ *
+ * A request is refused at once (PaceRefused) when the slot it would get, with no other request
+ * coming ahead of it, is more than `maxWaitMs` away or later than its `notAfter`; a background
+ * request that priority requests have kept waiting until its `notAfter` is refused then. A
+ * refused request is never sent. A request whose signal aborts while it waits leaves the queue
+ * at once, rejecting with the signal's reason. Like RequestPacer, it paces one process and is
+ * switched off by setUnpacedForTests.
+ */
+export class LanePacer {
+  #starts: Start[] = [];
+  #priority: Waiter[] = [];
+  #background: Waiter[] = [];
+  #timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    readonly name: string,
+    private readonly pace: () => LanePace,
+  ) {
+    pacers.add(this);
+  }
+
+  /** Forgets its starts and lets every waiting request go. */
+  clear(): void {
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
+    this.#starts = [];
+    const waiting = [...this.#priority, ...this.#background];
+    this.#priority = [];
+    this.#background = [];
+    for (const waiter of waiting) waiter.go();
+  }
+
+  /** Requests waiting for a slot (tests). */
+  get waiting(): number {
+    return this.#priority.length + this.#background.length;
+  }
+
+  #prune(now: number, pace: LanePace): void {
+    this.#starts = this.#starts.filter((start) => start.at > now - pace.windowMs);
+  }
+
+  /** When a new request of `lane` would start if no other request came ahead of it. */
+  #estimate(lane: Lane, now: number, pace: LanePace): number {
+    const starts = [...this.#starts];
+    const ahead: Lane[] = [
+      ...this.#priority.map((): Lane => "priority"),
+      ...(lane === "background" ? this.#background.map((): Lane => "background") : []),
+      lane,
+    ];
+    let at = now;
+    for (const next of ahead) {
+      at = earliestStart(starts, next, at, pace);
+      starts.push({ at, lane: next });
+    }
+    return at;
+  }
+
+  /** Starts every waiting request the window has room for, priority first; then waits. */
+  #pump(): void {
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
+    const pace = this.pace();
+    for (;;) {
+      const queue = this.#priority.length > 0 ? this.#priority : this.#background;
+      const head = queue[0];
+      if (!head) return;
+      const now = pacingClock();
+      this.#prune(now, pace);
+      const at = earliestStart(this.#starts, head.lane, now, pace);
+      if (at > now) {
+        this.#timer = setTimeout(() => this.#pump(), Math.ceil(at - now));
+        this.#timer.unref?.();
+        return;
+      }
+      queue.shift();
+      this.#starts.push({ at: now, lane: head.lane });
+      head.go();
+    }
+  }
+
+  #refusal(wait: number): PaceRefused {
+    return new PaceRefused(
+      wait,
+      `paced: the next ${this.name} request may start in ${Math.ceil(wait / 1000)} s`,
+    );
+  }
+
+  /**
+   * Waits for a slot in `lane` (priority by default). Rejects with PaceRefused when the slot is
+   * more than the pace's `maxWaitMs` away or later than `notAfter`, and with the signal's reason
+   * when it aborts first.
+   */
+  async slot(options: LaneSlotOptions = {}): Promise<void> {
+    const { signal, notAfter, lane = "priority" } = options;
+    signal?.throwIfAborted();
+    if (unpaced) return;
+    const pace = this.pace();
+    const now = pacingClock();
+    this.#prune(now, pace);
+    const at = this.#estimate(lane, now, pace);
+    const wait = at - now;
+    // A slot free now is taken whatever the deadline: only a wait can make a request too late.
+    if (wait > pace.maxWaitMs || (wait > 0 && notAfter !== undefined && at > notAfter)) {
+      throw this.#refusal(wait);
+    }
+    if (wait <= 0) {
+      this.#starts.push({ at: now, lane });
+      return;
+    }
+    const queue = lane === "priority" ? this.#priority : this.#background;
+    await new Promise<void>((resolve, reject) => {
+      let late: ReturnType<typeof setTimeout> | undefined;
+      const leave = () => {
+        const index = queue.indexOf(waiter);
+        if (index >= 0) queue.splice(index, 1);
+        clearTimeout(late);
+        signal?.removeEventListener("abort", onAbort);
+        this.#pump();
+      };
+      const onAbort = () => {
+        leave();
+        reject(signal?.reason);
+      };
+      const waiter: Waiter = {
+        lane,
+        go: () => {
+          clearTimeout(late);
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        },
+      };
+      // Priority requests that came ahead kept it waiting past its deadline: it is not sent.
+      if (lane === "background" && notAfter !== undefined) {
+        late = setTimeout(
+          () => {
+            leave();
+            reject(this.#refusal(0));
+          },
+          // Just after it: a slot due at `notAfter` itself is still taken.
+          Math.max(0, Math.ceil(notAfter - now)) + 1,
+        );
+        late.unref?.();
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+      queue.push(waiter);
+      this.#pump();
+    });
   }
 }

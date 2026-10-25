@@ -4,9 +4,13 @@ import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
 // Inter and IBM Plex Mono are served with the app (apps/web/public/fonts, styles/fonts.css), so
 // the page renders in its own fonts without asking a third party for them. Each script is a
 // separate file with its unicode-range: a Latin page fetches only the Latin files, and a name such
-// as "Dvořák" or "Кино" brings in the faces it needs instead of falling back to a system font.
+// as "Dvořák", "Кино" or "Βαγγέλης" brings in the faces it needs instead of falling back to a
+// system font.
 const fixture = loadFixture("measured-v2");
-const NAMES = "Dvořák Łona Beyoncé Кино";
+// Latin Extended, Cyrillic and extended Cyrillic (Қ, ұ): in both families.
+const NAMES = "Dvořák Łona Beyoncé Кино Қайрат Нұртас";
+// Greek: in Inter only (IBM Plex Mono has no Greek).
+const GREEK = "Βαγγέλης Παπαθανασίου";
 const PRELOADED = "/fonts/inter-latin-wght-normal.woff2";
 // The files a Latin-only page uses: Inter's latin subset and IBM Plex Mono's Latin1 split.
 const LATIN_FILE = /^\/fonts\/(inter-latin-wght-normal|IBMPlexMono-\w+-Latin1)\.woff2$/;
@@ -61,8 +65,15 @@ test("a Latin page loads Inter and IBM Plex Mono from the app, and only their La
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await page.evaluate(() => document.fonts.ready);
 
-  expect(await page.evaluate(() => document.fonts.check("16px Inter"))).toBe(true);
-  expect(await page.evaluate(() => document.fonts.check('16px "IBM Plex Mono"'))).toBe(true);
+  // Both families have faces that loaded. (document.fonts.check() would answer true even for a
+  // family with no face at all.)
+  const loaded = await page.evaluate(() =>
+    [...document.fonts]
+      .filter((face) => face.status === "loaded")
+      .map((face) => face.family.replace(/^["']|["']$/g, "")),
+  );
+  expect(loaded).toContain("Inter");
+  expect(loaded).toContain("IBM Plex Mono");
 
   // A measured value's provenance line is set in IBM Plex Mono, and drawn with it.
   const line = page
@@ -117,16 +128,24 @@ test("names outside Latin-1 are drawn in Inter and IBM Plex Mono throughout", as
   await page.evaluate(() => document.fonts.ready);
   for (const path of requests.fonts) expect(path).toMatch(LATIN_FILE);
 
-  // The same text in the body face, the mono face, and the mono face at semibold: IBM Plex Mono
-  // 600 is a face of its own (PostScript name IBMPlexMono-SmBld), not the medium one made bold.
+  // The names in the body face, the mono face, and the mono face at semibold: IBM Plex Mono 600
+  // is a face of its own (PostScript name IBMPlexMono-SmBld), not the medium one made bold.
+  const sans = { family: "var(--font-sans)", face: /^Inter/ };
   const probes = [
-    { id: "sans", family: "var(--font-sans)", weight: "400", face: /^Inter/ },
-    { id: "mono", family: "var(--font-mono)", weight: "400", face: /^IBMPlexMono$/ },
-    { id: "mono-600", family: "var(--font-mono)", weight: "600", face: /^IBMPlexMono-SmBld$/ },
+    { id: "sans", text: `${NAMES} ${GREEK}`, weight: "400", ...sans },
+    { id: "sans-600", text: `${NAMES} ${GREEK}`, weight: "600", ...sans },
+    { id: "mono", text: NAMES, family: "var(--font-mono)", weight: "400", face: /^IBMPlexMono$/ },
+    {
+      id: "mono-600",
+      text: NAMES,
+      family: "var(--font-mono)",
+      weight: "600",
+      face: /^IBMPlexMono-SmBld$/,
+    },
   ];
   await page.evaluate(
-    ({ text, probes }) => {
-      for (const { id, family, weight } of probes) {
+    (probes) => {
+      for (const { id, text, family, weight } of probes) {
         const element = document.createElement("p");
         element.id = `probe-${id}`;
         element.textContent = text;
@@ -135,7 +154,7 @@ test("names outside Latin-1 are drawn in Inter and IBM Plex Mono throughout", as
         document.body.append(element);
       }
     },
-    { text: NAMES, probes: probes.map(({ id, family, weight }) => ({ id, family, weight })) },
+    probes.map(({ id, text, family, weight }) => ({ id, text, family, weight })),
   );
 
   const cdp = await openCdp(page);
@@ -153,6 +172,8 @@ test("names outside Latin-1 are drawn in Inter and IBM Plex Mono throughout", as
   for (const path of [
     "/fonts/inter-latin-ext-wght-normal.woff2",
     "/fonts/inter-cyrillic-wght-normal.woff2",
+    "/fonts/inter-cyrillic-ext-wght-normal.woff2",
+    "/fonts/inter-greek-wght-normal.woff2",
     "/fonts/IBMPlexMono-Regular-Latin2.woff2",
     "/fonts/IBMPlexMono-Regular-Cyrillic.woff2",
     "/fonts/IBMPlexMono-SemiBold-Latin2.woff2",

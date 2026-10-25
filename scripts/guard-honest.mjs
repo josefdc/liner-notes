@@ -29,7 +29,10 @@ const isRecording = (path) => /^fixtures\/replays\/[^/]+\.json$/.test(path);
 // An occurrence that is not user-facing data (e.g. retry jitter) is allowed only with a marker
 // on the same line naming the rule and a reason: `// guard-allow: <rule-id> — <reason>`.
 // Each marker allows exactly one match on its line.
-const allowMarker = (line, id) => new RegExp(`guard-allow:\\s*${id}\\s*[—-]\\s*\\S`).test(line);
+// The rule name must match exactly: a marker for `prototype-copy-recordings` does not allow a
+// `prototype-copy` match.
+const allowMarker = (line, id) =>
+  new RegExp(`guard-allow:\\s*${id}(?![\\w-])\\s*[—-]\\s*\\S`).test(line);
 
 const scriptKind = (path) => {
   if (/\.tsx$/.test(path)) return ts.ScriptKind.TSX;
@@ -109,18 +112,90 @@ const spansOf = (text, pattern) =>
   [...text.matchAll(pattern)].map((match) => [match.index, match.index + match[0].length]);
 
 const HTML_COMMENT = /<!--[\s\S]*?-->/g;
-const JSON_STRING = /"(?:[^"\\\n]|\\.)*"/g;
+
+// Every string value of a JSON text with its path and span (quotes included). The text is
+// parsed first, so a malformed file throws instead of being half read.
+function jsonStrings(text) {
+  JSON.parse(text);
+  const found = [];
+  let i = 0;
+  const space = () => {
+    while (/\s/.test(text[i] ?? "")) i++;
+  };
+  const string = () => {
+    const start = i++;
+    while (text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
+    i++;
+    return { start, end: i, value: JSON.parse(text.slice(start, i)) };
+  };
+  const value = (path) => {
+    space();
+    if (text[i] === '"') {
+      const { start, end, value: string_ } = string();
+      found.push({ path, start, end, value: string_ });
+    } else if (text[i] === "{" || text[i] === "[") {
+      const object = text[i++] === "{";
+      for (let index = 0; ; index++) {
+        space();
+        if (text[i] === "}" || text[i] === "]") break;
+        let key = index;
+        if (object) {
+          key = string().value;
+          space();
+          i++; // the colon
+        }
+        value([...path, key]);
+        space();
+        if (text[i] === ",") i++;
+      }
+      i++;
+    } else {
+      const literal = /-?[\d.eE+-]+|true|false|null/y;
+      literal.lastIndex = i;
+      i += literal.exec(text)[0].length;
+    }
+  };
+  value([]);
+  return found;
+}
+
+// In a recorded run (fixtures/replays/*.json), the text the app wrote into its events: the
+// `message` of status and interrupt events and the `error` of error events. The result itself
+// (claims, factoids, analysis) and every other model answer are not scanned: a recording keeps
+// what the model said, and must never be edited to bring a count down. The planner's status
+// lines (`🔍 <reasoning>`, `✅ <reasoning>`, node `research_manager`) are model text after the
+// app's leading emoji, so only that emoji is scanned.
+const PLANNER_LINE = /^(?:🔍|✅) (?!Deep dive complete$)/u;
+function recordedMessageSpans(text) {
+  const run = JSON.parse(text);
+  const spans = [];
+  for (const { path, start, end, value } of jsonStrings(text)) {
+    const [events, index, key, field] = path;
+    if (events !== "events" || key !== "event" || path.length !== 4) continue;
+    const event = run.events[index].event;
+    const written =
+      ((event.type === "status" || event.type === "interrupt") && field === "message") ||
+      (event.type === "error" && field === "error");
+    if (!written) continue;
+    if (event.type === "status" && event.node === "research_manager" && PLANNER_LINE.test(value)) {
+      spans.push([start + 1, start + 1 + value.indexOf(" ")]);
+    } else {
+      spans.push([start, end]);
+    }
+  }
+  return spans;
+}
 
 // What a rule scans in a file (`rule.scan`); everything else is blanked:
 //   (none)    the text as it is
 //   "code"    comments blanked: script comments (line, block, JSX `{/* … */}`), CSS `/* … */`
 //             and HTML `<!-- … -->`
-//   "strings" string and template literals of a script, or the strings of a JSON file
-//   "copy"    text a user can read: a script's strings and JSX text, an HTML page without its
-//             comments, scripts and styles, or the strings of a JSON file
+//   "strings" string and template literals of a script
+//   "copy"    text in source: a script's strings and JSX text, or an HTML page without its
+//             comments, scripts and styles
+//   "messages" the messages the app wrote into a recorded run (see recordedMessageSpans)
 export function scannedText(rule, text, path) {
   if (!rule.scan) return text;
-  const json = /\.json$/.test(path);
   const html = /\.html?$/.test(path);
   if (rule.scan === "code") {
     if (isScript(path)) return mask(text, scriptSpans(text, path).comments, false);
@@ -128,7 +203,7 @@ export function scannedText(rule, text, path) {
     if (html) return mask(text, spansOf(text, HTML_COMMENT), false);
     return text;
   }
-  if (json) return mask(text, spansOf(text, JSON_STRING), true);
+  if (rule.scan === "messages") return mask(text, recordedMessageSpans(text), true);
   if (rule.scan === "copy" && html) {
     const hidden = /<!--[\s\S]*?-->|<(script|style)\b[\s\S]*?<\/\1\s*>/gi;
     return mask(text, spansOf(text, hidden), false);
@@ -166,8 +241,8 @@ export const PROTOTYPE_PHRASES = {
     "\\bEVENTS RECORDED\\b",
     "\\bAWAITING DATA\\b",
     "\\bPROCESS COMPLETE\\b",
-    // Console status lights: "● IDLE", "◉ ACTIVE", "● ONLINE", "◉ BUSY".
-    "[●◉](?:\\s|&nbsp;)*[a-z]{3,}",
+    "No signal detected",
+    "Ready for deployment",
     "\\bAgent Analysis\\b",
     "\\bFrequency analysis:",
     "Cross-referencing visual artifacts",
@@ -191,6 +266,9 @@ export const PROTOTYPE_PHRASES = {
     "\\b(?:DECRYPT(?:ING|ED)?|Decrypt(?:ing|ed)?)\\b",
     // Upper case only: `logic:` is an ordinary key or word.
     "\\bLOGIC:",
+    // Console status lights in capitals: "● IDLE", "◉ ACTIVE", "● ONLINE", "◉ BUSY" (not a
+    // legend such as "● Measured").
+    "[●◉](?:\\s|&nbsp;)*[A-Z]{3,}\\b",
     // Console tags in brackets: "[ COMPLETE ]", "[ ACTIVE ]", "[ DECRYPT MORE ]".
     "\\[\\s+[A-Z]+(?:\\s+[A-Z]+)*\\s+\\]",
   ],
@@ -215,7 +293,7 @@ export const rules = [
     description: "Math.random in API code (values must be measured or missing, never random)",
     files: (p) => p.startsWith("apps/api/src/") && isScript(p) && !isTest(p),
     pattern:
-      /\bMath\s*\??\.\s*random\b|\{[^}]*\brandom\b[^}]*\}\s*=\s*Math\b|\b(?:randomInt|getRandomValues|randomBytes)\s*\(/g,
+      /\bMath\s*\??\.\s*random\b|\{[^{}]*\brandom\b[^{}]*\}\s*=\s*Math\b|\b(?:randomInt|getRandomValues|randomBytes)\s*\(/g,
   },
   {
     id: "stock-images-web",
@@ -290,19 +368,18 @@ export const rules = [
     id: "prototype-copy-recordings",
     owner: "#33",
     description:
-      "The prototype's copy in the recorded runs (fixtures/replays), shown when a run is replayed",
+      "The prototype's copy in the messages the app wrote into the recorded runs (fixtures/replays)",
     files: isRecording,
     pattern: PROTOTYPE_COPY,
-    scan: "copy",
+    scan: "messages",
   },
   {
     id: "emoji-in-recordings",
     owner: "#33",
-    description:
-      "Emoji in the progress messages of the recorded runs (fixtures/replays), shown when a run is replayed",
+    description: "Emoji in the messages the app wrote into the recorded runs (fixtures/replays)",
     files: isRecording,
     pattern: EMOJI,
-    scan: "strings",
+    scan: "messages",
   },
 ];
 

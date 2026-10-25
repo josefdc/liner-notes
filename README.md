@@ -156,13 +156,18 @@ Then open http://localhost:3000
 ```bash
 npm run lint           # Biome (lint + formatting); `npm run format` rewrites files
 npm run typecheck      # TypeScript in every workspace
-npm run guard:honest   # counts of placeholder-data patterns; lower the baseline with -- --update
+npm run guard:honest   # ratcheted counts (see below); lower the baselines with -- --update
 npm test               # Vitest: API, web and script tests
 npm run build && npm run check:css   # the built CSS is Tailwind output with no invalid values
 npm run test:e2e       # Playwright against the web app with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
 cd services/audio && uv run ruff check . && uv run ruff format --check .
 cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
 ```
+
+The honesty guard (`scripts/guard-honest.mjs`) counts patterns that may only go down: placeholder
+data (random values, stock images, unscoped colours), the prototype's old copy and product name, and
+emoji in progress and log messages, in the source and in the messages of the recorded runs
+(`fixtures/replays`). Each count fails CI if it rises above its baseline in `scripts/guard-baseline.json`.
 
 CI runs the same checks on every pull request (`.github/workflows/ci.yml`).
 

@@ -40,6 +40,21 @@ describe("random-values-api", () => {
   it("requires a reason in the marker", () => {
     expect(count("random-values-api", "Math.random(); // guard-allow: random-values-api")).toBe(1);
   });
+
+  it("counts a destructure over several lines", () => {
+    expect(count("random-values-api", "const {\n  floor,\n  random,\n} = Math;\n")).toBe(1);
+  });
+
+  it("does not join a block with a later destructure of other names", () => {
+    const text = [
+      "export function backoff(attempt) {",
+      "  // no random jitter here",
+      "  const { min } = Math;",
+      "  return min(attempt * 100, 1000);",
+      "}",
+    ].join("\n");
+    expect(count("random-values-api", text, "apps/api/src/a.ts")).toBe(0);
+  });
 });
 
 describe("hex-colours-outside-tokens", () => {
@@ -60,6 +75,15 @@ describe("hex-colours-outside-tokens", () => {
     ["an element id", 'href="#add-button"'],
   ])("ignores %s", (_name, line) => {
     expect(count("hex-colours-outside-tokens", line)).toBe(0);
+  });
+});
+
+describe("allow markers", () => {
+  it("exempt only the rule they name", () => {
+    const line = (id) => `const s = 'Command Center'; // guard-allow: ${id} — kept for a test`;
+    expect(count("prototype-copy", line("prototype-copy"))).toBe(0);
+    expect(count("prototype-copy", line("prototype-copy-recordings"))).toBe(1);
+    expect(count("prototype-copy", line("prototype"))).toBe(1);
   });
 });
 
@@ -119,7 +143,8 @@ describe("prototype-copy", () => {
       "\\bEVENTS RECORDED\\b": "12 EVENTS RECORDED",
       "\\bAWAITING DATA\\b": "AWAITING DATA...",
       "\\bPROCESS COMPLETE\\b": "PROCESS COMPLETE",
-      "[●◉](?:\\s|&nbsp;)*[a-z]{3,}": "◉ BUSY",
+      "No signal detected": "No signal detected. Verify track name and artist.",
+      "Ready for deployment": "Analysis complete. Ready for deployment.",
       "\\bAgent Analysis\\b": "Agent Analysis",
       "\\bFrequency analysis:": "Frequency analysis: 120 BPM",
       "Cross-referencing visual artifacts": "Cross-referencing visual artifacts from Spotify...",
@@ -140,6 +165,7 @@ describe("prototype-copy", () => {
     exactCase: {
       "\\b(?:DECRYPT(?:ING|ED)?|Decrypt(?:ing|ed)?)\\b": "DECRYPTING...",
       "\\bLOGIC:": "LOGIC: related influence",
+      "[●◉](?:\\s|&nbsp;)*[A-Z]{3,}\\b": "◉ BUSY",
       "\\[\\s+[A-Z]+(?:\\s+[A-Z]+)*\\s+\\]": "[ COMPLETE ]",
     },
   };
@@ -163,6 +189,7 @@ describe("prototype-copy", () => {
     ["the lowercase decrypt route", 'fetch("/api/factoids/decrypt/stream")'],
     ["a lowercase logic key", "const s = 'logic: a';"],
     ["a lowercase bracket", "const s = '[ complete ]';"],
+    ["a status light in sentence case", "const s = '● Online';"],
   ])("does not count %s", (_name, line) => {
     expect(count("prototype-copy", line)).toBe(0);
   });
@@ -229,6 +256,8 @@ describe("prototype-copy", () => {
     ["a word that only contains a phrase", "const intelligent = 'INTELLIGENT';"],
     ["two separate strings", "const a = ['Command', 'Center'];"],
     ["a status light with a number", "const s = '● 120 BPM';"],
+    ["a legend entry after a dot", "const s = '● Measured';"],
+    ["a legend dot in its own element", "<li>\n  <span>●</span> Sampled\n</li>"],
   ])("ignores %s", (_name, line) => {
     expect(count("prototype-copy", line)).toBe(0);
   });
@@ -295,27 +324,64 @@ describe("emoji-in-progress", () => {
 
 describe("recordings", () => {
   const path = "fixtures/replays/one-more-time-daft-punk.json";
+  const status = (message, node = "scout") => ({ event: { type: "status", message, node } });
   const recording = JSON.stringify(
     {
       events: [
-        { event: { type: "status", message: "🔎 Searching samples..." } },
-        { event: { type: "status", message: "Establishing connection to Spotify API..." } },
-        { event: { type: "status", message: "Found 3 records" } },
+        status("🔎 Searching samples...", "research_tool"),
+        status("Establishing connection to Spotify API..."),
+        status("🔍 A deep dive into its DNA finds the Command Center", "research_manager"),
+        status("🔬 Starting deep dive research...", "research_manager"),
+        {
+          event: {
+            type: "interrupt",
+            message: "Target acquired: pick one",
+            candidates: [{ title: "Deep Dive" }],
+          },
+        },
+        { event: { type: "error", code: "internal", error: "Signal lost" } },
+        {
+          event: {
+            type: "complete",
+            data: {
+              factoids: [{ text: "🎧 A deep dive into its DNA" }],
+              claims: [{ text: "the Command Center of disco" }],
+            },
+          },
+        },
       ],
+      analysis: { factoids: [{ text: "🎧 its DNA" }] },
     },
     null,
     2,
   );
+  const found = (id) => countInText(rule(id), recording, path).matches.map(({ text }) => text);
 
-  it("counts prototype copy and emoji in the strings of a recorded run", () => {
-    expect(countInText(rule("prototype-copy-recordings"), recording, path)).toMatchObject({
-      total: 1,
-      lines: [12],
-    });
-    expect(countInText(rule("emoji-in-recordings"), recording, path)).toMatchObject({
-      total: 1,
-      lines: [6],
-    });
+  it("counts the messages the app wrote: status, interrupt and error", () => {
+    expect(found("prototype-copy-recordings")).toEqual([
+      "Establishing connection to",
+      "deep dive",
+      "Target acquired",
+      "Signal lost",
+    ]);
+  });
+
+  it("counts the emoji the app puts before the planner's reasoning, not the reasoning", () => {
+    expect(found("emoji-in-recordings")).toEqual(["🔎", "🔍", "🔬"]);
+  });
+
+  it("reports a recorded message on its own line", () => {
+    const { lines } = countInText(rule("emoji-in-recordings"), recording, path);
+    const text = recording.split("\n");
+    expect(lines.map((line) => text[line - 1].trim().slice(0, 14))).toEqual([
+      '"message": "🔎',
+      '"message": "🔍',
+      '"message": "🔬',
+    ]);
+  });
+
+  it("throws on a recording that is not JSON", () => {
+    expect(() => countInText(rule("emoji-in-recordings"), "{ not json", path)).toThrow();
   });
 
   it("scans the recorded runs only", () => {

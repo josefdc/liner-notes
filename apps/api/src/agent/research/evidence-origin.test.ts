@@ -155,9 +155,19 @@ describe("evidence given back by the research cache", () => {
     );
   }
 
+  const RECORDING = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
+  /** What the cached run read: the recording, not the song's original, no Discogs or Genius. */
+  const context = {
+    readAt: AT,
+    recordingMbid: RECORDING,
+    trackIsOriginal: false,
+    configured: { discogs: false, genius: false },
+    track: { title: "Ice Ice Baby", artist: "Vanilla Ice" },
+  };
+
   it("restores what a pack held, as items a pack takes again", async () => {
     const stored = await storedPack();
-    const restored = restoredEvidence(stored);
+    const restored = restoredEvidence(stored, context);
     expect(restored).toEqual(stored);
     const pack = new EvidencePack();
     expect(pack.addAll(restored ?? [])).toBe(stored.length);
@@ -169,6 +179,18 @@ describe("evidence given back by the research cache", () => {
     const stored = await storedPack();
     const [primary] = stored;
     const page = stored.find((e) => e.sourceTier === "web") as Evidence;
+    const cover = stored.find(
+      (e) => e.source === "musicbrainz" && e.recordRef?.startsWith("work/"),
+    ) as Evidence;
+    const coverOfTrack = cover.recordRef?.replace(/^work\/[^/]+/, `track/recording/${RECORDING}`);
+    const discogs = {
+      ...primary,
+      id: "discogs:release/123/credit/0",
+      source: "discogs" as const,
+      url: "https://www.discogs.com/release/123",
+      excerpt: "Discogs release 123 credits Somebody Else as Producer on the whole release.",
+      recordRef: "release/123/credit/0",
+    };
     const forged: Array<[string, Evidence]> = [
       ["a summary filed as web search's primary record", { ...primary, source: "tavily" }],
       ["an editorial item", { ...primary, sourceTier: "editorial" }],
@@ -185,10 +207,58 @@ describe("evidence given back by the research cache", () => {
       ],
       ["a placeholder text", { ...page, excerpt: "No results found." }],
       ["an item that breaks the contract", { ...primary, url: null, recordRef: null }],
+      [
+        "a web error page",
+        {
+          ...page,
+          url: "https://example.test/err",
+          id: "tavily:https://example.test/err",
+          title: "404 Not Found",
+          excerpt: "The requested URL was not found on this server.",
+        },
+      ],
+      ["an item read after the run", { ...page, retrievedAt: "2027-06-01T00:00:00.000Z" }],
+      ["a Discogs item while Discogs is not configured", discogs],
+      [
+        "a Genius item with a lyric excerpt",
+        {
+          ...primary,
+          id: "genius:track/song/1/samples/2",
+          source: "genius",
+          url: "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+          excerpt: "Yo, VIP, let's kick it! Ice ice baby, ice ice baby",
+          recordRef: "track/song/1/samples/2",
+        },
+      ],
+      ["a preview link", { ...primary, url: "https://p.scdn.co/mp3-preview/abc?cid=1" }],
+      [
+        "a cover of the song stated about the track, which is not the original",
+        { ...cover, recordRef: coverOfTrack ?? null, id: `musicbrainz:${coverOfTrack}` },
+      ],
+      [
+        "a MusicBrainz record of another recording",
+        {
+          ...primary,
+          id: "musicbrainz:track/recording/00000000-0000-4000-8000-000000000000",
+          recordRef: "track/recording/00000000-0000-4000-8000-000000000000",
+          url: "https://musicbrainz.org/recording/00000000-0000-4000-8000-000000000000",
+        },
+      ],
+      ["a record on another site's page", { ...primary, url: "https://example.test/recording" }],
     ];
     for (const [what, item] of forged) {
-      expect(restoredEvidence([...stored, item]), what).toBeNull();
+      expect(restoredEvidence([...stored, item], context), what).toBeNull();
     }
+    // The checks hold the cached run's facts: a configured Discogs and an original recording.
+    const configured = { ...context, configured: { discogs: true, genius: false } };
+    expect(restoredEvidence([...stored, discogs], configured)).not.toBeNull();
+    const original = { ...context, trackIsOriginal: true };
+    const rescoped = {
+      ...cover,
+      recordRef: coverOfTrack ?? null,
+      id: `musicbrainz:${coverOfTrack}`,
+    };
+    expect(restoredEvidence([...stored, rescoped], original)).not.toBeNull();
   });
 });
 

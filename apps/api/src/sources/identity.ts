@@ -32,6 +32,7 @@ import {
   GENIUS_ACCESS_TOKEN,
 } from "./genius.js";
 import { describeError } from "./http.js";
+import { pacingClock } from "./pacing.js";
 import {
   browseRecordingReleases,
   browseWorkRecordings,
@@ -502,7 +503,7 @@ export async function resolveIdentity(
     }
     const details = await getRecordingDetails(pick.recording.id, signal);
     if (!details || typeof details !== "object" || !isMbid(details.id)) {
-      throw unexpectedShape("musicbrainz", "the recording lookup is not a recording");
+      throw unexpectedShape("musicbrainz", "the recording lookup is not a recording", details);
     }
     // The lookup answers for the recording itself: checked again, in case it was merged.
     const check = checkIdentity(track, {
@@ -736,6 +737,8 @@ const MAX_DEADLINE_MS = 120_000;
  * deadline would otherwise take their requests down with it.
  */
 export const OTHER_SOURCES_RESERVE_MS = 5000;
+/** How long before the deadline a paced request must start (at most a tenth of it). */
+export const REQUEST_MARGIN_MS = 1500;
 
 /** A deadline in ms: the default when not a positive number, and at most two minutes. */
 function deadlineOf(ms: number | undefined): number {
@@ -782,15 +785,44 @@ async function collectInOrder(
   options: PrimarySourcesOptions,
 ): Promise<PrimarySources> {
   const deadlineMs = deadlineOf(options.deadlineMs);
-  const deadline = AbortSignal.timeout(deadlineMs);
+  // Timers rather than AbortSignal.timeout: the deadlines follow the process's timers, which a
+  // test can drive.
+  const deadline = deadlineAfter(deadlineMs);
+  const datingCut = deadlineAfter(
+    deadlineMs - Math.min(OTHER_SOURCES_RESERVE_MS, Math.floor(deadlineMs / 4)),
+  );
+  try {
+    return await collectWithin(track, options, deadlineMs, deadline.signal, datingCut.signal);
+  } finally {
+    deadline.clear();
+    datingCut.clear();
+  }
+}
+
+/** A signal that aborts with a TimeoutError after `ms`, and the way to stop its timer. */
+function deadlineAfter(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("deadline reached", "TimeoutError")),
+    ms,
+  );
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
+async function collectWithin(
+  track: TrackRef,
+  options: PrimarySourcesOptions,
+  deadlineMs: number,
+  deadline: AbortSignal,
+  datingCut: AbortSignal,
+): Promise<PrimarySources> {
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-  const datingSignal = AbortSignal.any([
-    signal,
-    AbortSignal.timeout(
-      deadlineMs - Math.min(OTHER_SOURCES_RESERVE_MS, Math.floor(deadlineMs / 4)),
-    ),
-  ]);
-  const run = { now: options.now, signal };
+  const datingSignal = AbortSignal.any([signal, datingCut]);
+  // A paced request (Discogs, SecondHandSongs) must start early enough to be answered within the
+  // deadline; a later slot is not taken, and the source is reported as not asked.
+  const notAfter =
+    pacingClock() + deadlineMs - Math.min(REQUEST_MARGIN_MS, Math.floor(deadlineMs / 10));
+  const run = { now: options.now, signal, notAfter };
   let told = false;
   const tell = (recording: IdentifiedRecording | null) => {
     if (told) return;

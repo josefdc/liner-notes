@@ -125,18 +125,25 @@ export function shsLink(url: string, from: ShsLink["from"] = "work"): ShsLink | 
 }
 
 /**
- * Anonymous requests: one every 6 s and at most 100 an hour (about 10 a minute and 100 an hour
- * are the anonymous limits reported for the API; its own page could not be read to confirm
- * them). With an API key: one a second. A request is not kept waiting more than 15 s, inside the
- * primary sources' 20 s deadline; past that it is reported as rate limited. A run makes one
- * request.
+ * Anonymous requests: at most 10 a minute and 100 an hour, at least 250 ms apart (about 10 a
+ * minute and 100 an hour are the anonymous limits reported for the API; its own page could not
+ * be read to confirm them). With an API key the limits are not known either: at most 60 a
+ * minute, a conservative pace. A run makes one request; a request is not sent when its slot
+ * comes after the run's deadline (the source is then "not asked").
  */
 export const SHS_ANONYMOUS_PACE: Pace = {
-  intervalMs: 6000,
-  budget: { max: 100, windowMs: 60 * 60 * 1000 },
-  maxWaitMs: 15_000,
+  intervalMs: 250,
+  budgets: [
+    { max: 10, windowMs: 60 * 1000 },
+    { max: 100, windowMs: 60 * 60 * 1000 },
+  ],
+  maxWaitMs: 60_000,
 };
-export const SHS_KEYED_PACE: Pace = { intervalMs: 1000, maxWaitMs: 15_000 };
+export const SHS_KEYED_PACE: Pace = {
+  intervalMs: 250,
+  budgets: [{ max: 60, windowMs: 60 * 1000 }],
+  maxWaitMs: 60_000,
+};
 
 /** The pace for the configuration now. */
 export function shsPace(): Pace {
@@ -147,17 +154,25 @@ const pacer = new RequestPacer("SecondHandSongs", shsPace);
 
 const pageOf = (link: ShsLink) => `${SITE}/${link.kind}/${link.id}`;
 
-async function shsGet<T>(link: ShsLink, scrub: Shape, signal?: AbortSignal): Promise<T> {
+async function shsGet<T>(
+  link: ShsLink,
+  scrub: Shape,
+  run: { signal?: AbortSignal; notAfter?: number },
+): Promise<T> {
   const key = credential(SHS_API_KEY);
-  const answer = await pacedFetchJson<T>(pacer, {
-    source: "secondhandsongs",
-    url: pageOf(link),
-    headers: { Accept: "application/json", ...(key ? { "X-API-Key": key } : {}) },
-    scrub,
-    signal,
-  });
+  const answer = await pacedFetchJson<T>(
+    pacer,
+    {
+      source: "secondhandsongs",
+      url: pageOf(link),
+      headers: { Accept: "application/json", ...(key ? { "X-API-Key": key } : {}) },
+      scrub,
+      signal: run.signal,
+    },
+    { notAfter: run.notAfter },
+  );
   if (!answer || typeof answer !== "object" || Array.isArray(answer)) {
-    throw unexpectedShape("secondhandsongs", `${link.kind} ${link.id} is not an object`);
+    throw unexpectedShape("secondhandsongs", `${link.kind} ${link.id} is not an object`, answer);
   }
   return answer;
 }
@@ -212,6 +227,7 @@ function checkWork(work: ShsWork, link: ShsLink): void {
     throw unexpectedShape(
       "secondhandsongs",
       `work ${link.id} has no versions list with isOriginal`,
+      work,
     );
   }
 }
@@ -227,7 +243,7 @@ function checkPerformance(p: ShsPerformance, link: ShsLink): void {
     (p.isOriginal === false && !Array.isArray(p.originals)) ||
     !lists.every((l) => l === undefined || (Array.isArray(l) && l.every(isObject)))
   ) {
-    throw unexpectedShape("secondhandsongs", `performance ${link.id} is not a performance`);
+    throw unexpectedShape("secondhandsongs", `performance ${link.id} is not a performance`, p);
   }
 }
 
@@ -318,7 +334,13 @@ function readPerformance(
 export async function shsRelationships(
   track: TrackRef,
   links: ShsLink[],
-  options: { now?: Clock; signal?: AbortSignal; trackIsOriginal?: boolean } = {},
+  options: {
+    now?: Clock;
+    signal?: AbortSignal;
+    /** On `pacingClock`: the latest the request may start (sources/pacing.ts). */
+    notAfter?: number;
+    trackIsOriginal?: boolean;
+  } = {},
 ): Promise<SourceResult<ShsRelationship>> {
   const ordered = [...links].sort((a, b) =>
     a.kind === b.kind ? a.id - b.id : a.kind === "performance" ? -1 : 1,
@@ -333,11 +355,11 @@ export async function shsRelationships(
   try {
     let read: Read;
     if (link.kind === "work") {
-      const work = await shsGet<ShsWork>(link, WORK_SHAPE, options.signal);
+      const work = await shsGet<ShsWork>(link, WORK_SHAPE, options);
       checkWork(work, link);
       read = readWork(work, track, trackIsOriginal);
     } else {
-      const performance = await shsGet<ShsPerformance>(link, PERFORMANCE_SHAPE, options.signal);
+      const performance = await shsGet<ShsPerformance>(link, PERFORMANCE_SHAPE, options);
       checkPerformance(performance, link);
       // A performance linked from the recording is the track; one linked from the work is the
       // song's, and its covers and samples hold for the track only when it is the original.

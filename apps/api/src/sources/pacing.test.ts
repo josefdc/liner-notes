@@ -1,16 +1,28 @@
 /**
  * Client-side pacing of Discogs and SecondHandSongs (sources/pacing.ts, `pacedFetchJson`), with
- * fake timers and a stubbed network: requests start at most at the source's pace, a request whose
- * slot is too far away is refused as rate limited without being sent, and a 429 is retried once
- * after its Retry-After, then reported as a typed `rate_limited` error.
+ * fake timers and a stubbed network: requests start at most at the source's pace and budgets; a
+ * request whose slot is too far away, or after the caller's deadline, is refused without being
+ * sent (the source is "not asked", never a timeout); a 429 holds the source for its Retry-After
+ * (bounded) and is retried once, then reported as a typed `rate_limited` error; and pacing is
+ * on by default.
  */
 
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import rickRoll from "./fixtures/discogs-release-249504.json" with { type: "json" };
 import work from "./fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
 import { DISCOGS_PACE, discogsTrackCredits } from "./discogs.js";
 import { isSourceError, MAX_RETRY_WAIT_MS, pacedFetchJson } from "./http.js";
-import { type Pace, RequestPacer, setUnpacedForTests } from "./pacing.js";
+import {
+  MAX_HOLD_MS,
+  type Pace,
+  PaceRefused,
+  pacingClock,
+  RequestPacer,
+  setUnpacedForTests,
+} from "./pacing.js";
 import type { TrackRef } from "./records.js";
 import { SHS_ANONYMOUS_PACE, SHS_KEYED_PACE, shsPace, shsRelationships } from "./shs.js";
 import { type FetchCall, json, stubFetch } from "./testing/fetchStub.js";
@@ -30,116 +42,181 @@ const RICK: TrackRef = {
   artists: ["Rick Astley"],
   durationMs: 213_573,
 };
+const FAKE = ["setTimeout", "clearTimeout", "Date", "performance"] as const;
 
+let t0 = 0;
 beforeEach(() => {
   delete process.env.SOURCE_CASSETTE;
   delete process.env.SHS_API_KEY;
   delete process.env.DISCOGS_TOKEN;
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"], now: START });
+  vi.useFakeTimers({ toFake: [...FAKE], now: START });
+  t0 = pacingClock();
   setUnpacedForTests(false);
 });
 afterEach(() => {
   setUnpacedForTests(true);
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
-/** When each request started, in ms after START. */
-const startsOf = (calls: Array<FetchCall & { at?: number }>) => calls.map((c) => c.at);
+/** Ms since the test started, on the pacers' clock. */
+const elapsed = () => Math.round(pacingClock() - t0);
 
 /** A stub that notes when each request reached it. */
 function timedStub(answer: (call: FetchCall, index: number) => Response) {
   const calls: Array<FetchCall & { at: number }> = [];
-  const net = stubFetch((call) => {
-    calls.push({ ...call, at: Date.now() - START });
+  stubFetch((call) => {
+    calls.push({ ...call, at: elapsed() });
     return answer(call, calls.length - 1);
   });
-  return { net, calls };
+  return calls;
+}
+const startsOf = (calls: Array<{ at: number }>) => calls.map((c) => c.at);
+
+/** Starts `n` slots of `pacer` at once; the times they were granted, or the refusals. */
+async function slots(pacer: RequestPacer, n: number, advanceMs: number) {
+  const out: Array<number | string> = [];
+  const all = Promise.all(
+    Array.from({ length: n }, () =>
+      pacer.slot().then(
+        () => out.push(elapsed()),
+        (error: unknown) => out.push(error instanceof PaceRefused ? "refused" : String(error)),
+      ),
+    ),
+  );
+  await vi.advanceTimersByTimeAsync(advanceMs);
+  await all;
+  return out;
 }
 
 describe("a pacer", () => {
   const pace = (p: Partial<Pace> = {}): Pace => ({ intervalMs: 1000, maxWaitMs: 10_000, ...p });
 
   it("starts requests at most one per interval, in order", async () => {
-    const pacer = new RequestPacer("Test", () => pace());
-    const started: number[] = [];
-    const all = Promise.all(
-      [0, 1, 2, 3].map(() => pacer.slot().then(() => started.push(Date.now() - START))),
-    );
-    await vi.advanceTimersByTimeAsync(5000);
-    await all;
-    expect(started).toEqual([0, 1000, 2000, 3000]);
+    expect(await slots(new RequestPacer("Test", () => pace()), 4, 5000)).toEqual([
+      0, 1000, 2000, 3000,
+    ]);
   });
 
-  it("keeps a budget per window: past it, a request waits for the oldest start to leave", async () => {
+  it("keeps every budget: past one, a request waits for its oldest start to leave", async () => {
     const pacer = new RequestPacer("Test", () =>
-      pace({ intervalMs: 0, budget: { max: 2, windowMs: 60_000 }, maxWaitMs: 120_000 }),
+      pace({
+        intervalMs: 0,
+        budgets: [
+          { max: 2, windowMs: 10_000 },
+          { max: 3, windowMs: 60_000 },
+        ],
+        maxWaitMs: 120_000,
+      }),
     );
-    const started: number[] = [];
-    const all = Promise.all(
-      [0, 1, 2].map(() => pacer.slot().then(() => started.push(Date.now() - START))),
+    expect(await slots(pacer, 4, 61_000)).toEqual([0, 0, 10_000, 60_000]);
+  });
+
+  it("keeps no more starts than its longest budget window holds, and none without a budget", async () => {
+    const budgeted = new RequestPacer("Test", () =>
+      pace({ intervalMs: 0, budgets: [{ max: 1000, windowMs: 1000 }] }),
     );
-    await vi.advanceTimersByTimeAsync(61_000);
-    await all;
-    expect(started).toEqual([0, 0, 60_000]);
+    for (let i = 0; i < 50; i++) {
+      await budgeted.slot();
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(budgeted.kept).toBeLessThanOrEqual(11);
+    const plain = new RequestPacer("Test", () => pace({ intervalMs: 0 }));
+    for (let i = 0; i < 50; i++) await plain.slot();
+    expect(plain.kept).toBe(0);
   });
 
   it("refuses at once a request whose slot is further than it may wait, and keeps no slot for it", async () => {
     const pacer = new RequestPacer("Test", () => pace({ maxWaitMs: 1500 }));
-    await pacer.slot();
-    const second = pacer.slot();
-    await expect(pacer.slot()).rejects.toMatchObject({ name: "PaceRefused", waitMs: 2000 });
-    await vi.advanceTimersByTimeAsync(1000);
-    await second;
+    expect(await slots(pacer, 3, 2000)).toEqual([0, "refused", 1000]);
     // The refused request took no slot: the next one starts one interval after the second.
-    const next = pacer.slot();
-    let at = -1;
-    void next.then(() => {
-      at = Date.now() - START;
-    });
+    expect(await slots(pacer, 1, 1000)).toEqual([2000]);
+  });
+
+  it("refuses a request whose slot comes after the caller's deadline", async () => {
+    const pacer = new RequestPacer("Test", () => pace());
+    await pacer.slot();
+    await expect(pacer.slot({ notAfter: pacingClock() + 500 })).rejects.toBeInstanceOf(PaceRefused);
+    const granted = pacer.slot({ notAfter: pacingClock() + 1000 });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(at).toBe(2000);
+    await expect(granted).resolves.toBeUndefined();
   });
 
   it("gives the slot back when its request is cancelled while it waits", async () => {
     const pacer = new RequestPacer("Test", () => pace());
     await pacer.slot();
     const cancel = new AbortController();
-    const waiting = pacer.slot(cancel.signal);
+    const waiting = pacer.slot({ signal: cancel.signal });
     cancel.abort(new Error("cancelled"));
     await expect(waiting).rejects.toThrow("cancelled");
-    const next = pacer.slot();
-    let at = -1;
-    void next.then(() => {
-      at = Date.now() - START;
-    });
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(at).toBe(1000);
+    expect(await slots(pacer, 1, 1000)).toEqual([1000]);
   });
 
-  it("holds every request after the source asked to slow down", async () => {
-    const pacer = new RequestPacer("Test", () => pace({ intervalMs: 0 }));
-    pacer.holdFor(3000);
-    let at = -1;
-    void pacer.slot().then(() => {
-      at = Date.now() - START;
-    });
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(at).toBe(3000);
+  it("holds every request after the source asked to slow down, at most MAX_HOLD_MS", async () => {
+    const pacer = new RequestPacer("Test", () =>
+      pace({ intervalMs: 0, maxWaitMs: 2 * MAX_HOLD_MS }),
+    );
+    expect(pacer.holdFor(3000)).toBe(3000);
+    expect(await slots(pacer, 1, 3000)).toEqual([3000]);
+    expect(pacer.holdFor(10 * 365 * 24 * 3600 * 1000)).toBe(MAX_HOLD_MS);
+    expect(await slots(pacer, 1, MAX_HOLD_MS)).toEqual([3000 + MAX_HOLD_MS]);
+  });
+
+  it("makes a request already waiting for its slot wait out a hold that came meanwhile", async () => {
+    const pacer = new RequestPacer("Test", () => pace({ maxWaitMs: 120_000 }));
+    const granted: number[] = [];
+    const all = Promise.all([0, 1, 2].map(() => pacer.slot().then(() => granted.push(elapsed()))));
+    await vi.advanceTimersByTimeAsync(0);
+    pacer.holdFor(60_000);
+    await vi.advanceTimersByTimeAsync(62_000);
+    await all;
+    // The first had started; the two waiting take new slots after the hold, still paced.
+    expect(granted).toEqual([0, 60_000, 61_000]);
+  });
+
+  it("reads a monotonic clock: a step of the wall clock moves no slot", async () => {
+    const pacer = new RequestPacer("Test", () => pace());
+    await pacer.slot();
+    vi.setSystemTime(START - 3600_000);
+    expect(await slots(pacer, 1, 1000)).toEqual([1000]);
+  });
+});
+
+describe("pacing is on by default", () => {
+  it("paces a pacer of a fresh module, without the tests' switch", async () => {
+    vi.resetModules();
+    const fresh = await import("./pacing.js");
+    const pacer = new fresh.RequestPacer("Test", () => ({ intervalMs: 1000, maxWaitMs: 10 }));
+    await pacer.slot();
+    await expect(pacer.slot()).rejects.toBeInstanceOf(fresh.PaceRefused);
+  });
+
+  it("is switched off only by tests and their setup", () => {
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const files = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name);
+        return statSync(path).isDirectory() ? files(path) : path.endsWith(".ts") ? [path] : [];
+      });
+    const callers = files(src)
+      .filter((path) => !path.endsWith(".test.ts") && !path.endsWith("sources/pacing.ts"))
+      .filter((path) => readFileSync(path, "utf8").includes("setUnpacedForTests"))
+      .map((path) => relative(src, path));
+    expect(callers).toEqual([]);
   });
 });
 
 describe("a paced request", () => {
-  const pacer = () => new RequestPacer("Test", () => ({ intervalMs: 1000, maxWaitMs: 5000 }));
+  const pacer = (p: Partial<Pace> = {}) =>
+    new RequestPacer("Test", () => ({ intervalMs: 1000, maxWaitMs: 60_000, ...p }));
   const request = { source: "secondhandsongs" as const, url: SHS_WORK };
+  const tooMany = (after: string) =>
+    new Response("slow down", { status: 429, headers: { "retry-after": after } });
 
   it("is retried once after the Retry-After of a 429, and then answers", async () => {
-    const { calls } = timedStub((_call, i) =>
-      i === 0
-        ? new Response("slow down", { status: 429, headers: { "retry-after": "3" } })
-        : json({ ok: true }),
-    );
+    const calls = timedStub((_call, i) => (i === 0 ? tooMany("3") : json({ ok: true })));
     const answer = pacedFetchJson(pacer(), request);
     await vi.advanceTimersByTimeAsync(4000);
     await expect(answer).resolves.toEqual({ ok: true });
@@ -147,9 +224,7 @@ describe("a paced request", () => {
   });
 
   it("reports a second 429 as a typed rate limit, after one retry only", async () => {
-    const { calls } = timedStub(
-      () => new Response("slow down", { status: 429, headers: { "retry-after": "1" } }),
-    );
+    const calls = timedStub(() => tooMany("1"));
     const answer = pacedFetchJson(pacer(), request).catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(5000);
     const error = await answer;
@@ -158,23 +233,67 @@ describe("a paced request", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("does not wait out a Retry-After longer than it honours", async () => {
-    const { calls } = timedStub(
-      () => new Response("slow down", { status: 429, headers: { "retry-after": "120" } }),
-    );
-    const error = await pacedFetchJson(pacer(), request).catch((e: unknown) => e);
+  it("does not wait out a Retry-After over 5 s, and holds the source for it", async () => {
+    const calls = timedStub(() => tooMany("120"));
+    const paced = pacer({ maxWaitMs: 60_000 });
+    const error = await pacedFetchJson(paced, request).catch((e: unknown) => e);
     expect(isSourceError(error, "rate_limited")).toBe(true);
-    expect(calls).toHaveLength(1);
     expect(MAX_RETRY_WAIT_MS).toBeLessThan(120_000);
+    // The next request is not sent inside the hold: its slot is too far away.
+    await expect(pacedFetchJson(paced, request)).rejects.toBeInstanceOf(PaceRefused);
+    expect(calls).toHaveLength(1);
   });
 
-  it("is refused as rate limited, and not sent, when its slot is too far away", async () => {
-    const { calls } = timedStub(() => json({ ok: true }));
+  it("bounds a Retry-After that is huge or a far date, and takes a past date for none", async () => {
+    for (const after of ["99999999", "Fri, 01 Jan 2100 00:00:00 GMT"]) {
+      const calls = timedStub(() => tooMany(after));
+      const start = elapsed();
+      const paced = pacer({ maxWaitMs: 2 * MAX_HOLD_MS });
+      await pacedFetchJson(paced, request).catch(() => {});
+      const next = pacedFetchJson(paced, request).catch(() => {});
+      await vi.advanceTimersByTimeAsync(MAX_HOLD_MS + 1000);
+      await next;
+      expect(calls).toHaveLength(2);
+      expect(calls[1].at - start).toBeLessThanOrEqual(MAX_HOLD_MS + 1000);
+    }
+    // A date in the past says nothing: the default 2 s wait before the one retry.
+    const calls = timedStub((_call, i) =>
+      i === 0 ? tooMany("Mon, 01 Jan 2001 00:00:00 GMT") : json({ ok: true }),
+    );
+    const start = elapsed();
+    const answer = pacedFetchJson(pacer({ intervalMs: 0 }), request);
+    await vi.advanceTimersByTimeAsync(2500);
+    await expect(answer).resolves.toEqual({ ok: true });
+    expect(startsOf(calls).map((t) => t - start)).toEqual([0, 2000]);
+  });
+
+  it("is refused, and not sent, when its slot is too far away; a refusal is never retried", async () => {
+    const calls = timedStub(() => json({ ok: true }));
     const slow = new RequestPacer("Test", () => ({ intervalMs: 10_000, maxWaitMs: 5000 }));
     await pacedFetchJson(slow, request);
     const error = await pacedFetchJson(slow, request).catch((e: unknown) => e);
-    expect(isSourceError(error, "rate_limited")).toBe(true);
+    expect(error).toBeInstanceOf(PaceRefused);
     expect((error as Error).message).toMatch(/paced: the next Test request may start in 10 s/);
+    expect(calls).toHaveLength(1);
+    // Nor does a refusal hold the source: the next request goes at its own slot.
+    await vi.advanceTimersByTimeAsync(6000);
+    const next = pacedFetchJson(slow, request);
+    await vi.advanceTimersByTimeAsync(4000);
+    await next;
+    expect(startsOf(calls)).toEqual([0, 10_000]);
+  });
+
+  it("is refused, never a timeout, when the deadline comes while it waits for its slot", async () => {
+    const calls = timedStub(() => json({ ok: true }));
+    const paced = pacer();
+    await pacedFetchJson(paced, request);
+    const deadline = new AbortController();
+    const waiting = pacedFetchJson(paced, { ...request, signal: deadline.signal }).catch(
+      (e: unknown) => e,
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    deadline.abort(new DOMException("deadline reached", "TimeoutError"));
+    expect(await waiting).toBeInstanceOf(PaceRefused);
     expect(calls).toHaveLength(1);
   });
 
@@ -186,28 +305,30 @@ describe("a paced request", () => {
     );
     // Both reach the cassette (which has no entry): neither is refused by the pacer.
     for (const error of errors) expect(isSourceError(error, "cassette_miss")).toBe(true);
-    vi.unstubAllEnvs();
   });
 });
 
 describe("Discogs and SecondHandSongs are paced", () => {
-  it("Discogs: one release request a little over every second", async () => {
+  it("Discogs: at most 55 a minute, at least 200 ms apart", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
-    const { calls } = timedStub((call) =>
+    expect(DISCOGS_PACE).toMatchObject({
+      intervalMs: 200,
+      budgets: [{ max: 55, windowMs: 60_000 }],
+    });
+    const calls = timedStub((call) =>
       call.url.endsWith("/249504")
         ? json(rickRoll)
         : json({ id: Number(call.url.split("/").pop()), title: "Other", tracklist: [] }),
     );
     const result = discogsTrackCredits(RICK, [1, 2, 249504], {});
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(1000);
     expect((await result).status).toBe("found");
-    expect(startsOf(calls)).toEqual([0, DISCOGS_PACE.intervalMs, 2 * DISCOGS_PACE.intervalMs]);
-    expect(DISCOGS_PACE.intervalMs).toBeGreaterThanOrEqual(1000); // ≤ 60 a minute
+    expect(startsOf(calls)).toEqual([0, 200, 400]);
   });
 
   it("Discogs: a 429 is retried once after its Retry-After, then the credits are read", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
-    const { calls } = timedStub((_call, i) =>
+    const calls = timedStub((_call, i) =>
       i === 0
         ? new Response("slow down", { status: 429, headers: { "retry-after": "2" } })
         : json(rickRoll),
@@ -218,8 +339,22 @@ describe("Discogs and SecondHandSongs are paced", () => {
     expect(startsOf(calls)).toEqual([0, 2000]);
   });
 
+  it("Discogs: a request our pacing does not send is not asked, with no source error", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
+    const calls = timedStub(() => json(rickRoll));
+    // Two runs at once whose deadline leaves 100 ms: the second's slot (200 ms) is too late.
+    const notAfter = pacingClock() + 100;
+    const [first, second] = await Promise.all([
+      discogsTrackCredits(RICK, [249504], { notAfter }),
+      discogsTrackCredits(RICK, [249504], { notAfter }),
+    ]);
+    expect(first.status).toBe("found");
+    expect(second).toMatchObject({ status: "missing", error: null, notAsked: "pace" });
+    expect(calls).toHaveLength(1);
+  });
+
   it("SecondHandSongs: two 429s give the source's typed rate_limited error", async () => {
-    const { calls } = timedStub(
+    const calls = timedStub(
       () => new Response("slow down", { status: 429, headers: { "retry-after": "1" } }),
     );
     const result = shsRelationships(ICE, [WORK_LINK]);
@@ -231,20 +366,18 @@ describe("Discogs and SecondHandSongs are paced", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("SecondHandSongs: anonymous requests 6 s apart, at most 100 an hour; faster with a key", async () => {
+  it("SecondHandSongs anonymous: 10 a minute and 100 an hour; a key allows 60 a minute", async () => {
     expect(shsPace()).toBe(SHS_ANONYMOUS_PACE);
-    expect(SHS_ANONYMOUS_PACE).toMatchObject({
-      intervalMs: 6000,
-      budget: { max: 100, windowMs: 3_600_000 },
-    });
-    const { calls } = timedStub(() => json(work));
-    const both = Promise.all([
-      shsRelationships(ICE, [WORK_LINK]),
-      shsRelationships(ICE, [WORK_LINK]),
+    expect(SHS_ANONYMOUS_PACE.budgets).toEqual([
+      { max: 10, windowMs: 60_000 },
+      { max: 100, windowMs: 3_600_000 },
     ]);
-    await vi.advanceTimersByTimeAsync(7000);
-    for (const result of await both) expect(result.status).toBe("found");
-    expect(startsOf(calls)).toEqual([0, 6000]);
+    const calls = timedStub(() => json(work));
+    const all = Promise.all(Array.from({ length: 11 }, () => shsRelationships(ICE, [WORK_LINK])));
+    await vi.advanceTimersByTimeAsync(61_000);
+    for (const result of await all) expect(result.status).toBe("found");
+    // A burst of ten, 250 ms apart; the eleventh when the first leaves the minute.
+    expect(startsOf(calls)).toEqual([...Array.from({ length: 10 }, (_, i) => i * 250), 60_000]);
 
     process.env.SHS_API_KEY = "shs-test-key-0123456789";
     expect(shsPace()).toBe(SHS_KEYED_PACE);

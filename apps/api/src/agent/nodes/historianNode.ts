@@ -16,10 +16,11 @@
  * search's results. Each item is sent as an `evidence` event; the primary sources' errors are
  * the run's source errors.
  *
- * Research is cached with its evidence, and only when it is complete (see the gate below). A
- * research-cache hit gives the cached run's evidence, errors and recording back and asks no
- * primary source; only a cached research without evidence for this ISRC reads them again, and
- * then keeps the cached web-tier items.
+ * Research is cached with its evidence, and only when it is complete and the track's details
+ * were read (see the gate below). A research-cache hit gives the cached run's evidence, errors
+ * and recording back and asks no primary source; a row that left a part for a later run reads
+ * them again (keeping the cached research and web items) and is written again when they answer;
+ * a row read for another ISRC, or for none while this run has one, is a miss.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -54,8 +55,8 @@ import { logger } from "../../logger.js";
 import { type CachedResearch, getCache } from "../../store/cache.js";
 import { fixedSteps, researcherSteps } from "../research/plan.js";
 import {
-  cachedEvidenceHolds,
   cachedEvidenceOf,
+  cachedEvidenceUse,
   cachedRunEvidence,
   cachedWebEvidence,
   lastingAmong,
@@ -112,7 +113,7 @@ export async function historianNode(
     // Cache not available — proceed with fresh research
   }
   if (cached) {
-    const hit = await cacheHit(state.spotifyData, cached, isrc, config, runtime);
+    const hit = await cacheHit(state.spotifyData, cached, isrc, cacheKey, config, runtime);
     if (hit) return hit;
   }
 
@@ -133,7 +134,7 @@ export async function historianNode(
   const query = trackQuery(state.spotifyData);
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
-  log.info(`Deep dive research for: ${title} by ${artist}`);
+  log.debug(`Deep dive research for: ${title} by ${artist}`);
 
   // The plan's Last.fm step, each method at most once per run (outside the researcher subgraph,
   // which does not ask them again): the track's tags and similar tracks while the ISRC identifies
@@ -298,16 +299,19 @@ export async function historianNode(
   // source that is not configured (the cache key names the configured sources, so adding a key
   // runs the research again) and a primary source's answer of a shape its reader does not know
   // (a retry gets the same answer). Both are stored with the research and reported on a hit.
+  //
+  // Nor is research cached from a run that could not read the track's details (a Spotify error
+  // in the run: no ISRC, no duration), whatever the reason: a run that reads them does better.
+  // A part the run left for a later one for a reason of its own (a source our pacing did not
+  // ask, the work's recordings not dated in time) is no source error and does not block it:
+  // the row says so, and a hit reads the primary sources again.
   config.signal?.throwIfAborted();
   const notConfigured = sourceErrors.filter((e) => e.code === "not_configured");
-  const lastingKeys = new Set(pack.lasting.map((e) => `${e.source}:${e.code}`));
-  const primaryBlocking = pack.errors.filter(
-    (e) => e.code !== "not_configured" && !lastingKeys.has(`${e.source}:${e.code}`),
-  );
+  const detailed = !(state.sourceErrors ?? []).some((e) => e.source === "spotify");
   const complete =
+    detailed &&
     !failure &&
-    pack.lost.length === 0 &&
-    primaryBlocking.length === 0 &&
+    primaryErrorsAllowCaching(pack) &&
     sourceErrors.length === notConfigured.length &&
     (finalState.usage ?? []).every((call) => call.status === "ok");
   if (complete) {
@@ -322,6 +326,7 @@ export async function historianNode(
     }
   } else {
     log.info("Research not cached: it is not complete", {
+      trackDetailsRead: detailed,
       stoppedEarly: Boolean(failure),
       sourceErrors: uniqueErrors([...sourceErrors, ...pack.errors])
         .filter((e) => e.code !== "not_configured")
@@ -350,6 +355,7 @@ export async function historianNode(
     // The primary sources' errors are the run's too.
     sourceErrors: uniqueErrors([...sourceErrors, ...pack.errors]),
     lastingSourceErrors: lastingAmong(pack.lasting, sourceErrors),
+    primaryNotAsked: notAskedOf(pack),
     statusMessages: [
       ...prefetchStatus,
       ...(finalState.statusMessages ?? []),
@@ -360,31 +366,55 @@ export async function historianNode(
 }
 
 /**
- * The historian's answer from a cached research, or null when it cannot be used (its evidence
- * fails the checks it is restored through): the research is then read again. With evidence read
- * for this ISRC, the cached evidence, recording and primary-source errors are this run's and no
- * primary source is asked; otherwise (research without evidence, another ISRC) the primary
- * sources are read for this run and the cached web-tier items are kept.
+ * True when the primary sources' errors let the research be cached: none lost records, and each
+ * is a source not configured or an answer of a shape its reader does not know (lasting).
+ */
+function primaryErrorsAllowCaching(pack: RunEvidence): boolean {
+  const lasting = new Set(pack.lasting.map((e) => `${e.source}:${e.code}`));
+  return (
+    pack.lost.length === 0 &&
+    pack.errors.every((e) => e.code === "not_configured" || lasting.has(`${e.source}:${e.code}`))
+  );
+}
+
+/** The primary sources the run did not ask (a request not sent), for the composer's store gate. */
+function notAskedOf(pack: RunEvidence): SourceId[] {
+  return pack.incomplete.filter((part) => part.part === "not_asked").map((part) => part.source);
+}
+
+/**
+ * The historian's answer from a cached research, or null when it is a miss: its evidence fails
+ * the checks it is restored through, is of another format, or was read for another ISRC (or for
+ * none while this run has one; `cachedEvidenceUse`). The research is then made again and
+ * replaces the row. A "fast" hit gives the cached evidence, recording and primary-source errors
+ * as this run's and asks no primary source. A "refresh" hit (a row that left a part for a later
+ * run) reads the primary sources again, keeps the cached research and web items, and writes
+ * the row again when they answer with nothing that blocks caching.
  */
 async function cacheHit(
   spotify: SpotifyData,
   cached: CachedResearch,
   isrc: string | null,
+  cacheKey: string,
   config: LangGraphRunnableConfig,
   runtime: AgentRuntime,
 ): Promise<Partial<SonicAgentStateType> | null> {
   // The sources that were not configured when it was made are reported again: a cached answer
   // without them would read as "read, nothing there".
   const { notConfigured = [], evidence: stored, ...cachedResearch } = cached;
-  const restored = restoredItems(stored);
-  if (stored && !restored) {
-    log.warn(
-      `Cached research for ${spotify.title} holds evidence that fails its checks; reading again`,
-    );
+  const restored = restoredItems(stored, {
+    title: spotify.title,
+    artist: trackQuery(spotify).primary,
+  });
+  const use = stored && restored ? cachedEvidenceUse(stored, isrc) : "miss";
+  if (!stored || !restored || use === "miss") {
+    log.info("Cached research not used; reading again", {
+      spotifyId: spotify.id,
+      reason: !stored ? "no evidence" : !restored ? "evidence fails its checks" : "another ISRC",
+    });
     return null;
   }
-  const fast = stored && restored && cachedEvidenceHolds(stored, isrc) ? stored : null;
-  log.info(`Cache hit for: ${spotify.title}`, { primarySources: fast ? "cached" : "read" });
+  log.debug(`Cache hit for: ${spotify.title}`, { primarySources: use });
   sendStatus(
     config,
     runtime,
@@ -394,20 +424,32 @@ async function cacheHit(
   let pack: RunEvidence;
   let recording: IdentifiedRecording | null;
   let reading: string | null = null;
-  if (fast && restored) {
-    pack = cachedRunEvidence(fast, restored, config, runtime);
-    recording = fast.recording;
+  if (use === "fast") {
+    pack = cachedRunEvidence(stored, restored, config, runtime);
+    recording = stored.recording;
   } else {
-    // The cached research holds no evidence for this ISRC: the primary sources are read for
-    // this run.
+    // The cached run left a part for a later run: the primary sources are read again.
     const primary = startPrimarySources(spotify, isrc, config.signal, runtime);
-    reading = isrc ? readingPrimary() : null;
-    if (reading) sendStatus(config, runtime, "RESEARCH-FOUND", reading);
-    pack = await runEvidence(primary.run, [], config, runtime, cachedWebEvidence(restored ?? []));
+    reading = readingPrimary();
+    sendStatus(config, runtime, "RESEARCH-FOUND", reading);
+    pack = await runEvidence(primary.run, [], config, runtime, cachedWebEvidence(restored));
     recording = await primary.recording;
+    config.signal?.throwIfAborted();
+    if (primaryErrorsAllowCaching(pack)) {
+      try {
+        getCache().putResearch(cacheKey, {
+          ...cachedResearch,
+          ...(notConfigured.length > 0 ? { notConfigured } : {}),
+          evidence: cachedEvidenceOf(pack, isrc, recording, timestampOf(runtime)),
+        });
+      } catch {
+        // Non-critical
+      }
+    }
   }
   const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
   const lasting = lastingAmong(pack.lasting, notConfigured);
+  const notAsked = notAskedOf(pack);
   return {
     // The recording's MusicBrainz sample relations join the cached research (for the result
     // built without the model).
@@ -419,6 +461,7 @@ async function cacheHit(
     isrcRecording: recording,
     ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
     ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),
+    ...(notAsked.length > 0 ? { primaryNotAsked: notAsked } : {}),
     statusMessages: [
       "📚 Research (cached): loaded from persistent cache",
       ...unreadableStatus(notConfigured),

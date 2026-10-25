@@ -588,6 +588,15 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // The primary-record sources the run did not ask, their request not sent (our own pacing left
+  // no slot in time, or the run's time for them ran out first): no source error. The research
+  // may be cached; the composer stores no result without them, so a stored result never lacks
+  // their records without saying so.
+  primaryNotAsked: Annotation<SourceError["source"][]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+
   // HITL configuration (how many candidates the track picker offers)
   hitlConfig: Annotation<HITLConfig>({
     reducer: (_, next) => next,

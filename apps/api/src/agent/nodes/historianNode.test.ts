@@ -71,6 +71,20 @@ describe("historianNode", () => {
       samples: ["Sample A"],
       productionTrivia: [],
       notConfigured: [{ source: "lastfm", code: "not_configured" }],
+      // The evidence of a track without an ISRC: no primary source was asked.
+      evidence: {
+        format: 1,
+        readAt: "2026-10-20T12:00:00.000Z",
+        isrc: null,
+        items: [],
+        omitted: 0,
+        samples: [],
+        recording: null,
+        trackIsOriginal: false,
+        errors: [],
+        lasting: [],
+        incomplete: [],
+      },
     });
 
     const out = await historianNode(

@@ -24,7 +24,12 @@ import {
   stubFetch,
 } from "../../sources/testing/fetchStub.js";
 import { runRoute } from "../../sources/testing/iceIceBaby.js";
-import { type CachedResearch, initCache, type SonicCache } from "../../store/cache.js";
+import {
+  type CachedEvidence,
+  type CachedResearch,
+  initCache,
+  type SonicCache,
+} from "../../store/cache.js";
 import { runMigrations } from "../../store/migrations.js";
 import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { historianNode } from "../nodes/historianNode.js";
@@ -37,6 +42,8 @@ const MB = "https://musicbrainz.org/ws/2";
 const SHS_WORK = "https://secondhandsongs.com/work/4196";
 const WORK = `${MB}/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d?`;
 const WEB_ID = "tavily:https://example.test/ice-ice-baby";
+/** The timers a test drives: the deadlines, the pacers' clock and MusicBrainz's queue. */
+const FAKE = ["setTimeout", "clearTimeout", "Date", "performance"] as const;
 
 const spotifyData = {
   id: "3Fcfwhm8oRrBvBZ8KGhtea",
@@ -306,44 +313,185 @@ describe("the research key and what a hit trusts", () => {
     expect(again.llm.calls.length).toBeGreaterThan(0);
   });
 
-  it("reads the primary sources for cached evidence of another ISRC, and keeps its web items", async () => {
+  it("does not use cached evidence of another ISRC: the research is made again and replaces it", async () => {
     await historian();
     const stored = cache.getResearch(key()) as CachedResearch;
     const evidence = stored.evidence;
     if (!evidence) throw new Error("no cached evidence");
-    cache.putResearch(key(), { ...stored, evidence: { ...evidence, isrc: "USXX00000001" } });
+    cache.putResearch(key(), {
+      ...stored,
+      collaboratorsOf: "OLD ARTIST",
+      evidence: { ...evidence, isrc: "USXX00000001" },
+    });
 
+    const again = await historian(LATER);
+    expect(again.llm.calls.length).toBeGreaterThan(0);
+    expect(again.out.researchData?.collaboratorsOf).not.toBe("OLD ARTIST");
+    expect(cache.getResearch(key())?.evidence?.isrc).toBe("USCA29001716");
+  });
+
+  const crafted: Array<[string, (row: CachedResearch) => CachedResearch]> = [
+    ["of another format", (row) => withEvidence(row, { format: 2 })],
+    [
+      "holding a timeout as lasting",
+      (row) =>
+        withEvidence(row, {
+          errors: [{ source: "secondhandsongs", code: "timeout" }],
+          lasting: [{ source: "secondhandsongs", code: "timeout" }],
+        }),
+    ],
+    [
+      "holding an error that blocks caching",
+      (row) => withEvidence(row, { errors: [{ source: "secondhandsongs", code: "unavailable" }] }),
+    ],
+    [
+      "whose recording is not its records' recording",
+      (row) =>
+        withEvidence(row, {
+          recording: {
+            ...(row.evidence?.recording as NonNullable<CachedEvidence["recording"]>),
+            mbid: "00000000-0000-4000-8000-000000000000",
+          },
+        }),
+    ],
+    [
+      "saying Discogs was not configured, while it is now",
+      (row) => {
+        vi.stubEnv("DISCOGS_TOKEN", "discogs-test-token-0123456789");
+        // The key names Discogs: the row is put where this run looks.
+        cache.putResearch(key(), row);
+        return row;
+      },
+    ],
+  ];
+  for (const [what, craft] of crafted) {
+    it(`does not use a cached row ${what}`, async () => {
+      await historian();
+      const row = cache.getResearch(key()) as CachedResearch;
+      cache.putResearch(key(), craft(row));
+      expect(cache.getResearch(key())).not.toBeNull();
+      const again = await historian(LATER);
+      expect(again.llm.calls.length).toBeGreaterThan(0);
+    });
+  }
+});
+
+/** A cached row with fields of its evidence replaced. */
+function withEvidence(row: CachedResearch, patch: Partial<CachedEvidence>): CachedResearch {
+  const evidence = row.evidence;
+  if (!evidence) throw new Error("no cached evidence");
+  return { ...row, evidence: { ...evidence, ...patch } };
+}
+
+describe("what is not cached, or cached for a later run to complete", () => {
+  it("does not cache research from a run that could not read the track's details", async () => {
+    const degraded = {
+      spotifyData: { ...spotifyData, isrc: null, durationMs: 0, duration: "" },
+      isrc: null,
+      sourceErrors: [{ source: "spotify", code: "unavailable", message: "spotify: HTTP 503" }],
+    } as unknown as SonicAgentStateType;
+    const llm = stubLlm(planner);
+    await historianNode(degraded, { writer: () => {} } as never, testRuntime(llm, AT));
+    expect(llm.calls.length).toBeGreaterThan(0);
+    expect(cache.getResearch(key())).toBeNull();
+
+    // The next run, with the details, makes the research and caches it.
+    const next = await historian(LATER);
+    expect(next.llm.calls.length).toBeGreaterThan(0);
+    expect(cache.getResearch(key())?.evidence?.isrc).toBe("USCA29001716");
+  });
+
+  it("does not cache it when SecondHandSongs answers a JSON error at 200, and does not call it lasting", async () => {
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? json({ error: "Too many requests, slow down" }) : route(call),
+    );
+    const { out } = await historian();
+    expect(out.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "rate_limited" }),
+      ]),
+    );
+    expect(out.lastingSourceErrors ?? []).toEqual([]);
+    expect(cache.getResearch(key())).toBeNull();
+  });
+
+  it("caches research whose work could not be dated in time, and a hit reads the primary sources again", async () => {
+    vi.useFakeTimers({ toFake: [...FAKE] });
+    let first: Awaited<ReturnType<typeof historian>>;
+    try {
+      net = stubFetch((call) =>
+        call.url.startsWith(`${MB}/recording?work=`) ? never(call) : route(call),
+      );
+      const run = historian();
+      await vi.advanceTimersByTimeAsync(25_000);
+      first = await run;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect((first.out.sourceErrors ?? []).filter((e) => e.code !== "not_configured")).toEqual([]);
+    expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
+      { source: "musicbrainz", part: "dates" },
+    ]);
+
+    // The dating answers now: the hit asks no model, reads the primary sources and completes the row.
+    net = stubFetch(route);
     const hit = await historian(LATER);
     expect(hit.llm.calls).toEqual([]);
     expect(primaryRequests(hit.requests).length).toBeGreaterThan(0);
     expect(ids(hit.out.evidence)).toContain(WEB_ID);
-    expect(statusOf(hit.events)).toContain(
-      "📇 Reading primary sources (MusicBrainz, SecondHandSongs)...",
-    );
+    expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([]);
+    // Then a hit asks nothing.
+    expect((await historian(LATER)).requests).toEqual([]);
   });
 });
 
-describe("pacing in a run", () => {
-  beforeEach(() => setUnpacedForTests(false));
-  afterEach(() => setUnpacedForTests(true));
+describe("pacing in concurrent runs", () => {
+  let restoreMb: () => void;
+  beforeEach(() => {
+    setUnpacedForTests(false);
+    // MusicBrainz at its production spacing, as the shared queue runs it.
+    restoreMb = MusicBrainzRateLimiter.getInstance().setIntervalForTests(1100);
+  });
+  afterEach(() => {
+    restoreMb();
+    setUnpacedForTests(true);
+  });
 
-  it("reports a SecondHandSongs request it cannot pace in time as rate limited", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  /** `n` historian runs at once on the timers the test drives; what each one read. */
+  async function concurrent(n: number) {
+    vi.useFakeTimers({ toFake: [...FAKE] });
     try {
-      // Three runs at once: the anonymous pace (one request every 6 s) puts the third run's
-      // request 12 s away, within the 15 s a request may wait; a fourth would wait 18 s.
-      const runs = Promise.all([historian(), historian(), historian(), historian()]);
-      await vi.advanceTimersByTimeAsync(30_000);
-      const done = await runs;
-      const limited = done.filter(({ out }) =>
-        out.sourceErrors?.some((e) => e.source === "secondhandsongs" && e.code === "rate_limited"),
-      );
-      expect(limited).toHaveLength(1);
-      expect(net.calls.filter((c) => c.url === SHS_WORK)).toHaveLength(3);
+      const runs = Promise.all(Array.from({ length: n }, () => historian()));
+      await vi.advanceTimersByTimeAsync(60_000);
+      return await runs;
     } finally {
       vi.useRealTimers();
     }
-  });
+  }
+
+  for (const n of [4, 6]) {
+    it(`loses no record of ${n} concurrent runs to our own pacing`, async () => {
+      const [alone] = await concurrent(1);
+      db.prepare("DELETE FROM research_cache").run();
+      const runs = await concurrent(n);
+      const own = (alone.out.evidence ?? []).filter((e) => e.source === "secondhandsongs");
+      expect(own.length).toBeGreaterThan(0);
+      let notAsked = 0;
+      for (const { out } of runs) {
+        // Our own pacing kept no request from being sent, and no source was "timed out" by it.
+        expect((out.statusMessages ?? []).filter((m) => m.includes("our own pacing"))).toEqual([]);
+        expect(out.sourceErrors?.some((e) => e.source === "secondhandsongs")).toBe(false);
+        if (out.primaryNotAsked?.includes("secondhandsongs")) {
+          // Only the run's own deadline, after the shared MusicBrainz queue, may leave it unasked.
+          notAsked++;
+          continue;
+        }
+        const shs = (out.evidence ?? []).filter((e) => e.source === "secondhandsongs");
+        expect(shs.map((e) => e.id)).toEqual(own.map((e) => e.id));
+      }
+      expect(net.calls.filter((c) => c.url === SHS_WORK)).toHaveLength(1 + n - notAsked);
+    }, 30_000);
+  }
 });
 
 describe("the historian, researcher and research cache log through the API's logger", () => {
@@ -359,9 +507,18 @@ describe("the historian, researcher and research cache log through the API's log
     }
     const entries = logs.entries();
     const of = (component: string) => entries.filter((e) => e.component === component);
-    expect(of("Historian").map((e) => e.msg)).toContain(
-      "Deep dive research for: Ice Ice Baby by Vanilla Ice",
+    // The track's title is written at debug level only.
+    expect(of("Historian")).toContainEqual(
+      expect.objectContaining({
+        level: "debug",
+        msg: "Deep dive research for: Ice Ice Baby by Vanilla Ice",
+      }),
     );
+    const above = [...of("Historian"), ...of("Researcher"), ...of("Cache")].filter(
+      (e) => e.level !== "debug",
+    );
+    expect(above.length).toBeGreaterThan(0);
+    for (const entry of above) expect(JSON.stringify(entry)).not.toContain("Ice Ice Baby");
     expect(of("Researcher").map((e) => e.msg)).toContain("Plan: done");
     expect(of("Cache")).toContainEqual(
       expect.objectContaining({

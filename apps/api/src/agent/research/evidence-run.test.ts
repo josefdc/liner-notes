@@ -185,6 +185,24 @@ const answer = (call: StubCall) => {
 
 const spotifyData = tools.track as unknown as SpotifyData;
 
+/**
+ * The research row a complete run caches, its research replaced by "cached", and marked as
+ * having left `incomplete` for a later run (a hit then reads the primary sources again).
+ */
+async function storedRow(
+  incomplete: unknown[] = [{ source: "secondhandsongs", part: "not_asked" }],
+): Promise<Record<string, unknown>> {
+  cache.getResearch.mockReturnValue(null);
+  await historianNode(
+    { spotifyData, isrc: "USCA29001716" } as SonicAgentStateType,
+    { writer: () => {} } as never,
+    testRuntime(stubLlm(answer), AT),
+  );
+  const row = JSON.parse(JSON.stringify(cache.putResearch.mock.calls.at(-1)?.[1]));
+  cache.putResearch.mockClear();
+  return { ...row, samples: ["cached"], evidence: { ...row.evidence, incomplete } };
+}
+
 describe("the historian's evidence pack", () => {
   it("holds the primary sources' records and the web search's results, each sent as an event", async () => {
     const llm = stubLlm(answer);
@@ -233,22 +251,29 @@ describe("the historian's evidence pack", () => {
     expect(net.calls.some((c) => c.url === "https://secondhandsongs.com/work/4196")).toBe(true);
   });
 
-  it("reads the primary sources for a cached research too, and says so first", async () => {
-    cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
+  it("reads the primary sources again for a cached research that left a part, and says so first", async () => {
+    cache.getResearch.mockReturnValue(await storedRow());
     const events: Array<{ type: string; message?: string }> = [];
     const out = await historianNode(
       { spotifyData, isrc: "USCA29001716" } as SonicAgentStateType,
       { writer: (event: never) => events.push(event) } as never,
       testRuntime(stubLlm(answer), AT),
     );
-    // The cached research, with this run's MusicBrainz sample relations (not from the cache).
-    expect(out.researchData).toEqual({
-      samples: ["cached", expect.stringMatching(/^\[MusicBrainz Samples\] .*"Under Pressure"/)],
-      productionTrivia: [],
-    });
+    // The cached research, with this run's MusicBrainz sample relations.
+    expect(out.researchData?.samples).toEqual([
+      "cached",
+      expect.stringMatching(/^\[MusicBrainz Samples\] .*"Under Pressure"/),
+    ]);
+    // This run's primary records and the cached run's web page.
     expect(new Set(out.evidence?.map((e) => e.source))).toEqual(
-      new Set(["musicbrainz", "secondhandsongs"]),
+      new Set(["musicbrainz", "secondhandsongs", "tavily"]),
     );
+    // SecondHandSongs answered this time: the row is written again, complete.
+    expect(cache.putResearch).toHaveBeenCalledTimes(1);
+    expect(
+      (cache.putResearch.mock.calls[0][1] as { evidence: { incomplete: unknown[] } }).evidence
+        .incomplete,
+    ).toEqual([]);
     // While the sources are read, the stream says what the run is waiting for.
     // Only the sources that will be asked: Discogs and Genius have no credential here.
     const reading = events.findIndex(
@@ -341,7 +366,7 @@ describe("a run whose primary sources fail", () => {
   });
 
   it("keeps the result on a research-cache hit past a lasting primary-source error", async () => {
-    cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
+    cache.getResearch.mockReturnValue(await storedRow());
     net = stubFetch((call) =>
       call.url === SHS_WORK ? json({ unexpected: true }) : runRoute(call),
     );
@@ -379,7 +404,7 @@ describe("a run whose primary sources fail", () => {
   });
 
   it("does not keep the result on a research-cache hit when a primary source fails", async () => {
-    cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
+    cache.getResearch.mockReturnValue(await storedRow());
     net = stubFetch((call) =>
       call.url === SHS_WORK ? new Response("busy", { status: 503 }) : runRoute(call),
     );

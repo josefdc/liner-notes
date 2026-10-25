@@ -28,9 +28,13 @@ import { SOURCE_NAMES } from "../prompts.js";
 import { trackQuery, uniqueErrors, unreadableStatus } from "../researcherSubgraph.js";
 import { type AgentRuntime, timestampOf } from "../runtime.js";
 import type { SpotifyData } from "../state.js";
+import { discogsConfigured } from "../../sources/discogs.js";
+import { geniusConfigured } from "../../sources/genius.js";
+import type { SearchedTrack } from "./plan.js";
 import {
   EvidencePack,
   lastingErrors,
+  notAskedSources,
   lostRecords,
   primaryRecordEvidence,
   primarySourceErrors,
@@ -108,10 +112,18 @@ export interface RunEvidence {
   samples: string[];
   /** How many items the pack's size cap left out. */
   omitted: number;
-  /** The MusicBrainz work's recordings could not be dated. */
-  datesIncomplete: boolean;
+  /**
+   * What the run could not read for a reason of its own, which is no source error and does not
+   * block caching: a source our pacing did not ask, the work's recordings not dated in time.
+   */
+  incomplete: Incomplete[];
+  /** Whether the identified recording is its song's original recording. */
+  trackIsOriginal: boolean;
   status: string[];
 }
+
+/** A part of the primary sources a run did not read (`RunEvidence.incomplete`). */
+export type Incomplete = CachedEvidence["incomplete"][number];
 
 /**
  * The matched recording's sample relations (both directions, about the recording itself) as the
@@ -147,10 +159,17 @@ interface PrimaryOutcome {
   lost: SourceError[];
   lasting: SourceError[];
   samples: string[];
-  datesIncomplete: boolean;
+  incomplete: Incomplete[];
+  trackIsOriginal: boolean;
   found: string[];
   warnings: string[];
 }
+
+/** The status line of a source whose request was not sent: not a source error. */
+const notAskedNote = (source: SourceId, why: "pace" | "deadline") =>
+  why === "pace"
+    ? `📇 ${SOURCE_NAMES[source]} not asked: our own pacing of its requests left no time in this run; a later run asks it`
+    : `📇 ${SOURCE_NAMES[source]} not asked: the run's time for the primary sources ran out first; a later run asks it`;
 
 const DATES_NOTE =
   "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
@@ -169,7 +188,8 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
       lost: [],
       lasting: [],
       samples: [],
-      datesIncomplete: false,
+      incomplete: [],
+      trackIsOriginal: false,
       found: ["📇 Primary sources not asked: the track has no ISRC"],
       warnings: [],
     };
@@ -200,11 +220,18 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
     );
   }
   warnings.push(...unreadableStatus(errors.filter((e) => !lost.includes(e))));
+  const incomplete: Incomplete[] = [];
   // Nothing was lost, but the covers are less specific than a later run may give: said once.
-  const datesIncomplete =
-    musicbrainz.status === "found" && Boolean(musicbrainz.incomplete?.includes(DATES_INCOMPLETE));
-  if (datesIncomplete) warnings.push(DATES_NOTE);
-  return { records, errors, lost, lasting, samples, datesIncomplete, found, warnings };
+  if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(DATES_INCOMPLETE)) {
+    incomplete.push({ source: "musicbrainz", part: "dates" });
+    warnings.push(DATES_NOTE);
+  }
+  for (const { source, why } of notAskedSources(read.sources)) {
+    incomplete.push({ source, part: "not_asked" });
+    warnings.push(notAskedNote(source, why));
+  }
+  const trackIsOriginal = read.sources.identity?.original.original ?? false;
+  return { records, errors, lost, lasting, samples, incomplete, trackIsOriginal, found, warnings };
 }
 
 /**
@@ -238,7 +265,8 @@ function packOf(
     lasting: primary.lasting,
     samples: primary.samples,
     omitted,
-    datesIncomplete: primary.datesIncomplete,
+    incomplete: primary.incomplete,
+    trackIsOriginal: primary.trackIsOriginal,
     status: [...primary.found, ...warnings],
   };
 }
@@ -261,6 +289,9 @@ export async function runEvidence(
   return packOf(readOutcome(read), [...webSearchEvidence(web), ...cached], config, runtime);
 }
 
+/** The version of `CachedEvidence` this code writes; a row of another is a miss. */
+export const CACHED_EVIDENCE_FORMAT = 1;
+
 /**
  * The run's evidence as the research cache holds it, with the recording the ISRC identified.
  * Only for a run whose primary-source errors are all "not configured" or lasting: the historian
@@ -273,24 +304,75 @@ export function cachedEvidenceOf(
   readAt: string,
 ): CachedEvidence {
   return {
+    format: CACHED_EVIDENCE_FORMAT,
     readAt,
     isrc,
     items: run.evidence.map((item) => ({ ...item })),
     omitted: run.omitted,
     samples: [...run.samples],
     recording,
+    trackIsOriginal: run.trackIsOriginal,
     errors: [...run.errors],
     lasting: [...run.lasting],
-    datesIncomplete: run.datesIncomplete,
+    incomplete: run.incomplete.map((part) => ({ ...part })),
   };
 }
 
+const PRIMARY: readonly SourceId[] = ["musicbrainz", "discogs", "genius", "secondhandsongs"];
+
 /**
- * The items of a cached research's evidence, checked and sealed again (`restoredEvidence`);
- * null when the cache holds none, or holds one that fails a check.
+ * Why a cached evidence's own fields are not what `cachedEvidenceOf` writes for a cached run,
+ * or null: errors only of the kinds the gate lets through (a source not configured, which must
+ * still not be, and an answer of unknown shape, which is lasting), lasting errors among them,
+ * the recording that its MusicBrainz records are about, and no primary record without an ISRC.
  */
-export function restoredItems(cached: CachedEvidence | undefined): SourcedEvidence[] | null {
-  return cached ? restoredEvidence(cached.items) : null;
+function cachedEvidenceIssue(
+  cached: CachedEvidence,
+  configured: { discogs: boolean; genius: boolean },
+): string | null {
+  const keyOf = (e: SourceError) => `${e.source}:${e.code}`;
+  const lasting = new Set(cached.lasting.map(keyOf));
+  for (const e of cached.errors) {
+    if (!PRIMARY.includes(e.source)) return "an error of a source that is not primary";
+    if (e.code === "not_configured") {
+      if (e.source !== "discogs" && e.source !== "genius") return "a source that needs no key";
+      if (configured[e.source]) return "a source not configured then, configured now";
+    } else if (e.code !== "invalid_response" || !lasting.has(keyOf(e))) {
+      return "an error that blocks caching";
+    }
+  }
+  const errors = new Set(cached.errors.map(keyOf));
+  for (const e of cached.lasting) {
+    if (e.code !== "invalid_response" || !errors.has(keyOf(e))) return "not a lasting error";
+  }
+  const own = cached.items.some(
+    (item) => item.source === "musicbrainz" && item.recordRef?.startsWith("track/"),
+  );
+  if (own && !cached.recording) return "MusicBrainz records without the recording";
+  const primary = cached.items.some((item) => item.sourceTier === "primary-record");
+  if (cached.isrc === null && (primary || cached.recording)) return "records without an ISRC";
+  return null;
+}
+
+/**
+ * The items of a cached research's evidence, checked and sealed again (`restoredEvidence`,
+ * against what the cached run read); null when the cache holds none, holds evidence of another
+ * format, or holds an item or an error that fails a check.
+ */
+export function restoredItems(
+  cached: CachedEvidence | undefined,
+  track?: SearchedTrack,
+): SourcedEvidence[] | null {
+  if (!cached || cached.format !== CACHED_EVIDENCE_FORMAT) return null;
+  const configured = { discogs: discogsConfigured(), genius: geniusConfigured() };
+  if (cachedEvidenceIssue(cached, configured) !== null) return null;
+  return restoredEvidence(cached.items, {
+    readAt: cached.readAt,
+    recordingMbid: cached.recording?.mbid ?? null,
+    trackIsOriginal: cached.trackIsOriginal,
+    configured,
+    track,
+  });
 }
 
 /** The web-tier items among restored ones. */
@@ -299,11 +381,21 @@ export function cachedWebEvidence(items: readonly SourcedEvidence[]): SourcedEvi
 }
 
 /**
- * True when a cached research's evidence can stand for this run's: it was read for the same
- * ISRC (or both have none). The primary sources are then not asked again.
+ * How a research-cache hit uses a cached evidence for a run with `isrc`:
+ * - "miss": read for another ISRC, or for none while this run has one (a run that could not
+ *   read the track's details is never cached, so this is research made without an identity):
+ *   the research is made again and replaces the row;
+ * - "refresh": read for this ISRC, but a part was left for a later run (`incomplete`): the
+ *   primary sources are read again, with the cached research and web items;
+ * - "fast": it stands for this run's evidence (also for a run that could not read the track's
+ *   ISRC: the row is keyed by the track) and no primary source is asked.
  */
-export function cachedEvidenceHolds(cached: CachedEvidence, isrc: string | null): boolean {
-  return cached.isrc === isrc;
+export function cachedEvidenceUse(
+  cached: CachedEvidence,
+  isrc: string | null,
+): "fast" | "refresh" | "miss" {
+  if (isrc !== null && cached.isrc !== isrc) return "miss";
+  return isrc !== null && cached.incomplete.length > 0 ? "refresh" : "fast";
 }
 
 /**
@@ -336,9 +428,10 @@ export function cachedRunEvidence(
     lost: [],
     lasting: [...cached.lasting],
     samples: [...cached.samples],
-    datesIncomplete: cached.datesIncomplete,
+    incomplete: [],
+    trackIsOriginal: cached.trackIsOriginal,
     found,
-    warnings: [...unreadableStatus(cached.errors), ...(cached.datesIncomplete ? [DATES_NOTE] : [])],
+    warnings: unreadableStatus(cached.errors),
   };
   return packOf(outcome, cachedWebEvidence(items), config, runtime, cached.omitted);
 }

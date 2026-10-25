@@ -30,6 +30,7 @@ import {
   type Evidence,
   evidenceIssues,
   type SourceError,
+  type SourceId,
 } from "@liner-notes/contract";
 import type { PrimarySources } from "../../sources/identity.js";
 import {
@@ -202,39 +203,137 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
   return items;
 }
 
+/** What a cached pack was read with, for the checks of its restored items. */
+export interface StoredContext {
+  /** When the run read it: no item was read later. */
+  readAt: string;
+  /** The MusicBrainz id of the recording the ISRC identified; null when none was. */
+  recordingMbid: string | null;
+  /** Whether the track is its song's original recording: only then are covers about it. */
+  trackIsOriginal: boolean;
+  /** The primary sources with a credential configured now. */
+  configured: { discogs: boolean; genius: boolean };
+  /** The track, for the web tier's error-page check. */
+  track?: SearchedTrack;
+}
+
+const MBID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const KIND =
+  "(samples|sampled-by|interpolates|interpolated-by|cover-of|covered-by|remix-of|remixed-by)";
+
 /**
- * Why a stored item is not one this module's constructors would have made, or null: a primary
- * record of a primary source with a scoped recordRef and the id the source module gives it, or a
- * web page of the web search with its id, a web URL and none of the pages the web tier leaves
- * out; and the contract's evidence checks.
+ * The recordRef and page each source module writes, and how its excerpt starts (an excerpt is
+ * always the module's own sentence about a relationship or credit, never page text). Each
+ * pattern names the parts the checks compare: the recording, the page's id, the kind.
  */
-function storedItemIssue(item: Evidence): string | null {
-  if (item.sourceTier === "primary-record") {
-    if (!(PRIMARY_KEYS as readonly string[]).includes(item.source)) return "not a primary source";
-    if (evidenceScope(item) === null) return "no scope";
-    if (item.id !== `${item.source}:${item.recordRef}`) return "not the source's id";
-    return null;
+const STORED_SHAPES: Record<
+  (typeof PRIMARY_KEYS)[number],
+  { refs: RegExp[]; page: (match: RegExpMatchArray) => RegExp; excerpt: string }
+> = {
+  musicbrainz: {
+    refs: [
+      new RegExp(`^track/recording/(${MBID})$`),
+      new RegExp(`^track/recording/(${MBID})/${KIND}/(?:recording|work)/${MBID}$`),
+      new RegExp(`^work/(${MBID})/(covered-by)/recording/${MBID}$`),
+    ],
+    // A cover of the work is stated on the work's page; any other item on the recording's.
+    page: (m) =>
+      m[0].startsWith("work/")
+        ? new RegExp(`^https://musicbrainz\\.org/work/${m[1]}$`)
+        : m[2] === "covered-by"
+          ? new RegExp(`^https://musicbrainz\\.org/(?:recording/${m[1]}|work/${MBID})$`)
+          : new RegExp(`^https://musicbrainz\\.org/recording/${m[1]}$`),
+    excerpt: "MusicBrainz",
+  },
+  discogs: {
+    refs: [/^track\/release\/(\d+)\/credit\/\d+$/, /^release\/(\d+)\/credit\/\d+$/],
+    page: (m) => new RegExp(`^https://www\\.discogs\\.com/release/${m[1]}$`),
+    excerpt: "Discogs release ",
+  },
+  secondhandsongs: {
+    refs: [new RegExp(`^(?:track|work)/((?:work|performance)/\\d+)/${KIND}/\\d+$`)],
+    page: (m) => new RegExp(`^https://secondhandsongs\\.com/${m[1]}$`),
+    excerpt: "SecondHandSongs: ",
+  },
+  genius: {
+    refs: [new RegExp(`^(?:track|work)/song/\\d+/${KIND}/\\d+$`)],
+    page: () => /^https:\/\/genius\.com\/[^/?#]+$/,
+    excerpt: "Genius: ",
+  },
+};
+
+/**
+ * Why a stored primary record is not one its source module would have written for this
+ * recording, or null: a source configured now, the module's recordRef, page and excerpt, the
+ * recording the ISRC identified, and covers stated about the track only for the song's original
+ * recording.
+ */
+function storedRecordIssue(item: Evidence, context: StoredContext): string | null {
+  const source = item.source as (typeof PRIMARY_KEYS)[number];
+  if (!(PRIMARY_KEYS as readonly string[]).includes(source)) return "not a primary source";
+  if ((source === "discogs" || source === "genius") && !context.configured[source]) {
+    return "a source not configured now";
   }
+  if (evidenceScope(item) === null) return "no scope";
+  if (item.id !== `${item.source}:${item.recordRef}`) return "not the source's id";
+  const shape = STORED_SHAPES[source];
+  const match = shape.refs.map((re) => item.recordRef?.match(re)).find(Boolean);
+  if (!match) return "not a recordRef its source writes";
+  if (!item.url || !shape.page(match).test(item.url)) return "not its source's page";
+  if (!item.excerpt.startsWith(shape.excerpt)) return "not its source's excerpt";
+  if (source === "musicbrainz" && item.recordRef?.startsWith("track/")) {
+    if (match[1] !== context.recordingMbid) return "about another recording";
+  }
+  const coverOfSong =
+    evidenceScope(item) === "track" &&
+    /\/covered-by\//.test(item.recordRef ?? "") &&
+    (source === "genius" ||
+      (source === "musicbrainz" && match[2] === "covered-by" && /\/work\//.test(item.url)) ||
+      (source === "secondhandsongs" && item.recordRef?.startsWith("track/work/")));
+  if (coverOfSong && !context.trackIsOriginal) return "a cover of the song stated about the track";
+  return null;
+}
+
+/**
+ * Why a stored item is not one this module's constructors would have made for the cached run,
+ * or null: a primary record as its source module writes it (storedRecordIssue), or a web page
+ * of the web search with its id and a web URL, none of the pages the web tier leaves out (lyric
+ * pages, preview or signed links, error pages, placeholders); no item read after the run; no
+ * URL that is a lyric page (other than a Genius song's own page) or a preview link; and the
+ * contract's evidence checks (at sealing).
+ */
+function storedItemIssue(item: Evidence, context: StoredContext): string | null {
+  if (Date.parse(item.retrievedAt) > Date.parse(context.readAt)) return "read after the run";
+  if (item.url && isPreviewUrl(item.url)) return "a preview or signed link";
+  if (item.url && isLyricPage(item.url) && item.source !== "genius") return "a lyric page";
+  if (item.sourceTier === "primary-record") return storedRecordIssue(item, context);
   if (item.sourceTier === "web") {
     if (item.source !== "tavily" || item.recordRef !== null) return "not a web search result";
     const url = item.url ? webPage(item.url) : null;
     if (!url || url !== item.url || item.id !== `tavily:${url}`) return "not a web page's id";
-    if (isLyricPage(url) || isPreviewUrl(url)) return "a page the web tier leaves out";
     if (isPlaceholder(item.excerpt)) return "a placeholder";
+    if (isErrorPage({ title: item.title, content: item.excerpt }, context.track)) {
+      return "an error page";
+    }
     return null;
   }
   return "a tier no source module builds";
 }
 
 /**
- * The evidence of a cached research, as items of a pack again: each stored item checked as above
- * and sealed. Null when any item fails a check: the cached evidence is then not used at all,
- * never in part.
+ * The evidence of a cached research, as items of a pack again: each stored item checked against
+ * what the cached run read (`context`), as above, and sealed. Null when any item fails a check:
+ * the cached evidence is then not used at all, never in part. What it cannot check is that the
+ * text is what the source answered: the research cache, which only the historian writes from a
+ * sealed pack, is trusted for that.
  */
-export function restoredEvidence(items: readonly Evidence[]): SourcedEvidence[] | null {
+export function restoredEvidence(
+  items: readonly Evidence[],
+  context: StoredContext,
+): SourcedEvidence[] | null {
   const restored: SourcedEvidence[] = [];
   for (const item of items) {
-    if (storedItemIssue(item) !== null) return null;
+    if (storedItemIssue(item, context) !== null) return null;
     try {
       restored.push(seal({ ...item }));
     } catch (error) {
@@ -243,6 +342,18 @@ export function restoredEvidence(items: readonly Evidence[]): SourcedEvidence[] 
     }
   }
   return restored;
+}
+
+/** The primary sources whose request was not sent (`notAsked`): no error, not read. */
+export function notAskedSources(
+  sources: PrimarySources,
+): Array<{ source: SourceId; why: "pace" | "deadline" }> {
+  return PRIMARY_KEYS.flatMap((key) => {
+    const result = sources[key];
+    return result.status === "missing" && result.notAsked
+      ? [{ source: key, why: result.notAsked }]
+      : [];
+  });
 }
 
 const SCOPE_RANK: Record<EvidenceScope, number> = { track: 0, release: 1, work: 2 };

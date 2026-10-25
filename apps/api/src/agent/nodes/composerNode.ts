@@ -399,6 +399,7 @@ function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
     usage: state.usage ?? [],
     sourceErrors: state.sourceErrors ?? [],
     lastingSourceErrors: state.lastingSourceErrors ?? [],
+    primaryNotAsked: state.primaryNotAsked ?? [],
     isrc: state.isrc ?? null,
     isrcRecording: state.isrcRecording ?? null,
     preview: state.preview ?? null,
@@ -565,6 +566,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // clarification node), whatever the reason, even a key that is not configured: a run that
     // reads them does better.
     const spotifyUnread = state.sourceErrors.some((e) => e.source === "spotify");
+    // A primary source the run did not ask, its request not sent (no source error): a later run
+    // asks it.
+    const primaryNotAsked = state.primaryNotAsked.length > 0;
     // The result is about the track the run chose, by the scout's match or the user's pick: it
     // is stored under that track, never under the text, so it is served only for that track.
     const chosen = state.selectedBy === "match" || state.selectedBy === "user";
@@ -574,7 +578,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       !transientAudio &&
       !transientSources &&
       !plannerFailed &&
-      !spotifyUnread
+      !spotifyUnread &&
+      !primaryNotAsked
     ) {
       try {
         signal?.throwIfAborted();

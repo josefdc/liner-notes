@@ -24,7 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
 import { logger } from "../logger.js";
-import { PaceRefused, type RequestPacer } from "./pacing.js";
+import { PaceRefused, pacingClock, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
 
@@ -580,8 +580,9 @@ function parseRetryAfter(value: string | null): number | undefined {
   if (!value) return undefined;
   const seconds = Number(value);
   if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  // A date in the past, or one that does not parse, says nothing: the caller's default applies.
   const date = Date.parse(value);
-  return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
+  return Number.isNaN(date) || date <= Date.now() ? undefined : date - Date.now();
 }
 
 const isJsonType = (contentType: string) => /\bjson\b/i.test(contentType);
@@ -844,48 +845,79 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Options of a paced request. */
+export interface PacedOptions {
+  /** On `pacingClock`: the latest the request may start (the caller's deadline, less a margin). */
+  notAfter?: number;
+}
+
 /**
  * `fetchJson` through the source's pacer (sources/pacing.ts). A request the pacer refuses (its
- * slot is too far away) is a `rate_limited` SourceError and nothing is requested. When the source
- * answers "slow down" (429), the source's requests are held for its Retry-After (2 s when it
- * sends none) and the request is retried once after it, when that is at most MAX_RETRY_WAIT_MS;
- * a longer wait, or a second "slow down", is the `rate_limited` error. A replayed request is not
- * paced: nothing reaches the source.
+ * slot is too far away, or later than `notAfter`) rejects with the pacer's PaceRefused and is
+ * never sent; so does one whose deadline (a TimeoutError abort of `req.signal`) came while it
+ * waited for its slot. The caller reports such a source as not asked, never as a timeout.
+ *
+ * When the source answers "slow down" (429), its requests are held for its Retry-After (2 s when
+ * it sends none or a date in the past; at most MAX_HOLD_MS) and the request is retried once
+ * after it, when that is at most MAX_RETRY_WAIT_MS and still before `notAfter`; otherwise, or
+ * on a second "slow down", the source's `rate_limited` error is the answer. A refusal of the
+ * pacer is never retried. A replayed request is not paced: nothing reaches the source.
  */
-export async function pacedFetchJson<T>(pacer: RequestPacer, req: SourceRequest): Promise<T> {
+export async function pacedFetchJson<T>(
+  pacer: RequestPacer,
+  req: SourceRequest,
+  options: PacedOptions = {},
+): Promise<T> {
   if (req.cassette !== false && cassetteMode() === "replay") return fetchJson<T>(req);
   const { signal } = req;
+  const { notAfter } = options;
   const stopped = (error: unknown) =>
     signal?.aborted && !isSourceError(error) ? abortError(req.source, signal, error) : error;
-  const attempt = async () => {
+  const deadlinePassed = () =>
+    signal?.aborted === true && (signal.reason as { name?: string })?.name === "TimeoutError";
+  const slot = async () => {
+    // The caller's deadline passed before the request was made (other requests took the time).
+    if (deadlinePassed()) {
+      throw new PaceRefused(0, "the deadline passed before the request could start", "deadline");
+    }
     try {
-      await pacer.slot(signal);
+      await pacer.slot({ signal, notAfter });
     } catch (error) {
-      if (error instanceof PaceRefused) {
-        throw new SourceError(req.source, "rate_limited", error.message, {
-          retryAfterMs: error.waitMs,
-        });
+      if (error instanceof PaceRefused) throw error;
+      // The deadline came while it waited for its slot: our pacing kept it from being sent.
+      if (deadlinePassed()) {
+        throw new PaceRefused(
+          0,
+          `paced: the deadline came before the ${pacer.name} request's slot`,
+        );
       }
       throw stopped(error);
     }
-    return fetchJson<T>(req);
   };
+  await slot();
   try {
-    return await attempt();
+    return await fetchJson<T>(req);
   } catch (error) {
-    // Only the source's own "slow down" answer is retried; a refusal of the pacer is not.
-    if (signal?.aborted || !isSourceError(error, "rate_limited") || error.status === undefined) {
-      throw stopped(error);
-    }
+    // Only the source's own "slow down" answer is retried.
+    if (signal?.aborted || !isSourceError(error, "rate_limited")) throw stopped(error);
     const after = error.retryAfterMs ?? DEFAULT_RETRY_WAIT_MS;
-    pacer.holdFor(after);
+    const held = pacer.holdFor(after);
+    if (held < after) {
+      log.warn(
+        `${req.source} asked to wait ${Math.ceil(after / 1000)} s; holding it ${Math.ceil(held / 1000)} s`,
+      );
+    }
     if (after > MAX_RETRY_WAIT_MS) throw error;
+    if (notAfter !== undefined && pacingClock() + after > notAfter) throw error;
     log.info(`${req.source} asked to slow down; retrying once in ${Math.ceil(after / 1000)} s`);
     try {
       await wait(after, signal);
+      await slot();
     } catch (stop) {
+      // The retry is not made: the source's own answer stands.
+      if (stop instanceof PaceRefused) throw error;
       throw stopped(stop);
     }
-    return await attempt();
+    return await fetchJson<T>(req);
   }
 }

@@ -18,7 +18,7 @@
  */
 
 import type Database from "better-sqlite3";
-import { Evidence, SourceError } from "@liner-notes/contract";
+import { Evidence, SourceError, SourceId } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
 import { logger } from "../logger.js";
@@ -61,6 +61,8 @@ export interface SpotifySearchResult {
  * `restoredEvidence` (agent/research/evidencePack.ts), which checks each one.
  */
 export interface CachedEvidence {
+  /** The version of this shape (agent/research/runEvidence.ts); a row of another is a miss. */
+  format: number;
   /** When the run read it (ISO 8601). */
   readAt: string;
   /** The ISRC the primary sources were read from; null when the track had none (not asked). */
@@ -73,14 +75,21 @@ export interface CachedEvidence {
   samples: string[];
   /** The recording the ISRC identified, for the composer; null when none was. */
   recording: IdentifiedRecording | null;
+  /** Whether the recording is its song's original recording (its covers are then about it). */
+  trackIsOriginal: boolean;
   /**
    * The primary sources' errors, none of which blocked caching: a source not configured, or one
    * that answered in a shape its reader does not know (also in `lasting`).
    */
   errors: SourceError[];
   lasting: SourceError[];
-  /** The MusicBrainz work's recordings could not be dated (its covers are about the song). */
-  datesIncomplete: boolean;
+  /**
+   * What the run left for a later run, none of which blocked caching: a source whose request
+   * was not sent ("not_asked": our own pacing left no slot in time, or the run's time for the
+   * primary sources ran out first), the MusicBrainz work's recordings not dated ("dates"; its
+   * covers are then about the song). A hit reads the primary sources again for such a row.
+   */
+  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" }>;
 }
 
 /** Research as the research cache holds it. */
@@ -113,15 +122,17 @@ const RecordingSchema = z.object({
 });
 
 const CachedEvidenceSchema = z.object({
+  format: z.number().int(),
   readAt: z.string(),
   isrc: z.string().nullable(),
   items: z.array(Evidence),
   omitted: z.number().int().nonnegative(),
   samples: stringList,
   recording: RecordingSchema.nullable(),
+  trackIsOriginal: z.boolean(),
   errors: z.array(SourceError),
   lasting: z.array(SourceError),
-  datesIncomplete: z.boolean(),
+  incomplete: z.array(z.object({ source: SourceId, part: z.enum(["not_asked", "dates"]) })),
 });
 
 const ResearchSchema = z

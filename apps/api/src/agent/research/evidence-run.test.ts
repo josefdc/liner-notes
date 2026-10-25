@@ -315,6 +315,32 @@ describe("a run whose primary sources fail", () => {
     expect(cache.putResearch).not.toHaveBeenCalled();
   });
 
+  it("does not keep the result when SecondHandSongs answers JSON that does not parse", async () => {
+    // A cut or garbled body: passing, not an answer of a shape the reader does not know.
+    net = stubFetch((call) =>
+      call.url === SHS_WORK
+        ? new Response('{"title": "Ice Ice Baby", "versions": [', {
+            headers: { "content-type": "application/json" },
+          })
+        : primaryRoute(call),
+    );
+    const { trackData, stored } = await runGraph();
+
+    expect(TrackAnalysis.parse(trackData).run?.sourceErrors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "secondhandsongs" })]),
+    );
+    expect(stored).toBe(0);
+  });
+
+  it("keeps the result on a research-cache hit past a lasting primary-source error", async () => {
+    cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? json({ unexpected: true }) : primaryRoute(call),
+    );
+    const { stored } = await runGraph();
+    expect(stored).toBe(1);
+  });
+
   it("does not keep the result when SecondHandSongs answers with an HTML page", async () => {
     net = stubFetch((call) =>
       call.url === SHS_WORK ? html("<html>are you a robot?</html>") : primaryRoute(call),

@@ -517,7 +517,7 @@ export async function resolveIdentity(
             coverIds,
           );
         } catch (error) {
-          workError = `dates incomplete: the recordings of the work "${only.title}" could not be dated (${describeError(error)}), so its covers are not claimed for this recording`;
+          workError = `${DATES_INCOMPLETE}the recordings of the work "${only.title}" could not be dated (${describeError(error)}), so its covers are not claimed for this recording`;
         }
       }
     }
@@ -652,6 +652,9 @@ export async function musicBrainzRelationships(
     error: resolution.workFailure,
   });
 }
+
+/** How the MusicBrainz note starts when the work's recordings could not be dated. */
+export const DATES_INCOMPLETE = "dates incomplete: ";
 
 export interface PrimarySources {
   identity: PrimaryIdentity | null;

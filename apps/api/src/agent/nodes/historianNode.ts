@@ -15,7 +15,7 @@
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import type { SourceError, SourceId } from "@liner-notes/contract";
+import type { SourceId } from "@liner-notes/contract";
 import { isLlmError } from "../../llm/errors.js";
 import { isSourceError, type SourceName } from "../../sources/http.js";
 import { discogsConfigured } from "../../sources/discogs.js";
@@ -41,7 +41,12 @@ import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
-import { runEvidence, sendStatus, startPrimarySources } from "../research/runEvidence.js";
+import {
+  lastingAmong,
+  runEvidence,
+  sendStatus,
+  startPrimarySources,
+} from "../research/runEvidence.js";
 import {
   emptyResearch,
   mergeResearch,
@@ -103,7 +108,7 @@ export async function historianNode(
     if (reading) sendStatus(config, runtime, "RESEARCH-FOUND", reading);
     const pack = await runEvidence(primary, [], config, runtime);
     const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
-    const lasting = lastingOf(pack.lasting, notConfigured);
+    const lasting = lastingAmong(pack.lasting, notConfigured);
     return {
       researchData: cachedResearch,
       evidence: pack.evidence,
@@ -293,7 +298,7 @@ export async function historianNode(
     // The primary sources' errors are the run's too; they do not block the research cache,
     // which does not hold their records.
     sourceErrors: uniqueErrors([...sourceErrors, ...pack.errors]),
-    lastingSourceErrors: lastingOf(pack.lasting, sourceErrors),
+    lastingSourceErrors: lastingAmong(pack.lasting, sourceErrors),
     statusMessages: [
       ...prefetchStatus,
       ...(finalState.statusMessages ?? []),
@@ -301,16 +306,6 @@ export async function historianNode(
       ...(failure ? [summary] : []),
     ],
   };
-}
-
-/**
- * The lasting primary-source errors that no other error of the run shares a source and code
- * with: errors are reported once per source and code, so one that also came from elsewhere
- * (the researcher's own MusicBrainz step) is not taken as lasting.
- */
-function lastingOf(lasting: readonly SourceError[], others: readonly SourceError[]): SourceError[] {
-  const taken = new Set(others.map((e) => `${e.source}:${e.code}`));
-  return lasting.filter((e) => !taken.has(`${e.source}:${e.code}`));
 }
 
 /** Research without Last.fm's artist-level data, when `uncertain` says it is not this artist's. */

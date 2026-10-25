@@ -738,11 +738,18 @@ describe("the recorder", () => {
     for (const url of refused) {
       expect(leaks({ evidence: [webItem(url)] }, check), url).not.toEqual([]);
     }
-    // Slugs of words and short ids are pages, not tokens.
+    // Slugs of words and short ids are pages, not tokens, Title-Case and dated ones too.
     for (const url of [
       "https://www.example.com/music/news/ice-ice-baby-under-pressure-lawsuit-1234/",
       "https://example.org/wiki/List_of_songs_recorded_by_Vanilla_Ice_and_others",
       "https://example.org/articles/2024/10/a1b2c3",
+      "https://www.quora.com/Why-was-Ice-Ice-Baby-so-popular-in-1990",
+      "https://music.fandom.com/wiki/Billboard_Hot_100_Number_Ones_of_1990",
+      "https://www.wikiwand.com/en/articles/List_of_Billboard_Hot_100_number_ones_of_1990",
+      "https://www.scribd.com/document/123456789/Ice-Ice-Baby-Copyright-Case-1990-Settlement",
+      "https://archive.org/details/IceIceBabyVanillaIce1990SingleRelease",
+      "https://pitchfork.com/thepitch/Ice-Ice-Baby-at-30-An-Oral-History/",
+      "https://www.nme.com/news/music/Vanilla-Ice-Ice-Ice-Baby-Sample-Lawsuit-2024",
     ]) {
       expect(leaks({ evidence: [webItem(url)] }, check), url).toEqual([]);
     }

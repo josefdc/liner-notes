@@ -8,6 +8,8 @@ import { Evidence as EvidenceSchema, evidenceIssues, SourceId } from "@liner-not
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
 import { evidenceForPrompt, shownEvidence } from "../prompts.js";
+import { stubLlm, testRuntime } from "../testing/stubLlm.js";
+import { lastingAmong, runEvidence } from "./runEvidence.js";
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { found, primaryEvidence, scopedRef } from "../../sources/records.js";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -300,6 +302,35 @@ describe("what a primary source lost, and a bug in its reader", () => {
       incomplete: expect.stringMatching(/^dates incomplete: /),
     });
     expect(primaryRecordEvidence(sources).map((e) => e.id)).toEqual(normal);
+
+    // The note is shown: the covers are less specific than a later run may give.
+    const sent: Array<{ type: string; message?: string }> = [];
+    const pack = await runEvidence(
+      Promise.resolve({ status: "read", sources }),
+      [],
+      { writer: (event: never) => sent.push(event) } as never,
+      testRuntime(stubLlm(() => ({}))),
+    );
+    expect(pack.lost).toEqual([]);
+    const line =
+      "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
+    expect(pack.status).toContain(line);
+    expect(sent).toContainEqual(expect.objectContaining({ type: "status", message: line }));
+  });
+
+  it("takes a lasting error as lasting only when no other error has its source and code", () => {
+    const shape = {
+      source: "secondhandsongs",
+      code: "invalid_response",
+      message: "unexpected",
+    } as const;
+    expect(lastingAmong([shape], [])).toEqual([shape]);
+    expect(lastingAmong([shape], [{ source: "discogs", code: "not_configured" }])).toEqual([shape]);
+    // The same source and code from elsewhere (another step): not lasting, so it blocks.
+    expect(lastingAmong([shape], [{ ...shape, message: "unexpected" }])).toEqual([]);
+    expect(
+      lastingAmong([shape], [{ source: "secondhandsongs", code: "invalid_response" }]),
+    ).toEqual([]);
   });
 
   it("lists no lost records when every request answered", async () => {

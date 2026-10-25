@@ -579,7 +579,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // source that is only not configured does not block it: the key names the configured
     // sources. Nor does a source read only for the genealogy previews (enriched.sourceErrors):
     // a stored result never carries a preview. Nor does a lasting error of the evidence pack
-    // (state.lastingErrors: a primary-record answer whose shape its reader does not know); it is
+    // (state.lastingSourceErrors: a primary-record answer whose shape its reader does not know); it is
     // stored with the result and reported again when the result is served. The run information,
     // the preview links and the search match belong to this run, not to a later one served from
     // the cache.

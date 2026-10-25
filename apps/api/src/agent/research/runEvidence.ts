@@ -4,8 +4,10 @@
  * the web search's results, put in one evidence pack and sent as `evidence` events.
  *
  * Every primary-source error is a source error of the run, and keeps the composer from storing
- * the result, with one exception: an answer of a shape the reader does not know, returned in
- * `lasting`, which is stored with the result and reported again when it is served. A source that
+ * the result, with two exceptions: a source that is not configured (Discogs, Genius without
+ * their credential: the result key names them), and an answer of a shape the reader does not
+ * know, returned in `lasting`; both are stored with the result and reported again when it is
+ * served. A source that
  * answered but lost records to a failed request (the MusicBrainz work, and so its covers) is also
  * returned in `lost`: the historian does not cache the research then, and the status says the
  * records are incomplete. Other primary-source errors do not block the research cache, which
@@ -14,7 +16,11 @@
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { SourceError, SourceId } from "@liner-notes/contract";
-import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
+import {
+  collectPrimarySources,
+  DATES_INCOMPLETE,
+  type PrimarySources,
+} from "../../sources/identity.js";
 import { SOURCE_NAMES } from "../prompts.js";
 import { trackQuery, uniqueErrors, unreadableStatus } from "../researcherSubgraph.js";
 import { type AgentRuntime, timestampOf } from "../runtime.js";
@@ -122,6 +128,12 @@ export async function runEvidence(
       );
     }
     warnings.push(...unreadableStatus(errors.filter((e) => !lost.includes(e))));
+    // Nothing was lost, but the covers are less specific than a later run may give: said once.
+    if (musicbrainz.status === "found" && musicbrainz.incomplete?.includes(DATES_INCOMPLETE)) {
+      warnings.push(
+        "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording",
+      );
+    }
   } else {
     found.push("📇 Primary sources not asked: the track has no ISRC");
   }
@@ -134,6 +146,19 @@ export async function runEvidence(
   for (const message of found) sendStatus(config, runtime, "RESEARCH-FOUND", message);
   for (const message of warnings) sendStatus(config, runtime, "SYS-WARN", message);
   return { evidence, errors, lost, lasting, status: [...found, ...warnings] };
+}
+
+/**
+ * The lasting primary-source errors that no other error of the run (`others`) shares a source
+ * and code with: errors are reported once per source and code, so one that also came from
+ * elsewhere (the researcher's own MusicBrainz step) is not taken as lasting, and blocks.
+ */
+export function lastingAmong(
+  lasting: readonly SourceError[],
+  others: readonly SourceError[],
+): SourceError[] {
+  const taken = new Set(others.map((e) => `${e.source}:${e.code}`));
+  return lasting.filter((e) => !taken.has(`${e.source}:${e.code}`));
 }
 
 /** Sends one status line of the historian. */

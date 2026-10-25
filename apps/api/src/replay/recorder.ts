@@ -192,21 +192,23 @@ function webEvidencePages(value: unknown, pages = new Set<string>()): Set<string
 }
 
 /**
- * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, or a
- * token of 32 or more base64/hex characters (hex alone, or mixed case with digits: a slug of
- * words such as "ice-ice-baby-under-pressure-1234" is neither).
+ * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, 32 or
+ * more hex characters, or 32 or more base64 characters without word structure (no separator
+ * such as "-", "_" or ".", and letters and digits alternating throughout, as in random text). A
+ * slug of words, Title-Case or not ("Why-was-Ice-Ice-Baby-so-popular-in-1990",
+ * "IceIceBabyVanillaIce1990SingleRelease"), is a page name, not a token.
  */
 function tokenSegment(segment: string): boolean {
   if (/^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./.test(segment)) return true;
   if (/^(?:sk|pk)[-_][A-Za-z0-9_-]{16,}$/.test(segment)) return true;
   if (/^[A-Fa-f0-9]{32,}$/.test(segment)) return true;
-  return (
-    /^[A-Za-z0-9+/=_-]{32,}$/.test(segment) &&
-    /\d/.test(segment) &&
-    /[A-Z]/.test(segment) &&
-    /[a-z]/.test(segment)
-  );
+  if (!/^[A-Za-z0-9+/=]{32,}$/.test(segment)) return false;
+  const alternations = segment.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
+  return alternations.length >= 4;
 }
+
+/** The secret shapes a page's path is scanned for; long runs are judged by `tokenSegment`. */
+const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
 
 function plainWebPage(url: string): boolean {
   if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
@@ -218,13 +220,12 @@ function plainWebPage(url: string): boolean {
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
   if (parsed.username || parsed.password) return false;
+  const scan = (text: string, shapes: Array<[string, RegExp]>) =>
+    shapes.some(([, pattern]) => pattern.test(text) || pattern.test(decoded(text)));
+  if (scan(`${parsed.search}${parsed.hash}`, SECRET_SHAPES)) return false;
   // The path is scanned too: a page link may carry a capability token or an address there.
-  const parts = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  if (SECRET_SHAPES.some(([, pattern]) => pattern.test(parts) || pattern.test(decoded(parts)))) {
-    return false;
-  }
-  const segments = decoded(parsed.pathname).split("/");
-  return !segments.some(tokenSegment);
+  if (scan(parsed.pathname, PATH_SECRET_SHAPES)) return false;
+  return !decoded(parsed.pathname).split("/").some(tokenSegment);
 }
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;

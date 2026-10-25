@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Factoid, TrackData } from '../types';
+import { audioBlock } from './measured/testing';
 import Player from './Player';
 
 afterEach(cleanup);
@@ -45,6 +46,35 @@ describe('Player', () => {
     );
     expect(container.textContent).not.toMatch(/\b(null|NaN|undefined)\b/);
     expect(container.textContent).not.toMatch(/\d+\s*BPM|\d+%/);
+  });
+
+  it.each([
+    [
+      'no audio preview',
+      { audioUnavailableReason: 'no_preview' },
+      'No key moments — no audio preview',
+    ],
+    ['an estimate', { audioSource: 'estimated' }, 'No key moments — the audio was not measured'],
+    [
+      'a gate that did not pass',
+      {
+        audio: audioBlock({ gate: { passed: false, reason: 'silence' } }),
+        audioSource: 'unavailable',
+      },
+      'No key moments — the preview is silent',
+    ],
+  ])('draws no key moments for %s, and says why', (_case, change, note) => {
+    const moments = [{ time: 12, type: 'energy_peak', intensity: 0.9, description: 'Peak' }];
+    render(
+      <Player
+        trackData={{ ...missingTrack, keyMoments: moments, ...change } as TrackData}
+        onBack={() => {}}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(timeline.textContent).toContain(note);
+    expect(timeline.textContent).not.toContain('key moments measured');
+    expect(screen.queryAllByRole('img', { name: /Peak/ })).toHaveLength(0);
   });
 
   it('labels the insights and the genealogy as model inference and drops lyric factoids', () => {

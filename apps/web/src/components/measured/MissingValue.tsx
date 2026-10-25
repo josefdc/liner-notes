@@ -2,8 +2,8 @@ import type React from 'react';
 import { Badge } from '../ui/Badge';
 
 // A value that is not shown: never a 0 or a placeholder in its place. It says so ("not
-// measured", or "not shown" for a value that was measured but says nothing), and why when the
-// result says.
+// measured" for a measurement, "not available" for an audio-model estimate, "not shown" for a
+// value that says nothing), and why when the result says.
 
 export interface MissingValueProps {
   label: string;
@@ -28,9 +28,7 @@ export const MissingValue: React.FC<MissingValueProps> = ({
       {label} {status}
     </Badge>
     {reason && (
-      <span className="max-w-60 text-[10px] font-mono text-text-tertiary leading-tight text-left">
-        — {reason}
-      </span>
+      <span className="max-w-60 text-chrome font-mono text-text-chip text-left">— {reason}</span>
     )}
   </span>
 );

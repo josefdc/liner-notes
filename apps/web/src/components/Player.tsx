@@ -17,6 +17,8 @@ import {
   formatBpm,
   formatSeconds,
   measuredAudioOf,
+  measuredKeyMoments,
+  noKeyMomentsReason,
   FACTOID_UNAVAILABLE_TEXT,
   normalizeTrack,
   recordingOf,
@@ -62,19 +64,6 @@ interface PlayerProps {
 
 // ─── P2:24 Default visible factoids count ───────────────────────────────────
 const INITIAL_VISIBLE_FACTOIDS = 3;
-
-/**
- * Whether the audio was analysed: true when it was (including "not_detected", where the
- * analysis ran but found no tempo or key), false when it was not, undefined when unknown.
- */
-function audioAnalyzed(track: TrackData): boolean | undefined {
-  // A measurement means the analysis ran, whatever it found.
-  if (measuredAudioOf(track)) return true;
-  if (track.audioSource === 'analyzed' || track.audioUnavailableReason === 'not_detected') {
-    return true;
-  }
-  return track.audioSource === 'unavailable' ? false : undefined;
-}
 
 /** Shown when there is no analysis to display: never a demo track in its place. */
 const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'headingRef'>> = ({
@@ -130,6 +119,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const { bpm, key } = audioValues(track);
   // The measured preview window, when the result carries its measurement.
   const measurement = useMemo(() => measuredAudioOf(track), [track]);
+  // Key moments only where the audio was measured; otherwise why there are none.
+  const noMomentsReason = useMemo(() => noKeyMomentsReason(track), [track]);
+  const keyMoments = useMemo(() => measuredKeyMoments(track), [track]);
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
   // How the result was produced: more facts stay on that side (recorded, or live).
@@ -568,8 +560,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               segmentsSource={track.segmentsSource}
               durationSeconds={track.durationSeconds}
               samples={track.samples}
-              keyMoments={measurement ? measurement.keyMoments : track.keyMoments}
-              audioAnalyzed={audioAnalyzed(track)}
+              keyMoments={keyMoments}
+              audioAnalyzed={noMomentsReason === null}
+              noMomentsReason={noMomentsReason}
               previewSeconds={measurement?.windowSeconds}
             />
           </div>

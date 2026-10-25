@@ -17,6 +17,8 @@ import {
 // the block (older APIs) never shows a value as more than it is.
 const measured = loadFixture("measured-v2");
 const partly = loadFixture("partly-measured-v2");
+const gated = loadFixture("gated-v2");
+const ANALYZER = "analyzer 2.1.0+essentia.models-5c5c0c7f";
 
 type Event = { type: string; data?: Record<string, unknown> };
 
@@ -52,7 +54,7 @@ const valueItem = (list: Locator, label: string) =>
   list.getByRole("listitem").filter({ hasText: new RegExp(`^${label}\\b`) });
 
 test("the mock results are results the API may send", () => {
-  for (const fixture of [measured, partly]) {
+  for (const fixture of [measured, partly, gated]) {
     const data = resultOf(fixture);
     // TrackAnalysis reads an unreadable `audio` as null, so the block is checked on its own too.
     expect(AudioFeatures.safeParse(data?.audio).success).toBe(true);
@@ -72,27 +74,36 @@ test.describe("a measured result", () => {
     await analyzeAndOpenDashboard(page, "Bright Lines");
 
     const values = page.getByRole("list", { name: "Audio values" });
+    // The confidence on the estimator's own scale, said to be uncalibrated; the method and the
+    // analyzer as text.
     await expect(valueItem(values, "BPM")).toHaveText(
-      "BPM 105.2Measured · confidence 0.62 · signal, 29.8 s preview",
+      "BPM 105.2Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
+        `essentia.RhythmExtractor2013 · ${ANALYZER} · the confidence does not flag half or double tempo`,
     );
     await expect(valueItem(values, "Key")).toHaveText(
-      "Key A MinorMeasured · strength 0.71 · signal, 29.8 s preview",
+      "Key A MinorMeasured · key strength 0.71 of 1, not a probability · signal, 29.8 s preview" +
+        `essentia.KeyExtractor, edma profile · ${ANALYZER}`,
     );
     // Loudness, measured, replaces the 0-1 energy score.
     await expect(valueItem(values, "Loudness")).toHaveText(
-      "Loudness -13.6 dBFS RMSMeasured · direct measure · signal, 29.8 s preview",
+      "Loudness -13.6 dBFS RMSMeasured · direct measure · signal, 29.8 s preview" +
+        `essentia.RMS, mean RMS 0.210 · ${ANALYZER}`,
     );
     await expect(values).not.toContainText("Energy");
 
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
     await expect(valueItem(scores, "Dance")).toHaveText(
-      "Dance 0.58Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview",
+      "Dance 0.58Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview" +
+        ANALYZER,
     );
     await expect(valueItem(scores, "Mood")).toContainText("Mood 5.20 on 1–9");
     await expect(scores).not.toContainText("Measured");
 
     const fingerprint = page.getByRole("region", { name: "Sonic Fingerprint" });
     await expect(fingerprint).toContainText("Model estimate");
+    await expect(fingerprint).toContainText(
+      "Style and tag scores from audio models run on the preview",
+    );
     const styles = fingerprint.getByRole("region", { name: "Styles (model estimate)" });
     await expect(styles).toContainText("Model estimate · scores, not probabilities");
     await expect(styles.getByRole("listitem")).toHaveText([
@@ -131,7 +142,7 @@ test.describe("a measured result", () => {
     await expect(timeline).not.toContainText("about 30 s");
     await expect(page.getByText("DEEP_DIVE_MODE")).toContainText("29.8 s preview");
     await expect(valueItem(page.getByRole("list", { name: "Audio values" }), "BPM")).toContainText(
-      "Measured · confidence 0.62",
+      "Measured · estimator confidence 3.30 of 5.32, not calibrated",
     );
     await screenshot(page, testInfo, "player");
     await screenshot(page, testInfo, "timeline", timeline);
@@ -146,21 +157,32 @@ test("a partly measured result says what was not measured and why", async ({ pag
   const values = page.getByRole("list", { name: "Audio values" });
   // Its audioSource is "unavailable", but the tempo is in the measurement: it is shown.
   await expect(valueItem(values, "BPM")).toHaveText(
-    "BPM 123Measured · no confidence given · signal, 22.4 s preview",
+    `BPM 123Measured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · ${ANALYZER}`,
   );
   await expect(valueItem(values, "Key")).toHaveText(
     "Key not measured— not detected in the preview",
   );
   await expect(valueItem(values, "Loudness")).toContainText("Measured");
   await expect(page.getByRole("list", { name: "Audio-model estimates" })).toHaveText(
-    "Model scores not measured— the audio models are not loaded",
+    "Model scores not available— the audio models are not loaded",
   );
   const fingerprint = page.getByRole("region", { name: "Sonic Fingerprint" });
-  await expect(fingerprint).toContainText("Styles not measured— the audio models are not loaded");
-  await expect(fingerprint).toContainText("Tags not measured— the audio models are not loaded");
+  // The subtitle never says the models ran.
+  await expect(fingerprint).toContainText(
+    "Style and tag scores not available: the audio models are not loaded",
+  );
+  await expect(fingerprint).not.toContainText("models run on the preview");
+  await expect(fingerprint).toContainText("Styles not available— the audio models are not loaded");
+  await expect(fingerprint).toContainText("Tags not available— the audio models are not loaded");
+  // The notice names only what is missing: the tempo was measured.
   const notices = page.getByRole("region", { name: "Missing data" });
-  await expect(notices).toContainText("Audio partly measured");
-  await expect(notices).toContainText("Not measured: key, mood, arousal");
+  await expect(notices).toHaveText(
+    "Audio partly measured" +
+      "The analysis ran but did not detect the key." +
+      "Not measured: key." +
+      "Audio-model estimates not available: mood, arousal, danceability, acousticness, instrumental, style scores, tag scores (the audio models are not loaded).",
+  );
+  await expect(notices).not.toContainText("tempo");
   await screenshot(page, testInfo, "partly-dashboard");
   await screenshot(page, testInfo, "partly-fingerprint", fingerprint);
 
@@ -174,6 +196,70 @@ test("a partly measured result says what was not measured and why", async ({ pag
   );
   await screenshot(page, testInfo, "partly-player");
   await screenshot(page, testInfo, "partly-timeline", lane);
+});
+
+test("a preview the gate stopped measures nothing, and every view says why", async ({
+  page,
+}, testInfo) => {
+  const problems = collectProblems(page);
+  await useMockApi(page, gated);
+  await analyzeAndOpenDashboard(page, "Quiet Room");
+
+  const notices = page.getByRole("region", { name: "Missing data" });
+  await expect(notices).toHaveText(
+    "Audio not measuredNothing was measured on the preview: the preview is silent.",
+  );
+  const values = page.getByRole("list", { name: "Audio values" });
+  await expect(valueItem(values, "BPM")).toHaveText("BPM not measured— the preview is silent");
+  await expect(valueItem(values, "Key")).toHaveText("Key not measured— the preview is silent");
+  await expect(valueItem(values, "Loudness")).toHaveText(
+    "Loudness not measured— the preview is silent",
+  );
+  await expect(page.locator('[data-value-kind="measured"]')).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Audio-model estimates" })).toHaveText(
+    "Model scores not available— the preview is silent",
+  );
+  const fingerprint = page.getByRole("region", { name: "Sonic Fingerprint" });
+  await expect(fingerprint).toContainText(
+    "Style and tag scores not available: the preview is silent",
+  );
+  await screenshot(page, testInfo, "gated-dashboard");
+  await screenshot(page, testInfo, "gated-fingerprint", fingerprint);
+
+  await openPlayer(page);
+  const timeline = page.getByRole("group", { name: "Song structure" });
+  await expect(timeline).toContainText("No key moments — the preview is silent");
+  await expect(timeline).not.toContainText("detected");
+  await expect(page.getByRole("region", { name: "Missing data" })).toContainText(
+    "Audio not measured",
+  );
+  await screenshot(page, testInfo, "gated-player");
+  await screenshot(page, testInfo, "gated-timeline", timeline);
+  expect(problems).toEqual([]);
+});
+
+test("a measurement the contract cannot read is not shown as measured", async ({
+  page,
+}, testInfo) => {
+  // One malformed block (sections) makes the whole measurement unreadable, as the contract
+  // reads it: the copies next to it are not confirmed by anything.
+  const fixture = structuredClone(measured);
+  const data = resultOf(fixture) as { audio: Record<string, unknown> };
+  data.audio.sections = { segments: "A", method: "novelty", basis: "signal" };
+  expect(AudioFeatures.safeParse(data.audio).success).toBe(false);
+  await useMockApi(page, fixture);
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+
+  await expect(page.locator('[data-value-kind="measured"]')).toHaveCount(0);
+  const values = page.getByRole("list", { name: "Audio values" });
+  await expect(valueItem(values, "BPM")).toHaveText(
+    "BPM 105.2Not confirmed as measured · confidence and basis unknown",
+  );
+  await expect(page.getByRole("region", { name: "Missing data" })).toContainText(
+    "Audio values not confirmed",
+  );
+  await expect(page.getByRole("region", { name: "Styles (model estimate)" })).toHaveCount(0);
+  await screenshot(page, testInfo, "unreadable-dashboard");
 });
 
 test.describe("a result without the audio block", () => {
@@ -196,6 +282,15 @@ test.describe("a result without the audio block", () => {
       "No audio preview is available for this track.",
     );
     await screenshot(page, testInfo, "unavailable-dashboard");
+
+    // The Player draws none of its key moments: nothing was measured.
+    await openPlayer(page);
+    const timeline = page.getByRole("group", { name: "Song structure" });
+    await expect(timeline).toContainText("No key moments — no audio preview");
+    await expect(timeline).not.toContainText("key moments measured");
+    await expect(timeline.getByRole("img", { name: /Energy peak/ })).toHaveCount(0);
+    await expect(page.getByText("DEEP_DIVE_MODE")).toHaveText("DEEP_DIVE_MODE // BPM not measured");
+    await screenshot(page, testInfo, "unavailable-player");
   });
 
   test("shows its measured values with their confidence and basis unknown", async ({ page }) => {
@@ -208,6 +303,13 @@ test.describe("a result without the audio block", () => {
     await expect(valueItem(values, "Energy")).toHaveText(
       "Energy 71%Measured · confidence and basis unknown",
     );
+    // Its model scores are estimates, never measured.
+    const scores = page.getByRole("list", { name: "Audio-model estimates" });
+    await expect(valueItem(scores, "Mood")).toHaveText(
+      "Mood Mellow 0.34Model estimate · score, not a probability · basis unknown",
+    );
+    await expect(scores).not.toContainText("Measured");
+    await expect(scores.locator('[data-value-kind="measured"]')).toHaveCount(0);
     await openPlayer(page);
     // Without the window's length the lane still says it is not known.
     await expect(

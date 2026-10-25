@@ -19,6 +19,11 @@ interface SmartTimelineProps {
    */
   audioAnalyzed?: boolean;
   /**
+   * Why there are no key moments when the audio was not measured (the gate's reason, "no audio
+   * preview", ...); shown instead of a bare "not analysed".
+   */
+  noMomentsReason?: string | null;
+  /**
    * Length of the analysed preview window in seconds, as measured (the result's
    * `audio.window.durationSeconds`); undefined when the result does not send it.
    */
@@ -124,6 +129,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   samples = EMPTY_SAMPLES,
   keyMoments = EMPTY_KEY_MOMENTS,
   audioAnalyzed,
+  noMomentsReason,
   previewSeconds,
 }) => {
   const duration = positiveSeconds(durationSeconds);
@@ -251,7 +257,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       ) : (
         <Note>
           {audioAnalyzed === false
-            ? 'No key moments — the audio was not analysed'
+            ? `No key moments — ${noMomentsReason ?? 'the audio was not analysed'}`
             : audioAnalyzed
               ? 'No key moments detected'
               : 'No key moments'}

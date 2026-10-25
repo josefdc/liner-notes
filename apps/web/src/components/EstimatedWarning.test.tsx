@@ -99,7 +99,8 @@ describe('ResultNotices', () => {
     );
     const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
     expect(notice).toContain('Audio partly measured');
-    expect(notice).toContain('The analysis ran but could not detect the tempo or key.');
+    // Only the tempo is missing: the key was measured and is not said to be undetected.
+    expect(notice).toContain('The analysis ran but did not detect the tempo.');
     expect(notice).toContain('Not measured: BPM.');
   });
 });
@@ -200,7 +201,10 @@ describe('partly measured results', () => {
     const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
     expect(notice).toContain('Audio partly measured');
     expect(notice).toContain('The analysis did not report why.');
-    expect(notice).toContain('Not measured: energy, mood, danceability, acousticness.');
+    expect(notice).toContain('Not measured: energy.');
+    expect(notice).toContain(
+      'Audio-model estimates not available: mood, danceability, acousticness.',
+    );
   });
 
   it.each(['null', 'undefined', ' NULL '])('treats the key text %j as missing', (key) => {

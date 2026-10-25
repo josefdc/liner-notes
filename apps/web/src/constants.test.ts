@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { audioBlock, measuredTrack } from './components/measured/testing';
 import {
   AUDIO_UNAVAILABLE_SHORT,
+  audioNoticeOf,
   audioReadings,
   audioValues,
   displayableFactoids,
+  fingerprintSubtitle,
   hasEstimatedAudio,
   hasMeasuredAudioSource,
   MODELS_NOT_LOADED_TEXT,
+  measuredKeyMoments,
   missingAudioValues,
   modelUnavailableText,
+  noKeyMomentsReason,
   normalizeTrack,
   type Reading,
   SATURATED_ENERGY_TEXT,
@@ -215,12 +219,17 @@ describe('audioReadings', () => {
       state: 'shown',
       kind: 'measured',
       value: '123.1',
-      confidence: 'confidence 0.62',
+      // On the estimator's own scale, said to be uncalibrated: never a bare probability.
+      confidence: 'estimator confidence 3.30 of 5.32, not calibrated',
       basis: 'signal, 29.8 s preview',
+      detail:
+        'essentia.RhythmExtractor2013 · analyzer 2.1.0+essentia.models-5c5c0c7f · the confidence does not flag half or double tempo',
     });
-    expect((values.bpm as { title: string }).title).toContain('essentia.RhythmExtractor2013');
-    expect((values.bpm as { title: string }).title).toContain('3.30 on the estimator');
-    expect(values.key).toMatchObject({ value: 'F# Minor', confidence: 'strength 0.71' });
+    expect(values.key).toMatchObject({
+      value: 'F# Minor',
+      confidence: 'key strength 0.71 of 1, not a probability',
+      detail: 'essentia.KeyExtractor, edma profile · analyzer 2.1.0+essentia.models-5c5c0c7f',
+    });
     // Loudness replaces the older energy score.
     expect(values.loudness).toMatchObject({ value: '-13.6 dBFS RMS', kind: 'measured' });
     expect(values.energy).toBeUndefined();
@@ -231,6 +240,14 @@ describe('audioReadings', () => {
       basis: 'model discogs-effnet-bs64-1, 29.8 s preview',
     });
     expect(missingAudioValues(measuredTrack())).toEqual([]);
+  });
+
+  it('gives a normalised tempo confidence its scale when the raw one is not sent', () => {
+    const tempo = { ...audioBlock().tempo, rawConfidence: undefined };
+    const values = byField(audioReadings(measuredTrack(audioBlock({ tempo }))).signal);
+    expect(values.bpm).toMatchObject({
+      confidence: 'estimator confidence 0.62 of 1, not calibrated',
+    });
   });
 
   it('says a value the estimator gave no confidence for has none', () => {
@@ -256,12 +273,7 @@ describe('audioReadings', () => {
       status: 'not shown',
       reason: SATURATED_ENERGY_TEXT,
     });
-    expect(missingAudioValues(copiesOnly({ energy: 1 }))).toEqual([
-      'energy',
-      'mood',
-      'danceability',
-      'acousticness',
-    ]);
+    expect(missingAudioValues(copiesOnly({ energy: 1 }))).toEqual(['energy']);
     // An energy below saturation is still shown, its basis unknown.
     expect(byField(audioReadings(copiesOnly({})).signal).energy).toMatchObject({
       state: 'shown',
@@ -286,5 +298,185 @@ describe('audioReadings', () => {
 
   it('has no fingerprint for a result without an audio block', () => {
     expect(audioReadings(copiesOnly({})).fingerprint).toBeNull();
+  });
+});
+
+const moments = [{ time: 12, type: 'energy_peak', intensity: 0.9, description: 'Peak' }] as const;
+
+describe('key moments', () => {
+  it('are shown only when the audio was measured', () => {
+    // An "unavailable" result whose analysis did not run measured no key moments either.
+    const notRun = copiesOnly({
+      audioSource: 'unavailable',
+      audioUnavailableReason: 'no_preview',
+      keyMoments: [...moments],
+    });
+    expect(measuredKeyMoments(notRun)).toEqual([]);
+    expect(noKeyMomentsReason(notRun)).toBe('no audio preview');
+
+    const estimated = copiesOnly({ audioSource: 'estimated', keyMoments: [...moments] });
+    expect(measuredKeyMoments(estimated)).toEqual([]);
+    expect(noKeyMomentsReason(estimated)).toBe('the audio was not measured');
+
+    const ran = copiesOnly({ keyMoments: [...moments] });
+    expect(measuredKeyMoments(ran)).toEqual(moments);
+    expect(noKeyMomentsReason(ran)).toBeNull();
+  });
+
+  it('come from the measurement, and a gate that did not pass gives its reason', () => {
+    expect(measuredKeyMoments(measuredTrack())).toHaveLength(2);
+    expect(noKeyMomentsReason(measuredTrack())).toBeNull();
+    const gated = measuredTrack(audioBlock({ gate: { passed: false, reason: 'silence' } }));
+    expect(measuredKeyMoments(gated)).toEqual([]);
+    expect(noKeyMomentsReason(gated)).toBe('the preview is silent');
+  });
+});
+
+describe('a result whose audio block is null or cannot be read', () => {
+  it.each([
+    ['null', null],
+    ['unreadable', audioBlock({ version: 3 })],
+  ])('never shows its copies as measured (%s)', (_case, audio) => {
+    const track = measuredTrack(audio as Record<string, unknown>, { valence: 0.4 });
+    expect(hasMeasuredAudioSource(track)).toBe(false);
+    expect(audioValues(track).bpm).toBeNull();
+    expect(measuredKeyMoments(track)).toEqual([]);
+    const { signal, model } = audioReadings(track);
+    expect(byField(signal).bpm).toMatchObject({ state: 'shown', kind: 'unverified', basis: null });
+    expect(byField(model).valence).toMatchObject({ kind: 'unverified' });
+    expect([...signal, ...model].some((r) => r.state === 'shown' && r.kind === 'measured')).toBe(
+      false,
+    );
+    expect(audioNoticeOf(track)?.title).toBe('Audio values not confirmed');
+  });
+});
+
+describe('model scores', () => {
+  it('of results without an audio block are estimates, never measured', () => {
+    const { model } = audioReadings(copiesOnly({ valence: 0.4, danceability: 0.7 }));
+    const shown = model.filter((r) => r.state === 'shown');
+    expect(shown).toHaveLength(2);
+    expect(shown.every((r) => r.kind === 'estimate')).toBe(true);
+  });
+
+  it('are not shown when outside the range their model produces', () => {
+    const block = audioBlock();
+    const moods = {
+      ...block.fingerprint.moods,
+      danceability: { ...block.fingerprint.moods.danceability, value: 1.4 },
+    };
+    const track = measuredTrack(audioBlock({ fingerprint: { ...block.fingerprint, moods } }));
+    expect(byField(audioReadings(track).model).danceability).toMatchObject({
+      state: 'missing',
+      status: 'not shown',
+    });
+    expect(audioValues(track).danceability).toBeNull();
+  });
+
+  it('missing are "not available", not "not measured"', () => {
+    const { model, fingerprint } = audioReadings(measuredTrack(audioBlock({ fingerprint: null })));
+    expect(model.every((r) => r.state === 'missing' && r.status === 'not available')).toBe(true);
+    expect(fingerprint?.styles).toMatchObject({ state: 'missing' });
+  });
+});
+
+describe('a zero loudness on a preview the gate passed', () => {
+  it('is not said to be silence', () => {
+    const track = measuredTrack(
+      audioBlock({ loudness: { rmsMean: 0, method: 'm', basis: 'signal' } }),
+    );
+    const loudness = byField(audioReadings(track).signal).loudness;
+    expect(loudness).toMatchObject({ state: 'missing', status: 'not shown' });
+    expect(JSON.stringify(loudness)).not.toContain('silent');
+  });
+});
+
+describe('audioNoticeOf', () => {
+  it('names only what is missing: a measured tempo is never said to be undetected', () => {
+    const partly = measuredTrack(audioBlock({ key: null }), {
+      key: null,
+      audioSource: 'unavailable',
+      audioUnavailableReason: 'not_detected',
+    });
+    expect(audioNoticeOf(partly)).toEqual({
+      title: 'Audio partly measured',
+      lines: ['The analysis ran but did not detect the key.', 'Not measured: key.'],
+    });
+    // The same with the copies only (the shape of the recorded "One More Time" result).
+    const replayShape = copiesOnly({
+      key: null,
+      audioSource: 'unavailable',
+      audioUnavailableReason: 'not_detected',
+    });
+    expect(audioNoticeOf(replayShape)?.lines[0]).toBe(
+      'The analysis ran but did not detect the key.',
+    );
+  });
+
+  it('says both when tempo and key are missing', () => {
+    const track = copiesOnly({
+      bpm: null,
+      key: null,
+      audioSource: 'unavailable',
+      audioUnavailableReason: 'not_detected',
+    });
+    expect(audioNoticeOf(track)?.lines[0]).toBe(
+      'The analysis ran but could not detect the tempo or key.',
+    );
+  });
+
+  it('does not call a result with every signal value measured "partly measured"', () => {
+    const track = measuredTrack(audioBlock({ fingerprint: null }));
+    expect(audioNoticeOf(track)).toEqual({
+      title: 'Audio-model estimates not available',
+      lines: [
+        `Audio-model estimates not available: mood, arousal, danceability, acousticness, instrumental, style scores, tag scores (${MODELS_NOT_LOADED_TEXT}).`,
+      ],
+    });
+    expect(audioNoticeOf(measuredTrack())).toBeNull();
+  });
+
+  it('gives a gate that did not pass a title and body that agree', () => {
+    const track = measuredTrack(audioBlock({ gate: { passed: false, reason: 'noise' } }));
+    expect(audioNoticeOf(track)).toEqual({
+      title: 'Audio not measured',
+      lines: ['Nothing was measured on the preview: the preview is noise, not music.'],
+    });
+  });
+
+  it('does not call "unavailable" values without a reason estimated', () => {
+    const track = copiesOnly({ audioSource: 'unavailable' });
+    const signal = byField(audioReadings(track).signal);
+    expect(signal.bpm).toMatchObject({ state: 'missing', reason: null });
+    expect(audioNoticeOf(track)).toEqual({
+      title: 'Audio not analysed',
+      lines: [
+        'The analysis did not report why.',
+        'Not measured: BPM, key, energy.',
+        'Audio-model estimates not available: mood, danceability, acousticness.',
+      ],
+    });
+  });
+});
+
+describe('fingerprintSubtitle', () => {
+  it('says what the panel shows', () => {
+    expect(fingerprintSubtitle(measuredTrack(), false)).toBe(
+      'Style and tag scores from audio models run on the preview',
+    );
+    expect(fingerprintSubtitle(measuredTrack(audioBlock({ fingerprint: null })), false)).toBe(
+      `Style and tag scores not available: ${MODELS_NOT_LOADED_TEXT}`,
+    );
+    expect(
+      fingerprintSubtitle(
+        measuredTrack(audioBlock({ gate: { passed: false, reason: 'silence' } })),
+        false,
+      ),
+    ).toBe('Style and tag scores not available: the preview is silent');
+    expect(fingerprintSubtitle(measuredTrack(), true)).toBe(
+      'Style and tag scores from audio models run on the preview; genre affinity written by the model',
+    );
+    expect(fingerprintSubtitle(copiesOnly({}), true)).toBe('Genre affinity written by the model');
+    expect(fingerprintSubtitle(copiesOnly({}), false)).toBe('Genre affinity');
   });
 });

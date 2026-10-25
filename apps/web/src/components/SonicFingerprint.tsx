@@ -30,19 +30,27 @@ const scoreLabel = (label: string) => label.replaceAll('---', ' / ');
  */
 const ScoreList: React.FC<{ reading: ScoreListReading }> = ({ reading }) => {
   if (reading.state === 'missing') {
-    return <MissingValue label={reading.label} reason={reading.reason} />;
+    return <MissingValue label={reading.label} status="not available" reason={reading.reason} />;
   }
+  // Labels may repeat: each item is keyed by its label and how many times it came before.
+  const seen = new Map<string, number>();
+  const items = reading.items.slice(0, TOP_SCORES).map((item) => {
+    const n = seen.get(item.label) ?? 0;
+    seen.set(item.label, n + 1);
+    return { ...item, key: `${item.label}#${n}` };
+  });
   return (
     <section aria-label={`${reading.label} (model estimate)`} className="flex flex-col gap-1.5">
-      <p className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
-        {reading.label} · top {Math.min(TOP_SCORES, reading.items.length)}
+      <p className="text-chrome font-mono text-text-chip uppercase tracking-widest">
+        {reading.label} · top {items.length}
       </p>
-      <p className="text-[10px] font-mono text-text-tertiary leading-tight">
+      <p className="text-chrome font-mono text-text-chip">
         Model estimate · scores, not probabilities · {reading.basis}
       </p>
+      <p className="text-chrome font-mono text-text-chip">{reading.detail}</p>
       <ul className="flex flex-wrap gap-1.5">
-        {reading.items.slice(0, TOP_SCORES).map((item) => (
-          <li key={item.label}>
+        {items.map((item) => (
+          <li key={item.key}>
             <MeasuredValue
               compact
               kind="estimate"
@@ -100,7 +108,7 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
             : 'No genre profile was produced for this track.'}
         </p>
         {/* A result without a measurement has no style or tag scores either. */}
-        <MissingValue label="Style and tag scores" />
+        <MissingValue label="Style and tag scores" status="not available" />
       </div>
     );
   }

@@ -4,14 +4,8 @@ import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
   type AudioField,
+  audioNoticeOf,
   audioReadings,
-  audioUnavailableText,
-  audioValueCount,
-  ESTIMATED_AUDIO_TEXT,
-  hasEstimatedAudio,
-  hasMeasuredAudioSource,
-  measuredAudioOf,
-  missingAudioValues,
   missingModelOutput,
   modelUnavailableText,
   QUERY_MATCH_TITLE,
@@ -84,6 +78,7 @@ export const ReadingValue: React.FC<{ reading: Reading; size?: 'sm' | 'md' }> = 
       kind={reading.kind}
       confidence={reading.confidence}
       basis={reading.basis}
+      detail={reading.detail}
       title={reading.title}
       size={size}
       icon={ICONS[reading.field]?.(size === 'md' ? 12 : 10, reading)}
@@ -107,6 +102,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   // With an `audio` block but no audio models, one line says so instead of one per score.
   const modelsMissing = fingerprint !== null && modelShown.length === 0;
   const modelRows = showMissingModel ? model : modelShown;
+  const firstModel = model[0];
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
@@ -119,8 +115,11 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
       </ul>
 
       {modelRows.length > 0 && (
-        <div className={`flex flex-wrap items-center gap-2 ${rowClassName}`}>
-          <p className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+        <div className="flex flex-col gap-2">
+          {/* Its own line in every state, above the estimates it labels. */}
+          <p
+            className={`flex ${rowClassName} text-chrome font-mono text-text-chip uppercase tracking-widest`}
+          >
             Audio-model estimates (scores, not probabilities)
           </p>
           <ul
@@ -131,7 +130,8 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
               <li>
                 <MissingValue
                   label="Model scores"
-                  reason={model[0]?.state === 'missing' ? model[0].reason : null}
+                  status="not available"
+                  reason={firstModel?.state === 'missing' ? firstModel.reason : null}
                   size={size}
                 />
               </li>
@@ -148,34 +148,6 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
     </div>
   );
 };
-
-/** The audio notice for a track, or null when every audio value was measured. */
-function audioNotice(track: TrackData) {
-  const missing = missingAudioValues(track);
-  if (hasEstimatedAudio(track)) {
-    return { title: 'Audio values not measured', reason: ESTIMATED_AUDIO_TEXT, missing };
-  }
-  if (missing.length === 0 && hasMeasuredAudioSource(track)) return null;
-  const audio = measuredAudioOf(track);
-  const { signal } = audioReadings(track);
-  const reasons = signal.filter((r) => r.state === 'missing' && r.reason !== null);
-  let reason: string;
-  if (audio && !audio.gate.passed) {
-    reason = `The audio was analysed but nothing was measured: ${signal[0]?.state === 'missing' ? signal[0].reason : 'the preview did not pass the analysis gate'}.`;
-  } else if (track.audioUnavailableReason) {
-    reason = audioUnavailableText(track.audioUnavailableReason);
-  } else if (reasons.length > 0 || audio) {
-    reason = 'Each missing value says why, or that it was not measured.';
-  } else {
-    reason = audioUnavailableText(undefined);
-  }
-  return {
-    title:
-      missing.length === audioValueCount(track) ? 'Audio not analysed' : 'Audio partly measured',
-    reason,
-    missing,
-  };
-}
 
 const Notice: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="flex gap-3 items-start px-4 py-3 border border-analog/30 bg-analog/5 rounded-md">
@@ -200,7 +172,7 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
   className = '',
 }) => {
   const match = isWholeRecording(track.run) ? null : queryMatchText(track.queryMatch);
-  const audio = audioNotice(track);
+  const audio = audioNoticeOf(track);
   const modelMissing = track.modelUnavailable ? missingModelOutput(track) : [];
   const missing = Boolean(track.modelUnavailable || audio);
   if (!match && !missing) return null;
@@ -229,8 +201,9 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
           )}
           {audio && (
             <Notice title={audio.title}>
-              <p>{audio.reason}</p>
-              {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
+              {audio.lines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
             </Notice>
           )}
         </section>

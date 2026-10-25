@@ -73,17 +73,21 @@ describe('audio values from a measurement', () => {
     render(<AudioStats track={measuredTrack()} />);
     const values = screen.getByRole('list', { name: 'Audio values' });
     expect(item(values, 'BPM')).toBe(
-      'BPM 123.1Measured · confidence 0.62 · signal, 29.8 s preview',
+      'BPM 123.1Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview' +
+        'essentia.RhythmExtractor2013 · analyzer 2.1.0+essentia.models-5c5c0c7f · the confidence does not flag half or double tempo',
     );
     expect(item(values, 'Key')).toBe(
-      'Key F# MinorMeasured · strength 0.71 · signal, 29.8 s preview',
+      'Key F# MinorMeasured · key strength 0.71 of 1, not a probability · signal, 29.8 s preview' +
+        'essentia.KeyExtractor, edma profile · analyzer 2.1.0+essentia.models-5c5c0c7f',
     );
     expect(item(values, 'Loudness')).toBe(
-      'Loudness -13.6 dBFS RMSMeasured · direct measure · signal, 29.8 s preview',
+      'Loudness -13.6 dBFS RMSMeasured · direct measure · signal, 29.8 s preview' +
+        'essentia.RMS, mean RMS 0.210 · analyzer 2.1.0+essentia.models-5c5c0c7f',
     );
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
     expect(item(scores, 'Dance')).toBe(
-      'Dance 0.81Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview',
+      'Dance 0.81Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview' +
+        'analyzer 2.1.0+essentia.models-5c5c0c7f',
     );
     // DEAM valence is on 1-9: shown on its own scale, with no mood word read off it.
     expect(item(scores, 'Mood')).toContain('Mood 5.60 on 1–9');
@@ -106,14 +110,16 @@ describe('audio values from a measurement', () => {
     );
     const values = screen.getByRole('list', { name: 'Audio values' });
     // "unavailable" does not hide the tempo the measurement has.
-    expect(item(values, 'BPM')).toContain('Measured · confidence 0.62');
+    expect(item(values, 'BPM')).toContain('Measured · estimator confidence 3.30 of 5.32');
     expect(item(values, 'Key')).toBe('Key not measured— not detected in the preview');
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
-    expect(scores.textContent).toBe('Model scores not measured— the audio models are not loaded');
+    expect(scores.textContent).toBe('Model scores not available— the audio models are not loaded');
     const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
-    expect(notice).toContain('Audio partly measured');
-    expect(notice).toContain(
-      'Not measured: key, mood, arousal, danceability, acousticness, instrumental, style scores, tag scores.',
+    expect(notice).toBe(
+      'Audio partly measured' +
+        'The analysis ran but did not detect the key.' +
+        'Not measured: key.' +
+        'Audio-model estimates not available: mood, arousal, danceability, acousticness, instrumental, style scores, tag scores (the audio models are not loaded).',
     );
   });
 
@@ -139,8 +145,9 @@ describe('audio values from a measurement', () => {
     expect(item(values, 'BPM')).toBe('BPM not measured— the preview is silent');
     expect(values.textContent).not.toContain('Measured');
     const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
-    expect(notice).toContain('Audio not analysed');
-    expect(notice).toContain('nothing was measured: the preview is silent');
+    expect(notice).toBe(
+      'Audio not measuredNothing was measured on the preview: the preview is silent.',
+    );
   });
 });
 
@@ -168,7 +175,7 @@ describe('the fingerprint from a measurement', () => {
     const { fingerprint } = audioReadings(measuredTrack(audioBlock({ fingerprint: null })));
     render(<SonicFingerprint fingerprint={fingerprint} />);
     expect(document.body.textContent).toBe(
-      'Styles not measured— the audio models are not loadedTags not measured— the audio models are not loaded',
+      'Styles not available— the audio models are not loadedTags not available— the audio models are not loaded',
     );
   });
 });

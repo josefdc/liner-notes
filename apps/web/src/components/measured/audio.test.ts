@@ -44,25 +44,32 @@ describe('readAudio', () => {
     expect(audio?.keyMoments).toEqual([]);
   });
 
-  it('reads a block it cannot read as not measured and keeps the others', () => {
-    const audio = readAudio(
-      audioBlock({
-        tempo: { bpm: 120, confidence: 3.3, method: 'x', basis: 'signal' },
-        key: {
-          tonic: 'Bb',
-          mode: 'minor',
-          strength: 0.5,
-          profile: 'edma',
-          method: 'x',
-          basis: 'signal',
+  const tempo = audioBlock().tempo;
+  const key = audioBlock().key;
+  it.each([
+    ['a tempo with basis "model"', { tempo: { ...tempo, basis: 'model' } }],
+    ['a key with basis "model"', { key: { ...key, basis: 'model' } }],
+    ['a tempo confidence outside 0-1', { tempo: { ...tempo, confidence: 3.3 } }],
+    ['a flat tonic', { key: { ...key, tonic: 'Bb' } }],
+    ['another window', { window: { kind: 'full-track', durationSeconds: 200 } }],
+    ['a malformed section', { sections: { segments: 'A', method: 'x', basis: 'signal' } }],
+    ['an unknown gate reason', { gate: { passed: false, reason: 'clipping' } }],
+    [
+      'a model without a licence',
+      {
+        fingerprint: {
+          ...audioBlock().fingerprint,
+          tags: { model: { id: 'msd-musicnn-1' }, scores: [], basis: 'model' },
         },
-        loudness: { rmsMean: 0.2, method: 'x', basis: 'model' },
-      }),
-    );
-    expect(audio?.tempo).toBeNull();
-    expect(audio?.key).toBeNull();
-    expect(audio?.loudness).toBeNull();
-    expect(audio?.fingerprint?.tags?.scores).toHaveLength(2);
+      },
+    ],
+  ])('reads a block with %s as no measurement at all, as the contract does', (_case, change) => {
+    expect(readAudio(audioBlock(change))).toBeNull();
+  });
+
+  it('drops only the key moments it cannot read, as the contract does', () => {
+    const moments = [...audioBlock().keyMoments, { time: -1, type: 'onset' }];
+    expect(readAudio(audioBlock({ keyMoments: moments }))?.keyMoments).toHaveLength(2);
   });
 
   it('reads missing audio models as no fingerprint', () => {

@@ -327,33 +327,35 @@ export function composeFromOutput(
 
 /**
  * Album artwork and previews for the genealogy nodes. The enricher's answer is used for
- * artwork only: nodes, labels and links stay as composed.
+ * artwork only: nodes, labels and links stay as composed. `sourceErrors` holds a source the
+ * enricher could not read for the previews (Deezer).
  */
 async function withArtwork(
   genealogy: Genealogy,
   coverUrl: string,
   signal: AbortSignal | undefined,
-): Promise<Genealogy> {
+): Promise<{ genealogy: Genealogy; sourceErrors: SourceError[] }> {
+  const sourceErrors: SourceError[] = [];
   try {
-    const enriched = await enrichGenealogyWithArtwork(genealogy, coverUrl, signal);
+    const enriched = await enrichGenealogyWithArtwork(genealogy, coverUrl, signal, (error) =>
+      sourceErrors.push(error),
+    );
     const byId = new Map(enriched.nodes.map((node) => [node.id, node]));
-    return {
-      nodes: genealogy.nodes.map((node) => {
-        const found = byId.get(node.id);
-        if (!found) return node;
-        return {
-          ...node,
-          ...(found.img ? { img: found.img } : {}),
-          ...(found.previewUrl ? { previewUrl: found.previewUrl } : {}),
-          ...(found.spotifyId ? { spotifyId: found.spotifyId } : {}),
-        };
-      }),
-      links: genealogy.links,
-    };
+    const nodes = genealogy.nodes.map((node) => {
+      const found = byId.get(node.id);
+      if (!found) return node;
+      return {
+        ...node,
+        ...(found.img ? { img: found.img } : {}),
+        ...(found.previewUrl ? { previewUrl: found.previewUrl } : {}),
+        ...(found.spotifyId ? { spotifyId: found.spotifyId } : {}),
+      };
+    });
+    return { genealogy: { nodes, links: genealogy.links }, sourceErrors };
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
     console.warn("⚠️ [Composer] Could not enrich genealogy:", error);
-    return genealogy;
+    return { genealogy, sourceErrors };
   }
 }
 
@@ -522,6 +524,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const composed = composeFromOutput(output, spotify, state.evidence, runtime.newId);
 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
+    const enriched = await withArtwork(composed.genealogy, spotify.coverUrl, signal);
+    const runErrors = [...sourceErrors, ...enriched.sourceErrors];
     const trackData: TrackData = {
       ...baseFields(state, spotify),
       // A generic structure, not an analysis of this track
@@ -529,9 +533,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       segmentsSource: "template",
       samples: [],
       factoids: composed.factoids,
-      genealogy: await withArtwork(composed.genealogy, spotify.coverUrl, signal),
+      genealogy: enriched.genealogy,
       claims: composed.claims,
-      run: runInfo(false, [call], sourceErrors),
+      run: runInfo(false, [call], runErrors),
     };
 
     // A cancelled run reports nothing and stores nothing.
@@ -544,7 +548,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // run may do better: the audio may be measurable later, a source failed for a passing reason
     // (an outage, a timeout, a rate limit, a rejected key), or a research planner call failed. A
     // source that is only not configured does not block it: the key names the configured
-    // sources. The run information, the preview links and the search match belong to this run,
+    // sources. Nor does a source read only for the genealogy previews (enriched.sourceErrors):
+    // a stored result never carries a preview. The run information, the preview links and the search match belong to this run,
     // not to a later one served from the cache.
     const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
@@ -580,7 +585,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       trackData,
       claims: composed.claims,
       usage: [call],
-      sourceErrors,
+      sourceErrors: runErrors,
       statusMessages: ["🎼 Analysis complete!"],
     };
 
@@ -611,14 +616,16 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       );
 
       const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
+      const enriched = await withArtwork(fallback.genealogy, spotify!.coverUrl, signal);
+      const runErrors = [...sourceErrors, ...enriched.sourceErrors];
       const trackData: TrackData = {
         ...fallback,
         ...baseFields(state, spotify!),
-        genealogy: await withArtwork(fallback.genealogy, spotify!.coverUrl, signal),
+        genealogy: enriched.genealogy,
         claims: [],
         modelUnavailable: true,
         modelUnavailableReason: reason,
-        run: runInfo(true, [failed], sourceErrors),
+        run: runInfo(true, [failed], runErrors),
       };
       signal?.throwIfAborted();
       const problems = contractProblems(trackData);
@@ -628,7 +635,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         trackData,
         claims: [],
         usage: [failed],
-        sourceErrors,
+        sourceErrors: runErrors,
         statusMessages: [
           `⚠️ Model unavailable (${MODEL_REASON_TEXT[reason]}); showing source data only`,
         ],

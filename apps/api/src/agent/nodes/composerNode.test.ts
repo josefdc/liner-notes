@@ -21,11 +21,19 @@ const enrich = vi.hoisted(() => ({
   during: null as null | (() => void),
   /** A preview URL the enricher gives every genealogy node, when set. */
   nodePreview: null as string | null,
+  /** A source error the enricher reports for the node previews, when set. */
+  reports: null as null | { source: string; code: string; message?: string },
 }));
 const mb = vi.hoisted(() => ({ lookupIsrc: vi.fn() }));
 vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: { nodes: object[] }) => {
+  enrichGenealogyWithArtwork: async (
+    genealogy: { nodes: object[] },
+    _cover: string,
+    _signal: AbortSignal | undefined,
+    report?: (error: unknown) => void,
+  ) => {
     enrich.during?.();
+    if (enrich.reports) report?.(enrich.reports);
     const previewUrl = enrich.nodePreview;
     if (!previewUrl) return genealogy;
     return { ...genealogy, nodes: genealogy.nodes.map((node) => ({ ...node, previewUrl })) };
@@ -193,6 +201,7 @@ describe("composerNode", () => {
     store.put.mockReset();
     store.get.mockReset();
     enrich.nodePreview = null;
+    enrich.reports = null;
     mb.lookupIsrc.mockReset();
     for (const method of ["log", "warn", "error"] as const) {
       vi.spyOn(console, method).mockImplementation(() => {});
@@ -671,6 +680,34 @@ describe("composerNode", () => {
       );
       expect(store.put).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ["the composed result", succeeding, true],
+      ["the fallback", () => failing("rate_limited"), false],
+    ])(
+      "lists Deezer read for the genealogy previews in %s's source errors, and still stores the composed one",
+      async (_name, llm, stored) => {
+        const deezer = {
+          source: "deezer",
+          code: "rate_limited",
+          message: "Genealogy previews: quota",
+        };
+        enrich.reports = deezer;
+        const writer = vi.fn();
+
+        const out = await createComposerNode(testRuntime(llm()))(stateWith(measured), {
+          writer,
+          configurable: { thread_id: "run-1" },
+        } as never);
+
+        expect(out.sourceErrors).toEqual([deezer]);
+        expect(out.trackData?.run?.sourceErrors).toEqual([deezer]);
+        const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+        expect(complete.data.run.sourceErrors).toEqual([deezer]);
+        // A stored result never carries a preview, so a preview source does not keep it out.
+        if (stored) expect(store.put).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it("stores a result for a track picked from the track picker under that track", async () => {
       await createComposerNode(testRuntime(succeeding()))(

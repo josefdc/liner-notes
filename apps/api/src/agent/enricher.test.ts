@@ -13,7 +13,16 @@ const cache = vi.hoisted(() => ({ getArtwork: vi.fn(), putArtwork: vi.fn() }));
 vi.mock("../store/cache.js", () => ({ getCache: () => cache }));
 
 import { type FetchCall, json, never, stubFetch } from "../sources/testing/fetchStub.js";
-import { enrichGenealogyWithArtwork, strictlyMatches } from "./enricher.js";
+import type { SourceError } from "@liner-notes/contract";
+import {
+  enrichGenealogyWithArtwork,
+  LOOKUP_TIMEOUT_MS,
+  limiter,
+  MAX_DEEZER_LOOKUPS,
+  PREVIEW_BUDGET_MS,
+  releaseFits,
+  strictlyMatches,
+} from "./enricher.js";
 import type { Genealogy } from "./schema.js";
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -435,6 +444,108 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(net.calls).toHaveLength(0);
   });
 
+  /** A Spotify track `title` by `artist` on `album`, released `released`, 200 s long. */
+  const onRelease = (title: string, artist: string, album: string, released: string) =>
+    spotifyTrack({
+      name: title,
+      artists: [{ id: "a0", name: artist }],
+      duration_ms: 200_000,
+      album: { name: album, release_date: released, images: [{ url: COVER }] },
+    });
+  const entryOn = (title: string, artist: string, album: string) =>
+    entry({
+      title,
+      duration: 200,
+      artist: { id: 1, name: artist },
+      album: { id: 1, title: album },
+    });
+
+  it.each([
+    [
+      "a re-recorded album",
+      "Rock the Boat - The Hues Corporation (1973)",
+      ["Rock the Boat", "The Hues Corporation", "Greatest Hits (Re-Recorded Versions)", "2004"],
+    ],
+    [
+      "a live album",
+      "Bohemian Rhapsody - Queen (1975)",
+      ["Bohemian Rhapsody", "Queen", "Live Killers", "1979-06-22"],
+    ],
+    [
+      "an unplugged album",
+      "About a Girl - Nirvana (1989)",
+      ["About A Girl", "Nirvana", "MTV Unplugged In New York", "1994-11-01"],
+    ],
+    [
+      "a karaoke album credited to the artist",
+      "Rock the Boat - The Hues Corporation",
+      ["Rock the Boat", "The Hues Corporation", "Karaoke Hits", "2010"],
+    ],
+    [
+      "a live album whose name says nothing of it, years after the label's",
+      "Respect - Aretha Franklin (1967)",
+      ["Respect", "Aretha Franklin", "Aretha at Fillmore West", "1971-05-19"],
+    ],
+  ])(
+    "gives no Spotify id or preview for a plain title on %s, and keeps the cover",
+    async (_label, label, release) => {
+      const [title, artist, album, released] = release;
+      const net = stub({
+        spotify: onRelease(title, artist, album, released),
+        byIsrc: () => entryOn(title, artist, album),
+      });
+
+      const node = await enrichOne({
+        id: "n1",
+        group: 4,
+        label,
+        trackTitle: title,
+        trackArtist: artist,
+      });
+
+      expect(node.img).toBe(COVER);
+      expect(node.spotifyId).toBeUndefined();
+      expect(node.previewUrl).toBeUndefined();
+      expect(deezerCalls(net)).toHaveLength(0);
+      // Cached without the track's identity, so a later run cannot take its id from the cache.
+      const [, cached] = cache.putArtwork.mock.calls[0];
+      expect(cached).toMatchObject({ coverUrl: COVER, spotifyId: null, trackTitle: null });
+    },
+  );
+
+  it.each([
+    ["Under Pressure - Queen (1981)", ["Under Pressure", "Queen", "Hot Space", "1982-05-21"]],
+    ["Live and Let Die - Wings (1973)", ["Live And Let Die", "Wings", "Live And Let Die", "1973"]],
+    [
+      "Bohemian Rhapsody - Queen",
+      [
+        "Bohemian Rhapsody - Remastered 2011",
+        "Queen",
+        "A Night At The Opera (2011 Remaster)",
+        "1975-11-21",
+      ],
+    ],
+    ["Alive - Pearl Jam (1991)", ["Alive", "Pearl Jam", "Ten", "1991-08-27"]],
+  ])("keeps the id and the preview of the studio recording for %j", async (label, release) => {
+    const [title, artist, album, released] = release;
+    stub({
+      spotify: onRelease(title, artist, album, released),
+      byIsrc: () => entryOn(title, artist, album),
+    });
+    const named = label.split(" - ")[0];
+
+    const node = await enrichOne({
+      id: "n1",
+      group: 4,
+      label,
+      trackTitle: named,
+      trackArtist: artist,
+    });
+
+    expect(node.spotifyId).toBe("x");
+    expect(node.previewUrl).toBe(deezerClip(7));
+  });
+
   /** Nodes "Song n - Queen" (n = 1..count), each strictly matched by a track with its own ISRC. */
   function strictNodes(count: number) {
     const nodes = Array.from({ length: count }, (_, i) => ({
@@ -450,7 +561,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       return spotifyTrack({
         id: `id${n}`,
         name: `Song ${n}`,
-        external_ids: { isrc: `GBXXX990000${n}` },
+        external_ids: { isrc: `GBXXX99${String(n).padStart(5, "0")}` },
       });
     };
     const isrcEntry = (isrc: string) => {
@@ -460,12 +571,29 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     return { nodes, spotify, isrcEntry };
   }
 
-  const enrichAll = (nodes: object[], signal = new AbortController().signal) =>
+  const enrichAll = (
+    nodes: object[],
+    signal = new AbortController().signal,
+    report?: (error: SourceError) => void,
+  ) =>
     enrichGenealogyWithArtwork(
       { nodes: nodes as Genealogy["nodes"], links: [] },
       "https://i.scdn.co/image/c",
       signal,
+      report,
     );
+
+  /** Deezer's entry for `isrc` after `ms`, or the request's abort. */
+  const slowly = (call: FetchCall, ms: number, answer: unknown) =>
+    new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(json(answer)), ms);
+      call.signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        reject(call.signal?.reason);
+      });
+    });
+
+  const previews = (out: Genealogy) => out.nodes.filter((node) => node.previewUrl).length;
 
   it("makes one lookup per node, at most two at once", async () => {
     const { nodes, spotify, isrcEntry } = strictNodes(7);
@@ -492,18 +620,137 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(most).toBe(2);
   });
 
-  it("stops looking up Deezer once it fails, and keeps every node's artwork", async () => {
+  it("stops looking up Deezer at its rate limit, keeps every node's artwork, and reports it once", async () => {
     const { nodes, spotify } = strictNodes(5);
     const quota = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
     const net = stub({ spotify, byIsrc: () => quota });
+    const report = vi.fn();
 
-    const out = await enrichAll(nodes);
+    const out = await enrichAll(nodes, undefined, report);
 
     expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
     expect(out.nodes.every((node) => node.previewUrl === undefined)).toBe(true);
     // Only the lookups already under way when the first failed (at most two) were made.
     expect(deezerCalls(net).length).toBeGreaterThanOrEqual(1);
     expect(deezerCalls(net).length).toBeLessThanOrEqual(2);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0][0]).toMatchObject({ source: "deezer", code: "rate_limited" });
+  });
+
+  it("goes on after one failure of another kind, and stops after the second", async () => {
+    const { nodes, spotify, isrcEntry } = strictNodes(6);
+    const failing = new Set(["GBXXX9900001"]);
+    const once = stub({
+      spotify,
+      byIsrc: (isrc) =>
+        failing.has(isrc) ? json({ error: "bad gateway" }, { status: 502 }) : isrcEntry(isrc),
+    });
+    const report = vi.fn();
+
+    const out = await enrichAll(nodes, undefined, report);
+
+    expect(out.nodes.find((node) => node.id === "n1")?.previewUrl).toBeUndefined();
+    expect(previews(out)).toBe(5);
+    expect(deezerCalls(once)).toHaveLength(6);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0][0]).toMatchObject({ source: "deezer", code: "unavailable" });
+
+    vi.unstubAllGlobals();
+    const always = stub({ spotify, byIsrc: () => json({ error: "bad gateway" }, { status: 502 }) });
+    const after = await enrichAll(nodes);
+    expect(previews(after)).toBe(0);
+    // The two lookups under way, and at most one that started between their failures.
+    expect(deezerCalls(always).length).toBeLessThanOrEqual(3);
+  });
+
+  it("does not count an ISRC Deezer has no usable entry for as a failure", async () => {
+    const { nodes, spotify, isrcEntry } = strictNodes(8);
+    const net = stub({
+      spotify,
+      // Odd songs: no entry, or one that cannot be used; even songs: their entry.
+      byIsrc: (isrc) => {
+        const n = Number(isrc.slice(-5));
+        if (n % 4 === 1) return undefined;
+        if (n % 4 === 3) return { ...isrcEntry(isrc), duration: 400 };
+        return isrcEntry(isrc);
+      },
+    });
+    const report = vi.fn();
+
+    const out = await enrichAll(nodes, undefined, report);
+
+    expect(out.nodes.filter((node) => node.previewUrl).map((node) => node.id)).toEqual([
+      "n2",
+      "n4",
+      "n6",
+      "n8",
+    ]);
+    expect(deezerCalls(net)).toHaveLength(8);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it(`looks up at most ${MAX_DEEZER_LOOKUPS} nodes of one run`, async () => {
+    const { nodes, spotify, isrcEntry } = strictNodes(MAX_DEEZER_LOOKUPS + 5);
+    const net = stub({ spotify, byIsrc: (isrc) => isrcEntry(isrc) });
+
+    const out = await enrichAll(nodes);
+
+    expect(deezerCalls(net)).toHaveLength(MAX_DEEZER_LOOKUPS);
+    expect(previews(out)).toBe(MAX_DEEZER_LOOKUPS);
+    expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
+  });
+
+  describe("with the clock run by the test", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Enriches `nodes`, running the clock until it is done; the elapsed time with the result. */
+    async function timed(nodes: object[], report?: (error: SourceError) => void) {
+      const controller = new AbortController();
+      const started = Date.now();
+      let settled = false;
+      const pending = enrichAll(nodes, controller.signal, report).finally(() => {
+        settled = true;
+      });
+      for (let i = 0; i < 600 && !settled; i++) await vi.advanceTimersByTimeAsync(100);
+      return { out: await pending, elapsed: Date.now() - started, run: controller.signal };
+    }
+
+    it("gives up a lookup that does not answer in time, and makes no more", async () => {
+      const { nodes, spotify } = strictNodes(3);
+      const net = stub({ spotify, byIsrc: (_isrc, call) => never(call) });
+      const report = vi.fn();
+
+      const { out, elapsed, run } = await timed(nodes, report);
+
+      expect(run.aborted).toBe(false);
+      expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
+      expect(previews(out)).toBe(0);
+      expect(deezerCalls(net)).toHaveLength(2);
+      expect(elapsed).toBeLessThan(LOOKUP_TIMEOUT_MS + 500);
+      expect(report).toHaveBeenCalledTimes(1);
+      expect(report.mock.calls[0][0]).toMatchObject({ source: "deezer", code: "timeout" });
+    });
+
+    it("stops the previews when their budget is spent, and the enrichment still completes", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(10);
+      // Each answer takes 3 s: within a lookup's time, but two rounds of two fill most of the
+      // budget, and the third is cut off by it.
+      const net = stub({ spotify, byIsrc: (isrc, call) => slowly(call, 3_000, isrcEntry(isrc)) });
+
+      const { out, elapsed, run } = await timed(nodes);
+
+      expect(run.aborted).toBe(false);
+      expect(out.nodes).toHaveLength(10);
+      expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
+      expect(previews(out)).toBe(4);
+      expect(deezerCalls(net)).toHaveLength(5);
+      expect(elapsed).toBeLessThan(PREVIEW_BUDGET_MS + 1_000);
+    });
   });
 
   it("rejects when the run is cancelled during a Deezer lookup, and stops the request", async () => {
@@ -522,6 +769,24 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(lookup?.signal?.aborted).toBe(true);
   });
 
+  it("keeps a link a Deezer error echoes out of the warning and the source error", async () => {
+    const echoed = deezerClip(9);
+    stub({
+      spotify: spotifyTrack(),
+      byIsrc: () => ({ error: { type: "Exception", message: `bad link ${echoed}`, code: 100 } }),
+    });
+    const report = vi.fn();
+
+    const out = await enrichAll([{ size: 22, ...underPressure }], undefined, report);
+
+    expect(out.nodes[0].previewUrl).toBeUndefined();
+    const warned = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    expect(warned).toContain("Deezer");
+    expect(warned).not.toMatch(/dzcdn|hdnea/);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(report.mock.calls)).not.toMatch(/dzcdn|hdnea/);
+  });
+
   it("keeps the Deezer preview out of the artwork cache and the logs", async () => {
     stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
 
@@ -537,6 +802,100 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     );
     expect(logged).toContain("Deezer");
     expect(logged).not.toMatch(/dzcdn|hdnea/);
+  });
+});
+
+describe("limiter", () => {
+  it("frees the slot of a task that throws, and runs the waiting ones in turn", async () => {
+    const run = limiter(1);
+    const order: string[] = [];
+    const failing = run(async () => {
+      order.push("a");
+      throw new Error("a failed");
+    });
+    const next = run(async () => {
+      order.push("b");
+      return "b";
+    });
+    const last = run(async () => {
+      order.push("c");
+      return "c";
+    });
+
+    await expect(failing).rejects.toThrow("a failed");
+    await expect(next).resolves.toBe("b");
+    await expect(last).resolves.toBe("c");
+    expect(order).toEqual(["a", "b", "c"]);
+  });
+
+  it("never runs more than its limit at once", async () => {
+    const run = limiter(2);
+    let active = 0;
+    let most = 0;
+    const task = (fails: boolean) =>
+      run(async () => {
+        active++;
+        most = Math.max(most, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        if (fails) throw new Error("failed");
+      });
+
+    await Promise.allSettled([task(true), task(false), task(true), task(false), task(false)]);
+
+    expect(most).toBe(2);
+    expect(active).toBe(0);
+  });
+});
+
+describe("releaseFits", () => {
+  const release = (album: string, releaseDate: string, title = "Respect") => ({
+    title,
+    album,
+    releaseDate,
+  });
+
+  it.each([
+    [
+      "no year named, a plain album",
+      "Respect - Aretha Franklin",
+      release("I Never Loved a Man", "1967"),
+      true,
+    ],
+    [
+      "the named year",
+      "Respect - Aretha Franklin (1967)",
+      release("I Never Loved a Man", "1967-03-10"),
+      true,
+    ],
+    [
+      "a year after the named one",
+      "Respect - Aretha Franklin (1967)",
+      release("Singles", "1968"),
+      true,
+    ],
+    [
+      "four years after",
+      "Respect - Aretha Franklin (1967)",
+      release("Aretha at Fillmore West", "1971-05-19"),
+      false,
+    ],
+    ["years before", "Respect - Aretha Franklin (1967)", release("Early Takes", "1960"), false],
+    ["an unknown release date", "Respect - Aretha Franklin (1967)", release("Singles", ""), false],
+    [
+      "a live album, no year named",
+      "Respect - Aretha Franklin",
+      release("Live in Paris", "1968"),
+      false,
+    ],
+    [
+      "an album named like the song",
+      "Live And Let Die - Wings",
+      release("Live And Let Die", "1973", "Live And Let Die"),
+      true,
+    ],
+  ])("for %s: %s", (_label, label, found, fits) => {
+    expect(releaseFits(label, found)).toBe(fits);
   });
 });
 
@@ -575,6 +934,13 @@ describe("strictlyMatches", () => {
   ])("matches the credit %j against %j by %j: %s", (artist, title, names, expected) => {
     const node = { trackTitle: title.replace(/ \(feat\..*\)$/, ""), trackArtist: artist };
     expect(strictlyMatches(node, track(title, names))).toBe(expected);
+  });
+
+  it("refuses a plain title on an album that marks another recording", () => {
+    const found = { ...track("Bohemian Rhapsody", ["Queen"]), album: "Live Killers" };
+    const node = { trackTitle: "Bohemian Rhapsody", trackArtist: "Queen" };
+    expect(strictlyMatches(node, found)).toBe(false);
+    expect(strictlyMatches(node, { ...found, album: "A Night at the Opera" })).toBe(true);
   });
 
   it("refuses a featured artist's track, another version and a missing title or artist", () => {

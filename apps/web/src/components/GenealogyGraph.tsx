@@ -83,8 +83,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Audio preview (extracted hook)
-  const { isPlaying, playingNodeId, hasPreviewSupport, playPreview, stopPreview } =
-    useAudioPreview();
+  const {
+    isPlaying,
+    playingNodeId,
+    hasPreviewSupport,
+    unavailableNodeId,
+    playPreview,
+    stopPreview,
+  } = useAudioPreview();
 
   // State for responsive dimensions (ResizeObserver)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -519,6 +525,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
           <div className="flex items-center gap-2 text-gray-500 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
             <VolumeX size={12} />
             <span>AUDIO BLOCKED</span>
+          </div>
+        </div>
+      )}
+
+      {/* A node's clip that could not be loaded (preview links expire); hover again to retry */}
+      {hasPreviewSupport && unavailableNodeId && (
+        <div className="absolute top-4 right-4 pointer-events-none">
+          <div className="flex items-center gap-2 text-gray-500 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+            <VolumeX size={12} />
+            <span>PREVIEW UNAVAILABLE</span>
           </div>
         </div>
       )}

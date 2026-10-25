@@ -135,6 +135,13 @@
               "claimId": "c-future-rejected"
             },
             {
+              "id": "f6",
+              "title": "The vocal",
+              "content": "Vocals by Ivy Example.",
+              "type": "credits",
+              "claimId": "c-vocal"
+            },
+            {
               "id": "f5",
               "title": "Leaving home",
               "content": "The lyrics are about leaving home.",
@@ -574,6 +581,29 @@
                 "measured": 123.04,
                 "method": "essentia.RhythmExtractor2013"
               }
+            },
+            {
+              "id": "c-128",
+              "text": "The preview analysis measured the track at 128 BPM.",
+              "about": "sound",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "field": "tempo"
+            },
+            {
+              "id": "c-vocal",
+              "text": "Vocals by Ivy Example.",
+              "about": "credit",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
             }
           ]
         }

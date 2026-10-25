@@ -114,6 +114,15 @@ describe('safeHref', () => {
 
   it('never links a preview clip, a signed address or one that carries a credential', () => {
     for (const url of [
+      // Azure SAS, S3 session tokens, CloudFront signed URLs, tokens in the fragment.
+      'https://acct.blob.core.windows.net/c/a.mp3?sv=2022-11-02&se=2026-01-01&sig=abc',
+      'https://acct.blob.core.windows.net/c/a.mp3?sig=abc',
+      'https://acct.blob.core.windows.net/c/a.mp3?se=2026-01-01',
+      'https://bucket.s3.amazonaws.com/a.mp3?X-Amz-Security-Token=abc',
+      'https://d1.cloudfront.net/a.mp3?Policy=abc&Signature=def&Key-Pair-Id=K1',
+      'https://d1.cloudfront.net/a.mp3?Key-Pair-Id=K1',
+      'https://example.org/callback#access_token=abc&token_type=bearer',
+      'https://example.org/callback#id_token=abc',
       'https://p.scdn.co/mp3-preview/abc?cid=1',
       'https://cdnt-preview.dzcdn.net/api/1/1/a/b/c.mp3?hdnea=exp=1~acl=/*~hmac=x',
       'https://e-cdns-preview-a.dzcdn.net/stream/c-1.mp3',
@@ -190,6 +199,8 @@ describe('resultClaims on the provenance fixture', () => {
       ['c-dup', 'inferred'],
       ['c-dup', 'inferred'],
       ['c-90', 'inferred'],
+      ['c-128', 'inferred'],
+      ['c-vocal', 'inferred'],
     ]);
     // Keys stay unique when ids repeat.
     expect(new Set(claims.all.map((shown) => shown.key)).size).toBe(claims.all.length);
@@ -211,7 +222,7 @@ describe('resultClaims on the provenance fixture', () => {
     // An id any claim was rejected under leaves the main view, whichever claim came first.
     expect(shownIds).not.toContain('c-dup');
     expect(claims.isHidden('c-dup')).toBe(true);
-    expect(claims.shown).toHaveLength(15);
+    expect(claims.shown).toHaveLength(17);
   });
 
   it('hides the ids only unreadable claims carry, and says which were rejected', () => {

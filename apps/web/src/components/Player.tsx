@@ -182,17 +182,29 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => track.samples.filter((sample) => !claims.isHidden(sample.claimId)),
     [track.samples, claims],
   );
-  const creditClaims = useMemo(
-    () => claims.shown.filter((shown) => shown.claim.about === 'credit'),
-    [claims],
+  // Claims a card shows are not listed again, as credits or as other claims.
+  const onCards = useMemo(
+    () => new Set(resultFactoids.map((factoid) => factoid.claimId)),
+    [resultFactoids],
   );
+  const creditClaims = useMemo(
+    () =>
+      claims.shown.filter(
+        (shown) => shown.claim.about === 'credit' && !onCards.has(shown.claim.id),
+      ),
+    [claims, onCards],
+  );
+  const creditsOnCards = claims.shown.filter(
+    (shown) => shown.claim.about === 'credit' && onCards.has(shown.claim.id),
+  ).length;
   // Claims no card or credit shows.
-  const otherClaims = useMemo(() => {
-    const onCards = new Set(track.factoids.map((factoid) => factoid.claimId));
-    return claims.shown.filter(
-      (shown) => shown.claim.about !== 'credit' && !onCards.has(shown.claim.id),
-    );
-  }, [claims, track.factoids]);
+  const otherClaims = useMemo(
+    () =>
+      claims.shown.filter(
+        (shown) => shown.claim.about !== 'credit' && !onCards.has(shown.claim.id),
+      ),
+    [claims, onCards],
+  );
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
@@ -542,6 +554,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           <div className="mt-10 space-y-8">
             <CreditsList
               credits={creditClaims}
+              onCards={creditsOnCards}
               uncited={track.credits}
               readings={readings}
               audio={measurement}

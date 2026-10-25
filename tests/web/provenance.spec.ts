@@ -62,7 +62,7 @@ test("the mock result is a result the API may send, with only the faults planted
     'claims[6].evidenceIds: cites "ev-gone", which is not in the evidence pack',
     "claims[7].verdict: a model claim is sourced only when supported or partial",
     'factoids[3].claimId: unknown claim "c-future-rejected"',
-    'factoids[4].claimId: unknown claim "c-future"',
+    'factoids[5].claimId: unknown claim "c-future"',
   ]);
 });
 
@@ -109,6 +109,9 @@ test.describe("a result with claims", () => {
       "Partly supported: The release credits name the producer; no engineer is listed.",
     );
     await expect(producer).toContainText("Discogs · primary record · about a whole release");
+    // A credit claim shown on a card is not listed again.
+    await expect(page.getByText("Vocals by Ivy Example.")).toHaveCount(1);
+    await expect(credits).toContainText("1 credit is shown with the facts above.");
     // A code-built credit the verifier did not support is never plainly sourced.
     const mastered = claimItem(credits, "Mastered by Gil Example.");
     await expect(mastered).toContainText("SourcedNot supported");
@@ -201,8 +204,19 @@ test.describe("a result with claims", () => {
     await expect(noValues).toContainText(
       "Conflict with the measurement: the result does not give the claim's value · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)",
     );
-    // Numbers that agree with the measurement raise no conflict.
-    await expect(claimItem(more, "It runs at roughly 123 BPM.")).not.toContainText("Conflict");
+    // Numbers that agree with the measurement raise no conflict; the check ran.
+    const roughly = claimItem(more, "It runs at roughly 123 BPM.");
+    await expect(roughly).not.toContainText("Conflict");
+    await expect(roughly).toContainText("no verifier verdict on its text");
+    await expect(roughly).toContainText("agrees with the measurement · measured 123 BPM");
+    // A model sentence stating a wrong measurement, which no check compared, is shown beside
+    // the measured value.
+    const wrong = claimItem(more, "The preview analysis measured the track at 128 BPM.");
+    await expect(wrong).toContainText("Model inference");
+    await expect(wrong).toContainText(
+      "not compared with the measurement · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)",
+    );
+    await screenshot(page, testInfo, "not-compared", wrong);
     await screenshot(page, testInfo, "conflict", sleeve);
   });
 

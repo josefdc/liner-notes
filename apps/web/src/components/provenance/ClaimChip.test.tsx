@@ -273,4 +273,55 @@ describe('ClaimChip', () => {
     const chip = renderChip(track([claim({ numericCheck: 'consistent', field: 'tempo' })]));
     expect(chip.textContent).not.toContain('Conflict');
   });
+
+  it('shows the measured value beside a claim that states a number no check compared', () => {
+    const chip = renderChip(
+      track([claim({ text: 'The preview measured 128 BPM.', field: 'tempo', evidenceIds: [] })]),
+    );
+    expect(chip.textContent).toContain(
+      `not compared with the measurement · measured 123.1 BPM (${TEMPO}, 29.8 s preview)`,
+    );
+    expect(chip.textContent).not.toContain('128');
+  });
+
+  it("never takes that value from the claim's comparison, and adds nothing without one", () => {
+    const compared = renderChip(
+      track([
+        claim({
+          field: 'tempo',
+          numericCheck: 'consistent',
+          numericComparison: { claimed: 123, measured: 99, method: 'stated by the producer' },
+        }),
+      ]),
+    );
+    expect(compared.textContent).toContain(
+      `agrees with the measurement · measured 123.1 BPM (${TEMPO}, 29.8 s preview)`,
+    );
+    expect(compared.textContent).not.toContain('99');
+    cleanup();
+    const unmeasured = renderChip(
+      track([claim({ field: 'tempo' })], [], audioBlock({ tempo: null })),
+    );
+    expect(unmeasured.textContent).not.toMatch(/measured \d|compared with the measurement/);
+    cleanup();
+    const noField = renderChip(track([claim({})]));
+    expect(noField.textContent).not.toContain('compared with the measurement');
+  });
+
+  it('says a consistent number was checked: only its text has no verdict', () => {
+    const chip = renderChip(track([claim({ field: 'tempo', numericCheck: 'consistent' })]));
+    expect(chip.textContent).toContain('no verifier verdict on its text');
+    expect(chip.textContent).not.toContain('not checked');
+  });
+
+  it('never reads plainly supported when the support rests on sources not in this result', () => {
+    const chip = renderChip(
+      track([claim({ evidenceIds: ['ev1', 'gone'], kind: 'sourced', verdict: 'supported' })]),
+    );
+    expect(chip.dataset.claimKind).toBe('inferred');
+    expect(chip.textContent).toContain(
+      'found supported by sources that are not all in this result',
+    );
+    expect(chip.textContent).not.toContain('supported by its sources');
+  });
 });

@@ -286,20 +286,34 @@ export function scopeText(evidence: Pick<Evidence, 'recordRef'>): string | null 
 const PREVIEW_HOST =
   /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
 const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
-// Query parameters that carry a credential.
+// Query (or fragment) parameters that carry a credential or sign a URL: tokens and keys, S3
+// (X-Amz-*), Google Cloud Storage, Azure SAS (sig, se), CloudFront (Policy, Signature,
+// Key-Pair-Id) and Akamai (hdnea, hdnts).
 const CREDENTIAL_PARAMS = new Set([
   'access_token',
+  'id_token',
   'api_key',
   'apikey',
   'token',
   'signature',
+  'sig',
+  'se',
+  'policy',
+  'key-pair-id',
   'x-amz-credential',
   'x-amz-signature',
+  'x-amz-security-token',
   'x-goog-credential',
   'x-goog-signature',
   'hdnea',
   'hdnts',
 ]);
+
+/** True when a query or fragment (`?a=1&b=2`, `#access_token=…`) names a credential parameter. */
+function carriesCredential(params: string): boolean {
+  const keys = [...new URLSearchParams(params.replace(/^[?#]/, '')).keys()];
+  return keys.some((key) => CREDENTIAL_PARAMS.has(key.toLowerCase()));
+}
 
 /**
  * A link that may be opened: an absolute http or https URL, as the browser resolves it; null for
@@ -316,9 +330,7 @@ export function safeHref(url: string | null | undefined): string | null {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (parsed.username || parsed.password) return null;
-  if ([...parsed.searchParams.keys()].some((key) => CREDENTIAL_PARAMS.has(key.toLowerCase()))) {
-    return null;
-  }
+  if (carriesCredential(parsed.search) || carriesCredential(parsed.hash)) return null;
   const href = parsed.href;
   for (const value of [url.trim(), href]) {
     if (PREVIEW_HOST.test(value) || SIGNED_URL.test(value)) return null;
@@ -448,15 +460,17 @@ export function withoutHiddenRelations(
   genealogy: TrackData['genealogy'],
   isHidden: (id: unknown) => boolean,
 ): TrackData['genealogy'] {
-  const claimOf = (link: object) => (link as { claimId?: unknown }).claimId;
-  const links = genealogy.links.filter((link) => !isHidden(claimOf(link)));
+  // A link that is not an object (null, from a tolerant payload) relates nothing: it is skipped.
+  const claimOf = (link: unknown) => (isObject(link) ? link.claimId : undefined);
+  const links = genealogy.links.filter((link) => isObject(link) && !isHidden(claimOf(link)));
   if (links.length === genealogy.links.length) return genealogy;
   const ends = (list: TrackData['genealogy']['links']) =>
     new Set(list.flatMap((link) => [link.source, link.target]));
-  const linkedBefore = ends(genealogy.links);
+  const linkedBefore = ends(genealogy.links.filter(isObject) as TrackData['genealogy']['links']);
   const linkedAfter = ends(links);
   const nodes = genealogy.nodes.filter(
-    (node) => node.group === 1 || linkedAfter.has(node.id) || !linkedBefore.has(node.id),
+    (node) =>
+      !isObject(node) || node.group === 1 || linkedAfter.has(node.id) || !linkedBefore.has(node.id),
   );
   return { nodes, links };
 }

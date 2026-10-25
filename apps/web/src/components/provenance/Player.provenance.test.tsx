@@ -94,6 +94,10 @@ describe('the Player with claims', () => {
   it('lists the credits from the credit claims, with their sources and the verifier reasons', () => {
     render(<Player trackData={provenanceTrack()} onBack={() => {}} />);
     const credits = screen.getByRole('region', { name: 'Credits' });
+    // A credit claim on a card is not listed again.
+    expect(screen.getAllByText('Vocals by Ivy Example.')).toHaveLength(1);
+    expect(credits.textContent).toContain('1 credit is shown with the facts above.');
+    expect(credits.textContent).not.toContain('Ivy Example');
     const items = within(credits).getAllByRole('listitem');
     expect(items.map((item) => item.querySelector('p')?.textContent)).toEqual([
       'Written by Ada Example and Ben Example.',
@@ -134,7 +138,19 @@ describe('the Player with claims', () => {
       ['ConnectionIt was used in a 2012 short film.', 'sourced'],
       ["HistoryA blog calls it the band's breakthrough.", 'sourced'],
       ['SampleA vocal chop from an older record opens the song.', 'inferred'],
+      ['SoundThe preview analysis measured the track at 128 BPM.', 'inferred'],
     ]);
+    // A model sentence stating a measurement is shown beside the measured value, not compared.
+    const wrong = within(more).getAllByRole('listitem')[11];
+    expect(wrong?.textContent).toContain(
+      'not compared with the measurement · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)',
+    );
+    expect(wrong?.textContent).not.toContain('128 BPM (');
+    // A number the check found consistent: its text has no verdict, its number agrees.
+    const roughly = within(more).getAllByRole('listitem')[5];
+    expect(roughly?.textContent).toContain('no verifier verdict on its text');
+    expect(roughly?.textContent).not.toContain('not checked');
+    expect(roughly?.textContent).toContain('agrees with the measurement · measured 123 BPM');
     const blog = within(more).getAllByRole('listitem')[9];
     expect(blog?.textContent).toContain('Web search · web page');
     expect(blog?.textContent).not.toContain('primary record');
@@ -175,5 +191,25 @@ describe('the Player with claims', () => {
     expect(analysis().textContent).toContain(
       '"Sonic Profile" is written from the audio measurement.',
     );
+  });
+
+  it.each([
+    ['a single-node genealogy', [{ id: 'current', group: 1, label: 'Paper Lanterns', size: 40 }]],
+    [
+      'a drawn genealogy',
+      [
+        { id: 'current', group: 1, label: 'Paper Lanterns', size: 40 },
+        { id: 'n-free', group: 4, label: 'Unclaimed Influence - Third (1990)', size: 25 },
+      ],
+    ],
+  ])('skips a genealogy link that is null, with %s', (_case, nodes) => {
+    const track = {
+      ...provenanceTrack(),
+      genealogy: { nodes, links: [null, { source: 'n-free', target: 'current', value: 1 }] },
+    } as unknown as TrackData;
+    render(<Player trackData={track} onBack={() => {}} />);
+    expect(screen.getByRole('heading', { name: 'Paper Lanterns' })).toBeTruthy();
+    const network = document.getElementById('panel-genealogy')?.textContent ?? '';
+    expect(network.includes('Unclaimed Influence')).toBe(nodes.length > 1);
   });
 });

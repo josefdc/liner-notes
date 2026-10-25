@@ -88,14 +88,19 @@ export function statusText(shown: ShownClaim): string | null {
   const parts: string[] = [];
   if (kind === 'sourced' && claim.origin === 'code') parts.push('taken from the source record');
   if (claim.verdict === null) {
-    // Beside a conflict, the numeric check did run: only the text has no verdict.
+    // When the numeric check ran (conflict, consistent), only the text has no verdict.
     parts.push(
-      claim.numericCheck === 'conflict'
+      claim.numericCheck === 'conflict' || claim.numericCheck === 'consistent'
         ? 'no verifier verdict on its text'
         : 'not checked by the verifier',
     );
   } else if (claim.verdict === 'supported') {
-    parts.push('supported by its sources');
+    // Support that rests in part on sources this result does not hold is not shown as plain.
+    parts.push(
+      shown.missingCitations > 0
+        ? 'found supported by sources that are not all in this result'
+        : 'supported by its sources',
+    );
   }
   return parts.length > 0 ? parts.join(' · ') : null;
 }
@@ -110,6 +115,28 @@ export function verdictReasonText(claim: Claim): string | null {
     return `Not supported by its sources: ${reason || 'the verifier gave no reason'}`;
   }
   return null;
+}
+
+/**
+ * The measured value a claim names, beside a claim not shown as measured whose number was not
+ * found in conflict: "not compared with the measurement" when no numeric check ran, "agrees with
+ * the measurement" when it did and agreed. The value is the result's own measurement; null when
+ * the measurement does not hold it.
+ */
+export function measurementBesideText(
+  shown: ShownClaim,
+  audio: MeasuredAudio | null | undefined,
+): string | null {
+  const { claim, kind } = shown;
+  if (kind === 'measured') return null;
+  if (claim.numericCheck === 'conflict' || claim.numericCheck === 'contradicted') return null;
+  const measured = measuredSide(claim, audio);
+  if (!measured) return null;
+  const check =
+    claim.numericCheck === 'consistent'
+      ? 'agrees with the measurement'
+      : 'not compared with the measurement';
+  return `${check} · measured ${measured.value} (${measured.method}, ${measured.window})`;
 }
 
 /** How a claim's citations are introduced: by who cited them, or as the claim's sources. */
@@ -162,6 +189,7 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
   const conflict = claim.numericCheck === 'conflict';
   const status = statusText(shown);
   const reason = verdictReasonText(claim);
+  const besides = measurementBesideText(shown, audio);
   return (
     <div
       data-claim-kind={kind}
@@ -197,6 +225,7 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
         </p>
       )}
       {conflict && <p className={LINE}>{conflictText(claim, audio)}</p>}
+      {besides && <p className={LINE}>{besides}</p>}
     </div>
   );
 };

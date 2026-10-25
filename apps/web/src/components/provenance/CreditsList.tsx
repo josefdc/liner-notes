@@ -34,6 +34,8 @@ export function uncitedCreditRows(credits: ProductionCredits | undefined) {
 interface CreditsListProps {
   /** The result's credit claims that are not rejected. */
   credits: readonly ShownClaim[];
+  /** How many credit claims are shown on the factoid cards instead (not listed again). */
+  onCards?: number;
   /** The result's `credits` lists, written by the model without a source. */
   uncited?: ProductionCredits;
   readings?: readonly Reading[];
@@ -43,6 +45,7 @@ interface CreditsListProps {
 
 export const CreditsList: React.FC<CreditsListProps> = ({
   credits,
+  onCards = 0,
   uncited,
   readings,
   audio,
@@ -55,7 +58,14 @@ export const CreditsList: React.FC<CreditsListProps> = ({
       <h4 id={headingId} className="text-xs font-mono text-text-chip uppercase tracking-widest">
         Credits
       </h4>
-      {credits.length === 0 && rows.length === 0 && (
+      {onCards > 0 && (
+        <p className={LINE}>
+          {onCards === 1
+            ? '1 credit is shown with the facts above.'
+            : `${onCards} credits are shown with the facts above.`}
+        </p>
+      )}
+      {credits.length === 0 && rows.length === 0 && onCards === 0 && (
         <p className={LINE}>No credits found in this result.</p>
       )}
       {credits.length > 0 && (

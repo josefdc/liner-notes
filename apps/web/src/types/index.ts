@@ -205,11 +205,13 @@ export interface TrackData {
     nodes: GenealogyNode[];
     links: GenealogyLink[];
     /**
-     * The result's evidence pack, which the links cite. Not sent here by the API (it sends
-     * `evidence` with the result): `normalizeTrack` copies it in, so whatever shows the
-     * genealogy can check each link's citations. Without it every link is a model inference.
+     * The result's evidence pack and claims, which the links cite and state. Not sent here by
+     * the API (it sends `evidence` and `claims` with the result): `normalizeTrack` copies them
+     * in, so whatever shows the genealogy can check each link. Without them every link is a
+     * model inference.
      */
     evidence?: unknown;
+    claims?: unknown;
   };
   // Genre profile for the Sonic Fingerprint radar chart (written by the model)
   genreProfile?: GenreProfileItem[];

@@ -289,13 +289,14 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
 // The genealogy's words: the connected-track cards' relation badges and provenance lines on the
 // Dashboard; the legend, the link list and a focused link's detail in the Player.
 const GENEALOGY_TEXT = {
-  dashboard: "span[data-link-kind], p[data-link-provenance]",
+  dashboard: "span[data-link-kind], p[data-link-relation], p[data-link-provenance]",
   player: [
     '[aria-label="Link legend"] li',
+    '[data-testid="links-rejected"]',
     "#panel-genealogy details summary",
     '[aria-label="Genealogy links"] li',
-    '[data-testid="link-detail"]',
   ].join(", "),
+  detail: '[data-testid="link-detail"]',
 };
 
 for (const cover of ["no cover", "a white cover"]) {
@@ -310,7 +311,14 @@ for (const cover of ["no cover", "a white cover"]) {
     );
     const { genealogy } = complete.data;
     genealogy.nodes = genealogy.nodes.filter((node: { id: string }) =>
-      ["current", "sample-sourced", "sample-inferred", "influence-inferred"].includes(node.id),
+      [
+        "current",
+        "sample-sourced",
+        "sample-inferred",
+        "influence-inferred",
+        "backwards",
+        "rejected",
+      ].includes(node.id),
     );
     const kept = new Set(genealogy.nodes.map((node: { id: string }) => node.id));
     genealogy.links = genealogy.links.filter(
@@ -330,11 +338,16 @@ for (const cover of ["no cover", "a white cover"]) {
     await page.mouse.move(0, 0);
     await openPlayer(page);
     await page.waitForTimeout(500);
-    await page.getByText(/^Links as a list/).click();
-    await page.locator("#panel-genealogy g.link-targets line").first().focus();
+    // The list opens over the graph; then, closed again, a focused link's detail.
+    const summary = page.getByText(/^Links as a list/);
+    await summary.click();
     const player = await neutralBadgeContrast(page, GENEALOGY_TEXT.player);
-    // Inferred badges and every provenance line (sourced badges are amber, not measured here).
-    expect(dashboard.length).toBeGreaterThanOrEqual(5);
+    await summary.click();
+    await page.locator("#panel-genealogy g.link-targets line").first().focus();
+    player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail)));
+    // Inferred badges, every relation and provenance line (sourced badges are amber, not
+    // measured here).
+    expect(dashboard.length).toBeGreaterThanOrEqual(8);
     // Two kinds and three relations in the legend, the summary, three links and the detail.
     expect(player.length).toBeGreaterThanOrEqual(10);
     for (const { text, ratio } of [...dashboard, ...player]) {

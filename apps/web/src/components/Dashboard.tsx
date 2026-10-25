@@ -10,13 +10,8 @@ import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
-import {
-  provenanceText,
-  rank,
-  relationToTrack,
-  shownLinks,
-  type TrackRelation,
-} from './genealogy/links';
+import type { TrackRelation } from './genealogy/links';
+import { useLinkReader } from './genealogy/useLinkReader';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -66,13 +61,9 @@ function generateGradientColors(label: string, group: number): { from: string; t
   };
 }
 
-/**
- * Tracks connected to this one in its genealogy (empty when there are none: no stand-ins), the
- * best known first. Each says how it is related by the link that joins it to this track, read
- * with the contract's rule: a documented relation ("Sampled in this track") only for a sourced
- * link with evidence in the pack, never from the node's group.
- */
-function getRelatedTracks(trackData: TrackData | null): Array<{
+type LinkReader = typeof import('./genealogy/links');
+
+interface RelatedTrack {
   id: string;
   /** The Spotify track the node was strictly matched to, when there is one. */
   spotifyId?: string;
@@ -81,18 +72,41 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   title: string;
   artist: string;
   relation: TrackRelation;
+  /** The relation as a sentence naming both tracks (null when no link joins them). */
+  sentence: string | null;
+  /** Where the relation comes from (null when no link joins them). */
+  provenance: string | null;
   img: string | null;
   group: number;
-}> {
-  if (!trackData) return [];
-  const nodes = trackData.genealogy?.nodes ?? [];
-  const links = shownLinks(trackData.genealogy);
-  const currentId = nodes.find((node) => node.group === 1)?.id ?? null;
-  const strength = (relation: TrackRelation) => (relation.link ? rank(relation.link) : -1);
+}
 
-  return nodes
-    .filter((node) => node.group !== 1)
-    .map((node) => ({ node, relation: relationToTrack(links, node.id, currentId) }))
+/** The tracks other than the analysed one; the link reader is needed only when there are some. */
+const relatedNodes = (trackData: TrackData | null) =>
+  (trackData?.genealogy?.nodes ?? []).filter((node) => node.group !== 1);
+
+/**
+ * Tracks connected to this one in its genealogy (empty when there are none: no stand-ins), the
+ * best known first. Each says how it is related by the link that joins it to this track, read
+ * with the contract's rule and the reader's stricter ones: a documented relation (a sample, a
+ * cover…) only for a sourced link with evidence in the pack, never from the node's group. Null
+ * while the link reader loads.
+ */
+function getRelatedTracks(
+  trackData: TrackData | null,
+  reader: LinkReader | null,
+): RelatedTrack[] | null {
+  const others = relatedNodes(trackData);
+  if (!trackData || others.length === 0) return [];
+  if (!reader) return null;
+  const nodes = trackData.genealogy?.nodes ?? [];
+  const links = reader.shownLinks(trackData.genealogy);
+  const named = reader.nodesById(nodes);
+  const nameOf = (id: string) => reader.nodeName(named.get(id), id);
+  const currentId = nodes.find((node) => node.group === 1)?.id ?? null;
+  const strength = (relation: TrackRelation) => (relation.link ? reader.rank(relation.link) : -1);
+
+  return others
+    .map((node) => ({ node, relation: reader.relationToTrack(links, node.id, currentId) }))
     .sort((a, b) => strength(b.relation) - strength(a.relation))
     .slice(0, 4)
     .map(({ node, relation }) => ({
@@ -102,6 +116,8 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
       title: node.label,
       artist: '', // Genealogy nodes don't have separate artist field
       relation,
+      sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
+      provenance: relation.link ? reader.provenanceText(relation.link) : null,
       img: isValidImageUrl(node.img) ? node.img : null,
       group: node.group,
     }));
@@ -141,7 +157,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
     [rawTrackData],
   );
-  const relatedTracks = useMemo(() => getRelatedTracks(trackData), [trackData]);
+  // The link reader (and the contract's schemas it validates with) loads only when there are
+  // connected tracks to read.
+  const { reader, failed: readerFailed } = useLinkReader(relatedNodes(trackData).length > 0);
+  const relatedTracks = useMemo(() => getRelatedTracks(trackData, reader), [trackData, reader]);
   const hasGenreProfile = (trackData?.genreProfile?.length ?? 0) > 0;
   // The audio models' style and tag scores; null for a result without an `audio` block.
   const fingerprint = useMemo(
@@ -406,21 +425,30 @@ const Dashboard: React.FC<DashboardProps> = ({
                   : 'From the genealogy graph — each card says whether its link is sourced or a model inference'}
               </p>
             </div>
-            {relatedTracks.length > 0 && (
+            {relatedTracks !== null && relatedTracks.length > 0 && (
               <span className="text-xs font-mono text-analog">
                 {relatedTracks.length} RELATED ARTIFACTS
               </span>
             )}
           </div>
 
-          {relatedTracks.length === 0 && (
+          {relatedTracks !== null && relatedTracks.length === 0 && (
             <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
               No connected tracks found for this song.
             </p>
           )}
+          {relatedTracks === null && readerFailed && (
+            <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
+              Connected tracks could not be loaded. Reload the page to try again.
+            </p>
+          )}
 
-          <div className="flex gap-(--space-lg) overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
-            {relatedTracks.map((rec) => (
+          {/* Busy while the link reader loads: the cards follow once their relations are read */}
+          <div
+            aria-busy={relatedTracks === null && !readerFailed}
+            className="flex gap-(--space-lg) overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain"
+          >
+            {(relatedTracks ?? []).map((rec, index) => (
               <div
                 key={rec.id}
                 role="button"
@@ -435,9 +463,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
                 data-hovered={hoveredCardId === rec.id || undefined}
-                className="relative min-w-[280px] rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
+                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
-                  animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`,
+                  animationDelay: `${index * 80}ms`,
                   animationFillMode: 'forwards',
                 }}
               >
@@ -482,9 +510,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <span className="font-bold">LOGIC:</span> {rec.relation.text}
                       </span>
                     </Badge>
-                    {rec.relation.link && (
+                    {rec.sentence && (
+                      <p data-link-relation className="text-chrome font-mono text-text-secondary">
+                        {rec.sentence}
+                      </p>
+                    )}
+                    {rec.provenance && (
                       <p data-link-provenance className="text-chrome font-mono text-text-chip">
-                        {provenanceText(rec.relation.link)}
+                        {rec.provenance}
                       </p>
                     )}
                   </div>

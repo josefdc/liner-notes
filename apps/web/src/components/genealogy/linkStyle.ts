@@ -24,7 +24,7 @@ export const LINK_DASH: Record<LinkKind, string> = {
 /** How opaque a link's line is at rest, by its kind. */
 export const LINK_OPACITY: Record<LinkKind, number> = {
   sourced: 0.9,
-  inferred: 0.7,
+  inferred: 0.8,
 };
 
 /** A link's line width from its strength (1-3). */

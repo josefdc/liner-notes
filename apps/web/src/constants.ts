@@ -939,11 +939,13 @@ export function normalizeTrack(track: TrackData): TrackData {
     samples: list(track.samples),
     keyMoments: list(track.keyMoments),
     factoids: displayableFactoids(track.factoids).filter((f) => !repeatsEstimatedAudio(f, track)),
-    // The links are shown against the result's evidence pack (components/genealogy/links.ts).
+    // The links are shown against the result's evidence pack and claims
+    // (components/genealogy/links.ts): always the result's own, never a genealogy's copy.
     genealogy: {
       nodes: list(genealogy.nodes),
       links: list(genealogy.links),
-      ...('evidence' in track ? { evidence: track.evidence } : {}),
+      evidence: 'evidence' in track ? track.evidence : undefined,
+      claims: 'claims' in track ? track.claims : undefined,
     },
     genreProfile: Array.isArray(track.genreProfile) ? track.genreProfile : undefined,
     credits: isObject(track.credits) ? track.credits : undefined,

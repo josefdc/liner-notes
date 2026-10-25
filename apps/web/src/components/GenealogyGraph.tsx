@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { select, selectAll } from 'd3-selection';
-import { zoom, zoomIdentity } from 'd3-zoom';
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
+import {
+  forceSimulation,
+  forceLink,
+  forceManyBody,
+  forceCenter,
+  forceCollide,
+  forceX,
+  forceY,
+} from 'd3-force';
 import type { Simulation } from 'd3-force';
 import { drag } from 'd3-drag';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
@@ -12,17 +20,46 @@ import { useAudioPreview } from './genealogy/useAudioPreview';
 import {
   describeLink,
   isDocumentedSource,
-  LINK_KIND_LABEL,
+  kindLabel,
   LINK_TYPE_LABEL,
+  nodeName,
+  nodesById,
   provenanceText,
+  rank,
+  readGenealogy,
+  relationSentence,
   relationToTrack,
-  shownLinks,
+  type ShownLink,
 } from './genealogy/links';
+import { labelHeight, labelWidth, visibleLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
+import { useFillHeight } from './genealogy/useFillHeight';
 import { isValidImageUrl } from '../utils/image';
 import type { TrackData } from '../types';
+
+/** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
+type Item = { kind: 'node'; id: string } | { kind: 'link'; index: number };
+
+const sameItem = (a: Item | null, b: Item | null) =>
+  a !== null &&
+  b !== null &&
+  (a.kind === 'node'
+    ? b.kind === 'node' && a.id === b.id
+    : b.kind === 'link' && a.index === b.index);
+
+/** The words on a link's line: its relation, hedged when it is not sourced. */
+function lineLabel(link: ShownLink): string {
+  if (!link.directionKnown) return 'related';
+  const label = LINK_TYPE_LABEL[link.type].toLowerCase();
+  return link.kind === 'sourced' ? label : `possible ${label}`;
+}
+
+/** Screen size of the line labels and track labels, whatever the zoom. */
+const LINE_LABEL_PX = 9;
+const NODE_LABEL_PX = { narrow: 9, wide: 10 };
+const SUB_LABEL_PX = 8;
 
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
@@ -78,23 +115,28 @@ function generateSvgPlaceholder(label: string, group: number, size: number): str
 }
 
 const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) => {
+  const rootRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // The links that can be drawn (d3-force throws on a link to an unknown node id, which would
-  // take the whole page down), each read with the contract's link schema and shown by its rule:
-  // sourced only with evidence in the result's pack.
-  const links = useMemo(() => shownLinks(data), [data]);
-  const labelOf = useMemo(() => {
-    const labels = new Map(graphNodes(data).map((node) => [node.id, node.label]));
-    return (id: string) => labels.get(id) ?? id;
+  // take the whole page down), each read with the contract's link schema and shown by its rule
+  // and this app's stricter ones; links whose claim the verifier contradicted are left out.
+  const { links, rejected } = useMemo(() => readGenealogy(data), [data]);
+  const nameOf = useMemo(() => {
+    const nodes = nodesById(data?.nodes);
+    return (id: string) => nodeName(nodes.get(id), id);
   }, [data]);
   const currentId = useMemo(
     () => graphNodes(data).find((node) => node.group === 1)?.id ?? null,
     [data],
   );
-  // The link pointed at or focused in the graph; its relation and provenance are shown.
-  const [activeLink, setActiveLink] = useState<number | null>(null);
+  // What the pointer is on, and what keyboard focus is on: the detail shows the first of them,
+  // so moving the pointer away does not take the focused item's detail with it.
+  const [hovered, setHovered] = useState<Item | null>(null);
+  const [focused, setFocused] = useState<Item | null>(null);
+  // On phones the panel has no height of its own: fill the space down to the tab bar.
+  const fillHeight = useFillHeight(rootRef);
 
   // Audio preview (extracted hook)
   const {
@@ -156,6 +198,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     const nodeScale = isMobile ? 0.6 : 1;
     const linkDistance = isMobile ? 80 : 120;
     const chargeStrength = isMobile ? -300 : -400;
+    // The fit never shrinks the graph below this: lines, dashes and labels stay readable, and
+    // what does not fit can be panned to.
+    const minFitScale = isMobile ? 0.5 : 0.35;
 
     // 2. Define Glow Filters (Cinematic Neon Look)
     const defs = svg.append('defs');
@@ -174,12 +219,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     amberMerge.append('feMergeNode').attr('in', 'coloredBlur');
     amberMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
-    // 3. Zoom Behavior
+    // 3. Zoom Behavior. Text keeps its size on screen whatever the zoom, and line labels that
+    // would overlap are hidden, the best known relations kept.
     const g = svg.append('g');
+    let transform: ZoomTransform = zoomIdentity;
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 4])
       .on('zoom', (event) => {
+        transform = event.transform;
         g.attr('transform', event.transform);
+        fitText();
       });
 
     svg.call(zoomBehavior);
@@ -200,13 +249,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       n,
       shown,
     }));
+    // Each track's relation to the analysed one, from the link that joins them.
+    const relations = new Map(nodes.map((n) => [n.id, relationToTrack(links, n.id, currentId)]));
     // Tracks a sourced sample, interpolation, cover or remix says the analysed track uses.
-    const origins = new Set(
-      nodes
-        .filter((n) => isDocumentedSource(relationToTrack(links, n.id, currentId), n.id))
-        .map((n) => n.id),
-    );
-    const isOrigin = (d: CustomNode) => d.group !== 1 && origins.has(d.id);
+    const isOrigin = (d: CustomNode) => {
+      const relation = relations.get(d.id);
+      return d.group !== 1 && relation !== undefined && isDocumentedSource(relation, d.id);
+    };
 
     // Create simulation centered at viewport center
     const simulation = forceSimulation(nodes)
@@ -221,10 +270,20 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .force(
         'collide',
         forceCollide().radius((d: any) => d.size + (isMobile ? 8 : 15)),
-      );
+      )
+      // A light pull to the middle: a track with no link shown (its only link rejected, or
+      // none sent) is not pushed off into the distance, taking the fit with it.
+      .force('x', forceX(width / 2).strength(0.04))
+      .force('y', forceY(height / 2).strength(0.04));
 
-    // Auto-fit after simulation stabilizes
+    // Auto-fit once the layout first settles; a later drag keeps the user's view.
+    let fitted = false;
     simulation.on('end', () => {
+      if (fitted) {
+        fitText();
+        return;
+      }
+      fitted = true;
       // Calculate bounding box of all nodes
       let minX = Infinity,
         maxX = -Infinity,
@@ -249,7 +308,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       const padding = isMobile ? 40 : 60;
       const scaleX = (width - padding * 2) / graphWidth;
       const scaleY = (height - padding * 2) / graphHeight;
-      const scale = Math.min(scaleX, scaleY, 1.5); // Cap max zoom
+      const scale = Math.max(Math.min(scaleX, scaleY, 1.5), minFitScale); // Cap max zoom
 
       // Apply transform to center and fit
       const translateX = width / 2 - graphCenterX * scale;
@@ -262,11 +321,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     });
 
     // 5. Render links: the colour is the relation a link is shown as, the line its kind (solid
-    // when sourced, dashed when a model inference), and a label names the relation.
+    // when sourced, dashed when not), and a label names the relation. Widths and dashes are
+    // kept on screen whatever the zoom (non-scaling stroke).
     const restingOpacity = (d: CustomLink) => LINK_OPACITY[d.shown.kind];
     const link = g
       .append('g')
       .attr('class', 'links')
+      .attr('aria-hidden', 'true')
       .selectAll('line')
       .data(simulationLinks)
       .join('line')
@@ -276,38 +337,30 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .attr('stroke', (d) => LINK_COLOR[d.shown.type])
       .attr('stroke-opacity', restingOpacity)
       .attr('stroke-width', (d) => linkWidth(d.shown.value, d.shown.kind))
-      .attr('stroke-dasharray', (d) => LINK_DASH[d.shown.kind]);
+      .attr('stroke-dasharray', (d) => LINK_DASH[d.shown.kind])
+      .attr('vector-effect', 'non-scaling-stroke');
 
+    // Decorative for screen readers: the summary and the focused item say the same in words.
     const linkLabel = g
       .append('g')
       .attr('class', 'link-labels')
+      .attr('aria-hidden', 'true')
       .style('pointer-events', 'none')
       .selectAll('text')
       .data(simulationLinks)
       .join('text')
-      .text((d) => LINK_TYPE_LABEL[d.shown.type].toLowerCase())
+      .text((d) => lineLabel(d.shown))
       .attr('text-anchor', 'middle')
       .attr('dy', '-0.4em')
       .attr('fill', (d) => LINK_COLOR[d.shown.type])
       .attr('font-family', 'IBM Plex Mono')
-      .attr('font-size', isMobile ? '8px' : '9px')
+      .attr('font-size', `${LINE_LABEL_PX}px`)
       .style('paint-order', 'stroke')
       .style('stroke', colors.void)
       .style('stroke-width', '3px');
 
     // A wider, invisible line over each link: pointing at it or focusing it shows the link's
-    // relation and where it comes from.
-    const highlightLink = (index: number | null) => {
-      link
-        .attr('stroke-opacity', (d) =>
-          index === null ? restingOpacity(d) : d.n === index ? 1 : 0.15,
-        )
-        .attr(
-          'stroke-width',
-          (d) => linkWidth(d.shown.value, d.shown.kind) * (d.n === index ? 1.8 : 1),
-        );
-      setActiveLink(index);
-    };
+    // relation and where it comes from; focused, it shows a band of its own as a focus ring.
     const linkTarget = g
       .append('g')
       .attr('class', 'link-targets')
@@ -315,15 +368,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .data(simulationLinks)
       .join('line')
       .attr('data-link-index', (d) => d.n)
-      .attr('stroke', 'transparent')
+      .attr('stroke', colors.cyber)
+      .attr('stroke-opacity', 0)
       .attr('stroke-width', 12)
+      .attr('vector-effect', 'non-scaling-stroke')
       .style('pointer-events', 'stroke')
       .style('outline', 'none')
-      .attr('tabindex', 0)
-      .attr('aria-label', (d) => describeLink(d.shown, labelOf))
-      .on('mouseenter focus', (_event, d) => highlightLink(d.n))
-      .on('mouseleave blur', () => highlightLink(null));
-    linkTarget.append('title').text((d) => describeLink(d.shown, labelOf));
+      .attr('tabindex', -1)
+      .attr('aria-label', (d) => describeLink(d.shown, nameOf));
 
     // 6. Render Nodes
     const node = g
@@ -333,7 +385,23 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .data(nodes)
       .join('g')
       .attr('cursor', 'pointer')
+      .attr('data-node-id', (d) => d.id)
+      .attr('tabindex', -1)
+      .attr('role', (d) => (d.group === 1 ? 'img' : 'button'))
+      .attr('aria-label', (d) => nodeAriaLabel(d))
+      .style('outline', 'none')
       .call(dragBehavior(simulation) as any);
+
+    function nodeAriaLabel(d: CustomNode): string {
+      const name = nameOf(d.id);
+      if (d.group === 1) return `${name}, the analysed track`;
+      const relation = relations.get(d.id);
+      const link = relation?.link;
+      const said = link
+        ? `${relationSentence(link, nameOf)}. ${provenanceText(link)}.`
+        : 'No direct link to the analysed track.';
+      return `${name}: ${said} Press Enter to analyse it.`;
+    }
 
     // Node - Outer Glow Ring (The Halo)
     node
@@ -352,6 +420,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         if (isOrigin(d)) return 'url(#glow-amber)';
         return 'none';
       });
+
+    // Node - focus ring, shown while keyboard focus is on the track
+    node
+      .append('circle')
+      .attr('class', 'focus-ring')
+      .attr('r', (d) => d.size + 9)
+      .attr('fill', 'none')
+      .attr('stroke', colors.cyber)
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', '4 3')
+      .attr('opacity', 0)
+      .style('pointer-events', 'none');
 
     // Node - Image Container
     // We use a pattern definition or clipPath. ClipPath is easier for dynamic images per node.
@@ -378,12 +458,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     });
 
     // Node - Labels (responsive sizing)
-    const labelFontSize = isMobile ? '7px' : '10px';
-    const subLabelFontSize = isMobile ? '5px' : '8px';
+    const labelFontSize = isMobile ? NODE_LABEL_PX.narrow : NODE_LABEL_PX.wide;
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
       .append('g')
+      .attr('class', 'node-label')
       .attr('transform', (d) => `translate(0, ${d.size + (isMobile ? 8 : 15)})`)
       .style('pointer-events', 'none')
       .style('opacity', (d) => (isMobile && d.group !== 1 && !isOrigin(d) ? 0.7 : 1)); // Dim non-essential labels on mobile
@@ -398,7 +478,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .attr('text-anchor', 'middle')
       .attr('fill', '#fff')
       .attr('font-family', 'IBM Plex Mono')
-      .attr('font-size', labelFontSize)
+      .attr('font-size', `${labelFontSize}px`)
       .attr('letter-spacing', '0px')
       .style('text-shadow', '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8)');
 
@@ -406,6 +486,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     if (!isMobile) {
       labels
         .append('text')
+        .attr('class', 'sub-label')
         // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
         .text((d) => (d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]'))
         .attr('dy', '1.2em')
@@ -418,10 +499,129 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
               : colors.gray[400],
         )
         .attr('font-family', 'IBM Plex Mono')
-        .attr('font-size', subLabelFontSize);
+        .attr('font-size', `${SUB_LABEL_PX}px`);
     }
 
+    // A track's own drawing is decorative for screen readers: its name says it all.
+    node.selectChildren().attr('aria-hidden', 'true');
+
+    /** Keeps text the same size on screen at any zoom, and hides line labels that overlap. */
+    function fitText() {
+      const k = transform.k || 1;
+      linkLabel.attr('font-size', `${LINE_LABEL_PX / k}px`);
+      labels.selectAll('text').attr('font-size', function () {
+        const base = (this as Element).classList.contains('sub-label')
+          ? SUB_LABEL_PX
+          : labelFontSize;
+        return `${base / k}px`;
+      });
+      const boxes = simulationLinks.map((d: any) => ({
+        x: (((d.source.x ?? 0) + (d.target.x ?? 0)) / 2) * k,
+        y: (((d.source.y ?? 0) + (d.target.y ?? 0)) / 2) * k,
+        width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
+        height: labelHeight(LINE_LABEL_PX),
+        priority: rank(d.shown),
+      }));
+      const visible = visibleLabels(boxes);
+      linkLabel.attr('visibility', (d) => (visible[d.n] ? null : 'hidden'));
+    }
+    fitText();
+
     // 7. Interactions (Highlighting & Neighbor detection)
+
+    // What the pointer and keyboard focus are on (the detail box is React's; this draws it).
+    let pointerOn: Item | null = null;
+    let focusOn: Item | null = null;
+    const drawActive = () => {
+      const active = pointerOn ?? focusOn;
+      const activeLink = active?.kind === 'link' ? active.index : null;
+      link
+        .attr('stroke-opacity', (d) =>
+          activeLink === null ? restingOpacity(d) : d.n === activeLink ? 1 : 0.15,
+        )
+        .attr(
+          'stroke-width',
+          (d) => linkWidth(d.shown.value, d.shown.kind) * (d.n === activeLink ? 1.8 : 1),
+        );
+      // The focus ring: a band along a focused link, a dashed ring round a focused track.
+      linkTarget.attr('stroke-opacity', (d) =>
+        focusOn?.kind === 'link' && focusOn.index === d.n ? 0.3 : 0,
+      );
+      node
+        .select('.focus-ring')
+        .attr('opacity', (d) => (focusOn?.kind === 'node' && focusOn.id === d.id ? 1 : 0));
+    };
+    const pointAt = (item: Item | null) => {
+      pointerOn = item;
+      drawActive();
+      setHovered(item);
+    };
+
+    // Keyboard: one tab stop for the whole graph (roving tabindex). The arrow keys move between
+    // the tracks, then the links; Home and End go to the first and the last; Enter or Space
+    // analyses the focused track.
+    const items: Array<{ item: Item; element: SVGElement }> = [
+      ...node.nodes().map((element, i) => ({
+        item: { kind: 'node', id: nodes[i].id } as Item,
+        element: element as SVGElement,
+      })),
+      ...linkTarget.nodes().map((element, i) => ({
+        item: { kind: 'link', index: simulationLinks[i].n } as Item,
+        element: element as SVGElement,
+      })),
+    ];
+    const setRoving = (index: number) => {
+      items.forEach(({ element }, i) => {
+        element.setAttribute('tabindex', i === index ? '0' : '-1');
+      });
+    };
+    setRoving(0);
+    items.forEach(({ item, element }, i) => {
+      element.addEventListener('focus', () => {
+        setRoving(i);
+        focusOn = item;
+        drawActive();
+        setFocused(item);
+      });
+      element.addEventListener('blur', () => {
+        if (!sameItem(focusOn, item)) return;
+        focusOn = null;
+        drawActive();
+        setFocused(null);
+      });
+    });
+    svg.on('keydown', (event: KeyboardEvent) => {
+      if (items.length === 0) return;
+      const at = items.findIndex(({ element }) => element === event.target);
+      if (at === -1) return;
+      const last = items.length - 1;
+      const next =
+        event.key === 'ArrowRight' || event.key === 'ArrowDown'
+          ? Math.min(at + 1, last)
+          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+            ? Math.max(at - 1, 0)
+            : event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? last
+                : null;
+      if (next !== null) {
+        event.preventDefault();
+        setRoving(next);
+        items[next].element.focus();
+        return;
+      }
+      const { item } = items[at];
+      if ((event.key === 'Enter' || event.key === ' ') && item.kind === 'node') {
+        event.preventDefault();
+        const d = nodes.find((n) => n.id === item.id);
+        if (d) analyse(d);
+      }
+    });
+
+    linkTarget
+      .on('mouseenter', (_event, d) => pointAt({ kind: 'link', index: d.n }))
+      .on('mouseleave', () => pointAt(null));
 
     // Helper to find connected nodes
     const linkedByIndex: Record<string, boolean> = {};
@@ -437,8 +637,33 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       return linkedByIndex[`${a.id},${b.id}`] || a.id === b.id;
     }
 
+    /** Analyses a track (never the current one). */
+    function analyse(d: CustomNode) {
+      // Don't re-analyze the current song (group 1)
+      if (d.group === 1) return;
+
+      // Stop any playing preview
+      stopPreview();
+
+      // Trigger navigation callback
+      if (onNodeClick) {
+        onNodeClick({
+          id: d.id,
+          group: d.group,
+          label: d.label,
+          img: d.img,
+          size: d.size,
+          previewUrl: d.previewUrl,
+          spotifyId: d.spotifyId,
+          trackTitle: d.trackTitle,
+          trackArtist: d.trackArtist,
+        });
+      }
+    }
+
     node
       .on('mouseenter', function (_event, d) {
+        pointAt({ kind: 'node', id: d.id });
         // Dim everything
         node.style('opacity', 0.1);
         link.style('stroke-opacity', 0.05);
@@ -469,6 +694,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
           select(this)
             .append('text')
             .attr('class', 'preview-indicator')
+            .attr('aria-hidden', 'true')
             .attr('data-node-id', d.id)
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
@@ -486,6 +712,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
           select(this)
             .append('text')
             .attr('class', 'preview-indicator')
+            .attr('aria-hidden', 'true')
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
@@ -499,6 +726,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         }
       })
       .on('mouseleave', () => {
+        pointAt(null);
         node.style('opacity', 1);
         // Back to each link's own colour and opacity (its attributes).
         link.style('stroke', null).style('stroke-opacity', null);
@@ -511,27 +739,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       // Click to navigate (infinite exploration)
       .on('click', (event, d) => {
         event.stopPropagation();
-
-        // Don't re-analyze the current song (group 1)
-        if (d.group === 1) return;
-
-        // Stop any playing preview
-        stopPreview();
-
-        // Trigger navigation callback
-        if (onNodeClick) {
-          onNodeClick({
-            id: d.id,
-            group: d.group,
-            label: d.label,
-            img: d.img,
-            size: d.size,
-            previewUrl: d.previewUrl,
-            spotifyId: d.spotifyId,
-            trackTitle: d.trackTitle,
-            trackArtist: d.trackArtist,
-          });
-        }
+        analyse(d);
       });
 
     // 8. Tick Function
@@ -574,18 +782,29 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
     return () => {
       simulation.stop();
-      setActiveLink(null);
+      setHovered(null);
+      setFocused(null);
     };
-  }, [data, links, labelOf, currentId, onNodeClick, dimensions, playPreview, stopPreview]); // Add dimensions to dependency array for responsive redraw
+  }, [data, links, nameOf, currentId, onNodeClick, dimensions, playPreview, stopPreview]); // Add dimensions to dependency array for responsive redraw
 
   const nodeList = graphNodes(data);
-  const active = activeLink === null ? null : (links[activeLink] ?? null);
+  const related = nodeList.filter((node) => node.group !== 1);
+  const active = hovered ?? focused;
+  const activeLink = active?.kind === 'link' ? (links[active.index] ?? null) : null;
+  const activeNode =
+    active?.kind === 'node' ? (nodeList.find((node) => node.id === active.id) ?? null) : null;
+  const activeRelation = activeNode ? relationToTrack(links, activeNode.id, currentId) : null;
+  const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div
+      ref={rootRef}
+      className="relative w-full h-full flex flex-col"
+      style={fillHeight === null ? undefined : { height: fillHeight }}
+    >
       <div
         ref={wrapperRef}
-        className="relative flex-1 min-h-0 cursor-move bg-[radial-gradient(circle_at_center,_rgba(20,20,30,0.5)_0%,_transparent_70%)]"
+        className="relative flex-1 min-h-0 overflow-hidden cursor-move bg-[radial-gradient(circle_at_center,_rgba(20,20,30,0.5)_0%,_transparent_70%)]"
       >
         <svg
           ref={svgRef}
@@ -597,32 +816,52 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
             link that joins it to this one, never from its group. */}
         <div className="sr-only">
           Genealogy network
-          {nodeList.length > 0 ? ` with ${nodeList.length} related tracks` : ''}.
+          {related.length > 0
+            ? ` with ${related.length} related ${related.length === 1 ? 'track' : 'tracks'}`
+            : ''}
+          .
           {nodeList
             .map((node) => {
-              if (node.group === 1) return ` ${node.label} (Current song).`;
+              if (node.group === 1) return ` ${nameOf(node.id)} (the analysed track).`;
               const relation = relationToTrack(links, node.id, currentId);
-              const kind = relation.link ? `, ${LINK_KIND_LABEL[relation.link.kind]}` : '';
-              return ` ${node.label} (${relation.text}${kind}).`;
+              const kind = relation.link ? `, ${kindLabel(relation.link)}` : '';
+              return ` ${nameOf(node.id)} (${relation.text}${kind}).`;
             })
             .join('')}
+          {links.length > 0 &&
+            ' In the graph, the arrow keys move between the tracks and the links; Enter analyses the focused track.'}
         </div>
 
-        {/* The link pointed at or focused: its relation and where it comes from */}
-        {active && (
+        {/* What the pointer or keyboard focus is on: a link's relation and where it comes from,
+            or a track's relation to this one */}
+        {(activeLink || activeNode) && (
           <div
             aria-hidden="true"
             data-testid="link-detail"
-            className="absolute left-2 right-2 bottom-2 z-10 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip"
+            className="absolute left-2 right-2 bottom-2 z-20 max-h-[40%] overflow-hidden pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip"
           >
-            <p className="text-text-secondary">
-              {labelOf(active.source)} → {labelOf(active.target)}
-            </p>
-            <p>
-              <span className="text-text-secondary">{LINK_TYPE_LABEL[active.type]}</span>
-              {' · '}
-              {provenanceText(active)}
-            </p>
+            {activeLink && (
+              <>
+                <p className="text-text-secondary">{relationSentence(activeLink, nameOf)}</p>
+                <p>{provenanceText(activeLink)}</p>
+              </>
+            )}
+            {activeNode && (
+              <>
+                <p className="text-text-secondary">{nameOf(activeNode.id)}</p>
+                {activeNode.group === 1 ? (
+                  <p>The analysed track</p>
+                ) : activeRelation?.link ? (
+                  <>
+                    <p>{relationSentence(activeRelation.link, nameOf)}</p>
+                    <p>{provenanceText(activeRelation.link)}</p>
+                  </>
+                ) : (
+                  <p>No direct link to this track</p>
+                )}
+                {keyboardOnNode && activeNode.group !== 1 && <p>Enter: analyse this track</p>}
+              </>
+            )}
           </div>
         )}
 
@@ -676,12 +915,19 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         </div>
       </div>
 
-      {/* What the lines mean, in words, and the links as a list */}
-      {links.length > 0 && (
+      {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
+      {(links.length > 0 || rejected > 0) && (
         // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
         <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
           <LinkLegend types={links.map((link) => link.type)} />
-          <LinkList links={links} labelOf={labelOf} />
+          {rejected > 0 && (
+            <p className="text-chrome font-mono text-text-chip" data-testid="links-rejected">
+              {rejected === 1
+                ? '1 link not shown: the verifier contradicted its claim.'
+                : `${rejected} links not shown: the verifier contradicted their claims.`}
+            </p>
+          )}
+          <LinkList links={links} nameOf={nameOf} />
         </div>
       )}
     </div>

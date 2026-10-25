@@ -1,13 +1,14 @@
 import type React from 'react';
 import type { LinkKind, LinkType } from '@liner-notes/contract';
 import { colors } from '../../styles/theme';
-import { LINK_KIND_LABEL, LINK_TYPE_LABEL, LINK_TYPES } from './links';
+import { LINK_TYPE_LABEL, LINK_TYPES } from './links';
 import { LINK_COLOR, LINK_DASH } from './linkStyle';
 
 const KIND_NOTE: Record<LinkKind, string> = {
   sourced: 'cites evidence in this result',
-  inferred: 'not backed by evidence',
+  inferred: 'a model inference, or its evidence is missing or not checked',
 };
+const KIND_NAME: Record<LinkKind, string> = { sourced: 'Sourced', inferred: 'Not sourced' };
 
 /** A short line drawn as a link of this colour and kind is. */
 const Swatch: React.FC<{ color: string; kind: LinkKind }> = ({ color, kind }) => (
@@ -44,7 +45,7 @@ export const LinkLegend: React.FC<{ types: readonly LinkType[] }> = ({ types }) 
             <Swatch color={colors.gray[300]} kind={kind} />
             <span>
               <span className="text-text-secondary">
-                {kind === 'sourced' ? 'Solid' : 'Dashed'}: {LINK_KIND_LABEL[kind]}
+                {kind === 'sourced' ? 'Solid' : 'Dashed'}: {KIND_NAME[kind]}
               </span>{' '}
               — {KIND_NOTE[kind]}
             </span>

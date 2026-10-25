@@ -55,8 +55,9 @@ describe('normalizeTrack', () => {
     expect(track.bpm).toBeNull();
   });
 
-  it('hands the genealogy the evidence pack its links cite', () => {
+  it('hands the genealogy the evidence pack and claims of the result, never its own', () => {
     const evidence = [{ id: 'ev-1' }];
+    const claims = [{ id: 'cl-1' }];
     const link = {
       source: 'a',
       target: 'current',
@@ -66,16 +67,18 @@ describe('normalizeTrack', () => {
     };
     const track = normalizeTrack({
       id: 't1',
-      genealogy: { nodes: [], links: [link], evidence: 'not this' },
+      genealogy: { nodes: [], links: [link], evidence: 'not this', claims: 'nor this' },
       evidence,
+      claims,
     } as unknown as TrackData);
-    expect(track.genealogy).toEqual({ nodes: [], links: [link], evidence });
-    // A result without a pack has none to hand on.
+    expect(track.genealogy).toEqual({ nodes: [], links: [link], evidence, claims });
+    // A result without them has none to hand on, whatever its genealogy carries.
     const older = normalizeTrack({
       id: 't1',
-      genealogy: { nodes: [], links: [] },
+      genealogy: { nodes: [], links: [], evidence: 'not this', claims: 'nor this' },
     } as unknown as TrackData);
-    expect('evidence' in older.genealogy).toBe(false);
+    expect(older.genealogy.evidence).toBeUndefined();
+    expect(older.genealogy.claims).toBeUndefined();
   });
 });
 

@@ -30,3 +30,19 @@ export const link = (
   target: string,
   fields: Partial<GenealogyLink> = {},
 ): GenealogyLink => ({ source, target, value: 2, ...fields });
+
+/** A claim the contract reads, as the verifier left it. */
+export function claim(id: string, fields: Record<string, unknown> = {}) {
+  return {
+    id,
+    text: `Claim ${id}`,
+    about: 'sample',
+    kind: 'inferred',
+    origin: 'model',
+    evidenceIds: [],
+    verdict: null,
+    verdictReason: null,
+    numericCheck: 'n/a',
+    ...fields,
+  };
+}

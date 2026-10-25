@@ -129,7 +129,9 @@
                 "id": "current",
                 "group": 1,
                 "label": "Bright Lines - Test Artist (2011)",
-                "size": 40
+                "size": 40,
+                "trackTitle": "Bright Lines",
+                "trackArtist": "Test Artist"
               },
               {
                 "id": "sample-sourced",
@@ -152,7 +154,7 @@
               {
                 "id": "remix-sourced",
                 "group": 3,
-                "label": "Sourced Remix - Someone (1984)",
+                "label": "Sourced Remix - Someone (2015)",
                 "size": 24
               },
               {
@@ -213,6 +215,30 @@
                 "id": "no-cite",
                 "group": 2,
                 "label": "No Citation - Nobody (1977)",
+                "size": 22
+              },
+              {
+                "id": "model-sourced",
+                "group": 2,
+                "label": "Model Says Sourced - Someone (1983)",
+                "size": 22
+              },
+              {
+                "id": "model-verified",
+                "group": 2,
+                "label": "Verified Model Sample - Someone (1982)",
+                "size": 22
+              },
+              {
+                "id": "rejected",
+                "group": 2,
+                "label": "Rejected Sample - Someone (1981)",
+                "size": 22
+              },
+              {
+                "id": "backwards",
+                "group": 2,
+                "label": "Backwards Sample - Someone (2020)",
                 "size": 22
               }
             ],
@@ -342,6 +368,44 @@
                 "kind": "sourced",
                 "origin": "code",
                 "evidenceIds": []
+              },
+              {
+                "source": "model-sourced",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "model",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "model-verified",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "model",
+                "claimId": "cl-supported",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "rejected",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "claimId": "cl-contradicted",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "backwards",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
               }
             ]
           },
@@ -390,7 +454,31 @@
             }
           ],
           "audioUnavailableReason": "no_preview",
-          "audio": null
+          "audio": null,
+          "claims": [
+            {
+              "id": "cl-supported",
+              "text": "Bright Lines samples Verified Model Sample.",
+              "about": "sample",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-mb-1"],
+              "verdict": "supported",
+              "verdictReason": "The record lists the sample.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "cl-contradicted",
+              "text": "Bright Lines samples Rejected Sample.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "The record says otherwise.",
+              "numericCheck": "n/a"
+            }
+          ]
         }
       },
       {

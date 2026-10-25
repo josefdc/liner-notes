@@ -14,6 +14,7 @@ import {
   latestRunsForTrack,
   settleOpenRuns,
   startRun,
+  storeReplayOf,
   storeRunResult,
   updateRun,
   withoutPreviewUrls,
@@ -238,6 +239,35 @@ describe("storeRunResult", () => {
     expect(storeRunResult(db, "r", { ...result("r"), title: undefined })).toBe("invalid");
     expect(storeRunResult(db, "missing", result("missing"))).toBe("no_run");
     expect(getRun(db, "r")?.analysis).toBeNull();
+  });
+
+  it("keeps the stored result's evidence pack in its own column", () => {
+    const item = {
+      id: "musicbrainz:track/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      source: "musicbrainz",
+      sourceTier: "primary-record",
+      url: "https://musicbrainz.org/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      title: "Ice Ice Baby — MusicBrainz recording",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "MusicBrainz recording.",
+      recordRef: "track/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+    };
+    for (const id of ["cites", "empty", "none", "other"])
+      startRun(db, { runId: id, threadId: id, query: "q" });
+    storeRunResult(db, "cites", result("cites", { evidence: [item] }));
+    storeRunResult(db, "empty", result("empty", { evidence: [] }));
+    storeRunResult(db, "none", result("none"));
+    storeRunResult(db, "other", result("earlier", { evidence: [item] }));
+    const evidence = (id: string) =>
+      db.prepare("SELECT evidence FROM runs WHERE run_id = ?").pluck().get(id);
+    expect(JSON.parse(evidence("cites") as string)).toEqual([item]);
+    expect(evidence("empty")).toBe("[]");
+    // No pack in the result, or no result of the run's own: nothing is stored.
+    expect(evidence("none")).toBeNull();
+    expect(evidence("other")).toBeNull();
+    // A replayed run keeps no result of its own, so no pack either.
+    storeReplayOf(db, "cites", { slug: "s", recordedAt: "2026-01-01T00:00:00.000Z", digest: "d" });
+    expect(evidence("cites")).toBeNull();
   });
 
   it("stores a replay when either the caller or the result says so", () => {

@@ -395,13 +395,23 @@ export function evidenceScope(evidence: Pick<Evidence, "recordRef">): EvidenceSc
   return scope === "track" || scope === "work" || scope === "release" ? scope : null;
 }
 
-/** An Evidence item for a primary record; the excerpt is cut to the contract's limit. */
+/**
+ * The items `primaryEvidence` built. Each source module builds its items from the payload it
+ * read, so an item in this set came from a source's answer; a copy, an object parsed from text
+ * or one written by hand is not in it.
+ */
+const builtFromPayload = new WeakSet<object>();
+
+/**
+ * An Evidence item for a primary record, frozen; the excerpt is cut to the contract's limit.
+ * Called by the source modules only, with what they read from the source's payload.
+ */
 export function primaryEvidence(input: EvidenceInput): Evidence {
   const excerpt =
     input.excerpt.length > EVIDENCE_EXCERPT_MAX
       ? `${input.excerpt.slice(0, EVIDENCE_EXCERPT_MAX - 1)}…`
       : input.excerpt;
-  return {
+  const item: Evidence = Object.freeze({
     id: `${input.source}:${input.recordRef}`,
     source: input.source,
     sourceTier: "primary-record",
@@ -410,7 +420,14 @@ export function primaryEvidence(input: EvidenceInput): Evidence {
     retrievedAt: input.retrievedAt,
     excerpt,
     recordRef: input.recordRef,
-  };
+  });
+  builtFromPayload.add(item);
+  return item;
+}
+
+/** True for an item `primaryEvidence` built (that very object, not a copy of it). */
+export function isPrimaryRecordEvidence(item: unknown): item is Evidence {
+  return typeof item === "object" && item !== null && builtFromPayload.has(item);
 }
 
 /** "Title" by Artist, for excerpts. */

@@ -428,9 +428,9 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // Research data (from historian)
-  // Uses accumulation reducer: [...prev.X, ...next.X] (not replace) because
-  // engineerNode and historianNode run in parallel and both contribute research data.
+  // Research data (from the historian: its Last.fm pre-fetch and the researcher subgraph's
+  // steps, or the research cache). Lists accumulate ([...prev.X, ...next.X]); a node that
+  // returns research adds to what the state already holds.
   researchData: Annotation<ResearchData>({
     reducer: mergeResearch,
     default: emptyResearch,
@@ -493,8 +493,8 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // The evidence pack: records from source payloads, never model text. Branches add items; an
-  // id already in the pack is kept once (the first item wins).
+  // The evidence pack: records from source payloads, never model text. The historian writes it
+  // (research/evidencePack.ts); an id already in the pack is kept once (the first item wins).
   evidence: Annotation<Evidence[]>({
     reducer: (prev, next) => {
       const ids = new Set(prev.map((item) => item.id));

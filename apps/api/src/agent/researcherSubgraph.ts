@@ -13,7 +13,9 @@
  * research; "nothing found" is recorded in `noneFound`; a source that could not be read is a
  * `sourceErrors` entry, its status line says so and the planner prompt shows it as unavailable.
  * Similar artists and tracks are kept by rank with their raw score and its scale. ListenBrainz
- * is asked about the track's own artist only (its MusicBrainz MBID, or its exact name).
+ * is asked about the track's own artist only (its MusicBrainz MBID, or its exact name). The web
+ * search's results are also kept as they were read (`webFindings`), for the run's web-tier
+ * evidence.
  */
 
 import { StateGraph, END, START, Annotation } from "@langchain/langgraph";
@@ -21,6 +23,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { ResearchPlanOutput } from "@liner-notes/contract";
 
 import { answeredCall, failedCall } from "./callRecords.js";
+import type { WebFinding } from "./research/evidencePack.js";
 import { isAbortError, withRetry } from "./errors.js";
 import { plannerMessages, SOURCE_NAMES } from "./prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
@@ -140,6 +143,13 @@ export const ResearcherState = Annotation.Root({
 
   // Sources a step could not read (shared with parent)
   sourceErrors: Annotation<SourceError[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+
+  // The web search's results as it read them, and when: the historian builds the run's
+  // web-tier evidence from them (research/evidencePack.ts).
+  webFindings: Annotation<WebFinding[]>({
     reducer: (prev, next) => [...prev, ...next],
     default: () => [],
   }),
@@ -566,6 +576,8 @@ async function researchToolNode(
   interface Step {
     data: ResearchData;
     reader: StepReader;
+    /** The web search's results, for the run's web-tier evidence. */
+    web: WebFinding[];
     resolution?: ArtistResolution;
     lastfmUncertain?: string;
   }
@@ -574,11 +586,13 @@ async function researchToolNode(
   const search = async (): Promise<Step> => {
     const newData = emptyResearch();
     const reader = new StepReader();
-    const step: Step = { data: newData, reader };
+    const step: Step = { data: newData, reader, web: [] };
     const webText = (raw: unknown, none: NoneLabel): string | null => {
       const found = reader.read<WebResults>("tavily", raw, none);
       const results = Array.isArray(found?.results) ? found.results : [];
       if (found && results.length === 0) reader.nothing(none);
+      const retrievedAt = timestampOf(runtime);
+      for (const result of results) step.web.push({ result, retrievedAt });
       return results.length > 0 ? formatResults(results) : null;
     };
     /** The artist did not resolve: the run asks no artist-level question about it again. */
@@ -855,6 +869,7 @@ async function researchToolNode(
     return {
       researchData: step.data,
       sourceErrors: errors,
+      ...(step.web.length > 0 ? { webFindings: step.web } : {}),
       ...(step.resolution ? { artistResolution: step.resolution } : {}),
       ...(step.lastfmUncertain ? { lastfmArtistUncertain: step.lastfmUncertain } : {}),
       statusMessages: status,

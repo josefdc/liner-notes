@@ -42,10 +42,21 @@ export const Evidence = z.object({
   title: z.string(),
   retrievedAt: Timestamp,
   excerpt: z.string(),
+  /**
+   * For a primary record, its first path segment is its scope: what the item states a fact
+   * about. `track/` the matched recording (e.g. `track/recording/<mbid>`), `release/` a whole
+   * release the track is on (e.g. a release-wide Discogs credit), `work/` the song, not this
+   * recording (e.g. another artist's cover of it). A claim about the recording never rests on
+   * a `work/` or `release/` item alone. Web results have none (null).
+   */
   recordRef: z
     .string()
     .nullable()
-    .describe("Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id"),
+    .describe(
+      "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A " +
+        "primary record's starts with its scope: track/ (this recording), release/ (a whole " +
+        "release the track is on) or work/ (the song, not this recording)",
+    ),
 });
 export type Evidence = z.infer<typeof Evidence>;
 

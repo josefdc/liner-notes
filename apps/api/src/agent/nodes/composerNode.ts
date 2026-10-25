@@ -377,8 +377,8 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     ...measuredAudioFields(state.audioFeatures),
     // The ISRC is the one Spotify gave for the chosen track; `preview` is how the clip the audio
-    // values were measured on was matched to it (none when nothing was measured). No node writes
-    // evidence yet (#27): it is empty today.
+    // values were measured on was matched to it (none when nothing was measured). The evidence
+    // is the historian's pack: records read from the sources, never model text.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
     // How this run's search text matched the track; the web says so when it is not exact. None

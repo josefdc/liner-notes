@@ -22,15 +22,37 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import request from "supertest";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import { llm } from "../../llm/invoke.js";
+import { captureLogsForTests } from "../../logger.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
 import { getRun } from "../../store/runs.js";
 import { createTestApp } from "../testApp.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "./analyze.js";
+
+/** The messages of the warnings logged from now until the test ends. */
+function captureWarnings(): () => string[] {
+  const logs = captureLogsForTests();
+  onTestFinished(() => logs.restore());
+  return () =>
+    logs
+      .entries()
+      .filter((entry) => entry.level === "warn")
+      .map((entry) => String(entry.msg));
+}
 
 type Hook = null | ((signal: AbortSignal | undefined) => Promise<void>);
 
@@ -444,7 +466,7 @@ describe("analyze routes", () => {
         entered.resolve();
         await gate.promise;
       };
-      const warn = vi.spyOn(console, "warn");
+      const warned = captureWarnings();
 
       const client = open(streamPath("plain hurt"));
       await entered.promise;
@@ -454,7 +476,7 @@ describe("analyze routes", () => {
       const threadId = ofType(parseEvents(client.body()), "connected")[0].threadId as string;
       client.req.destroy();
       await vi.waitFor(() =>
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining("run aborted")),
+        expect(warned()).toContainEqual(expect.stringContaining("run aborted")),
       );
       gate.resolve();
 
@@ -782,7 +804,7 @@ describe("analyze routes", () => {
 
   describe("disconnect", () => {
     it("aborts the run within 1 s when the client disconnects, and logs it", async () => {
-      const warn = vi.spyOn(console, "warn");
+      const warned = captureWarnings();
       const started = deferred();
       stub.engineerStep = (signal) =>
         new Promise<void>((resolve) => {
@@ -801,7 +823,7 @@ describe("analyze routes", () => {
       client.req.destroy();
       await vi.waitFor(
         () => {
-          expect(warn).toHaveBeenCalledWith(expect.stringContaining("run aborted"));
+          expect(warned()).toContainEqual(expect.stringContaining("run aborted"));
           expect(runStatus(threadId)).toBe("cancelled");
         },
         { timeout: 1_000, interval: 20 },
@@ -849,18 +871,18 @@ describe("analyze routes", () => {
       "disconnect during the resume check (%s): no run, choice kept, claim released",
       async (_route, start) => {
         const threadId = await pausedThread();
-        const warn = vi.spyOn(console, "warn");
+        const warned = captureWarnings();
         const check = holdNextCheckpointRead();
 
         const client = start(threadId);
         await check.reading;
         client.req.destroy();
         await vi.waitFor(() =>
-          expect(warn).toHaveBeenCalledWith(expect.stringContaining("Client disconnected")),
+          expect(warned()).toContainEqual(expect.stringContaining("Client disconnected")),
         );
         check.release();
         await vi.waitFor(() =>
-          expect(warn).toHaveBeenCalledWith(expect.stringContaining("Client left before")),
+          expect(warned()).toContainEqual(expect.stringContaining("Client left before")),
         );
 
         expect(stub.calls).toMatchObject({ details: 0, engineer: 0, composer: 0 });

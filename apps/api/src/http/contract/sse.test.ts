@@ -34,6 +34,7 @@ import { createApp } from "../app.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "../routes/analyze.js";
 import { createFactoidsRouter } from "../routes/factoids.js";
 import { droppedEventCount } from "../sse.js";
+import { type CapturedLogs, captureLogsForTests } from "../../logger.js";
 
 // =============================================================================
 // Stub graph
@@ -420,9 +421,18 @@ describe("event streams follow the contract", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    logs = captureLogsForTests();
   });
+  let logs: CapturedLogs;
+  /** The messages logged at `level`. */
+  const logged = (level: string) =>
+    logs
+      .entries()
+      .filter((entry) => entry.level === level)
+      .map((entry) => String(entry.msg));
   let restoreDeadline: (() => void) | null = null;
   afterEach(() => {
+    logs.restore();
     restoreDeadline?.();
     restoreDeadline = null;
     vi.useRealTimers();
@@ -514,7 +524,7 @@ describe("event streams follow the contract", () => {
         .threadId as string;
       client.req.destroy();
       await vi.waitFor(() =>
-        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Client disconnected")),
+        expect(logged("warn")).toContainEqual(expect.stringContaining("Client disconnected")),
       );
       run.release();
       await vi.waitFor(() => expect(runStatus(threadId)).toBe("completed"));
@@ -533,9 +543,12 @@ describe("event streams follow the contract", () => {
       expect(types(events)).toEqual(["connected", "complete", "done"]);
       expect(events.find((event) => event.type === "complete")?.data).toEqual(COMPOSED);
       expect(droppedEventCount()).toBe(dropped + 1);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("status event dropped"),
-        expect.anything(),
+      expect(logs.entries()).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          msg: expect.stringContaining("status event dropped"),
+          detail: expect.anything(),
+        }),
       );
       expect(runStatus(events[0].threadId as string)).toBe("completed");
     });
@@ -571,8 +584,13 @@ describe("event streams follow the contract", () => {
     it("ends with done and no error when the route fails after the result was sent", async () => {
       // The run's bookkeeping throws once the result is out: the stream still ends cleanly, and
       // nothing follows the outcome but done.
-      vi.mocked(console.log).mockImplementation((message: unknown) => {
-        if (String(message).includes("recorded completed")) throw new Error("secret-bookkeeping");
+      logs.restore();
+      logs = captureLogsForTests({
+        onLine: (entry) => {
+          if (String(entry.msg).includes("recorded completed")) {
+            throw new Error("secret-bookkeeping");
+          }
+        },
       });
 
       const body = await sse(streamPath("plain hurt"));
@@ -580,9 +598,12 @@ describe("event streams follow the contract", () => {
 
       expect(types(events).slice(-2)).toEqual(["complete", "done"]);
       expect(body).not.toContain("secret");
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("Stream route failed"),
-        expect.any(Error),
+      expect(logs.entries()).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          msg: "Stream route failed",
+          err: expect.objectContaining({ message: "secret-bookkeeping" }),
+        }),
       );
     });
 

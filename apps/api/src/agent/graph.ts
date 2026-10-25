@@ -37,6 +37,9 @@ import {
 import { type AgentRuntime, defaultAgentRuntime, runIdFor } from "./runtime.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import { SonicAgentState, type SonicAgentStateType } from "./state.js";
+import { logger } from "../logger.js";
+
+const log = logger("Graph");
 
 // =============================================================================
 // Routing
@@ -136,7 +139,7 @@ let cachedGraph: ReturnType<typeof buildSonicAgentGraph> | null = null;
 export function createSonicAgentGraph() {
   if (!cachedGraph) {
     cachedGraph = buildSonicAgentGraph({ checkpointer: getCheckpointer(), store: getStore() });
-    console.log("✅ [Graph] Compiled and cached LangGraph workflow");
+    log.info("Compiled and cached LangGraph workflow");
   }
   return cachedGraph;
 }

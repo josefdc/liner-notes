@@ -6,7 +6,8 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { captureLogsForTests } from "../logger.js";
 import type { BudgetSettings } from "../config/settings.js";
 import {
   BUDGET_STATE_TTL_MS,
@@ -150,16 +151,17 @@ describe("liveBudgetState", () => {
 
   it("warns about an unusable log at most once per TTL, though it reads it on every request", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    const warn = vi.mocked(console.warn);
-    warn.mockClear();
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     for (let i = 0; i < 3; i++) {
       expect((await liveBudgetState(env(), "dev")).state).toBe("unverifiable");
     }
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toMatch(/^\[Budget\] Live analysis off/);
+    expect(logs.messages("warn")).toHaveLength(1);
+    expect(logs.entries()[0]).toMatchObject({ level: "warn", component: "Budget" });
+    expect(logs.messages("warn")[0]).toMatch(/^Live analysis off/);
     vi.setSystemTime(Date.now() + BUDGET_STATE_TTL_MS);
     await liveBudgetState(env(), "dev");
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(logs.messages("warn")).toHaveLength(2);
   });
 
   it("does not keep an answer when the log cannot be used", async () => {

@@ -4,6 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import {
   analyzeAudioPreview,
   checkAudioServiceHealth,
@@ -11,6 +12,13 @@ import {
   resolvePreview,
 } from "./audio.js";
 import { json, never, stubFetch } from "./testing/fetchStub.js";
+
+// Every test's log lines, for the tests that check what is logged.
+let logs: CapturedLogs;
+beforeEach(() => {
+  logs = captureLogsForTests();
+});
+afterEach(() => logs.restore());
 
 describe("isAllowedPreviewUrl", () => {
   it.each([
@@ -289,10 +297,8 @@ describe("the chosen track's preview clip", () => {
     const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
 
     expect(data).toMatchObject({ source: "analyzed", previewUrl: ISRC_CLIP });
-    const logged = (["log", "warn", "error"] as const)
-      .flatMap((method) => vi.mocked(console[method]).mock.calls.flat())
-      .map((arg) => String(arg))
-      .join("\n");
+    const logged = logs.lines().join("\n");
+    expect(logs.entries().some((entry) => entry.component === "Audio")).toBe(true);
     expect(logged).not.toContain("dzcdn.net");
     expect(logged).not.toContain("hdnea");
   });

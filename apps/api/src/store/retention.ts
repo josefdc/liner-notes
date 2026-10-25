@@ -24,6 +24,9 @@
 
 import type Database from "better-sqlite3";
 import { FINAL_RUN_STATUSES } from "./runs.js";
+import { logger } from "../logger.js";
+
+const log = logger("Retention");
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -46,13 +49,11 @@ function setting(name: string, raw: string | undefined, fallback: number, minimu
   if (raw == null || raw.trim() === "") return fallback;
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) {
-    console.warn(
-      `[Retention] Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`,
-    );
+    log.warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
     return fallback;
   }
   if (value < minimum) {
-    console.warn(`[Retention] ${name}=${value} is below the minimum; using ${minimum}.`);
+    log.warn(`${name}=${value} is below the minimum; using ${minimum}.`);
     return minimum;
   }
   return value;
@@ -192,8 +193,8 @@ export function pruneDatabase(
   const total =
     result.checkpoints + result.writes + result.storeItems + result.runs + result.runEvents;
   if (total > 0) {
-    console.log(
-      `[Retention] Pruned ${result.threads} threads (${result.checkpoints} checkpoints, ` +
+    log.info(
+      `Pruned ${result.threads} threads (${result.checkpoints} checkpoints, ` +
         `${result.writes} writes), ${result.storeItems} store items, ${result.runs} runs ` +
         `(${result.runEvents} events)`,
     );
@@ -216,12 +217,12 @@ export function startRetention(
     try {
       cache.purgeExpired();
     } catch (err) {
-      console.error("[Retention] Cache purge failed:", err);
+      log.error("Cache purge failed", { err });
     }
     try {
       pruneDatabase(db);
     } catch (err) {
-      console.error("[Retention] Pruning failed:", err);
+      log.error("Pruning failed", { err });
     }
   };
   run();

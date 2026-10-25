@@ -45,6 +45,9 @@ import {
 } from "../agent/trackMatch.js";
 import { fetchJson, type Shape, SourceError } from "./http.js";
 import { type SourceErrorCode, sourceErrorCode } from "./toolResult.js";
+import { logger } from "../logger.js";
+
+const log = logger("Deezer");
 
 // =============================================================================
 // Deezer payloads
@@ -296,8 +299,8 @@ function durationScore(request: PreviewRequest, entry: DeezerTrack): number {
 }
 
 function found(entry: DeezerTrack, match: DeezerMatch): DeezerPreviewResult {
-  console.log(
-    `✅ [Deezer] Matched by ${match.method}: "${entry.title}" by ${entry.artist?.name} (id ${entry.id})`,
+  log.info(
+    `Matched by ${match.method}: "${entry.title}" by ${entry.artist?.name} (id ${entry.id})`,
   );
   return {
     found: true,
@@ -313,7 +316,7 @@ function notFound(
   message: string,
   failure?: { error: string; errorCode: SourceErrorCode },
 ): DeezerPreviewResult {
-  console.log(`⚠️ [Deezer] ${message}`);
+  log.info(message);
   return { found: false, previewUrl: null, rejected, message, ...failure };
 }
 
@@ -416,7 +419,7 @@ export async function deezerPreviewBySearch(
   const url = new URL(`${DEEZER_API_BASE}/search/track`);
   url.searchParams.set("q", `${artist} ${request.title}`.trim());
   url.searchParams.set("limit", "10");
-  console.log(`🔍 [Deezer] Searching: "${request.title}" by ${artist}`);
+  log.info(`Searching: "${request.title}" by ${artist}`);
 
   const data = await deezerGet<DeezerSearchResponse>(url, SEARCH_SHAPE, signal);
   const entries = Array.isArray(data?.data) ? data.data : [];
@@ -473,7 +476,7 @@ export function deezerFailure(
 ): DeezerPreviewResult {
   if (signal?.aborted) throw error;
   const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("❌ [Deezer] Error:", message);
+  log.error(`Error: ${message}`);
   return notFound([], "Deezer could not be read", {
     error: message,
     errorCode: sourceErrorCode(error),

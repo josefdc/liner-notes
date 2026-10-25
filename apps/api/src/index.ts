@@ -23,8 +23,13 @@ import { closeDatabase, initializeDatabase } from "./store/database.js";
 import { startRetention } from "./store/retention.js";
 import { settleOpenRuns } from "./store/runs.js";
 import { isWaitingAtInterrupt } from "./store/threads.js";
+import { installConsoleBridge, logger } from "./logger.js";
 
+// Modules that still write to the console write JSON log lines too.
+installConsoleBridge();
 installProcessHandlers(closeDatabase);
+
+const log = logger("Server");
 
 // =============================================================================
 // Database and cache
@@ -34,7 +39,7 @@ let db: ReturnType<typeof initializeDatabase>;
 try {
   db = initializeDatabase();
 } catch (err) {
-  console.error(`[Database] ${err instanceof Error ? err.message : String(err)}`);
+  logger("Database").error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 }
 initCache(db);
@@ -49,12 +54,13 @@ async function settleRuns(when: string): Promise<void> {
       isWaitingAtInterrupt(db, threadId),
     );
     if (interrupted + cancelled > 0) {
-      console.log(
-        `[Runs] ${when}: ${cancelled} open runs cancelled, ${interrupted} left waiting for a choice`,
+      logger("Runs").info(
+        `${when}: ${cancelled} open runs cancelled, ${interrupted} left waiting for a choice`,
+        { cancelled, interrupted },
       );
     }
   } catch (err) {
-    console.error(`[Runs] ${when}: could not settle open runs:`, err);
+    logger("Runs").error(`${when}: could not settle open runs`, { err });
   }
 }
 
@@ -73,7 +79,7 @@ const server = createServer(gate.handler);
 
 server.on("error", (error) => {
   // Not listening (e.g. the port is taken): the runs belong to whichever process is.
-  console.error("[Server] Could not listen:", error);
+  log.error("Could not listen", { err: error });
   closeDatabase();
   process.exit(1);
 });
@@ -84,11 +90,15 @@ server.listen(settings.port, settings.host, () => {
     typeof address === "object" && address
       ? `${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`
       : String(address);
-  console.log(`[Server] Liner Notes API listening on http://${bound}`);
-  console.log(
-    `[Server] CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
+  const port = typeof address === "object" && address ? address.port : settings.port;
+  // The bound address is the server's own, not a client's; it is written at debug level so an
+  // info-level log holds no address at all.
+  log.info(`Liner Notes API listening on port ${port}`, { port });
+  log.debug(`Listening on http://${bound}`);
+  log.info(
+    `CORS origins: ${settings.http.corsOrigins.length > 0 ? settings.http.corsOrigins.join(", ") : "none"}`,
   );
-  if (settings.replayMode !== "off") console.log(`[Server] REPLAY_MODE=${settings.replayMode}`);
+  if (settings.replayMode !== "off") log.info(`REPLAY_MODE=${settings.replayMode}`);
 
   // Runs left "running" by a process that stopped are not running any more.
   void gate.until(

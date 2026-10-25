@@ -23,6 +23,9 @@ import {
   SchemaMismatchError,
   SchemaTooNewError,
 } from "./migrations.js";
+import { logger } from "../logger.js";
+
+const log = logger("Database");
 
 // =============================================================================
 // Errors
@@ -229,9 +232,7 @@ function checkIntegrity(dbPath: string, busyTimeoutMs: number): void {
     quickCheckReadOnly(dbPath, busyTimeoutMs);
   } catch (err) {
     if (errorCode(err) !== "SQLITE_READONLY_ROLLBACK") throw err;
-    console.warn(
-      `[Database] ${dbPath} has an unfinished transaction from a crash; rolling it back.`,
-    );
+    log.warn(`${dbPath} has an unfinished transaction from a crash; rolling it back.`);
     const db = new Database(dbPath, { fileMustExist: true, timeout: busyTimeoutMs });
     try {
       db.prepare("SELECT COUNT(*) FROM sqlite_master").get();
@@ -255,8 +256,8 @@ function quarantineCorruptDatabase(
   before: { walExisted: boolean; shm: Buffer | null },
 ): string {
   const corruptPath = `${dbPath}.corrupt.${Date.now()}`;
-  console.error(
-    `[Database] ${dbPath} is corrupt (${describeError(cause)}). Moving it, with its -wal and ` +
+  log.error(
+    `${dbPath} is corrupt (${describeError(cause)}). Moving it, with its -wal and ` +
       `-shm files, to ${corruptPath} and starting empty.`,
   );
   try {
@@ -373,9 +374,7 @@ export function initializeDatabase(
   }
 
   dbInstance = db;
-  console.log(
-    `[Database] Initialized at ${resolvedPath} (schema v${LATEST_SCHEMA_VERSION}, WAL mode)`,
-  );
+  log.info(`Initialized at ${resolvedPath} (schema v${LATEST_SCHEMA_VERSION}, WAL mode)`);
   return dbInstance;
 }
 
@@ -409,9 +408,9 @@ export function closeDatabase(): void {
   if (dbInstance) {
     try {
       dbInstance.close();
-      console.log("[Database] Connection closed.");
+      log.info("Connection closed.");
     } catch (err) {
-      console.error("[Database] Error closing:", err);
+      log.error("Error closing", { err });
     }
     dbInstance = null;
   }

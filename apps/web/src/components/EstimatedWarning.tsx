@@ -3,21 +3,26 @@ import { TriangleAlert, Disc, Heart, History, Sparkles, Zap } from 'lucide-react
 import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
-  AUDIO_FIELD_COUNT,
-  ESTIMATED_AUDIO_TEXT,
+  type AudioField,
+  audioReadings,
   audioUnavailableText,
-  audioValues,
-  formatScore,
+  audioValueCount,
+  ESTIMATED_AUDIO_TEXT,
   hasEstimatedAudio,
+  hasMeasuredAudioSource,
+  measuredAudioOf,
   missingAudioValues,
   missingModelOutput,
   modelUnavailableText,
-  moodLabel,
   QUERY_MATCH_TITLE,
+  type Reading,
+  type ShownReading,
   queryMatchText,
   recordingOf,
 } from '../constants';
 import { isWholeRecording, recordedDate } from '../utils/recording';
+import { MeasuredValue } from './measured/MeasuredValue';
+import { MissingValue } from './measured/MissingValue';
 
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
@@ -37,28 +42,59 @@ export const InferenceLabel: React.FC<{ children?: React.ReactNode; className?: 
   </Badge>
 );
 
-/** Badge for a value that was not measured. */
-export const NotMeasured: React.FC<{ label: string; size?: 'sm' | 'md' }> = ({
-  label,
-  size = 'sm',
-}) => (
-  <Badge variant="gray" size={size} className="border-dashed" title={`${label} was not measured`}>
-    {label} not measured
-  </Badge>
-);
-
 interface AudioStatsProps {
   track: TrackData;
   size?: 'sm' | 'md';
-  /** Classes for each row of badges (alignment). */
+  /** Classes for each row of values (alignment). */
   rowClassName?: string;
   className?: string;
 }
 
+const ICONS: Partial<Record<AudioField, (size: number, reading: ShownReading) => React.ReactNode>> =
+  {
+    loudness: (size) => <Zap size={size} className="text-cyber" />,
+    energy: (size) => <Zap size={size} className="text-cyber" />,
+    valence: (size, reading) => (
+      <Heart
+        size={size}
+        className={
+          /^(Euphoric|Upbeat)/.test(reading.value) ? 'text-accent-pink' : 'text-accent-blue'
+        }
+      />
+    ),
+    danceability: (size) => <Disc size={size} className="text-analog" />,
+  };
+
+/** One audio value with its provenance, or marked missing with why. */
+export const ReadingValue: React.FC<{ reading: Reading; size?: 'sm' | 'md' }> = ({
+  reading,
+  size = 'sm',
+}) =>
+  reading.state === 'missing' ? (
+    <MissingValue
+      label={reading.label}
+      status={reading.status}
+      reason={reading.reason}
+      size={size}
+    />
+  ) : (
+    <MeasuredValue
+      label={reading.label}
+      value={reading.value}
+      kind={reading.kind}
+      confidence={reading.confidence}
+      basis={reading.basis}
+      title={reading.title}
+      size={size}
+      icon={ICONS[reading.field]?.(size === 'md' ? 12 : 10, reading)}
+    />
+  );
+
 /**
- * Measured audio values (BPM, key, energy) and, separately, the audio-model scores. Each
- * measured value is either shown or marked "not measured"; model scores are shown only when
- * present and are labelled as estimates.
+ * Measured audio values (BPM, key, loudness or the older energy) and, separately, the
+ * audio-model scores. Each value is shown with its confidence and basis (measured, or a model
+ * estimate), or marked missing with why. A result without an `audio` block shows only the model
+ * scores it has.
  */
 export const AudioStats: React.FC<AudioStatsProps> = ({
   track,
@@ -66,104 +102,45 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   rowClassName = 'justify-center',
   className = '',
 }) => {
-  // Estimated (not measured) values come back null here: shown as not measured.
-  const { bpm, key, energy, valence, danceability, acousticness } = audioValues(track);
-  const hasModelScores = valence !== null || danceability !== null || acousticness !== null;
-  // A whole recording's values were measured when it was recorded. A run whose model answers
-  // alone were replayed measured its audio live, in this run.
-  const measuredTitle = isWholeRecording(track.run)
-    ? 'Measured from the audio preview when this run was recorded'
-    : 'Measured from the audio preview';
-  const iconSize = size === 'md' ? 12 : 10;
+  const { signal, model, showMissingModel, fingerprint } = audioReadings(track);
+  const modelShown = model.filter((reading) => reading.state === 'shown');
+  // With an `audio` block but no audio models, one line says so instead of one per score.
+  const modelsMissing = fingerprint !== null && modelShown.length === 0;
+  const modelRows = showMissingModel ? model : modelShown;
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
-      <ul aria-label="Audio values" className={`flex flex-wrap items-center gap-2 ${rowClassName}`}>
-        <li>
-          {bpm !== null ? (
-            <Badge variant="cyber" size={size} title={measuredTitle}>
-              <span className="opacity-60">BPM</span> {bpm}
-            </Badge>
-          ) : (
-            <NotMeasured label="BPM" size={size} />
-          )}
-        </li>
-        <li>
-          {key !== null ? (
-            <Badge variant="cyber" size={size} title={measuredTitle}>
-              <span className="opacity-60">KEY</span> {key}
-            </Badge>
-          ) : (
-            <NotMeasured label="Key" size={size} />
-          )}
-        </li>
-        <li>
-          {energy !== null ? (
-            <Badge
-              variant="gray"
-              size={size}
-              icon={<Zap size={iconSize} className="text-cyber" />}
-              title={measuredTitle}
-            >
-              <span className="text-text-chip">ENERGY</span>{' '}
-              <span className="text-cyber">{Math.round(energy * 100)}%</span>
-            </Badge>
-          ) : (
-            <NotMeasured label="Energy" size={size} />
-          )}
-        </li>
+      <ul aria-label="Audio values" className={`flex flex-wrap items-start gap-2 ${rowClassName}`}>
+        {signal.map((reading) => (
+          <li key={reading.field}>
+            <ReadingValue reading={reading} size={size} />
+          </li>
+        ))}
       </ul>
 
-      {hasModelScores && (
+      {modelRows.length > 0 && (
         <div className={`flex flex-wrap items-center gap-2 ${rowClassName}`}>
           <p className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
-            Audio-model estimates (scores 0–1, not probabilities)
+            Audio-model estimates (scores, not probabilities)
           </p>
           <ul
             aria-label="Audio-model estimates"
-            className={`flex flex-wrap items-center gap-2 ${rowClassName}`}
+            className={`flex flex-wrap items-start gap-2 ${rowClassName}`}
           >
-            {valence !== null && (
+            {modelsMissing ? (
               <li>
-                <Badge
-                  variant="gray"
+                <MissingValue
+                  label="Model scores"
+                  reason={model[0]?.state === 'missing' ? model[0].reason : null}
                   size={size}
-                  icon={
-                    <Heart
-                      size={iconSize}
-                      className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}
-                    />
-                  }
-                  title="Mood score from an audio model: 0 = melancholic, 1 = euphoric"
-                >
-                  <span className="text-text-chip">MOOD</span>{' '}
-                  <span className={valence > 0.5 ? 'text-accent-pink' : 'text-accent-blue'}>
-                    {moodLabel(valence)}
-                  </span>{' '}
-                  <span className="text-text-chip">{formatScore(valence)}</span>
-                </Badge>
+                />
               </li>
-            )}
-            {danceability !== null && (
-              <li>
-                <Badge
-                  variant="gray"
-                  size={size}
-                  icon={<Disc size={iconSize} className="text-analog" />}
-                  title="Danceability score from an audio model"
-                >
-                  <span className="text-text-chip">DANCE</span>{' '}
-                  <span className="text-analog">{formatScore(danceability)}</span>
-                </Badge>
-              </li>
-            )}
-            {acousticness !== null && (
-              <li>
-                <Badge variant="gray" size={size} title="Acousticness score from an audio model">
-                  <span className="text-text-chip">ACOUSTIC</span>{' '}
-                  <span className="text-analog">{formatScore(acousticness)}</span>
-                </Badge>
-              </li>
+            ) : (
+              modelRows.map((reading) => (
+                <li key={reading.field}>
+                  <ReadingValue reading={reading} size={size} />
+                </li>
+              ))
             )}
           </ul>
         </div>
@@ -178,10 +155,24 @@ function audioNotice(track: TrackData) {
   if (hasEstimatedAudio(track)) {
     return { title: 'Audio values not measured', reason: ESTIMATED_AUDIO_TEXT, missing };
   }
-  if (track.audioSource === 'analyzed' && missing.length === 0) return null;
+  if (missing.length === 0 && hasMeasuredAudioSource(track)) return null;
+  const audio = measuredAudioOf(track);
+  const { signal } = audioReadings(track);
+  const reasons = signal.filter((r) => r.state === 'missing' && r.reason !== null);
+  let reason: string;
+  if (audio && !audio.gate.passed) {
+    reason = `The audio was analysed but nothing was measured: ${signal[0]?.state === 'missing' ? signal[0].reason : 'the preview did not pass the analysis gate'}.`;
+  } else if (track.audioUnavailableReason) {
+    reason = audioUnavailableText(track.audioUnavailableReason);
+  } else if (reasons.length > 0 || audio) {
+    reason = 'Each missing value says why, or that it was not measured.';
+  } else {
+    reason = audioUnavailableText(undefined);
+  }
   return {
-    title: missing.length === AUDIO_FIELD_COUNT ? 'Audio not analysed' : 'Audio partly measured',
-    reason: audioUnavailableText(track.audioUnavailableReason),
+    title:
+      missing.length === audioValueCount(track) ? 'Audio not analysed' : 'Audio partly measured',
+    reason,
     missing,
   };
 }

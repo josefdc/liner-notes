@@ -104,14 +104,18 @@ export interface GenreProfileItem {
   value: number; // 0-100
 }
 
-/** Why measured audio values are missing (sent with audioSource "unavailable"). */
+/**
+ * Why measured audio values are missing (sent with audioSource "unavailable"). "low_confidence":
+ * measured, but below the confidence needed to show a value.
+ */
 export type AudioUnavailableReason =
   | 'service_unavailable'
   | 'no_preview'
   | 'preview_rejected'
   | 'analysis_failed'
   | 'not_detected'
-  | 'not_run';
+  | 'not_run'
+  | 'low_confidence';
 
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
 /**
@@ -141,6 +145,8 @@ export interface ResultRun {
    * do not say.
    */
   replayed?: string;
+  /** The audio analyzer of the run's measurement; null when nothing was measured. */
+  analyzerVersion?: string | null;
 }
 
 export type ModelUnavailableReason =
@@ -193,9 +199,17 @@ export interface TrackData {
   };
   // Genre profile for the Sonic Fingerprint radar chart (written by the model)
   genreProfile?: GenreProfileItem[];
+  /**
+   * The audio measurement itself (the contract's AudioFeatures v2): each value with its method,
+   * confidence and basis, the preview window and the gate. As the server sent it, unchecked:
+   * read it with `measuredAudioOf` (constants.ts). Absent from results of APIs that do not
+   * send it; null when nothing was measured.
+   */
+  audio?: unknown;
   // Audio provenance: 'analyzed' when tempo and key were measured, 'unavailable' otherwise.
   // 'estimated' is sent by the API before audio values were measured only, and by results it
   // cached: those values were estimated from the genre or at random and are never shown.
+  // With an `audio` block, the block decides what was measured, not this field.
   audioSource?: 'analyzed' | 'unavailable' | 'estimated';
   audioConfidence?: 'high' | 'low';
   audioUnavailableReason?: AudioUnavailableReason;

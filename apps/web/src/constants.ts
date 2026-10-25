@@ -1,3 +1,13 @@
+import type { ModelScore } from '@liner-notes/contract';
+import {
+  keyLabel,
+  MOOD_HEADS,
+  type MeasuredAudio,
+  type MoodHead,
+  readAudio,
+  rmsToDbfs,
+} from './components/measured/audio';
+import { isWholeRecording } from './utils/recording';
 import type {
   AudioUnavailableReason,
   Factoid,
@@ -18,6 +28,8 @@ export const AUDIO_UNAVAILABLE_TEXT: Record<AudioUnavailableReason, string> = {
   analysis_failed: 'The audio analysis failed.',
   not_detected: 'The analysis ran but could not detect the tempo or key.',
   not_run: 'The audio analysis did not run.',
+  low_confidence:
+    'The analysis ran, but its tempo or key was below the confidence needed to show it.',
 };
 
 export function audioUnavailableText(reason: string | undefined): string {
@@ -115,14 +127,34 @@ export function measuredText(value: string | null | undefined): string | null {
   return typeof value === 'string' && !MISSING_TEXT.has(value.trim().toLowerCase()) ? value : null;
 }
 
+/** The result's audio measurement (its `audio` block), or null when it has none to read. */
+export function measuredAudioOf(track: TrackData): MeasuredAudio | null {
+  return readAudio(track.audio);
+}
+
 /**
- * True when the audio values of this result can be shown as measurements. Only two sources
- * qualify: "analyzed", and "unavailable" (where any value that is present was still
- * measured). "estimated", a missing source or any other value comes from the estimating
- * analysis (or a result it cached), so those values are treated as not measured.
+ * True when a result without an `audio` block (from an API that did not send it) carries values
+ * its analysis measured: audioSource "analyzed", or "unavailable" because the analysis ran but did
+ * not detect the tempo or the key ("not_detected"; the values it did measure are kept). Any other
+ * "unavailable" result measured nothing, whatever values it carries.
+ */
+function legacyMeasured(track: TrackData): boolean {
+  return (
+    track.audioSource === 'analyzed' ||
+    (track.audioSource === 'unavailable' && track.audioUnavailableReason === 'not_detected')
+  );
+}
+
+/**
+ * True when the audio values of this result can be shown as measurements. With an `audio`
+ * block, that block decides (its gate passed; each value is then shown only when it was
+ * measured). Without one, only the values of an analysis that ran count (see legacyMeasured):
+ * "estimated", a missing source, an "unavailable" analysis that did not run and any other value
+ * are not measurements.
  */
 export function hasMeasuredAudioSource(track: TrackData): boolean {
-  return track.audioSource === 'analyzed' || track.audioSource === 'unavailable';
+  const audio = measuredAudioOf(track);
+  return audio ? audio.gate.passed : legacyMeasured(track);
 }
 
 export interface AudioValues {
@@ -154,15 +186,42 @@ const NO_AUDIO_VALUES: AudioValues = {
   acousticness: null,
 };
 
-/** The audio values that may be shown as measured; everything else is null. */
-export function audioValues(track: TrackData): AudioValues {
-  return hasMeasuredAudioSource(track) ? rawAudioValues(track) : NO_AUDIO_VALUES;
+/** A mood head's value when it is a 0-1 score, else null. */
+function unitScore(score: ModelScore | null | undefined): number | null {
+  return score && score.range[0] === 0 && score.range[1] === 1 ? score.value : null;
 }
 
-/** True when the result carries audio values that were estimated rather than measured. */
+/**
+ * The audio values that may be shown as measured; everything else is null. With an `audio`
+ * block they are read from it (energy is then null: loudness replaces it); without one, from
+ * the result's copies when its analysis ran.
+ */
+export function audioValues(track: TrackData): AudioValues {
+  const audio = measuredAudioOf(track);
+  if (audio) {
+    const moods = audio.fingerprint?.moods;
+    return {
+      bpm: audio.tempo?.bpm ?? null,
+      key: audio.key ? keyLabel(audio.key) : null,
+      energy: null,
+      valence: unitScore(moods?.valence),
+      danceability: unitScore(moods?.danceability),
+      acousticness: unitScore(moods?.acoustic),
+    };
+  }
+  return legacyMeasured(track) ? rawAudioValues(track) : NO_AUDIO_VALUES;
+}
+
+/**
+ * True when the result carries audio values that were estimated rather than measured: values
+ * with no `audio` block under audioSource "estimated", a missing source or one this page does
+ * not know. Values under "unavailable" were not estimated: the analysis did not run.
+ */
 export function hasEstimatedAudio(track: TrackData): boolean {
   return (
-    !hasMeasuredAudioSource(track) &&
+    measuredAudioOf(track) === null &&
+    !legacyMeasured(track) &&
+    track.audioSource !== 'unavailable' &&
     Object.values(rawAudioValues(track)).some((value) => value !== null)
   );
 }
@@ -180,22 +239,346 @@ export function moodLabel(valence: number): string {
   return 'Melancholic';
 }
 
-// Signal measurements first, then the scores from audio models run over the preview.
-const AUDIO_FIELD_LABELS: [keyof AudioValues, string][] = [
-  ['bpm', 'BPM'],
-  ['key', 'key'],
-  ['energy', 'energy'],
-  ['valence', 'mood'],
-  ['danceability', 'danceability'],
-  ['acousticness', 'acousticness'],
-];
+// ─── Each audio value with its provenance, or why it is missing ──────────────────────────────
 
-export const AUDIO_FIELD_COUNT = AUDIO_FIELD_LABELS.length;
+/**
+ * Why one value is missing, in a few words, for each reason the API sends with
+ * audioUnavailableReason.
+ */
+export const AUDIO_UNAVAILABLE_SHORT: Record<AudioUnavailableReason, string> = {
+  service_unavailable: 'the audio service did not respond',
+  no_preview: 'no audio preview',
+  preview_rejected: 'the preview is not from an allowed source',
+  analysis_failed: 'the analysis failed',
+  not_detected: 'not detected in the preview',
+  not_run: 'the analysis did not run',
+  low_confidence: 'below the confidence needed to show it',
+};
 
-/** Names of the audio values that were not measured, signal measurements first. */
+/** Why the audio service measured nothing on a preview (its gate), in a few words. */
+export const AUDIO_GATE_TEXT: Record<string, string> = {
+  silence: 'the preview is silent',
+  noise: 'the preview is noise, not music',
+  too_short: 'the preview is too short to measure',
+};
+
+/** The v1 energy (0-1) reads 1.0 for any master louder than about -11 dBFS RMS. */
+export const SATURATED_ENERGY_TEXT = 'energy saturates on loud masters';
+
+/** Why the audio-model values are missing when the result has a measurement without them. */
+export const MODELS_NOT_LOADED_TEXT = 'the audio models are not loaded';
+
+export type AudioField =
+  | 'bpm'
+  | 'key'
+  | 'loudness'
+  | 'energy'
+  | 'valence'
+  | 'arousal'
+  | 'danceability'
+  | 'acousticness'
+  | 'instrumental';
+
+/** A value shown: measured from the signal, or an audio model's score (an estimate). */
+export interface ShownReading {
+  field: AudioField;
+  label: string;
+  state: 'shown';
+  kind: 'measured' | 'estimate';
+  value: string;
+  /** The estimator's confidence in words; null when the result does not say. */
+  confidence: string | null;
+  /** What the value rests on (signal or model, and the preview window); null when unknown. */
+  basis: string | null;
+  /** The full provenance (method, model, analyzer), for the tooltip. */
+  title: string;
+}
+
+/** A value that is not shown, with why when the result says. */
+export interface MissingReading {
+  field: AudioField;
+  label: string;
+  state: 'missing';
+  /** "not measured", or "not shown" for a value that was measured but says nothing. */
+  status: string;
+  reason: string | null;
+}
+
+export type Reading = ShownReading | MissingReading;
+
+/** A ranked list of audio-model scores (Discogs styles, MusiCNN tags), or why it is missing. */
+export type ScoreListReading =
+  | {
+      label: string;
+      state: 'shown';
+      items: { label: string; score: number }[];
+      model: string;
+      basis: string;
+      title: string;
+    }
+  | { label: string; state: 'missing'; reason: string | null };
+
+export interface AudioReadings {
+  /** Signal measurements: tempo, key, and loudness (or the older energy). */
+  signal: Reading[];
+  /** Audio-model scores (moods and classification heads). */
+  model: Reading[];
+  /** False for a result without an `audio` block: its missing model scores are not shown. */
+  showMissingModel: boolean;
+  /**
+   * The style and tag scores (the audio fingerprint); null for a result without an `audio`
+   * block, which never carries them.
+   */
+  fingerprint: { styles: ScoreListReading; tags: ScoreListReading } | null;
+}
+
+const MEASURED_TITLE = 'Measured from the audio preview';
+const RECORDED_TITLE = 'Measured from the audio preview when this run was recorded';
+const ESTIMATED_TEXT = 'estimated, not measured';
+const SCORE_TEXT = 'score, not a probability';
+
+/** Seconds as shown for a preview window: one decimal, without a trailing ".0". */
+export function formatSeconds(seconds: number): string {
+  return String(Math.round(seconds * 10) / 10);
+}
+
+/** A tempo as shown: one decimal, without a trailing ".0". */
+export function formatBpm(bpm: number): string {
+  return String(Math.round(bpm * 10) / 10);
+}
+
+function formatModelScore(score: ModelScore): string {
+  const [low, high] = score.range;
+  return low === 0 && high === 1
+    ? formatScore(score.value)
+    : `${score.value.toFixed(2)} on ${low}–${high}`;
+}
+
+function missing(field: AudioField, label: string, reason: string | null, status = 'not measured') {
+  return { field, label, state: 'missing', status, reason } satisfies MissingReading;
+}
+
+const MOOD_LABELS: Record<MoodHead, [AudioField, string]> = {
+  valence: ['valence', 'Mood'],
+  arousal: ['arousal', 'Arousal'],
+  danceability: ['danceability', 'Dance'],
+  acoustic: ['acousticness', 'Acoustic'],
+  instrumental: ['instrumental', 'Instrumental'],
+};
+
+/** Readings from the result's `audio` block. */
+function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: boolean) {
+  const window = `${formatSeconds(audio.windowSeconds)} s preview`;
+  const basis = `signal, ${window}`;
+  const measuredTitle = (method: string, extra = '') =>
+    `${recorded ? RECORDED_TITLE : MEASURED_TITLE} (${window}) · ${method}${extra} · analyzer ${audio.analyzerVersion}`;
+  const gateReason = audio.gate.passed
+    ? null
+    : (AUDIO_GATE_TEXT[audio.gate.reason ?? ''] ?? 'the preview did not pass the analysis gate');
+  // The result-level reason applies to a withheld tempo or key only when it is about detection.
+  const resultReason =
+    track.audioUnavailableReason === 'not_detected' ||
+    track.audioUnavailableReason === 'low_confidence'
+      ? AUDIO_UNAVAILABLE_SHORT[track.audioUnavailableReason]
+      : null;
+  const signalReason = gateReason ?? resultReason;
+
+  const { tempo, key, loudness, fingerprint } = audio;
+  const level = loudness ? rmsToDbfs(loudness.rmsMean) : null;
+  const signal: Reading[] = [
+    tempo
+      ? {
+          field: 'bpm',
+          label: 'BPM',
+          state: 'shown',
+          kind: 'measured',
+          value: formatBpm(tempo.bpm),
+          confidence:
+            tempo.confidence === null
+              ? 'no confidence given'
+              : `confidence ${tempo.confidence.toFixed(2)}`,
+          basis,
+          title: measuredTitle(
+            tempo.method,
+            tempo.rawConfidence
+              ? ` · confidence ${tempo.rawConfidence.value.toFixed(2)} on the estimator's ${tempo.rawConfidence.range[0]}–${tempo.rawConfidence.range[1]} scale`
+              : '',
+          ),
+        }
+      : missing('bpm', 'BPM', signalReason),
+    key
+      ? {
+          field: 'key',
+          label: 'Key',
+          state: 'shown',
+          kind: 'measured',
+          value: keyLabel(key),
+          confidence:
+            key.strength === null ? 'no strength given' : `strength ${key.strength.toFixed(2)}`,
+          basis,
+          title: measuredTitle(key.method, ` · ${key.profile} profile`),
+        }
+      : missing('key', 'Key', signalReason),
+    loudness && level !== null
+      ? {
+          field: 'loudness',
+          label: 'Loudness',
+          state: 'shown',
+          kind: 'measured',
+          value: `${level.toFixed(1)} dBFS RMS`,
+          confidence: 'direct measure',
+          basis,
+          title: measuredTitle(loudness.method, ` · mean RMS ${loudness.rmsMean.toFixed(3)}`),
+        }
+      : missing('loudness', 'Loudness', loudness ? AUDIO_GATE_TEXT.silence : gateReason),
+  ];
+
+  const modelReason = gateReason ?? (fingerprint ? null : MODELS_NOT_LOADED_TEXT);
+  const model: Reading[] = MOOD_HEADS.map((head) => {
+    const [field, label] = MOOD_LABELS[head];
+    const score = fingerprint?.moods?.[head] ?? null;
+    if (!score) return missing(field, label, modelReason);
+    const value = formatModelScore(score);
+    const unit = unitScore(score);
+    return {
+      field,
+      label,
+      state: 'shown',
+      kind: 'estimate',
+      value: head === 'valence' && unit !== null ? `${moodLabel(unit)} ${value}` : value,
+      confidence: SCORE_TEXT,
+      basis: `model ${score.model.id}, ${window}`,
+      title: `Score from the audio model ${score.model.id} on the ${window}: an estimate, not a measurement and not a probability`,
+    } satisfies ShownReading;
+  });
+
+  const scoreList = (
+    label: string,
+    list: { model: { id: string }; items: { label: string; score: number }[] } | null,
+  ): ScoreListReading =>
+    list && list.items.length > 0
+      ? {
+          label,
+          state: 'shown',
+          items: list.items,
+          model: list.model.id,
+          basis: `model ${list.model.id}, ${window}`,
+          title: `Activations of the audio model ${list.model.id} on the ${window}: scores, not probabilities`,
+        }
+      : { label, state: 'missing', reason: modelReason };
+  const styles = fingerprint?.styles;
+  const tags = fingerprint?.tags;
+  return {
+    signal,
+    model,
+    showMissingModel: true,
+    fingerprint: {
+      styles: scoreList('Styles', styles ? { model: styles.model, items: styles.top } : null),
+      tags: scoreList('Tags', tags ? { model: tags.model, items: tags.scores } : null),
+    },
+  } satisfies AudioReadings;
+}
+
+/** Readings from a result without an `audio` block: its copies, whose basis it does not say. */
+function legacyReadings(track: TrackData, recorded: boolean): AudioReadings {
+  const raw = rawAudioValues(track);
+  const title = recorded ? RECORDED_TITLE : MEASURED_TITLE;
+  const ran = legacyMeasured(track);
+  const reason = (value: unknown) => {
+    if (track.audioSource === 'unavailable' && track.audioUnavailableReason) {
+      return Object.hasOwn(AUDIO_UNAVAILABLE_SHORT, track.audioUnavailableReason)
+        ? AUDIO_UNAVAILABLE_SHORT[track.audioUnavailableReason]
+        : null;
+    }
+    return !ran && value !== null ? ESTIMATED_TEXT : null;
+  };
+  const measured = (field: AudioField, label: string, value: string): ShownReading => ({
+    field,
+    label,
+    state: 'shown',
+    kind: 'measured',
+    value,
+    confidence: null,
+    basis: null,
+    title,
+  });
+  const estimate = (field: AudioField, label: string, value: string): ShownReading => ({
+    field,
+    label,
+    state: 'shown',
+    kind: 'estimate',
+    value,
+    confidence: SCORE_TEXT,
+    basis: null,
+    title: `${label} score from an audio model (0–1): an estimate, not a probability`,
+  });
+
+  const signal: Reading[] = [
+    ran && raw.bpm !== null
+      ? measured('bpm', 'BPM', formatBpm(raw.bpm))
+      : missing('bpm', 'BPM', reason(raw.bpm)),
+    ran && raw.key !== null
+      ? measured('key', 'Key', raw.key)
+      : missing('key', 'Key', reason(raw.key)),
+    !ran || raw.energy === null
+      ? missing('energy', 'Energy', reason(raw.energy))
+      : raw.energy >= 1
+        ? missing('energy', 'Energy', SATURATED_ENERGY_TEXT, 'not shown')
+        : measured('energy', 'Energy', `${Math.round(raw.energy * 100)}%`),
+  ];
+  const model: Reading[] = [
+    ran && raw.valence !== null
+      ? estimate('valence', 'Mood', `${moodLabel(raw.valence)} ${formatScore(raw.valence)}`)
+      : missing('valence', 'Mood', reason(raw.valence)),
+    ran && raw.danceability !== null
+      ? estimate('danceability', 'Dance', formatScore(raw.danceability))
+      : missing('danceability', 'Dance', reason(raw.danceability)),
+    ran && raw.acousticness !== null
+      ? estimate('acousticness', 'Acoustic', formatScore(raw.acousticness))
+      : missing('acousticness', 'Acoustic', reason(raw.acousticness)),
+  ];
+  return { signal, model, showMissingModel: false, fingerprint: null };
+}
+
+/**
+ * Every audio value of a result, each shown with its provenance (measured or model estimate,
+ * confidence, basis) or marked missing with why. A result's `audio` block decides; a result
+ * without one is read from its copies, whose confidence and basis are unknown.
+ */
+export function audioReadings(track: TrackData): AudioReadings {
+  const recorded = isWholeRecording(track.run);
+  const audio = measuredAudioOf(track);
+  return audio ? measuredReadings(track, audio, recorded) : legacyReadings(track, recorded);
+}
+
+// How the notices name each value.
+const NOTICE_LABELS: Record<AudioField, string> = {
+  bpm: 'BPM',
+  key: 'key',
+  loudness: 'loudness',
+  energy: 'energy',
+  valence: 'mood',
+  arousal: 'arousal',
+  danceability: 'danceability',
+  acousticness: 'acousticness',
+  instrumental: 'instrumental',
+};
+
+/** Names of the audio values that are missing, signal measurements first. */
 export function missingAudioValues(track: TrackData): string[] {
-  const values = audioValues(track);
-  return AUDIO_FIELD_LABELS.filter(([field]) => values[field] === null).map(([, label]) => label);
+  const { signal, model, fingerprint } = audioReadings(track);
+  const names = [...signal, ...model]
+    .filter((reading) => reading.state === 'missing')
+    .map((reading) => NOTICE_LABELS[reading.field]);
+  if (fingerprint?.styles.state === 'missing') names.push('style scores');
+  if (fingerprint?.tags.state === 'missing') names.push('tag scores');
+  return names;
+}
+
+/** How many audio values a result can have: the notice says "not analysed" when all are missing. */
+export function audioValueCount(track: TrackData): number {
+  const { signal, model, fingerprint } = audioReadings(track);
+  return signal.length + model.length + (fingerprint ? 2 : 0);
 }
 
 /** Parts of a result the model writes that this result does not have. */
@@ -216,7 +599,7 @@ const ESTIMATE_FACTOID_TITLES = new Set(['sonic profile', 'track signature']);
 /**
  * True when a factoid repeats audio values that were not measured: one of the estimating
  * fallback's audio templates, or text stating the estimated BPM, key, energy or danceability.
- * Measured values (audioSource "analyzed" or "unavailable") are never matched.
+ * A result whose values were measured (see hasMeasuredAudioSource) is never matched.
  */
 function repeatsEstimatedAudio(factoid: Factoid, track: TrackData): boolean {
   if (hasMeasuredAudioSource(track)) return false;

@@ -1,0 +1,297 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "runId": "thread-measured-v2",
+        "seq": 0,
+        "threadId": "thread-measured-v2"
+      },
+      {
+        "type": "heartbeat",
+        "runId": "thread-measured-v2"
+      },
+      {
+        "type": "status",
+        "runId": "thread-measured-v2",
+        "seq": 1,
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "runId": "thread-measured-v2",
+        "seq": 2,
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "runId": "thread-measured-v2",
+        "seq": 3,
+        "data": {
+          "id": "t-measured-v2",
+          "title": "Bright Lines",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-measured-v2",
+          "releaseYear": "2011",
+          "bpm": 105.21,
+          "key": "A Minor",
+          "energy": null,
+          "valence": null,
+          "danceability": 0.58,
+          "acousticness": 0.08,
+          "durationSeconds": 240,
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record"
+            }
+          ],
+          "keyMoments": [
+            {
+              "time": 4.2,
+              "type": "onset",
+              "intensity": 0.8,
+              "description": "Beat transition"
+            },
+            {
+              "time": 18.6,
+              "type": "energy_peak",
+              "intensity": 1,
+              "description": "Energy peak"
+            }
+          ],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Bright Lines - Test Artist (2011)",
+                "size": 40
+              },
+              {
+                "id": "origin1",
+                "group": 2,
+                "label": "Older Record - Someone (1984)",
+                "size": 30
+              }
+            ],
+            "links": [
+              {
+                "source": "origin1",
+                "target": "current",
+                "value": 3,
+                "type": "sample"
+              }
+            ]
+          },
+          "audioSource": "analyzed",
+          "audioConfidence": "high",
+          "audio": {
+            "version": 2,
+            "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f",
+            "window": {
+              "kind": "preview-30s",
+              "durationSeconds": 29.75
+            },
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "tempo": {
+              "bpm": 105.21,
+              "confidence": 0.62,
+              "rawConfidence": {
+                "value": 3.3,
+                "range": [0, 5.32]
+              },
+              "method": "essentia.RhythmExtractor2013",
+              "basis": "signal"
+            },
+            "key": {
+              "tonic": "A",
+              "mode": "minor",
+              "strength": 0.71,
+              "profile": "edma",
+              "method": "essentia.KeyExtractor",
+              "basis": "signal"
+            },
+            "loudness": {
+              "rmsMean": 0.21,
+              "method": "essentia.RMS",
+              "basis": "signal"
+            },
+            "beats": null,
+            "energyContour": null,
+            "sections": null,
+            "keyMoments": [
+              {
+                "time": 4.2,
+                "type": "onset",
+                "intensity": 0.8,
+                "description": "Beat transition"
+              },
+              {
+                "time": 18.6,
+                "type": "energy_peak",
+                "intensity": 1,
+                "description": "Energy peak"
+              }
+            ],
+            "fingerprint": {
+              "styles": {
+                "model": {
+                  "id": "discogs-effnet-bs64-1",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "top": [
+                  {
+                    "label": "Electronic---Synth-pop",
+                    "score": 0.61
+                  },
+                  {
+                    "label": "Electronic---Dream Pop",
+                    "score": 0.22
+                  },
+                  {
+                    "label": "Pop---Indie Pop",
+                    "score": 0.09
+                  }
+                ],
+                "basis": "model"
+              },
+              "tags": {
+                "model": {
+                  "id": "msd-musicnn-1",
+                  "licence": "CC BY-NC-SA 4.0"
+                },
+                "scores": [
+                  {
+                    "label": "electronic",
+                    "score": 0.7
+                  },
+                  {
+                    "label": "synthpop",
+                    "score": 0.41
+                  },
+                  {
+                    "label": "female vocalists",
+                    "score": 0.18
+                  }
+                ],
+                "basis": "model"
+              },
+              "moods": {
+                "danceability": {
+                  "value": 0.58,
+                  "range": [0, 1],
+                  "model": {
+                    "id": "discogs-effnet-bs64-1",
+                    "licence": "CC BY-NC-SA 4.0"
+                  },
+                  "basis": "model"
+                },
+                "acoustic": {
+                  "value": 0.08,
+                  "range": [0, 1],
+                  "model": {
+                    "id": "discogs-effnet-bs64-1",
+                    "licence": "CC BY-NC-SA 4.0"
+                  },
+                  "basis": "model"
+                },
+                "instrumental": {
+                  "value": 0.31,
+                  "range": [0, 1],
+                  "model": {
+                    "id": "discogs-effnet-bs64-1",
+                    "licence": "CC BY-NC-SA 4.0"
+                  },
+                  "basis": "model"
+                },
+                "valence": {
+                  "value": 5.2,
+                  "range": [1, 9],
+                  "model": {
+                    "id": "msd-musicnn-1",
+                    "licence": "CC BY-NC-SA 4.0"
+                  },
+                  "basis": "model"
+                },
+                "arousal": {
+                  "value": 6.1,
+                  "range": [1, 9],
+                  "model": {
+                    "id": "msd-musicnn-1",
+                    "licence": "CC BY-NC-SA 4.0"
+                  },
+                  "basis": "model"
+                }
+              }
+            }
+          },
+          "run": {
+            "id": "thread-measured-v2",
+            "mode": "live",
+            "recordedAt": null,
+            "commit": null,
+            "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f"
+          }
+        }
+      },
+      {
+        "type": "done",
+        "runId": "thread-measured-v2",
+        "seq": 4,
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

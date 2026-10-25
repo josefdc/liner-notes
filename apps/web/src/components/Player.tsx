@@ -14,6 +14,9 @@ import {
 import {
   audioValues,
   displayableFactoids,
+  formatBpm,
+  formatSeconds,
+  measuredAudioOf,
   FACTOID_UNAVAILABLE_TEXT,
   normalizeTrack,
   recordingOf,
@@ -65,6 +68,8 @@ const INITIAL_VISIBLE_FACTOIDS = 3;
  * analysis ran but found no tempo or key), false when it was not, undefined when unknown.
  */
 function audioAnalyzed(track: TrackData): boolean | undefined {
+  // A measurement means the analysis ran, whatever it found.
+  if (measuredAudioOf(track)) return true;
   if (track.audioSource === 'analyzed' || track.audioUnavailableReason === 'not_detected') {
     return true;
   }
@@ -123,6 +128,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const { bpm, key } = audioValues(track);
+  // The measured preview window, when the result carries its measurement.
+  const measurement = useMemo(() => measuredAudioOf(track), [track]);
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
   // How the result was produced: more facts stay on that side (recorded, or live).
@@ -316,8 +323,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         </div>
         <div className="hidden md:flex items-center gap-3 text-xs font-mono text-cyber">
           <span>
-            DEEP_DIVE_MODE {'//'} {bpm !== null ? `${bpm} BPM` : 'BPM not measured'}
+            DEEP_DIVE_MODE {'//'} {bpm !== null ? `${formatBpm(bpm)} BPM` : 'BPM not measured'}
             {key !== null && ` // ${key}`}
+            {measurement && ` // ${formatSeconds(measurement.windowSeconds)} s preview`}
           </span>
         </div>
       </div>
@@ -560,8 +568,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               segmentsSource={track.segmentsSource}
               durationSeconds={track.durationSeconds}
               samples={track.samples}
-              keyMoments={track.keyMoments}
+              keyMoments={measurement ? measurement.keyMoments : track.keyMoments}
               audioAnalyzed={audioAnalyzed(track)}
+              previewSeconds={measurement?.windowSeconds}
             />
           </div>
         </div>

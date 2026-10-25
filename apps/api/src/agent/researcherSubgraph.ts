@@ -1,9 +1,15 @@
 /**
  * Deep Dive Researcher Subgraph
  *
- * Iterative research: a fixed first step (sample history), then up to MAX_PLANNED_STEPS steps
- * chosen by the research planner, a model call on the `fast` tier through the provider layer
- * (schema `ResearchPlanOutput`). Each step runs one search; the planner sees what was found.
+ * The researcher's part of the run's research plan (research/plan.ts): a fixed first step
+ * (sample history), then up to MAX_PLANNED_STEPS follow-ups chosen by the research planner, a
+ * model call on the `fast` tier through the provider layer (schema `ResearchPlanOutput`). Each
+ * step runs one search; the planner sees what was found. Every step runs at most once per run:
+ * the steps the historian already read (`ranSteps`: Last.fm, the recording's MusicBrainz
+ * relationships when the ISRC identified it) and the ones that ran here are not offered again,
+ * and one the planner picks anyway is not run. The artist the identified recording credits
+ * (`artistResolution`, set by the historian) is the artist of every artist-level step, by its
+ * MusicBrainz id: no name search.
  *
  * A failed planner call ends the research (the run continues with what was found) and is
  * recorded in `usage` with its error kind. A cancelled run stops the research: the run's abort
@@ -24,6 +30,16 @@ import { ResearchPlanOutput } from "@liner-notes/contract";
 
 import { answeredCall, failedCall } from "./callRecords.js";
 import type { WebFinding } from "./research/evidencePack.js";
+import {
+  FIRST_STEP,
+  FOLLOW_UP_TIER,
+  isPlaceholder,
+  lastfmBio,
+  MAX_FOLLOW_UPS,
+  RAN_IN_RESEARCH,
+  type RanStep,
+  uniqueSteps,
+} from "./research/plan.js";
 import { isAbortError, withRetry } from "./errors.js";
 import { plannerMessages, SOURCE_NAMES } from "./prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
@@ -69,7 +85,7 @@ export const PLANNER_CALL_SITE = "research_planner";
 /** Output budget of a planner call, reasoning included (fast tier: low effort). */
 export const PLANNER_MAX_OUTPUT_TOKENS = 1500;
 /** Research steps chosen by the planner, after the fixed first step. */
-export const MAX_PLANNED_STEPS = 2;
+export const MAX_PLANNED_STEPS = MAX_FOLLOW_UPS;
 /** Wait before a search's one retry after a transient failure. */
 export const SEARCH_RETRY_MS = 500;
 
@@ -107,6 +123,14 @@ export const ResearcherState = Annotation.Root({
   lastfmArtistUncertain: Annotation<string | null>({
     reducer: (prev, next) => next ?? prev,
     default: () => null,
+  }),
+
+  // The steps that already ran this run, each with why: the historian's (Last.fm, the
+  // recording's MusicBrainz relationships when the ISRC identified it) and this research's. A
+  // step runs at most once per run.
+  ranSteps: Annotation<RanStep[]>({
+    reducer: (prev, next) => uniqueSteps([...prev, ...next]),
+    default: () => [],
   }),
 
   // Subgraph-specific: iteration counter
@@ -185,7 +209,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       status("🔬 Starting deep dive research...");
       return {
         researchPlan: {
-          nextAction: "search_samples",
+          nextAction: FIRST_STEP,
           query: null,
           reasoning: "Starting research with sample history to discover musical DNA",
         },
@@ -207,13 +231,14 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       sourceErrors: state.sourceErrors,
       step: iteration,
       maxSteps: MAX_PLANNED_STEPS,
+      ran: state.ranSteps,
     });
     let plan: ResearchPlan;
     let call: LlmCallRecord;
     try {
       const result = await runtime.llm.invoke(
         PLANNER_CALL_SITE,
-        "fast",
+        FOLLOW_UP_TIER,
         messages,
         ResearchPlanOutput,
         {
@@ -228,7 +253,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
     } catch (error) {
       if (config.signal?.aborted || isAbortError(error)) throw error;
       // Only a provider-layer failure ends the research; anything else is a bug and is thrown.
-      const failed = failedCall(PLANNER_CALL_SITE, "fast", error);
+      const failed = failedCall(PLANNER_CALL_SITE, FOLLOW_UP_TIER, error);
       if (failed.status === "unexpected") throw error;
       console.warn(`⚠️ [Research Manager] Planner unavailable (${failed.status})`);
       return {
@@ -342,7 +367,9 @@ export function mergeTags(existing: string[], tags: unknown): string[] {
   const seen = new Set(existing.map((t) => t.replace(/\s*\(\d+\)$/, "").toLowerCase()));
   const merged = [...existing];
   for (const tag of Array.isArray(tags) ? tags : []) {
-    if (typeof tag?.name !== "string" || seen.has(tag.name.toLowerCase())) continue;
+    if (typeof tag?.name !== "string" || !tag.name.trim() || seen.has(tag.name.toLowerCase())) {
+      continue;
+    }
     seen.add(tag.name.toLowerCase());
     merged.push(`${tag.name} (${Number(tag.count) || 0})`);
   }
@@ -567,7 +594,18 @@ async function researchToolNode(
   const resolution = state.artistResolution;
   const known = resolution?.status === "identified" ? resolution : null;
   const uncertain = state.lastfmArtistUncertain;
+  const research = state.researchData;
   const label = actionLabel(plan.nextAction);
+
+  // A step runs at most once per run: one that already ran (here or in the historian) is not
+  // asked again, and costs the planner its step.
+  const ran = state.ranSteps.find((step) => step.action === plan.nextAction);
+  if (ran) {
+    const message = `⏭️ Not asked again: ${label} (${ran.why})`;
+    writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
+    return { statusMessages: [message] };
+  }
+  const thisStep: RanStep[] = [{ action: plan.nextAction, why: RAN_IN_RESEARCH }];
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
 
@@ -596,7 +634,10 @@ async function researchToolNode(
     const step: Step = { data: newData, reader, web: [] };
     const webText = (raw: unknown, none: NoneLabel): string | null => {
       const found = reader.read<WebResults>("tavily", raw, none);
-      const results = Array.isArray(found?.results) ? found.results : [];
+      // A result whose text is a placeholder ("No results found") is no answer.
+      const results = (Array.isArray(found?.results) ? found.results : []).filter(
+        (r) => !isPlaceholder(r?.content),
+      );
       if (found && results.length === 0) reader.nothing(none);
       const retrievedAt = timestampOf(runtime);
       for (const result of results) step.web.push({ result, retrievedAt });
@@ -793,14 +834,25 @@ async function researchToolNode(
         );
         if (reader.reasons.includes("shared_page")) step.lastfmUncertain = UNCERTAIN.shared;
         if (!data) break;
-        if (typeof data.bio === "string" && data.bio) newData.lastfmArtistBio = data.bio;
-        newData.lastfmArtistTags = mergeTags([], data.tags);
-        // Artist info lists similar artists without a match value: names in Last.fm's order.
-        newData.lastfmSimilarArtists = (
-          Array.isArray(data.similarArtists) ? data.similarArtists : []
-        )
-          .filter((a) => typeof a?.name === "string")
-          .map((a, i) => `${i + 1}. ${a.name} (Last.fm artist info; no match value)`);
+        // A bio that is only Last.fm's "Read more" link is no bio.
+        const bio = lastfmBio(data.bio);
+        if (bio) newData.lastfmArtistBio = bio;
+        // Tags already read for the track or the artist are not added again.
+        const held = [...(research.lastfmTags ?? []), ...(research.lastfmArtistTags ?? [])];
+        newData.lastfmArtistTags = mergeTags(held, data.tags).slice(held.length);
+        // Artist info lists similar artists without a match value: names in Last.fm's order,
+        // only when the ranked list with match values was not read.
+        if ((research.lastfmSimilarArtists?.length ?? 0) === 0) {
+          newData.lastfmSimilarArtists = (
+            Array.isArray(data.similarArtists) ? data.similarArtists : []
+          )
+            .filter((a) => typeof a?.name === "string")
+            .map((a, i) => `${i + 1}. ${a.name} (Last.fm artist info; no match value)`);
+        }
+        const similar = newData.lastfmSimilarArtists?.length ?? 0;
+        if (!bio && newData.lastfmArtistTags.length + similar === 0) {
+          reader.nothing("artistInfo", "nothing that was not already read");
+        }
         break;
       }
 
@@ -875,6 +927,7 @@ async function researchToolNode(
     ];
     return {
       researchData: step.data,
+      ranSteps: thisStep,
       sourceErrors: errors,
       ...(step.web.length > 0 ? { webFindings: step.web } : {}),
       ...(step.resolution ? { artistResolution: step.resolution } : {}),
@@ -888,6 +941,7 @@ async function researchToolNode(
     const record = errorRecord(ACTION_SOURCE[plan.nextAction], error);
     console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, record.message);
     return {
+      ranSteps: thisStep,
       sourceErrors: [record],
       // A bug in our own reader says so: the source is not to blame.
       statusMessages: [

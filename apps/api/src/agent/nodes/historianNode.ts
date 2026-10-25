@@ -1,10 +1,13 @@
 /**
  * Historian Node — Deep Dive Research
  * Runs in parallel with Engineer
- * Uses the ResearcherSubgraph for iterative research. It has no graph retry policy: a retry
- * would repeat the planner's model calls. When the research stops early on a provider or
- * source failure, what it found, its model calls and its source errors are kept and the status
- * says so; a bug fails the run.
+ * Runs the run's research plan (research/plan.ts): the primary sources from the track's ISRC,
+ * Last.fm once, then the ResearcherSubgraph (the sample-history search and at most two
+ * follow-ups chosen by the planner). The MusicBrainz recording the ISRC identifies is read once:
+ * its credited artist is the researcher's artist (by MBID) and the recording goes to the
+ * composer (`isrcRecording`). It has no graph retry policy: a retry would repeat the planner's
+ * model calls. When the research stops early on a provider or source failure, what it found, its
+ * model calls and its source errors are kept and the status says so; a bug fails the run.
  *
  * It writes the run's evidence pack (research/runEvidence.ts): the primary sources' records,
  * read from the track's ISRC (MusicBrainz, Discogs, SecondHandSongs, Genius), and the web
@@ -27,6 +30,8 @@ import {
   getLastfmSimilarTracks,
 } from "../../sources/lastfm.js";
 import {
+  type ArtistResolution,
+  artistFromCredit,
   getCachedResearcherSubgraph,
   mergeTags,
   type NoneLabel,
@@ -41,12 +46,14 @@ import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
+import { fixedSteps } from "../research/plan.js";
 import {
   lastingAmong,
   runEvidence,
   sendStatus,
   startPrimarySources,
 } from "../research/runEvidence.js";
+import type { IdentifiedRecording } from "../../sources/identity.js";
 import {
   emptyResearch,
   mergeResearch,
@@ -106,12 +113,13 @@ export async function historianNode(
     // The cached research holds no evidence: the primary sources are read for this run.
     const reading = isrc ? readingPrimary() : null;
     if (reading) sendStatus(config, runtime, "RESEARCH-FOUND", reading);
-    const pack = await runEvidence(primary, [], config, runtime);
+    const pack = await runEvidence(primary.run, [], config, runtime);
     const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
     const lasting = lastingAmong(pack.lasting, notConfigured);
     return {
       researchData: cachedResearch,
       evidence: pack.evidence,
+      isrcRecording: await primary.recording,
       ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
       ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),
       statusMessages: [
@@ -139,17 +147,21 @@ export async function historianNode(
   const options = { signal: config.signal };
   console.log("📚 [Historian] Deep dive research for:", title, "by", artist);
 
-  // Pre-fetch Last.fm tags and similar tracks in parallel (outside the researcher loop)
-  // This ensures genre tags are always available regardless of which actions the LLM picks.
-  // Each result is read by its type: data, "nothing found" (recorded, never a fact) or the
-  // source's error (a source error, and the prompts say Last.fm was unavailable).
+  // The plan's Last.fm step, once per run (outside the researcher subgraph, which does not ask it
+  // again): the track's tags, the artist's tags and the similar tracks, in parallel, while the
+  // ISRC identifies the recording. Each result is read by its type: data, "nothing found"
+  // (recorded, never a fact) or the source's error (a source error, and the prompts say Last.fm
+  // was unavailable).
   const prefetch = new StepReader();
   console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
   config.signal?.throwIfAborted();
-  const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
-    getLastfmTrackTags.invoke({ title: query.title, artist: query.primary }, options),
-    getLastfmArtistTags.invoke({ artist: query.primary }, options),
-    getLastfmSimilarTracks.invoke({ title: query.title, artist: query.primary }, options),
+  const [[trackTagsResult, artistTagsResult, similarTracksResult], recording] = await Promise.all([
+    Promise.allSettled([
+      getLastfmTrackTags.invoke({ title: query.title, artist: query.primary }, options),
+      getLastfmArtistTags.invoke({ artist: query.primary }, options),
+      getLastfmSimilarTracks.invoke({ title: query.title, artist: query.primary }, options),
+    ]),
+    primary.recording,
   ]);
   config.signal?.throwIfAborted();
   const settled = (result: PromiseSettledResult<string>, label: NoneLabel) => {
@@ -211,6 +223,10 @@ export async function historianNode(
         runId: runIdFor(state, config, runtime),
         // The planner reads which sources could not be read.
         sourceErrors: prefetchErrors,
+        // The steps already read are not offered again; the artist the identified recording
+        // credits is the artist of every artist-level step.
+        ranSteps: fixedSteps({ recordingIdentified: recording !== null }),
+        ...(recording ? artistOf(recording, query.primary) : {}),
       },
       {
         streamMode: ["values", "custom"],
@@ -252,7 +268,7 @@ export async function historianNode(
   ]);
 
   // The run's evidence: the primary sources' records, then the web search's results.
-  const pack = await runEvidence(primary, finalState.webFindings ?? [], config, runtime);
+  const pack = await runEvidence(primary.run, finalState.webFindings ?? [], config, runtime);
 
   // Nothing is written for a cancelled run. Research is cached only when it is complete: not
   // when it stopped early, a source could not be read for a passing reason (an outage, a
@@ -294,6 +310,7 @@ export async function historianNode(
   return {
     researchData: mergedResearch,
     evidence: pack.evidence,
+    isrcRecording: recording,
     usage: finalState.usage ?? [],
     // The primary sources' errors are the run's too; they do not block the research cache,
     // which does not hold their records.
@@ -306,6 +323,18 @@ export async function historianNode(
       ...(failure ? [summary] : []),
     ],
   };
+}
+
+/**
+ * The researcher's artist from the recording the ISRC identified: its credited artist (the
+ * track's first artist among the credits, else the first credit), verified by the identification.
+ */
+function artistOf(
+  recording: IdentifiedRecording,
+  primary: string,
+): { artistResolution: ArtistResolution } | Record<string, never> {
+  const own = artistFromCredit(recording.artists, primary);
+  return own ? { artistResolution: { status: "identified", verified: true, ...own } } : {};
 }
 
 /** Research without Last.fm's artist-level data, when `uncertain` says it is not this artist's. */

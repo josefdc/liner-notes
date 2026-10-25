@@ -34,6 +34,7 @@ import {
 } from "../../sources/records.js";
 import { isLyricPage, type WebResult } from "../../sources/search.js";
 import { isPreviewUrl } from "../../store/runs.js";
+import { isPlaceholder } from "./plan.js";
 
 /** The most items a run's pack keeps; the lowest-ranked are left out and counted. */
 export const EVIDENCE_PACK_MAX_ITEMS = 80;
@@ -162,7 +163,8 @@ function webPage(url: string): string | null {
 /**
  * Web-tier Evidence from the web search's results: the page's title, URL and the text the
  * search returned for it, cut to the contract's excerpt limit. One item per URL; a result
- * without a web URL or text, on a lyric site, or whose URL is a preview or signed link gives none.
+ * without a web URL or text (or whose text is a placeholder, "No results found"), on a lyric
+ * site, or whose URL is a preview or signed link gives none.
  */
 export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvidence[] {
   const items: SourcedEvidence[] = [];
@@ -171,7 +173,9 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
     const raw = typeof result?.url === "string" ? result.url.trim() : "";
     const url = raw ? webPage(raw) : null;
     const text = typeof result?.content === "string" ? result.content.trim() : "";
-    if (!url || !text || isLyricPage(url) || isPreviewUrl(url) || isPreviewUrl(raw)) continue;
+    if (!url || isPlaceholder(text) || isLyricPage(url) || isPreviewUrl(url) || isPreviewUrl(raw)) {
+      continue;
+    }
     if (seen.has(url)) continue;
     seen.add(url);
     const title = typeof result.title === "string" && result.title.trim() ? result.title : url;

@@ -14,9 +14,7 @@
  * configured, failed, timed out: "unavailable") (`accuracy`).
  */
 
-import { tool } from "@langchain/core/tools";
 import type { Evidence, SourceError as SourceErrorRecord, SourceId } from "@liner-notes/contract";
-import { z } from "zod";
 import {
   DISCOGS_TOKEN,
   type DiscogsCredit,
@@ -32,6 +30,7 @@ import {
   GENIUS_ACCESS_TOKEN,
 } from "./genius.js";
 import { describeError } from "./http.js";
+import { pacingClock } from "./pacing.js";
 import {
   browseRecordingReleases,
   browseWorkRecordings,
@@ -469,9 +468,18 @@ export function originalPerformance(
  */
 export async function resolveIdentity(
   track: TrackRef,
-  options: { signal?: AbortSignal; onRecording?: (recording: IdentifiedRecording) => void } = {},
+  options: {
+    signal?: AbortSignal;
+    /**
+     * Stops the dating of the work's recordings (default `signal`): the chain's last reads,
+     * and the only ones whose loss loses no record, cut early enough for the other sources.
+     */
+    datingSignal?: AbortSignal;
+    onRecording?: (recording: IdentifiedRecording) => void;
+  } = {},
 ): Promise<IdentityResolution> {
   const { signal } = options;
+  const datingSignal = options.datingSignal ?? signal;
   const none = (result: SourceResult<never>): IdentityResolution => ({
     identity: null,
     details: null,
@@ -493,7 +501,7 @@ export async function resolveIdentity(
     }
     const details = await getRecordingDetails(pick.recording.id, signal);
     if (!details || typeof details !== "object" || !isMbid(details.id)) {
-      throw unexpectedShape("musicbrainz", "the recording lookup is not a recording");
+      throw unexpectedShape("musicbrainz", "the recording lookup is not a recording", details);
     }
     // The lookup answers for the recording itself: checked again, in case it was merged.
     const check = checkIdentity(track, {
@@ -559,7 +567,7 @@ export async function resolveIdentity(
           original = originalPerformance(
             details,
             links.works,
-            await browseWorkRecordings(only.mbid, 2, signal),
+            await browseWorkRecordings(only.mbid, 2, datingSignal),
             coverIds,
           );
         } catch (error) {
@@ -721,6 +729,14 @@ export interface PrimarySources {
 /** The longest a whole run may take, all sources together, and the longest it may be set to. */
 export const PRIMARY_SOURCES_DEADLINE_MS = 20_000;
 const MAX_DEADLINE_MS = 120_000;
+/**
+ * The time the dating of the work's recordings leaves before the deadline (at most a quarter of
+ * it) for Discogs, Genius and SecondHandSongs, which are asked after it: a dating cut by the
+ * deadline would otherwise take their requests down with it.
+ */
+export const OTHER_SOURCES_RESERVE_MS = 5000;
+/** How long before the deadline a paced request must start (at most a tenth of it). */
+export const REQUEST_MARGIN_MS = 1500;
 
 /** A deadline in ms: the default when not a positive number, and at most two minutes. */
 function deadlineOf(ms: number | undefined): number {
@@ -766,9 +782,45 @@ async function collectInOrder(
   track: TrackRef,
   options: PrimarySourcesOptions,
 ): Promise<PrimarySources> {
-  const deadline = AbortSignal.timeout(deadlineOf(options.deadlineMs));
+  const deadlineMs = deadlineOf(options.deadlineMs);
+  // Timers rather than AbortSignal.timeout: the deadlines follow the process's timers, which a
+  // test can drive.
+  const deadline = deadlineAfter(deadlineMs);
+  const datingCut = deadlineAfter(
+    deadlineMs - Math.min(OTHER_SOURCES_RESERVE_MS, Math.floor(deadlineMs / 4)),
+  );
+  try {
+    return await collectWithin(track, options, deadlineMs, deadline.signal, datingCut.signal);
+  } finally {
+    deadline.clear();
+    datingCut.clear();
+  }
+}
+
+/** A signal that aborts with a TimeoutError after `ms`, and the way to stop its timer. */
+function deadlineAfter(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("deadline reached", "TimeoutError")),
+    ms,
+  );
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
+async function collectWithin(
+  track: TrackRef,
+  options: PrimarySourcesOptions,
+  deadlineMs: number,
+  deadline: AbortSignal,
+  datingCut: AbortSignal,
+): Promise<PrimarySources> {
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-  const run = { now: options.now, signal };
+  const datingSignal = AbortSignal.any([signal, datingCut]);
+  // A paced request (Discogs, SecondHandSongs) must start early enough to be answered within the
+  // deadline; a later slot is not taken, and the source is reported as not asked.
+  const notAfter =
+    pacingClock() + deadlineMs - Math.min(REQUEST_MARGIN_MS, Math.floor(deadlineMs / 10));
+  const run = { now: options.now, signal, notAfter };
   let told = false;
   const tell = (recording: IdentifiedRecording | null) => {
     if (told) return;
@@ -778,7 +830,7 @@ async function collectInOrder(
 
   let resolved: IdentityResolution | undefined;
   const resolution = await settle<never>("musicbrainz", async () => {
-    resolved = await resolveIdentity(track, { signal, onRecording: tell });
+    resolved = await resolveIdentity(track, { signal, datingSignal, onRecording: tell });
     return resolved.result;
   });
   tell(null);
@@ -851,36 +903,3 @@ async function collectInOrder(
     accuracy: identityAccuracy(results),
   };
 }
-
-/**
- * The identity chain and primary sources as an agent tool; the result is JSON. The run stops
- * when the agent's call is cancelled (`config.signal`).
- */
-export const primarySourcesTool = tool(
-  async ({ isrc, title, artists, durationMs }, config): Promise<string> =>
-    JSON.stringify(
-      await collectPrimarySources(
-        { isrc, title, artists, durationMs: durationMs ?? null },
-        { signal: config?.signal },
-      ),
-    ),
-  {
-    name: "primary_sources",
-    description:
-      "Structured records for a track from MusicBrainz, Discogs, SecondHandSongs and Genius, " +
-      "reached from its ISRC: samples, covers, remixes and credits, each with evidence. A " +
-      "record marked about the work is a fact about the song, not about this recording. A " +
-      "source without a verified record is reported as missing, with the reason.",
-    schema: z.object({
-      isrc: z.string().describe("The track's ISRC"),
-      title: z.string().describe("The track title"),
-      artists: z.array(z.string()).min(1).describe("The track's credited artists, one by one"),
-      durationMs: z
-        .number()
-        .positive()
-        .nullable()
-        .optional()
-        .describe("The track's duration in ms"),
-    }),
-  },
-);

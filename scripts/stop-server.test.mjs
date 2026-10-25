@@ -1,7 +1,16 @@
-// Stopping a server run through tsx, as the replay end-to-end check does. Run with `npm test`.
+// Stopping a server run through the tsx CLI, the harder case: tsx relays a signal to its child
+// (the replay end-to-end check starts the API as `node --import tsx`, with no relay in between).
+// Run with `npm test`.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -106,7 +115,10 @@ describe("stopServer", () => {
       const exits = readReport(server.report).filter(
         (line) => line.pid === server.pid && line.event === "exit",
       );
-      expect(exits).toEqual([expect.objectContaining({ attempts: 0, hosts: [] })]);
+      // tsx, which leads the group, started the server.
+      expect(exits).toEqual([
+        expect.objectContaining({ ppid: server.group, attempts: 0, hosts: [] }),
+      ]);
       expect(server.output()).toContain(`[deny-network] outbound attempts: 0 (pid ${server.pid})`);
     },
     3 * STEP_TIMEOUT_MS,
@@ -194,6 +206,28 @@ describe("readReportFile", () => {
     expect(lines.map((l) => `${l.pid} ${l.event}`)).toEqual(["11 start", "11 exit"]);
     expect(unreadable).toEqual([torn.slice(0, 40), '{"note":"not a report line"}']);
     expect(readReport(file)).toEqual(lines);
-    expect(readReportFile(join(scratch, "absent.jsonl"))).toEqual({ lines: [], unreadable: [] });
+    expect(readReportFile(join(scratch, "absent.jsonl"))).toEqual({
+      lines: [],
+      unreadable: [],
+      end: 0,
+    });
+  });
+
+  it("reads from a byte on: the lines added since an earlier read", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "stop-server-"));
+    cleanups.push(() => rmSync(scratch, { recursive: true, force: true }));
+    const file = join(scratch, "report.jsonl");
+    const line = (pid, event) =>
+      `${JSON.stringify({ pid, ppid: 1, argv: ["/x/é.ts"], event, attempts: 0, hosts: [] })}\n`;
+    writeFileSync(file, line(11, "start") + line(11, "exit"));
+
+    const first = readReportFile(file);
+    appendFileSync(file, `${line(12, "start")}{"pid":12,`);
+    const second = readReportFile(file, first.end);
+
+    expect(first.lines.map((l) => `${l.pid} ${l.event}`)).toEqual(["11 start", "11 exit"]);
+    expect(second.lines.map((l) => `${l.pid} ${l.event}`)).toEqual(["12 start"]);
+    expect(second.unreadable).toEqual(['{"pid":12,']);
+    expect(second.end).toBe(readFileSync(file).length);
   });
 });

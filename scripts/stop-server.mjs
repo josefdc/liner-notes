@@ -1,8 +1,9 @@
 // Stopping a server started as `npm start` in a process group of its own (npm, then sh, then the
 // server), so that its exit is the same however busy the machine is.
 //
-// Only the server process gets SIGTERM, never the whole group. When the server runs under the tsx
-// CLI (`tsx src/index.ts`), tsx (4.21) relays a signal it gets to its child and, unless the child
+// The server process alone gets SIGTERM when its pid is known and in the group; the whole group
+// gets it only when not (the server never started, say). When the server runs under the tsx CLI
+// (`tsx src/index.ts`), tsx (4.21) relays a signal it gets to its child and, unless the child
 // acknowledges it within about 30 ms (twice), kills the child with SIGKILL: a child whose event
 // loop is busy at that moment dies without running its exit handlers, so it neither shuts down
 // cleanly nor writes its deny-network report. Signalled alone, the server shuts down, and any
@@ -18,20 +19,21 @@ const isReportLine = (value) =>
   typeof value.event === "string";
 
 /**
- * Reads a deny-network report (tests/deny-network.mjs): `lines` are its report lines, and
- * `unreadable` every other non-empty line (one being written while a process runs, or one cut
- * short). An absent file reads as no lines.
+ * Reads a deny-network report (tests/deny-network.mjs) from byte `from` on: `lines` are its report
+ * lines, `unreadable` every other non-empty line (one being written while a process runs, or one
+ * cut short) and `end` the byte it read up to, from which a later read takes only the lines added
+ * since. An absent file reads as no lines.
  */
-export function readReportFile(file) {
-  let text;
+export function readReportFile(file, from = 0) {
+  let bytes;
   try {
-    text = readFileSync(file, "utf8");
+    bytes = readFileSync(file);
   } catch {
-    return { lines: [], unreadable: [] };
+    return { lines: [], unreadable: [], end: from };
   }
   const lines = [];
   const unreadable = [];
-  for (const line of text.split("\n")) {
+  for (const line of bytes.subarray(from).toString("utf8").split("\n")) {
     if (line.trim() === "") continue;
     let value;
     try {
@@ -42,7 +44,7 @@ export function readReportFile(file) {
     if (isReportLine(value)) lines.push(value);
     else unreadable.push(line);
   }
-  return { lines, unreadable };
+  return { lines, unreadable, end: bytes.length };
 }
 
 /** The report lines of a deny-network report, leaving out any it cannot read. */

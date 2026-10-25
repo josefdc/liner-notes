@@ -28,6 +28,7 @@ import {
 } from "@liner-notes/contract";
 import { API_ROOT } from "../config/apiPackage.js";
 import { logger } from "../logger.js";
+import { archiveCoverOf } from "./cover.js";
 
 const log = logger("Replay");
 
@@ -142,6 +143,16 @@ export function loadReplays(dir: string): ReplaySet {
       continue;
     }
     const record = parsed.data;
+    // The one cover a record may carry is the Cover Art Archive link its own evidence gives
+    // (replay/cover.ts); any other is not served, in the result or its complete event.
+    const cover = archiveCoverOf(record.analysis);
+    if (record.analysis.coverUrl && record.analysis.coverUrl !== cover) {
+      warnings.push(`${file}: its cover is not the one its evidence gives; served without it`);
+      record.analysis.coverUrl = "";
+    }
+    for (const { event } of record.events) {
+      if (event.type === "complete" && event.data.coverUrl !== cover) event.data.coverUrl = "";
+    }
     const issues = record.analysis.run
       ? runIssues(record.analysis.run, record.analysis.audio, "analysis.run")
       : ["analysis.run: missing"];

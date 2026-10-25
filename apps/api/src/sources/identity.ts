@@ -46,6 +46,7 @@ import {
   type MbWork,
   NOT_ORIGINAL_RELEASE_TYPES,
   normalizeIsrc,
+  normalizeName,
   recordingRelationships,
   withMusicBrainzPriority,
   workCovers,
@@ -100,6 +101,8 @@ export interface PrimaryIdentity {
    * releases could not be read or none qualifies.
    */
   coverRelease: CoverRelease | null;
+  /** Why the recording's releases could not be read (then no release is named); else null. */
+  coverReleaseError: string | null;
   /** The Genius page linked from the recording's work; null when none or several. */
   geniusUrl: string | null;
   /** Every Genius page linked from the recording's works. */
@@ -235,12 +238,21 @@ export function pickRecording(
   return { recording: chosen, omitted, reason: "" };
 }
 
-/** A release date as a sort key; a bare year or month sorts after the dated days in it. */
+/** A release date MusicBrainz writes: a year, a year and month, or a day. */
+const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
+
+/**
+ * A release date as a sort key; a bare year or month sorts after the dated days in it, and
+ * anything that is not a date (missing, padded, "1990-9-4") sorts as undated, last.
+ */
 function dateKey(date: string | undefined): string {
-  if (!date) return "9999-99-99";
+  if (typeof date !== "string" || !RELEASE_DATE.test(date)) return "9999-99-99";
   const [year, month = "99", day = "99"] = date.split("-");
   return `${year}-${month}-${day}`;
 }
+
+/** Plain string order, the same in every locale. */
+const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** A release the recording is on, as the evidence names it. */
 export interface CoverRelease {
@@ -261,47 +273,53 @@ const RELEASE_TYPE_WORD: Record<CoverReleaseType, string> = {
 
 const COVER_RELEASE_RANK: Record<CoverReleaseType, number> = { album: 0, ep: 1, single: 2 };
 
-/** Plain string order, the same in every locale. */
-const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
 const coverReleaseType = (release: MbReleaseSummary): CoverReleaseType | null => {
   const type = String(release["release-group"]?.["primary-type"] ?? "").toLowerCase();
   return type === "album" || type === "ep" || type === "single" ? type : null;
 };
 
 /**
- * The one release of the recording that stands for it: original releases only (not a
- * compilation, live, DJ-mix or remix release), an album before an EP before a single, then the
- * earliest dated (undated last), then the lowest MBID. Null when none qualifies. The same list
- * always gives the same release, whatever its order.
+ * The one release of the recording that stands for it, for its cover: an official release
+ * (not a compilation, live, DJ-mix or remix release) of type album, EP or single for which the
+ * Cover Art Archive holds a front image (`cover-art-archive.front` in MusicBrainz's answer).
+ * Among those: one titled as the album the track is shown with (`album`, compared as names
+ * are), then an album before an EP before a single, then the earliest dated (undated last),
+ * then the lowest MBID. Null when none qualifies: a release without a front image is never
+ * named for a cover. The same list always gives the same release, whatever its order.
  */
-export function pickCoverRelease(releases: readonly MbReleaseSummary[]): CoverRelease | null {
-  const before = (
-    a: MbReleaseSummary,
-    aType: CoverReleaseType,
-    b: MbReleaseSummary,
-    bType: CoverReleaseType,
-  ) =>
-    (COVER_RELEASE_RANK[aType] - COVER_RELEASE_RANK[bType] ||
-      dateKey(a.date).localeCompare(dateKey(b.date)) ||
-      byCodePoint(a.id.toLowerCase(), b.id.toLowerCase())) < 0;
-  let best: { release: MbReleaseSummary; type: CoverReleaseType } | null = null;
+export function pickCoverRelease(
+  releases: readonly MbReleaseSummary[],
+  album?: string | null,
+): CoverRelease | null {
+  const shown = typeof album === "string" ? normalizeName(album) : "";
+  const sameAlbum = (release: MbReleaseSummary) =>
+    shown !== "" && normalizeName(release.title) === shown;
+  const order = (a: Candidate, b: Candidate) =>
+    Number(b.sameAlbum) - Number(a.sameAlbum) ||
+    COVER_RELEASE_RANK[a.type] - COVER_RELEASE_RANK[b.type] ||
+    byCodePoint(dateKey(a.release.date), dateKey(b.release.date)) ||
+    byCodePoint(a.release.id.toLowerCase(), b.release.id.toLowerCase());
+  type Candidate = { release: MbReleaseSummary; type: CoverReleaseType; sameAlbum: boolean };
+  let best: Candidate | null = null;
   const list: readonly MbReleaseSummary[] = Array.isArray(releases) ? releases : [];
   for (const release of list) {
     if (!release || !isMbid(release.id) || typeof release.title !== "string") continue;
     if (!release.title.trim()) continue;
+    if (String(release.status ?? "").toLowerCase() !== "official") continue;
+    if (release["cover-art-archive"]?.front !== true) continue;
     const secondary = release["release-group"]?.["secondary-types"] ?? [];
     if (secondary.some((t) => NOT_ORIGINAL_RELEASE_TYPES.has(String(t).toLowerCase()))) continue;
     const type = coverReleaseType(release);
     if (!type) continue;
-    if (!best || before(release, type, best.release, best.type)) best = { release, type };
+    const candidate = { release, type, sameAlbum: sameAlbum(release) };
+    if (!best || order(candidate, best) < 0) best = candidate;
   }
   if (!best) return null;
   return {
     mbid: best.release.id.toLowerCase(),
     title: best.release.title.trim(),
     type: best.type,
-    date: best.release.date?.trim() || null,
+    date: RELEASE_DATE.test(best.release.date ?? "") ? (best.release.date as string) : null,
   };
 }
 
@@ -315,7 +333,7 @@ export function discogsCandidates(releases: MbReleaseSummary[]): number[] {
       const secondary = r["release-group"]?.["secondary-types"] ?? [];
       return !secondary.some((t) => NOT_ORIGINAL_RELEASE_TYPES.has(String(t).toLowerCase()));
     })
-    .sort((a, b) => dateKey(a.date).localeCompare(dateKey(b.date)) || a.id.localeCompare(b.id));
+    .sort((a, b) => byCodePoint(dateKey(a.date), dateKey(b.date)) || byCodePoint(a.id, b.id));
   const ids: number[] = [];
   for (const release of originals) {
     for (const rel of release.relations ?? []) {
@@ -533,7 +551,7 @@ export function originalPerformance(
  * from and whether it is the song's original recording. Never throws. `onRecording` is told the
  * recording as soon as its lookup passed the checks, before the releases and the work are read.
  * The recording's releases are read once, for the release that stands for the recording and,
- * when Discogs is configured, for their Discogs links.
+ * when Discogs is configured, for their Discogs links (then before the work; otherwise last).
  */
 export async function resolveIdentity(
   track: TrackRef,
@@ -592,21 +610,31 @@ export async function resolveIdentity(
     let releasesFailure: SourceErrorRecord | null = null;
     let releasesNote: string | null = null;
     let coverRelease: CoverRelease | null = null;
+    let coverReleaseError: string | null = null;
     // The recording's releases are read once: for the release that stands for it (its cover in
-    // a recorded run) and, when Discogs is configured, for their Discogs links. Without Discogs
-    // a failed read loses only that release: no record and no source error.
-    try {
-      const { releases, total } = await browseRecordingReleases(details.id, 2, signal);
-      coverRelease = pickCoverRelease(releases);
-      if (discogsConfigured()) {
+    // a recorded run) and, when Discogs is configured, for their Discogs links, before the work
+    // (Discogs is asked from them). Without Discogs they are read last: one page, on the dating
+    // signal, so the read never delays the work and its dating; a failed read loses only that
+    // release, which the MusicBrainz result notes (no record, no source error).
+    const readReleases = async (pages: number, readSignal: AbortSignal | undefined) => {
+      try {
+        const read = await browseRecordingReleases(details.id, pages, readSignal);
+        coverRelease = pickCoverRelease(read.releases, track.album);
+        return read;
+      } catch (error) {
+        coverReleaseError = describeError(error);
+        throw error;
+      }
+    };
+    if (discogsConfigured()) {
+      try {
+        const { releases, total } = await readReleases(2, signal);
         // Sorted before the Discogs source takes the first few.
         discogsReleaseIds = discogsCandidates(releases);
         if (total > releases.length) {
           releasesNote = `only ${releases.length} of the recording's ${total} releases were read for Discogs links`;
         }
-      }
-    } catch (error) {
-      if (discogsConfigured()) {
+      } catch (error) {
         releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
         releasesFailure = errorRecord("discogs", error);
       }
@@ -651,6 +679,14 @@ export async function resolveIdentity(
       }
     }
 
+    if (!discogsConfigured()) {
+      try {
+        await readReleases(1, datingSignal);
+      } catch {
+        // Noted by musicBrainzRelationships (coverReleaseError).
+      }
+    }
+
     const identity: PrimaryIdentity = {
       isrc,
       recording: {
@@ -664,6 +700,7 @@ export async function resolveIdentity(
       releasesFailure,
       releasesNote,
       coverRelease,
+      coverReleaseError,
       original,
       ...links,
     };
@@ -710,6 +747,11 @@ export async function musicBrainzRelationships(
 
   const notes: string[] = [];
   if (resolution.workError) notes.push(resolution.workError);
+  if (identity.coverReleaseError) {
+    notes.push(
+      `${RELEASES_INCOMPLETE}the recording's releases could not be read (${identity.coverReleaseError}), so no release is named for it`,
+    );
+  }
   const [work] = identity.works;
   if (resolution.work && work && !work.cover) {
     const about = identity.original.original ? "track" : "work";
@@ -801,6 +843,9 @@ export async function musicBrainzRelationships(
 
 /** How the MusicBrainz note starts when the work's recordings could not be dated. */
 export const DATES_INCOMPLETE = "dates incomplete: ";
+
+/** How the MusicBrainz note starts when the recording's releases could not be read. */
+export const RELEASES_INCOMPLETE = "releases incomplete: ";
 
 export interface PrimarySources {
   identity: PrimaryIdentity | null;

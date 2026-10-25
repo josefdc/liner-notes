@@ -397,6 +397,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           src={cover.src}
           alt=""
           onError={cover.onError}
+          referrerPolicy="no-referrer"
           className="absolute inset-0 w-full h-full object-cover opacity-10 blur-3xl scale-110 pointer-events-none"
         />
       )}
@@ -620,7 +621,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           {/* Album Art Container */}
           <AlbumCover
             cover={cover}
-            alt="Album Art"
+            album={track.album}
+            evidence={track.evidence}
             className="mb-8 mt-4 flex-shrink-0"
             frameClassName="relative w-56 h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 group"
             surfaceClassName={`rounded-lg shadow-elevated-lg transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''} ${isPlaying && cover.src ? 'shadow-[var(--shadow-glow-cyber)]' : ''}`}

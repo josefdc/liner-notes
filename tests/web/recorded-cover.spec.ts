@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
+  animationsSettled,
   collectProblems,
   loadFixture,
   openPlayer,
@@ -54,7 +55,18 @@ const archiveImages = (page: Page) =>
     "https://coverartarchive.org/",
   );
 
-const credit = (page: Page) => page.getByRole("link", { name: "Cover: Cover Art Archive" });
+const credit = (page: Page) => page.getByRole("link", { name: /^Cover: / });
+
+/** Images on the page that failed to load and are still drawn (a broken-image glyph). */
+const brokenImages = (page: Page) =>
+  page.locator("#root img").evaluateAll((images) =>
+    images
+      .filter((image) => {
+        const img = image as HTMLImageElement;
+        return img.complete && img.naturalWidth === 0;
+      })
+      .map((image) => (image as HTMLImageElement).src),
+  );
 
 test("a recorded run shows its Cover Art Archive cover, credited to the archive", async ({
   page,
@@ -65,21 +77,22 @@ test("a recorded run shows its Cover Art Archive cover, credited to the archive"
   await analyzeAndOpenDashboard(page, "Bright Lines");
 
   await expect(page.getByRole("region", { name: "Recorded run" })).toBeVisible();
-  const hero = page.getByRole("img", { name: "Bright Lines", exact: true });
+  const hero = page.getByRole("img", { name: "Cover of Test Album", exact: true });
   await expect(hero).toBeVisible();
   // The cover and the blurred background behind it, both loaded.
   await expect
     .poll(() => archiveImages(page))
     .toEqual([
       { alt: "", loaded: true },
-      { alt: "Bright Lines", loaded: true },
+      { alt: "Cover of Test Album", loaded: true },
     ]);
   await expect(credit(page)).toBeVisible();
+  await expect(credit(page)).toHaveText("Cover: Cover Art Archive (opens in a new tab)");
   await expect(credit(page)).toHaveAttribute("href", ARCHIVE_PAGE);
   await expect(page.getByText("Cover not available")).toHaveCount(0);
 
   await openPlayer(page);
-  await expect(page.getByRole("img", { name: "Album Art" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Cover of Test Album" })).toBeVisible();
   await expect(credit(page)).toHaveAttribute("href", ARCHIVE_PAGE);
   await expect(page.getByText("Cover not available")).toHaveCount(0);
   expect(new Set(requests)).toEqual(new Set([ARCHIVE]));
@@ -91,7 +104,22 @@ test("a recorded cover the archive does not hold (404) is not available, with no
 }) => {
   const requests = await archive(page, 404);
   await useMockApi(page, recorded());
-  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Bright Lines");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  // The analysis screen's cover of the track: nothing drawn for it, never a broken image. The
+  // screen moves on to the Dashboard by itself a few seconds after the result: checked before.
+  const proceed = page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" });
+  await expect(proceed).toBeVisible();
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  const quick = { timeout: 1500 };
+  await expect.poll(() => archiveImages(page), quick).toEqual([]);
+  await expect.poll(() => brokenImages(page), quick).toEqual([]);
+  await expect(proceed).toBeVisible({ timeout: 1 });
+  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible({
+    timeout: 10_000,
+  });
+  await animationsSettled(page);
 
   await expect(page.getByText("Cover not available")).toBeVisible();
   await expect.poll(() => archiveImages(page)).toEqual([]);
@@ -118,4 +146,36 @@ test("a recording without a cover says so and asks the archive for nothing", asy
   await expect(page.getByText("Cover not available")).toBeVisible();
   await expect(page.locator("#root img")).toHaveCount(0);
   expect(requests).toEqual([]);
+});
+
+test("suggestions and the track picker show a placeholder, never a broken image, for a 404 cover", async ({
+  page,
+}) => {
+  const requests = await archive(page, 404);
+  const fixture = loadFixture("hitl");
+  const interrupt = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "interrupt",
+  );
+  for (const candidate of interrupt.candidates) candidate.coverUrl = ARCHIVE;
+  fixture.suggestions = interrupt.candidates;
+  await useMockApi(page, fixture);
+  await page.goto("/");
+
+  // The search suggestions, as a replaying server sends them: with the recorded cover.
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await expect(page.getByRole("option")).toHaveCount(interrupt.candidates.length);
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  await expect.poll(() => archiveImages(page)).toEqual([]);
+  expect(await brokenImages(page)).toEqual([]);
+  await expect(page.locator("[role=option] [data-cover-placeholder]")).toHaveCount(
+    interrupt.candidates.length,
+  );
+
+  // The track picker of an ambiguous search.
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await expect(page.getByText("Is this the right track?")).toBeVisible();
+  await expect.poll(() => archiveImages(page)).toEqual([]);
+  expect(await brokenImages(page)).toEqual([]);
+  await expect(page.locator("[data-cover-placeholder]")).toHaveCount(interrupt.candidates.length);
 });

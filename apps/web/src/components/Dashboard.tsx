@@ -311,6 +311,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <img
               src={cover.src}
               onError={cover.onError}
+              referrerPolicy="no-referrer"
               className="absolute inset-0 w-full h-full object-cover opacity-[0.07] blur-2xl scale-110 pointer-events-none"
               alt=""
             />
@@ -320,7 +321,8 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Album Cover */}
             <AlbumCover
               cover={cover}
-              alt={trackData.title}
+              album={trackData.album}
+              evidence={trackData.evidence}
               className="flex-shrink-0"
               frameClassName="relative w-32 h-32 md:w-40 md:h-40 group/cover"
               surfaceClassName="rounded-md shadow-2xl"

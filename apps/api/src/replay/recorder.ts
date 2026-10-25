@@ -26,7 +26,7 @@
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
  * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
  * outside the allow-listed source sites, a preview or media URL inside text (the Cover Art
- * Archive link `archiveCoverOf` derives is allowed as a `coverUrl` value only), the typed query
+ * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
  * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
@@ -38,14 +38,16 @@
 import {
   type AnalyzeStreamEvent,
   analysisIssues,
-  type Evidence,
   ReplayRecord,
   runIssues,
   TrackAnalysis,
 } from "@liner-notes/contract";
 import { isMediaUrl } from "../sources/http.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
+import { ARCHIVE_FRONT, archiveCover } from "./cover.js";
 import { normalizeQuery } from "./records.js";
+
+export { archiveCover, archiveCoverOf } from "./cover.js";
 
 export class RecordRefused extends Error {
   constructor(readonly reasons: string[]) {
@@ -112,37 +114,6 @@ export function withoutMediaFields(value: unknown): unknown {
         return [key, withoutMediaFields(inner)];
       }),
   );
-}
-
-const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-/** A MusicBrainz release as sources/identity.ts names it in an Evidence item's recordRef. */
-const RELEASE_REF = new RegExp(`^release/(${UUID_PATTERN})$`);
-/** The Cover Art Archive's front image of a release, at a size it serves. */
-const ARCHIVE_FRONT = new RegExp(
-  `^https://coverartarchive\\.org/release/${UUID_PATTERN}/front-(?:250|500)$`,
-);
-
-/**
- * The Cover Art Archive link a record keeps as the result's cover: the front image (250 px) of
- * the release named by the result's one MusicBrainz release item (a primary record whose
- * recordRef is `release/<mbid>`, with that release's page), or "" when there is no such item or
- * more than one. The link is public and stable, meant for embedding; whether the archive holds a
- * cover for the release is not known here, and the page says so when the image does not load.
- */
-export function archiveCoverOf(analysis: { evidence?: readonly Evidence[] | null }): string {
-  const releases = (Array.isArray(analysis.evidence) ? analysis.evidence : []).filter(
-    (item) =>
-      item?.source === "musicbrainz" &&
-      item.sourceTier === "primary-record" &&
-      RELEASE_REF.test(item.recordRef ?? ""),
-  );
-  if (releases.length !== 1) return "";
-  const [item] = releases;
-  const mbid = RELEASE_REF.exec(item.recordRef ?? "")?.[1];
-  if (!mbid) return "";
-  if (item.id !== `musicbrainz:release/${mbid}`) return "";
-  if (item.url !== `https://musicbrainz.org/release/${mbid}`) return "";
-  return `https://coverartarchive.org/release/${mbid}/front-250`;
 }
 
 /** A status message about the user's own action in the recorded run. */
@@ -315,9 +286,24 @@ export interface LeakCheck {
   otherRunIds?: readonly string[];
   /**
    * The Cover Art Archive link the record keeps (`archiveCoverOf`): allowed as the whole value
-   * of a `coverUrl` field, and nowhere else.
+   * of the result's cover (`analysis.coverUrl`) and of the complete event's
+   * (`events[n].event.data.coverUrl`), and nowhere else.
    */
   allowedCover?: string;
+}
+
+/** The paths of the result's cover in a record: its result's, and its complete events'. */
+function resultCoverPaths(record: unknown): Set<string> {
+  const paths = new Set(["analysis.coverUrl"]);
+  const events = (record as { events?: unknown } | null)?.events;
+  if (Array.isArray(events)) {
+    events.forEach((item, i) => {
+      if ((item as { event?: { type?: unknown } } | null)?.event?.type === "complete") {
+        paths.add(`events[${i}].event.data.coverUrl`);
+      }
+    });
+  }
+  return paths;
 }
 
 /**
@@ -345,10 +331,11 @@ export function leaks(
   const allowed = (url: string) =>
     allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
   const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
+  const coverPaths = resultCoverPaths(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
-    // The kept cover, as the whole value of a cover field: an allowed link there only.
-    const isCover = cover !== null && text === cover && /(?:^|\.)coverUrl$/.test(path);
+    // The kept cover, as the whole value of the result's cover: an allowed link there only.
+    const isCover = cover !== null && text === cover && coverPaths.has(path);
     const allowedHere = (url: string) => allowed(url) || (isCover && url === cover);
     if (
       secrets.some(
@@ -468,6 +455,8 @@ export interface BuiltRecord {
    * replayed as it was sent live); for the person recording to judge.
    */
   warnings: string[];
+  /** Why the record keeps no cover (`archiveCover`); absent when it keeps one. */
+  noCover?: string;
 }
 
 /** The texts that are the track's own: a query made of them reveals nothing about the user. */
@@ -526,7 +515,7 @@ export function buildRecord(
   // for other texts, and the typed text is not kept.
   const { queryMatch: _match, ...recorded } = analysis;
   // Every image blanked, then the one cover a record keeps: the Cover Art Archive's.
-  const cover = archiveCoverOf(analysis);
+  const { url: cover, reason: noCover } = archiveCover(analysis);
   const blanked = withoutMediaFields({
     ...recorded,
     run: {
@@ -595,5 +584,5 @@ export function buildRecord(
   const warnings = analysisIssues(record.analysis).filter(
     (issue) => !runInfoIssues.includes(issue),
   );
-  return { record, warnings };
+  return { record, warnings, ...(noCover && { noCover }) };
 }

@@ -618,7 +618,15 @@ describe("a stubbed run", () => {
 describe("concurrent runs on the shared MusicBrainz queue", () => {
   it("keeps the same records when the deadline cuts only the dating of the work's recordings", async () => {
     const baseline = await runGraph("run-alone");
-    const ids = (data: TrackData | null) => (data?.evidence ?? []).map((e) => e.id).sort();
+    // The release is read last, on the dating signal: a run whose dating was cut may not name
+    // it (a note, not a lost record).
+    const isRelease = (id: string) => id.startsWith("musicbrainz:release/");
+    const ids = (data: TrackData | null) =>
+      (data?.evidence ?? [])
+        .map((e) => e.id)
+        .filter((id) => !isRelease(id))
+        .sort();
+    expect((baseline.trackData?.evidence ?? []).filter((e) => isRelease(e.id))).toHaveLength(1);
     cache.putResearch.mockClear();
 
     // The real spacing between MusicBrainz requests: four runs fill the queue, and the 20 s

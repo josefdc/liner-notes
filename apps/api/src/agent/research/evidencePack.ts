@@ -328,14 +328,20 @@ function storedItemIssue(item: Evidence, context: StoredContext): string | null 
 /**
  * The evidence of a cached research, as items of a pack again: each stored item checked against
  * what the cached run read (`context`), as above, and sealed. Null when any item fails a check:
- * the cached evidence is then not used at all, never in part. What it cannot check is that the
- * text is what the source answered: the research cache, which only the historian writes from a
- * sealed pack, is trusted for that.
+ * the cached evidence is then not used at all, never in part; so is evidence that names more
+ * than one MusicBrainz release. What it cannot check is that the text is what the source
+ * answered: the research cache, which only the historian writes from a sealed pack, is trusted
+ * for that.
  */
 export function restoredEvidence(
   items: readonly Evidence[],
   context: StoredContext,
 ): SourcedEvidence[] | null {
+  // The MusicBrainz module names at most one release for the recording.
+  const releases = items.filter(
+    (item) => item.source === "musicbrainz" && evidenceScope(item) === "release",
+  );
+  if (releases.length > 1) return null;
   const restored: SourcedEvidence[] = [];
   for (const item of items) {
     if (storedItemIssue(item, context) !== null) return null;

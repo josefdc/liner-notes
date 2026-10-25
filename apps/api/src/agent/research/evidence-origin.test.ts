@@ -258,6 +258,15 @@ describe("evidence given back by the research cache", () => {
         },
       ],
       [
+        "a second MusicBrainz release, which the module never writes",
+        {
+          ...release,
+          id: "musicbrainz:release/00000000-0000-4000-8000-000000000000",
+          recordRef: "release/00000000-0000-4000-8000-000000000000",
+          url: "https://musicbrainz.org/release/00000000-0000-4000-8000-000000000000",
+        },
+      ],
+      [
         "a MusicBrainz release with a path after its MBID",
         {
           ...release,
@@ -432,8 +441,11 @@ describe("what a primary source lost, and a bug in its reader", () => {
     );
   });
 
-  it("loses nothing when the deadline cuts only the dating of the work's recordings", async () => {
-    const normal = primaryRecordEvidence(await iceIceBaby()).map((e) => e.id);
+  it("loses no record when the deadline cuts the dating of the work's recordings", async () => {
+    // The releases are read last, on the dating signal: the cut leaves the release unnamed.
+    const normal = primaryRecordEvidence(await iceIceBaby())
+      .map((e) => e.id)
+      .filter((id) => !id.startsWith("musicbrainz:release/"));
     const dating = "https://musicbrainz.org/ws/2/recording?work=";
     stubFetch((call) => (call.url.startsWith(dating) ? never(call) : primaryRoute(call)));
     const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 300 });
@@ -443,7 +455,7 @@ describe("what a primary source lost, and a bug in its reader", () => {
     // A note, not an error: the work's covers are listed, about the work.
     expect(sources.musicbrainz).toMatchObject({
       status: "found",
-      incomplete: expect.stringMatching(/^dates incomplete: /),
+      incomplete: expect.stringMatching(/^dates incomplete: .*; releases incomplete: /),
     });
     expect(primaryRecordEvidence(sources).map((e) => e.id)).toEqual(normal);
 
@@ -460,6 +472,13 @@ describe("what a primary source lost, and a bug in its reader", () => {
       "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
     expect(pack.status).toContain(line);
     expect(sent).toContainEqual(expect.objectContaining({ type: "status", message: line }));
+    expect(pack.incomplete).toEqual([
+      { source: "musicbrainz", part: "dates" },
+      { source: "musicbrainz", part: "releases" },
+    ]);
+    expect(pack.status).toContain(
+      "MusicBrainz: releases incomplete, the recording's releases could not be read, so no release is named for it; a later run reads them",
+    );
   });
 
   it("takes a lasting error as lasting only when no other error has its source and code", () => {

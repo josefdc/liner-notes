@@ -48,3 +48,70 @@ export function archiveReleaseOf(url: string | null | undefined): string | null 
 
 /** The Cover Art Archive's page of a release, where a credit links to. */
 export const archiveReleasePage = (mbid: string) => `https://${ARCHIVE_HOST}/release/${mbid}`;
+
+/** A title compared as names are: case, accents and punctuation aside. */
+function comparable(title: string): string {
+  return title
+    .normalize('NFKD')
+    .replace(/(\p{Script=Latin})\p{M}+/gu, '$1')
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+const RELEASE_TITLE_SUFFIX = ' — MusicBrainz release';
+
+/**
+ * The title of the release a result's MusicBrainz evidence names, by the release's MBID: the
+ * item `musicbrainz:release/<mbid>` the API writes, titled "<release> — MusicBrainz release".
+ * Null when the result has no such item.
+ */
+export function releaseTitleOf(evidence: unknown, mbid: string): string | null {
+  if (!Array.isArray(evidence)) return null;
+  const item = evidence.find(
+    (entry: unknown) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      (entry as { id?: unknown }).id === `musicbrainz:release/${mbid}` &&
+      (entry as { source?: unknown }).source === 'musicbrainz',
+  ) as { title?: unknown } | undefined;
+  const title = typeof item?.title === 'string' ? item.title : '';
+  if (!title.endsWith(RELEASE_TITLE_SUFFIX)) return null;
+  return title.slice(0, -RELEASE_TITLE_SUFFIX.length).trim() || null;
+}
+
+/** How a cover is named: its alt text, and its credit when it comes from the archive. */
+export interface CoverLabels {
+  alt: string;
+  credit: { text: string; href: string } | null;
+}
+
+/**
+ * The alt text and credit of a result's cover. A Cover Art Archive cover is credited to the
+ * archive, linked to the release's page there; when the result's evidence names that release
+ * and its title is not the album the result shows, the alt text and the credit name it, so the
+ * cover is never taken for the shown album's. Any other cover is the shown album's.
+ */
+export function coverLabels(
+  src: string | null,
+  album: string | null | undefined,
+  evidence: unknown,
+): CoverLabels {
+  const shown = typeof album === 'string' ? album.trim() : '';
+  const mbid = src ? archiveReleaseOf(src) : null;
+  if (!mbid) return { alt: shown ? `Cover of ${shown}` : 'Album cover', credit: null };
+  const href = archiveReleasePage(mbid);
+  const release = releaseTitleOf(evidence, mbid);
+  if (release && comparable(release) !== comparable(shown)) {
+    return {
+      alt: `Cover of ${release}`,
+      credit: { text: `Cover: ${release} · Cover Art Archive`, href },
+    };
+  }
+  return {
+    alt: release ? `Cover of ${shown}` : 'Cover from the Cover Art Archive',
+    credit: { text: 'Cover: Cover Art Archive', href },
+  };
+}

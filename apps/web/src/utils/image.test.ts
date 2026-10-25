@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { archiveReleaseOf, archiveReleasePage, isValidImageUrl } from './image';
+import {
+  archiveReleaseOf,
+  archiveReleasePage,
+  coverLabels,
+  isValidImageUrl,
+  releaseTitleOf,
+} from './image';
 
 describe('isValidImageUrl', () => {
   it('accepts Spotify album art', () => {
@@ -52,5 +58,54 @@ describe('archiveReleaseOf (cover)', () => {
     ['undefined', undefined],
   ])('reads no release from %s', (_case, url) => {
     expect(archiveReleaseOf(url)).toBeNull();
+  });
+});
+
+describe('coverLabels (cover)', () => {
+  const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
+  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-250`;
+  const PAGE = `https://coverartarchive.org/release/${MBID}`;
+  const item = (title: string, id = `musicbrainz:release/${MBID}`) => ({
+    id,
+    source: 'musicbrainz',
+    title: `${title} — MusicBrainz release`,
+  });
+
+  it('names the shown album when the release is that album', () => {
+    expect(coverLabels(ARCHIVE, 'To The Extreme', [item('to the extreme')])).toEqual({
+      alt: 'Cover of To The Extreme',
+      credit: { text: 'Cover: Cover Art Archive', href: PAGE },
+    });
+  });
+
+  it('names the release when it is not the shown album', () => {
+    expect(coverLabels(ARCHIVE, 'Greatest Hits', [item('To the Extreme')])).toEqual({
+      alt: 'Cover of To the Extreme',
+      credit: { text: 'Cover: To the Extreme · Cover Art Archive', href: PAGE },
+    });
+  });
+
+  it('never takes an archive cover for the shown album when the evidence does not name it', () => {
+    for (const evidence of [undefined, [], [item('X', 'musicbrainz:release/other')], 'junk']) {
+      expect(coverLabels(ARCHIVE, 'Test Album', evidence)).toEqual({
+        alt: 'Cover from the Cover Art Archive',
+        credit: { text: 'Cover: Cover Art Archive', href: PAGE },
+      });
+    }
+  });
+
+  it('names the album for any other cover, and credits no archive', () => {
+    expect(coverLabels('https://i.scdn.co/image/x', 'Test Album', [item('X')])).toEqual({
+      alt: 'Cover of Test Album',
+      credit: null,
+    });
+    expect(coverLabels(null, '', undefined)).toEqual({ alt: 'Album cover', credit: null });
+  });
+
+  it('reads the release title only from the release item the API writes', () => {
+    expect(releaseTitleOf([item('Hooked')], MBID)).toBe('Hooked');
+    expect(releaseTitleOf([{ ...item('Hooked'), source: 'tavily' }], MBID)).toBeNull();
+    expect(releaseTitleOf([{ ...item('Hooked'), title: 'Hooked' }], MBID)).toBeNull();
+    expect(releaseTitleOf([item('Hooked')], 'other')).toBeNull();
   });
 });

@@ -433,7 +433,10 @@ for (const cover of ["no cover", "a white archive cover"]) {
     const player = await neutralBadgeContrast(page, "[data-cover-text]");
     const expected = cover === "no cover" ? "Cover not available" : "Cover: Cover Art Archive";
     for (const measured of [dashboard, player]) {
-      expect(measured.map(({ text }) => text)).toEqual([expected]);
+      // The credit's "(opens in a new tab)" is for screen readers only.
+      expect(measured.map(({ text }) => text).filter((text) => !text.startsWith("("))).toEqual([
+        expected,
+      ]);
     }
     for (const { text, ratio } of [...dashboard, ...player]) {
       expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);

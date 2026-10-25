@@ -45,6 +45,7 @@ import {
   originalPerformance,
   pickCoverRelease,
   pickRecording,
+  RELEASES_INCOMPLETE,
   resolveIdentity,
 } from "./identity.js";
 import {
@@ -55,6 +56,7 @@ import {
   MusicBrainzRateLimiter,
 } from "./musicbrainz.js";
 import { never } from "./testing/fetchStub.js";
+import { iceReleasesWithArt } from "./testing/iceIceBaby.js";
 import { evidenceScope, type TrackRef } from "./records.js";
 
 const MB = "https://musicbrainz.org/ws/2";
@@ -74,7 +76,7 @@ const ICE_TRACK: TrackRef = {
 const musicBrainz: FetchRoute = (call: FetchCall) => {
   if (call.url.startsWith(`${MB}/isrc/USCA29001716?`)) return json(iceIsrc);
   if (call.url.startsWith(`${MB}/recording/${ICE}?`)) return json(iceDetails);
-  if (call.url.startsWith(`${MB}/release?`)) return json(iceReleases);
+  if (call.url.startsWith(`${MB}/release?`)) return json(iceReleasesWithArt);
   if (call.url.startsWith(`${MB}/work/${ICE_WORK}?`)) return json(iceWork);
   if (call.url.startsWith(`${MB}/recording?work=${ICE_WORK}&`)) {
     const offset = new URL(call.url).searchParams.get("offset");
@@ -206,35 +208,88 @@ describe("discogsCandidates on the recording's releases", () => {
 
 describe("the cover release", () => {
   const TO_THE_EXTREME = "ae103b0a-b932-4009-acb6-388db1cf890b";
+  const withArt = iceReleasesWithArt.releases as MbReleaseSummary[];
   let made = 0;
-  /** A synthetic release; its MBID counts up unless given. */
+  /** A synthetic official release with a front image at the archive; its MBID counts up. */
   const release = (
     type: string,
     date: string | undefined,
-    { id, secondary = [] }: { id?: string; secondary?: string[] } = {},
+    {
+      id,
+      secondary = [],
+      title,
+      front = true,
+      status = "Official",
+    }: {
+      id?: string;
+      secondary?: string[];
+      title?: string;
+      front?: boolean | null;
+      status?: string | null;
+    } = {},
   ): MbReleaseSummary => ({
     id: id ?? `00000000-0000-4000-8000-${String(++made).padStart(12, "0")}`,
-    title: `${type} ${date ?? "undated"}`,
+    title: title ?? `${type} ${date ?? "undated"}`,
     ...(date !== undefined && { date }),
-    status: "Official",
+    ...(status !== null && { status }),
     "release-group": { "primary-type": type, "secondary-types": secondary },
+    ...(front !== null && { "cover-art-archive": { front } }),
   });
-  const picked = (releases: MbReleaseSummary[]) => {
-    const forward = pickCoverRelease(releases);
+  const picked = (releases: MbReleaseSummary[], album?: string) => {
+    const forward = pickCoverRelease(releases, album);
     // The same list in any order gives the same release.
-    expect(pickCoverRelease([...releases].reverse())).toEqual(forward);
+    expect(pickCoverRelease([...releases].reverse(), album)).toEqual(forward);
     return forward;
   };
 
-  it("picks the earliest dated original album of the ice-ice-baby releases", () => {
+  it("picks the earliest dated original album with a front image of the ice-ice-baby releases", () => {
     // 13 releases: a 2004 soundtrack and compilation, eight "To the Extreme" and "Hooked"
     // albums (1990-09-04, 1990-12-03, the rest dated only "1990"), three singles.
-    expect(picked(iceReleases.releases as MbReleaseSummary[])).toEqual({
+    expect(picked(withArt)).toEqual({
       mbid: TO_THE_EXTREME,
       title: "To the Extreme",
       type: "album",
       date: "1990-09-04",
     });
+    // As captured, without the archive's flags: no release is known to have a front image.
+    expect(picked(iceReleases.releases as MbReleaseSummary[])).toBeNull();
+  });
+
+  it("prefers the release titled as the album the track is shown with", () => {
+    // Spotify's album as a single: its earliest single is picked over the albums.
+    expect(picked(withArt, "Ice Ice Baby")).toMatchObject({
+      mbid: "218fc465-cfe8-47cc-bb31-1cd740982afc",
+      title: "Ice Ice Baby",
+      type: "single",
+    });
+    // Compared as names are: case, accents and punctuation aside.
+    expect(picked(withArt, "HOOKED!")?.mbid).toBe("1ee4e020-0a64-4df6-8703-5b0644963e7e");
+    expect(picked(withArt, "to the extreme")?.mbid).toBe(TO_THE_EXTREME);
+    // No release has the shown album's title (a compilation is never picked): the ranking.
+    for (const album of ["Greatest Hits of the 90’s", "Something Else", "", undefined]) {
+      expect(picked(withArt, album)?.mbid, String(album)).toBe(TO_THE_EXTREME);
+    }
+  });
+
+  it("names a release only when the archive holds its front image", () => {
+    const bare = release("Album", "1990-01-01", { front: false });
+    const unknown = release("Album", "1990-01-01", { front: null });
+    const later = release("Album", "1995-01-01");
+    expect(picked([bare, unknown, later])?.mbid).toBe(later.id);
+    // Even titled as the shown album, a release without a front image is not picked.
+    const titled = release("Album", "1990-01-01", { front: false, title: "Shown Album" });
+    expect(picked([titled, later], "Shown Album")?.mbid).toBe(later.id);
+    expect(picked([bare, unknown, titled])).toBeNull();
+  });
+
+  it("names only an official release", () => {
+    const official = release("Album", "1999-01-01");
+    const others = ["Promotion", "Bootleg", "Pseudo-Release", null].map((status) =>
+      release("Album", "1980-01-01", { status }),
+    );
+    expect(picked([...others, official])?.mbid).toBe(official.id);
+    expect(picked([release("Album", "1999-01-01", { status: "OFFICIAL" })])).not.toBeNull();
+    expect(picked(others)).toBeNull();
   });
 
   it("ranks an album before an EP before a single, whatever their dates", () => {
@@ -265,6 +320,15 @@ describe("the cover release", () => {
     const high = release("Album", "1991-01-01", { id: "f0000000-0000-4000-8000-000000000000" });
     expect(picked([high, low])?.mbid).toBe(low.id);
     expect(picked([undated])).toMatchObject({ mbid: undated.id, date: null });
+  });
+
+  it("takes a date that is not a year, a month or a day as undated", () => {
+    const padded = release("Album", " 1980");
+    const unpadded = release("Album", "1990-9-4");
+    const words = release("Album", "spring 1985");
+    const real = release("Album", "1990-12-03");
+    expect(picked([padded, unpadded, words, real])?.mbid).toBe(real.id);
+    expect(picked([padded])).toMatchObject({ mbid: padded.id, date: null });
   });
 
   it("is null for no release, or none that is an album, EP or single with an MBID and a title", () => {
@@ -301,30 +365,46 @@ describe("the cover release", () => {
     expect(evidenceScope(releases[0])).toBe("release");
     // No record points at it: it states the release, not a relationship.
     expect(result.records.some((r) => r.evidenceId === releases[0].id)).toBe(false);
+    expect(result.incomplete ?? "").not.toContain(RELEASES_INCOMPLETE);
     expectValidEvidence(result.evidence);
   });
 
-  it("is left out, with no error, when the releases cannot be read or there are none", async () => {
-    for (const answer of [
-      () => json({ error: "boom" }, { status: 500 }),
-      () => json({ "release-count": 0, releases: [] }),
-    ]) {
+  it("names the release titled as the track's album", async () => {
+    stubFetch(musicBrainz);
+    const { identity } = await resolveIdentity({ ...ICE_TRACK, album: "Ice Ice Baby" });
+    expect(identity?.coverRelease).toMatchObject({
+      mbid: "218fc465-cfe8-47cc-bb31-1cd740982afc",
+      type: "single",
+    });
+  });
+
+  it("is left out without an error; a failed read is noted as incomplete, an empty one is not", async () => {
+    for (const [what, answer] of [
+      ["failed", () => json({ error: "boom" }, { status: 500 })],
+      ["empty", () => json({ "release-count": 0, releases: [] })],
+      ["no front image", () => json(iceReleases)],
+    ] as const) {
       const net = stubFetch((call) =>
         call.url.startsWith(`${MB}/release?`) ? answer() : musicBrainz(call),
       );
       const sources = await collectPrimarySources(ICE_TRACK, { now });
-      expect(net.calls.filter((c) => c.url.startsWith(`${MB}/release?`))).toHaveLength(1);
-      expect(sources.identity).toMatchObject({
+      expect(net.calls.filter((c) => c.url.startsWith(`${MB}/release?`)).length, what).toBe(1);
+      expect(sources.identity, what).toMatchObject({
         coverRelease: null,
+        coverReleaseError: what === "failed" ? expect.stringMatching(/HTTP 500/) : null,
         releasesError: null,
         releasesFailure: null,
       });
       expect(sources.musicbrainz.status).toBe("found");
-      expect(sources.musicbrainz.error ?? null).toBeNull();
-      expect(sources.discogs).toMatchObject({
-        status: "missing",
-        reason: "DISCOGS_TOKEN is not set",
-      });
+      expect(sources.musicbrainz.error ?? null, what).toBeNull();
+      if (sources.musicbrainz.status !== "found") throw new Error("not found");
+      if (what === "failed") {
+        expect(sources.musicbrainz.incomplete).toMatch(
+          /releases incomplete: the recording's releases could not be read \(.*HTTP 500.*\), so no release is named for it/,
+        );
+      } else {
+        expect(sources.musicbrainz.incomplete ?? "", what).not.toContain(RELEASES_INCOMPLETE);
+      }
       // Discogs says only that it is not configured, as when the releases were read.
       expect(sources.discogs.error).toEqual({
         source: "discogs",
@@ -335,6 +415,30 @@ describe("the cover release", () => {
       // The recording's own items are all there.
       expect(sources.evidence[0].recordRef).toBe(`track/recording/${ICE}`);
     }
+  });
+
+  it("without Discogs, reads one page last, on the dating signal", async () => {
+    // 250 releases: one page of them is read.
+    const net = stubFetch((call) =>
+      call.url.startsWith(`${MB}/release?`)
+        ? json({ ...iceReleasesWithArt, "release-count": 250 })
+        : musicBrainz(call),
+    );
+    const { identity } = await resolveIdentity(ICE_TRACK);
+    const reads = net.calls.filter((c) => c.url.startsWith(`${MB}/release?`));
+    expect(reads.map((c) => new URL(c.url).searchParams.get("offset"))).toEqual(["0"]);
+    expect(net.calls.at(-1)).toBe(reads[0]);
+    expect(identity?.coverRelease?.mbid).toBe(TO_THE_EXTREME);
+
+    // The dating signal cut: the work and the recording are kept, the release is not named.
+    net.calls.length = 0;
+    const cut = await resolveIdentity(ICE_TRACK, { datingSignal: AbortSignal.abort() });
+    expect(cut.identity).toMatchObject({
+      coverRelease: null,
+      coverReleaseError: expect.any(String),
+    });
+    expect(cut.work).not.toBeNull();
+    expect(cut.result.status).toBe("found");
   });
 });
 
@@ -409,14 +513,16 @@ describe("resolveIdentity", () => {
       releasesFailure: null,
       releasesNote: null,
       coverRelease: { mbid: "ae103b0a-b932-4009-acb6-388db1cf890b" },
+      coverReleaseError: null,
     });
     expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
       "/ws/2/isrc/USCA29001716",
       `/ws/2/recording/${ICE}`,
-      "/ws/2/release",
       `/ws/2/work/${ICE_WORK}`,
       "/ws/2/recording",
       "/ws/2/recording",
+      // Last: after the work and its dating, so the read never delays them.
+      "/ws/2/release",
     ]);
   });
 
@@ -678,7 +784,7 @@ describe("collectPrimarySources", () => {
       ...iceReleases,
       releases: iceReleases.releases.map((r) => ({
         ...r,
-        "cover-art-archive": { front: true },
+        "cover-art-archive": { front: true, darkened: false },
         barcode: "077779532520",
       })),
     };
@@ -713,13 +819,9 @@ describe("collectPrimarySources", () => {
       "secondhandsongs",
     ]);
     const all = Object.values(run.cassettes).join("\n");
-    for (const unread of [
-      "cover-art-archive",
-      "077779532520",
-      "Sleeve notes",
-      "a.jpg",
-      "About the song",
-    ]) {
+    // Of the archive's flags, only whether there is a front image is kept.
+    expect(run.cassettes.musicbrainz).toMatch(/cover-art-archive\W+front\W+true\W*\}/);
+    for (const unread of ["darkened", "077779532520", "Sleeve notes", "a.jpg", "About the song"]) {
       expect(all).not.toContain(unread);
     }
     expect(all).not.toContain("test-token");

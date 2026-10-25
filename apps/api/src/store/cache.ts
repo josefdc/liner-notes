@@ -139,23 +139,33 @@ const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 const stringList = z.array(z.string());
 
 /** Text that holds a link; a track's details never do. */
-const LINK = /\b(?:https?:|www\.)/i;
-const noLink = z.string().refine((text) => !LINK.test(text));
+const LINK = /https?:\/\//i;
+const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
+const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
-const TrackDetailsSchema = z
-  .object({
-    isrc: z
-      .string()
-      .regex(/^[A-Z]{2}[A-Z0-9]{3}\d{7}$/)
-      .nullable(),
-    durationMs: z.number().int().positive().nullable(),
-    album: noLink.nullable(),
-    releaseDate: z
-      .string()
-      .regex(/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/)
-      .nullable(),
-  })
-  .strict();
+/**
+ * Track details, field by field: a field that is not valid (an album name that holds a link, a
+ * malformed ISRC or date, a duration that is not a positive whole number) is dropped (null) and
+ * the others are kept; any other field is left out. Null when `value` is not an object.
+ */
+function validDetails(value: unknown): CachedTrackDetails | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const fields = value as Record<string, unknown>;
+  const text = (field: unknown) => (typeof field === "string" && field ? field : null);
+  const isrc = text(fields.isrc);
+  const album = text(fields.album);
+  const releaseDate = text(fields.releaseDate);
+  const durationMs = fields.durationMs;
+  return {
+    isrc: isrc && ISRC.test(isrc) ? isrc : null,
+    durationMs:
+      typeof durationMs === "number" && Number.isInteger(durationMs) && durationMs > 0
+        ? durationMs
+        : null,
+    album: album && !LINK.test(album) ? album : null,
+    releaseDate: releaseDate && RELEASE_DATE.test(releaseDate) ? releaseDate : null,
+  };
+}
 
 const RecordingSchema = z.object({
   mbid: z.string(),
@@ -211,11 +221,9 @@ function parseJson(text: string): unknown {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-/** Stored track details, or null when there are none or they are not valid details. */
+/** Stored track details (validDetails), or null when there are none or they are not an object. */
 function trackDetails(text: string | null): CachedTrackDetails | null {
-  if (!text) return null;
-  const parsed = TrackDetailsSchema.safeParse(parseJson(text));
-  return parsed.success ? parsed.data : null;
+  return text ? validDetails(parseJson(text)) : null;
 }
 
 /** A stored JSON list of artist names, or null when there is none or it cannot be read. */
@@ -401,8 +409,9 @@ export class SonicCache {
 
   /**
    * A cached search, or null (missing or expired). Its track details are left out when the row
-   * has none or they are not valid details (a row of older code); the enricher then searches
-   * again for a row that carries a Spotify id (agent/enricher.ts `servable`).
+   * has none or they are not an object (a row of older code); the enricher then searches again
+   * for a row that carries a Spotify id (agent/enricher.ts `servable`). A field of the details
+   * that is not valid is dropped (validDetails).
    */
   getArtwork(searchKey: string): SpotifySearchResult | null {
     try {
@@ -426,19 +435,13 @@ export class SonicCache {
   }
 
   /**
-   * Caches a search. Only the fields named here are written (a preview URL never is); track
-   * details that are not valid details (a link, a malformed ISRC or date) are not written.
+   * Caches a search. Only the fields named here are written (a preview URL never is); a field of
+   * the track details that is not valid (an album name that holds a link, a malformed ISRC or
+   * date) is written as null, the others as given (validDetails).
    */
   putArtwork(searchKey: string, result: SpotifySearchResult, ttlMs: number = TTL_ARTWORK): void {
     try {
-      const details = result.trackDetails
-        ? TrackDetailsSchema.safeParse({
-            isrc: result.trackDetails.isrc,
-            durationMs: result.trackDetails.durationMs,
-            album: result.trackDetails.album,
-            releaseDate: result.trackDetails.releaseDate,
-          })
-        : null;
+      const details = result.trackDetails ? validDetails(result.trackDetails) : null;
       this.stmt.putArtwork.run(
         searchKey,
         result.coverUrl,
@@ -447,7 +450,7 @@ export class SonicCache {
         result.trackTitle,
         result.trackArtist,
         result.trackArtists?.length ? JSON.stringify(result.trackArtists) : null,
-        details?.success ? JSON.stringify(details.data) : null,
+        details ? JSON.stringify(details) : null,
         nowSec() + Math.floor(ttlMs / 1000),
       );
     } catch (err) {

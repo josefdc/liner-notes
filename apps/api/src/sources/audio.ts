@@ -238,7 +238,7 @@ export async function resolvePreview(
     }
   };
 
-  const byIsrc = await lookup(deezerPreviewByIsrc);
+  const byIsrc = await lookup((request, signal) => deezerPreviewByIsrc(request, signal));
   if (byIsrc.found) return { previewUrl: byIsrc.previewUrl, match: byIsrc.match };
   const failure = (result: DeezerPreviewResult) =>
     !result.found && result.error

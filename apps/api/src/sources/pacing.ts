@@ -1,6 +1,6 @@
 /**
- * Client-side pacing of one source's requests (Discogs, SecondHandSongs; MusicBrainz has its
- * own queue in musicbrainz.ts): at most one request every `intervalMs` and, for each budget the
+ * Client-side pacing of one source's requests (Discogs, SecondHandSongs, Deezer; MusicBrainz has
+ * its own queue in musicbrainz.ts): at most one request every `intervalMs` and, for each budget the
  * source sets, at most `max` requests in any window of `windowMs`. Each request reserves the
  * next free slot and waits for it. A request is refused at once (`PaceRefused`, with the wait),
  * and takes no slot, when its slot is more than `maxWaitMs` away, or is not free now and comes

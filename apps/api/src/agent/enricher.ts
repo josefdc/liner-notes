@@ -46,6 +46,7 @@
 import type { SourceError } from "@liner-notes/contract";
 import { isAllowedPreviewUrl } from "../sources/audio.js";
 import { deezerPreviewByIsrc, type PreviewRequest } from "../sources/deezer.js";
+import { PaceRefused, pacingClock } from "../sources/pacing.js";
 import { describeError, isSourceError } from "../sources/http.js";
 import { sourceErrorCode } from "../sources/toolResult.js";
 import { searchTracks, type SpotifyTrackSummary } from "../sources/spotify.js";
@@ -123,6 +124,11 @@ export const MAX_DEEZER_LOOKUPS = 20;
 export const PREVIEW_BUDGET_MS = 8_000;
 /** How long one node's lookup (its ISRC entry, and that entry's alternative) may take. */
 export const LOOKUP_TIMEOUT_MS = 4_000;
+/**
+ * The least time a lookup's request must have left, of its own time and the budget's, when it
+ * starts: a later slot of Deezer's pace is refused, and the node gets no preview.
+ */
+const START_MARGIN_MS = 1_000;
 /** Failures of other kinds than those in `stops` after which no more lookups are made. */
 const MAX_FAILURES = 2;
 
@@ -219,6 +225,8 @@ function lookupBudget(ms: number) {
       left -= Date.now() - since;
       if (left <= 0 && !controller.signal.aborted) spend();
     },
+    /** The budget's time left now. */
+    remaining: () => (active > 0 ? left - (Date.now() - since) : left),
     clear: () => clearTimeout(timer),
   };
 }
@@ -242,7 +250,13 @@ const withoutLinks = (text: string) => text.replace(/\bhttps?:\/\/\S+/gi, "[link
  *   time; a node whose turn comes after that gets no preview, and the run goes on. A spent
  *   budget is said once in the log; it is not a Deezer failure;
  * - none after a rate limit or a timeout of Deezer's, nor after MAX_FAILURES other failures. A
- *   lookup that finds no usable entry is not a failure.
+ *   lookup that finds no usable entry is not a failure;
+ * - their requests take Deezer's pace for the whole process, within the share left to node
+ *   previews (sources/deezer.ts DEEZER_NODE_PACE), so that concurrent runs stay under Deezer's
+ *   quota and an analysed track's lookup still gets a slot. A lookup whose slot would come too
+ *   late for its own time or the budget (less START_MARGIN_MS) is skipped: that request is not
+ *   sent, it is not a failure, and it does not count against MAX_DEEZER_LOOKUPS. Skips are said
+ *   once in the log.
  * A lookup gives the preview only of an entry deezerPreviewByIsrc accepts and the player may
  * load; anything else is no preview. The first Deezer failure is reported (`report`) as a
  * source error of the run. A cancelled run rejects. `done` clears the budget's timer.
@@ -255,6 +269,7 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
   let failures = 0;
   let stopped = false;
   let reported = false;
+  let skipsSaid = false;
 
   const failed = (error: unknown, timedOut: boolean) => {
     failures++;
@@ -281,6 +296,14 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
     );
   };
 
+  /** A lookup Deezer's pace had no slot for in time: said once; it counts against nothing. */
+  const skipped = () => {
+    started--;
+    if (skipsSaid) return;
+    skipsSaid = true;
+    log.info("Genealogy previews: Deezer's pace has no slot in time; those nodes get none");
+  };
+
   const lookUp = (request: PreviewRequest): Promise<string | null> =>
     run(async () => {
       signal?.throwIfAborted();
@@ -290,11 +313,19 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
       const own = deadline(LOOKUP_TIMEOUT_MS);
       const signals = [budget.signal, own.signal, ...(signal ? [signal] : [])];
       budget.begin();
+      const left = Math.min(budget.remaining(), LOOKUP_TIMEOUT_MS) - START_MARGIN_MS;
       try {
-        const result = await deezerPreviewByIsrc(request, AbortSignal.any(signals));
+        const result = await deezerPreviewByIsrc(request, AbortSignal.any(signals), {
+          lane: "nodes",
+          notAfter: pacingClock() + Math.max(0, left),
+        });
         return result.found && isAllowedPreviewUrl(result.previewUrl) ? result.previewUrl : null;
       } catch (error) {
         if (signal?.aborted) throw error;
+        if (error instanceof PaceRefused) {
+          skipped();
+          return null;
+        }
         if (budget.signal.aborted) {
           budgetSpent();
           return null;
@@ -453,12 +484,13 @@ const servable = (cached: SpotifySearchResult) => !cached.spotifyId || !!cached.
  * A node served from the cache, under the rules of a fresh search: the Spotify id only for a
  * strict match (its album is checked as a fresh one's is: a row cached for a release that names
  * other recordings gives the cover only), and a Deezer lookup by ISRC only when the release's
- * year also fits the label. A row without the track's identity gives the cover only. The cache
- * keeps no Spotify clip, so none is offered.
+ * year also fits the label. A row without the track's identity gives the cover only, and so does
+ * one whose details keep no album (unknown, or a name the cache would not keep): its release
+ * cannot be checked. The cache keeps no Spotify clip, so none is offered.
  */
 function fromCache(node: GenealogyNode, cached: SpotifySearchResult): NodeLookup {
   const track = cachedTrack(cached);
-  if (!cached.spotifyId || !strictlyMatches(node, track)) {
+  if (!cached.spotifyId || !track.album || !strictlyMatches(node, track)) {
     return { artwork: withoutId(cached), previewUrl: null, byIsrc: null };
   }
   if (!cached.trackDetails || !releaseYearFits(node.label, track.releaseDate)) {
@@ -475,10 +507,18 @@ function fromCache(node: GenealogyNode, cached: SpotifySearchResult): NodeLookup
  * by its ISRC (`byIsrc`, when it has one). A cached entry that may be served (servable) is
  * judged the same way (fromCache), with the Deezer lookup only: no preview is stored. A failed
  * search gives nothing and caches nothing, so a later run tries again; a cancelled run rejects.
+ * A row that may not be served (older code's, with an id) is searched again; when that search
+ * fails or finds nothing, the node keeps the row's cover (without its id) and the row is kept.
  */
 async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<NodeLookup> {
   const cached = getCachedArtwork(node.label);
   if (cached && servable(cached)) return fromCache(node, cached);
+  /** What the node gets when the search gives nothing: the old row's cover, or nothing. */
+  const nothing: NodeLookup = {
+    artwork: cached ? withoutId(cached) : NO_ARTWORK,
+    previewUrl: null,
+    byIsrc: null,
+  };
 
   let found: SpotifyTrackSummary | undefined;
   try {
@@ -486,7 +526,12 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
     log.warn(`Spotify search for "${node.label}" failed: ${describeError(error)}`);
-    return { artwork: NO_ARTWORK, previewUrl: null, byIsrc: null };
+    return nothing;
+  }
+  if (!found && cached) {
+    // Searched again for an old row and found nothing: the row stays until it expires.
+    signal?.throwIfAborted();
+    return nothing;
   }
 
   const artwork: SpotifySearchResult = found

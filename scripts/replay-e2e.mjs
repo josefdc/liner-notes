@@ -20,9 +20,11 @@
 //
 // Last, it stops the API and requires every process to report 0 outbound attempts, and checks
 // the API's log (LOG_FILE): JSON lines, the A1 run's lines carry its run id, and no line holds
-// an IP address, a query string, the typed query or any of the dummy keys.
+// an IP address, a query string, the typed query or any of the dummy keys. Then
+// `npm run report -w apps/api` over the API's database counts the replays it served, and prints
+// nothing anyone typed.
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -395,6 +397,39 @@ const dummySecrets = Object.entries(env)
 check(
   dummySecrets.every((secret) => !logText.includes(secret)),
   "log: none of the dummy keys or the endpoint",
+);
+
+// The run report over the database the API wrote (two days, in case the runs crossed midnight).
+const reportRun = spawnSync(
+  "npm",
+  ["run", "report", "-w", "apps/api", "--", "--days", "2", "--json"],
+  {
+    cwd: ROOT,
+    env,
+    encoding: "utf8",
+    timeout: START_TIMEOUT_MS,
+  },
+);
+let runReport = null;
+try {
+  runReport = JSON.parse(reportRun.stdout.slice(reportRun.stdout.indexOf("{")));
+} catch {
+  // checked below
+}
+console.log(
+  `report: exit ${reportRun.status}, ${runReport?.total.runs ?? "?"} runs, ` +
+    `${runReport?.total.replay ?? "?"} replays`,
+);
+check(
+  reportRun.status === 0 && runReport !== null && runReport.total.replay >= 2,
+  "report: counts the replays the API served",
+  reportRun.status === 0 ? "" : reportRun.stderr.slice(-300),
+);
+check(
+  !reportRun.stdout.toLowerCase().includes(TYPED_QUERY.toLowerCase()) &&
+    !reportRun.stdout.toLowerCase().includes(SHOWCASE_QUERY.toLowerCase()) &&
+    (replayRunId === undefined || !reportRun.stdout.includes(replayRunId)),
+  "report: no typed query and no run id",
 );
 
 rmSync(scratch, { recursive: true, force: true });

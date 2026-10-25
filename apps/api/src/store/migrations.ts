@@ -337,6 +337,21 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 11,
+    name: "run_pauses",
+    up(db) {
+      // A run keeps how long it waited for the user's choice (the track picker), so its duration
+      // can leave that time out: `paused_since` is when its current wait began (null while it is
+      // not waiting), `paused_seconds` the waits that have ended. A run stored before this
+      // migration may have waited for any time, which nothing recorded: its paused_seconds is
+      // null (unknown), and stays null.
+      db.exec(`
+        ALTER TABLE runs ADD COLUMN paused_since INTEGER;
+        ALTER TABLE runs ADD COLUMN paused_seconds INTEGER;
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

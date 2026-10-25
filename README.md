@@ -192,6 +192,13 @@ spent budget answers 503. The answer is public and limited per address like sear
 check names and states (and the schema version), never a key, host, amount, provider name or
 variable name: what the provider lacks is written to the API's log. See `apps/api/.env.example`.
 
+`npm run report -w apps/api` (`-- --days N`, default 7; `-- --json`) reads the API's database
+(`SQLITE_DB_PATH`) read-only and prints, per day: runs by live, replay and cached result and by
+outcome, p50/p95 duration of completed live runs (time spent waiting at the track picker left
+out), the fallback rate, and model calls, tokens and estimated USD from the database's usage rows,
+which follow `RUN_RETENTION_DAYS`. It never prints what anyone typed or a run id; the spend log
+(`LLM_SPEND_LOG`) stays the authoritative record of spend.
+
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with
 `TRUST_PROXY=1`, so its per-IP rate limits use the client address nginx puts in

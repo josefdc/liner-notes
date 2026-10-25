@@ -39,7 +39,7 @@ import { captureLogsForTests } from "../../logger.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
-import { getRun } from "../../store/runs.js";
+import { getRun, runDurationSql } from "../../store/runs.js";
 import { createTestApp } from "../testApp.js";
 import analyzeRouter, { RUN_DEADLINE_MS, setRunDeadlineForTests } from "./analyze.js";
 
@@ -401,6 +401,32 @@ describe("analyze routes", () => {
       await resumed;
       expect(runStatus(threadId)).toBe("completed");
     });
+
+    it.each([
+      ["stream", (threadId: string) => sse(resumePath(threadId, "track-a"))],
+      ["POST", (threadId: string) => postResume(threadId, "track-a")],
+    ])(
+      "leaves the time waiting at the picker out of the run's duration (%s resume)",
+      async (_, resume) => {
+        const threadId = await pausedThread();
+        // The visitor takes ten minutes to choose.
+        const realNow = Date.now.bind(Date);
+        vi.spyOn(Date, "now").mockImplementation(() => realNow() + 10 * 60 * 1000);
+
+        await resume(threadId);
+
+        expect(runStatus(threadId)).toBe("completed");
+        const run = getDb()
+          .prepare(
+            `SELECT finished_at - created_at AS wall, paused_seconds AS paused,
+             ${runDurationSql()} AS duration FROM runs WHERE run_id = ?`,
+          )
+          .get(threadId) as { wall: number; paused: number; duration: number };
+        expect(run.wall).toBeGreaterThanOrEqual(600);
+        expect(run.paused).toBeGreaterThanOrEqual(599);
+        expect(run.duration).toBeLessThan(10);
+      },
+    );
 
     it("uses the candidate's own data, with no invented duration or explicit flag, when the track lookup fails", async () => {
       stub.detailsFail = true;

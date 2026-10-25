@@ -48,6 +48,9 @@ import { getCache, type SpotifySearchResult } from "../store/cache.js";
 import { isAbortError } from "./errors.js";
 import type { Genealogy, GenealogyNode } from "./schema.js";
 import { recordingTitleDifference, sameArtistName } from "./trackMatch.js";
+import { logger } from "../logger.js";
+
+const log = logger("Enricher");
 
 // =============================================================================
 // Persistent Artwork Cache (backed by SQLite)
@@ -233,7 +236,7 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
     failures++;
     if (timedOut || stops(error) || failures >= MAX_FAILURES) stopped = true;
     const text = withoutLinks(describeError(error));
-    console.warn(`⚠️ [Enricher] Deezer lookup for a genealogy preview failed: ${text}`);
+    log.warn(`Deezer lookup for a genealogy preview failed: ${text}`);
     if (reported) return;
     reported = true;
     report?.({
@@ -248,9 +251,9 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
     stopped = true;
     if (budgetSaid) return;
     budgetSaid = true;
-    console.log(
-      `ℹ️ [Enricher] Genealogy previews: the ${PREVIEW_BUDGET_MS / 1000} s budget for Deezer ` +
-        "lookups is spent; the remaining nodes get none",
+    log.info(
+      `Genealogy previews: the ${PREVIEW_BUDGET_MS / 1000} s budget for Deezer lookups is ` +
+        "spent; the remaining nodes get none",
     );
   };
 
@@ -424,7 +427,7 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
     [found] = await searchTracks(node.label, 1, signal);
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
-    console.warn(`⚠️ [Enricher] Spotify search for "${node.label}" failed: ${describeError(error)}`);
+    log.warn(`Spotify search for "${node.label}" failed: ${describeError(error)}`);
     return { artwork: NO_ARTWORK, previewUrl: null, byIsrc: null };
   }
 
@@ -493,7 +496,7 @@ export async function enrichGenealogyWithArtwork(
     };
   }
 
-  console.log(`🎨 [Enricher] Enriching ${genealogy.nodes.length} genealogy nodes with artwork...`);
+  log.info(`Enriching ${genealogy.nodes.length} genealogy nodes with artwork`);
 
   const deezer = deezerPreviews(signal, report);
   try {
@@ -555,7 +558,7 @@ export async function enrichGenealogyWithArtwork(
     }
 
     const nodesWithImages = enrichedNodes.filter((n) => n.img).length;
-    console.log(`✅ [Enricher] Found artwork for ${nodesWithImages}/${enrichedNodes.length} nodes`);
+    log.info(`Found artwork for ${nodesWithImages}/${enrichedNodes.length} nodes`);
 
     // Ensure links have required fields
     const safeLinks = (genealogy.links || [])
@@ -573,7 +576,7 @@ export async function enrichGenealogyWithArtwork(
   } catch (error) {
     // A cancelled run stops here: it reports nothing.
     if (signal?.aborted || isAbortError(error)) throw error;
-    console.error("❌ [Enricher] Error enriching genealogy:", error);
+    log.error("Could not enrich the genealogy", { err: error });
     // Return safe fallback if enrichment fails
     return {
       nodes: [

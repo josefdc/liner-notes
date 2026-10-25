@@ -29,10 +29,12 @@ import { parseSpendLog, summarise } from "./spendLog.js";
 import {
   errorResponse,
   hang,
+  onReceipt,
   type ProviderRoute,
   providerFetch,
   responseBody,
   testSettings,
+  untilSentOrSettled,
 } from "./testing/providerStub.js";
 import { listLlmUsage, type LlmUsageRow } from "./usage.js";
 
@@ -365,14 +367,21 @@ describe("timeout", () => {
   });
 
   it("stops at once, without retrying, when the caller aborts", async () => {
-    const { llm, net } = setup(hang);
+    // Aborts once the stub has the first request; a retry would be answered at once, so a
+    // retry after the abort shows as a second call and a call that does not fail.
+    const { route, received } = onReceipt((call, index) => (index === 0 ? hang(call) : ok()));
+    const { llm, net } = setup(route);
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
-    const error = await llm
+    const result = llm
       .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
       .catch((e) => e);
-    expect(isLlmError(error, "aborted")).toBe(true);
+    await untilSentOrSettled(received, result);
+    controller.abort();
+    // Before awaiting the call: a request that did not get the abort fails here, not by hanging.
+    expect(net.calls[0]?.signal?.aborted).toBe(true);
+    const error = await result;
     expect(net.calls).toHaveLength(1);
+    expect(isLlmError(error, "aborted")).toBe(true);
   });
 });
 

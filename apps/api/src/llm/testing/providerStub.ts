@@ -117,6 +117,46 @@ export function hang(call: ProviderCall): Promise<Response> {
   });
 }
 
+/**
+ * `route`, plus a promise that resolves when the first request reaches it: a test can abort
+ * after the request was sent without guessing how long sending takes.
+ */
+export function onReceipt(route: ProviderRoute) {
+  let resolve!: () => void;
+  const received = new Promise<void>((r) => {
+    resolve = r;
+  });
+  const wrapped: ProviderRoute = (call, index) => {
+    resolve();
+    return route(call, index);
+  };
+  return { route: wrapped, received };
+}
+
+/**
+ * Waits until the stub has the request, or until `call` settles without sending it (which the
+ * test's own expectations then reject). A call that does neither fails here, with a message,
+ * after `ms` rather than at the test timeout; a passing test never waits for it.
+ */
+export async function untilSentOrSettled(
+  received: Promise<void>,
+  call: Promise<unknown>,
+  ms = 4000,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`the call neither sent its request nor settled within ${ms} ms`)),
+      ms,
+    );
+  });
+  try {
+    await Promise.race([received, call, guard]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** An error response as the Responses API sends it. */
 export const errorResponse = (status: number, headers: Record<string, string> = {}) =>
   Response.json(

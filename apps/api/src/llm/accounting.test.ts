@@ -20,10 +20,12 @@ import { parseSpendLog, type SpendLine, summarise } from "./spendLog.js";
 import {
   errorResponse,
   hang,
+  onReceipt,
   type ProviderRoute,
   providerFetch,
   responseBody,
   testSettings,
+  untilSentOrSettled,
 } from "./testing/providerStub.js";
 import type { LlmUsageRow } from "./usage.js";
 
@@ -566,24 +568,18 @@ describe("aborts", () => {
 
   it("keeps the worst case for an abort after the request was sent", async () => {
     // Aborts once the provider stub has the request, however long the machine took to send it.
-    let received!: () => void;
-    const sent = new Promise<void>((resolve) => {
-      received = resolve;
-    });
-    const { llm, net, rows } = setup((call) => {
-      received();
-      return hang(call);
-    });
+    const { route, received } = onReceipt(hang);
+    const { llm, net, rows } = setup(route);
     const controller = new AbortController();
     const result = llm
       .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
       .catch((e) => e);
-    // A call that settles without sending anything fails on the expectations below.
-    await Promise.race([sent, result]);
+    await untilSentOrSettled(received, result);
     controller.abort();
-    expect(isLlmError(await result, "aborted")).toBe(true);
+    // Before awaiting the call: a request that did not get the abort fails here, not by hanging.
     expect(net.calls).toHaveLength(1);
     expect(net.calls[0].signal?.aborted).toBe(true);
+    expect(isLlmError(await result, "aborted")).toBe(true);
     expectWorstCaseKept();
     expect(rows).toMatchObject([{ status: "error:aborted", sent: true }]);
   });

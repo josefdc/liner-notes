@@ -41,9 +41,15 @@ import {
   runUsage,
 } from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
+import { PRIMARY_RECORD_SOURCES } from "../research/evidencePack.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
-import { composerMessages, type PromptRecording, type PromptTrack } from "../prompts.js";
+import {
+  composerMessages,
+  type PromptRecording,
+  type PromptTrack,
+  shownEvidence,
+} from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { shownQueryMatch, storeResult } from "../storedResults.js";
 import {
@@ -114,6 +120,18 @@ const MODEL_REASON_TEXT: Record<ModelUnavailableReason, string> = {
 // Audio problems that may clear up on the next run. A result missing audio for one of these
 // reasons is not stored, so it is not served after the analysis service recovers.
 const TRANSIENT_AUDIO_REASONS = new Set(["service_unavailable", "analysis_failed", "not_run"]);
+
+/**
+ * A source error that a later run would meet again, so it does not keep the result from being
+ * stored: a source that is not configured (the result key names the configured sources), or a
+ * primary-record source's answer in a shape its reader does not understand.
+ */
+export function lastingSourceError(error: SourceError): boolean {
+  return (
+    error.code === "not_configured" ||
+    (error.code === "invalid_response" && PRIMARY_RECORD_SOURCES.has(error.source))
+  );
+}
 
 // =============================================================================
 // Prompt metadata
@@ -214,7 +232,7 @@ interface Composed {
 
 /**
  * Factoids, claims and the genealogy from the model's output. Ids come from `newId`; cited ids
- * that are not in the evidence pack are dropped; every model claim and link is `inferred` until
+ * that are not in `evidence` (the items the prompt showed) are dropped; every model claim and link is `inferred` until
  * a verifier judges it, and every node it proposes is drawn as a related influence.
  */
 export function composeFromOutput(
@@ -519,7 +537,13 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     }
     const call = answeredCall(COMPOSER_CALL_SITE, result);
     const output = result.output;
-    const composed = composeFromOutput(output, spotify, state.evidence, runtime.newId);
+    // Only the items the prompt showed may be cited: the model never read the others.
+    const composed = composeFromOutput(
+      output,
+      spotify,
+      shownEvidence(state.evidence),
+      runtime.newId,
+    );
 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
     const trackData: TrackData = {
@@ -544,12 +568,14 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // run may do better: the audio may be measurable later, a source failed for a passing reason
     // (an outage, a timeout, a rate limit, a rejected key), or a research planner call failed. A
     // source that is only not configured does not block it: the key names the configured
-    // sources. The run information, the preview links and the search match belong to this run,
+    // sources. Nor does a primary-record source whose answer has a shape its reader does not
+    // understand: a retry gets the same answer until the reader changes (a bug in the reader is
+    // reported as an internal error, which blocks it). The run information, the preview links and the search match belong to this run,
     // not to a later one served from the cache.
     const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
     const transientSources = [...state.sourceErrors, ...sourceErrors].some(
-      (e) => e.code !== "not_configured",
+      (e) => !lastingSourceError(e),
     );
     const plannerFailed = state.usage.some((u) => u.status !== "ok");
     // Built without the track's Spotify details (the picked candidate's fields only, see the

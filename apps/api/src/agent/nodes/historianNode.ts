@@ -6,18 +6,18 @@
  * source failure, what it found, its model calls and its source errors are kept and the status
  * says so; a bug fails the run.
  *
- * It writes the run's evidence pack (research/evidencePack.ts): the primary sources' records,
+ * It writes the run's evidence pack (research/runEvidence.ts): the primary sources' records,
  * read from the track's ISRC (MusicBrainz, Discogs, SecondHandSongs, Genius), and the web
  * search's results. Each item is sent as an `evidence` event. The primary sources are read on
  * every run with an ISRC, also when the research comes from the cache, and their errors are the
- * run's source errors; they are not part of the cached research.
+ * run's source errors; they are not part of the cached research, and do not block caching it
+ * unless a source lost records to a failed request.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import type { SourceError, SourceId } from "@liner-notes/contract";
+import type { SourceId } from "@liner-notes/contract";
 import { isLlmError } from "../../llm/errors.js";
 import { isSourceError, type SourceName } from "../../sources/http.js";
-import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
 import {
   getLastfmTrackTags,
@@ -37,23 +37,19 @@ import {
 } from "../researcherSubgraph.js";
 import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
-import { SOURCE_NAMES } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
-import {
-  EvidencePack,
-  primaryRecordEvidence,
-  primarySourceErrors,
-  type SourcedEvidence,
-  webSearchEvidence,
-} from "../research/evidencePack.js";
+import { runEvidence, sendStatus, startPrimarySources } from "../research/runEvidence.js";
 import {
   emptyResearch,
   mergeResearch,
   type ResearchData,
   type SonicAgentStateType,
-  type SpotifyData,
 } from "../state.js";
+
+/** The status line of a research-cache hit while the primary sources are read. */
+const READING_PRIMARY =
+  "📇 Reading primary sources (MusicBrainz, Discogs, SecondHandSongs, Genius)...";
 
 export async function historianNode(
   state: SonicAgentStateType,
@@ -66,7 +62,8 @@ export async function historianNode(
 
   const writer = config.writer;
   // The primary sources are read from the track's ISRC while the research runs.
-  const primary = primarySources(state.spotifyData, state.isrc ?? null, config.signal, runtime);
+  const isrc = state.isrc ?? null;
+  const primary = startPrimarySources(state.spotifyData, isrc, config.signal, runtime);
   // Research depends on which optional sources have a key: adding one later runs it again.
   const cacheKey = researchCacheKey(state.spotifyData.id, configuredSources());
 
@@ -90,7 +87,8 @@ export async function historianNode(
       timestamp: timestampOf(runtime),
     });
     // The cached research holds no evidence: the primary sources are read for this run.
-    const pack = await evidencePack(primary, [], config, runtime);
+    if (isrc) sendStatus(config, runtime, "RESEARCH-FOUND", READING_PRIMARY);
+    const pack = await runEvidence(primary, [], config, runtime);
     const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
     return {
       researchData: cachedResearch,
@@ -99,6 +97,7 @@ export async function historianNode(
       statusMessages: [
         "📚 Research (cached): loaded from persistent cache",
         ...unreadableStatus(notConfigured),
+        ...(isrc ? [READING_PRIMARY] : []),
         ...pack.status,
       ],
     };
@@ -233,7 +232,7 @@ export async function historianNode(
   ]);
 
   // The run's evidence: the primary sources' records, then the web search's results.
-  const pack = await evidencePack(primary, finalState.webFindings ?? [], config, runtime);
+  const pack = await runEvidence(primary, finalState.webFindings ?? [], config, runtime);
 
   // Nothing is written for a cancelled run. Research is cached only when it is complete: not
   // when it stopped early, a source could not be read for a passing reason (an outage, a
@@ -241,10 +240,13 @@ export async function historianNode(
   // as with audio that failed transiently). A source that is not configured is a lasting state:
   // it does not block the cache, its errors are stored with the research and reported on a hit,
   // and the cache key names the configured sources, so adding a key runs the research again.
+  // The primary sources are not part of the cached research and their errors do not block it,
+  // except a source that lost records to a failed request: the run is incomplete.
   config.signal?.throwIfAborted();
   const notConfigured = sourceErrors.filter((e) => e.code === "not_configured");
   const complete =
     !failure &&
+    pack.lost.length === 0 &&
     sourceErrors.length === notConfigured.length &&
     (finalState.usage ?? []).every((call) => call.status === "ok");
   if (complete) {
@@ -283,94 +285,6 @@ export async function historianNode(
       ...(failure ? [summary] : []),
     ],
   };
-}
-
-/** The primary sources' answers, or the failure of the collection (a bug: it never throws). */
-type PrimaryRun = Promise<
-  | { status: "read"; sources: PrimarySources }
-  | { status: "not_asked" }
-  | { status: "threw"; error: unknown }
->;
-
-/**
- * Starts reading the primary sources for the track from its ISRC (none without one). The
- * collection never throws; a cancelled run reads as unavailable sources, and the caller stops
- * on the signal.
- */
-function primarySources(
-  spotify: SpotifyData,
-  isrc: string | null,
-  signal: AbortSignal | undefined,
-  runtime: AgentRuntime,
-): PrimaryRun {
-  if (!isrc) return Promise.resolve({ status: "not_asked" });
-  const { names } = trackQuery(spotify);
-  return collectPrimarySources(
-    {
-      isrc,
-      title: spotify.title,
-      artists: names,
-      durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
-    },
-    { signal, now: runtime.now },
-  ).then(
-    (sources) => ({ status: "read" as const, sources }),
-    (error: unknown) => ({ status: "threw" as const, error }),
-  );
-}
-
-/**
- * The run's evidence pack from the primary sources' answers and the web search's results, sent
- * as `evidence` events; with the primary sources' errors and status lines.
- */
-async function evidencePack(
-  primary: PrimaryRun,
-  web: Parameters<typeof webSearchEvidence>[0],
-  config: LangGraphRunnableConfig,
-  runtime: AgentRuntime,
-): Promise<{ evidence: SourcedEvidence[]; errors: SourceError[]; status: string[] }> {
-  const read = await primary;
-  config.signal?.throwIfAborted();
-  if (read.status === "threw") throw read.error;
-  const pack = new EvidencePack();
-  const found: string[] = [];
-  const errors = read.status === "read" ? uniqueErrors(primarySourceErrors(read.sources)) : [];
-  if (read.status === "read") {
-    const records = primaryRecordEvidence(read.sources);
-    pack.addAll(records);
-    found.push(
-      records.length > 0
-        ? `📇 Primary sources: ${records.length} records (${countsBySource(records)})`
-        : "📇 Primary sources: no record matched the track",
-    );
-  } else {
-    found.push("📇 Primary sources not asked: the track has no ISRC");
-  }
-  pack.addAll(webSearchEvidence(web));
-  const warnings = unreadableStatus(errors);
-  if (pack.omitted > 0) {
-    warnings.push(`📇 Evidence pack: ${pack.omitted} lower-ranked items left out (size cap)`);
-  }
-  const evidence = pack.items();
-  const send = (code: "RESEARCH-FOUND" | "SYS-WARN", message: string) =>
-    config.writer?.({
-      type: "status",
-      code,
-      message,
-      node: "historian",
-      timestamp: timestampOf(runtime),
-    });
-  for (const item of evidence) config.writer?.({ type: "evidence", evidence: item });
-  for (const message of found) send("RESEARCH-FOUND", message);
-  for (const message of warnings) send("SYS-WARN", message);
-  return { evidence, errors, status: [...found, ...warnings] };
-}
-
-/** "MusicBrainz 5, SecondHandSongs 3". */
-function countsBySource(items: readonly SourcedEvidence[]): string {
-  const counts = new Map<SourceId, number>();
-  for (const item of items) counts.set(item.source, (counts.get(item.source) ?? 0) + 1);
-  return [...counts].map(([source, n]) => `${SOURCE_NAMES[source]} ${n}`).join(", ");
 }
 
 /** Research without Last.fm's artist-level data, when `uncertain` says it is not this artist's. */

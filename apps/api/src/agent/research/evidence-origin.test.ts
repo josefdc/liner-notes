@@ -9,12 +9,18 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { found, primaryEvidence, scopedRef } from "../../sources/records.js";
-import { stubFetch } from "../../sources/testing/fetchStub.js";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { SourceError } from "../../sources/http.js";
+import { failed, unexpectedShape } from "../../sources/records.js";
+import { type FetchRoute, never, stubFetch } from "../../sources/testing/fetchStub.js";
 import { ICE_TRACK, primaryRoute } from "../../sources/testing/iceIceBaby.js";
 import {
   EVIDENCE_PACK_MAX_ITEMS,
   EvidenceOriginError,
   EvidencePack,
+  lostRecords,
   primaryRecordEvidence,
   primarySourceErrors,
   type SourcedEvidence,
@@ -161,6 +167,8 @@ describe("items built from the sources' answers", () => {
       web("https://genius.com/Vanilla-ice-ice-ice-baby-lyrics"),
       web("javascript:alert(1)"),
       web("https://example.test/empty", "   "),
+      web("https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/0/x.mp3"),
+      web("https://bucket.s3.amazonaws.com/press.pdf?X-Amz-Signature=abc123"),
       web("https://example.test/b", "Recorded in Miami.", ""),
     ]);
 
@@ -244,5 +252,83 @@ describe("the pack", () => {
       "musicbrainz:work/recording/r1",
       "tavily:https://example.test/a",
     ]);
+  });
+});
+
+describe("what a primary source lost, and a bug in its reader", () => {
+  it("reports a work read cut by the deadline as lost records, with the timeout", async () => {
+    const work = "https://musicbrainz.org/ws/2/work/";
+    const route: FetchRoute = (call) =>
+      call.url.startsWith(work) ? never(call) : primaryRoute(call);
+    stubFetch(route);
+    const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 300 });
+
+    expect(sources.musicbrainz.status).toBe("found");
+    expect(lostRecords(sources)).toEqual([
+      {
+        error: expect.objectContaining({ source: "musicbrainz", code: "timeout" }),
+        note: expect.stringMatching(/the work "Ice Ice Baby" could not be read/),
+      },
+    ]);
+    expect(primarySourceErrors(sources)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "musicbrainz", code: "timeout" })]),
+    );
+  });
+
+  it("lists no lost records when every request answered", async () => {
+    expect(lostRecords(await iceIceBaby())).toEqual([]);
+  });
+
+  it("reports a TypeError in a reader as an internal error, not as the source's answer", () => {
+    const bug = failed("secondhandsongs", new TypeError("name.trim is not a function"));
+    expect(bug).toMatchObject({
+      status: "missing",
+      error: {
+        source: "secondhandsongs",
+        code: "unavailable",
+        message: "internal error: name.trim is not a function",
+      },
+    });
+    const shape = failed("secondhandsongs", unexpectedShape("secondhandsongs", "no versions"));
+    expect(shape).toMatchObject({ error: { code: "invalid_response" } });
+    const busy = failed("secondhandsongs", new SourceError("secondhandsongs", "timeout", "slow"));
+    expect(busy).toMatchObject({ error: { code: "timeout" } });
+  });
+});
+
+describe("who builds evidence", () => {
+  const SRC = join(dirname(fileURLToPath(import.meta.url)), "../..");
+  const files = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      return statSync(path).isDirectory() ? files(path) : path.endsWith(".ts") ? [path] : [];
+    });
+  const IMPORT = /import\s+(?:type\s+)?(?:\{([^}]*)\}|\*\s+as\s+\w+)\s+from\s+["']([^"']+)["']/g;
+
+  it("only the source readers and agent/research import the evidence constructors", () => {
+    const importers: Record<string, string[]> = { primaryEvidence: [], webSearchEvidence: [] };
+    const modules: Record<string, RegExp> = {
+      primaryEvidence: /records\.js$/,
+      webSearchEvidence: /evidencePack\.js$/,
+    };
+    for (const path of files(SRC)) {
+      const text = readFileSync(path, "utf8");
+      for (const [, names = "", from] of text.matchAll(IMPORT)) {
+        for (const [name, module] of Object.entries(modules)) {
+          if (!module.test(from)) continue;
+          if (names === "" || new RegExp(`\\b${name}\\b`).test(names)) {
+            importers[name].push(relative(SRC, path));
+          }
+        }
+      }
+    }
+    const allowed = (path: string) => /^(?:sources|agent\/research)\//.test(path);
+    expect(importers.primaryEvidence.length).toBeGreaterThan(0);
+    expect(importers.webSearchEvidence.length).toBeGreaterThan(0);
+    expect(
+      Object.values(importers)
+        .flat()
+        .filter((path) => !allowed(path)),
+    ).toEqual([]);
   });
 });

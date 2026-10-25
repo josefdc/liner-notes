@@ -19,23 +19,38 @@
  * v5: results whose genealogy nodes carry a Spotify id only for a strict match of the track the
  * model named. Earlier results may carry the top search hit's id (a cover, another song), and a
  * click on such a node now analyses that id: they are not served.
+ *
+ * The result key also names which primary-record sources with a credential (Discogs, Genius)
+ * are configured: a result stored while one was not configured says so and holds none of its
+ * records, so adding the credential composes the result again. The research key does not: the
+ * research cache holds no primary record.
  */
 
+import { discogsConfigured } from "../sources/discogs.js";
+import { geniusConfigured } from "../sources/genius.js";
 import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
 export const TRACKS_NAMESPACE: string[] = ["tracks", "v5"];
 
-/** The optional research sources that are configured (have a key). */
+/** The optional sources that are configured (have a key). */
 export interface ConfiguredSources {
   lastfm: boolean;
   tavily: boolean;
+  /** Primary-record sources; only the result key names them. */
+  discogs: boolean;
+  genius: boolean;
 }
 
-/** The optional research sources configured now. */
+/** The optional sources configured now. */
 export function configuredSources(): ConfiguredSources {
-  return { lastfm: lastfmConfigured(), tavily: tavilyConfigured() };
+  return {
+    lastfm: lastfmConfigured(),
+    tavily: tavilyConfigured(),
+    discogs: discogsConfigured(),
+    genius: geniusConfigured(),
+  };
 }
 
 const flags = (configured: ConfiguredSources) =>
@@ -47,4 +62,6 @@ export const researchCacheKey = (spotifyId: string, configured: ConfiguredSource
 
 /** Result cache key of a track (its Spotify id), for the sources configured now. */
 export const resultCacheKey = (spotifyId: string, configured: ConfiguredSources) =>
-  `${spotifyId}|${flags(configured)}`;
+  `${spotifyId}|${flags(configured)}:discogs=${configured.discogs ? 1 : 0}:genius=${
+    configured.genius ? 1 : 0
+  }`;

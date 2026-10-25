@@ -225,6 +225,25 @@ export function researchBlocks(research: ResearchData | null, max = SOURCE_MATER
  */
 export function evidenceForPrompt(evidence: readonly Evidence[], max = EVIDENCE_PACK_MAX): string {
   if (evidence.length === 0) return "(empty: there is nothing to cite)";
+  const { lines } = promptEvidence(evidence, max);
+  const left = evidence.length - lines.length;
+  const note = left > 0 ? `\n(${left} more items not shown; they cannot be cited)` : "";
+  return `<<<SOURCE evidence pack>>>\n${lines.join("\n")}\n<<<END SOURCE>>>${note}`;
+}
+
+/**
+ * The items of the pack the composer's prompt shows (the first ones within EVIDENCE_PACK_MAX
+ * characters): the only ones its answer may cite.
+ */
+export function shownEvidence(
+  evidence: readonly Evidence[],
+  max = EVIDENCE_PACK_MAX,
+): readonly Evidence[] {
+  return evidence.slice(0, promptEvidence(evidence, max).lines.length);
+}
+
+/** The pack's lines as the prompt shows them, whole items until `max` characters. */
+function promptEvidence(evidence: readonly Evidence[], max: number): { lines: string[] } {
   const lines: string[] = [];
   let size = 0;
   for (const e of evidence) {
@@ -244,9 +263,7 @@ export function evidenceForPrompt(evidence: readonly Evidence[], max = EVIDENCE_
     lines.push(line);
     size += line.length + 1;
   }
-  const left = evidence.length - lines.length;
-  const note = left > 0 ? `\n(${left} more items not shown; they cannot be cited)` : "";
-  return `<<<SOURCE evidence pack>>>\n${lines.join("\n")}\n<<<END SOURCE>>>${note}`;
+  return { lines };
 }
 
 export function composerUserPrompt(input: ComposerPromptInput): string {

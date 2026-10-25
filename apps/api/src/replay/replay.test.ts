@@ -655,6 +655,52 @@ describe("the recorder", () => {
     }
   });
 
+  it("keeps the pages of web-tier evidence, and refuses preview and secret-bearing links", () => {
+    const webItem = (url: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "A page",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "The bass line comes from Under Pressure.",
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const page = "https://www.rollingstone.com/music/news/ice-ice-baby-under-pressure-1234/";
+    const wiki = "https://example.org/wiki/Ice_Ice_Baby_(song)";
+    const cited = { evidenceIds: [`tavily:${page}`, `tavily:${wiki}`] };
+    expect(
+      leaks(
+        {
+          analysis: { evidence: [webItem(page), webItem(wiki)], claims: [cited] },
+          events: [{ type: "evidence", evidence: webItem(page) }],
+        },
+        check,
+      ),
+    ).toEqual([]);
+
+    const preview = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/0/x.mp3";
+    const keyed = `https://example.org/article?api_key=${"k".repeat(12)}`;
+    const found = leaks(
+      {
+        preview: { evidence: [webItem(preview)] },
+        keyed: { evidence: [webItem(keyed)] },
+        // Not web-tier evidence: a URL outside the allow-listed sites, as before.
+        other: { url: page },
+      },
+      check,
+    );
+    expect(found).toEqual(
+      expect.arrayContaining([
+        "preview.evidence[0].url: a preview URL",
+        "keyed.evidence[0].url: a key or token parameter",
+        "keyed.evidence[0].url: a URL outside the allow-listed sites",
+        "other.url: a URL outside the allow-listed sites",
+      ]),
+    );
+  });
+
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {
     const runId = await liveRun("plain words");
     const { run, events } = stored(runId);

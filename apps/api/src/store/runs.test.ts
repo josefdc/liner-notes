@@ -265,7 +265,12 @@ describe("storeRunResult", () => {
     // No pack in the result, or no result of the run's own: nothing is stored.
     expect(evidence("none")).toBeNull();
     expect(evidence("other")).toBeNull();
-    // A replayed run keeps no result of its own, so no pack either.
+    // A result stored as a replay (its model answers came from cassettes) is the run's own
+    // result: its pack is kept with it, as its analysis is.
+    startRun(db, { runId: "replayed", threadId: "replayed", query: "q" });
+    storeRunResult(db, "replayed", result("replayed", { evidence: [item] }), "replay");
+    expect(JSON.parse(evidence("replayed") as string)).toEqual([item]);
+    // A replayed recording (storeReplayOf) keeps no result of its own, so no pack either.
     storeReplayOf(db, "cites", { slug: "s", recordedAt: "2026-01-01T00:00:00.000Z", digest: "d" });
     expect(evidence("cites")).toBeNull();
   });

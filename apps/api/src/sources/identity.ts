@@ -53,7 +53,6 @@ import {
 import {
   type Clock,
   checkIdentity,
-  errorRecord,
   failed,
   found,
   type IdentityCounts,
@@ -65,6 +64,7 @@ import {
   primaryEvidence,
   quoted,
   RELATION_PHRASE,
+  readFailure,
   scopedRef,
   type SourceResult,
   systemClock,
@@ -109,6 +109,8 @@ export type IdentityResolution =
       /** The work with its recordings, when the recording performs exactly one. */
       work: MbWork | null;
       workError: string | null;
+      /** The work read's failure, for the run's source errors (its covers are missing). */
+      workFailure: SourceErrorRecord | null;
       result: SourceResult<never>;
     }
   | {
@@ -116,6 +118,7 @@ export type IdentityResolution =
       details: null;
       work: null;
       workError: null;
+      workFailure: null;
       result: SourceResult<never>;
     };
 
@@ -431,6 +434,7 @@ export async function resolveIdentity(
     details: null,
     work: null,
     workError: null,
+    workFailure: null,
     result,
   });
   try {
@@ -475,12 +479,13 @@ export async function resolveIdentity(
       }
     } catch (error) {
       releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
-      releasesFailure = errorRecord("discogs", error);
+      releasesFailure = readFailure("discogs", error);
     }
 
     const links = linksOf(details);
     let work: MbWork | null = null;
     let workError: string | null = null;
+    let workFailure: SourceErrorRecord | null = null;
     let original =
       ruledOut(details, links.works) ?? originalPerformance(details, links.works, null);
     const needsDates = ruledOut(details, links.works) === null;
@@ -505,6 +510,7 @@ export async function resolveIdentity(
         }
       } catch (error) {
         workError = `the work "${only.title}" could not be read: ${describeError(error)}`;
+        workFailure = readFailure("musicbrainz", error);
       }
     }
 
@@ -528,6 +534,7 @@ export async function resolveIdentity(
       details,
       work,
       workError,
+      workFailure,
       result: found("musicbrainz", [], [], { omitted: pick.omitted }),
     };
   } catch (error) {
@@ -634,6 +641,7 @@ export async function musicBrainzRelationships(
   return found("musicbrainz", kept, evidence, {
     omitted: result.omitted,
     incomplete: notes.length > 0 ? notes.join("; ") : null,
+    error: resolution.workFailure,
   });
 }
 
@@ -699,6 +707,7 @@ export async function collectPrimarySources(
     details: null,
     work: null,
     workError: null,
+    workFailure: null,
     result: resolution,
   };
   const { identity } = base;

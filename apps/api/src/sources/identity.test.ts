@@ -759,10 +759,12 @@ describe("robustness", () => {
       call.url.startsWith(`${MB}/recording/${ICE}?`) ? json(malformed) : withShs(call),
     );
     const sources = await collectPrimarySources(ICE_TRACK, { now });
+    // The reader fails on it past its shape checks: an internal error, reported as such.
     expect(sources.musicbrainz).toMatchObject({
       status: "missing",
-      error: { source: "musicbrainz", code: "invalid_response" },
+      error: { source: "musicbrainz", code: "unavailable" },
     });
+    expect(sources.musicbrainz.error?.message).toMatch(/^internal error: /);
     expect(sources.secondhandsongs.status).toBe("found");
   });
 

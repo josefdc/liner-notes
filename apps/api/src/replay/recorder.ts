@@ -171,6 +171,40 @@ function allowedUrl(url: string): boolean {
   }
 }
 
+/**
+ * The pages a record's web-tier evidence links to (web search results cited by the run): any
+ * site, but only a plain http(s) page that is not a preview, media or signed link, has no
+ * credentials and whose query carries nothing shaped like a secret. These URLs, and their ids
+ * (`tavily:<url>`), are content of the record; any other URL still has to be on an allow-listed
+ * site.
+ */
+function webEvidencePages(value: unknown, pages = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) webEvidencePages(item, pages);
+  } else if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    if (item.sourceTier === "web" && typeof item.url === "string" && plainWebPage(item.url)) {
+      pages.add(item.url);
+    }
+    for (const inner of Object.values(item)) webEvidencePages(inner, pages);
+  }
+  return pages;
+}
+
+function plainWebPage(url: string): boolean {
+  if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  if (parsed.username || parsed.password) return false;
+  const query = `${parsed.search}${parsed.hash}`;
+  return !SECRET_SHAPES.some(([, pattern]) => pattern.test(query) || pattern.test(decoded(query)));
+}
+
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
 /** Keys of id fields: a source's ids (record refs, slugs) may be long and token-like. */
@@ -234,6 +268,10 @@ export function leaks(
   const typed = normalizeQuery(typedQuery);
   const typedIsPublic = typed === "" || publicTexts.some((text) => containsWords(text, typed));
   const others = new Set(otherRunIds.map((id) => id.toLowerCase()));
+  // A URL found in text may stop short of the page's own (at a parenthesis, a quote).
+  const pages = [...webEvidencePages(record)];
+  const allowed = (url: string) =>
+    allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
     if (
@@ -245,7 +283,7 @@ export function leaks(
     }
     // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
     // those are their own); an id field's value may be a long source id.
-    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedUrl(url) ? " " : url));
+    const scanned = text.replace(URL_IN_TEXT, (url) => (allowed(url) ? " " : url));
     for (const [what, pattern] of SECRET_SHAPES) {
       if (isId && what === "a long token") continue;
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
@@ -253,7 +291,7 @@ export function leaks(
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
-      else if (allowedUrl(url)) continue;
+      else if (allowed(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
       else found.push(`${path}: a URL outside the allow-listed sites`);
     }

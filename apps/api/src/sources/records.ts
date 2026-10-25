@@ -251,6 +251,11 @@ export type SourceResult<T> =
       evidence: Evidence[];
       /** Set when part of the record could not be read (e.g. a second request failed). */
       incomplete: string | null;
+      /**
+       * Set when records were lost because a request failed (not for a note such as "3 more
+       * not listed"): the run's source error, so the result is not kept as complete.
+       */
+      error?: SourceErrorRecord;
     })
   | (ResultBase & {
       status: "missing";
@@ -267,7 +272,12 @@ export function found<T>(
   source: SourceId,
   records: T[],
   evidence: Evidence[],
-  options: { omitted?: Omission[]; matched?: number; incomplete?: string | null } = {},
+  options: {
+    omitted?: Omission[];
+    matched?: number;
+    incomplete?: string | null;
+    error?: SourceErrorRecord | null;
+  } = {},
 ): SourceResult<T> {
   const omitted = options.omitted ?? [];
   return {
@@ -277,6 +287,7 @@ export function found<T>(
     evidence,
     omitted,
     incomplete: options.incomplete ?? null,
+    ...(options.error ? { error: options.error } : {}),
     identity: {
       matched: options.matched ?? 1,
       rejected: omitted.length,
@@ -331,6 +342,23 @@ export function errorRecord(source: SourceId, error: unknown): SourceErrorRecord
   return { source, code: sourceErrorCode(error), message: describeError(error) };
 }
 
+/** A failure of our own code (a bug), not of the source: it is never the source's answer. */
+const isInternalError = (error: unknown) =>
+  error instanceof TypeError || error instanceof ReferenceError || error instanceof RangeError;
+
+/**
+ * A primary source's failure as the run's source error. A bug in the code reading the answer
+ * (a TypeError past the shape checks) is not an invalid response from the source: it is
+ * reported as an internal error, with code "unavailable", so it stays visible and the result is
+ * not kept. A payload of an unexpected shape is "invalid_response" (`unexpectedShape`).
+ */
+export function readFailure(source: SourceId, error: unknown): SourceErrorRecord {
+  if (isInternalError(error)) {
+    return { source, code: "unavailable", message: `internal error: ${describeError(error)}` };
+  }
+  return errorRecord(source, error);
+}
+
 /** Any failure while reading a source, as "missing" with a typed error; never a throw. */
 export function failed<T>(
   source: SourceId,
@@ -338,7 +366,7 @@ export function failed<T>(
   omitted: Omission[] = [],
   matched = 0,
 ): SourceResult<T> {
-  const record = errorRecord(source, error);
+  const record = readFailure(source, error);
   return missing(source, record.message ?? "", { omitted, error: record, matched });
 }
 

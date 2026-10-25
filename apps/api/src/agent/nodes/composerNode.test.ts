@@ -297,6 +297,36 @@ describe("composerNode", () => {
     expect(out.claims).toEqual(claims);
   });
 
+  it("keeps a citation only of an item the prompt showed", async () => {
+    // More items than the prompt's evidence budget holds: the last ones are not shown.
+    const pack: Evidence[] = [
+      ...evidence,
+      ...Array.from({ length: 120 }, (_, i) => ({
+        ...evidence[0],
+        id: `secondhandsongs:work/work/1/covered-by/${i}`,
+        source: "secondhandsongs" as const,
+        recordRef: `work/work/1/covered-by/${i}`,
+        excerpt: `SecondHandSongs: cover ${i}. ${"x".repeat(400)}`,
+      })),
+    ];
+    const last = pack[pack.length - 1].id;
+    const llm = stubLlm(() => ({
+      ...output,
+      claims: [{ ...output.claims[0], evidenceIds: ["ev-mb-1", last] }],
+    }));
+    const out = await createComposerNode(testRuntime(llm))(
+      { ...stateWith(measured), evidence: pack } as SonicAgentStateType,
+      config(),
+    );
+
+    const { user } = messagesOf(llm.calls[0]);
+    expect(user).toContain(JSON.stringify("ev-mb-1"));
+    expect(user).not.toContain(JSON.stringify(last));
+    expect(out.trackData?.claims?.[0].evidenceIds).toEqual(["ev-mb-1"]);
+    // The pack itself is kept whole in the result.
+    expect(out.trackData?.evidence).toHaveLength(pack.length);
+  });
+
   it("draws every node the model proposes as a related influence, never as a sample", async () => {
     const out = await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
 
@@ -679,7 +709,7 @@ describe("composerNode", () => {
       );
       expect(store.put).toHaveBeenCalledTimes(1);
       const [, key, value] = store.put.mock.calls[0];
-      expect(key).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
+      expect(key).toMatch(/^x\|lastfm=[01]:tavily=[01]:discogs=[01]:genius=[01]$/);
       expect(value.trackData).toMatchObject({ id: "x" });
     });
 
@@ -762,6 +792,29 @@ describe("composerNode", () => {
       expect(store.put).toHaveBeenCalledTimes(1);
     });
 
+    it("stores a result when a primary source's answer is not understood, not when it failed", async () => {
+      const run = (error: { source: string; code: string; message?: string }) =>
+        createComposerNode(testRuntime(succeeding()))(
+          { ...stateWith(measured), sourceErrors: [error] } as SonicAgentStateType,
+          config(),
+        );
+      // The same answer would come again: the reader has to change, not the run.
+      for (const source of ["secondhandsongs", "discogs", "genius", "musicbrainz"]) {
+        store.put.mockClear();
+        await run({ source, code: "invalid_response" });
+        expect(store.put, source).toHaveBeenCalledTimes(1);
+      }
+      for (const error of [
+        { source: "secondhandsongs", code: "timeout" },
+        { source: "musicbrainz", code: "unavailable", message: "internal error: x is undefined" },
+        { source: "lastfm", code: "invalid_response" },
+      ]) {
+        store.put.mockClear();
+        await run(error);
+        expect(store.put, JSON.stringify(error)).not.toHaveBeenCalled();
+      }
+    });
+
     it("stores a result with measured audio, without this run's information", async () => {
       await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
       expect(store.put).toHaveBeenCalledTimes(1);
@@ -770,7 +823,9 @@ describe("composerNode", () => {
       // sources: adding a key later composes the result again.
       // Keyed by the track (its Spotify id), never by the search text.
       expect(namespace).toEqual(["tracks", "v5"]);
-      expect(store.put.mock.calls[0][1]).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
+      expect(store.put.mock.calls[0][1]).toMatch(
+        /^x\|lastfm=[01]:tavily=[01]:discogs=[01]:genius=[01]$/,
+      );
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });

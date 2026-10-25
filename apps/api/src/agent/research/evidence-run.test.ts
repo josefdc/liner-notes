@@ -99,8 +99,10 @@ vi.mock("../enricher.js", () => ({
 
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { evidenceScope } from "../../sources/records.js";
-import { stubFetch } from "../../sources/testing/fetchStub.js";
+import { json, stubFetch } from "../../sources/testing/fetchStub.js";
+import shsWork from "../../sources/fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
 import { primaryRoute } from "../../sources/testing/iceIceBaby.js";
+import { TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { runMigrations } from "../../store/migrations.js";
 import { startRun, storeRunResult } from "../../store/runs.js";
 import { buildSonicAgentGraph } from "../graph.js";
@@ -110,6 +112,7 @@ import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import { messagesOf, type StubCall, stubLlm, testRuntime } from "../testing/stubLlm.js";
 
 const AT = "2026-10-20T12:00:00.000Z";
+const SHS_WORK = "https://secondhandsongs.com/work/4196";
 const WEB_ID = "tavily:https://example.test/ice-ice-baby";
 /** The MusicBrainz item for the recording itself. */
 const RECORDING_ID = "musicbrainz:track/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
@@ -226,17 +229,22 @@ describe("the historian's evidence pack", () => {
     expect(net.calls.some((c) => c.url === "https://secondhandsongs.com/work/4196")).toBe(true);
   });
 
-  it("reads the primary sources for a cached research too", async () => {
+  it("reads the primary sources for a cached research too, and says so first", async () => {
     cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
+    const events: Array<{ type: string; message?: string }> = [];
     const out = await historianNode(
       { spotifyData, isrc: "USCA29001716" } as SonicAgentStateType,
-      { writer: () => {} } as never,
+      { writer: (event: never) => events.push(event) } as never,
       testRuntime(stubLlm(answer), AT),
     );
     expect(out.researchData).toEqual({ samples: ["cached"], productionTrivia: [] });
     expect(new Set(out.evidence?.map((e) => e.source))).toEqual(
       new Set(["musicbrainz", "secondhandsongs"]),
     );
+    // While the sources are read, the stream says what the run is waiting for.
+    const reading = events.findIndex((e) => /^📇 Reading primary sources/.test(e.message ?? ""));
+    expect(reading).toBeGreaterThan(-1);
+    expect(reading).toBeLessThan(events.findIndex((e) => e.type === "evidence"));
   });
 
   it("asks no primary source without an ISRC, and says so", async () => {
@@ -251,6 +259,104 @@ describe("the historian's evidence pack", () => {
   });
 });
 
+/** One run of the whole graph for the track; the stored results and research it left. */
+async function runGraph(threadId = "run-a2") {
+  const llm = stubLlm(answer);
+  const store = new InMemoryStore();
+  const graph = buildSonicAgentGraph({
+    runtime: testRuntime(llm, AT),
+    checkpointer: new MemorySaver(),
+    store,
+  });
+  let trackData: TrackData | null = null;
+  const events: Array<{ type: string; message?: string }> = [];
+  const stream = await graph.stream(
+    { songQuery: "Ice Ice Baby Vanilla Ice" },
+    { configurable: { thread_id: threadId }, streamMode: ["updates", "custom"] },
+  );
+  for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
+    if (mode === "custom") events.push(chunk as { type: string });
+    const composer = (chunk as { composer?: { trackData?: TrackData } }).composer;
+    if (mode === "updates" && composer?.trackData) trackData = composer.trackData;
+  }
+  const stored = (await store.search(TRACKS_NAMESPACE)).length;
+  return { llm, trackData: trackData as TrackData | null, events, stored };
+}
+
+const statusLines = (events: ReadonlyArray<{ type: string; message?: string }>) =>
+  events.filter((e) => e.type === "status").map((e) => e.message ?? "");
+
+describe("a run whose primary sources fail", () => {
+  const WORK = "https://musicbrainz.org/ws/2/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d?";
+
+  it("reports the work's covers as missing and keeps neither the result nor the research", async () => {
+    net = stubFetch((call) =>
+      call.url.startsWith(WORK) ? new Response("busy", { status: 503 }) : primaryRoute(call),
+    );
+    const { trackData, events, stored } = await runGraph();
+
+    const result = TrackAnalysis.parse(trackData);
+    const lost = result.run?.sourceErrors?.find((e) => e.source === "musicbrainz");
+    // MusicBrainz answers 503 when it is over its rate: a passing reason, kept as it was.
+    expect(lost).toMatchObject({ source: "musicbrainz", code: "rate_limited" });
+    expect(statusLines(events).some((m) => /MusicBrainz records are incomplete/.test(m))).toBe(
+      true,
+    );
+    // MusicBrainz lists no cover of the work, and the run does not pass that off as complete.
+    const covers = (e: { source: string; recordRef: string | null }) =>
+      e.source === "musicbrainz" && /covered-by/.test(e.recordRef ?? "");
+    expect(result.evidence?.some(covers)).toBe(false);
+    expect(stored).toBe(0);
+    expect(cache.putResearch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the result when a primary source answers in a shape its reader does not know", async () => {
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? json({ unexpected: true }) : primaryRoute(call),
+    );
+    const { trackData, stored } = await runGraph();
+
+    expect(TrackAnalysis.parse(trackData).run?.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "invalid_response" }),
+      ]),
+    );
+    expect(stored).toBe(1);
+    expect(cache.putResearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a bug in a primary source's reader as an internal error, and keeps nothing", async () => {
+    // A performer whose name is not text: the reader fails on it with a TypeError.
+    const broken = structuredClone(shsWork) as { versions: Array<{ performer?: unknown }> };
+    broken.versions[0].performer = { name: { first: "Vanilla" } };
+    net = stubFetch((call) => (call.url === SHS_WORK ? json(broken) : primaryRoute(call)));
+    const { trackData, stored } = await runGraph();
+
+    const error = TrackAnalysis.parse(trackData).run?.sourceErrors?.find(
+      (e) => e.source === "secondhandsongs",
+    );
+    expect(error).toMatchObject({ code: "unavailable" });
+    expect(error?.message).toMatch(/^internal error: /);
+    expect(stored).toBe(0);
+  });
+
+  it("does not keep the result when a primary source could not be read, but caches the research", async () => {
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : primaryRoute(call),
+    );
+    const { trackData, stored } = await runGraph();
+
+    expect(TrackAnalysis.parse(trackData).run?.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "unavailable" }),
+      ]),
+    );
+    expect(stored).toBe(0);
+    // The research cache holds no primary record: an unread source does not block it.
+    expect(cache.putResearch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("a stubbed run", () => {
   let dir: string;
   beforeEach(() => {
@@ -259,27 +365,17 @@ describe("a stubbed run", () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   it("gives the composer the pack and stores it with the run; none of its sources is a model", async () => {
-    const llm = stubLlm(answer);
-    const graph = buildSonicAgentGraph({
-      runtime: testRuntime(llm, AT),
-      checkpointer: new MemorySaver(),
-      store: new InMemoryStore(),
-    });
-    let trackData: TrackData | null = null;
-    const events: Array<{ type: string }> = [];
-    const stream = await graph.stream(
-      { songQuery: "Ice Ice Baby Vanilla Ice" },
-      { configurable: { thread_id: "run-a2" }, streamMode: ["updates", "custom"] },
-    );
-    for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
-      if (mode === "custom") events.push(chunk as { type: string });
-      const composer = (chunk as { composer?: { trackData?: TrackData } }).composer;
-      if (mode === "updates" && composer?.trackData) trackData = composer.trackData;
-    }
+    const { llm, trackData, events, stored } = await runGraph();
+    // Discogs and Genius are only not configured: the result is kept.
+    expect(stored).toBe(1);
 
     const result = TrackAnalysis.parse(trackData);
     const evidence = result.evidence ?? [];
     expect(evidence.length).toBeGreaterThan(2);
+    // The work's covers are there when MusicBrainz answers (see the failing case above).
+    expect(
+      evidence.some((e) => e.source === "musicbrainz" && /covered-by/.test(e.recordRef ?? "")),
+    ).toBe(true);
     expect(events.filter((e) => e.type === "evidence")).toHaveLength(evidence.length);
     // The composer was given the pack, and the song's records are marked as such.
     const composer = llm.calls.find((c) => c.callSite === "composer");

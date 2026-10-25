@@ -10,6 +10,11 @@
  * model wrote, an object shaped like Evidence (one parsed from a model's answer, or a copy of an
  * item), or an item that breaks the contract's evidence checks.
  *
+ * The constructors are called only from the code that reads the sources (agent/research/,
+ * sources/; a test pins it). The web tier rests on that: its results reach the researcher as the
+ * search tool's JSON text, which carries no object brand, and the researcher's Tavily reader is
+ * their one caller.
+ *
  * The pack keeps an id once (the first item wins), lists items by tier (primary records, then
  * editorial, then web; within primary records the recording's own items, then a release's,
  * then the song's) and keeps at most EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
@@ -20,6 +25,7 @@ import {
   type Evidence,
   evidenceIssues,
   type SourceError,
+  type SourceId,
 } from "@liner-notes/contract";
 import type { PrimarySources } from "../../sources/identity.js";
 import {
@@ -28,6 +34,7 @@ import {
   isPrimaryRecordEvidence,
 } from "../../sources/records.js";
 import { isLyricPage, type WebResult } from "../../sources/search.js";
+import { isPreviewUrl } from "../../store/runs.js";
 
 /** The most items a run's pack keeps; the lowest-ranked are left out and counted. */
 export const EVIDENCE_PACK_MAX_ITEMS = 80;
@@ -65,6 +72,9 @@ export function isSourcedEvidence(item: unknown): item is SourcedEvidence {
 
 const PRIMARY_KEYS = ["musicbrainz", "discogs", "genius", "secondhandsongs"] as const;
 
+/** The primary-record sources read from the track's ISRC. */
+export const PRIMARY_RECORD_SOURCES: ReadonlySet<SourceId> = new Set(PRIMARY_KEYS);
+
 /**
  * The Evidence of the primary sources' answers, in source order. Every item must be one the
  * source module built from its payload, of that source, as a primary record with a scoped
@@ -93,11 +103,31 @@ export function primaryRecordEvidence(sources: PrimarySources): SourcedEvidence[
   return items;
 }
 
-/** The sources that could not be read for the primary records, for the run's source errors. */
+/**
+ * The primary sources' errors, for the run's source errors: each source that could not be read,
+ * and each that answered but lost records to a failed request (`lostRecordErrors`).
+ */
 export function primarySourceErrors(sources: PrimarySources): SourceError[] {
   return PRIMARY_KEYS.flatMap((key) => {
+    const { error } = sources[key];
+    return error ? [error] : [];
+  });
+}
+
+/**
+ * The sources that answered with records but lost some to a failed request (the MusicBrainz
+ * work, and so its covers, when its read failed or the deadline cut it): the error and the
+ * source's note on what is missing. A retry may complete them, so a run with one is not kept
+ * as complete.
+ */
+export function lostRecords(
+  sources: PrimarySources,
+): Array<{ error: SourceError; note: string | null }> {
+  return PRIMARY_KEYS.flatMap((key) => {
     const result = sources[key];
-    return result.status === "missing" && result.error ? [result.error] : [];
+    return result.status === "found" && result.error
+      ? [{ error: result.error, note: result.incomplete }]
+      : [];
   });
 }
 
@@ -119,7 +149,7 @@ const isWebPage = (url: string) => {
 /**
  * Web-tier Evidence from the web search's results: the page's title, URL and the text the
  * search returned for it, cut to the contract's excerpt limit. One item per URL; a result
- * without a web URL or text, or on a lyric site, gives none.
+ * without a web URL or text, on a lyric site, or whose URL is a preview or signed link gives none.
  */
 export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvidence[] {
   const items: SourcedEvidence[] = [];
@@ -127,7 +157,8 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
   for (const { result, retrievedAt } of findings) {
     const url = typeof result?.url === "string" ? result.url.trim() : "";
     const text = typeof result?.content === "string" ? result.content.trim() : "";
-    if (!url || !text || !isWebPage(url) || isLyricPage(url) || seen.has(url)) continue;
+    if (!url || !text || !isWebPage(url) || isLyricPage(url) || isPreviewUrl(url)) continue;
+    if (seen.has(url)) continue;
     seen.add(url);
     const title = typeof result.title === "string" && result.title.trim() ? result.title : url;
     items.push(

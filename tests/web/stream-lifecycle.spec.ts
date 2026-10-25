@@ -196,7 +196,6 @@ test.describe("with the browser's EventSource", () => {
 
   async function serveStream(page: Page, body: string) {
     const opened: string[] = [];
-    await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
     await page.route("**/api/search/suggest**", (route) =>
       route.fulfill({ json: { success: true, suggestions: [] } }),
     );

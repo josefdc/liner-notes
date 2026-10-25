@@ -15,8 +15,6 @@ const requests = (page: import("@playwright/test").Page) =>
   page.evaluate(() => (window as unknown as MockWindow).__mockApi.log);
 
 test.beforeEach(async ({ page }) => {
-  // Keep the tests off the network: web fonts are not needed to check behaviour.
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await page.addInitScript((config) => {
     (window as unknown as { __mockApi: unknown }).__mockApi = config;
   }, mockConfig(fixture));

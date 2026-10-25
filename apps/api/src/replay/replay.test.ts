@@ -803,7 +803,7 @@ describe("the recorder", () => {
 
 describe("the recorded cover from the Cover Art Archive", () => {
   const RELEASE = "ae103b0a-b932-4009-acb6-388db1cf890b";
-  const ARCHIVE = `https://coverartarchive.org/release/${RELEASE}/front-250`;
+  const ARCHIVE = `https://coverartarchive.org/release/${RELEASE}/front-500`;
   const OTHER = "5a260489-c99d-485b-902e-24751e5b1c69";
   const SPOTIFY_COVER = "https://i.scdn.co/image/ab67616d0000b273spotifycover";
   /** A MusicBrainz release item as sources/identity.ts builds it. */
@@ -917,11 +917,13 @@ describe("the recorded cover from the Cover Art Archive", () => {
       "events[2].event.candidates[0].coverUrl: an image or media URL",
       "suggestion.coverUrl: an image or media URL",
     ]);
-    // Only the 250 px front image is the kept cover.
-    const larger = ARCHIVE.replace("front-250", "front-500");
-    expect(leaks({ analysis: { coverUrl: larger } }, { ...check, allowedCover: larger })).toEqual([
-      "analysis.coverUrl: an image or media URL",
-    ]);
+    // Only the 500 px front image is the kept cover: no other size, nor the plain front.
+    for (const size of ["front-250", "front-1200", "front"]) {
+      const other = ARCHIVE.replace("front-500", size);
+      expect(leaks({ analysis: { coverUrl: other } }, { ...check, allowedCover: other })).toEqual([
+        "analysis.coverUrl: an image or media URL",
+      ]);
+    }
     // Without a kept cover, the cover field is refused too.
     expect(leaks({ analysis: { coverUrl: ARCHIVE } }, { ...check, allowedCover: "" })).toEqual([
       "analysis.coverUrl: an image or media URL",
@@ -934,7 +936,20 @@ describe("the recorded cover from the Cover Art Archive", () => {
 
   it("says why a record keeps no Cover Art Archive cover, and replay:record prints it", async () => {
     expect(build(liveRunWith([releaseItem()]))).not.toHaveProperty("noCover");
-    expect(build(liveRunWith([])).noCover).toMatch(/^the evidence names no MusicBrainz release/);
+    expect(build(liveRunWith([])).noCover).toBe(
+      "the evidence names no MusicBrainz recording, so no release was read: the track has no ISRC, MusicBrainz matched no recording to it, or MusicBrainz could not be read",
+    );
+    const recordingItem = {
+      ...releaseItem(),
+      id: `musicbrainz:track/recording/${OTHER}`,
+      url: `https://musicbrainz.org/recording/${OTHER}`,
+      title: "One More Time — MusicBrainz recording",
+      excerpt: 'MusicBrainz recording "One More Time" by Daft Punk (5:20), ISRC GBDUW0000059.',
+      recordRef: `track/recording/${OTHER}`,
+    };
+    expect(build(liveRunWith([recordingItem])).noCover).toBe(
+      "the evidence names the MusicBrainz recording but no release: its releases could not be read in time, none is an official album, EP or single the Cover Art Archive holds a front image of, or the run was made by earlier code (before releases were read, or before the evidence pack's size cap always kept the release)",
+    );
     expect(build(liveRunWith([releaseItem(), releaseItem(OTHER)])).noCover).toBe(
       "the evidence names 2 MusicBrainz releases, not one",
     );
@@ -946,7 +961,7 @@ describe("the recorded cover from the Cover Art Archive", () => {
     const deps = { settingsFileValues: () => ({}), checkout: () => runningCommit() ?? "abc1234" };
     expect(recordMain(["--run", runId, "--slug", "no-cover", "--out", out], deps)).toBe(0);
     expect(vi.mocked(console.warn).mock.calls.map(([m]) => String(m))).toContain(
-      "Warning: no cover kept: the evidence names no MusicBrainz release (its releases could not be read, none has a front image at the Cover Art Archive, or the research was cached before releases were read)",
+      "Warning: no cover kept: the evidence names no MusicBrainz recording, so no release was read: the track has no ISRC, MusicBrainz matched no recording to it, or MusicBrainz could not be read",
     );
   });
 

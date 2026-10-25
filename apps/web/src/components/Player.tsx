@@ -623,8 +623,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             cover={cover}
             album={track.album}
             evidence={track.evidence}
-            className="mb-8 mt-4 flex-shrink-0"
-            frameClassName="relative w-56 h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 group"
+            className="mb-8 mt-4 flex-shrink-0 w-56 md:w-64 lg:w-80"
+            frameClassName="group"
             surfaceClassName={`rounded-lg shadow-elevated-lg transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''} ${isPlaying && cover.src ? 'shadow-[var(--shadow-glow-cyber)]' : ''}`}
             iconSize={56}
           >

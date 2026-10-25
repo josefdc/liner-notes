@@ -45,6 +45,7 @@ import {
   originalPerformance,
   pickCoverRelease,
   pickRecording,
+  readCoverRelease,
   RELEASES_INCOMPLETE,
   resolveIdentity,
 } from "./identity.js";
@@ -345,6 +346,8 @@ describe("the cover release", () => {
   it("is one MusicBrainz release item, after the recording's own, with the release's page", async () => {
     stubFetch(musicBrainz);
     const resolution = await resolveIdentity(ICE_TRACK);
+    if (!resolution.identity) throw new Error("no identity");
+    await readCoverRelease(resolution.identity, ICE_TRACK.album);
     const result = await musicBrainzRelationships(resolution, { now });
     if (result.status !== "found") throw new Error(result.reason);
     const releases = result.evidence.filter((e) => e.recordRef?.startsWith("release/"));
@@ -371,8 +374,8 @@ describe("the cover release", () => {
 
   it("names the release titled as the track's album", async () => {
     stubFetch(musicBrainz);
-    const { identity } = await resolveIdentity({ ...ICE_TRACK, album: "Ice Ice Baby" });
-    expect(identity?.coverRelease).toMatchObject({
+    const sources = await collectPrimarySources({ ...ICE_TRACK, album: "Ice Ice Baby" }, { now });
+    expect(sources.identity?.coverRelease).toMatchObject({
       mbid: "218fc465-cfe8-47cc-bb31-1cd740982afc",
       type: "single",
     });
@@ -417,28 +420,40 @@ describe("the cover release", () => {
     }
   });
 
-  it("without Discogs, reads one page last, on the dating signal", async () => {
-    // 250 releases: one page of them is read.
-    const net = stubFetch((call) =>
-      call.url.startsWith(`${MB}/release?`)
-        ? json({ ...iceReleasesWithArt, "release-count": 250 })
-        : musicBrainz(call),
-    );
-    const { identity } = await resolveIdentity(ICE_TRACK);
-    const reads = net.calls.filter((c) => c.url.startsWith(`${MB}/release?`));
-    expect(reads.map((c) => new URL(c.url).searchParams.get("offset"))).toEqual(["0"]);
-    expect(net.calls.at(-1)).toBe(reads[0]);
-    expect(identity?.coverRelease?.mbid).toBe(TO_THE_EXTREME);
-
-    // The dating signal cut: the work and the recording are kept, the release is not named.
-    net.calls.length = 0;
-    const cut = await resolveIdentity(ICE_TRACK, { datingSignal: AbortSignal.abort() });
-    expect(cut.identity).toMatchObject({
-      coverRelease: null,
-      coverReleaseError: expect.any(String),
+  it("without Discogs, reads one page alongside Genius and SecondHandSongs, on the dating signal", async () => {
+    // The release read answers only once SecondHandSongs has been asked: were SecondHandSongs
+    // to wait for it, the read would be cut with the dating and name no release.
+    let shsAsked = () => {};
+    const asked = new Promise<void>((resolve) => {
+      shsAsked = resolve;
     });
-    expect(cut.work).not.toBeNull();
-    expect(cut.result.status).toBe("found");
+    const net = stubFetch((call) => {
+      if (call.url.startsWith("https://secondhandsongs.com/")) shsAsked();
+      return call.url.startsWith(`${MB}/release?`)
+        ? asked.then(() => json({ ...iceReleasesWithArt, "release-count": 250 }))
+        : withShs(call);
+    });
+    const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 8000 });
+    expect(sources.identity).toMatchObject({
+      coverRelease: { mbid: TO_THE_EXTREME },
+      coverReleaseError: null,
+    });
+    // One page of the 250 releases, after the chain: the work and its dating come first.
+    const paths = net.calls.map((c) => new URL(c.url));
+    expect(
+      paths.filter((u) => u.pathname === "/ws/2/release").map((u) => u.searchParams.get("offset")),
+    ).toEqual(["0"]);
+    const order = paths.map((u) => `${u.host}${u.pathname}`);
+    expect(order.indexOf("musicbrainz.org/ws/2/release")).toBeGreaterThan(
+      order.lastIndexOf("musicbrainz.org/ws/2/recording"),
+    );
+    expect(sources.evidence.map((e) => e.id)).toContain(`musicbrainz:release/${TO_THE_EXTREME}`);
+
+    // On a cut signal the release is not named, and the read says why.
+    const { identity } = await resolveIdentity(ICE_TRACK);
+    if (!identity) throw new Error("no identity");
+    await readCoverRelease(identity, null, AbortSignal.abort());
+    expect(identity).toMatchObject({ coverRelease: null, coverReleaseError: expect.any(String) });
   });
 });
 
@@ -504,7 +519,7 @@ describe("resolveIdentity", () => {
     ]);
   });
 
-  it("reads the releases once without a Discogs token, for the release that stands for the recording", async () => {
+  it("reads no release without a Discogs token: the collection reads them after the chain", async () => {
     const net = stubFetch(musicBrainz);
     const { identity } = await resolveIdentity(ICE_TRACK);
     expect(identity).toMatchObject({
@@ -512,7 +527,7 @@ describe("resolveIdentity", () => {
       releasesError: null,
       releasesFailure: null,
       releasesNote: null,
-      coverRelease: { mbid: "ae103b0a-b932-4009-acb6-388db1cf890b" },
+      coverRelease: null,
       coverReleaseError: null,
     });
     expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
@@ -521,8 +536,6 @@ describe("resolveIdentity", () => {
       `/ws/2/work/${ICE_WORK}`,
       "/ws/2/recording",
       "/ws/2/recording",
-      // Last: after the work and its dating, so the read never delays them.
-      "/ws/2/release",
     ]);
   });
 

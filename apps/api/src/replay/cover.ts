@@ -10,14 +10,17 @@ import type { Evidence } from "@liner-notes/contract";
 const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /** A MusicBrainz release as sources/identity.ts names it in an Evidence item's recordRef. */
 const RELEASE_REF = new RegExp(`^release/(${UUID_PATTERN})$`);
-/** The link `archiveCover` derives: the archive's 250 px front image of a release. */
+/**
+ * The link `archiveCover` derives: the archive's 500 px front image of a release (sharp at the
+ * Player's 320 px). The only size a record may keep.
+ */
 export const ARCHIVE_FRONT = new RegExp(
-  `^https://coverartarchive\\.org/release/${UUID_PATTERN}/front-250$`,
+  `^https://coverartarchive\\.org/release/${UUID_PATTERN}/front-500$`,
 );
 
 /**
  * The Cover Art Archive link a record keeps as the result's cover, or "" with the reason: the
- * front image (250 px) of the release named by the result's one MusicBrainz release item (a
+ * front image (500 px) of the release named by the result's one MusicBrainz release item (a
  * primary record whose recordRef is `release/<mbid>`, with that release's id and page).
  */
 export function archiveCover(analysis: { evidence?: readonly Evidence[] | null }): {
@@ -31,10 +34,14 @@ export function archiveCover(analysis: { evidence?: readonly Evidence[] | null }
       RELEASE_REF.test(item.recordRef ?? ""),
   );
   if (releases.length === 0) {
+    const recording = (Array.isArray(analysis.evidence) ? analysis.evidence : []).some(
+      (item) => item?.source === "musicbrainz" && /^track\/recording\//.test(item.recordRef ?? ""),
+    );
     return {
       url: "",
-      reason:
-        "the evidence names no MusicBrainz release (its releases could not be read, none has a front image at the Cover Art Archive, or the research was cached before releases were read)",
+      reason: recording
+        ? "the evidence names the MusicBrainz recording but no release: its releases could not be read in time, none is an official album, EP or single the Cover Art Archive holds a front image of, or the run was made by earlier code (before releases were read, or before the evidence pack's size cap always kept the release)"
+        : "the evidence names no MusicBrainz recording, so no release was read: the track has no ISRC, MusicBrainz matched no recording to it, or MusicBrainz could not be read",
     };
   }
   if (releases.length > 1) {
@@ -51,7 +58,7 @@ export function archiveCover(analysis: { evidence?: readonly Evidence[] | null }
   if (item.url !== `https://musicbrainz.org/release/${mbid}`) {
     return { url: "", reason: "the MusicBrainz release item does not link its release's page" };
   }
-  return { url: `https://coverartarchive.org/release/${mbid}/front-250`, reason: "" };
+  return { url: `https://coverartarchive.org/release/${mbid}/front-500`, reason: "" };
 }
 
 /** The Cover Art Archive link a record keeps as the result's cover, or "" (`archiveCover`). */

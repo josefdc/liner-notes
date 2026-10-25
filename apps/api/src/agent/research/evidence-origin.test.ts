@@ -11,6 +11,7 @@ import {
   SourceId,
 } from "@liner-notes/contract";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { archiveCoverOf } from "../../replay/cover.js";
 import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
 import { evidenceForPrompt, shownEvidence } from "../prompts.js";
 import { stubLlm, testRuntime } from "../testing/stubLlm.js";
@@ -365,6 +366,18 @@ describe("the pack", () => {
       excerpt: `MusicBrainz record ${n}.`,
       retrievedAt: AT,
     });
+  const discogsCredit = (scope: "track" | "release", n: number) =>
+    primaryEvidence({
+      source: "discogs",
+      recordRef:
+        scope === "track"
+          ? scopedRef("track", `release/599648/credit/${n}`)
+          : scopedRef("release", `599648/credit/${n}`),
+      url: "https://www.discogs.com/release/599648",
+      title: `Credit ${n}`,
+      excerpt: `Discogs release 599648 credit ${n}.`,
+      retrievedAt: AT,
+    });
   const sealed = (...items: ReturnType<typeof primary>[]) =>
     primaryRecordEvidence({
       musicbrainz: found("musicbrainz", [], items),
@@ -397,13 +410,80 @@ describe("the pack", () => {
     pack.addAll(webSearchEvidence([web("https://example.test/a")]));
     pack.addAll(sealed(primary("work", 1), primary("track", 2), primary("release", 3)));
     pack.addAll(sealed(primary("track", 4)));
+    pack.addAll(
+      primaryRecordEvidence({
+        musicbrainz: { status: "missing", error: null },
+        discogs: found("discogs", [], [discogsCredit("release", 5)]),
+        genius: { status: "missing", error: null },
+        secondhandsongs: { status: "missing", error: null },
+      } as unknown as PrimarySources),
+    );
     expect(pack.items().map((e) => e.recordRef ?? e.id)).toEqual([
+      // The release MusicBrainz names for the recording ranks with the recording's items.
       "track/recording/r2",
-      "track/recording/r4",
       "release/recording/r3",
+      "track/recording/r4",
+      "release/599648/credit/5",
       "work/recording/r1",
       "tavily:https://example.test/a",
     ]);
+  });
+
+  it("keeps the MusicBrainz release, and so a recorded cover, when the cap cuts a full pack", () => {
+    // Every primary source full for an original recording: MusicBrainz's recording and 25
+    // relationships, 25 at Genius and at SecondHandSongs (all about the track), Discogs credits.
+    const RELEASE = "ae103b0a-b932-4009-acb6-388db1cf890b";
+    const item = (source: "genius" | "secondhandsongs", n: number) =>
+      primaryEvidence({
+        source,
+        recordRef: scopedRef("track", `song/1/samples/${n}`),
+        url: source === "genius" ? "https://genius.com/x" : "https://secondhandsongs.com/work/1",
+        title: `Record ${n}`,
+        excerpt: `${source} record ${n}.`,
+        retrievedAt: AT,
+      });
+    const release = primaryEvidence({
+      source: "musicbrainz",
+      recordRef: scopedRef("release", RELEASE),
+      url: `https://musicbrainz.org/release/${RELEASE}`,
+      title: "To the Extreme — MusicBrainz release",
+      excerpt:
+        'MusicBrainz: "Ice Ice Baby" by Vanilla Ice appears on the official album "To the Extreme".',
+      retrievedAt: AT,
+    });
+    const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+    const sources = {
+      musicbrainz: found(
+        "musicbrainz",
+        [],
+        [...range(26).map((n) => primary("track", n)), release],
+      ),
+      discogs: found(
+        "discogs",
+        [],
+        range(8).map((n) => discogsCredit("track", n)),
+      ),
+      genius: found(
+        "genius",
+        [],
+        range(25).map((n) => item("genius", n)),
+      ),
+      secondhandsongs: found(
+        "secondhandsongs",
+        [],
+        range(25).map((n) => item("secondhandsongs", n)),
+      ),
+    } as unknown as PrimarySources;
+    const pack = new EvidencePack();
+    pack.addAll(primaryRecordEvidence(sources));
+    pack.addAll(webSearchEvidence([web("https://example.test/a")]));
+    expect(pack.size).toBe(86);
+    expect(pack.omitted).toBe(6);
+    const kept = pack.items();
+    expect(kept.map((e) => e.id)).toContain(`musicbrainz:release/${RELEASE}`);
+    expect(archiveCoverOf({ evidence: kept })).toBe(
+      `https://coverartarchive.org/release/${RELEASE}/front-500`,
+    );
   });
 
   it("keeps at most its cap, leaving out the lowest-ranked items and counting them", () => {

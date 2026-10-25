@@ -29,7 +29,7 @@ const missingTrack = {
 
 describe('the Player album cover', () => {
   const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
-  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-250`;
+  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-500`;
   const credit = () => screen.queryByRole('link', { name: /^Cover: / });
   const evidence = [
     {

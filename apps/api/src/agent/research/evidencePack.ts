@@ -21,8 +21,9 @@
  * their one caller.
  *
  * The pack keeps an id once (the first item wins), lists items by tier (primary records, then
- * editorial, then web; within primary records the recording's own items, then a release's,
- * then the song's) and keeps at most EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
+ * editorial, then web; within primary records the recording's own items and the release
+ * MusicBrainz names for it, then a release's, then the song's) and keeps at most
+ * EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
  */
 
 import {
@@ -369,10 +370,16 @@ export function notAskedSources(
 
 const SCOPE_RANK: Record<EvidenceScope, number> = { track: 0, release: 1, work: 2 };
 
-/** Primary records first (the recording's, a release's, the song's), then editorial, then web. */
+/**
+ * Primary records first (the recording's, a release's, the song's), then editorial, then web.
+ * The release MusicBrainz names for the recording (sources/identity.ts, at most one) ranks with
+ * the recording's own items: a recorded run's cover is derived from it (replay/cover.ts), so the
+ * size cap never leaves it out while it keeps any of the recording's items.
+ */
 function rank(item: Evidence): number {
   if (item.sourceTier === "primary-record") {
     const scope = evidenceScope(item);
+    if (scope === "release" && item.source === "musicbrainz") return SCOPE_RANK.track;
     return scope ? SCOPE_RANK[scope] : 3;
   }
   return item.sourceTier === "editorial" ? 4 : 5;

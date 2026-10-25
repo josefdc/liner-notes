@@ -96,7 +96,7 @@ describe('Dashboard', () => {
 
 describe('the Dashboard album cover', () => {
   const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
-  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-250`;
+  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-500`;
   /** The MusicBrainz release item the API writes for the cover's release. */
   const releaseItem = (title: string) => ({
     id: `musicbrainz:release/${MBID}`,

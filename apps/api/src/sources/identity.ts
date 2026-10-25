@@ -550,8 +550,8 @@ export function originalPerformance(
  * ISRC → the MusicBrainz recording that is the track, with the links the other sources start
  * from and whether it is the song's original recording. Never throws. `onRecording` is told the
  * recording as soon as its lookup passed the checks, before the releases and the work are read.
- * The recording's releases are read once, for the release that stands for the recording and,
- * when Discogs is configured, for their Discogs links (then before the work; otherwise last).
+ * With Discogs configured, the recording's releases are read here, once, for their Discogs links
+ * and the release that stands for the recording; without it, `readCoverRelease` reads them.
  */
 export async function resolveIdentity(
   track: TrackRef,
@@ -611,11 +611,10 @@ export async function resolveIdentity(
     let releasesNote: string | null = null;
     let coverRelease: CoverRelease | null = null;
     let coverReleaseError: string | null = null;
-    // The recording's releases are read once: for the release that stands for it (its cover in
-    // a recorded run) and, when Discogs is configured, for their Discogs links, before the work
-    // (Discogs is asked from them). Without Discogs they are read last: one page, on the dating
-    // signal, so the read never delays the work and its dating; a failed read loses only that
-    // release, which the MusicBrainz result notes (no record, no source error).
+    // With Discogs configured, the recording's releases are read here, once, before the work:
+    // for their Discogs links (Discogs is asked from them) and for the release that stands for
+    // the recording (its cover in a recorded run). Without Discogs, `readCoverRelease` reads them
+    // after the chain, alongside the other sources.
     const readReleases = async (pages: number, readSignal: AbortSignal | undefined) => {
       try {
         const read = await browseRecordingReleases(details.id, pages, readSignal);
@@ -679,14 +678,6 @@ export async function resolveIdentity(
       }
     }
 
-    if (!discogsConfigured()) {
-      try {
-        await readReleases(1, datingSignal);
-      } catch {
-        // Noted by musicBrainzRelationships (coverReleaseError).
-      }
-    }
-
     const identity: PrimaryIdentity = {
       isrc,
       recording: {
@@ -714,6 +705,26 @@ export async function resolveIdentity(
     };
   } catch (error) {
     return none(failed("musicbrainz", error));
+  }
+}
+
+/**
+ * Without Discogs: reads one page of the recording's official releases for the release that
+ * stands for it (`pickCoverRelease`) and sets `identity.coverRelease`, or `coverReleaseError`
+ * when the read fails (the MusicBrainz result then notes it: no record, no source error).
+ * `collectPrimarySources` runs it alongside Genius and SecondHandSongs, on the dating signal,
+ * so it never delays them, the work or its dating. Never throws.
+ */
+export async function readCoverRelease(
+  identity: PrimaryIdentity,
+  album: string | null | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    const { releases } = await browseRecordingReleases(identity.recording.mbid, 1, signal);
+    identity.coverRelease = pickCoverRelease(releases, album);
+  } catch (error) {
+    identity.coverReleaseError = describeError(error);
   }
 }
 
@@ -1020,7 +1031,13 @@ async function collectWithin(
   };
 
   const results = await Promise.all([
-    settle("musicbrainz", () => musicBrainzRelationships(base, run)),
+    // Without Discogs, the release that stands for the recording is read alongside the others.
+    settle("musicbrainz", async () => {
+      if (identity && !discogsConfigured()) {
+        await readCoverRelease(identity, track.album, datingSignal);
+      }
+      return musicBrainzRelationships(base, run);
+    }),
     settle("discogs", async () => discogs()),
     settle("genius", async () => genius()),
     settle("secondhandsongs", async () =>

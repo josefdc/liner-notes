@@ -24,7 +24,7 @@ const RELEASE_PATH =
 
 /**
  * The MusicBrainz release MBID of a Cover Art Archive image link
- * (https://coverartarchive.org/release/<mbid>/front-250), or null for any other URL: another
+ * (https://coverartarchive.org/release/<mbid>/front-500), or null for any other URL: another
  * host (matched exactly), plain http, a port or credentials, or a path that is not a release's.
  */
 export function archiveReleaseOf(url: string | null | undefined): string | null {
@@ -104,14 +104,17 @@ export function coverLabels(
   if (!mbid) return { alt: shown ? `Cover of ${shown}` : 'Album cover', credit: null };
   const href = archiveReleasePage(mbid);
   const release = releaseTitleOf(evidence, mbid);
-  if (release && comparable(release) !== comparable(shown)) {
-    return {
-      alt: `Cover of ${release}`,
-      credit: { text: `Cover: ${release} · Cover Art Archive`, href },
-    };
-  }
-  return {
-    alt: release ? `Cover of ${shown}` : 'Cover from the Cover Art Archive',
+  const named = (title: string) => ({
+    alt: `Cover of ${title}`,
+    credit: { text: `Cover: ${title} · Cover Art Archive`, href },
+  });
+  const unnamed = {
+    alt: 'Cover from the Cover Art Archive',
     credit: { text: 'Cover: Cover Art Archive', href },
   };
+  if (!release) return unnamed;
+  // No album shown: the release is named when its title has letters or digits to name it by.
+  if (shown === '') return comparable(release) === '' ? unnamed : named(release);
+  if (comparable(release) !== comparable(shown)) return named(release);
+  return { alt: `Cover of ${shown}`, credit: unnamed.credit };
 }

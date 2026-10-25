@@ -34,13 +34,14 @@ interface AlbumCoverProps {
   album: string | null | undefined;
   /** The result's evidence pack: it names the release a Cover Art Archive cover is of. */
   evidence?: unknown;
-  /** Classes of the square that holds the image or the notice (its size and position). */
-  frameClassName: string;
+  /** Classes of the square that holds the image or the notice, as wide as the figure. */
+  frameClassName?: string;
   /** Classes the image and the notice share (corners, shadow, state). */
   surfaceClassName?: string;
   iconSize?: number;
   /** Drawn inside the frame, behind the image (a glow). */
   children?: React.ReactNode;
+  /** Classes of the figure: its width (the cover's) and position. The credit wraps within it. */
   className?: string;
 }
 
@@ -54,7 +55,7 @@ export function AlbumCover({
   cover,
   album,
   evidence,
-  frameClassName,
+  frameClassName = '',
   surfaceClassName = '',
   iconSize = 32,
   children,
@@ -66,7 +67,7 @@ export function AlbumCover({
       className={`flex flex-col items-center gap-(--space-sm) ${className}`}
       data-cover={cover.src ? 'shown' : 'not-available'}
     >
-      <div className={frameClassName}>
+      <div className={`relative w-full aspect-square ${frameClassName}`}>
         {children}
         {cover.src ? (
           <img
@@ -88,13 +89,16 @@ export function AlbumCover({
         )}
       </div>
       {cover.src && labels.credit && (
-        <figcaption className="text-chrome font-mono text-center max-w-full">
+        <figcaption className="w-full text-chrome font-mono text-center">
+          {/* At most three lines under the cover, whatever the release's title; the whole credit
+              is in the link's text and title */}
           <a
             href={labels.credit.href}
             target="_blank"
             rel="noopener noreferrer"
+            title={labels.credit.text}
             data-cover-text
-            className="text-text-secondary underline underline-offset-2 decoration-border-hover hover:text-text-primary hover:decoration-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
+            className="line-clamp-3 break-words text-text-secondary underline underline-offset-2 decoration-border-hover hover:text-text-primary hover:decoration-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
           >
             {labels.credit.text}
             <span className="sr-only"> (opens in a new tab)</span>

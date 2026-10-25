@@ -6,7 +6,7 @@ import { AlbumCover, CoverThumb, useAlbumCover } from './AlbumCover';
 afterEach(cleanup);
 
 const ARCHIVE =
-  'https://coverartarchive.org/release/ae103b0a-b932-4009-acb6-388db1cf890b/front-250';
+  'https://coverartarchive.org/release/ae103b0a-b932-4009-acb6-388db1cf890b/front-500';
 const OTHER = 'https://i.scdn.co/image/ab67616d0000b273';
 
 /** The cover alone, without the blurred background a page draws behind it. */

@@ -323,8 +323,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               cover={cover}
               album={trackData.album}
               evidence={trackData.evidence}
-              className="flex-shrink-0"
-              frameClassName="relative w-32 h-32 md:w-40 md:h-40 group/cover"
+              className="flex-shrink-0 w-32 md:w-40"
+              frameClassName="group/cover"
               surfaceClassName="rounded-md shadow-2xl"
               iconSize={40}
             >

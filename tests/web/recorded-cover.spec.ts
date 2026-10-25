@@ -14,10 +14,10 @@ import {
 // the page says the cover is not available instead of showing a stand-in image.
 
 const RELEASE = "ae103b0a-b932-4009-acb6-388db1cf890b";
-const ARCHIVE = `https://coverartarchive.org/release/${RELEASE}/front-250`;
+const ARCHIVE = `https://coverartarchive.org/release/${RELEASE}/front-500`;
 const ARCHIVE_PAGE = `https://coverartarchive.org/release/${RELEASE}`;
 const COVER_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="250" height="250"><rect width="100%" height="100%" fill="#336699"/></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500"><rect width="100%" height="100%" fill="#336699"/></svg>';
 
 /** The recorded result, with `coverUrl` as given. */
 function recorded(coverUrl = ARCHIVE) {
@@ -178,4 +178,87 @@ test("suggestions and the track picker show a placeholder, never a broken image,
   await expect.poll(() => archiveImages(page)).toEqual([]);
   expect(await brokenImages(page)).toEqual([]);
   await expect(page.locator("[data-cover-placeholder]")).toHaveCount(interrupt.candidates.length);
+});
+
+/** The recorded result whose release, named in the credit, is titled `title`. */
+function releasedAs(title: string) {
+  const fixture = recorded();
+  const complete = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  complete.data.evidence[0].title = `${title} — MusicBrainz release`;
+  return fixture;
+}
+
+/**
+ * The cover's figure and what sits beside it: their widths, the credit's height, and any
+ * element of the row that reaches past the row's box (the hero clips what overflows).
+ */
+const coverLayout = (page: Page) =>
+  page.locator("figure[data-cover]").evaluate((figure) => {
+    const row = figure.parentElement as HTMLElement;
+    const box = row.getBoundingClientRect();
+    const outside = [...row.querySelectorAll("*")]
+      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+      .filter(
+        ({ rect }) =>
+          rect.width > 0 && (rect.left < box.left - 0.5 || rect.right > box.right + 0.5),
+      )
+      .map(
+        ({ element }) => `${element.tagName.toLowerCase()} ${element.textContent?.slice(0, 30)}`,
+      );
+    const frame = figure.firstElementChild as HTMLElement;
+    const caption = figure.querySelector("figcaption");
+    const info = figure.nextElementSibling as HTMLElement | null;
+    return {
+      figure: Math.round(figure.getBoundingClientRect().width),
+      frame: Math.round(frame.getBoundingClientRect().width),
+      info: info ? Math.round(info.getBoundingClientRect().width) : null,
+      caption: caption ? Math.round(caption.getBoundingClientRect().height) : 0,
+      overflow: row.scrollWidth > row.clientWidth + 1,
+      outside,
+    };
+  });
+
+const ZIGGY = "The Rise and Fall of Ziggy Stardust and the Spiders from Mars";
+// 166 characters, ending in a 37-character word that has to break.
+const LONG = `${"A Very Long Release Title That Keeps Going ".repeat(3)}Supercalifragilisticexpialidocious!!?`;
+
+test("a long release title wraps under the cover and never squeezes or overflows the hero", async ({
+  page,
+}) => {
+  expect(LONG).toHaveLength(166);
+  await archive(page, 200);
+  await page.setViewportSize({ width: 1024, height: 900 });
+  // The credit of a release titled as the album shown: the width the track info has.
+  await useMockApi(page, releasedAs("Test Album"));
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  const plain = await coverLayout(page);
+  expect(plain).toMatchObject({ figure: 160, frame: 160, overflow: false, outside: [] });
+
+  for (const title of [ZIGGY, LONG]) {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await archive(page, 200);
+    await useMockApi(page, releasedAs(title));
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+    await expect(credit(page)).toContainText(title.slice(0, 20));
+    const dashboard = await coverLayout(page);
+    expect(dashboard, title).toMatchObject({
+      figure: 160,
+      frame: 160,
+      info: plain.info,
+      overflow: false,
+      outside: [],
+    });
+    // At most three lines of 14 px.
+    expect(dashboard.caption, title).toBeLessThanOrEqual(42);
+    // The whole credit stays in the link's title.
+    await expect(credit(page)).toHaveAttribute("title", `Cover: ${title} · Cover Art Archive`);
+
+    await openPlayer(page);
+    const player = await coverLayout(page);
+    // lg (1024 px): a 320 px cover, the credit within it.
+    expect(player, title).toMatchObject({ figure: 320, frame: 320, overflow: false, outside: [] });
+    expect(player.caption, title).toBeLessThanOrEqual(42);
+  }
 });

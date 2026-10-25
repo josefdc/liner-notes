@@ -13,7 +13,8 @@ import type { Evidence, ResearchAction, SourceError, SourceId } from "@liner-not
 import type { LlmMessage } from "../llm/invoke.js";
 import { type EvidenceScope, evidenceScope } from "../sources/records.js";
 import { followUpChoices, type RanStep } from "./research/plan.js";
-import type { AudioFeatures, ResearchData } from "./state.js";
+import { loudnessDbfs, measuredAudioFields, moodScore } from "./finalize.js";
+import type { AudioMeasurement, ResearchData } from "./state.js";
 
 // =============================================================================
 // Untrusted text
@@ -167,24 +168,32 @@ export interface PromptRecording {
 export interface ComposerPromptInput {
   track: PromptTrack;
   recording: PromptRecording | null;
-  audio: AudioFeatures | null;
+  audio: AudioMeasurement | null;
   evidence: readonly Evidence[];
   research: ResearchData | null;
   /** The sources the run could not read. */
   sourceErrors?: readonly SourceError[];
 }
 
-/** The measured values the model may read (never write), or null when nothing was measured. */
-function measuredForPrompt(audio: AudioFeatures | null) {
-  if (!audio) return null;
+/**
+ * The measured values the model may read (never write), or null when nothing was measured: the
+ * result's own copies (finalize.ts), the loudness in dBFS RMS (no 0..1 energy: it saturates on
+ * loud masters) and the instrumental head's score.
+ */
+function measuredForPrompt(measurement: AudioMeasurement | null) {
+  const fields = measuredAudioFields(measurement);
+  const rmsMean = fields.audio?.gate.passed ? fields.audio.loudness?.rmsMean : undefined;
+  const level = rmsMean != null ? loudnessDbfs(rmsMean) : null;
   const values = {
-    tempoBpm: audio.bpm,
-    key: audio.key,
-    energy: audio.energy,
-    valence: audio.valence,
-    danceability: audio.danceability,
-    acousticness: audio.acousticness,
-    instrumentalness: audio.instrumentalness,
+    tempoBpm: fields.bpm,
+    key: fields.key,
+    loudnessDbfsRms: level !== null ? Math.round(level * 10) / 10 : null,
+    valence: fields.valence ?? null,
+    danceability: fields.danceability ?? null,
+    acousticness: fields.acousticness ?? null,
+    instrumentalness: fields.audio?.gate.passed
+      ? moodScore(fields.audio.fingerprint?.moods?.instrumental)
+      : null,
   };
   return Object.values(values).every((v) => v === null) ? null : values;
 }

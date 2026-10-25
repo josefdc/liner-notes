@@ -2,10 +2,15 @@
  * Engineer Node — Audio Analysis
  * Runs in parallel with Historian
  *
- * Every value it returns is measured by the audio analysis service or null. When no
- * measurement is possible the features carry `unavailableReason`, and nothing is cached.
- * Cached rows are only reused when they carry the `measured` marker and say how the measured
- * clip was matched to the track; older rows are measured again.
+ * It leaves the audio service's measurement for the composer: the AudioFeatures v2 block as the
+ * service sent it, or why there is none (`unavailableReason`). It derives no value itself: the
+ * result's copies come from the block in finalize.ts. Nothing is cached without a measurement.
+ *
+ * The audio cache is read first, by the track's keys and the analyzer version the service reports
+ * on /health (store/measuredAudio.ts): a measurement by another analyzer version is a miss, and
+ * when the service does not say its version the cache is not read and the track is measured. A
+ * measurement with a tempo and a key is cached under `isrc:<ISRC>` when its clip was found by the
+ * ISRC, and under `spotify:<id>` otherwise.
  *
  * The clip is a preview of the chosen recording only (sources/audio.ts resolvePreview). The node
  * writes it for the player (`previewUrl`, for this run only: it is signed and expires), and how
@@ -20,81 +25,84 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   analyzeAudioPreview,
   type AudioAnalysisResult,
+  audioServiceVersion,
   isAllowedPreviewUrl,
   type PreviewLookupError,
   type PreviewSourceMatch,
   resolvePreview,
   type TrackPreviewRequest,
 } from "../../sources/audio.js";
-import { getCache } from "../../store/cache.js";
-import { isMatchedMeasurement } from "../../store/measuredAudio.js";
-import type { SonicAgentStateType, AudioFeatures, AudioUnavailableReason } from "../state.js";
+import { type CachedAudio, getCache, type SonicCache } from "../../store/cache.js";
+import { audioLookupKeys, audioTrackKey } from "../../store/measuredAudio.js";
+import type { AudioMeasurement, AudioUnavailableReason, SonicAgentStateType } from "../state.js";
 import { isAbortError } from "../errors.js";
+import { measuredAudioFields } from "../finalize.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import { logger } from "../../logger.js";
 
 const log = logger("Engineer");
 
-function unavailableFeatures(reason: AudioUnavailableReason, detail?: string): AudioFeatures {
+function unavailableMeasurement(reason: AudioUnavailableReason, detail?: string): AudioMeasurement {
   return {
-    bpm: null,
-    key: null,
-    energy: null,
-    valence: null,
-    danceability: null,
-    acousticness: null,
-    instrumentalness: null,
-    confidence: "low",
-    keyMoments: [],
+    audio: null,
     unavailableReason: reason,
-    unavailableDetail: detail,
+    ...(detail ? { unavailableDetail: detail } : {}),
   };
 }
 
-/** Builds AudioFeatures from an analysis result, keeping only measured values. */
-export function toAudioFeatures(analysis: AudioAnalysisResult): AudioFeatures {
-  if (analysis.source !== "analyzed") {
-    return unavailableFeatures(analysis.reason ?? "analysis_failed", analysis.error);
+/**
+ * The measurement in an analysis result: the service's v2 block with how its clip was matched,
+ * or the reason there is none. Nothing else of the result is read.
+ */
+export function toAudioMeasurement(analysis: AudioAnalysisResult): AudioMeasurement {
+  if (analysis.source !== "analyzed" || !analysis.audio) {
+    return unavailableMeasurement(
+      analysis.reason ?? "analysis_failed",
+      analysis.error ?? (analysis.source === "analyzed" ? "The analysis carried no v2 block" : ""),
+    );
   }
-
-  // A key is a pitch class plus a mode; with either missing there is no key.
-  const key = analysis.key && analysis.mode ? `${analysis.key} ${analysis.mode}` : null;
-  const features: AudioFeatures = {
-    bpm: analysis.bpm ?? null,
-    key,
-    energy: analysis.energy ?? null,
-    valence: analysis.valence ?? null,
-    danceability: analysis.danceability ?? null,
-    acousticness: analysis.acousticness ?? null,
-    instrumentalness: analysis.instrumentalness ?? null,
-    confidence: "low",
-    keyMoments: analysis.keyMoments || [],
+  return {
+    audio: analysis.audio,
+    ...(analysis.previewMatch ? { previewMatch: analysis.previewMatch } : {}),
     ...(analysis.outOfRange?.length ? { outOfRange: analysis.outOfRange } : {}),
   };
+}
 
-  if (features.bpm == null || features.key == null) {
-    const missing = [features.bpm == null && "tempo", features.key == null && "key"]
-      .filter(Boolean)
-      .join(" and ");
+/** What a measurement says, for status lines: "116 BPM // D Minor" or what is missing. */
+function measuredSummary(measurement: AudioMeasurement): {
+  measured: boolean;
+  text: string;
+  complete: boolean;
+} {
+  const fields = measuredAudioFields(measurement);
+  if (fields.audioSource === "analyzed") {
     return {
-      ...features,
-      unavailableReason: "not_detected",
-      unavailableDetail: `The analysis found no ${missing}`,
+      measured: true,
+      text: `${fields.bpm} BPM // ${fields.key}`,
+      complete: fields.audioConfidence === "high",
     };
   }
-
-  const complete =
-    features.energy != null &&
-    features.valence != null &&
-    features.danceability != null &&
-    features.acousticness != null &&
-    features.instrumentalness != null;
+  const reason = fields.audioUnavailableReason ?? "not_run";
+  const audio = fields.audio;
+  if (audio && !audio.gate.passed) {
+    return {
+      measured: false,
+      text: `The analysis measured nothing on the preview (${audio.gate.reason ?? "gate"}) (${reason})`,
+      complete: false,
+    };
+  }
+  if (audio) {
+    const missing = [!audio.tempo && "tempo", !audio.key && "key"].filter(Boolean).join(" and ");
+    return {
+      measured: false,
+      text: `The analysis found no ${missing} (${reason})`,
+      complete: false,
+    };
+  }
   return {
-    ...features,
-    confidence: complete ? "high" : "low",
-    measured: true,
-    analyzer: "audio-service",
-    ...(analysis.previewMatch ? { previewMatch: analysis.previewMatch } : {}),
+    measured: false,
+    text: `Audio not measured (${reason}): BPM and key unavailable`,
+    complete: false,
   };
 }
 
@@ -148,24 +156,31 @@ export async function engineerNode(
   }
 
   const writer = config.writer;
+  const track = state.spotifyData;
+  const request = previewRequest(state);
 
-  // Check persistent audio cache first. Rows without the measured marker, or that do not say
-  // how their clip was matched, are ignored.
-  let cachedAudio: AudioFeatures | null = null;
+  // The audio cache first, by the track's keys and the analyzer version the service reports.
+  // Without that version (the service does not answer) the cache is not read: a measurement of
+  // another version must not be served.
+  let cache: SonicCache | null = null;
   try {
-    cachedAudio = getCache().getAudio(state.spotifyData.id);
+    cache = getCache();
   } catch {
     // Cache not available — proceed with fresh analysis
   }
-  if (cachedAudio && !isMatchedMeasurement(cachedAudio)) {
-    log.info(`Ignoring unmarked cached audio for: ${state.spotifyData.title}`);
+  let cached: CachedAudio | null = null;
+  if (cache) {
+    const version = await audioServiceVersion(config.signal);
+    if (version) cached = cache.getAudio(audioLookupKeys(track.id, request.isrc), version);
+    else log.info("The audio service did not say its analyzer version; the cache is not read");
   }
-  if (isMatchedMeasurement(cachedAudio)) {
-    log.info(`Cache hit for: ${state.spotifyData.title}`);
+  if (cached) {
+    const summary = measuredSummary(cached).text;
+    log.info(`Cache hit for: ${track.title}`);
     writer?.({
       type: "status",
       code: "AUDIO-COMPLETE",
-      message: `Audio cache hit: ${cachedAudio.bpm} BPM // ${cachedAudio.key}`,
+      message: `Audio cache hit: ${summary}`,
       node: "engineer",
       timestamp: timestampOf(runtime),
     });
@@ -173,7 +188,7 @@ export async function engineerNode(
     let previewUrl: string | null = null;
     let lookupError: PreviewLookupError | undefined;
     try {
-      const fresh = await resolvePreview(previewRequest(state), config.signal);
+      const fresh = await resolvePreview(request, config.signal);
       previewUrl =
         fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null;
       lookupError = fresh.sourceError;
@@ -182,11 +197,11 @@ export async function engineerNode(
       log.warn("Could not look up a preview", { err: error });
     }
     return {
-      audioFeatures: cachedAudio,
-      preview: previewProvenance(cachedAudio.previewMatch),
+      audioFeatures: cached,
+      preview: previewProvenance(cached.previewMatch),
       previewUrl,
       ...lookupErrors(lookupError),
-      statusMessages: [`🎵 Audio (cached): ${cachedAudio.bpm} BPM, ${cachedAudio.key}`],
+      statusMessages: [`🎵 Audio (cached): ${summary.replace(" // ", ", ")}`],
     };
   }
 
@@ -198,81 +213,80 @@ export async function engineerNode(
     timestamp: timestampOf(runtime),
   });
 
-  log.info(`Analyzing: ${state.spotifyData.title}`);
+  log.info(`Analyzing: ${track.title}`);
 
-  let audioFeatures: AudioFeatures;
+  let measurement: AudioMeasurement;
   let analysis: AudioAnalysisResult | null = null;
   try {
     // analyzeAudioPreview reports failures in its result (source "unavailable") instead of throwing.
     // The run's abort signal stops the analysis when the client leaves.
     config.signal?.throwIfAborted();
-    const { spotifyPreviewUrl, ...track } = previewRequest(state);
+    const { spotifyPreviewUrl, ...trackRequest } = request;
     const analysisResult = await analyzeAudioPreview.invoke(
-      { ...track, previewUrl: spotifyPreviewUrl },
+      { ...trackRequest, previewUrl: spotifyPreviewUrl },
       { signal: config.signal },
     );
     analysis = JSON.parse(analysisResult) as AudioAnalysisResult;
-    audioFeatures = toAudioFeatures(analysis);
+    measurement = toAudioMeasurement(analysis);
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     log.error(`Error: ${message}`);
-    audioFeatures = unavailableFeatures("analysis_failed", message);
+    measurement = unavailableMeasurement("analysis_failed", message);
   }
   // The clip for the player, and how it was matched when the service measured it.
   const previewOut = {
-    preview: analysis?.source === "analyzed" ? previewProvenance(analysis.previewMatch) : null,
+    preview: measurement.audio ? previewProvenance(measurement.previewMatch) : null,
     previewUrl: analysis?.previewUrl ?? null,
     ...lookupErrors(analysis?.previewSourceError),
   };
 
-  if (audioFeatures.unavailableReason) {
-    const reason = audioFeatures.unavailableReason;
-    // Say what is missing: "not_detected" can leave a measured tempo without a key, or the
-    // reverse; the other reasons mean nothing was measured.
-    const summary =
-      reason === "not_detected"
-        ? `${audioFeatures.unavailableDetail ?? "The analysis found no tempo or key"} (${reason})`
-        : `Audio not measured (${reason}): BPM and key unavailable`;
+  const summary = measuredSummary(measurement);
+  if (!summary.measured) {
     writer?.({
       type: "status",
       code: "AUDIO-ERROR",
-      message: summary,
+      message: summary.text,
       node: "engineer",
       timestamp: timestampOf(runtime),
     });
-    log.info(summary);
+    log.info(summary.text);
     return {
-      audioFeatures,
+      audioFeatures: measurement,
       ...previewOut,
-      statusMessages: [`⚠️ ${summary}`],
+      statusMessages: [`⚠️ ${summary.text}`],
     };
   }
 
-  // Only measurements are cached. A failed write (e.g. a column that does not accept null
-  // energy yet) is logged and the run continues; nothing reports the result as cached.
-  // Nothing is cached for a cancelled run.
+  // Only measurements with a tempo and a key are cached, under the key their clip's match
+  // allows. A failed write is logged and the run continues; nothing reports the result as
+  // cached. Nothing is cached for a cancelled run.
   config.signal?.throwIfAborted();
-  try {
-    getCache().putAudio(state.spotifyData.id, audioFeatures);
-  } catch (error) {
-    log.warn("Could not cache audio", { err: error });
+  if (cache && measurement.previewMatch) {
+    try {
+      cache.putAudio(
+        audioTrackKey(measurement.previewMatch, track.id, request.isrc),
+        track.id,
+        measurement,
+      );
+    } catch (error) {
+      log.warn("Could not cache audio", { err: error });
+    }
   }
 
-  const partial =
-    audioFeatures.confidence === "high" ? "" : " (some perceptual features not measured)";
+  const partial = summary.complete ? "" : " (some perceptual features not measured)";
   writer?.({
     type: "status",
     code: "AUDIO-COMPLETE",
-    message: `Frequency analysis: ${audioFeatures.bpm} BPM // ${audioFeatures.key}${partial}`,
+    message: `Frequency analysis: ${summary.text}${partial}`,
     node: "engineer",
     timestamp: timestampOf(runtime),
   });
-  log.info(`Analysis complete: ${audioFeatures.bpm} BPM, ${audioFeatures.key}`);
+  log.info(`Analysis complete: ${summary.text}`);
 
   return {
-    audioFeatures,
+    audioFeatures: measurement,
     ...previewOut,
-    statusMessages: [`🎵 Audio (measured): ${audioFeatures.bpm} BPM, ${audioFeatures.key}`],
+    statusMessages: [`🎵 Audio (measured): ${summary.text.replace(" // ", ", ")}`],
   };
 }

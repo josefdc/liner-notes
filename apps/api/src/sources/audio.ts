@@ -1,18 +1,18 @@
 /**
  * Audio Analysis Tool for LangGraph Agent
  *
- * Measures from a 30-second preview clip:
- * - BPM (tempo)
- * - Musical key and mode
- * - Energy level
- * - Perceptual features (valence, danceability, ...) when the Essentia models are installed
+ * Measures a 30-second preview clip with the audio service, which answers with the contract's
+ * AudioFeatures v2 block (`v2`): tempo, key, loudness, beats, energy contour, sections and key
+ * moments from the signal, and model scores (styles, tags, mood heads) when the Essentia models
+ * are loaded. Only that block is read. The v1 fields the service still sends next to it (bpm,
+ * key, mode, energy, ...) are ignored, and an answer without a readable block is no measurement.
  *
  * The clip is a preview of the chosen recording only (see resolvePreview): the Deezer entry for
  * its ISRC, Spotify's own clip of the chosen track, or a Deezer search result that strictly
  * matches it. Never another recording's clip: with no such preview nothing is measured.
  * Calls the Python audio analysis service for the measurement. When there is no preview or
- * the service cannot measure it, the result has source "unavailable", null values and a
- * reason; nothing is estimated.
+ * the service cannot measure it, the result has source "unavailable", no block and a reason;
+ * nothing is estimated.
  *
  * Preview URLs are signed and expire within minutes: they are returned for the run's player,
  * never logged.
@@ -21,6 +21,12 @@
  */
 
 import { tool } from "@langchain/core/tools";
+import {
+  type AudioFeatures,
+  AudioFeatures as AudioFeaturesSchema,
+  audioFeaturesIssues,
+  type ModelScore,
+} from "@liner-notes/contract";
 import { z } from "zod";
 
 import {
@@ -41,13 +47,6 @@ const log = logger("Audio");
 // =============================================================================
 // TypeScript Interfaces
 // =============================================================================
-
-export interface KeyMoment {
-  time: number; // Time in seconds
-  type: "energy_peak" | "energy_drop" | "onset" | "harmonic_change" | "silence";
-  intensity: number; // 0-1 scale
-  description: string;
-}
 
 /**
  * How the run's preview clip was matched to the chosen track: a Deezer match (see DeezerMatch),
@@ -71,21 +70,16 @@ export type PreviewResolution = (
   | { previewUrl: null; match: null; detail: string }
 ) & { sourceError?: PreviewLookupError };
 
-/** Result of analyze_audio_preview. Every value is measured or null. */
+/** Result of analyze_audio_preview: the service's v2 block, or why there is none. */
 export interface AudioAnalysisResult {
+  /** "analyzed" exactly when `audio` holds the service's block. */
   source: "analyzed" | "unavailable";
-  bpm: number | null;
-  key: string | null;
-  mode: string | null;
-  energy: number | null;
-  duration?: number | null;
-  keyMoments?: KeyMoment[];
-  // Perceptual features from Essentia (null when the models are unavailable)
-  valence?: number | null;
-  danceability?: number | null;
-  acousticness?: number | null;
-  instrumentalness?: number | null;
-  /** Fields the service returned outside their valid range (reported as null) */
+  /**
+   * The AudioFeatures v2 block as the service measured it (its gate may say it measured
+   * nothing: silence, noise, too short); null when there is none.
+   */
+  audio: AudioFeatures | null;
+  /** Mood heads the service returned outside their range; they are null in `audio`. */
   outOfRange?: string[];
   /** Set when source is "unavailable" */
   reason?: AudioUnavailableReason;
@@ -100,23 +94,6 @@ export interface AudioAnalysisResult {
   previewMatch?: PreviewSourceMatch | null;
   /** Set when Deezer could not be read while the clip was looked up. */
   previewSourceError?: PreviewLookupError;
-}
-
-// What the service may return. It sends null bpm when no tempo is found and null key/mode
-// for unpitched audio; any field may also be missing in older service versions.
-interface AudioServiceResponse {
-  bpm?: number | null;
-  key?: string | null;
-  mode?: string | null;
-  energy?: number | null;
-  duration?: number | null;
-  source?: string;
-  keyMoments?: KeyMoment[];
-  // Perceptual features from Essentia (present when models are available)
-  valence?: number | null;
-  danceability?: number | null;
-  acousticness?: number | null;
-  instrumentalness?: number | null;
 }
 
 // =============================================================================
@@ -157,42 +134,77 @@ export function isAllowedPreviewUrl(previewUrl: string): boolean {
   return PREVIEW_HOSTS.has(host) || host.endsWith(PREVIEW_HOST_SUFFIX);
 }
 
-/** A measured tempo: a finite number above zero, else null. */
-function measuredBpm(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
-}
-
-/** A finite number, else null. */
-function measuredNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-/** A non-empty string, else null. */
-function measuredText(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-/** "Major" or "Minor" (any case), else null. */
-function measuredMode(value: unknown): "Major" | "Minor" | null {
-  const text = measuredText(value)?.toLowerCase();
-  return text === "major" ? "Major" : text === "minor" ? "Minor" : null;
-}
-
 function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnalysisResult {
-  return {
-    source: "unavailable",
-    bpm: null,
-    key: null,
-    mode: null,
-    energy: null,
-    keyMoments: [],
-    valence: null,
-    danceability: null,
-    acousticness: null,
-    instrumentalness: null,
-    reason,
-    error,
-  };
+  return { source: "unavailable", audio: null, reason, error };
+}
+
+const MOOD_HEADS = ["danceability", "acoustic", "instrumental", "valence", "arousal"] as const;
+
+/** True when a mood head's output is a finite number inside the range it states. */
+function withinRange(score: ModelScore): boolean {
+  const [low, high] = score.range;
+  return (
+    [score.value, low, high].every(Number.isFinite) &&
+    low <= high &&
+    score.value >= low &&
+    score.value <= high
+  );
+}
+
+/** What the service's answer measured: its v2 block, or why it cannot be used. */
+export type ServiceMeasurement =
+  | { audio: AudioFeatures; outOfRange: string[] }
+  | { audio: null; error: string };
+
+/**
+ * The v2 block of an /analyze answer, as the contract reads it. Nothing else of the answer is
+ * read: an answer with only the v1 fields (an older service), a block of another version, or
+ * one that breaks the contract's rules (a gate that did not pass with values set) is no
+ * measurement, with the reason. A mood head outside its own range is dropped (null) and named in
+ * `outOfRange`; the rest of the block is kept.
+ */
+export function readServiceMeasurement(answer: unknown): ServiceMeasurement {
+  const block =
+    answer !== null && typeof answer === "object" ? (answer as { v2?: unknown }).v2 : undefined;
+  if (block == null) {
+    return {
+      audio: null,
+      error: "The audio service sent no v2 measurement (an older service sends only v1 fields)",
+    };
+  }
+  const parsed = AudioFeaturesSchema.safeParse(block);
+  if (!parsed.success) {
+    const where = parsed.error.issues
+      .slice(0, 3)
+      .map((issue) => issue.path.join(".") || "(block)")
+      .join(", ");
+    return {
+      audio: null,
+      error: `The audio service's v2 block does not fit the contract (${where})`,
+    };
+  }
+  const audio = parsed.data;
+  const outOfRange: string[] = [];
+  const moods = audio.fingerprint?.moods;
+  if (audio.fingerprint && moods) {
+    const kept = { ...moods };
+    for (const head of MOOD_HEADS) {
+      const score = moods[head];
+      if (score && !withinRange(score)) {
+        kept[head] = null;
+        outOfRange.push(head);
+      }
+    }
+    if (outOfRange.length > 0) audio.fingerprint = { ...audio.fingerprint, moods: kept };
+  }
+  const issues = audioFeaturesIssues(audio);
+  if (issues.length > 0) {
+    return {
+      audio: null,
+      error: `The audio service's v2 block breaks the contract's rules (${issues.slice(0, 3).join("; ")})`,
+    };
+  }
+  return { audio, outOfRange };
 }
 
 // =============================================================================
@@ -283,23 +295,39 @@ export async function resolvePreview(
 // Audio Analysis Service Client
 // =============================================================================
 
-/**
- * Check if the audio analysis service is available
- */
-async function isServiceAvailable(signal: AbortSignal | undefined): Promise<boolean> {
+/** /health, as the service answers it; null when it did not answer. */
+async function readHealth(signal: AbortSignal | undefined): Promise<unknown> {
   try {
-    await fetchJson({
+    return await fetchJson<unknown>({
       source: "audio",
       url: `${audioServiceUrl()}/health`,
       timeoutMs: 5000,
       cassette: false,
       signal,
     });
-    return true;
   } catch (error) {
     if (signal?.aborted) throw error;
-    return false;
+    return null;
   }
+}
+
+/** Whether the audio analysis service answers its health check. */
+async function isServiceAvailable(signal: AbortSignal | undefined): Promise<boolean> {
+  return (await readHealth(signal)) !== null;
+}
+
+/**
+ * The analyzer version the audio service reports on /health (`analyzer_version`, e.g.
+ * "2.1.0+essentia.models-5c5c0c7f"), or null when the service does not answer or names none.
+ * The audio cache is keyed by it: a measurement by another version is not served.
+ */
+export async function audioServiceVersion(signal: AbortSignal | undefined): Promise<string | null> {
+  const health = await readHealth(signal);
+  const version =
+    health !== null && typeof health === "object"
+      ? (health as { analyzer_version?: unknown }).analyzer_version
+      : undefined;
+  return typeof version === "string" && version.trim() !== "" ? version : null;
 }
 
 /**
@@ -308,9 +336,9 @@ async function isServiceAvailable(signal: AbortSignal | undefined): Promise<bool
 async function analyzeWithService(
   previewUrl: string,
   signal: AbortSignal | undefined,
-): Promise<AudioServiceResponse> {
+): Promise<unknown> {
   try {
-    return await fetchJson<AudioServiceResponse>({
+    return await fetchJson<unknown>({
       source: "audio",
       url: `${audioServiceUrl()}/analyze`,
       method: "POST",
@@ -404,54 +432,28 @@ export const analyzeAudioPreview = tool(
 
       log.info("Calling analysis service...");
       signal?.throwIfAborted();
-      const result = await analyzeWithService(effectivePreviewUrl, signal);
+      const answer = await analyzeWithService(effectivePreviewUrl, signal);
 
-      log.info(
-        `Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
-      );
-
-      // Only a reply that says it analysed the clip is a measurement.
-      if (result.source !== "analyzed") {
-        return withPreview(
-          unavailable(
-            "analysis_failed",
-            `Service reply source is ${JSON.stringify(result.source)}`,
-          ),
-        );
+      // Only the v2 block is a measurement; missing values in it stay null, never a default.
+      const measured = readServiceMeasurement(answer);
+      if (measured.audio === null) {
+        log.warn(`No measurement in the service's answer: ${measured.error}`);
+        return withPreview(unavailable("analysis_failed", measured.error));
       }
-
-      // Missing values stay null, never 0 or a default. A key needs both a pitch class and a
-      // mode: when either is missing (e.g. unpitched audio) both are null. 0..1 scores outside
-      // that range are dropped and listed in outOfRange.
-      const outOfRange: string[] = [];
-      const unit = (name: string, value: unknown): number | null => {
-        const n = measuredNumber(value);
-        if (n === null) return null;
-        if (n < 0 || n > 1) {
-          outOfRange.push(name);
-          return null;
-        }
-        return n;
-      };
-      const keyName = measuredText(result.key);
-      const mode = measuredMode(result.mode);
-      const pitched = keyName !== null && mode !== null;
-      const measured: AudioAnalysisResult = {
+      const { audio, outOfRange } = measured;
+      log.info(
+        `Analysis complete (${audio.analyzerVersion}): ` +
+          (audio.gate.passed
+            ? `${audio.tempo ? `${audio.tempo.bpm} BPM` : "no tempo"}, ` +
+              `${audio.key ? `${audio.key.tonic} ${audio.key.mode}` : "no key"}, ` +
+              `${audio.keyMoments.length} key moments`
+            : `nothing measured (${audio.gate.reason})`),
+      );
+      return withPreview({
         source: "analyzed",
-        bpm: measuredBpm(result.bpm),
-        key: pitched ? keyName : null,
-        mode: pitched ? mode : null,
-        energy: unit("energy", result.energy),
-        duration: measuredNumber(result.duration),
-        keyMoments: Array.isArray(result.keyMoments) ? result.keyMoments : [],
-        // Scores from the Essentia models (null when the models are unavailable)
-        valence: unit("valence", result.valence),
-        danceability: unit("danceability", result.danceability),
-        acousticness: unit("acousticness", result.acousticness),
-        instrumentalness: unit("instrumentalness", result.instrumentalness),
-      };
-      if (outOfRange.length > 0) measured.outOfRange = outOfRange;
-      return withPreview(measured);
+        audio,
+        ...(outOfRange.length > 0 ? { outOfRange } : {}),
+      });
     } catch (error) {
       // A cancelled run rejects: no "analysis failed" is reported for it.
       if (signal?.aborted) throw error;
@@ -463,9 +465,9 @@ export const analyzeAudioPreview = tool(
   {
     name: "analyze_audio_preview",
     description:
-      "Measure BPM, key and energy from a preview clip of the chosen recording: the Deezer " +
+      "Measure tempo, key and loudness from a preview clip of the chosen recording: the Deezer " +
       "entry for its ISRC, Spotify's own clip, or a Deezer search result that is strictly the " +
-      "same recording. Returns null values and a reason when no measurement is possible.",
+      "same recording. Returns no measurement and a reason when none is possible.",
     schema: z.object({
       previewUrl: z
         .string()

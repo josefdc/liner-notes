@@ -20,6 +20,7 @@ import {
   sourceBlock,
 } from "./prompts.js";
 import type { ResearchData } from "./state.js";
+import { audioV2, gatedV2, measurementOf } from "./testing/measuredAudio.js";
 
 const research: ResearchData = {
   samples: ["The drums come from a break."],
@@ -33,6 +34,41 @@ const input = (title: string, year: string | null = null): ComposerPromptInput =
   audio: null,
   evidence: [],
   research,
+});
+
+describe("measured audio in the composer's prompt", () => {
+  const measuredLine = (prompt: string) =>
+    prompt.split("\n")[prompt.split("\n").indexOf(MEASURED_HEADING) + 1];
+  const MEASURED_HEADING = "Measured audio (our analysis of a preview clip; null = not measured):";
+
+  it("gives the model the result's own copies and the loudness in dBFS, to read only", () => {
+    const prompt = composerUserPrompt({
+      ...input("Ice Ice Baby"),
+      audio: measurementOf(audioV2()),
+    });
+    expect(JSON.parse(measuredLine(prompt))).toEqual({
+      tempoBpm: 116,
+      key: "D Minor",
+      loudnessDbfsRms: -14.9,
+      valence: 0.21,
+      danceability: 0.64,
+      acousticness: 0.05,
+      instrumentalness: 0.01,
+    });
+    expect(measuredLine(prompt)).not.toContain("energy");
+  });
+
+  it("says nothing was measured without a block, or with one whose gate measured nothing", () => {
+    for (const audio of [
+      null,
+      { audio: null, unavailableReason: "no_preview" as const },
+      measurementOf(gatedV2()),
+    ]) {
+      expect(measuredLine(composerUserPrompt({ ...input("Ice Ice Baby"), audio }))).toBe(
+        "(not measured)",
+      );
+    }
+  });
 });
 
 describe("literal data", () => {

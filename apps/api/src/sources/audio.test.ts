@@ -7,11 +7,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import {
   analyzeAudioPreview,
+  audioServiceVersion,
   checkAudioServiceHealth,
   isAllowedPreviewUrl,
+  readServiceMeasurement,
   resolvePreview,
 } from "./audio.js";
 import { json, never, stubFetch } from "./testing/fetchStub.js";
+import {
+  ANALYZER_VERSION,
+  audioV2,
+  gatedV2,
+  serviceAnswer,
+} from "../agent/testing/measuredAudio.js";
 
 // Every test's log lines, for the tests that check what is logged.
 let logs: CapturedLogs;
@@ -129,6 +137,116 @@ describe("audio service client", () => {
   });
 });
 
+describe("what Node reads of the service's answer: the v2 block only", () => {
+  const SERVICE = "http://audio.test:3002";
+  const CLIP = "https://p.scdn.co/mp3-preview/own";
+  const TRACK = { title: "Ice Ice Baby", artist: "Vanilla Ice", previewUrl: CLIP };
+
+  /** The service measures Spotify's own clip and answers `answer`. */
+  function service(answer: unknown, health: unknown = { status: "ok" }) {
+    return stubFetch((call) => {
+      if (call.url.startsWith("https://api.deezer.com/")) {
+        return json({ error: { code: 800, message: "no data" } });
+      }
+      if (call.url === `${SERVICE}/health`) return json(health);
+      if (call.url === `${SERVICE}/analyze`) return json(answer);
+      return undefined;
+    });
+  }
+
+  beforeEach(() => {
+    process.env.AUDIO_ANALYSIS_URL = SERVICE;
+    for (const method of ["log", "warn", "error"] as const) {
+      vi.spyOn(console, method).mockImplementation(() => {});
+    }
+  });
+  afterEach(() => {
+    delete process.env.AUDIO_ANALYSIS_URL;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("measures from the v2 block and ignores the v1 fields next to it", async () => {
+    // v1 fields that disagree with the block: none of them is read.
+    service(serviceAnswer(audioV2(), { bpm: 58, key: "C", mode: "Major", energy: 1 }));
+
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+
+    expect(data.source).toBe("analyzed");
+    expect(data.audio).toEqual(audioV2());
+    for (const v1 of ["bpm", "key", "mode", "energy", "valence", "duration"]) {
+      expect(data).not.toHaveProperty(v1);
+    }
+  });
+
+  it("measures from a v2-only answer (the service without its v1 fields)", async () => {
+    service({ v2: audioV2() });
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+    expect(data).toMatchObject({ source: "analyzed", audio: audioV2() });
+  });
+
+  it("treats an answer with only the v1 fields as no measurement, and says why", async () => {
+    const { v2: _block, ...v1Only } = serviceAnswer(audioV2());
+    service(v1Only);
+
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+
+    expect(data).toMatchObject({ source: "unavailable", reason: "analysis_failed", audio: null });
+    expect(data.error).toMatch(/no v2 measurement/);
+    expect(data).not.toHaveProperty("bpm");
+  });
+
+  it.each([
+    ["a block of another version", { ...audioV2(), version: 1 }],
+    ["a block without its window", { ...audioV2(), window: undefined }],
+    [
+      "a gate that did not pass with a tempo",
+      { ...audioV2(), gate: { passed: false, reason: "noise" } },
+    ],
+    ["a passed gate with a reason", { ...audioV2(), gate: { passed: true, reason: "noise" } }],
+  ])("treats %s as no measurement", async (_label, block) => {
+    service(serviceAnswer(null, { v2: block }));
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+    expect(data).toMatchObject({ source: "unavailable", reason: "analysis_failed", audio: null });
+    expect(data.error).toMatch(/v2 block/);
+  });
+
+  it("keeps a block whose gate measured nothing, as the service sent it", async () => {
+    service(serviceAnswer(gatedV2("silence")));
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+    expect(data).toMatchObject({ source: "analyzed", audio: gatedV2("silence") });
+  });
+
+  it("drops a mood head outside its own range and names it", () => {
+    const block = audioV2();
+    const moods = block.fingerprint!.moods!;
+    const answer = serviceAnswer({
+      ...block,
+      fingerprint: {
+        ...block.fingerprint!,
+        moods: { ...moods, valence: { ...moods.valence!, value: 9.4 } },
+      },
+    });
+
+    const read = readServiceMeasurement(answer);
+
+    expect(read.audio?.fingerprint?.moods?.valence).toBeNull();
+    expect(read.audio?.fingerprint?.moods?.danceability).toEqual(moods.danceability);
+    expect(read).toMatchObject({ outOfRange: ["valence"] });
+  });
+
+  it("reads the analyzer version the service reports on /health, or none", async () => {
+    service(null, { status: "ok", analyzer_version: ANALYZER_VERSION, models: true });
+    expect(await audioServiceVersion(undefined)).toBe(ANALYZER_VERSION);
+
+    service(null, { status: "ok" });
+    expect(await audioServiceVersion(undefined)).toBeNull();
+
+    stubFetch((call) => (call.url === `${SERVICE}/health` ? json({}, { status: 503 }) : undefined));
+    expect(await audioServiceVersion(undefined)).toBeNull();
+  });
+});
+
 describe("the chosen track's preview clip", () => {
   const SERVICE = "http://audio.test:3002";
   const ISRC_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/isrc.mp3?hdnea=exp=1~hmac=a";
@@ -161,9 +279,7 @@ describe("the chosen track's preview clip", () => {
         return json({ data: deezer.search ?? [], total: deezer.search?.length ?? 0 });
       }
       if (call.url === `${SERVICE}/health`) return json({ status: "ok" });
-      if (call.url === `${SERVICE}/analyze`) {
-        return json({ source: "analyzed", bpm: 116, key: "D", mode: "minor", energy: 0.7 });
-      }
+      if (call.url === `${SERVICE}/analyze`) return json(serviceAnswer(audioV2()));
       return undefined;
     });
   }
@@ -212,7 +328,7 @@ describe("the chosen track's preview clip", () => {
 
     expect(data).toMatchObject({
       source: "analyzed",
-      bpm: 116,
+      audio: audioV2(),
       previewUrl: SEARCH_CLIP,
       previewMatch: { provider: "deezer", method: "search", deezerId: 3, score: 1 },
     });
@@ -234,8 +350,7 @@ describe("the chosen track's preview clip", () => {
     expect(data).toMatchObject({
       source: "unavailable",
       reason: "no_preview",
-      bpm: null,
-      key: null,
+      audio: null,
       previewUrl: null,
       previewMatch: null,
     });

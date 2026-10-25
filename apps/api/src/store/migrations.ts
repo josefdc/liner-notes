@@ -20,8 +20,8 @@ import { z } from "zod";
 /**
  * What migration 3 keeps as a measurement, and how long a low-confidence one may stay cached.
  * These are copies of measuredAudio.ts as of this migration, so later changes to the live cache
- * rules cannot change what a shipped migration does. A test checks that they still match today;
- * when the live rules change on purpose, that test is updated, not these.
+ * rules cannot change what a shipped migration does. Since migration 14 the live cache holds v2
+ * blocks instead; these stay as they shipped.
  */
 const unitScoreV3 = z.number().min(0).max(1).nullable();
 const MEASURED_AUDIO_V3 = z
@@ -401,6 +401,31 @@ export const MIGRATIONS: readonly Migration[] = [
       // a miss for the enricher (searched again and written with the details), one without is
       // still served (the cover only).
       db.exec("ALTER TABLE artwork_cache ADD COLUMN track_details TEXT");
+    },
+  },
+  {
+    version: 14,
+    name: "audio_cache_by_analyzer",
+    up(db) {
+      // The audio cache holds the audio service's AudioFeatures v2 block, filed under
+      // (track key, analyzer version): the track key is `isrc:<ISRC>` for a clip matched by ISRC
+      // and `spotify:<id>` otherwise (store/measuredAudio.ts). A measurement by another analyzer
+      // version is a miss. The rows kept so far hold flat values without the block (method,
+      // confidence, window): they are dropped, never turned into a block, and those tracks are
+      // measured again.
+      db.exec(`
+        DROP TABLE audio_cache;
+        CREATE TABLE audio_cache (
+          track_key TEXT NOT NULL,
+          analyzer_version TEXT NOT NULL,
+          spotify_id TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          full_data TEXT NOT NULL,
+          created_at INTEGER DEFAULT (unixepoch()),
+          expires_at INTEGER NOT NULL,
+          PRIMARY KEY (track_key, analyzer_version)
+        );
+      `);
     },
   },
 ];

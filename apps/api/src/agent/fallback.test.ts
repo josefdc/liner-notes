@@ -18,7 +18,8 @@ vi.mock("../llm/invoke.js", async (importOriginal) => {
 
 import { createFallbackTrackData } from "./fallback.js";
 import { TrackDataSchema } from "./schema.js";
-import type { AudioFeatures, ResearchData, SonicAgentStateType, SpotifyData } from "./state.js";
+import type { AudioMeasurement, ResearchData, SonicAgentStateType, SpotifyData } from "./state.js";
+import { audioV2, measurementOf, signalOnlyV2 } from "./testing/measuredAudio.js";
 
 const spotify: SpotifyData = {
   id: "x",
@@ -41,7 +42,7 @@ const emptyResearch: ResearchData = {
 };
 
 function build(
-  audioFeatures: AudioFeatures | null,
+  audioFeatures: AudioMeasurement | null,
   researchData: ResearchData = emptyResearch,
   spotifyData: Partial<SpotifyData> = {},
 ) {
@@ -84,36 +85,27 @@ describe("createFallbackTrackData", () => {
   });
 
   it("describes only the audio values that were measured", async () => {
-    const td = await build({
-      bpm: 116,
-      key: "D Minor",
-      energy: 0.72,
-      valence: null,
-      danceability: null,
-      acousticness: null,
-      instrumentalness: null,
-      confidence: "low",
-    });
+    const td = await build(measurementOf(signalOnlyV2()));
 
     expect(td).toMatchObject({ bpm: 116, key: "D Minor", audioSource: "analyzed" });
+    expect(td.audio).toEqual(signalOnlyV2());
     const profile = td.factoids.find((f) => f.title === "Sonic Profile");
     expect(profile?.content).toContain("116 BPM in D Minor");
     expect(profile?.content).not.toMatch(/mood|Danceability/i);
   });
 
   it("prints the same BPM as the payload", async () => {
-    const td = await build({
-      bpm: 98.5,
-      key: "A Minor",
-      energy: null,
-      valence: null,
-      danceability: null,
-      acousticness: null,
-      instrumentalness: null,
-      confidence: "low",
-    });
-    expect(td.bpm).toBe(98.5);
-    expect(allText(td.factoids)).toContain("98.5 BPM in A Minor");
+    const td = await build(
+      measurementOf(signalOnlyV2({ tempo: { ...audioV2().tempo!, bpm: 98.4 } })),
+    );
+    expect(td.bpm).toBe(98);
+    expect(allText(td.factoids)).toContain("98 BPM in D Minor");
+  });
+
+  it("describes no tempo or key it does not have both of", async () => {
+    const td = await build(measurementOf(signalOnlyV2({ key: null })));
+    expect(td).toMatchObject({ bpm: 116, key: null, audioUnavailableReason: "not_detected" });
+    expect(allText(td.factoids)).not.toMatch(/BPM/);
   });
 
   it("leaves out the duration and the explicit flag when they are unknown", async () => {
@@ -199,23 +191,15 @@ describe("createFallbackTrackData", () => {
     expect(allText(td.factoids)).not.toContain("MODEL_FACT");
   });
 
-  it("labels audio model scores as estimates and tempo, key and energy as measured", async () => {
-    const td = await build({
-      bpm: 116,
-      key: "D Minor",
-      energy: 0.72,
-      valence: 0.2,
-      danceability: 0.64,
-      acousticness: 0.1,
-      instrumentalness: 0.01,
-      confidence: "high",
-    });
+  it("labels audio model scores as estimates, and tempo, key and level as measured", async () => {
+    const td = await build(measurementOf(audioV2()));
     const profile = td.factoids.find((f) => f.title === "Sonic Profile")?.content ?? "";
     expect(profile).toContain("116 BPM in D Minor.");
-    expect(profile).toContain("High measured energy.");
+    // The level in dBFS RMS, never a 0..1 energy that saturates on loud masters.
+    expect(profile).toContain("Measured level -14.9 dBFS RMS on the preview.");
     expect(profile).toContain("Mood (audio model estimate): dark.");
     expect(profile).toContain("Danceability score (audio model estimate): 0.64.");
-    expect(profile).not.toMatch(/%|Measured mood/);
+    expect(profile).not.toMatch(/%|Measured mood|energy/);
   });
 
   it("lists what the track samples and what samples it separately, by MusicBrainz direction", async () => {

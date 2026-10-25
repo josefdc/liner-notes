@@ -5,7 +5,10 @@
  *
  * The model writes text only. Track metadata comes from Spotify, the duration from Spotify
  * only, and measured values from the audio measurement: `ComposerOutput` has no field for any
- * of them. Every model statement is a claim of kind `inferred` until a verifier judges it.
+ * of them. The model reads the measured values as context; the result's measurement (`audio`),
+ * its copies and `run.analyzerVersion` are written by code in one last step (finalize.ts), on
+ * the composed result and on the fallback alike. Every model statement is a claim of kind
+ * `inferred` until a verifier judges it.
  *
  * On any failure of the model call (budget refused, per-run call cap, rate limit, timeout,
  * network, an incomplete, refused or invalid answer) the result is the fallback built from
@@ -15,6 +18,7 @@
 
 import { getStore, type LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
+  analysisIssues,
   type Claim,
   type ClaimAbout,
   type ComposerOutput as ComposerOutputType,
@@ -41,6 +45,7 @@ import {
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
+import { finalizeResult, type ResultDraft } from "../finalize.js";
 import {
   composerMessages,
   type PromptRecording,
@@ -49,14 +54,7 @@ import {
 } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { shownQueryMatch, storeResult } from "../storedResults.js";
-import {
-  type Factoid,
-  type Genealogy,
-  type GenealogyLink,
-  type GenealogyNode,
-  measuredAudioFields,
-  type TrackData,
-} from "../schema.js";
+import type { Factoid, Genealogy, GenealogyLink, GenealogyNode, TrackData } from "../schema.js";
 import {
   createDefaultSegments,
   type LlmCallRecord,
@@ -356,7 +354,10 @@ async function withArtwork(
   }
 }
 
-/** The fields every result takes from Spotify, the measurement and the evidence state. */
+/**
+ * The fields every result takes from Spotify and the evidence state. The audio fields are
+ * finalize.ts's (finalizeResult, the last step of every result).
+ */
 function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
   return {
     id: spotify.id,
@@ -374,7 +375,6 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     ...(typeof spotify.explicit === "boolean" ? { explicit: spotify.explicit } : {}),
     // From Spotify only, never from a model; missing when Spotify gave none.
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
-    ...measuredAudioFields(state.audioFeatures),
     // The ISRC is the one Spotify gave for the chosen track; `preview` is how the clip the audio
     // values were measured on was matched to it (none when nothing was measured). The evidence
     // is the historian's pack: records read from the sources, never model text.
@@ -411,11 +411,22 @@ function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
 /**
  * Why a result does not fit the contract's TrackAnalysis, or null when it fits. Such a result
  * is a bug: it is neither sent nor stored, since the stream would refuse it and a stored copy
- * would be served for every later search of the song.
+ * would be served for every later search of the song. A result that fits but breaks one of the
+ * contract's producer rules (`analysisIssues`) is logged: the measured copies and the run's
+ * analyzer version cannot break them (finalize.ts writes them), so such a rule is about the
+ * rest of the result.
  */
-function contractProblems(trackData: TrackData): string | null {
+function contractProblems(trackData: TrackData, runId: string): string | null {
   const checked = TrackAnalysis.safeParse(trackData);
-  if (checked.success) return null;
+  if (checked.success) {
+    const issues = analysisIssues(checked.data);
+    if (issues.length > 0) {
+      log.warn(
+        `Run ${runId}: the result breaks the contract's producer rules (${issues.slice(0, 5).join("; ")})`,
+      );
+    }
+    return null;
+  }
   return checked.error.issues
     .slice(0, 3)
     .map((issue) => `${issue.path.join(".") || "(result)"}: ${issue.message}`)
@@ -462,20 +473,25 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         mode: replayed ? "replay" : "live",
         ...(replayed ? replayedRecording(records) : { recordedAt: null, commit: null }),
         ...(replayed && { replayed: "model_answers" as const }),
-        // The result carries no AudioFeatures block (its measured values are flat fields).
+        // finalizeResult sets it to the measurement's analyzerVersion (null without one).
         analyzerVersion: null,
         fallback,
         usage: runUsage(records, runtime.llm.callsForRun(runId)),
         sourceErrors: [...state.sourceErrors, ...errors],
       };
-      const issues = runIssues(info, undefined);
+      return info;
+    };
+    /** The result with the measurement written in (finalize.ts), its run rules checked. */
+    const finalized = (draft: ResultDraft): TrackData => {
+      const result = finalizeResult(draft, state.audioFeatures);
+      const issues = result.run ? runIssues(result.run, result.audio) : [];
       if (issues.length > 0) {
         log.warn(
           `Run ${runId}: the run information breaks the contract's run rules ` +
             `(${issues.join("; ")}); record its cassettes again so they say when and where`,
         );
       }
-      return info;
+      return result;
     };
 
     status("LLM-CONNECT", "Composing the liner notes...");
@@ -485,7 +501,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const messages = composerMessages({
       track: promptTrack(spotify),
       recording: promptRecording(state.isrcRecording),
-      audio: state.audioFeatures,
+      audio: state.audioFeatures ?? null,
       evidence: state.evidence,
       research: state.researchData,
       sourceErrors: state.sourceErrors,
@@ -527,7 +543,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
     const enriched = await withArtwork(composed.genealogy, spotify.coverUrl, signal);
     const runErrors = enriched.sourceErrors;
-    const trackData: TrackData = {
+    const trackData: TrackData = finalized({
       ...baseFields(state, spotify),
       // A generic structure, not an analysis of this track
       segments: createDefaultSegments(spotify.durationMs),
@@ -537,11 +553,11 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       genealogy: enriched.genealogy,
       claims: composed.claims,
       run: runInfo(false, [call], runErrors),
-    };
+    });
 
     // A cancelled run reports nothing and stores nothing.
     signal?.throwIfAborted();
-    const problems = contractProblems(trackData);
+    const problems = contractProblems(trackData, runId);
     if (problems) return unusable(problems, [call], runErrors);
     writer?.({ type: "complete", data: trackData });
 
@@ -633,7 +649,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
       const enriched = await withArtwork(fallback.genealogy, spotify!.coverUrl, signal);
       const runErrors = enriched.sourceErrors;
-      const trackData: TrackData = {
+      const trackData: TrackData = finalized({
         ...fallback,
         ...baseFields(state, spotify!),
         genealogy: enriched.genealogy,
@@ -641,9 +657,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         modelUnavailable: true,
         modelUnavailableReason: reason,
         run: runInfo(true, [failed], runErrors),
-      };
+      });
       signal?.throwIfAborted();
-      const problems = contractProblems(trackData);
+      const problems = contractProblems(trackData, runId);
       if (problems) return unusable(problems, [failed], runErrors);
       writer?.({ type: "complete", data: trackData });
       return {

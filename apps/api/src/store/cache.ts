@@ -9,9 +9,11 @@
  * sources' errors that did not block caching. Research cached by older code has no evidence;
  * its key version is no longer read (agent/cacheKeys.ts).
  *
- * The audio cache holds measurements only. A row is served only when its stored data carries
- * the `measured` marker the engineer sets on audio service measurements; a measured row with
- * low confidence is served too, with its confidence. Writes of unmarked features are refused.
+ * The audio cache holds measurements only: the audio service's AudioFeatures v2 block with how
+ * its clip was matched, filed under (track key, analyzer version) (see measuredAudio.ts). A row
+ * is served only for the analyzer version asked for and only when it is still such a
+ * measurement; a measurement with low confidence is served too, with its confidence. Writes of
+ * anything else are refused.
  *
  * Reads return null on a database error (the caller then does the work again). Writes throw,
  * after logging, so the caller decides whether a failed write matters.
@@ -20,17 +22,18 @@
 import type Database from "better-sqlite3";
 import { Evidence, SourceError, SourceId } from "@liner-notes/contract";
 import { z } from "zod";
-import type { AudioFeatures, ResearchData } from "../agent/state.js";
+import type { ResearchData } from "../agent/state.js";
 import { logger } from "../logger.js";
 import type { IdentifiedRecording } from "../sources/identity.js";
 import {
-  isMatchedMeasurement,
-  isMeasuredAudio,
+  audioConfidence,
+  type CachedAudio,
+  cacheableAudio,
   LOW_CONFIDENCE_AUDIO_TTL_MS,
-  parseMeasuredAudio,
+  parseCachedAudio,
 } from "./measuredAudio.js";
 
-export { isMatchedMeasurement, isMeasuredAudio } from "./measuredAudio.js";
+export type { CachedAudio } from "./measuredAudio.js";
 
 const log = logger("Cache");
 
@@ -239,16 +242,14 @@ function artistList(text: string | null): string[] | null {
 
 function prepareStatements(db: Database.Database) {
   return {
-    getAudio: db.prepare<[string], { full_data: string; expires_at: number }>(
-      "SELECT full_data, expires_at FROM audio_cache WHERE spotify_id = ?",
+    getAudio: db.prepare<[string, string], { full_data: string; expires_at: number }>(
+      "SELECT full_data, expires_at FROM audio_cache WHERE track_key = ? AND analyzer_version = ?",
     ),
     putAudio: db.prepare(
-      `INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(spotify_id) DO UPDATE SET
-         bpm = excluded.bpm,
-         key_signature = excluded.key_signature,
-         energy = excluded.energy,
+      `INSERT INTO audio_cache (track_key, analyzer_version, spotify_id, confidence, full_data, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(track_key, analyzer_version) DO UPDATE SET
+         spotify_id = excluded.spotify_id,
          confidence = excluded.confidence,
          full_data = excluded.full_data,
          created_at = unixepoch(),
@@ -312,17 +313,29 @@ export class SonicCache {
   // Audio Cache
   // ---------------------------------------------------------------------------
 
-  /** A cached measurement, or null (missing, expired, unmarked or not a valid measurement). */
-  getAudio(spotifyId: string): AudioFeatures | null {
+  /**
+   * The measurement cached under the first of `trackKeys` that has one by `analyzerVersion`, or
+   * null: none, expired, measured by another analyzer version, or no longer a measurement the
+   * cache serves (measuredAudio.ts cacheableAudio).
+   */
+  getAudio(trackKeys: readonly string[], analyzerVersion: string): CachedAudio | null {
     try {
-      const row = this.stmt.getAudio.get(spotifyId);
-      if (!row || nowSec() >= row.expires_at) return null;
-
-      const features = parseMeasuredAudio(row.full_data);
-      if (!features) {
-        log.warn(`Ignoring audio row for ${spotifyId}: not a marked measurement`);
+      for (const trackKey of trackKeys) {
+        const row = this.stmt.getAudio.get(trackKey, analyzerVersion);
+        if (!row || nowSec() >= row.expires_at) continue;
+        const cached = parseCachedAudio(row.full_data);
+        if (!cached) {
+          log.warn(`Ignoring audio row for ${trackKey}: not a measurement the cache serves`);
+          continue;
+        }
+        // The row's own block must say it was measured by the version asked for.
+        if (cached.audio.analyzerVersion !== analyzerVersion) {
+          log.warn(`Ignoring audio row for ${trackKey}: filed under another analyzer version`);
+          continue;
+        }
+        return cached;
       }
-      return features;
+      return null;
     } catch (err) {
       log.error("Could not read an audio row", { err });
       return null;
@@ -330,35 +343,37 @@ export class SonicCache {
   }
 
   /**
-   * Caches a measurement. Throws on unmarked features and on database errors. A complete
-   * (high-confidence) measurement that has not expired is not replaced by a partial one; a
-   * stored row that is not a valid measurement, or does not say how its clip was matched (see
-   * isMatchedMeasurement), counts as absent and is overwritten.
+   * Caches a measurement of track `spotifyId` under `trackKey` and the analyzer version of its
+   * block. Throws on anything that is not a measurement the cache serves, and on database errors.
+   * A complete (high-confidence) measurement that has not expired is not replaced by a partial
+   * one of the same version; a stored row that is no longer a measurement counts as absent and is
+   * overwritten.
    */
-  putAudio(spotifyId: string, features: AudioFeatures, ttlMs?: number): void {
-    if (!isMeasuredAudio(features)) {
+  putAudio(trackKey: string, spotifyId: string, measurement: unknown, ttlMs?: number): void {
+    const cached = cacheableAudio(measurement);
+    if (!cached) {
       throw new TypeError(
-        "Only measured audio features (measured: true, from the audio service) can be cached",
+        "Only measurements (a v2 block with a tempo and a key, and how its clip was matched) can be cached",
       );
     }
     try {
       const now = nowSec();
-      const row = this.stmt.getAudio.get(spotifyId);
-      const stored = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
-      const existing = isMatchedMeasurement(stored) ? stored : null;
-      if (existing?.confidence === "high" && features.confidence === "low") {
-        log.info(`Keeping the complete audio row for ${spotifyId}`);
+      const version = cached.audio.analyzerVersion;
+      const confidence = audioConfidence(cached);
+      const row = this.stmt.getAudio.get(trackKey, version);
+      const existing = row && now < row.expires_at ? parseCachedAudio(row.full_data) : null;
+      if (existing && audioConfidence(existing) === "high" && confidence === "low") {
+        log.info(`Keeping the complete audio row for ${trackKey}`);
         return;
       }
 
-      const ttl = ttlMs ?? (features.confidence === "high" ? TTL_AUDIO_HIGH : TTL_AUDIO_LOW);
+      const ttl = ttlMs ?? (confidence === "high" ? TTL_AUDIO_HIGH : TTL_AUDIO_LOW);
       this.stmt.putAudio.run(
+        trackKey,
+        version,
         spotifyId,
-        features.bpm,
-        features.key,
-        features.energy,
-        features.confidence,
-        JSON.stringify(features),
+        confidence,
+        JSON.stringify(cached),
         now + Math.floor(ttl / 1000),
       );
     } catch (err) {

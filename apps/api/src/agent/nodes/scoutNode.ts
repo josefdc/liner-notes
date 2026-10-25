@@ -109,9 +109,10 @@ async function selectedTrack(
  * The track the request asked for by id (a suggestion, a genealogy node, a picker row when the
  * picker had no thread to resume). The id decides the track; how the request's text matches it
  * is still recorded, so a result whose id and text disagree (a node's id that names another
- * recording than its label) says so. A suggestion's own text matches its track exactly. The
- * request says how a picker row was picked (`pickedBy`), as a resume does. A track Spotify does
- * not have (404, or 400 for an id it does not know) is "no match".
+ * recording than its label) says so. The request says how the track was picked (`pickedBy`), as
+ * a resume does: the web sends "click" for a suggestion, whose text may still read as a partial
+ * match of its own track (a self-titled song), so that no note shows; a genealogy node sends
+ * none. A track Spotify does not have (404, or 400 for an id it does not know) is "no match".
  */
 async function requestedTrack(
   state: SonicAgentStateType,

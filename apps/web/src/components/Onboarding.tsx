@@ -377,8 +377,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
         coverUrl: candidate.coverUrl,
       });
       // The suggestion's own track is analysed, by its id: not whatever its text finds (a
-      // re-recording or a cover with the same title).
-      analyze(query, { trackId: candidate.id });
+      // re-recording or a cover with the same title). It is a deliberate click on that track,
+      // so the result does not warn that the text matched it loosely (a self-titled song, such
+      // as "Black Sabbath" by Black Sabbath, reads as a partial match of its own text).
+      analyze(query, { trackId: candidate.id, pickedBy: 'click' });
     },
     [analyze],
   );

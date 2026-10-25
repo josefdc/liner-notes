@@ -286,6 +286,23 @@ describe('useAgent track picker', () => {
     expect(lastStream().url).toContain(`&trackId=${rows[1].id}&pickedBy=countdown`);
   });
 
+  it('without a thread, ends with an error for a row that has no Spotify id', async () => {
+    const hook = startAnalysis('Hurt');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: '' });
+    analysis.send({ ...interrupt(), threadId: '' });
+    const opened = streams().length;
+
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+
+    // The ambiguous text is not searched again.
+    expect(streams()).toHaveLength(opened);
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.error).toContain('could not be found again');
+  });
+
   it('opens one resume per picker and closes the analysis stream', async () => {
     const { hook, analysis } = openPicker();
     await act(async () => {

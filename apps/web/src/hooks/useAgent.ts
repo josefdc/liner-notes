@@ -507,7 +507,12 @@ export function useAgent(): UseAgentReturn {
       if (!run.threadId) {
         // Without a thread there is nothing to resume: analyse the chosen track by its id, with
         // the text the user searched (the result says how it matches) and how the row was
-        // picked, as a resume would.
+        // picked, as a resume would. A row without a Spotify id cannot be asked for: searching
+        // the text again would only bring the same picker back.
+        if (!isSpotifyTrackId(candidate.id)) {
+          fail(run, 'The track you picked could not be found again. Please search again.');
+          return;
+        }
         await analyze(run.query || `${candidate.title} ${candidate.artist}`, {
           trackId: candidate.id,
           ...(pickedBy ? { pickedBy } : {}),

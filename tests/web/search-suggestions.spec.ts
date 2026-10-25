@@ -79,5 +79,6 @@ test("a suggestion chosen with the keyboard is analysed by its Spotify track id"
     .poll(async () =>
       (await apiRequests(page)).filter((entry) => entry.startsWith("stream /api/analyze/stream")),
     )
-    .toEqual([`stream /api/analyze/stream?query=${query}&trackId=${suggestion.id}`]);
+    // A deliberate click on that track: no note that its text matched it loosely.
+    .toEqual([`stream /api/analyze/stream?query=${query}&trackId=${suggestion.id}&pickedBy=click`]);
 });

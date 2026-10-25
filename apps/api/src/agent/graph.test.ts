@@ -43,7 +43,7 @@ const tools = vi.hoisted(() => {
       results: [{ title: "Page", url: "https://example.test/", content }],
     });
   return {
-    searchMultipleTracks: tool(() => JSON.stringify([track])),
+    spotifySearch: tool(() => JSON.stringify([track])),
     analyzeAudioPreview: tool(() =>
       JSON.stringify({ source: "unavailable", reason: "no_preview" }),
     ),
@@ -68,7 +68,7 @@ const tools = vi.hoisted(() => {
 vi.mock("../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/spotify.js")>()),
   searchTracks: async (query: string, limit: number, signal?: AbortSignal) =>
-    JSON.parse(await tools.searchMultipleTracks.invoke({ query, limit }, { signal })),
+    JSON.parse(await tools.spotifySearch.invoke({ query, limit }, { signal })),
 }));
 vi.mock("../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/audio.js")>()),
@@ -666,7 +666,7 @@ describe("the analysis graph under failure", () => {
     expect(audioSignal?.aborted).toBe(true);
     expect(hooks.putAudio).not.toHaveBeenCalled();
     expect(hooks.putResearch).not.toHaveBeenCalled();
-    const scoutOptions = tools.searchMultipleTracks.invoke.mock.calls[0] as unknown[];
+    const scoutOptions = tools.spotifySearch.invoke.mock.calls[0] as unknown[];
     expect((scoutOptions[1] as { signal?: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -757,7 +757,7 @@ describe("the analysis graph's stored results", () => {
     expect(second.threw).toBeNull();
     expect(llm.calls).toEqual([]);
     expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(1);
-    expect(tools.searchMultipleTracks.invoke).toHaveBeenCalledTimes(2);
+    expect(tools.spotifySearch.invoke).toHaveBeenCalledTimes(2);
     const served = complete(second.events)?.data;
     expect(served).toMatchObject({ id: TRACK_ID, queryMatch: "exact" });
     expect(served).not.toHaveProperty("run");
@@ -822,9 +822,9 @@ describe("the analysis graph's stored results", () => {
     const store = new InMemoryStore();
     await drive(stubModel(["done"]), { store });
     // The same text now finds another track: its result is composed, not the stored one.
-    const answer = tools.searchMultipleTracks.invoke.getMockImplementation();
+    const answer = tools.spotifySearch.invoke.getMockImplementation();
     const [track] = JSON.parse(String(await answer?.()));
-    tools.searchMultipleTracks.invoke.mockImplementationOnce(async () =>
+    tools.spotifySearch.invoke.mockImplementationOnce(async () =>
       JSON.stringify([{ ...track, id: "4Fcfwhm8oRrBvBZ8KGhteb" }]),
     );
 

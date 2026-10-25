@@ -97,17 +97,37 @@ const WHITE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640"><rect width="100%" height="100%" fill="#fff"/></svg>';
 
 /**
- * Serves every image whose URL matches `pattern` as a white square, and returns how many were
- * requested: a white-cover test checks it, so a pattern that stops matching the cover's URL fails
- * instead of measuring against no cover at all.
+ * Serves every image from `origin` as a white square. The function it returns checks, on the view
+ * about to be measured, that the white cover was requested and is drawn there: an <img> from
+ * `origin` on screen, loaded and decoded. A route that stops matching the cover's URL, or a view
+ * that stops showing the cover, then fails instead of measuring against no cover at all.
  */
-async function serveWhiteCovers(page: Page, pattern: string) {
+async function serveWhiteCover(page: Page, origin: string) {
   let served = 0;
-  await page.route(pattern, (route) => {
+  await page.route(`${origin}**`, (route) => {
     served += 1;
     return route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG });
   });
-  return () => served;
+  return async () => {
+    await expect.poll(() => served, "the white cover is requested").toBeGreaterThan(0);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            (origin) =>
+              [...document.images].filter(
+                (image) =>
+                  image.currentSrc.startsWith(origin) &&
+                  image.complete &&
+                  image.naturalWidth > 0 &&
+                  image.getClientRects().length > 0,
+              ).length,
+            origin,
+          ),
+        { message: "the white cover is drawn" },
+      )
+      .toBeGreaterThan(0);
+  };
 }
 
 /** A fixture whose result shows the white cover. */
@@ -368,16 +388,15 @@ for (const fixture of ["full-result", "missing-states"]) {
     test(`neutral badge text meets 4.5:1 on the Dashboard and the Player (${fixture}, ${cover})`, async ({
       page,
     }) => {
-      const covers = await serveWhiteCovers(page, "https://i.scdn.co/**");
+      const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
       const data = fixture === "full-result" ? explicitResult() : loadFixture(fixture);
       await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
       await page.setViewportSize({ width: 1440, height: 900 });
       await analyzeAndOpenDashboard(page, "Track");
-      if (cover !== "no cover") {
-        await expect.poll(covers, "the white cover is served").toBeGreaterThan(0);
-      }
+      if (cover !== "no cover") await whiteCoverShown();
       const dashboard = await neutralBadgeContrast(page);
       await openPlayer(page);
+      if (cover !== "no cover") await whiteCoverShown();
       const player = await neutralBadgeContrast(page);
       expect(dashboard.length).toBeGreaterThan(0);
       expect(player.length).toBeGreaterThan(0);
@@ -450,16 +469,15 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
     test(`provenance and missing-value lines meet 4.5:1 (${fixture}, ${cover})`, async ({
       page,
     }) => {
-      const covers = await serveWhiteCovers(page, "https://i.scdn.co/**");
+      const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
       const data = loadFixture(fixture);
       await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
       await page.setViewportSize({ width: 1440, height: 900 });
       await analyzeAndOpenDashboard(page, "Track");
-      if (cover !== "no cover") {
-        await expect.poll(covers, "the white cover is served").toBeGreaterThan(0);
-      }
+      if (cover !== "no cover") await whiteCoverShown();
       const dashboard = await neutralBadgeContrast(page, PROVENANCE_TEXT);
       await openPlayer(page);
+      if (cover !== "no cover") await whiteCoverShown();
       const player = await neutralBadgeContrast(page, PROVENANCE_TEXT);
       expect(dashboard.length).toBeGreaterThan(4);
       expect(player.length).toBeGreaterThan(2);
@@ -486,11 +504,11 @@ const GENEALOGY_TEXT = {
 
 for (const cover of ["no cover", "a white cover"]) {
   test(`genealogy relation, legend and link text meet 4.5:1 (${cover})`, async ({ page }) => {
-    // Three passes: the Dashboard's cards at rest, each card hovered and measured on its own
-    // (four settles and screenshots), then the Player's legend, list and link detail. Alone it
-    // takes 9-10 s; in a full parallel run on a loaded machine, 15-19 s.
+    // Three passes: the Dashboard's cards at rest, then each card hovered and measured on its own
+    // (a settle and a screenshot per card), then the Player's legend, list and link detail. In a
+    // full parallel run on a loaded machine that comes close to the default limit.
     test.slow();
-    const covers = await serveWhiteCovers(page, "https://i.scdn.co/**");
+    const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
     // Sourced and inferred relations both, so both badge styles are on the Dashboard.
     const data = loadFixture("genealogy-kinds");
     const complete = data.streams["/api/analyze/stream"].find(
@@ -514,9 +532,7 @@ for (const cover of ["no cover", "a white cover"]) {
     await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
-    if (cover !== "no cover") {
-      await expect.poll(covers, "the white cover is served").toBeGreaterThan(0);
-    }
+    if (cover !== "no cover") await whiteCoverShown();
     const dashboard = await neutralBadgeContrast(page, GENEALOGY_TEXT.dashboard);
     // A hovered card lightens behind its badge, relation and provenance: each card, hovered.
     const cards = page.getByRole("button").filter({ has: page.locator("[data-link-kind]") });
@@ -543,6 +559,7 @@ for (const cover of ["no cover", "a white cover"]) {
     }
     await page.mouse.move(0, 0);
     await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
     // The list opens over the graph; then, closed again, a focused link's detail.
     const summary = page.getByText(/^Links as a list/);
     await summary.click();
@@ -580,15 +597,13 @@ for (const cover of ["no cover", "a white cover"]) {
     // Reaching the Player's claims takes most of this test on a loaded machine; measuring their
     // eighty-odd lines adds another 5–6 s.
     test.slow();
-    const covers = await serveWhiteCovers(page, "https://i.scdn.co/**");
+    const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
     const data = loadFixture("provenance");
     await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
-    if (cover !== "no cover") {
-      await expect.poll(covers, "the white cover is served").toBeGreaterThan(0);
-    }
     await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
     await page.getByRole("button", { name: /Rejected by the verifier/ }).click();
     const measured = await neutralBadgeContrast(page, CLAIM_TEXT);
     const texts = measured.map(({ text }) => text);
@@ -619,7 +634,7 @@ for (const cover of ["no cover", "a white archive cover"]) {
   test(`album cover text meets 4.5:1 on the Dashboard and the Player (${cover})`, async ({
     page,
   }) => {
-    const covers = await serveWhiteCovers(page, "https://coverartarchive.org/**");
+    const whiteCoverShown = await serveWhiteCover(page, "https://coverartarchive.org/");
     const data = loadFixture("recorded-cover");
     if (cover === "no cover") {
       const complete = data.streams["/api/analyze/stream"].find(
@@ -630,11 +645,10 @@ for (const cover of ["no cover", "a white archive cover"]) {
     await useMockApi(page, data);
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
-    if (cover !== "no cover") {
-      await expect.poll(covers, "the white cover is served").toBeGreaterThan(0);
-    }
+    if (cover !== "no cover") await whiteCoverShown();
     const dashboard = await neutralBadgeContrast(page, "[data-cover-text]");
     await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
     await page.waitForTimeout(500);
     const player = await neutralBadgeContrast(page, "[data-cover-text]");
     const expected = cover === "no cover" ? "Cover not available" : "Cover: Cover Art Archive";

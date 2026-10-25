@@ -3,8 +3,9 @@ import { defineConfig } from "@playwright/test";
 // Browser tests run the web app alone; the API is replaced by tests/mock-sse/mock-api.js.
 // Outside the ports the dev setup uses (3000-3002 and the 31x0-31x2 worktree slots).
 const port = Number(process.env.PLAYWRIGHT_WEB_PORT ?? 3290);
-// Relative to apps/web, one per port: two runs in one checkout never rebuild each other's files.
-// Ignored by git and Docker (dist-e2e*).
+// Relative to apps/web, one per port, so runs on different ports in one checkout never empty
+// each other's build (they still both rebuild packages/contract/dist). Ignored by git and Docker
+// (dist-e2e*).
 const outDir = `dist-e2e-${port}`;
 
 export default defineConfig({
@@ -42,10 +43,11 @@ export default defineConfig({
     },
     // The build's output and any error the preview server reports go to the test log.
     stdout: "pipe",
-    url: `http://127.0.0.1:${port}`,
-    // Always start our own server: on a shared machine the port may belong to someone else,
-    // and --strictPort makes a taken port fail instead of silently testing another app.
-    reuseExistingServer: false,
+    // Ready only when this run's own preview says it listens on the port. Not `url`: Playwright
+    // would accept any server that answers there, such as another checkout's preview started
+    // while this one was building, and run the tests against it. --strictPort makes our preview
+    // exit when the port is taken, and that exit fails the run.
+    wait: { stdout: new RegExp(`Local:\\s+http://127\\.0\\.0\\.1:${port}/`) },
     timeout: 60_000,
   },
 });

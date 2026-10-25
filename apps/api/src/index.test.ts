@@ -342,12 +342,16 @@ describe("an API process stopped by SIGTERM", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     api.process.kill("SIGTERM");
-    // Exit 0: the drain closed the open connection; past the shutdown timeout (8 s) the
-    // process says so and exits 1, however long either took on a busy machine.
+    // Exit 0 means the drain, not the 8 s shutdown timeout, closed the open connection.
     expect(await api.exit).toBe(0);
     await socketClosed;
     expect(logged(api.output(), "Server", "still open after the shutdown timeout")).toBe(false);
-    // The open connection was given the drain (3 s).
+    // The process drains for 3 s and gives up after 8 s; lifecycle.test.ts checks on a fake
+    // clock that the drain closes the connections exactly then.
+    expect(
+      logEntries(api.output()).find((entry) => String(entry.msg).startsWith("SIGTERM received")),
+    ).toMatchObject({ drainMs: 3_000, timeoutMs: 8_000 });
+    // The open connection was given the drain.
     expect(Date.now() - signalledAt).toBeGreaterThanOrEqual(2900);
     expect(received()).toBe(CONTINUE); // held until the drain closed it, never answered
 

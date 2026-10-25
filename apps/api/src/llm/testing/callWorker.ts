@@ -12,11 +12,11 @@
  *   WORKER_GROUP_DIR      a directory shared by the processes of one test, which line up on
  *                         it: none calls before all WORKER_GROUP_SIZE have started, and the
  *                         stub answers no call before every call of the group was sent to it or
- *                         refused (so an admitted call is still open while the others decide)
+ *                         refused (so an admitted call is still open while the others decide).
+ *                         A process still waiting for the group 20 s after it started exits 2.
  *   WORKER_GROUP_SIZE     the number of calls in the group (its processes make one each)
  *   WORKER_MAX_OUTPUT     max_output_tokens per call (default 1000)
  *   STUB_INPUT, STUB_OUTPUT   tokens the stub reports per call (default 100 / 20)
- *   STUB_DELAY_MS         delay before the stub answers (default 0)
  *   STUB_HANG             "1": the stub prints "in-flight" and never answers
  *
  * Prints one `RESULT {json}` line per call: { ok: true, usd } or { ok: false, kind }.
@@ -56,24 +56,25 @@ const mark = (name: string) => {
 };
 
 /**
- * Waits until the group's directory holds `groupSize` marks starting with `prefix`. A process
- * that never marks (it crashed) does not hold the others for ever: after 30 s they go on, and
- * the test sees the crashed process's exit code.
+ * One deadline for both waits, well inside the tests' 60 s timeout: when a process of the group
+ * never starts or never decides, the others exit 2 with a message, so the test shows every
+ * process's exit code and output instead of timing out.
  */
+const groupDeadline = Date.now() + 20_000;
+
+/** Waits until the group's directory holds `groupSize` marks starting with `prefix`. */
 async function untilGroup(prefix: string): Promise<void> {
   if (!groupDir) return;
-  const deadline = Date.now() + 30_000;
   while (readdirSync(groupDir).filter((name) => name.startsWith(prefix)).length < groupSize) {
-    if (Date.now() > deadline) {
+    if (Date.now() > groupDeadline) {
       process.stderr.write(`callWorker: the group did not reach ${groupSize} "${prefix}" marks\n`);
-      return;
+      process.exit(2);
     }
     await new Promise((r) => setTimeout(r, 5));
   }
 }
 
 const stubUsage = { input: Number(env.STUB_INPUT ?? 100), output: Number(env.STUB_OUTPUT ?? 20) };
-const delayMs = Number(env.STUB_DELAY_MS ?? 0);
 const provider = providerFetch(async () => {
   if (env.STUB_HANG === "1") {
     process.stdout.write("in-flight\n");
@@ -81,7 +82,6 @@ const provider = providerFetch(async () => {
   }
   mark("decided-sent");
   await untilGroup("decided-");
-  if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
   return Response.json(responseBody({ ok: true }, stubUsage));
 });
 

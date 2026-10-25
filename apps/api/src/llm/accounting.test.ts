@@ -24,7 +24,6 @@ import {
   type ProviderRoute,
   providerFetch,
   responseBody,
-  settledWithin,
   testSettings,
   untilSentOrSettled,
 } from "./testing/providerStub.js";
@@ -67,6 +66,28 @@ function setup(route: ProviderRoute, env: Record<string, string> = {}) {
     },
   });
   return { llm, net, rows, waits };
+}
+
+const realSetTimeout = globalThis.setTimeout;
+const PENDING = Symbol("pending");
+/** What `call` has settled with so far: PENDING until it settles. */
+function outcome<T>(call: Promise<T>): () => T | typeof PENDING {
+  let settled: T | typeof PENDING = PENDING;
+  void call.then((value) => {
+    settled = value;
+  });
+  return () => settled;
+}
+
+/**
+ * Fakes the clocks until the test ends. "At once" is then exact: what the abort settles does
+ * not need the clock to move at all, however busy the machine is.
+ */
+function onFakeClock(): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
 }
 
 const lines = (): SpendLine[] => parseSpendLog(readFileSync(log, "utf8"));
@@ -480,7 +501,7 @@ describe("aborts", () => {
 
   it("leaves the queue at once when aborted while waiting for a slot, charging nothing", async () => {
     // The first call holds the only slot until the test lets it answer: the queued call has to
-    // leave on its abort while the slot is still taken, however long the machine takes.
+    // leave on its abort while the slot is still taken, with no time passing.
     let answerFirst!: () => void;
     const firstMayAnswer = new Promise<void>((resolve) => {
       answerFirst = resolve;
@@ -495,17 +516,25 @@ describe("aborts", () => {
     const { llm, net } = setup(route, { LLM_CONCURRENCY: "1" });
     const running = llm.invoke("a", "research", "hi", Schema, { ...OPTIONS, runId: "rA" });
     await untilSentOrSettled(received, running);
+    onFakeClock();
     const controller = new AbortController();
-    const queued = llm
-      .invoke("b", "research", "hi", Schema, {
-        ...OPTIONS,
-        runId: "rB",
-        signal: controller.signal,
-      })
-      .catch((e) => e);
-    setTimeout(() => controller.abort(), 20);
-    const error = await settledWithin(queued, "the queued call waited for the slot");
-    expect(isLlmError(error, "aborted")).toBe(true);
+    const queued = outcome(
+      llm
+        .invoke("b", "research", "hi", Schema, {
+          ...OPTIONS,
+          runId: "rB",
+          signal: controller.signal,
+        })
+        .catch((e) => e),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    // Waiting: with the only slot taken, for the slot.
+    expect(queued()).toBe(PENDING);
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queued(), "left the queue with no time passing").not.toBe(PENDING);
+    expect(isLlmError(queued(), "aborted")).toBe(true);
+    vi.useRealTimers();
     answerFirst();
     await running;
     expect(net.calls).toHaveLength(1);
@@ -514,26 +543,33 @@ describe("aborts", () => {
   });
 
   it("stops during the retry wait, sending and charging no second attempt", async () => {
+    onFakeClock();
     const controller = new AbortController();
     const net = providerFetch(() => errorResponse(503));
+    let inRetryWait!: () => void;
+    const retryWait = new Promise<void>((resolve) => {
+      inRetryWait = resolve;
+    });
     const llm = createLlm({
       settings: testSettings({ LLM_SPEND_LOG: log }),
       fetch: net.fetch,
       recordUsage: () => {},
-      // Aborts at the start of the retry wait, which never ends: the call has to stop on the
-      // abort, without waiting it out.
+      // A retry wait that never ends: the call has to stop on the abort, with no time passing.
       sleep: () => {
-        controller.abort();
+        inRetryWait();
         return new Promise<void>(() => {});
       },
     });
-    const error = await settledWithin(
+    const call = outcome(
       llm
         .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
         .catch((e) => e),
-      "the call waited out the retry wait",
     );
-    expect(isLlmError(error, "aborted")).toBe(true);
+    await retryWait;
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(call(), "stopped with no time passing").not.toBe(PENDING);
+    expect(isLlmError(call(), "aborted")).toBe(true);
     expect(net.calls).toHaveLength(1);
     expect(reserves()).toHaveLength(1);
     expect(llm.callsForRun("run-1")).toBe(1);
@@ -592,18 +628,28 @@ describe("aborts", () => {
 
 describe("an abort while waiting for the spend log's lock", () => {
   it("returns at once, sending and charging nothing", async () => {
-    // The lock stays taken until the call has returned: it has to return without it.
+    // The lock stays taken until the call has returned: it has to return without it, at its
+    // next try for the lock.
     const release = await acquireLock(await resolveSpendLogPath(log));
+    onFakeClock();
     const { llm, net } = setup(hang);
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
-    const error = await settledWithin(
+    const call = outcome(
       llm
         .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
         .catch((e) => e),
-      "the call waited for the lock after its abort",
     );
+    // Waits (on the real clock) until the call waits for its next try, a timer on the fake one.
+    for (let i = 0; vi.getTimerCount() === 0; i++) {
+      if (i === 4000) throw new Error("the call never waited for the lock");
+      await new Promise((resolve) => realSetTimeout(resolve, 1));
+    }
+    controller.abort();
+    await vi.advanceTimersToNextTimerAsync();
+    const error = call();
+    vi.useRealTimers();
     await release();
+    expect(error, "returned at its next try, the lock still taken").not.toBe(PENDING);
     expect(isLlmError(error, "aborted")).toBe(true);
     expect(net.calls).toHaveLength(0);
     expect(llm.callsForRun("run-1")).toBe(0);

@@ -102,6 +102,7 @@ vi.mock("../agent/nodes/index.js", () => {
 });
 
 const QUERY = "Midnight City M83 typed-text-marker";
+const COMPILED = "Compiled and cached LangGraph workflow";
 
 const settings: HttpSettings = {
   corsOrigins: [],
@@ -221,6 +222,14 @@ describe("the log of one analysis", () => {
     });
   });
 
+  it("compiles the graph once, not for each analysis", async () => {
+    const app = createApp({ http: settings });
+    await analyze(app);
+    logs.clear();
+    await analyze(app);
+    expect(logs.messages().filter((message) => message === COMPILED)).toEqual([]);
+  });
+
   it("keeps each run's id on its own lines when runs overlap", async () => {
     const app = createApp({ http: settings });
     const runIds = await Promise.all([analyze(app), analyze(app), analyze(app)]);
@@ -233,10 +242,10 @@ describe("the log of one analysis", () => {
     expect(nodeLines.length).toBe(3 * 3);
     for (const entry of nodeLines) expect(entry.runId).toBe(entry.threadId);
     // Each run's node timings carry its own id. The first run of the file also has the line
-    // saying the graph was compiled (no node), whichever test that is.
+    // saying the graph was compiled, whichever test that is.
     for (const runId of runIds) {
       const timings = entries.filter(
-        (entry) => entry.component === "Graph" && "node" in entry && entry.runId === runId,
+        (entry) => entry.component === "Graph" && entry.msg !== COMPILED && entry.runId === runId,
       );
       expect(timings.map((entry) => entry.node).sort()).toEqual(
         ["composer", "engineer", "historian", "scout"].sort(),

@@ -157,23 +157,6 @@ export async function untilSentOrSettled(
   }
 }
 
-/**
- * `call`'s outcome, for a call that must settle on an event the test caused (an abort) without
- * anything else happening first. One that does not fails here, saying `what`, after `ms` rather
- * than at the test timeout; a passing test never waits for it.
- */
-export async function settledWithin<T>(call: Promise<T>, what: string, ms = 4000): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const guard = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} (not settled within ${ms} ms)`)), ms);
-  });
-  try {
-    return await Promise.race([call, guard]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /** An error response as the Responses API sends it. */
 export const errorResponse = (status: number, headers: Record<string, string> = {}) =>
   Response.json(

@@ -242,6 +242,13 @@ describe("node timings", () => {
 
   it("logs a node of a cancelled run as cancelled", async () => {
     const controller = new AbortController();
+    // Ignores its signal and returns once the run is cancelled, whenever that is.
+    stub.engineer = async () => {
+      await new Promise((resolve) =>
+        controller.signal.addEventListener("abort", resolve, { once: true }),
+      );
+      return {};
+    };
     stub.historian = async (_state, config) => {
       const { signal } = config as LangGraphRunnableConfig;
       await new Promise((_resolve, reject) => {
@@ -253,7 +260,7 @@ describe("node timings", () => {
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
     await expect(runAs(graph, INPUT, "thread-cancelled", controller)).rejects.toThrow();
-    // The engineer ignores the signal and ends after the run: it is cancelled too.
+    // The engineer returns after the cancel: it is cancelled too.
     await loggedFor("historian", "engineer");
     for (const node of ["historian", "engineer"]) {
       expect(timings().find((line) => line.node === node)).toMatchObject({
@@ -330,9 +337,13 @@ describe("node timings", () => {
 
   it("logs a node that returns after its run was cancelled as cancelled, not ok", async () => {
     const controller = new AbortController();
-    // Ignores the signal and returns once the run is over.
+    // Ignores the signal and returns once the run is over (the test says when).
+    let runOver!: () => void;
+    const over = new Promise<void>((resolve) => {
+      runOver = resolve;
+    });
     stub.engineer = async () => {
-      await wait(60);
+      await over;
       return {};
     };
     stub.historian = async (_state, config) => {
@@ -342,6 +353,7 @@ describe("node timings", () => {
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
     await expect(runAs(graph, INPUT, "thread-late", controller)).rejects.toThrow();
+    runOver();
     await loggedFor("engineer");
 
     const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));

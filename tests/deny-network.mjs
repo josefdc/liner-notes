@@ -16,10 +16,12 @@
 // Not enforced: child processes are covered only when they inherit NODE_OPTIONS with this file
 // (an inherited environment does); other programs (curl, python) are not covered at all.
 //
-// On exit the process prints "[deny-network] outbound attempts: N (pid P)" on stderr, and, when
-// DENY_NETWORK_REPORT names a file, appends one JSON line {pid, argv, attempts, hosts} to it (and
-// another at each blocked attempt, so a process killed by a signal is still counted), so a test
-// that starts several processes (npm, then the app) can check every one of them.
+// On exit the process prints "[deny-network] outbound attempts: N (pid P)" on stderr. When
+// DENY_NETWORK_REPORT names a file, it appends JSON lines {pid, argv, event, attempts, hosts} to
+// it: event "start" when this file loads (so a test knows which pid runs what), "blocked" at each
+// blocked attempt (so a process killed by a signal is still counted) and "exit" on exit (a process
+// killed by a signal has none). A test that starts several processes (npm, then the app) can
+// check every one of them.
 // globalThis.__denyNetwork.attempts() gives the count while the process runs.
 
 import dns from "node:dns";
@@ -49,7 +51,7 @@ function blocked(what, host) {
   blockedHosts.push(label);
   process.stderr.write(`[deny-network] blocked ${what} to ${label}\n`);
   // Written at once too: a process killed by a signal never reaches its exit report.
-  writeReport();
+  writeReport("blocked");
   const error = new Error(`Network access is denied in this process (${what} to ${label})`);
   error.code = "ENETUNREACH";
   return error;
@@ -199,7 +201,7 @@ syncBuiltinESMExports();
 globalThis.__denyNetwork = { attempts: () => blockedHosts.length, hosts: () => [...blockedHosts] };
 
 /** Appends this process's count to DENY_NETWORK_REPORT, when it names a file. */
-function writeReport() {
+function writeReport(event) {
   const report = process.env.DENY_NETWORK_REPORT;
   if (!report) return;
   try {
@@ -208,6 +210,7 @@ function writeReport() {
       `${JSON.stringify({
         pid: process.pid,
         argv: process.argv.slice(1),
+        event,
         attempts: blockedHosts.length,
         hosts: blockedHosts,
       })}\n`,
@@ -221,5 +224,7 @@ process.on("exit", () => {
   process.stderr.write(
     `[deny-network] outbound attempts: ${blockedHosts.length} (pid ${process.pid})\n`,
   );
-  writeReport();
+  writeReport("exit");
 });
+
+writeReport("start");

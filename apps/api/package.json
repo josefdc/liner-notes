@@ -8,7 +8,7 @@
     "predev": "npm run build -w @liner-notes/contract",
     "dev": "tsx watch src/index.ts",
     "prestart": "npm run build -w @liner-notes/contract",
-    "start": "tsx src/index.ts",
+    "start": "node --import tsx src/index.ts",
     "pretest:db": "npm run build -w @liner-notes/contract",
     "test:db": "vitest run --root ../.. --project api src/store/database.test.ts",
     "pretest:lastfm": "npm run build -w @liner-notes/contract",

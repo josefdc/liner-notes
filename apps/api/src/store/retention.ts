@@ -19,6 +19,8 @@
  *   with their run; a row whose run has no record (an evaluation or smoke call, or a run already
  *   deleted) goes once it was written longer ago than the run retention. The spend log itself
  *   (LLM_SPEND_LOG) is never pruned here: it is the authoritative record of spend.
+ * - The run cutoff applied is recorded (`retention_state`, the latest one kept), so the run
+ *   report marks the days whose records were deleted even after the retention is raised.
  *
  * Defaults: checkpoints 24 hours, store items 30 days, runs 30 days, run events 7 days.
  * Override with CHECKPOINT_RETENTION_HOURS (at least 1), STORE_RETENTION_DAYS,
@@ -152,6 +154,30 @@ function idleThreads(db: Database.Database, cutoffSec: number, openRunCutoffSec:
   return rows.map((r) => r.thread_id);
 }
 
+/**
+ * Records that runs and usage rows at or before `cutoffSec` (unix seconds) may have been
+ * deleted, keeping the latest cutoff recorded (migration 12).
+ */
+function recordRunCutoff(db: Database.Database, cutoffSec: number, now: number): void {
+  db.prepare(
+    `INSERT INTO retention_state (id, run_cutoff, updated_at) VALUES (1, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET run_cutoff = MAX(run_cutoff, excluded.run_cutoff),
+       updated_at = excluded.updated_at`,
+  ).run(cutoffSec, Math.floor(now / 1000));
+}
+
+/**
+ * The latest run cutoff retention applied (unix seconds), or null when the database records
+ * none: not migrated to keep it (schema before 12), or not pruned since.
+ */
+export function recordedRunCutoff(db: Database.Database): number | null {
+  if (!tableExists(db, "retention_state")) return null;
+  const row = db.prepare("SELECT run_cutoff FROM retention_state WHERE id = 1").get() as
+    | { run_cutoff: number }
+    | undefined;
+  return row?.run_cutoff ?? null;
+}
+
 /** Deletes everything older than the policy allows. Runs in one transaction. */
 export function pruneDatabase(
   db: Database.Database,
@@ -210,6 +236,9 @@ export function pruneDatabase(
     result.runs = db
       .prepare("DELETE FROM runs WHERE COALESCE(finished_at, created_at) <= ?")
       .run(runCutoff).changes;
+    // The cutoff applied, for the run report: the latest one, so raising RUN_RETENTION_DAYS
+    // never makes days already deleted look kept.
+    if (tableExists(db, "retention_state")) recordRunCutoff(db, runCutoff, now);
   })();
 
   const total =

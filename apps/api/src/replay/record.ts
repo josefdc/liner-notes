@@ -17,14 +17,14 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
 import { checkoutCommitOrNull } from "../config/checkoutCommit.js";
 import { knownSecrets } from "../llm/cassette.js";
+import { isMainModule } from "../scripts/isMain.js";
 import { getDefaultDbPath } from "../store/database.js";
 import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
 import { buildRecord, RecordRefused } from "./recorder.js";
@@ -189,6 +189,6 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
   return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }

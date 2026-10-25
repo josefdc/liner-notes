@@ -3,11 +3,12 @@ import { captureLogsForTests } from "../logger.js";
 import Database from "better-sqlite3";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
-import { runMigrations } from "./migrations.js";
+import { MIGRATIONS, runMigrations } from "./migrations.js";
 import {
   DEFAULT_RETENTION,
   pruneDatabase,
   RETENTION_INTERVAL_MS,
+  recordedRunCutoff,
   retentionFromEnv,
   startRetention,
 } from "./retention.js";
@@ -230,6 +231,33 @@ describe("pruneDatabase", () => {
       "u-long-wait",
       "u-recent",
     ]);
+  });
+
+  it("records the latest run cutoff it applied, also when nothing was old enough", () => {
+    const sec = (ms: number) => Math.floor(ms / 1000);
+    expect(recordedRunCutoff(db)).toBeNull();
+    pruneDatabase(db, { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY }, NOW);
+    expect(recordedRunCutoff(db)).toBe(sec(NOW - 7 * DAY));
+    // Raised to 30 days: the days already deleted stay recorded as such.
+    pruneDatabase(db, DEFAULT_RETENTION, NOW + HOUR);
+    expect(recordedRunCutoff(db)).toBe(sec(NOW - 7 * DAY));
+    pruneDatabase(db, DEFAULT_RETENTION, NOW + 24 * DAY);
+    expect(recordedRunCutoff(db)).toBe(sec(NOW - 6 * DAY));
+    // Lowered to a day.
+    pruneDatabase(db, { ...DEFAULT_RETENTION, runRetentionMs: DAY }, NOW + 24 * DAY);
+    expect(recordedRunCutoff(db)).toBe(sec(NOW + 23 * DAY));
+    expect(db.prepare("SELECT COUNT(*) FROM retention_state").pluck().get()).toBe(1);
+  });
+
+  it("prunes a database migrated before cutoffs were kept, recording none", () => {
+    const old = new Database(":memory:");
+    try {
+      runMigrations(old, MIGRATIONS.slice(0, 11));
+      expect(pruneDatabase(old, DEFAULT_RETENTION, NOW)).toMatchObject({ runs: 0 });
+      expect(recordedRunCutoff(old)).toBeNull();
+    } finally {
+      old.close();
+    }
   });
 });
 

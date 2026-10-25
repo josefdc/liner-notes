@@ -352,6 +352,28 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 12,
+    name: "retention_cutoff_sent_calls",
+    up(db) {
+      // `retention_state` keeps, in its one row, the latest run cutoff retention has applied
+      // (unix seconds: runs and usage rows at or before it may have been deleted), so the run
+      // report marks the days that were pruned, not the days the current setting would prune. A
+      // database has no row until it is pruned after this migration; what earlier prunes
+      // deleted was not recorded.
+      // `llm_usage.sent` is 1 when the attempt's request was sent to the provider, 0 when it was
+      // not (stopped before sending, no connection made, or answered from stored answers), and
+      // null for rows written before this migration (llm/usage.ts).
+      db.exec(`
+        CREATE TABLE retention_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          run_cutoff INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        ALTER TABLE llm_usage ADD COLUMN sent INTEGER;
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

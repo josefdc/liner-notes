@@ -796,6 +796,7 @@ export function createLlm(deps: LlmDependencies): Llm {
         priceMultiplier: multiplier,
         estimated: false,
         latencyMs,
+        sent: false,
       });
       return {
         output: parsed.data,
@@ -996,6 +997,11 @@ export function createLlm(deps: LlmDependencies): Llm {
     }
     const latencyMs = performance.now() - started;
     const error = "error" in answer ? answer.error : null;
+    // Whether the request was sent to the provider (the usage row's `sent`): it left this
+    // process, and an answer came back or the failure does not show that no connection was made.
+    const undelivered = thrown !== null && UNDELIVERED_CODES.has(errorCode(thrown) ?? "");
+    const answered = (httpStatus as number | null) !== null;
+    const sentToProvider: boolean = (sent as boolean) && (answered || !undelivered);
 
     // The settlement table in the module comment.
     let usdEst: number;
@@ -1010,7 +1016,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       estimated = true;
     } else if (error?.status !== undefined && UNBILLED_STATUSES.has(error.status)) {
       usdEst = 0;
-    } else if (thrown !== null && UNDELIVERED_CODES.has(errorCode(thrown) ?? "")) {
+    } else if (undelivered) {
       usdEst = 0;
     } else {
       usdEst = worstCase;
@@ -1054,6 +1060,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       priceMultiplier: price.multiplier,
       estimated,
       latencyMs,
+      sent: sentToProvider,
     });
     if (error) {
       // A failed answer that reported its tokens was billed: say what it cost.

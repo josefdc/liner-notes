@@ -427,7 +427,14 @@ describe("accounting", () => {
       multiplier: 1,
     });
     expect(rows).toMatchObject([
-      { id: reserve.id, mode: "live", status: "ok", usdEst: 0.00044, priceMultiplier: 1 },
+      {
+        id: reserve.id,
+        mode: "live",
+        status: "ok",
+        usdEst: 0.00044,
+        priceMultiplier: 1,
+        sent: true,
+      },
     ]);
   });
 
@@ -467,6 +474,7 @@ describe("accounting", () => {
         outputTokens: 20,
         reasoningTokens: 8,
         estimated: false,
+        sent: true,
       },
     ]);
   });

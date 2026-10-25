@@ -166,6 +166,7 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
     const built = buildRecord(run, events, { slug: values.slug, commit, secrets, otherRunIds });
     record = built.record;
     for (const warning of built.warnings) console.warn(`Warning: the result breaks ${warning}`);
+    if (built.noCover) console.warn(`Warning: no cover kept: ${built.noCover}`);
   } catch (err) {
     if (err instanceof RecordRefused) {
       console.error(err.message);

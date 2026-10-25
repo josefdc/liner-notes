@@ -24,6 +24,26 @@ const MB = "https://musicbrainz.org/ws/2";
 const ICE = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
 const ICE_WORK = "e0ebb61d-7f69-3667-a2b1-dcd447d80f3d";
 
+/**
+ * The recording's releases (fixtures/musicbrainz-releases-ice-ice-baby.json) with whether the
+ * Cover Art Archive holds a front image of each (`cover-art-archive.front`), which the capture
+ * did not keep: set here for the tests, not captured. Three "To the Extreme" releases dated only
+ * "1990" have none, as MusicBrainz reported for them on 2026-10-25; the others are given one.
+ */
+export const iceReleasesWithArt = {
+  ...iceReleases,
+  releases: iceReleases.releases.map((release) => ({
+    ...release,
+    "cover-art-archive": {
+      front: ![
+        "424c4142-7144-49be-899b-355e11215bdd",
+        "b4314c6e-4f28-4a18-8eaa-6e02a90c6d89",
+        "d02aeed5-99bb-4cd4-afa5-1cee117a6061",
+      ].includes(release.id),
+    },
+  })),
+};
+
 /** "Ice Ice Baby" as Spotify lists it on "To the Extreme". */
 export const ICE_TRACK: TrackRef = {
   isrc: "USCA29001716",
@@ -37,7 +57,7 @@ export const primaryRoute: FetchRoute = (call) => {
   if (call.url === "https://secondhandsongs.com/work/4196") return json(shsWork);
   if (call.url.startsWith(`${MB}/isrc/USCA29001716?`)) return json(iceIsrc);
   if (call.url.startsWith(`${MB}/recording/${ICE}?`)) return json(iceDetails);
-  if (call.url.startsWith(`${MB}/release?`)) return json(iceReleases);
+  if (call.url.startsWith(`${MB}/release?`)) return json(iceReleasesWithArt);
   if (call.url.startsWith(`${MB}/work/${ICE_WORK}?`)) return json(iceWork);
   if (call.url.startsWith(`${MB}/recording?work=${ICE_WORK}&`)) {
     const offset = new URL(call.url).searchParams.get("offset");

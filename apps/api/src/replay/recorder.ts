@@ -8,7 +8,11 @@
  * - fields that hold a preview clip or an image: `previewUrl` is removed, and an image field
  *   (`coverUrl`, `img`, `image…`, …) or any field whose whole value is a preview clip or a URL
  *   on an image host is blanked (`coverUrl` becomes "", which the contract reads as unknown).
- *   Preview URLs are signed and expire; images are not ours to redistribute;
+ *   Preview URLs are signed and expire; Spotify, Deezer and Last.fm images are not ours to
+ *   redistribute. The one image a record keeps is the result's cover from the Cover Art Archive
+ *   (`archiveCoverOf`): its public link for the release the run's MusicBrainz evidence names,
+ *   written into the result's `coverUrl` (in the record's result and its complete event) in
+ *   place of whatever cover the run showed;
  * - the run's id in the envelope (`runId`, `threadId`, `run.id`) becomes `recorded-<slug>` (each
  *   replay stamps its own id);
  * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
@@ -21,7 +25,8 @@
  * "connected … interrupt, done" then "resuming … complete, done" (a paused run's streams are
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
  * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
- * outside the allow-listed source sites, a preview or media URL inside text, the typed query
+ * outside the allow-listed source sites, a preview or media URL inside text (the Cover Art
+ * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
  * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
@@ -39,7 +44,10 @@ import {
 } from "@liner-notes/contract";
 import { isMediaUrl } from "../sources/http.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
+import { ARCHIVE_FRONT, archiveCover } from "./cover.js";
 import { normalizeQuery } from "./records.js";
+
+export { archiveCover, archiveCoverOf } from "./cover.js";
 
 export class RecordRefused extends Error {
   constructor(readonly reasons: string[]) {
@@ -276,6 +284,26 @@ export interface LeakCheck {
   ownRunIds?: readonly string[];
   /** The ids of the other runs the database knows (runs and threads). */
   otherRunIds?: readonly string[];
+  /**
+   * The Cover Art Archive link the record keeps (`archiveCoverOf`): allowed as the whole value
+   * of the result's cover (`analysis.coverUrl`) and of the complete event's
+   * (`events[n].event.data.coverUrl`), and nowhere else.
+   */
+  allowedCover?: string;
+}
+
+/** The paths of the result's cover in a record: its result's, and its complete events'. */
+function resultCoverPaths(record: unknown): Set<string> {
+  const paths = new Set(["analysis.coverUrl"]);
+  const events = (record as { events?: unknown } | null)?.events;
+  if (Array.isArray(events)) {
+    events.forEach((item, i) => {
+      if ((item as { event?: { type?: unknown } } | null)?.event?.type === "complete") {
+        paths.add(`events[${i}].event.data.coverUrl`);
+      }
+    });
+  }
+  return paths;
 }
 
 /**
@@ -285,7 +313,14 @@ export interface LeakCheck {
  */
 export function leaks(
   record: unknown,
-  { secrets, typedQuery, publicTexts, ownRunIds = [], otherRunIds = [] }: LeakCheck,
+  {
+    secrets,
+    typedQuery,
+    publicTexts,
+    ownRunIds = [],
+    otherRunIds = [],
+    allowedCover = "",
+  }: LeakCheck,
 ): string[] {
   const found: string[] = [];
   const typed = normalizeQuery(typedQuery);
@@ -295,8 +330,13 @@ export function leaks(
   const pages = [...webEvidencePages(record)];
   const allowed = (url: string) =>
     allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
+  const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
+  const coverPaths = resultCoverPaths(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
+    // The kept cover, as the whole value of the result's cover: an allowed link there only.
+    const isCover = cover !== null && text === cover && coverPaths.has(path);
+    const allowedHere = (url: string) => allowed(url) || (isCover && url === cover);
     if (
       secrets.some(
         (secret) => secret && (plain.includes(secret) || text.includes(encodeURIComponent(secret))),
@@ -306,7 +346,7 @@ export function leaks(
     }
     // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
     // those are their own); an id field's value may be a long source id.
-    const scanned = text.replace(URL_IN_TEXT, (url) => (allowed(url) ? " " : url));
+    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));
     for (const [what, pattern] of SECRET_SHAPES) {
       if (isId && what === "a long token") continue;
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
@@ -314,7 +354,7 @@ export function leaks(
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
-      else if (allowed(url)) continue;
+      else if (allowedHere(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
       else found.push(`${path}: a URL outside the allow-listed sites`);
     }
@@ -415,6 +455,8 @@ export interface BuiltRecord {
    * replayed as it was sent live); for the person recording to judge.
    */
   warnings: string[];
+  /** Why the record keeps no cover (`archiveCover`); absent when it keeps one. */
+  noCover?: string;
 }
 
 /** The texts that are the track's own: a query made of them reveals nothing about the user. */
@@ -472,7 +514,9 @@ export function buildRecord(
   // How the recorded run's search text matched the track is left out: the record is replayed
   // for other texts, and the typed text is not kept.
   const { queryMatch: _match, ...recorded } = analysis;
-  const recordedAnalysis = withoutMediaFields({
+  // Every image blanked, then the one cover a record keeps: the Cover Art Archive's.
+  const { url: cover, reason: noCover } = archiveCover(analysis);
+  const blanked = withoutMediaFields({
     ...recorded,
     run: {
       ...runInfo,
@@ -484,6 +528,7 @@ export function buildRecord(
       analyzerVersion,
     },
   }) as TrackAnalysis;
+  const recordedAnalysis: TrackAnalysis = { ...blanked, coverUrl: cover };
 
   const recordEvents = joined
     .filter(({ event }) => !isUserAction(event))
@@ -532,11 +577,12 @@ export function buildRecord(
     publicTexts: publicTextsOf(analysis),
     ownRunIds: [run.runId, run.threadId],
     otherRunIds,
+    allowedCover: cover,
   };
   for (const leak of leaks(record, check)) refuse(leak);
   stop();
   const warnings = analysisIssues(record.analysis).filter(
     (issue) => !runInfoIssues.includes(issue),
   );
-  return { record, warnings };
+  return { record, warnings, ...(noCover && { noCover }) };
 }

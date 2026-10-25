@@ -330,8 +330,9 @@ describe("the research plan of a track with an ISRC", () => {
     for (const [request, n] of Object.entries(requests)) expect(n, request).toBe(1);
     const has = (start: string) => Object.keys(requests).filter((r) => r.startsWith(start));
     // MusicBrainz: one ISRC lookup (the historian's chain, passed to the researcher and the
-    // composer), the recording, the work and its dating, the releases (Discogs is configured),
-    // and the credited artist's collaborators by its MBID. No name search.
+    // composer), the recording, the work and its dating, the releases (read once, for the
+    // release that stands for the recording and for Discogs' links), and the credited artist's
+    // collaborators by its MBID. No name search.
     expect(has("musicbrainz.org/ws/2/isrc/")).toHaveLength(1);
     expect(has(`musicbrainz.org/ws/2/artist/${ARTIST}`)).toHaveLength(1);
     expect(has("musicbrainz.org/ws/2/artist").length).toBe(1);

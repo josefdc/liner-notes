@@ -117,9 +117,11 @@ export interface CachedEvidence {
    * What the run left for a later run, none of which blocked caching: a source whose request
    * was not sent ("not_asked": our own pacing left no slot in time, or the run's time for the
    * primary sources ran out first), the MusicBrainz work's recordings not dated ("dates"; its
-   * covers are then about the song). A hit reads the primary sources again for such a row.
+   * covers are then about the song), the recording's MusicBrainz releases not read
+   * ("releases"; no release is named for it). A hit reads the primary sources again for such a
+   * row.
    */
-  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" }>;
+  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" | "releases" }>;
 }
 
 /** Research as the research cache holds it. */
@@ -193,7 +195,9 @@ const CachedEvidenceSchema = z.object({
   trackIsOriginal: z.boolean(),
   errors: z.array(SourceError),
   lasting: z.array(SourceError),
-  incomplete: z.array(z.object({ source: SourceId, part: z.enum(["not_asked", "dates"]) })),
+  incomplete: z.array(
+    z.object({ source: SourceId, part: z.enum(["not_asked", "dates", "releases"]) }),
+  ),
 });
 
 const ResearchSchema = z

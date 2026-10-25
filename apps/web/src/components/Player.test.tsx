@@ -27,6 +27,59 @@ const missingTrack = {
   audioUnavailableReason: 'not_detected',
 } as unknown as TrackData;
 
+describe('the Player album cover', () => {
+  const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
+  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-500`;
+  const credit = () => screen.queryByRole('link', { name: /^Cover: / });
+  const evidence = [
+    {
+      id: `musicbrainz:release/${MBID}`,
+      source: 'musicbrainz',
+      title: 'To the Extreme — MusicBrainz release',
+    },
+  ];
+
+  it('shows a Cover Art Archive cover with its credit, and says when it fails to load', () => {
+    const { container } = render(
+      <Player trackData={{ ...missingTrack, coverUrl: ARCHIVE }} onBack={() => {}} />,
+    );
+    const cover = screen.getByRole('img', { name: 'Cover from the Cover Art Archive' });
+    expect(container.querySelectorAll(`img[src="${ARCHIVE}"]`)).toHaveLength(2);
+    expect(credit()?.getAttribute('href')).toBe(`https://coverartarchive.org/release/${MBID}`);
+    fireEvent.error(cover);
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(credit()).toBeNull();
+  });
+
+  it("names the album, or the cover's release when it is another", () => {
+    render(
+      <Player trackData={{ ...missingTrack, coverUrl: ARCHIVE, evidence }} onBack={() => {}} />,
+    );
+    expect(screen.getByRole('img', { name: 'Cover of To the Extreme' })).toBeTruthy();
+    expect(credit()?.textContent).toBe(
+      'Cover: To the Extreme · Cover Art Archive (opens in a new tab)',
+    );
+  });
+
+  it('credits no archive for a cover from elsewhere', () => {
+    render(
+      <Player
+        trackData={{ ...missingTrack, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273' }}
+        onBack={() => {}}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'Cover of Test Album' })).toBeTruthy();
+    expect(credit()).toBeNull();
+  });
+
+  it('says the cover is not available when the result has none', () => {
+    const { container } = render(<Player trackData={missingTrack} onBack={() => {}} />);
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+});
+
 describe('Player', () => {
   it('shows an empty state, not a demo track, when there is no analysis', () => {
     const { container } = render(<Player trackData={null} onBack={() => {}} />);

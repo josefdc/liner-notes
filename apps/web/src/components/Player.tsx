@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Play,
   Pause,
-  Music,
   ExternalLink,
   Search,
   ChevronDown,
@@ -30,6 +29,7 @@ import GenealogyGraph from './GenealogyGraph';
 import { kindLabel, linkContext, shownLinks } from './genealogy/links';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
+import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
@@ -131,6 +131,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
 
   const { bpm, key } = audioValues(track);
   // The measured preview window, when the result carries its measurement.
+  const cover = useAlbumCover(track.coverUrl);
   const measurement = useMemo(() => measuredAudioOf(track), [track]);
   // Key moments only where the audio was measured; otherwise why there are none.
   const noMomentsReason = useMemo(() => noKeyMomentsReason(track), [track]);
@@ -391,10 +392,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   return (
     <div className="h-full w-full flex flex-col bg-void relative overflow-hidden">
       {/* Background Atmosphere */}
-      {track.coverUrl && (
+      {cover.src && (
         <img
-          src={track.coverUrl}
+          src={cover.src}
           alt=""
+          onError={cover.onError}
+          referrerPolicy="no-referrer"
           className="absolute inset-0 w-full h-full object-cover opacity-10 blur-3xl scale-110 pointer-events-none"
         />
       )}
@@ -616,22 +619,17 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           <ResultNotices track={track} className="w-full max-w-lg mb-4" />
 
           {/* Album Art Container */}
-          <div className="relative w-56 h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 mb-8 mt-4 group flex-shrink-0">
+          <AlbumCover
+            cover={cover}
+            album={track.album}
+            evidence={track.evidence}
+            className="mb-8 mt-4 flex-shrink-0 w-56 md:w-64 lg:w-80"
+            frameClassName="group"
+            surfaceClassName={`rounded-lg shadow-elevated-lg transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''} ${isPlaying && cover.src ? 'shadow-[var(--shadow-glow-cyber)]' : ''}`}
+            iconSize={56}
+          >
             <div className="absolute inset-0 bg-cyber/15 blur-3xl rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-(--duration-dramatic)"></div>
-            {track.coverUrl ? (
-              <img
-                src={track.coverUrl}
-                alt="Album Art"
-                className={`w-full h-full object-cover rounded-lg shadow-elevated-lg relative z-10 border border-white/10 transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow shadow-[var(--shadow-glow-cyber)]' : ''}`}
-              />
-            ) : (
-              <div
-                className={`w-full h-full rounded-lg shadow-elevated-lg relative z-10 border border-white/10 bg-gray-900 flex items-center justify-center transition-all duration-(--duration-dramatic) ${isPlaying ? 'animate-pulse-slow' : ''}`}
-              >
-                <Music size={64} className="text-text-muted" />
-              </div>
-            )}
-          </div>
+          </AlbumCover>
 
           {/* Meta */}
           <div className="text-center mb-6">

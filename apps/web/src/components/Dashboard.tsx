@@ -10,6 +10,13 @@ import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
+import {
+  provenanceText,
+  rank,
+  relationToTrack,
+  shownLinks,
+  type TrackRelation,
+} from './genealogy/links';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -59,7 +66,12 @@ function generateGradientColors(label: string, group: number): { from: string; t
   };
 }
 
-// Tracks connected to this one in its genealogy (empty when there are none: no stand-ins)
+/**
+ * Tracks connected to this one in its genealogy (empty when there are none: no stand-ins), the
+ * best known first. Each says how it is related by the link that joins it to this track, read
+ * with the contract's rule: a documented relation ("Sampled in this track") only for a sourced
+ * link with evidence in the pack, never from the node's group.
+ */
 function getRelatedTracks(trackData: TrackData | null): Array<{
   id: string;
   /** The Spotify track the node was strictly matched to, when there is one. */
@@ -68,31 +80,31 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   query: string;
   title: string;
   artist: string;
-  reason: string;
+  relation: TrackRelation;
   img: string | null;
   group: number;
 }> {
-  // Filter out the current song (group 1) and get related nodes
-  const relatedNodes = (trackData?.genealogy?.nodes ?? [])
+  if (!trackData) return [];
+  const nodes = trackData.genealogy?.nodes ?? [];
+  const links = shownLinks(trackData.genealogy);
+  const currentId = nodes.find((node) => node.group === 1)?.id ?? null;
+  const strength = (relation: TrackRelation) => (relation.link ? rank(relation.link) : -1);
+
+  return nodes
     .filter((node) => node.group !== 1)
-    .slice(0, 4);
-
-  const groupLabels: Record<number, string> = {
-    2: 'Sampled in this track',
-    3: 'Samples this track',
-    4: 'Related influence',
-  };
-
-  return relatedNodes.map((node) => ({
-    id: node.id,
-    ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
-    query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
-    title: node.label,
-    artist: '', // Genealogy nodes don't have separate artist field
-    reason: groupLabels[node.group] || 'Related',
-    img: isValidImageUrl(node.img) ? node.img : null,
-    group: node.group,
-  }));
+    .map((node) => ({ node, relation: relationToTrack(links, node.id, currentId) }))
+    .sort((a, b) => strength(b.relation) - strength(a.relation))
+    .slice(0, 4)
+    .map(({ node, relation }) => ({
+      id: node.id,
+      ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
+      query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
+      title: node.label,
+      artist: '', // Genealogy nodes don't have separate artist field
+      relation,
+      img: isValidImageUrl(node.img) ? node.img : null,
+      group: node.group,
+    }));
 }
 
 const EMPTY_LOGS: AgentLog[] = [];
@@ -391,7 +403,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-[10px] font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
-                  : 'From the genealogy graph — model inference from research'}
+                  : 'From the genealogy graph — each card says whether its link is sourced or a model inference'}
               </p>
             </div>
             {relatedTracks.length > 0 && (
@@ -453,10 +465,28 @@ const Dashboard: React.FC<DashboardProps> = ({
                     )}
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-white/5">
-                    <Badge variant="analog" glow>
-                      <span className="font-bold">LOGIC:</span> {rec.reason}
+                  <div className="mt-4 pt-3 border-t border-white/5 flex flex-col items-start gap-1.5">
+                    {/* A documented relation is named only for a sourced link; an inferred one
+                        says so in words, not by colour alone. The neutral badge's text is raised
+                        to secondary: on a hovered card its chip grey is under 4.5:1. */}
+                    <Badge
+                      variant={rec.relation.link?.kind === 'sourced' ? 'analog' : 'gray'}
+                      glow={rec.relation.link?.kind === 'sourced'}
+                      data-link-kind={rec.relation.link?.kind ?? 'none'}
+                    >
+                      <span
+                        className={
+                          rec.relation.link?.kind === 'sourced' ? undefined : 'text-text-secondary'
+                        }
+                      >
+                        <span className="font-bold">LOGIC:</span> {rec.relation.text}
+                      </span>
                     </Badge>
+                    {rec.relation.link && (
+                      <p data-link-provenance className="text-chrome font-mono text-text-chip">
+                        {provenanceText(rec.relation.link)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

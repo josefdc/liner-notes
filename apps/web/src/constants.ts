@@ -939,7 +939,12 @@ export function normalizeTrack(track: TrackData): TrackData {
     samples: list(track.samples),
     keyMoments: list(track.keyMoments),
     factoids: displayableFactoids(track.factoids).filter((f) => !repeatsEstimatedAudio(f, track)),
-    genealogy: { nodes: list(genealogy.nodes), links: list(genealogy.links) },
+    // The links are shown against the result's evidence pack (components/genealogy/links.ts).
+    genealogy: {
+      nodes: list(genealogy.nodes),
+      links: list(genealogy.links),
+      ...('evidence' in track ? { evidence: track.evidence } : {}),
+    },
     genreProfile: Array.isArray(track.genreProfile) ? track.genreProfile : undefined,
     credits: isObject(track.credits) ? track.credits : undefined,
   };

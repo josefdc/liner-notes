@@ -54,6 +54,29 @@ describe('normalizeTrack', () => {
     expect(track.releaseYear).toBeUndefined();
     expect(track.bpm).toBeNull();
   });
+
+  it('hands the genealogy the evidence pack its links cite', () => {
+    const evidence = [{ id: 'ev-1' }];
+    const link = {
+      source: 'a',
+      target: 'current',
+      value: 3,
+      kind: 'sourced',
+      evidenceIds: ['ev-1'],
+    };
+    const track = normalizeTrack({
+      id: 't1',
+      genealogy: { nodes: [], links: [link], evidence: 'not this' },
+      evidence,
+    } as unknown as TrackData);
+    expect(track.genealogy).toEqual({ nodes: [], links: [link], evidence });
+    // A result without a pack has none to hand on.
+    const older = normalizeTrack({
+      id: 't1',
+      genealogy: { nodes: [], links: [] },
+    } as unknown as TrackData);
+    expect('evidence' in older.genealogy).toBe(false);
+  });
 });
 
 describe('factoids that repeat estimated audio values', () => {

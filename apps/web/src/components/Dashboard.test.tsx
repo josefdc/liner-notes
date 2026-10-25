@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TrackData } from '../types';
 import Dashboard from './Dashboard';
+import { link, node, PACK } from './genealogy/testing';
 
 afterEach(cleanup);
 
@@ -89,5 +90,74 @@ describe('Dashboard', () => {
     expect(scores.textContent).toContain('0.62');
     expect(scores.textContent).toContain('Mellow');
     expect(scores.textContent).not.toContain('62%');
+  });
+});
+
+describe('Dashboard connected tracks', () => {
+  // Group 2 is "it samples" in the node's own terms; only a sourced link may say so.
+  const connected = (links: TrackData['genealogy']['links'], withPack = true) =>
+    ({
+      ...missingTrack,
+      modelUnavailable: false,
+      ...(withPack ? { evidence: PACK } : {}),
+      genealogy: {
+        nodes: [
+          node('current', 1, 'Quiet Signal'),
+          node('guess', 2, 'Guessed Sample'),
+          node('older', 2, 'Older Record'),
+          node('later', 3, 'Later Track'),
+          node('lonely', 2, 'Lonely Node'),
+        ],
+        links,
+      },
+    }) as unknown as TrackData;
+
+  const cards = () =>
+    screen.getAllByRole('button').filter((button) => button.textContent?.includes('LOGIC:'));
+  const reasons = () => cards().map((card) => card.querySelector('[data-link-kind]')?.textContent);
+
+  it('names a documented relation only for a sourced link with evidence in the pack', () => {
+    renderDashboard(
+      connected([
+        link('guess', 'current', { type: 'sample', kind: 'inferred', value: 3 }),
+        link('older', 'current', { type: 'sample', kind: 'sourced', evidenceIds: ['ev-mb-1'] }),
+        link('current', 'later', { type: 'sample', kind: 'sourced', evidenceIds: ['ev-shs-1'] }),
+      ]),
+    );
+    // Sourced relations first; a track with no link to this one says so.
+    expect(reasons()).toEqual([
+      'LOGIC: Sampled in this track',
+      'LOGIC: Samples this track',
+      'LOGIC: Possible influence',
+      'LOGIC: No direct link to this track',
+    ]);
+    const [older, , guess, lonely] = cards();
+    expect(older.textContent).toContain('Sourced · cites ev-mb-1 (musicbrainz)');
+    expect(guess.textContent).toContain(
+      'Model inference · stated as a sample, shown as an influence; no evidence cited',
+    );
+    expect(lonely.textContent).not.toMatch(/Sourced|Model inference/);
+    // Kind in words and in the badge's colour: amber for sourced, neutral otherwise.
+    expect(older.querySelector('[data-link-kind]')?.className).toContain('text-analog');
+    expect(guess.querySelector('[data-link-kind]')?.className).toContain('border-white/15');
+    expect(guess.querySelector('[data-link-kind] > span')?.className).toBe('text-text-secondary');
+  });
+
+  it('labels every relation as inferred when the result has no evidence pack', () => {
+    renderDashboard(
+      connected(
+        [link('older', 'current', { type: 'sample', kind: 'sourced', evidenceIds: ['ev-mb-1'] })],
+        false,
+      ),
+    );
+    expect(screen.queryByText(/Sampled in this track/)).toBeNull();
+    expect(reasons()[0]).toBe('LOGIC: Possible influence');
+    expect(cards()[0].textContent).toContain('cites ev-mb-1, not in the evidence pack');
+  });
+
+  it('never takes a relation from the node group', () => {
+    renderDashboard(connected([]));
+    expect(reasons()).toEqual(Array(4).fill('LOGIC: No direct link to this track'));
+    expect(screen.queryByText(/Sampled in this track|Samples this track/)).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { select, selectAll } from 'd3-selection';
 import { zoom, zoomIdentity } from 'd3-zoom';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
@@ -6,24 +6,23 @@ import type { Simulation } from 'd3-force';
 import { drag } from 'd3-drag';
 import 'd3-transition'; // Side-effect import: augments Selection with .transition()
 import { Volume2, VolumeX, MousePointerClick } from 'lucide-react';
-import { colors, genealogyColors, linkColors } from '../styles/theme';
+import { colors, genealogyColors } from '../styles/theme';
 import type { GenealogyGraphProps, CustomNode, CustomLink } from './genealogy/types';
 import { useAudioPreview } from './genealogy/useAudioPreview';
+import {
+  describeLink,
+  isDocumentedSource,
+  LINK_KIND_LABEL,
+  LINK_TYPE_LABEL,
+  provenanceText,
+  relationToTrack,
+  shownLinks,
+} from './genealogy/links';
+import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
+import { LinkLegend } from './genealogy/LinkLegend';
+import { LinkList } from './genealogy/LinkList';
 import { isValidImageUrl } from '../utils/image';
 import type { TrackData } from '../types';
-
-/**
- * The part of a genealogy that can be drawn: links whose source and target are both in the
- * node list. d3-force throws on a link to an unknown node id, which would take the whole page
- * down, so such links are left out.
- */
-export function drawableLinks(
-  data: Partial<TrackData['genealogy']> | null | undefined,
-): TrackData['genealogy']['links'] {
-  const ids = new Set(graphNodes(data).map((node) => node.id));
-  const links = Array.isArray(data?.links) ? data.links : [];
-  return links.filter((link) => ids.has(link.source) && ids.has(link.target));
-}
 
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
@@ -81,6 +80,21 @@ function generateSvgPlaceholder(label: string, group: number, size: number): str
 const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // The links that can be drawn (d3-force throws on a link to an unknown node id, which would
+  // take the whole page down), each read with the contract's link schema and shown by its rule:
+  // sourced only with evidence in the result's pack.
+  const links = useMemo(() => shownLinks(data), [data]);
+  const labelOf = useMemo(() => {
+    const labels = new Map(graphNodes(data).map((node) => [node.id, node.label]));
+    return (id: string) => labels.get(id) ?? id;
+  }, [data]);
+  const currentId = useMemo(
+    () => graphNodes(data).find((node) => node.group === 1)?.id ?? null,
+    [data],
+  );
+  // The link pointed at or focused in the graph; its relation and provenance are shown.
+  const [activeLink, setActiveLink] = useState<number | null>(null);
 
   // Audio preview (extracted hook)
   const {
@@ -178,13 +192,27 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         size: n.size * nodeScale, // Scale node sizes for mobile
       }),
     );
-    const links: CustomLink[] = JSON.parse(JSON.stringify(drawableLinks(data)));
+    // Copies: d3-force replaces each link's source and target with the node objects.
+    const simulationLinks: CustomLink[] = links.map((shown, n) => ({
+      source: shown.source,
+      target: shown.target,
+      value: shown.value,
+      n,
+      shown,
+    }));
+    // Tracks a sourced sample, interpolation, cover or remix says the analysed track uses.
+    const origins = new Set(
+      nodes
+        .filter((n) => isDocumentedSource(relationToTrack(links, n.id, currentId), n.id))
+        .map((n) => n.id),
+    );
+    const isOrigin = (d: CustomNode) => d.group !== 1 && origins.has(d.id);
 
     // Create simulation centered at viewport center
     const simulation = forceSimulation(nodes)
       .force(
         'link',
-        forceLink(links)
+        forceLink(simulationLinks)
           .id((d: any) => d.id)
           .distance(linkDistance),
       )
@@ -233,21 +261,69 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         .call(zoomBehavior.transform, zoomIdentity.translate(translateX, translateY).scale(scale));
     });
 
-    // 5. Render Links with semantic styling
+    // 5. Render links: the colour is the relation a link is shown as, the line its kind (solid
+    // when sourced, dashed when a model inference), and a label names the relation.
+    const restingOpacity = (d: CustomLink) => LINK_OPACITY[d.shown.kind];
     const link = g
       .append('g')
       .attr('class', 'links')
       .selectAll('line')
-      .data(links)
+      .data(simulationLinks)
       .join('line')
-      .attr('stroke', (d) => {
-        // Visual semantics based on relationship type using theme colors
-        return linkColors[d.type as keyof typeof linkColors] || linkColors.default;
-      })
-      .attr('stroke-opacity', (d) => (d.type === 'sample' ? 0.6 : 0.3))
-      .attr('stroke-width', (d) => Math.sqrt(d.value) * (d.type === 'sample' ? 1.5 : 1))
-      // Dashed line for influences
-      .attr('stroke-dasharray', (d) => (d.type === 'influence' ? '5,5' : 'none'));
+      .attr('data-link-index', (d) => d.n)
+      .attr('data-link-kind', (d) => d.shown.kind)
+      .attr('data-link-type', (d) => d.shown.type)
+      .attr('stroke', (d) => LINK_COLOR[d.shown.type])
+      .attr('stroke-opacity', restingOpacity)
+      .attr('stroke-width', (d) => linkWidth(d.shown.value, d.shown.kind))
+      .attr('stroke-dasharray', (d) => LINK_DASH[d.shown.kind]);
+
+    const linkLabel = g
+      .append('g')
+      .attr('class', 'link-labels')
+      .style('pointer-events', 'none')
+      .selectAll('text')
+      .data(simulationLinks)
+      .join('text')
+      .text((d) => LINK_TYPE_LABEL[d.shown.type].toLowerCase())
+      .attr('text-anchor', 'middle')
+      .attr('dy', '-0.4em')
+      .attr('fill', (d) => LINK_COLOR[d.shown.type])
+      .attr('font-family', 'IBM Plex Mono')
+      .attr('font-size', isMobile ? '8px' : '9px')
+      .style('paint-order', 'stroke')
+      .style('stroke', colors.void)
+      .style('stroke-width', '3px');
+
+    // A wider, invisible line over each link: pointing at it or focusing it shows the link's
+    // relation and where it comes from.
+    const highlightLink = (index: number | null) => {
+      link
+        .attr('stroke-opacity', (d) =>
+          index === null ? restingOpacity(d) : d.n === index ? 1 : 0.15,
+        )
+        .attr(
+          'stroke-width',
+          (d) => linkWidth(d.shown.value, d.shown.kind) * (d.n === index ? 1.8 : 1),
+        );
+      setActiveLink(index);
+    };
+    const linkTarget = g
+      .append('g')
+      .attr('class', 'link-targets')
+      .selectAll('line')
+      .data(simulationLinks)
+      .join('line')
+      .attr('data-link-index', (d) => d.n)
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 12)
+      .style('pointer-events', 'stroke')
+      .style('outline', 'none')
+      .attr('tabindex', 0)
+      .attr('aria-label', (d) => describeLink(d.shown, labelOf))
+      .on('mouseenter focus', (_event, d) => highlightLink(d.n))
+      .on('mouseleave blur', () => highlightLink(null));
+    linkTarget.append('title').text((d) => describeLink(d.shown, labelOf));
 
     // 6. Render Nodes
     const node = g
@@ -266,14 +342,14 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .attr('fill', 'transparent')
       .attr('stroke', (d) => {
         if (d.group === 1) return genealogyColors.current;
-        if (d.group === 2) return genealogyColors.origin;
+        if (isOrigin(d)) return genealogyColors.origin;
         return '#ffffff';
       })
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', (d) => (d.group === 1 || d.group === 2 ? 0.8 : 0.2))
+      .attr('stroke-opacity', (d) => (d.group === 1 || isOrigin(d) ? 0.8 : 0.2))
       .style('filter', (d) => {
         if (d.group === 1) return 'url(#glow-cyan)';
-        if (d.group === 2) return 'url(#glow-amber)';
+        if (isOrigin(d)) return 'url(#glow-amber)';
         return 'none';
       });
 
@@ -310,7 +386,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       .append('g')
       .attr('transform', (d) => `translate(0, ${d.size + (isMobile ? 8 : 15)})`)
       .style('pointer-events', 'none')
-      .style('opacity', (d) => (isMobile && d.group > 2 ? 0.7 : 1)); // Dim non-essential labels on mobile
+      .style('opacity', (d) => (isMobile && d.group !== 1 && !isOrigin(d) ? 0.7 : 1)); // Dim non-essential labels on mobile
 
     labels
       .append('text')
@@ -330,15 +406,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     if (!isMobile) {
       labels
         .append('text')
-        .text((d) => (d.group === 1 ? '[CURRENT]' : d.group === 2 ? '[ORIGIN]' : '[LINK]'))
+        // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
+        .text((d) => (d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]'))
         .attr('dy', '1.2em')
         .attr('text-anchor', 'middle')
         .attr('fill', (d) =>
           d.group === 1
             ? genealogyColors.current
-            : d.group === 2
+            : isOrigin(d)
               ? genealogyColors.origin
-              : colors.gray[500],
+              : colors.gray[400],
         )
         .attr('font-family', 'IBM Plex Mono')
         .attr('font-size', subLabelFontSize);
@@ -348,7 +425,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
     // Helper to find connected nodes
     const linkedByIndex: Record<string, boolean> = {};
-    links.forEach((d) => {
+    simulationLinks.forEach((d) => {
       // D3 replaces string IDs with Node objects after simulation starts
       const sourceId = (d.source as CustomNode).id || d.source;
       const targetId = (d.target as CustomNode).id || d.target;
@@ -365,6 +442,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         // Dim everything
         node.style('opacity', 0.1);
         link.style('stroke-opacity', 0.05);
+        linkLabel.style('opacity', 0.1);
 
         // Highlight connected
         const connectedNodes = node.filter((n) => isConnected(d, n));
@@ -377,6 +455,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
           )
           .style('stroke-opacity', 0.8)
           .style('stroke', '#fff');
+        linkLabel
+          .filter(
+            (l) => (l.source as CustomNode).id === d.id || (l.target as CustomNode).id === d.id,
+          )
+          .style('opacity', 1);
 
         // Audio Preview: Play if node has previewUrl (and not the current song)
         if (d.previewUrl && d.group !== 1) {
@@ -398,7 +481,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
             .transition()
             .duration(300)
             .style('opacity', 1);
-        } else if (d.group === 2) {
+        } else if (isOrigin(d)) {
           // Fallback visual for origin nodes without preview
           select(this)
             .append('text')
@@ -417,11 +500,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       })
       .on('mouseleave', () => {
         node.style('opacity', 1);
-        link
-          .style('stroke', (d: any) => {
-            return linkColors[d.type as keyof typeof linkColors] || linkColors.default;
-          })
-          .style('stroke-opacity', (d: any) => (d.type === 'sample' ? 0.6 : 0.3));
+        // Back to each link's own colour and opacity (its attributes).
+        link.style('stroke', null).style('stroke-opacity', null);
+        linkLabel.style('opacity', null);
         selectAll('.preview-indicator').remove();
 
         // Stop audio preview
@@ -455,11 +536,16 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
     // 8. Tick Function
     simulation.on('tick', () => {
-      link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+      for (const line of [link, linkTarget]) {
+        line
+          .attr('x1', (d: any) => d.source.x)
+          .attr('y1', (d: any) => d.source.y)
+          .attr('x2', (d: any) => d.target.x)
+          .attr('y2', (d: any) => d.target.y);
+      }
+      linkLabel
+        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
+        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
 
       node.attr('transform', (d) => `translate(${d.x},${d.y})`);
     });
@@ -488,86 +574,116 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
     return () => {
       simulation.stop();
+      setActiveLink(null);
     };
-  }, [data, onNodeClick, dimensions, playPreview, stopPreview]); // Add dimensions to dependency array for responsive redraw
+  }, [data, links, labelOf, currentId, onNodeClick, dimensions, playPreview, stopPreview]); // Add dimensions to dependency array for responsive redraw
+
+  const nodeList = graphNodes(data);
+  const active = activeLink === null ? null : (links[activeLink] ?? null);
 
   return (
-    <div
-      ref={wrapperRef}
-      className="w-full h-full relative cursor-move bg-[radial-gradient(circle_at_center,_rgba(20,20,30,0.5)_0%,_transparent_70%)]"
-    >
-      <svg
-        ref={svgRef}
-        className="w-full h-full overflow-visible"
-        role="img"
-        aria-label="Song genealogy network graph"
-      ></svg>
+    <div className="w-full h-full flex flex-col">
+      <div
+        ref={wrapperRef}
+        className="relative flex-1 min-h-0 cursor-move bg-[radial-gradient(circle_at_center,_rgba(20,20,30,0.5)_0%,_transparent_70%)]"
+      >
+        <svg
+          ref={svgRef}
+          className="w-full h-full overflow-visible"
+          aria-label="Song genealogy network graph"
+        ></svg>
 
-      {/* P2:22 — Accessible summary for screen readers */}
-      <div className="sr-only">
-        Genealogy network
-        {graphNodes(data).length > 0 ? ` with ${graphNodes(data).length} related tracks` : ''}.
-        {graphNodes(data)
-          .map((node) => {
-            const relationship =
-              node.group === 1
-                ? 'Current song'
-                : node.group === 2
-                  ? 'Sampled by this track'
-                  : node.group === 3
-                    ? 'Samples this track'
-                    : 'Related influence';
-            return ` ${node.label} (${relationship}).`;
-          })
-          .join('')}
+        {/* P2:22 — Accessible summary for screen readers: each track's relation comes from the
+            link that joins it to this one, never from its group. */}
+        <div className="sr-only">
+          Genealogy network
+          {nodeList.length > 0 ? ` with ${nodeList.length} related tracks` : ''}.
+          {nodeList
+            .map((node) => {
+              if (node.group === 1) return ` ${node.label} (Current song).`;
+              const relation = relationToTrack(links, node.id, currentId);
+              const kind = relation.link ? `, ${LINK_KIND_LABEL[relation.link.kind]}` : '';
+              return ` ${node.label} (${relation.text}${kind}).`;
+            })
+            .join('')}
+        </div>
+
+        {/* The link pointed at or focused: its relation and where it comes from */}
+        {active && (
+          <div
+            aria-hidden="true"
+            data-testid="link-detail"
+            className="absolute left-2 right-2 bottom-2 z-10 pointer-events-none rounded-sm border border-white/15 bg-black/90 px-2 py-1.5 text-chrome font-mono text-text-chip"
+          >
+            <p className="text-text-secondary">
+              {labelOf(active.source)} → {labelOf(active.target)}
+            </p>
+            <p>
+              <span className="text-text-secondary">{LINK_TYPE_LABEL[active.type]}</span>
+              {' · '}
+              {provenanceText(active)}
+            </p>
+          </div>
+        )}
+
+        {/* Audio Preview Indicator */}
+        {isPlaying && playingNodeId && (
+          <div className="absolute top-4 right-4 pointer-events-none">
+            <div className="flex items-center gap-2 text-cyber text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-cyber/30 animate-pulse">
+              <Volume2 size={12} className="animate-bounce" />
+              <span>PREVIEWING TRACK...</span>
+            </div>
+          </div>
+        )}
+
+        {/* No Preview Support Warning (browsers may block autoplay) */}
+        {!hasPreviewSupport && (
+          <div className="absolute top-4 right-4 pointer-events-none" role="status">
+            <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+              <VolumeX size={12} />
+              <span>AUDIO BLOCKED</span>
+            </div>
+          </div>
+        )}
+
+        {/* A node's clip that could not be loaded (preview links expire); hover again to retry */}
+        {hasPreviewSupport && unavailableNodeId && (
+          <div className="absolute top-4 right-4 pointer-events-none" role="status">
+            <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+              <VolumeX size={12} />
+              <span>PREVIEW UNAVAILABLE</span>
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Instructions Overlay - Hidden on mobile for cleaner UX */}
+        {!active && (
+          <div className="absolute bottom-4 left-4 pointer-events-none opacity-50 hidden md:block">
+            <div className="flex flex-col gap-1 text-[9px] font-mono text-gray-500">
+              <span>SCROLL TO ZOOM</span>
+              <span>DRAG TO PAN</span>
+              <span className="text-cyber flex items-center gap-1">
+                <MousePointerClick size={8} />
+                CLICK NODE TO EXPLORE
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
+        <div className="absolute top-2 right-2 pointer-events-none md:hidden">
+          <div className="text-[8px] font-mono text-white/40">PINCH • DRAG • TAP</div>
+        </div>
       </div>
 
-      {/* Audio Preview Indicator */}
-      {isPlaying && playingNodeId && (
-        <div className="absolute top-4 right-4 pointer-events-none">
-          <div className="flex items-center gap-2 text-cyber text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-cyber/30 animate-pulse">
-            <Volume2 size={12} className="animate-bounce" />
-            <span>PREVIEWING TRACK...</span>
-          </div>
+      {/* What the lines mean, in words, and the links as a list */}
+      {links.length > 0 && (
+        // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
+        <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
+          <LinkLegend types={links.map((link) => link.type)} />
+          <LinkList links={links} labelOf={labelOf} />
         </div>
       )}
-
-      {/* No Preview Support Warning (browsers may block autoplay) */}
-      {!hasPreviewSupport && (
-        <div className="absolute top-4 right-4 pointer-events-none" role="status">
-          <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
-            <VolumeX size={12} />
-            <span>AUDIO BLOCKED</span>
-          </div>
-        </div>
-      )}
-
-      {/* A node's clip that could not be loaded (preview links expire); hover again to retry */}
-      {hasPreviewSupport && unavailableNodeId && (
-        <div className="absolute top-4 right-4 pointer-events-none" role="status">
-          <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
-            <VolumeX size={12} />
-            <span>PREVIEW UNAVAILABLE</span>
-          </div>
-        </div>
-      )}
-
-      {/* Enhanced Instructions Overlay - Hidden on mobile for cleaner UX */}
-      <div className="absolute bottom-4 left-4 pointer-events-none opacity-50 hidden md:block">
-        <div className="flex flex-col gap-1 text-[9px] font-mono text-gray-500">
-          <span>SCROLL TO ZOOM</span>
-          <span>DRAG TO PAN</span>
-          <span className="text-cyber flex items-center gap-1">
-            <MousePointerClick size={8} />
-            CLICK NODE TO EXPLORE
-          </span>
-        </div>
-      </div>
-
-      {/* Mobile: Minimal top-right hint that doesn't obstruct graph */}
-      <div className="absolute top-2 right-2 pointer-events-none md:hidden">
-        <div className="text-[8px] font-mono text-white/40">PINCH • DRAG • TAP</div>
-      </div>
     </div>
   );
 };

@@ -14,7 +14,12 @@ import type { PickedBy, SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
 import { isAbortError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
-import { readStoredResult, servedResult, shownQueryMatch } from "../storedResults.js";
+import {
+  readStoredResult,
+  servedResult,
+  shownQueryMatch,
+  storedErrorStatus,
+} from "../storedResults.js";
 import { matchTrack } from "../trackMatch.js";
 
 /** What the route resumes a paused run with: the picked track, and how it was picked. */
@@ -148,7 +153,7 @@ export async function clarificationNode(
   config.signal?.throwIfAborted();
   if (stored) {
     console.log("📦 [Clarification] Stored result for:", selectedId);
-    const trackData = servedResult(stored, shownQueryMatch(picked));
+    const trackData = servedResult(stored.trackData, shownQueryMatch(picked));
     writer?.({
       type: "status",
       code: "NET-200",
@@ -156,8 +161,26 @@ export async function clarificationNode(
       node: "clarification",
       timestamp: timestampOf(runtime),
     });
+    // The sources its run could not read are reported again: missing, not empty.
+    const unread = storedErrorStatus(stored.sourceErrors);
+    for (const message of unread) {
+      writer?.({
+        type: "status",
+        code: "SYS-WARN",
+        message,
+        node: "clarification",
+        timestamp: timestampOf(runtime),
+      });
+    }
     writer?.({ type: "complete", data: trackData });
-    return { ...picked, trackData };
+    return {
+      ...picked,
+      trackData,
+      ...(stored.sourceErrors.length > 0
+        ? { sourceErrors: [...sourceErrors, ...stored.sourceErrors] }
+        : {}),
+      ...(unread.length > 0 ? { statusMessages: unread } : {}),
+    };
   }
 
   return {

@@ -3,11 +3,13 @@
  * ISRC (MusicBrainz, Discogs, SecondHandSongs, Genius), started while the research runs, and
  * the web search's results, put in one evidence pack and sent as `evidence` events.
  *
- * Errors come back in two kinds. A primary source that could not be read is a source error of
- * the run. A source that answered but lost records to a failed request (the MusicBrainz work,
- * and so its covers) is one too, and is also returned in `lost`, so the historian keeps neither
- * the research nor the composer the result as complete; the status says the records are
- * incomplete.
+ * Every primary-source error is a source error of the run, and keeps the composer from storing
+ * the result, with one exception: an answer of a shape the reader does not know, returned in
+ * `lasting`, which is stored with the result and reported again when it is served. A source that
+ * answered but lost records to a failed request (the MusicBrainz work, and so its covers) is also
+ * returned in `lost`: the historian does not cache the research then, and the status says the
+ * records are incomplete. Other primary-source errors do not block the research cache, which
+ * holds no primary record.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -19,6 +21,7 @@ import { type AgentRuntime, timestampOf } from "../runtime.js";
 import type { SpotifyData } from "../state.js";
 import {
   EvidencePack,
+  lastingErrors,
   lostRecords,
   primaryRecordEvidence,
   primarySourceErrors,
@@ -67,6 +70,8 @@ export interface RunEvidence {
   errors: SourceError[];
   /** Those of `errors` whose source lost records: the run is not complete. */
   lost: SourceError[];
+  /** Those of `errors` that are lasting (an answer of a shape the reader does not know). */
+  lasting: SourceError[];
   status: string[];
 }
 
@@ -90,15 +95,23 @@ export async function runEvidence(
   const warnings: string[] = [];
   let errors: SourceError[] = [];
   let lost: SourceError[] = [];
+  let lasting: SourceError[] = [];
   if (read.status === "read") {
     const records = primaryRecordEvidence(read.sources);
     pack.addAll(records);
+    const { musicbrainz } = read.sources;
+    // Without MusicBrainz the others are not asked: nothing was read, which is not "no match".
+    const unread =
+      musicbrainz.status === "missing" && musicbrainz.error
+        ? `📇 Primary sources: none could be read (${SOURCE_NAMES.musicbrainz} could not be read)`
+        : null;
     found.push(
       records.length > 0
         ? `📇 Primary sources: ${records.length} records (${countsBySource(records)})`
-        : "📇 Primary sources: no record matched the track",
+        : (unread ?? "📇 Primary sources: no record matched the track"),
     );
     errors = uniqueErrors(primarySourceErrors(read.sources));
+    lasting = lastingErrors(read.sources);
     const losses = lostRecords(read.sources);
     lost = losses.map(({ error }) => error);
     for (const { error, note } of losses) {
@@ -120,7 +133,7 @@ export async function runEvidence(
   for (const item of evidence) config.writer?.({ type: "evidence", evidence: item });
   for (const message of found) sendStatus(config, runtime, "RESEARCH-FOUND", message);
   for (const message of warnings) sendStatus(config, runtime, "SYS-WARN", message);
-  return { evidence, errors, lost, status: [...found, ...warnings] };
+  return { evidence, errors, lost, lasting, status: [...found, ...warnings] };
 }
 
 /** Sends one status line of the historian. */

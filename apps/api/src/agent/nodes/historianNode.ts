@@ -15,9 +15,11 @@
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import type { SourceId } from "@liner-notes/contract";
+import type { SourceError, SourceId } from "@liner-notes/contract";
 import { isLlmError } from "../../llm/errors.js";
 import { isSourceError, type SourceName } from "../../sources/http.js";
+import { discogsConfigured } from "../../sources/discogs.js";
+import { geniusConfigured } from "../../sources/genius.js";
 import { errorRecord } from "../../sources/records.js";
 import {
   getLastfmTrackTags,
@@ -47,9 +49,19 @@ import {
   type SonicAgentStateType,
 } from "../state.js";
 
-/** The status line of a research-cache hit while the primary sources are read. */
-const READING_PRIMARY =
-  "📇 Reading primary sources (MusicBrainz, Discogs, SecondHandSongs, Genius)...";
+/**
+ * The status line of a research-cache hit while the primary sources are read: the ones that
+ * will be asked (a source without its credential is reported as not configured instead).
+ */
+function readingPrimary(): string {
+  const asked = [
+    "MusicBrainz",
+    ...(discogsConfigured() ? ["Discogs"] : []),
+    "SecondHandSongs",
+    ...(geniusConfigured() ? ["Genius"] : []),
+  ];
+  return `📇 Reading primary sources (${asked.join(", ")})...`;
+}
 
 export async function historianNode(
   state: SonicAgentStateType,
@@ -87,17 +99,20 @@ export async function historianNode(
       timestamp: timestampOf(runtime),
     });
     // The cached research holds no evidence: the primary sources are read for this run.
-    if (isrc) sendStatus(config, runtime, "RESEARCH-FOUND", READING_PRIMARY);
+    const reading = isrc ? readingPrimary() : null;
+    if (reading) sendStatus(config, runtime, "RESEARCH-FOUND", reading);
     const pack = await runEvidence(primary, [], config, runtime);
     const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
+    const lasting = lastingOf(pack.lasting, notConfigured);
     return {
       researchData: cachedResearch,
       evidence: pack.evidence,
       ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
+      ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),
       statusMessages: [
         "📚 Research (cached): loaded from persistent cache",
         ...unreadableStatus(notConfigured),
-        ...(isrc ? [READING_PRIMARY] : []),
+        ...(reading ? [reading] : []),
         ...pack.status,
       ],
     };
@@ -278,6 +293,7 @@ export async function historianNode(
     // The primary sources' errors are the run's too; they do not block the research cache,
     // which does not hold their records.
     sourceErrors: uniqueErrors([...sourceErrors, ...pack.errors]),
+    lastingSourceErrors: lastingOf(pack.lasting, sourceErrors),
     statusMessages: [
       ...prefetchStatus,
       ...(finalState.statusMessages ?? []),
@@ -285,6 +301,16 @@ export async function historianNode(
       ...(failure ? [summary] : []),
     ],
   };
+}
+
+/**
+ * The lasting primary-source errors that no other error of the run shares a source and code
+ * with: errors are reported once per source and code, so one that also came from elsewhere
+ * (the researcher's own MusicBrainz step) is not taken as lasting.
+ */
+function lastingOf(lasting: readonly SourceError[], others: readonly SourceError[]): SourceError[] {
+  const taken = new Set(others.map((e) => `${e.source}:${e.code}`));
+  return lasting.filter((e) => !taken.has(`${e.source}:${e.code}`));
 }
 
 /** Research without Last.fm's artist-level data, when `uncertain` says it is not this artist's. */

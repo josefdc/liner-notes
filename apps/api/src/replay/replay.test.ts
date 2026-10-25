@@ -7,8 +7,8 @@
  *
  * The stub scout picks its path from the query: "ambiguous …" offers two candidates (the run
  * pauses), anything else matches TRACK_ID; for "echo …" its status repeats the typed query. The
- * stub composer's result carries a preview URL (under `previewUrl` and as a genealogy image), a
- * cover URL and the typed query in a field the contract does not name.
+ * stub composer's result carries a preview URL (under `previewUrl`, as a genealogy image and as a
+ * genealogy node's clip), a cover URL and the typed query in a field the contract does not name.
  */
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -158,7 +158,18 @@ vi.mock("../agent/nodes/index.js", async () => {
           { id: "fb", title: "B fact", content: "Recorded fact two.", type: "trivia" },
         ],
         genealogy: {
-          nodes: [{ id: "self", group: 1, label: "Recorded Song", size: 10, img: preview }],
+          nodes: [
+            { id: "self", group: 1, label: "Recorded Song", size: 10, img: preview },
+            // A genealogy node's own clip (Spotify's, or Deezer's by ISRC).
+            {
+              id: "influence",
+              group: 4,
+              label: "An Influence",
+              size: 8,
+              spotifyId: "0ReplayInfluence000001",
+              previewUrl: preview,
+            },
+          ],
           links: [],
         },
         run: {
@@ -425,6 +436,8 @@ describe("the recorder", () => {
     expect(built.analysis).not.toHaveProperty("previewUrl");
     expect(built.analysis.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
     expect(built.analysis.genealogy.nodes[0].img).toBe("");
+    expect(built.analysis.genealogy.nodes[1].spotifyId).toBe("0ReplayInfluence000001");
+    expect(built.analysis.genealogy.nodes[1]).not.toHaveProperty("previewUrl");
     expect(content(built.analysis)).toEqual(content(stored(runId).run.analysis));
     expect(types(built.events.map((e) => e.event as Event))).toEqual([
       "connected",
@@ -699,6 +712,40 @@ describe("the recorder", () => {
         "other.url: a URL outside the allow-listed sites",
       ]),
     );
+  });
+
+  it("refuses a web evidence page whose path carries a token or an address", () => {
+    const webItem = (url: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "A page",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "A page about the track.",
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl";
+    const refused = [
+      `https://example.org/magic-login/${jwt}/`,
+      "https://example.org/share/sk-AbCdEfGhIjKlMnOpQr12/press",
+      "https://example.org/dl/token=abc123def456/file",
+      "https://example.org/people/jane.doe@example.com",
+      "https://example.org/s/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7d/view",
+      "https://example.org/f/0123456789abcdef0123456789abcdef/report",
+    ];
+    for (const url of refused) {
+      expect(leaks({ evidence: [webItem(url)] }, check), url).not.toEqual([]);
+    }
+    // Slugs of words and short ids are pages, not tokens.
+    for (const url of [
+      "https://www.example.com/music/news/ice-ice-baby-under-pressure-lawsuit-1234/",
+      "https://example.org/wiki/List_of_songs_recorded_by_Vanilla_Ice_and_others",
+      "https://example.org/articles/2024/10/a1b2c3",
+    ]) {
+      expect(leaks({ evidence: [webItem(url)] }, check), url).toEqual([]);
+    }
   });
 
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {

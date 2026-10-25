@@ -64,7 +64,7 @@ import {
   primaryEvidence,
   quoted,
   RELATION_PHRASE,
-  readFailure,
+  errorRecord,
   scopedRef,
   type SourceResult,
   systemClock,
@@ -108,6 +108,7 @@ export type IdentityResolution =
       details: MbRecordingDetails;
       /** The work with its recordings, when the recording performs exactly one. */
       work: MbWork | null;
+      /** A note on the work: it could not be read, or its recordings could not be dated. */
       workError: string | null;
       /** The work read's failure, for the run's source errors (its covers are missing). */
       workFailure: SourceErrorRecord | null;
@@ -479,7 +480,7 @@ export async function resolveIdentity(
       }
     } catch (error) {
       releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
-      releasesFailure = readFailure("discogs", error);
+      releasesFailure = errorRecord("discogs", error);
     }
 
     const links = linksOf(details);
@@ -494,23 +495,30 @@ export async function resolveIdentity(
       const [only] = links.works;
       try {
         work = await getWorkRecordings(only.mbid, signal);
+      } catch (error) {
+        // The work's covers are lost: the run's error, so it is not kept as complete.
+        workError = `the work "${only.title}" could not be read: ${describeError(error)}`;
+        workFailure = errorRecord("musicbrainz", error);
+      }
+      // Dating the work's recordings costs requests; only when nothing else rules it out. When
+      // they cannot be dated, nothing is lost: the recording is not shown to be the original, so
+      // the work's covers stay about the work, and a note says so.
+      if (work && needsDates) {
         const coverIds = new Set(
-          (Array.isArray(work?.relations) ? work.relations : [])
+          (Array.isArray(work.relations) ? work.relations : [])
             .filter((r) => (r?.attributes ?? []).includes("cover") && r.recording)
             .map((r) => r.recording?.id as string),
         );
-        // Dating the work's recordings costs requests; only when nothing else rules it out.
-        if (needsDates) {
+        try {
           original = originalPerformance(
             details,
             links.works,
             await browseWorkRecordings(only.mbid, 2, signal),
             coverIds,
           );
+        } catch (error) {
+          workError = `dates incomplete: the recordings of the work "${only.title}" could not be dated (${describeError(error)}), so its covers are not claimed for this recording`;
         }
-      } catch (error) {
-        workError = `the work "${only.title}" could not be read: ${describeError(error)}`;
-        workFailure = readFailure("musicbrainz", error);
       }
     }
 

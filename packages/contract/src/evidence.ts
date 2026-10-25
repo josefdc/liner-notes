@@ -46,8 +46,9 @@ export const Evidence = z.object({
    * For a primary record, its first path segment is its scope: what the item states a fact
    * about. `track/` the matched recording (e.g. `track/recording/<mbid>`), `release/` a whole
    * release the track is on (e.g. a release-wide Discogs credit), `work/` the song, not this
-   * recording (e.g. another artist's cover of it). A claim about the recording never rests on
-   * a `work/` or `release/` item alone. Web results have none (null).
+   * recording (e.g. another artist's cover of it). A claim about the recording must not rest
+   * on a `work/` or `release/` item alone; for now that is a rule of the composer's prompt, not
+   * checked by code (claims built by code will check it). Web results have none (null).
    */
   recordRef: z
     .string()

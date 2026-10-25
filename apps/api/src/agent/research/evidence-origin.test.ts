@@ -7,6 +7,7 @@
 import { Evidence as EvidenceSchema, evidenceIssues, SourceId } from "@liner-notes/contract";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
+import { evidenceForPrompt, shownEvidence } from "../prompts.js";
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { found, primaryEvidence, scopedRef } from "../../sources/records.js";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -217,6 +218,16 @@ describe("the pack", () => {
       secondhandsongs: { status: "missing", error: null },
     } as unknown as PrimarySources);
 
+  it("writes a web page's id as the prompt shows it, so a citation of it is kept", () => {
+    const [item] = webSearchEvidence([
+      web("https://ja.example.test/wiki/アイス・アイス・ベイビー（曲）"),
+    ]);
+    expect(item.id).toMatch(/^tavily:https:\/\/ja\.example\.test\/wiki\/%[0-9A-F]{2}/);
+    expect(item.url).toBe(item.id.slice("tavily:".length));
+    expect(evidenceForPrompt([item])).toContain(JSON.stringify(item.id));
+    expect(shownEvidence([item]).map((e) => e.id)).toEqual([item.id]);
+  });
+
   it("keeps an id once, the first item", () => {
     const pack = new EvidencePack();
     const [first] = webSearchEvidence([web("https://example.test/a", "first")]);
@@ -273,6 +284,22 @@ describe("what a primary source lost, and a bug in its reader", () => {
     expect(primarySourceErrors(sources)).toEqual(
       expect.arrayContaining([expect.objectContaining({ source: "musicbrainz", code: "timeout" })]),
     );
+  });
+
+  it("loses nothing when the deadline cuts only the dating of the work's recordings", async () => {
+    const normal = primaryRecordEvidence(await iceIceBaby()).map((e) => e.id);
+    const dating = "https://musicbrainz.org/ws/2/recording?work=";
+    stubFetch((call) => (call.url.startsWith(dating) ? never(call) : primaryRoute(call)));
+    const sources = await collectPrimarySources(ICE_TRACK, { now, deadlineMs: 300 });
+
+    expect(lostRecords(sources)).toEqual([]);
+    expect(primarySourceErrors(sources).filter((e) => e.source === "musicbrainz")).toEqual([]);
+    // A note, not an error: the work's covers are listed, about the work.
+    expect(sources.musicbrainz).toMatchObject({
+      status: "found",
+      incomplete: expect.stringMatching(/^dates incomplete: /),
+    });
+    expect(primaryRecordEvidence(sources).map((e) => e.id)).toEqual(normal);
   });
 
   it("lists no lost records when every request answered", async () => {

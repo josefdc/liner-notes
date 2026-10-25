@@ -25,7 +25,6 @@ import {
   type Evidence,
   evidenceIssues,
   type SourceError,
-  type SourceId,
 } from "@liner-notes/contract";
 import type { PrimarySources } from "../../sources/identity.js";
 import {
@@ -72,9 +71,6 @@ export function isSourcedEvidence(item: unknown): item is SourcedEvidence {
 
 const PRIMARY_KEYS = ["musicbrainz", "discogs", "genius", "secondhandsongs"] as const;
 
-/** The primary-record sources read from the track's ISRC. */
-export const PRIMARY_RECORD_SOURCES: ReadonlySet<SourceId> = new Set(PRIMARY_KEYS);
-
 /**
  * The Evidence of the primary sources' answers, in source order. Every item must be one the
  * source module built from its payload, of that source, as a primary record with a scoped
@@ -105,7 +101,7 @@ export function primaryRecordEvidence(sources: PrimarySources): SourcedEvidence[
 
 /**
  * The primary sources' errors, for the run's source errors: each source that could not be read,
- * and each that answered but lost records to a failed request (`lostRecordErrors`).
+ * and each that answered but lost records to a failed request (`lostRecords`).
  */
 export function primarySourceErrors(sources: PrimarySources): SourceError[] {
   return PRIMARY_KEYS.flatMap((key) => {
@@ -115,10 +111,11 @@ export function primarySourceErrors(sources: PrimarySources): SourceError[] {
 }
 
 /**
- * The sources that answered with records but lost some to a failed request (the MusicBrainz
- * work, and so its covers, when its read failed or the deadline cut it): the error and the
- * source's note on what is missing. A retry may complete them, so a run with one is not kept
- * as complete.
+ * The sources that answered with records but lost some to a failed request: the MusicBrainz
+ * work, and so its covers, when its read failed or the deadline cut it (recordings that could
+ * not be dated lose nothing: that is a note, not an error). Each with the source's note on what
+ * is missing. The error blocks the research cache and the stored result whatever its code: a
+ * retry may complete them.
  */
 export function lostRecords(
   sources: PrimarySources,
@@ -131,20 +128,36 @@ export function lostRecords(
   });
 }
 
+/**
+ * The errors of the primary sources that answered JSON of a shape their reader does not know
+ * (marked lasting by `unexpectedShape`): a retry gets the same answer, so they do not keep the
+ * result from being stored; it is stored with them and reports them when served.
+ */
+export function lastingErrors(sources: PrimarySources): SourceError[] {
+  return PRIMARY_KEYS.flatMap((key) => {
+    const result = sources[key];
+    return result.status === "missing" && result.lasting && result.error ? [result.error] : [];
+  });
+}
+
 /** One web search result as the search read it, and when. */
 export interface WebFinding {
   result: WebResult;
   retrievedAt: string;
 }
 
-const isWebPage = (url: string) => {
+/**
+ * A web page's URL as the WHATWG URL parser writes it (ASCII, percent-encoded), so the id and
+ * link read the same in the prompt, which normalises text; null when it is not an http(s) URL.
+ */
+function webPage(url: string): string | null {
   try {
-    const { protocol } = new URL(url);
-    return protocol === "https:" || protocol === "http:";
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
   } catch {
-    return false;
+    return null;
   }
-};
+}
 
 /**
  * Web-tier Evidence from the web search's results: the page's title, URL and the text the
@@ -155,9 +168,10 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
   const items: SourcedEvidence[] = [];
   const seen = new Set<string>();
   for (const { result, retrievedAt } of findings) {
-    const url = typeof result?.url === "string" ? result.url.trim() : "";
+    const raw = typeof result?.url === "string" ? result.url.trim() : "";
+    const url = raw ? webPage(raw) : null;
     const text = typeof result?.content === "string" ? result.content.trim() : "";
-    if (!url || !text || !isWebPage(url) || isLyricPage(url) || isPreviewUrl(url)) continue;
+    if (!url || !text || isLyricPage(url) || isPreviewUrl(url) || isPreviewUrl(raw)) continue;
     if (seen.has(url)) continue;
     seen.add(url);
     const title = typeof result.title === "string" && result.title.trim() ? result.title : url;

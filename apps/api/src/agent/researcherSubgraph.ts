@@ -50,7 +50,11 @@ import {
 } from "../sources/lastfm.js";
 import { getListenBrainzSimilarArtists } from "../sources/listenbrainz.js";
 import { errorRecord } from "../sources/records.js";
-import { type NotAskedReason, readToolResult } from "../sources/toolResult.js";
+import {
+  INTERNAL_ERROR_PREFIX,
+  type NotAskedReason,
+  readToolResult,
+} from "../sources/toolResult.js";
 import type { SourceError, SourceId } from "@liner-notes/contract";
 import {
   emptyResearch,
@@ -467,8 +471,9 @@ export class StepReader {
 }
 
 /**
- * One status line per source that could not be read: "⚠️ Last.fm could not be read (…)", or
- * "⚠️ Last.fm key rejected (…)" for a key the source refused.
+ * One status line per source that could not be read: "⚠️ Last.fm could not be read (…)",
+ * "⚠️ Last.fm key rejected (…)" for a key the source refused, or, for a bug in our own reader
+ * (an internal error), that the reader failed: the source is not to blame.
  */
 export function unreadableStatus(
   errors: readonly SourceError[],
@@ -477,7 +482,9 @@ export function unreadableStatus(
   return uniqueErrors(errors).map((e) =>
     rejected.has(e.source)
       ? `⚠️ ${SOURCE_NAMES[e.source]} key rejected: fix the key (${e.code})`
-      : `⚠️ ${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
+      : e.message?.startsWith(INTERNAL_ERROR_PREFIX)
+        ? `⚠️ ${SOURCE_NAMES[e.source]}: our reader failed on its answer (internal error)`
+        : `⚠️ ${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
   );
 }
 
@@ -882,7 +889,12 @@ async function researchToolNode(
     console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, record.message);
     return {
       sourceErrors: [record],
-      statusMessages: [`⚠️ Search failed: ${label} (${record.code})`],
+      // A bug in our own reader says so: the source is not to blame.
+      statusMessages: [
+        record.message?.startsWith(INTERNAL_ERROR_PREFIX)
+          ? `⚠️ Search failed: ${label} (internal error in our reader)`
+          : `⚠️ Search failed: ${label} (${record.code})`,
+      ],
     };
   }
 }

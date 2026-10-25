@@ -130,7 +130,7 @@ describe("web research searches", () => {
       () => json({ detail: { error: "Unauthorized: invalid API key" } }, { status: 401 }),
       "unavailable",
     ],
-    ["an HTML answer", () => html("<html>bad gateway</html>"), "invalid_response"],
+    ["an HTML answer", () => html("<html>bad gateway</html>"), "unavailable"],
     ["a body without results", () => json({ detail: "something else" }), "invalid_response"],
   ])("%s is a failure with its code that the researcher drops", async (_name, reply, code) => {
     stubFetch((call) => (call.url === TAVILY ? reply() : undefined));

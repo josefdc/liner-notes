@@ -25,7 +25,12 @@ import { isAbortError, retryAfterWait, withRetry } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import type { ScoutFailure, SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
-import { readStoredResult, servedResult, shownQueryMatch } from "../storedResults.js";
+import {
+  readStoredResult,
+  servedResult,
+  shownQueryMatch,
+  storedErrorStatus,
+} from "../storedResults.js";
 import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
 
 /** The longest Retry-After the scout waits out before trying Spotify again. */
@@ -82,7 +87,7 @@ async function selectedTrack(
   config.signal?.throwIfAborted();
   if (stored) {
     console.log("📦 [Scout] Stored result for:", track.id);
-    const trackData = servedResult(stored, shownQueryMatch(selected));
+    const trackData = servedResult(stored.trackData, shownQueryMatch(selected));
     config.writer?.({
       type: "status",
       code: "NET-200",
@@ -90,8 +95,28 @@ async function selectedTrack(
       node: "scout",
       timestamp: timestampOf(runtime),
     });
+    // The sources its run could not read are reported again: missing, not empty.
+    const unread = storedErrorStatus(stored.sourceErrors);
+    for (const message of unread) {
+      config.writer?.({
+        type: "status",
+        code: "SYS-WARN",
+        message,
+        node: "scout",
+        timestamp: timestampOf(runtime),
+      });
+    }
     config.writer?.({ type: "complete", data: trackData });
-    return { ...selected, trackData };
+    return {
+      ...selected,
+      trackData,
+      ...(stored.sourceErrors.length > 0
+        ? { sourceErrors: [...(selected.sourceErrors ?? []), ...stored.sourceErrors] }
+        : {}),
+      ...(unread.length > 0
+        ? { statusMessages: [...(selected.statusMessages ?? []), ...unread] }
+        : {}),
+    };
   }
 
   config.writer?.({

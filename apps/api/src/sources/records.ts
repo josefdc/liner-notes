@@ -15,9 +15,9 @@ import {
   type SourceError as SourceErrorRecord,
   type SourceId,
 } from "@liner-notes/contract";
-import { describeError, type SourceName, SourceError } from "./http.js";
+import { type SourceName, SourceError } from "./http.js";
 import { normalizeName, withoutFeatured } from "./musicbrainz.js";
-import { sourceErrorCode } from "./toolResult.js";
+import { failureMessage, sourceErrorCode } from "./toolResult.js";
 
 // =============================================================================
 // The track
@@ -262,6 +262,12 @@ export type SourceResult<T> =
       reason: string;
       /** Set when the source could not be read, for the run's source errors. */
       error: SourceErrorRecord | null;
+      /**
+       * Set only by a reader whose source answered JSON of a shape it does not know
+       * (`unexpectedShape`): a retry gets the same answer until the reader changes, so the error
+       * does not keep a result from being stored (it is stored and reported with it).
+       */
+      lasting?: true;
     });
 
 /**
@@ -306,7 +312,12 @@ export function found<T>(
 export function missing<T>(
   source: SourceId,
   reason: string,
-  options: { omitted?: Omission[]; error?: SourceErrorRecord | null; matched?: number } = {},
+  options: {
+    omitted?: Omission[];
+    error?: SourceErrorRecord | null;
+    matched?: number;
+    lasting?: boolean;
+  } = {},
 ): SourceResult<T> {
   const omitted = options.omitted ?? [];
   const matched = options.matched ?? 0;
@@ -316,6 +327,7 @@ export function missing<T>(
     source,
     reason,
     error: options.error ?? null,
+    ...(options.lasting && options.error ? { lasting: true as const } : {}),
     omitted,
     identity: {
       matched,
@@ -336,43 +348,48 @@ export function notConfigured<T>(source: SourceId, variable: string): SourceResu
 
 /**
  * A failure as the run's source error. A deadline is a timeout; a request the caller cancelled
- * is "unavailable", not a timeout.
+ * is "unavailable", not a timeout; a bug in our own reader (a TypeError past the shape checks)
+ * is "unavailable" with an internal-error message, never the source's answer.
  */
 export function errorRecord(source: SourceId, error: unknown): SourceErrorRecord {
-  return { source, code: sourceErrorCode(error), message: describeError(error) };
+  return { source, code: sourceErrorCode(error), message: failureMessage(error) };
 }
-
-/** A failure of our own code (a bug), not of the source: it is never the source's answer. */
-const isInternalError = (error: unknown) =>
-  error instanceof TypeError || error instanceof ReferenceError || error instanceof RangeError;
 
 /**
- * A primary source's failure as the run's source error. A bug in the code reading the answer
- * (a TypeError past the shape checks) is not an invalid response from the source: it is
- * reported as an internal error, with code "unavailable", so it stays visible and the result is
- * not kept. A payload of an unexpected shape is "invalid_response" (`unexpectedShape`).
+ * Any failure while reading a source, as "missing" with a typed error; never a throw. Only an
+ * `unexpectedShape` failure is marked lasting.
  */
-export function readFailure(source: SourceId, error: unknown): SourceErrorRecord {
-  if (isInternalError(error)) {
-    return { source, code: "unavailable", message: `internal error: ${describeError(error)}` };
-  }
-  return errorRecord(source, error);
-}
-
-/** Any failure while reading a source, as "missing" with a typed error; never a throw. */
 export function failed<T>(
   source: SourceId,
   error: unknown,
   omitted: Omission[] = [],
   matched = 0,
 ): SourceResult<T> {
-  const record = readFailure(source, error);
-  return missing(source, record.message ?? "", { omitted, error: record, matched });
+  const record = errorRecord(source, error);
+  return missing<T>(source, record.message ?? "", {
+    omitted,
+    error: record,
+    matched,
+    lasting: isShapeFailure(error),
+  });
 }
 
-/** A payload that is not the shape the source documents; reported as an invalid response. */
+/** The errors `unexpectedShape` made; no other error is a shape failure. */
+const shapeFailures = new WeakSet<object>();
+
+/**
+ * A JSON payload that is not the shape the source documents, found by a primary-record reader;
+ * reported as an invalid response, and the one failure marked lasting (see `failed`).
+ */
 export function unexpectedShape(source: SourceName, what: string): SourceError {
-  return new SourceError(source, "parse", `unexpected answer: ${what}`);
+  const error = new SourceError(source, "parse", `unexpected answer: ${what}`);
+  shapeFailures.add(error);
+  return error;
+}
+
+/** True for an error `unexpectedShape` made. */
+export function isShapeFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && shapeFailures.has(error);
 }
 
 /** Per-source identity counts summed over results, for the run's identity accuracy report. */

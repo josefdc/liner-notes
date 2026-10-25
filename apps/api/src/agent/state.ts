@@ -521,6 +521,14 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // Those of sourceErrors that are lasting: a primary-record answer of a shape its reader does
+  // not know (marked by the reader, never by source name). They do not keep the composer from
+  // storing the result; it is stored with them and reports them again when served.
+  lastingSourceErrors: Annotation<SourceError[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+
   // HITL configuration (how many candidates the track picker offers)
   hitlConfig: Annotation<HITLConfig>({
     reducer: (_, next) => next,

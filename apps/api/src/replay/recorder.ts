@@ -174,7 +174,7 @@ function allowedUrl(url: string): boolean {
 /**
  * The pages a record's web-tier evidence links to (web search results cited by the run): any
  * site, but only a plain http(s) page that is not a preview, media or signed link, has no
- * credentials and whose query carries nothing shaped like a secret. These URLs, and their ids
+ * credentials and whose path and query carry nothing shaped like a secret. These URLs, and their ids
  * (`tavily:<url>`), are content of the record; any other URL still has to be on an allow-listed
  * site.
  */
@@ -191,6 +191,23 @@ function webEvidencePages(value: unknown, pages = new Set<string>()): Set<string
   return pages;
 }
 
+/**
+ * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, or a
+ * token of 32 or more base64/hex characters (hex alone, or mixed case with digits: a slug of
+ * words such as "ice-ice-baby-under-pressure-1234" is neither).
+ */
+function tokenSegment(segment: string): boolean {
+  if (/^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./.test(segment)) return true;
+  if (/^(?:sk|pk)[-_][A-Za-z0-9_-]{16,}$/.test(segment)) return true;
+  if (/^[A-Fa-f0-9]{32,}$/.test(segment)) return true;
+  return (
+    /^[A-Za-z0-9+/=_-]{32,}$/.test(segment) &&
+    /\d/.test(segment) &&
+    /[A-Z]/.test(segment) &&
+    /[a-z]/.test(segment)
+  );
+}
+
 function plainWebPage(url: string): boolean {
   if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
   let parsed: URL;
@@ -201,8 +218,13 @@ function plainWebPage(url: string): boolean {
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
   if (parsed.username || parsed.password) return false;
-  const query = `${parsed.search}${parsed.hash}`;
-  return !SECRET_SHAPES.some(([, pattern]) => pattern.test(query) || pattern.test(decoded(query)));
+  // The path is scanned too: a page link may carry a capability token or an address there.
+  const parts = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  if (SECRET_SHAPES.some(([, pattern]) => pattern.test(parts) || pattern.test(decoded(parts)))) {
+    return false;
+  }
+  const segments = decoded(parsed.pathname).split("/");
+  return !segments.some(tokenSegment);
 }
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;

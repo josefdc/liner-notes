@@ -242,7 +242,10 @@ describe("the historian's evidence pack", () => {
       new Set(["musicbrainz", "secondhandsongs"]),
     );
     // While the sources are read, the stream says what the run is waiting for.
-    const reading = events.findIndex((e) => /^📇 Reading primary sources/.test(e.message ?? ""));
+    // Only the sources that will be asked: Discogs and Genius have no credential here.
+    const reading = events.findIndex(
+      (e) => e.message === "📇 Reading primary sources (MusicBrainz, SecondHandSongs)...",
+    );
     expect(reading).toBeGreaterThan(-1);
     expect(reading).toBeLessThan(events.findIndex((e) => e.type === "evidence"));
   });
@@ -260,9 +263,8 @@ describe("the historian's evidence pack", () => {
 });
 
 /** One run of the whole graph for the track; the stored results and research it left. */
-async function runGraph(threadId = "run-a2") {
+async function runGraph(threadId = "run-a2", store = new InMemoryStore()) {
   const llm = stubLlm(answer);
-  const store = new InMemoryStore();
   const graph = buildSonicAgentGraph({
     runtime: testRuntime(llm, AT),
     checkpointer: new MemorySaver(),
@@ -270,23 +272,117 @@ async function runGraph(threadId = "run-a2") {
   });
   let trackData: TrackData | null = null;
   const events: Array<{ type: string; message?: string }> = [];
+  // Every node's source errors, as the run's state collects them.
+  const sourceErrors: Array<{ source: string; code: string; message?: string }> = [];
   const stream = await graph.stream(
     { songQuery: "Ice Ice Baby Vanilla Ice" },
     { configurable: { thread_id: threadId }, streamMode: ["updates", "custom"] },
   );
   for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
-    if (mode === "custom") events.push(chunk as { type: string });
-    const composer = (chunk as { composer?: { trackData?: TrackData } }).composer;
-    if (mode === "updates" && composer?.trackData) trackData = composer.trackData;
+    if (mode === "custom") {
+      events.push(chunk as { type: string });
+      continue;
+    }
+    for (const update of Object.values(chunk as Record<string, unknown>)) {
+      const node = (update ?? {}) as { trackData?: TrackData; sourceErrors?: typeof sourceErrors };
+      if (node.trackData) trackData = node.trackData;
+      sourceErrors.push(...(node.sourceErrors ?? []));
+    }
   }
   const stored = (await store.search(TRACKS_NAMESPACE)).length;
-  return { llm, trackData: trackData as TrackData | null, events, stored };
+  return { llm, trackData: trackData as TrackData | null, events, stored, sourceErrors };
 }
 
 const statusLines = (events: ReadonlyArray<{ type: string; message?: string }>) =>
   events.filter((e) => e.type === "status").map((e) => e.message ?? "");
 
 describe("a run whose primary sources fail", () => {
+  const html = (body: string) =>
+    new Response(body, { status: 200, headers: { "content-type": "text/html" } });
+
+  it("does not take an HTML page for the work for an answer: lost, nothing kept", async () => {
+    net = stubFetch((call) =>
+      call.url.startsWith(WORK) ? html("<html>challenge</html>") : primaryRoute(call),
+    );
+    const { trackData, stored } = await runGraph();
+
+    expect(TrackAnalysis.parse(trackData).run?.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "musicbrainz", code: "unavailable" }),
+      ]),
+    );
+    expect(stored).toBe(0);
+    expect(cache.putResearch).not.toHaveBeenCalled();
+  });
+
+  it("does not keep the result when SecondHandSongs answers with an HTML page", async () => {
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? html("<html>are you a robot?</html>") : primaryRoute(call),
+    );
+    const { trackData, stored } = await runGraph();
+
+    expect(TrackAnalysis.parse(trackData).run?.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "unavailable" }),
+      ]),
+    );
+    expect(stored).toBe(0);
+  });
+
+  it("says no primary record could be read when MusicBrainz is down", async () => {
+    net = stubFetch((call) =>
+      call.url.startsWith("https://musicbrainz.org/")
+        ? new Response("bad gateway", { status: 502 })
+        : primaryRoute(call),
+    );
+    const { events } = await runGraph();
+
+    const lines = statusLines(events);
+    expect(lines).toContain(
+      "📇 Primary sources: none could be read (MusicBrainz could not be read)",
+    );
+    expect(lines).not.toContain("📇 Primary sources: no record matched the track");
+  });
+
+  it("does not keep the result on a research-cache hit when a primary source fails", async () => {
+    cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : primaryRoute(call),
+    );
+    const { trackData, stored } = await runGraph();
+
+    expect(TrackAnalysis.parse(trackData).run?.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "unavailable" }),
+      ]),
+    );
+    expect(stored).toBe(0);
+  });
+
+  it("serves a result stored past a lasting error with that error reported again", async () => {
+    const store = new InMemoryStore();
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? json({ unexpected: true }) : primaryRoute(call),
+    );
+    const first = await runGraph("run-first", store);
+    expect(first.stored).toBe(1);
+
+    // SecondHandSongs answers now, but the stored result is served: it says what it misses.
+    net = stubFetch(primaryRoute);
+    const served = await runGraph("run-served", store);
+
+    expect(served.llm.calls).toEqual([]);
+    expect(served.trackData?.evidence?.some((e) => e.source === "secondhandsongs")).toBe(false);
+    expect(served.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "invalid_response" }),
+      ]),
+    );
+    expect(statusLines(served.events)).toContain(
+      "⚠️ Stored result: SecondHandSongs could not be read when it was composed (invalid_response)",
+    );
+  });
+
   const WORK = "https://musicbrainz.org/ws/2/work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d?";
 
   it("reports the work's covers as missing and keeps neither the result nor the research", async () => {
@@ -330,13 +426,17 @@ describe("a run whose primary sources fail", () => {
     const broken = structuredClone(shsWork) as { versions: Array<{ performer?: unknown }> };
     broken.versions[0].performer = { name: { first: "Vanilla" } };
     net = stubFetch((call) => (call.url === SHS_WORK ? json(broken) : primaryRoute(call)));
-    const { trackData, stored } = await runGraph();
+    const { trackData, stored, events } = await runGraph();
 
     const error = TrackAnalysis.parse(trackData).run?.sourceErrors?.find(
       (e) => e.source === "secondhandsongs",
     );
     expect(error).toMatchObject({ code: "unavailable" });
     expect(error?.message).toMatch(/^internal error: /);
+    // The status blames our reader, not the source.
+    expect(statusLines(events)).toContain(
+      "⚠️ SecondHandSongs: our reader failed on its answer (internal error)",
+    );
     expect(stored).toBe(0);
   });
 
@@ -403,4 +503,33 @@ describe("a stubbed run", () => {
     // Every value is one of the contract's sources, none of which is a model.
     for (const source of sources) expect(SourceId.options).toContain(source);
   });
+});
+
+describe("concurrent runs on the shared MusicBrainz queue", () => {
+  it("keeps the same records when the deadline cuts only the dating of the work's recordings", async () => {
+    const baseline = await runGraph("run-alone");
+    const ids = (data: TrackData | null) => (data?.evidence ?? []).map((e) => e.id).sort();
+    cache.putResearch.mockClear();
+
+    // The real spacing between MusicBrainz requests: four runs fill the queue, and the 20 s
+    // deadline cuts the dating requests, which come last in each chain.
+    const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(1100);
+    let runs: Awaited<ReturnType<typeof runGraph>>[];
+    try {
+      runs = await Promise.all(["run-1", "run-2", "run-3", "run-4"].map((id) => runGraph(id)));
+    } finally {
+      restore();
+    }
+
+    const dating = net.calls.filter((c) => c.url.includes("/ws/2/recording?work="));
+    const works = net.calls.filter((c) => c.url.includes("/ws/2/work/"));
+    expect(works.length).toBeGreaterThanOrEqual(5); // the baseline's and each run's
+    expect(dating.length).toBeLessThan(2 * 5); // some dating requests were cut
+    for (const run of runs) {
+      expect(ids(run.trackData)).toEqual(ids(baseline.trackData));
+      expect(run.sourceErrors.some((e) => e.source === "musicbrainz")).toBe(false);
+      expect(run.stored).toBe(1);
+    }
+    expect(cache.putResearch).toHaveBeenCalledTimes(4);
+  }, 90_000);
 });

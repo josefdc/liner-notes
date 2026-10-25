@@ -90,13 +90,9 @@ BEAT_MIN_ONSET = 0.1
 # the reported tempo, half or double it), are within STEADY_TEMPO_TOLERANCE of the reported
 # tempo. Both checks are needed: Essentia's beats follow a tempo change, librosa's beat
 # tracker keeps the period it was given. A band going from 90 to 130 BPM halfway fails both;
-# 25 ms of jitter moves the beat medians by under 1%. The calibration in evals/audio (see its
-# section of the report) kept both checks and set the tolerance to 0.04 (before: 0.05): with
-# Essentia it takes the tempo from a band swinging +-12 % around 100 BPM every 12 s and withheld
-# no tempo of the annotated clips; with librosa it withheld 5 of them, 1 right. A band swinging
-# +-10 % still passes with both: its thirds' medians stay within 4 % of the reported tempo.
+# 25 ms of jitter moves the beat medians by under 1%.
 STEADY_TEMPO_PARTS = 3
-STEADY_TEMPO_TOLERANCE = 0.04
+STEADY_TEMPO_TOLERANCE = 0.05
 # The local estimates are read off whole onset frames, and jitter moves their peak: they may
 # also be STEADY_LAG_FRAMES frames off (a drum take with 25 ms jitter at 100 BPM reads 107.7,
 # 1.8 frames from the true period; the 90-to-130 change is 3.3 frames off at best).
@@ -129,12 +125,9 @@ MIN_TONAL_RATIO = 0.1
 # 0.26-0.49, an A minor one-chord vamp under a bass 6 dB louder 0.18-0.25 (withheld). The
 # overtones of one note also spell three or more classes at this weighting (a drone with
 # mains-hum-like harmonics under drums 0.24 and above, a held brass note): without a beat the
-# pitch track withholds those, and with a beat Signals.key_withheld does. The calibration in
-# evals/audio (see its section of the report) lowered the level from 0.28 to 0.1: on the
-# annotated clips Essentia gains 9 keys, all exact, librosa 7, 4 exact; the chords over a C2
-# pedal 10 dB louder get their key back, and no control gets a key it should not have.
+# pitch track withholds those, and with a beat Signals.key_withheld does.
 KEY_MIN_PITCH_CLASSES = 3
-KEY_PITCH_CLASS_LEVEL = 0.1
+KEY_PITCH_CLASS_LEVEL = 0.28
 # A single harmonic series (every line within SERIES_TOLERANCE of a multiple of the lowest
 # line, for at least SERIES_SHARE of the line energy) is one sustained pitch, not a key: mains
 # hum (50 Hz harmonics 1-6 or 1-10 spell G, B and D) or a lone tone. A tolerance of 0.5% (or two
@@ -195,16 +188,16 @@ ONE_PITCH_MIN_EXPLAINED = 0.98
 STILL_MAX_MOVEMENT = 0.06
 MOVEMENT_WINDOW_S = 0.5  # the chromagram is averaged over this before it is compared
 # Below these strengths (0..1) the key is withheld. Set by the calibration in evals/audio (see
-# its section of the report) as the least strict value that removes a key given to an atonal
-# control at little cost. Essentia, 0.4 (before 0.3): it removes 2 of the 9 atonal controls'
-# keys (random chromatic notes; the others score up to 0.69) and withheld no answer of the
-# annotated clips. librosa, 0.45 (before 0.3; 0.4 withheld only a right key): it removes 5 of
-# the 10 (random notes with drums, a chromatic cluster; twelve-tone rows score 0.62-0.82) and
-# withheld 6 keys of the annotated clips, 3 of them right. Neither strength separates atonal
-# from tonal material: the spectral-line rules, not these minimums, keep keys off pitchless
-# sound.
+# its section of the report) as the least strict value that removes a key given to a control
+# with no key, at no cost on the annotated clips: 0.4 for both (before: 0.3). On the 250
+# GiantSteps+ clips it withheld no key with either estimator; it removes 7 control keys with
+# Essentia (two of random chromatic notes, five of one pitched source: tabla, toms, a cowbell)
+# and 22 with librosa (random notes over drums, a chromatic cluster, one-note basses, a tabla,
+# toms, cowbells). Neither strength separates atonal from tonal material, or one pitched source from
+# a chord: most of those controls keep a key, and the spectral-line rules, not these minimums,
+# keep keys off pitchless sound.
 ESSENTIA_MIN_KEY_STRENGTH = 0.4
-LIBROSA_MIN_KEY_STRENGTH = 0.45
+LIBROSA_MIN_KEY_STRENGTH = 0.4
 
 # The harmonic part is separated below this frequency (see Signals.harmonic).
 HARMONIC_MAX_HZ = 5000.0

@@ -68,17 +68,24 @@ PROTOCOL_NOTES = (
     "calibration results had been seen; the line-rule family decided that version's main "
     "result and let Essentia key a pitchless drum track (the service's own drum kit at 128 "
     "BPM, kit seed 3). None of them is used here.",
-    "The evaluation clips were scored more than once: with that first version's choices (the "
-    "first time from measurements rounded to six decimals, which made a 0.04 tolerance look "
-    "as if it fixed a librosa control: one third was 0.96 of the tempo to the last bit), and "
-    "again here. The values here follow from the written procedure on the full-precision "
-    "recording; none was chosen or changed in response to an evaluation score.",
+    'A second version read the plan\'s "librosa checked" as librosa shown only, where the '
+    "first had read it as a veto; the change was made after the numbers had been seen. It let "
+    "through a pitch-class level of 0.1, which gave keys to one pitched source (a one-note "
+    "bass over drums, a church bell, a tabla), and a tolerance of 0.04 that librosa's clips "
+    "reject. The veto is restored here, and no loosening is shipped.",
+    "The evaluation clips were scored in each version: the first time from measurements "
+    "rounded to six decimals, which made a 0.04 tolerance look as if it fixed a librosa control "
+    "(one third was 0.96 of the tempo to the last bit). The values here follow from the "
+    "written procedure on the full-precision recording, applying only changes that withhold "
+    "more; none was chosen or changed in response to an evaluation score.",
     "Before the plan was written, earlier reports had shown why 39 of 50 GiantSteps+ keys were "
     "withheld, some of them on clips that are now evaluation clips; that is what drew "
     "attention to the key evidence rules.",
     "The pitchless controls drawn at 30 seeds each (two drum kits, noise with a beat, a siren "
-    "over drums, clicks) were added after the drum track above was found. No value had "
-    "been set on them; the choice sees them like the other controls.",
+    "over drums, clicks) were added after the drum track above was found, and the "
+    "one-pitch-class ones (a one-note bass, octave riffs, bells alone and over drums, tabla, "
+    "toms, a cowbell, a held synth note) after the level of 0.1 was. No value had been set on "
+    "them; the choice sees them like the other controls.",
 )
 
 
@@ -141,8 +148,11 @@ def section(doc: dict) -> list[str]:
         "withholds answers that are right less often than those it keeps (T2); the least "
         "strict value that passes is taken. A rule the service keeps per estimator (the "
         "confidence and strength minimums) is decided on that estimator's clips; a shared rule "
-        "on Essentia's (the default), with librosa's shown next to it; beat-this is shown under "
-        "the service's rules and decides nothing.",
+        "on Essentia's (the default) and checked on librosa's: a change librosa's clips reject "
+        "is not made. beat-this is shown under the service's rules and decides nothing.",
+        "- Only changes that withhold more are shipped. A loosening the procedure picks is shown "
+        "but not shipped: it rests on these clips alone, and two loosenings chosen this way in "
+        "earlier versions of this calibration gave keys to material with no key.",
         "- Each change is then judged on the evaluation clips: a loosening that fails L1-L3 or "
         "a tightening that fails T2 there is reverted to the value before it. The controls are "
         "the ones the choice saw, so a change made for a control is not tested on new controls "
@@ -290,7 +300,7 @@ def choice_section(choice: dict) -> list[str]:
                 for cand in group["candidates"]
             ]
             if group.get("shown") and group.get("shared"):
-                who = f"`{name}` (shown: the shared value is decided on Essentia's clips)"
+                who = f"`{name}` (the check on a shared value: a change rejected here is not made)"
             elif group.get("shown"):
                 who = f"`{name}` (shown under the service's rules; it decides nothing)"
             elif group.get("shared"):
@@ -301,7 +311,14 @@ def choice_section(choice: dict) -> list[str]:
             if group.get("shown"):
                 continue
             before, chosen = group["before"], group["chosen"]
-            if chosen == before:
+            if group.get("notShipped"):
+                out += [
+                    f"The procedure picks {value_label(family, group['proposed'])}, a loosening: "
+                    "not shipped (a loosening needs data independent of these clips). Kept: "
+                    f"{value_label(family, before)}.",
+                    "",
+                ]
+            elif chosen == before:
                 out += [f"Kept: {value_label(family, before)}.", ""]
             else:
                 out += [
@@ -369,7 +386,13 @@ def confirmation_section(confirmation: dict) -> list[str]:
                 else "–"
             )
             if name != change["estimator"]:
-                status = "shown (the shared value is judged on Essentia's clips)"
+                status = "librosa's check: " + (
+                    "no evaluation clip changed"
+                    if not verdict["changed"]
+                    else (
+                        "fails " + ", ".join(verdict["failed"]) if verdict["failed"] else "passes"
+                    )
+                )
             elif not verdict["changed"]:
                 status = "no evaluation clip changed: kept"
             elif verdict["failed"]:
@@ -393,7 +416,7 @@ def confirmation_section(confirmation: dict) -> list[str]:
         "",
         f"Each change judged again on the evaluation clips ({KIND_RIGHT['tempo']} for tempo, "
         "exact for key), pooled over the rule's datasets: L1-L3 for a loosening, T2 for a "
-        "tightening.",
+        "tightening; a shared change is reverted when either estimator's clips reject it.",
         "",
         *table(head, rows),
         "",

@@ -311,6 +311,8 @@ GROUPS = {
     "one-source": "no key: one held pitch or one voice, or one pitched source over drums",
     "pitchless-seeded": "no key: drums, noise with a beat, a siren over drums and clicks, 30 "
     "seeds each, drawn from the seed (tempo, kit, levels, sounds)",
+    "one-pitch-class-seeded": "no key: one pitched source (a one-note bass, octave riffs, a bell "
+    "alone or over drums, tabla, toms, a cowbell, a held synth note), 30 seeds each",
     "music": "music the service's tests expect a key for",
     "no-tempo": "no single tempo",
     "tempo": "a known tempo (octave and meter)",
@@ -601,6 +603,18 @@ def controls() -> list[Control]:
             )
             for family, make in s.PITCHLESS_SEEDED.items()
             for seed in s.UNSEEN_SEEDS
+        ),
+        # one pitch class at many seeds (services/audio/tests/signals.py ONE_PITCH_CLASS_SEEDED)
+        *(
+            c(
+                f"{family}-s{seed}",
+                "one-pitch-class-seeded",
+                f"one pitch class: {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed),
+                key=NONE,
+            )
+            for family, make in s.ONE_PITCH_CLASS_SEEDED.items()
+            for seed in s.ONE_PITCH_CLASS_SEEDS
         ),
         # the service's own probe sets (tests/test_v2.py)
         *one_source_controls(),

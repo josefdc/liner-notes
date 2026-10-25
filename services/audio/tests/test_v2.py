@@ -363,27 +363,25 @@ def test_no_steady_tempo_without_a_beat_anywhere():
 
 
 # A band whose tempo swings around 100 BPM every 12 s (both estimators read about 107.7 at
-# +-10 % before). The thirds' medians smooth the swing: at the 0.04 tolerance the +-12 % swing
-# loses its tempo with both, while the +-10 % one keeps it (its thirds stay within 4 %; strict
-# expected failures, so a change is seen). librosa already withheld the +-12 % swing at 0.05.
+# +-10 %). The thirds' medians smooth the swing: librosa withholds the +-12 % swing, Essentia
+# reports a tempo for both, and librosa for the +-10 % one (strict expected failures, so a
+# change is seen).
 @pytest.mark.parametrize("estimator", ESTIMATORS)
 @pytest.mark.parametrize("swing", [0.1, 0.12])
 def test_no_tempo_for_a_slow_tempo_swing(swing, estimator, request):
-    if swing == 0.1:
+    if swing == 0.1 or estimator == "essentia":
         request.applymarker(
-            pytest.mark.xfail(strict=True, reason="its thirds stay within 4 % of the tempo")
+            pytest.mark.xfail(strict=True, reason="its thirds stay within 5 % of the tempo")
         )
     _, v2 = analyse_array(signals.tempo_swing(swing=swing), estimator)
     assert v2["tempo"] is None
 
 
 def test_steady_tempo_follows_the_beat_grid():
-    """The tolerance (0.04, pinned here) was set by the calibration in evals/audio."""
-    assert estimators.STEADY_TEMPO_TOLERANCE == 0.04
     steady = np.arange(60) * 0.5
     assert estimators.steady_tempo(steady, 120.0)
-    assert not estimators.steady_tempo(steady, 125.2)  # 4.2% off
-    assert estimators.steady_tempo(steady, 124.9)  # 3.9% off
+    assert not estimators.steady_tempo(steady, 126.5)  # 5.4% off
+    assert estimators.steady_tempo(steady, 125.9)  # 4.9% off
     change = np.concatenate([np.arange(23) * 60 / 90, 15 + np.arange(33) * 60 / 130])
     assert not estimators.steady_tempo(change, 90.0)
     assert not estimators.steady_tempo(change, 130.0)
@@ -599,7 +597,7 @@ def test_essentia_flat_names_become_sharps(monkeypatch, name, tonic):
 # by the calibration in evals/audio from atonal controls and annotated clips.
 @pytest.mark.parametrize(
     ("estimator", "minimum"),
-    [(estimators.LibrosaEstimator, 0.45), (estimators.EssentiaEstimator, 0.4)],
+    [(estimators.LibrosaEstimator, 0.4), (estimators.EssentiaEstimator, 0.4)],
 )
 def test_weak_keys_are_withheld_at_each_estimators_minimum(estimator, minimum):
     assert estimator.min_key_strength == minimum
@@ -611,8 +609,8 @@ def test_weak_keys_are_withheld_at_each_estimators_minimum(estimator, minimum):
 
 
 # Atonal material: random chromatic notes (with and without drums), a chromatic cluster and
-# twelve-tone rows. Neither estimator's strength separates it from tonal music: Essentia
-# (minimum 0.4) still keys seven of the ten, librosa (0.45) five. Those are strict expected
+# twelve-tone rows. Neither estimator's strength separates it from tonal music: at their minimum
+# of 0.4 Essentia still keys seven of the ten, librosa six. Those are strict expected
 # failures, so a change in either direction is seen.
 ATONAL = {
     **{f"random-notes-{k}": (lambda k=k: signals.random_notes(k)) for k in (83, 84, 85)},
@@ -628,6 +626,7 @@ KEYS_ATONAL = {
     "librosa": {
         "random-notes-83",
         "random-notes-84",
+        "random-notes-85",
         "twelve-tone-row-12",
         "twelve-tone-row-13",
         "twelve-tone-row-14",
@@ -785,20 +784,63 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
     assert v2["beats"] is not None
 
 
-@pytest.mark.parametrize("estimator", ESTIMATORS)
 @pytest.mark.parametrize("family", signals.PITCHLESS_SEEDED)
-def test_no_key_for_pitchless_material_at_unseen_seeds(family, estimator):
+def test_no_key_for_pitchless_material_at_unseen_seeds(family):
     """
     Drums, noise with a beat, a siren over drums and clicks, 30 seeds each (tempo, kit, noise,
-    levels and sounds drawn from the seed; none was used to set a threshold): never a key.
+    levels and sounds drawn from the seed; none was used to set a threshold): never a key,
+    with either estimator (on the same signals).
     """
-    make, chosen = signals.PITCHLESS_SEEDED[family], estimators.select_estimator(estimator)
+    make = signals.PITCHLESS_SEEDED[family]
     keyed = {}
     for seed in signals.UNSEEN_SEEDS:
-        key = chosen.key(estimators.Signals(make(seed), FIXTURE_SR))
-        if key is not None:
-            keyed[seed] = (key.tonic, key.mode, key.strength)
+        signals_ = estimators.Signals(make(seed), FIXTURE_SR)
+        for name in KEY_ESTIMATORS:
+            key = estimators.select_estimator(name).key(signals_)
+            if key is not None:
+                keyed[(name, seed)] = (key.tonic, key.mode, key.strength)
     assert keyed == {}
+
+
+# One pitched source, 30 seeds each (signals.ONE_PITCH_CLASS_SEEDED): a note's overtones, its
+# octaves or a bell's or a drum's partials can spell three pitch classes, and the service keys
+# some of this material, as it did before the calibration (the cowbell, tabla, toms and bells
+# most). Families it never keys must stay at none; for the others the count may not rise
+# above what is measured here (the shipped values give no more keys than before on any of
+# them). An overtone-aware check for one source is the follow-up, not a lower level.
+ONE_PITCH_CLASS_CEILING = {
+    ("one-note-bass", "essentia"): 6,
+    ("one-note-bass", "librosa"): 0,
+    ("octave-riff", "essentia"): 0,
+    ("octave-riff", "librosa"): 0,
+    ("bell", "essentia"): 7,
+    ("bell", "librosa"): 7,
+    ("bell-over-drums", "essentia"): 4,
+    ("bell-over-drums", "librosa"): 4,
+    ("tabla", "essentia"): 11,
+    ("tabla", "librosa"): 10,
+    ("toms", "essentia"): 9,
+    ("toms", "librosa"): 7,
+    ("cowbell", "essentia"): 19,
+    ("cowbell", "librosa"): 9,
+    ("synth-note-over-drums", "essentia"): 0,
+    ("synth-note-over-drums", "librosa"): 0,
+}
+
+
+@pytest.mark.parametrize("family", signals.ONE_PITCH_CLASS_SEEDED)
+def test_one_pitch_class_material_gets_no_more_keys_than_measured(family):
+    """Both estimators on the same signals (they share the representations)."""
+    make = signals.ONE_PITCH_CLASS_SEEDED[family]
+    keyed = {name: {} for name in KEY_ESTIMATORS}
+    for seed in signals.ONE_PITCH_CLASS_SEEDS:
+        signals_ = estimators.Signals(make(seed), FIXTURE_SR)
+        for name in KEY_ESTIMATORS:
+            key = estimators.select_estimator(name).key(signals_)
+            if key is not None:
+                keyed[name][seed] = (key.tonic, key.mode, round(key.strength, 2))
+    for name in KEY_ESTIMATORS:
+        assert len(keyed[name]) <= ONE_PITCH_CLASS_CEILING[(family, name)], (name, keyed[name])
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -837,9 +879,8 @@ def why(withheld):
         (0.09, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], None, "no sustained pitch"),
         (0.11, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], None, None),
         (0.5, [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], None, "fewer than three pitch classes"),
-        # The third class at 0.09 and 0.11 of the strongest: the level is 0.1.
-        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.09, 0, 0, 0, 0], None, "fewer than three pitch classes"),
-        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.11, 0, 0, 0, 0], None, None),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.27, 0, 0, 0, 0], None, "fewer than three pitch classes"),
+        (0.5, [1, 0, 0, 0, 1, 0, 0, 0.29, 0, 0, 0, 0], None, None),
         (0.5, [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], 50.0, "one harmonic series on 50.0 Hz"),
     ],
 )

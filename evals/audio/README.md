@@ -73,8 +73,10 @@ of a rule to the recorded clips without analysing the audio again. Every clip of
 is either a calibration clip or an evaluation clip (`datasets.split_of`: a SHA-256 of the
 dataset name and the dataset's own track id, about half each, independent of the selection's
 size and order). The rules' values are chosen on the calibration clips and the controls only,
-under acceptance criteria fixed before any evaluation clip was scored (the module docstring
-and the report state them); the evaluation clips are scored once, before against after. The
+under acceptance criteria written before the calibration runs (the module docstring and the
+report state them, and how the procedure was applied); the evaluation clips judge each change
+once more, and only changes that withhold more are shipped. The report also says how often the
+evaluation clips were scored. The
 section makes the choice again from the recorded clips and says whether the service holds the
 values chosen. A derivation check re-derives every served decision from the recorded
 measurements at the service's own values and reports any difference.
@@ -85,7 +87,9 @@ BPM, a bass-heavy band, noise carrying a siren, several talkers at once, and so 
 probe sets of the service's own tests, whose generators they reuse
 (`services/audio/tests/signals.py` and `music.py`, loaded by path). They include pitchless material drawn at 30
 seeds each (two drum kits, noise with a beat, a siren over drums, clicks), on which no value was
-set beforehand: none of it may get a key.
+set beforehand: none of it may get a key. One-pitch-class material (a one-note bass, octave
+riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way; the service
+still keys some of it, as before this calibration.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

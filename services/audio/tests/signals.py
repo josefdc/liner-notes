@@ -487,6 +487,186 @@ PITCHLESS_SEEDED = {
 UNSEEN_SEEDS = range(100, 130)
 
 
+# --- one pitch class at many seeds ---------------------------------------------------------
+# One pitched source (a note and its overtones, its octaves, a bell's or a drum's partials) is
+# no key: its overtones or inharmonic partials can still spell three pitch classes. Seeds
+# 500-529 were not used to set any value.
+
+
+def _drums_at(seed: int, bpm: float | None = None) -> np.ndarray:
+    if bpm is None:
+        bpm = float(np.random.default_rng(seed).uniform(80.0, 160.0))
+    return drums_only(round(bpm, 1), seed=seed).astype(float)
+
+
+def seeded_one_note_bass(seed: int) -> np.ndarray:
+    """A picked bass on one note (E1-G#2) in sixteenths, slightly inharmonic, over drums."""
+    rng = np.random.default_rng(seed)
+    f0 = hz(int(rng.integers(28, 45)))
+    bpm = float(rng.uniform(110.0, 140.0))
+    stiffness = (0.0, 0.0002, 0.0008)[seed % 3]
+    step = 60.0 / bpm / 4
+    t = seconds_of(step * 0.9)
+    note = sum(
+        np.sin(2 * np.pi * f0 * k * np.sqrt(1 + stiffness * k * k) * t) / k for k in range(1, 16)
+    ) * np.exp(-t / 0.12)
+    y = np.zeros(30 * SR)
+    for start in np.arange(0.0, 30.0, step):
+        place(y, float(start), note)
+    if seed % 4 == 0:  # with a kick only
+        kick = np.zeros(30 * SR)
+        for start in grid(bpm):
+            place(kick, start, Kit(seed=seed).kick)
+        return normalise(_db(y, 0.0) + _db(kick, 0.0))
+    return normalise(_db(y, 0.0) + _db(_drums_at(seed, bpm), 0.0))
+
+
+def seeded_octave_riff(seed: int) -> np.ndarray:
+    """One note jumping between its octaves (a detuned saw arpeggio or a sine bass), over drums."""
+    rng = np.random.default_rng(seed)
+    root = int(rng.integers(30, 46))
+    bpm = float(rng.uniform(110.0, 135.0))
+    y = np.zeros(30 * SR)
+    if seed % 2:
+        step = 60.0 / bpm / 4
+        t = seconds_of(step * 0.9)
+        notes = []
+        for octave in (0, 12, 24):
+            f = hz(root + octave)
+            saw = sum(
+                (np.sin(2 * np.pi * f * 1.003 * k * t) + np.sin(2 * np.pi * f * 0.997 * k * t)) / k
+                for k in range(1, 12)
+                if f * k < 5000
+            )
+            notes.append(saw * np.exp(-t / 0.1))
+        for n, start in enumerate(np.arange(0.0, 30.0, step)):
+            place(y, float(start), notes[(0, 1, 2, 1)[n % 4]])
+    else:
+        step = 60.0 / bpm / 2
+        t = seconds_of(step * 0.9)
+        for n, start in enumerate(np.arange(0.0, 30.0, step)):
+            f = hz(root + 12 * (n % 2))
+            tone = sum(
+                a * np.sin(2 * np.pi * f * h * t) for h, a in ((1, 1.0), (2, 0.4), (3, 0.25))
+            )
+            place(y, float(start), tone * np.exp(-t / 0.2))
+    return normalise(_db(y, -1.0) + _db(_drums_at(seed, bpm), 0.0))
+
+
+BELL_RATIOS = (0.5, 1.0, 1.183, 1.506, 2.0, 2.514, 2.662, 3.011, 4.166)  # hum, prime, tierce, ...
+
+
+def seeded_bell(seed: int) -> np.ndarray:
+    """A tolling church bell (inharmonic partials: a minor-third tierce, a fifth), every 1.6-3 s."""
+    rng = np.random.default_rng(seed)
+    f = hz(float(rng.uniform(55.0, 72.0)))
+    amps = (0.8, 0.6, 0.7, 0.3, 1.0, 0.4, 0.3, 0.3, 0.2)
+    decays = (4.0, 2.5, 2.0, 1.5, 1.5, 0.8, 0.7, 0.6, 0.4)
+    period = float(rng.uniform(1.6, 3.0))
+    t = seconds_of(6.0)
+    strike = sum(
+        a * np.sin(2 * np.pi * f * r * t) * np.exp(-t / d)
+        for r, a, d in zip(BELL_RATIOS, amps, decays, strict=True)
+    )
+    y = np.zeros(30 * SR)
+    for start in np.arange(0.0, 30.0, period):
+        place(y, float(start), strike)
+    return normalise(y)
+
+
+def seeded_bell_over_drums(seed: int) -> np.ndarray:
+    return normalise(_db(seeded_bell(seed).astype(float), -3.0) + _db(_drums_at(seed), 0.0))
+
+
+def seeded_tabla(seed: int) -> np.ndarray:
+    """Tabla-like strokes: a near-harmonic dayan, an inharmonic 'tin', a bayan gliding up."""
+    rng = np.random.default_rng(seed)
+    f0 = hz(float(rng.uniform(58.0, 66.0)))
+    bpm = float(rng.uniform(70.0, 120.0))
+    step = 60.0 / bpm / 4
+    t = seconds_of(0.6)
+    stretch = rng.uniform(1.0, 1.02, 6)
+    na = sum(0.8**k * np.sin(2 * np.pi * f0 * (k + 1) * stretch[k] * t) for k in range(5))
+    na = na * np.exp(-t / 0.25)
+    tin = sum(np.sin(2 * np.pi * f0 * r * t) for r in (1.0, 2.72, 3.9)) * np.exp(-t / 0.08)
+    ge = np.sin(2 * np.pi * np.cumsum(80 * (1 + 0.4 * (1 - np.exp(-t / 0.15)))) / SR)
+    ge = ge * np.exp(-t / 0.3)
+    strokes = (na, 0.6 * tin, ge, 0.5 * na + 0.7 * ge)
+    pattern = rng.integers(0, 4, 16)
+    y = np.zeros(30 * SR)
+    for n, start in enumerate(np.arange(0.0, 30.0, step)):
+        place(y, float(start), strokes[pattern[n % 16]])
+    return normalise(y)
+
+
+def seeded_toms(seed: int) -> np.ndarray:
+    """Three tuned toms or congas (90-330 Hz, gliding down), on a random pattern."""
+    rng = np.random.default_rng(seed)
+    pitches = rng.uniform(90.0, 330.0, 3)
+    bpm = float(rng.uniform(90.0, 130.0))
+    step = 60.0 / bpm / 4
+    t = seconds_of(0.4)
+    hits = [
+        np.sin(2 * np.pi * np.cumsum(p * (1 + 0.15 * np.exp(-t / 0.05))) / SR) * np.exp(-t / 0.15)
+        + 0.2 * rng.standard_normal(t.size) * np.exp(-t / 0.01)
+        for p in pitches
+    ]
+    pattern = rng.integers(-1, 3, 16)
+    y = np.zeros(30 * SR)
+    for n, start in enumerate(np.arange(0.0, 30.0, step)):
+        if pattern[n % 16] >= 0:
+            place(y, float(start), hits[pattern[n % 16]])
+    return normalise(y)
+
+
+def seeded_cowbell(seed: int) -> np.ndarray:
+    """An 808 cowbell (two square waves near 540 and 800 Hz) on a pattern, odd seeds over drums."""
+    rng = np.random.default_rng(seed)
+    bpm = float(rng.uniform(90.0, 140.0))
+    t = seconds_of(0.25)
+    f1, f2 = 540 * rng.uniform(0.95, 1.05), 800 * rng.uniform(0.95, 1.05)
+    bell = np.sign(np.sin(2 * np.pi * f1 * t)) + np.sign(np.sin(2 * np.pi * f2 * t))
+    bell = bell * np.exp(-t / 0.07)
+    pattern = rng.uniform(size=16) < 0.45
+    pattern[0] = True
+    step = 60.0 / bpm / 4
+    y = np.zeros(30 * SR)
+    for n, start in enumerate(np.arange(0.0, 30.0, step)):
+        if pattern[n % 16]:
+            place(y, float(start), bell)
+    if seed % 2:
+        y = _db(y, -3.0) + _db(_drums_at(seed, bpm), 0.0)
+    return normalise(y)
+
+
+def seeded_synth_note(seed: int) -> np.ndarray:
+    """One held note of seven detuned saw voices (+-30 cents), over drums."""
+    rng = np.random.default_rng(seed)
+    f0 = hz(int(rng.integers(33, 52)))
+    t = seconds_of(30.0)
+    y = np.zeros_like(t)
+    for cents in np.linspace(-30, 30, 7):
+        f = f0 * 2 ** (cents / 1200)
+        phase = rng.uniform(0, 2 * np.pi)
+        y += sum(
+            np.sin(2 * np.pi * f * k * t + phase * k) / k for k in range(1, 25) if f * k < 5000
+        )
+    return normalise(_db(y, -3.0) + _db(_drums_at(seed), 0.0))
+
+
+ONE_PITCH_CLASS_SEEDED = {
+    "one-note-bass": seeded_one_note_bass,
+    "octave-riff": seeded_octave_riff,
+    "bell": seeded_bell,
+    "bell-over-drums": seeded_bell_over_drums,
+    "tabla": seeded_tabla,
+    "toms": seeded_toms,
+    "cowbell": seeded_cowbell,
+    "synth-note-over-drums": seeded_synth_note,
+}
+ONE_PITCH_CLASS_SEEDS = range(500, 530)
+
+
 def probes() -> dict[str, np.ndarray]:
     """Named probe signals used across the tests (and for threshold measurements)."""
     return {

@@ -14,7 +14,9 @@ The choice (`select`) follows the plan written before the calibration was run: i
 the calibration clips only (datasets.split_of) and on the generated controls (controls.py), one
 family of rules after another in a fixed order, under the acceptance criteria below. A rule the
 service keeps per estimator is decided on that estimator's clips; a shared rule on Essentia's
-(the default), with librosa's shown. `confirm` then judges each change on the evaluation clips
+(the default) and checked on librosa's: a change librosa's clips reject is not made. Only
+changes that withhold more are applied; a loosening the procedure picks is reported, not
+shipped. `confirm` then judges each change on the evaluation clips
 and reverts the ones that fail there; `evaluate` compares the service's values before this
 calibration (BASELINE) with the values it has now, on the evaluation clips.
 
@@ -831,11 +833,25 @@ def choose(rows: list[dict], family: str = "") -> int | None:
     return max(accepted, key=lambda i: looseness(family, rows[i]["value"]))
 
 
+def veto(rows: list[dict], checked: list[dict]) -> None:
+    """
+    A shared rule is decided on Essentia's clips and checked on librosa's: a value whose change
+    librosa's clips reject (changed there and not accepted) is not accepted.
+    """
+    for row, other in zip(rows, checked, strict=True):
+        if other["verdict"]["changed"] and not other["verdict"]["accepted"]:
+            if row["verdict"]["accepted"]:
+                row["verdict"]["accepted"] = False
+            row["verdict"]["failed"] = [*row["verdict"]["failed"], "librosa's check"]
+
+
 def select(runs: list[dict], controls: list[dict]) -> dict:
     """
     The choice, family by family in the plan's order, from the baseline: each family's
     candidates on the calibration clips of the runs of its kind and on the controls, with the
-    earlier choices in place.
+    earlier choices in place. Only changes that withhold more are applied: a loosening the
+    procedure picks is recorded (`proposed`) but not shipped, since these clips are the only
+    evidence for it.
     """
     rules = BASELINE
     out = []
@@ -844,37 +860,16 @@ def select(runs: list[dict], controls: list[dict]) -> dict:
         if not kind_runs:
             continue
         entry: dict = {"family": family.key, "title": family.title, "kind": family.kind}
-        groups = []
+        groups, shown = [], []
         base = rules
-        for name in family.deciding:
-            rows = [
-                candidate_row(kind_runs, controls, family, name, v, rules)
-                for v in family_values(family, name)
-            ]
-            pick = choose(rows, family.key)
-            before = current(rules, family, name)
-            chosen = rows[pick]["value"] if pick is not None else before
-            groups.append(
-                {
-                    "estimator": name,
-                    "shared": not family.per_estimator,
-                    "before": before,
-                    "chosen": chosen,
-                    "candidates": rows,
-                }
-            )
-            if pick is not None:
-                rules = apply(rules, family, chosen, name)
         for name in family.shown:
-            if name not in kind_runs[0]["estimators"] and not any(
-                name in r["estimators"] for r in kind_runs
-            ):
+            if not any(name in r["estimators"] for r in kind_runs):
                 continue
             rows = [
                 candidate_row(kind_runs, controls, family, name, v, base)
                 for v in family_values(family, name)
             ]
-            groups.append(
+            shown.append(
                 {
                     "estimator": name,
                     "shown": True,
@@ -884,7 +879,33 @@ def select(runs: list[dict], controls: list[dict]) -> dict:
                     "candidates": rows,
                 }
             )
-        entry["groups"] = groups
+        for name in family.deciding:
+            rows = [
+                candidate_row(kind_runs, controls, family, name, v, rules)
+                for v in family_values(family, name)
+            ]
+            checks = [g for g in shown if g["estimator"] == "librosa"]
+            if not family.per_estimator and checks:
+                veto(rows, checks[0]["candidates"])
+            pick = choose(rows, family.key)
+            before = current(rules, family, name)
+            proposed = rows[pick]["value"] if pick is not None else before
+            loosens = pick is not None and rows[pick]["verdict"]["loosens"]
+            chosen = before if loosens else proposed
+            groups.append(
+                {
+                    "estimator": name,
+                    "shared": not family.per_estimator,
+                    "before": before,
+                    "proposed": proposed,
+                    "notShipped": loosens,
+                    "chosen": chosen,
+                    "candidates": rows,
+                }
+            )
+            if chosen != before:
+                rules = apply(rules, family, chosen, name)
+        entry["groups"] = groups + shown
         out.append(entry)
     return {"families": out, "rules": rules.as_dict()}
 
@@ -893,7 +914,7 @@ def confirm(runs: list[dict], controls: list[dict], choice: dict) -> dict:
     """
     Each change the choice made, judged again on the evaluation clips in the same order: a
     change that fails L1-L3 (a loosening) or T2 (a tightening) there is reverted to the value
-    before it. A shared rule is judged on Essentia's clips and shown on librosa's. Returns the
+    before it. A shared rule is judged on Essentia's clips and checked on librosa's. Returns the
     changes with their verdicts and the rules that remain.
     """
     rules = BASELINE
@@ -913,8 +934,12 @@ def confirm(runs: list[dict], controls: list[dict], choice: dict) -> dict:
                 for n in names
                 if any(n in r["estimators"] for r in kind_runs)
             }
-            verdict = rows[name]["verdict"]
-            confirmed = verdict["accepted"] or not verdict["changed"]
+
+            def holds(verdict):
+                return verdict["accepted"] or not verdict["changed"]
+
+            # A shared change is judged on Essentia's clips and checked on librosa's.
+            confirmed = all(holds(r["verdict"]) for r in rows.values())
             out.append(
                 {
                     "family": family.key,

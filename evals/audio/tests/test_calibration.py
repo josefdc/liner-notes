@@ -238,27 +238,26 @@ def test_the_baseline_holds_the_values_before_this_calibration():
 def test_the_service_values_are_read_from_the_service():
     """Pinned: the values this calibration chose, as the service holds them."""
     rules = cal.service_rules()
-    assert rules.min_strength == {"librosa": 0.45, "essentia": 0.4}
-    assert rules.steady_tolerance == 0.04
-    assert rules.class_level == 0.1
+    assert rules.min_strength == {"librosa": 0.4, "essentia": 0.4}
     assert rules.drift == {"librosa": None, "essentia": None, "beat-this": None}
     assert rules.onset_check == {"librosa": True, "essentia": True, "beat-this": True}
-    unchanged = ("min_periodicity", "min_confidence", "steady_lag_frames", "min_tonal_ratio")
-    for field in (*unchanged, "tonal_source", "class_vector", "min_classes"):
+    unchanged = ("min_periodicity", "min_confidence", "steady_tolerance", "steady_lag_frames")
+    unchanged += ("min_tonal_ratio", "tonal_source", "class_vector", "class_level")
+    for field in (*unchanged, "min_classes"):
         assert getattr(rules, field) == getattr(cal.BASELINE, field), field
 
 
 # --- the choice on recorded runs, and the report section -----------------------------------------------
 
 
-def tempo_run(clips):
+def tempo_run(clips, estimators=("essentia",)):
     return {
         "suite": "calibration",
         "kind": "tempo",
         "command": "uv run python -m evals_audio --suite calibration --dataset ballroom",
         "gitCommit": "abc1234",
         "dataset": {"name": "ballroom", "title": "Ballroom"},
-        "estimators": ["essentia"],
+        "estimators": list(estimators),
         "seeds": {"selection": 1, "clips": 1, "bootstrap": 1},
         "limit": None,
         "splits": {"calibration": sum(c["split"] == "calibration" for c in clips)}
@@ -269,13 +268,13 @@ def tempo_run(clips):
     }
 
 
-def controls_run(items):
+def controls_run(items, estimators=("essentia",)):
     return {
         "suite": "controls",
         "command": "uv run python -m evals_audio --suite controls",
         "gitCommit": "abc1234",
         "dataset": {"name": "controls", "title": "generated controls"},
-        "estimators": ["essentia"],
+        "estimators": list(estimators),
         "seeds": {"selection": 1, "clips": 1, "bootstrap": 1},
         "limit": None,
         "rules": cal.BASELINE.as_dict(),
@@ -283,47 +282,109 @@ def controls_run(items):
     }
 
 
-def onset_runs(control_raw=None, evaluation_right=36):
+def as_control(clip, name, tempo=None):
+    clip = {**clip, "name": name, "group": "no-tempo"}
+    clip["truth"] = {"tempo": tempo, "key": NOT_SCORED, "gate": "pass"}
+    clip["servedGate"] = {n: {"passed": True, "reason": None} for n in clip["estimators"]}
+    return clip
+
+
+def onset_runs(control_raw=None):
     """
     Essentia withholds 40 tempos for the onset-tempo part alone, 36 of them right: lifting the
-    part passes every criterion. One control changes tempo (truth: none): its beats show it.
+    part passes every criterion (a loosening). One control changes tempo (truth: none).
     """
     clips = []
     for split in ("calibration", "evaluation"):
         for k in range(50):
             clips.append(tempo_clip(f"{split}-steady-{k}", split, served=120.0))
-        right = 36 if split == "calibration" else evaluation_right
         for k in range(40):
-            raw = tempo_raw(onset_off=True, acc1=float(k < right), acc2=1.0)
+            raw = tempo_raw(onset_off=True, acc1=float(k < 36), acc2=1.0)
             clips.append(tempo_clip(f"{split}-onset-{k}", split, served=None, raw=raw))
     raw = control_raw or tempo_raw(onset_off=True, beats_off=True)
-    swing = tempo_clip("swing", served=None, raw=raw)
-    swing |= {"name": "swing", "group": "no-tempo", "truth": {"tempo": None, "key": NOT_SCORED}}
-    swing["truth"]["gate"] = "pass"
-    swing["servedGate"] = {"essentia": {"passed": True, "reason": None}}
-    return [tempo_run(clips)], controls_run([swing])
+    return [tempo_run(clips)], controls_run([as_control(tempo_clip("swing", raw=raw), "swing")])
 
 
-def test_the_choice_is_made_again_from_the_recorded_runs():
+def both(tid, split, essentia, librosa):
+    clip = tempo_clip(tid, split, raw=essentia)
+    clip["estimators"]["librosa"] = tempo_clip(tid, split, raw=librosa, name="librosa")[
+        "estimators"
+    ]["librosa"]
+    return clip
+
+
+def drift_runs(librosa_drift=0.0, evaluation_drift=0.0):
+    """
+    A swing control whose beats drift 0.2 within a third (truth: no tempo), and 100 steady clips
+    per half: a drift check is a tightening that fixes the control at no cost, unless librosa's
+    clips (or Essentia's evaluation clips) drift too and are right.
+    """
+    clips = []
+    for split in ("calibration", "evaluation"):
+        for k in range(100):
+            e = tempo_raw(drift=evaluation_drift if split == "evaluation" and k < 20 else 0.0)
+            lib = tempo_raw(drift=librosa_drift if k < 20 else 0.0)
+            clips.append(both(f"{split}-{k}", split, e, lib))
+    swing = both("swing", "calibration", tempo_raw(drift=0.2), tempo_raw(drift=0.2))
+    names = ("essentia", "librosa")
+    return [tempo_run(clips, names)], controls_run([as_control(swing, "swing")], names)
+
+
+def family(choice, key):
+    return next(f for f in choice["families"] if f["family"] == key)
+
+
+def test_a_loosening_the_procedure_picks_is_reported_but_not_shipped():
     runs, ctl = onset_runs()
     choice = cal.select(runs, ctl["controls"])
-    onset = next(f for f in choice["families"] if f["family"] == "onset")
-    group = onset["groups"][0]
+    group = family(choice, "onset")["groups"][0]
     assert group["estimator"] == "essentia"
-    assert (group["before"], group["chosen"]) == (True, False)
+    assert (group["before"], group["proposed"], group["chosen"]) == (True, False, True)
+    assert group["notShipped"]
     lifted = group["candidates"][1]
     assert lifted["pooled"]["extra"] == 40 and lifted["pooled"]["extraRight"] == 36
-    assert lifted["controls"]["broken"] == []
-    assert cal.Rules.from_dict(choice["rules"]).onset_check["essentia"] is False
+    assert lifted["verdict"]["accepted"]
+    assert cal.Rules.from_dict(choice["rules"]).onset_check["essentia"] is True
+    doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
+    assert "The procedure picks off, a loosening: not shipped" in render(doc)
 
 
 def test_a_change_that_gives_a_control_a_value_it_should_not_have_is_refused():
     runs, ctl = onset_runs(control_raw=tempo_raw(onset_off=True))  # only the onset part stops it
-    choice = cal.select(runs, ctl["controls"])
-    group = next(f for f in choice["families"] if f["family"] == "onset")["groups"][0]
+    group = family(cal.select(runs, ctl["controls"]), "onset")["groups"][0]
     assert group["candidates"][1]["controls"]["broken"] == ["swing"]
     assert group["candidates"][1]["verdict"]["failed"] == ["L4"]
-    assert group["chosen"] is True
+    assert group["proposed"] is True and not group["notShipped"]
+
+
+def test_a_tightening_is_shipped_at_its_least_strict_passing_value():
+    runs, ctl = drift_runs()
+    choice = cal.select(runs, ctl["controls"])
+    group = family(choice, "drift")["groups"][0]
+    assert group["chosen"] == [6.0, 0.15] and not group["notShipped"]
+    assert cal.Rules.from_dict(choice["rules"]).drift["librosa"] == [6.0, 0.15]
+
+
+def test_librosa_s_clips_veto_a_shared_change():
+    runs, ctl = drift_runs(librosa_drift=0.16)  # 20 right librosa tempos drift 0.16
+    group = family(cal.select(runs, ctl["controls"]), "drift")["groups"][0]
+    assert group["chosen"] is None
+    assert all("librosa's check" in c["verdict"]["failed"] for c in group["candidates"][1:])
+
+
+def test_a_change_that_fails_on_the_evaluation_clips_is_reverted():
+    runs, ctl = drift_runs()
+    kept = cal.confirm(runs, ctl["controls"], cal.select(runs, ctl["controls"]))
+    (change,) = kept["changes"]
+    assert change["confirmed"] and kept["rules"]["drift"]["essentia"] == [6.0, 0.15]
+    runs, ctl = drift_runs(evaluation_drift=0.2)  # 20 right evaluation tempos drift 0.2
+    reverted = cal.confirm(runs, ctl["controls"], cal.select(runs, ctl["controls"]))
+    (change,) = reverted["changes"]
+    assert not change["confirmed"]
+    assert change["rows"]["essentia"]["verdict"]["failed"] == ["T2"]
+    assert reverted["rules"]["drift"]["essentia"] is None
+    doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
+    assert "fails T2: reverted" in render(doc)
 
 
 def test_the_held_out_comparison_uses_only_the_evaluation_clips():
@@ -336,33 +397,29 @@ def test_the_held_out_comparison_uses_only_the_evaluation_clips():
     assert row_["discordantNew"] == 36 and row_["mcnemarP"] < 0.001
 
 
-def calibration_doc():
-    runs, ctl = onset_runs()
-    after = cal.BASELINE.set("onset_check", False, "essentia").as_dict()
+def calibration_doc(shipped=True):
+    runs, ctl = drift_runs()
+    after = cal.BASELINE.set("drift", {n: [6.0, 0.15] for n in cal.BASELINE.drift})
     for run in [*runs, ctl]:
-        run["rules"] = after
+        run["rules"] = (after if shipped else cal.BASELINE).as_dict()
     return {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
 
 
 def test_the_section_renders_the_choice_the_evaluation_and_the_controls():
-    doc = calibration_doc()
-    text = render(doc)
+    text = render(calibration_doc())
     assert "## Calibration of the withholding rules" in text
     assert "Derivation check: " in text
-    assert "Chosen: off (before: on)." in text
+    assert "Chosen: 6 s windows, 0.15 (before: none)." in text
     assert "The service holds the values that remain after the evaluation check." in text
     assert "### Held-out evaluation (evaluation clips)" in text
-    assert "| ballroom | `essentia` | 90 | 50/90 = 55.6 %" in text
+    assert "| ballroom | `essentia` | 100 | 100/100 = 100.0 %" in text
     assert "| swing | no-tempo | none |" in text
 
 
 def test_a_service_value_that_differs_from_the_choice_is_flagged():
-    doc = calibration_doc()
-    for run in doc["runs"]:
-        run["rules"] = cal.BASELINE.as_dict()  # the service kept the onset part
-    text = render(doc)
+    text = render(calibration_doc(shipped=False))
     assert "**no**" in text
-    assert "The service's values differ from those that remain in 1 rows" in text
+    assert "The service's values differ from those that remain in 2 rows" in text
 
 
 def test_the_section_counts_every_p_value_it_prints():
@@ -412,22 +469,3 @@ def test_controls_have_unique_names_known_groups_and_truths():
 )
 def test_a_control_value_is_judged_against_its_truth(truth, value, kind, ok):
     assert cal.control_ok(truth, value, kind) == ok
-
-
-def test_a_change_that_fails_on_the_evaluation_clips_is_reverted():
-    runs, ctl = onset_runs()
-    choice = cal.select(runs, ctl["controls"])
-    kept = cal.confirm(runs, ctl["controls"], choice)
-    (change,) = kept["changes"]
-    assert change["confirmed"] and kept["rules"]["onset_check"]["essentia"] is False
-    # The same choice (made on the calibration clips) when the evaluation clips' extra answers
-    # are mostly wrong: it is reverted.
-    runs, ctl = onset_runs(evaluation_right=10)
-    choice = cal.select(runs, ctl["controls"])
-    reverted = cal.confirm(runs, ctl["controls"], choice)
-    (change,) = reverted["changes"]
-    assert not change["confirmed"]
-    assert change["rows"]["essentia"]["verdict"]["failed"] == ["L1", "L2"]
-    assert reverted["rules"]["onset_check"]["essentia"] is True
-    doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
-    assert "fails L1, L2: reverted" in render(doc)

@@ -250,7 +250,8 @@ class MusicBrainzRateLimiter {
     while (this.pending > 0) {
       const elapsed = Date.now() - this.lastRequestTime;
 
-      if (elapsed < this.minInterval) {
+      // A clock that went back (a step of the wall clock) does not stall the queue.
+      if (elapsed >= 0 && elapsed < this.minInterval) {
         await this.delay(this.minInterval - elapsed);
       }
 

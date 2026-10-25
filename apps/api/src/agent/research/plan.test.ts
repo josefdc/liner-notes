@@ -449,12 +449,16 @@ describe("the research plan of a track with an ISRC", () => {
     expect(counts(run.lastfmMethods)["track.getSimilar"]).toBe(1);
   });
 
-  it("gives the composer the recording on a research-cache hit, from the run's one ISRC lookup", async () => {
-    cache.research = { samples: ["cached sample research"], productionTrivia: [] };
+  it("gives the composer the recording on a research-cache hit, from the cached run's ISRC lookup", async () => {
+    await runPlan([]);
+    const [, stored] = cache.putResearch.mock.calls[0] as [string, unknown];
+    cache.research = JSON.parse(JSON.stringify(stored));
+    net.calls.length = 0;
     const run = await runPlan([]);
 
     expect(run.planner).toHaveLength(0);
-    expect(run.asked(`${MB}/isrc/`)).toHaveLength(1);
+    // The cached evidence holds the recording: no ISRC lookup on the hit.
+    expect(run.asked(`${MB}/isrc/`)).toHaveLength(0);
     const { user } = messagesOf(run.composer as StubCall);
     expect(user).toContain(`"mbid":"${RECORDING}"`);
     expect(user).toContain('"firstReleaseDate":"1990-09-04"');
@@ -466,8 +470,15 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.trackData?.modelUnavailable).toBe(true);
     const card = run.trackData?.factoids?.find((f) => f.title === "Sample DNA");
     expect(card?.content).toContain('"Under Pressure" by Queen & David Bowie');
-    // Not cached with the research: the cache holds no primary record.
-    expect(JSON.stringify(cache.putResearch.mock.calls)).not.toContain("[MusicBrainz Samples]");
+    // Cached with the research's evidence, apart from the research itself.
+    const [, cachedResearch] = cache.putResearch.mock.calls[0] as [
+      string,
+      { samples: string[]; evidence?: { samples: string[] } },
+    ];
+    expect(JSON.stringify(cachedResearch.samples)).not.toContain("[MusicBrainz Samples]");
+    expect(cachedResearch.evidence?.samples).toEqual([
+      expect.stringMatching(/^\[MusicBrainz Samples\] .*"Under Pressure"/),
+    ]);
   });
 
   it("reports a fixed step whose source could not be read, and keeps neither result nor research", async () => {

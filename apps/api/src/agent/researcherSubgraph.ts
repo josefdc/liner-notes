@@ -44,6 +44,7 @@ import {
   UNREAD_IN_RESEARCH,
   uniqueSteps,
 } from "./research/plan.js";
+import { logger } from "../logger.js";
 import { isAbortError, withRetry } from "./errors.js";
 import { plannerMessages, SOURCE_NAMES } from "./prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
@@ -84,6 +85,8 @@ import {
   type ResearchPlan,
   type SpotifyData,
 } from "./state.js";
+
+const log = logger("Researcher");
 
 export const PLANNER_CALL_SITE = "research_planner";
 /** Output budget of a planner call, reasoning included (fast tier: low effort). */
@@ -285,7 +288,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       // Only a provider-layer failure ends the research; anything else is a bug and is thrown.
       const failed = failedCall(PLANNER_CALL_SITE, FOLLOW_UP_TIER, error);
       if (failed.status === "unexpected") throw error;
-      console.warn(`⚠️ [Research Manager] Planner unavailable (${failed.status})`);
+      log.warn(`Planner unavailable (${failed.status})`);
       return {
         researchComplete: true,
         usage: [failed],
@@ -293,7 +296,9 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       };
     }
 
-    console.log(`📋 [Research Manager] Plan: ${plan.nextAction} - ${plan.reasoning}`);
+    // The planner's reasoning is model text: written at debug level only.
+    log.info(`Plan: ${plan.nextAction}`);
+    log.debug("Planner reasoning", { reasoning: plan.reasoning });
     if (plan.nextAction === "done") {
       status("✅ Deep dive complete");
       return { researchComplete: true, usage: [call], statusMessages: [`✅ ${plan.reasoning}`] };
@@ -706,7 +711,7 @@ async function researchStep(
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
 
-  console.log(`🔧 [Research Tool] Executing: ${plan.nextAction}`);
+  log.debug(`Executing: ${plan.nextAction}`);
 
   writer?.({
     type: "status",
@@ -1017,7 +1022,7 @@ async function researchStep(
       signal: config.signal,
     });
     const errors = uniqueErrors(step.reader.errors);
-    console.log(`✅ [Research Tool] Read ${plan.nextAction} (${errors.length} source errors)`);
+    log.info(`Read ${plan.nextAction} (${errors.length} source errors)`);
     // The status says what happened: a source that could not be read is never "found". Steps
     // run together say a source's warning once.
     const warnings = unreadableStatus(errors, step.reader.rejected).filter(
@@ -1062,7 +1067,7 @@ async function researchStep(
     // research goes on.
     if (config.signal?.aborted || isAbortError(error)) throw error;
     const record = errorRecord(ACTION_SOURCE[plan.nextAction], error);
-    console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, record.message);
+    log.warn(`Error in ${plan.nextAction}: ${record.message ?? record.code}`);
     return {
       ranSteps: ranAs(true),
       stepsRun: 1,
@@ -1084,26 +1089,26 @@ async function researchStep(
 function shouldContinueResearch(state: ResearcherStateType): string {
   // Exit conditions (the manager stops after the fixed step and MAX_PLANNED_STEPS planned ones)
   if (state.researchComplete) {
-    console.log("🏁 [Router] Research marked complete");
+    log.debug("Research marked complete");
     return END;
   }
 
   if (!state.researchPlan || state.researchPlan.nextAction === "done") {
-    console.log("🏁 [Router] No plan or done action");
+    log.debug("No plan or done action");
     return END;
   }
 
-  console.log("➡️ [Router] Continuing to research_tool");
+  log.debug("Continuing to research_tool");
   return "research_tool";
 }
 
 function afterToolExecution(state: ResearcherStateType): string {
   if (state.researchComplete) {
-    console.log("🏁 [Router] Research complete after tool");
+    log.debug("Research complete after tool");
     return END;
   }
 
-  console.log("🔄 [Router] Looping back to research_manager");
+  log.debug("Looping back to research_manager");
   return "research_manager";
 }
 

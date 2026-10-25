@@ -607,8 +607,13 @@ describe("research inputs", () => {
   });
 
   describe("the research cache", () => {
-    it("is keyed v3 with the configured sources; research cached under v2 is not read", async () => {
+    it("is keyed v4 with the configured sources; research cached under v2 or v3 is not read", async () => {
       network();
+      store.research.set(`v3:${ICE.id}:lastfm=1:tavily=1`, {
+        samples: [],
+        productionTrivia: [],
+        listenbrainzSimilarArtists: ["Young MC (similarity: 100%)"],
+      });
       store.research.set(`v2:${ICE.id}`, {
         samples: [],
         productionTrivia: [],
@@ -619,7 +624,7 @@ describe("research inputs", () => {
 
       expect(plannerCalls).toBe(1);
       expect(textOf(out.researchData)).not.toContain("100%");
-      expect(store.puts).toEqual([`v3:${ICE.id}:lastfm=1:tavily=1`]);
+      expect(store.puts).toEqual([`v4:${ICE.id}:lastfm=1:tavily=1:discogs=0:genius=0`]);
     });
 
     it("without Last.fm and Tavily keys: cached, and the second analysis is a hit that reports them", async () => {
@@ -627,7 +632,7 @@ describe("research inputs", () => {
       const first = await historian(ICE, "search_lastfm_tags");
       const second = await historian(ICE, "search_lastfm_tags");
 
-      const key = `v3:${ICE.id}:lastfm=0:tavily=0`;
+      const key = `v4:${ICE.id}:lastfm=0:tavily=0:discogs=0:genius=0`;
       expect(store.puts).toEqual([key]);
       expect(first.plannerCalls).toBeGreaterThan(0);
       expect(second.plannerCalls).toBe(0);
@@ -649,8 +654,8 @@ describe("research inputs", () => {
 
       expect(again.plannerCalls).toBe(1);
       expect(store.puts).toEqual([
-        `v3:${ICE.id}:lastfm=0:tavily=1`,
-        `v3:${ICE.id}:lastfm=1:tavily=1`,
+        `v4:${ICE.id}:lastfm=0:tavily=1:discogs=0:genius=0`,
+        `v4:${ICE.id}:lastfm=1:tavily=1:discogs=0:genius=0`,
       ]);
     });
 

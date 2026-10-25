@@ -4,7 +4,12 @@
  * of a real item cannot be added; the pack keeps an id once, orders by tier and caps its size.
  */
 
-import { Evidence as EvidenceSchema, evidenceIssues, SourceId } from "@liner-notes/contract";
+import {
+  type Evidence,
+  Evidence as EvidenceSchema,
+  evidenceIssues,
+  SourceId,
+} from "@liner-notes/contract";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
 import { evidenceForPrompt, shownEvidence } from "../prompts.js";
@@ -26,6 +31,7 @@ import {
   lostRecords,
   primaryRecordEvidence,
   primarySourceErrors,
+  restoredEvidence,
   type SourcedEvidence,
   webSearchEvidence,
 } from "./evidencePack.js";
@@ -135,6 +141,124 @@ describe("EvidencePack.add refuses anything not built from a source's answer", (
       secondhandsongs: { status: "missing", error: null },
     } as unknown as PrimarySources;
     expect(() => primaryRecordEvidence(misfiled)).toThrow(/not a musicbrainz primary record/);
+  });
+});
+
+describe("evidence given back by the research cache", () => {
+  /** A real pack's items as the research cache stores and reads them (JSON, parsed). */
+  async function storedPack(): Promise<Evidence[]> {
+    const pack = new EvidencePack();
+    pack.addAll(primaryRecordEvidence(await iceIceBaby()));
+    pack.addAll(webSearchEvidence([web("https://example.test/ice-ice-baby")]));
+    return JSON.parse(JSON.stringify(pack.items())).map((item: unknown) =>
+      EvidenceSchema.parse(item),
+    );
+  }
+
+  const RECORDING = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
+  /** What the cached run read: the recording, not the song's original, no Discogs or Genius. */
+  const context = {
+    readAt: AT,
+    recordingMbid: RECORDING,
+    trackIsOriginal: false,
+    configured: { discogs: false, genius: false },
+    track: { title: "Ice Ice Baby", artist: "Vanilla Ice" },
+  };
+
+  it("restores what a pack held, as items a pack takes again", async () => {
+    const stored = await storedPack();
+    const restored = restoredEvidence(stored, context);
+    expect(restored).toEqual(stored);
+    const pack = new EvidencePack();
+    expect(pack.addAll(restored ?? [])).toBe(stored.length);
+    // A stored item itself is still refused by the pack: only the restored copy is taken.
+    expect(() => pack.add(stored[0] as SourcedEvidence)).toThrow(EvidenceOriginError);
+  });
+
+  it("refuses the whole cached evidence when one item is not what a source module builds", async () => {
+    const stored = await storedPack();
+    const [primary] = stored;
+    const page = stored.find((e) => e.sourceTier === "web") as Evidence;
+    const cover = stored.find(
+      (e) => e.source === "musicbrainz" && e.recordRef?.startsWith("work/"),
+    ) as Evidence;
+    const coverOfTrack = cover.recordRef?.replace(/^work\/[^/]+/, `track/recording/${RECORDING}`);
+    const discogs = {
+      ...primary,
+      id: "discogs:release/123/credit/0",
+      source: "discogs" as const,
+      url: "https://www.discogs.com/release/123",
+      excerpt: "Discogs release 123 credits Somebody Else as Producer on the whole release.",
+      recordRef: "release/123/credit/0",
+    };
+    const forged: Array<[string, Evidence]> = [
+      ["a summary filed as web search's primary record", { ...primary, source: "tavily" }],
+      ["an editorial item", { ...primary, sourceTier: "editorial" }],
+      ["an id that is not the source's", { ...primary, id: `${primary.id}/edited` }],
+      [
+        "a record without a scope",
+        { ...primary, recordRef: "recording/x", id: "musicbrainz:recording/x" },
+      ],
+      ["a web page with a recordRef", { ...page, recordRef: "track/x" }],
+      ["a web page whose id is not its URL", { ...page, id: "tavily:https://example.test/other" }],
+      [
+        "a lyric page",
+        { ...page, url: "https://genius.com/x-lyrics", id: "tavily:https://genius.com/x-lyrics" },
+      ],
+      ["a placeholder text", { ...page, excerpt: "No results found." }],
+      ["an item that breaks the contract", { ...primary, url: null, recordRef: null }],
+      [
+        "a web error page",
+        {
+          ...page,
+          url: "https://example.test/err",
+          id: "tavily:https://example.test/err",
+          title: "404 Not Found",
+          excerpt: "The requested URL was not found on this server.",
+        },
+      ],
+      ["an item read after the run", { ...page, retrievedAt: "2027-06-01T00:00:00.000Z" }],
+      ["a Discogs item while Discogs is not configured", discogs],
+      [
+        "a Genius item with a lyric excerpt",
+        {
+          ...primary,
+          id: "genius:track/song/1/samples/2",
+          source: "genius",
+          url: "https://genius.com/Vanilla-ice-ice-ice-baby-lyrics",
+          excerpt: "Yo, VIP, let's kick it! Ice ice baby, ice ice baby",
+          recordRef: "track/song/1/samples/2",
+        },
+      ],
+      ["a preview link", { ...primary, url: "https://p.scdn.co/mp3-preview/abc?cid=1" }],
+      [
+        "a cover of the song stated about the track, which is not the original",
+        { ...cover, recordRef: coverOfTrack ?? null, id: `musicbrainz:${coverOfTrack}` },
+      ],
+      [
+        "a MusicBrainz record of another recording",
+        {
+          ...primary,
+          id: "musicbrainz:track/recording/00000000-0000-4000-8000-000000000000",
+          recordRef: "track/recording/00000000-0000-4000-8000-000000000000",
+          url: "https://musicbrainz.org/recording/00000000-0000-4000-8000-000000000000",
+        },
+      ],
+      ["a record on another site's page", { ...primary, url: "https://example.test/recording" }],
+    ];
+    for (const [what, item] of forged) {
+      expect(restoredEvidence([...stored, item], context), what).toBeNull();
+    }
+    // The checks hold the cached run's facts: a configured Discogs and an original recording.
+    const configured = { ...context, configured: { discogs: true, genius: false } };
+    expect(restoredEvidence([...stored, discogs], configured)).not.toBeNull();
+    const original = { ...context, trackIsOriginal: true };
+    const rescoped = {
+      ...cover,
+      recordRef: coverOfTrack ?? null,
+      id: `musicbrainz:${coverOfTrack}`,
+    };
+    expect(restoredEvidence([...stored, rescoped], original)).not.toBeNull();
   });
 });
 
@@ -364,10 +488,15 @@ describe("who builds evidence", () => {
   const IMPORT = /import\s+(?:type\s+)?(?:\{([^}]*)\}|\*\s+as\s+\w+)\s+from\s+["']([^"']+)["']/g;
 
   it("only the source readers and agent/research import the evidence constructors", () => {
-    const importers: Record<string, string[]> = { primaryEvidence: [], webSearchEvidence: [] };
+    const importers: Record<string, string[]> = {
+      primaryEvidence: [],
+      webSearchEvidence: [],
+      restoredEvidence: [],
+    };
     const modules: Record<string, RegExp> = {
       primaryEvidence: /records\.js$/,
       webSearchEvidence: /evidencePack\.js$/,
+      restoredEvidence: /evidencePack\.js$/,
     };
     for (const path of files(SRC)) {
       const text = readFileSync(path, "utf8");
@@ -383,6 +512,7 @@ describe("who builds evidence", () => {
     const allowed = (path: string) => /^(?:sources|agent\/research)\//.test(path);
     expect(importers.primaryEvidence.length).toBeGreaterThan(0);
     expect(importers.webSearchEvidence.length).toBeGreaterThan(0);
+    expect(importers.restoredEvidence.length).toBeGreaterThan(0);
     expect(
       Object.values(importers)
         .flat()

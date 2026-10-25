@@ -819,6 +819,14 @@ describe("composerNode", () => {
       expect(store.put).toHaveBeenCalledTimes(1);
     });
 
+    it("stores no result when a primary source was not asked (its request not sent)", async () => {
+      await createComposerNode(testRuntime(succeeding()))(
+        { ...stateWith(measured), primaryNotAsked: ["secondhandsongs"] } as SonicAgentStateType,
+        config(),
+      );
+      expect(store.put).not.toHaveBeenCalled();
+    });
+
     it("stores a result only past errors marked lasting, and stores it with them", async () => {
       type Error = { source: string; code: string; message?: string };
       const run = (errors: Error[], lasting: Error[] = []) =>

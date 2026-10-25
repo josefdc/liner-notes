@@ -48,15 +48,17 @@ export type LiveRefusal = "live_disabled" | "budget_exhausted";
  *
  * `purpose` is the budget purpose of the live work the request would start: the analysis
  * runtime's by default (agent/runtime.ts), so the pause follows the same caps as its calls.
+ * `quiet` (readiness probes) reads the budget without logging a pause.
  */
 export async function liveRefused(
   env: NodeJS.ProcessEnv = process.env,
   purpose: LlmPurpose = defaultAgentRuntime.purpose,
+  options: { quiet?: boolean } = {},
 ): Promise<LiveRefusal | null> {
   const mode = currentReplayMode(env);
   if (mode === "off") return null;
   if (mode === "only" || liveUnavailableReason(env) !== null) return "live_disabled";
-  const budget = await liveBudgetState(env, purpose);
+  const budget = await liveBudgetState(env, purpose, options);
   if (budget.state === "exhausted") return "budget_exhausted";
   if (budget.state === "unverifiable") return "live_disabled";
   return null;

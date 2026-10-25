@@ -124,7 +124,9 @@ interface AudioServiceResponse {
 // =============================================================================
 
 // Read when called, so the URL set by the environment loader (or a test) is used.
-const audioServiceUrl = () => process.env.AUDIO_ANALYSIS_URL || "http://localhost:3002";
+/** Where the audio service listens when AUDIO_ANALYSIS_URL is unset. */
+export const DEFAULT_AUDIO_SERVICE_URL = "http://localhost:3002";
+const audioServiceUrl = () => process.env.AUDIO_ANALYSIS_URL || DEFAULT_AUDIO_SERVICE_URL;
 const SERVICE_TIMEOUT = 30000; // 30 seconds for audio processing
 
 // Optional shared secret the service requires on /analyze when it is configured.

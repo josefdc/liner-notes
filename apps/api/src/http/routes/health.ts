@@ -1,6 +1,8 @@
+import type { ReadyResponse } from "@liner-notes/contract";
 import { Router } from "express";
 import { API_VERSION } from "../../config/apiPackage.js";
 import { isDatabaseHealthy } from "../../store/database.js";
+import { readiness } from "../readiness.js";
 
 const router = Router();
 
@@ -19,15 +21,20 @@ router.get("/api/health", (_req, res) => {
 });
 
 /**
- * Readiness: 200 when the database answers a query, 503 otherwise.
+ * Readiness: 200 when the API can serve what it is set up to serve, 503 with the failing checks
+ * otherwise (http/readiness.ts): the database, its migrations, the audio service, the model
+ * provider and the budget's state; the audio service and the provider only while live analysis
+ * is served. `checks` maps each check to its status; `details` has each in full.
  */
-router.get("/api/ready", (_req, res) => {
-  const ready = isDatabaseHealthy();
-  res.status(ready ? 200 : 503).json({
+router.get("/api/ready", async (_req, res) => {
+  const { ready, checks } = await readiness();
+  const body: ReadyResponse = {
     status: ready ? "ready" : "unavailable",
-    checks: { database: ready ? "ok" : "unavailable" },
+    checks: Object.fromEntries(checks.map((check) => [check.name, check.status])),
+    details: checks,
     timestamp: new Date().toISOString(),
-  });
+  };
+  res.status(ready ? 200 : 503).json(body);
 });
 
 export default router;

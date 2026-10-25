@@ -698,6 +698,17 @@ describe("composerNode", () => {
       },
     );
 
+    it("does not store a result built on a measurement served while the service could not say its version", async () => {
+      const out = await createComposerNode(testRuntime(succeeding()))(
+        stateWith({ ...measured, servedUnversioned: true }),
+        config(),
+      );
+      // Sent with the measurement it was built on, never stored: a later run measures again,
+      // and the note that the service was unavailable is never served without it.
+      expect(out.trackData?.audio).toEqual(audioV2());
+      expect(store.put).not.toHaveBeenCalled();
+    });
+
     it("does not store a result when audio analysis did not run", async () => {
       await createComposerNode(testRuntime(succeeding()))(stateWith(null), config());
       expect(store.put).not.toHaveBeenCalled();

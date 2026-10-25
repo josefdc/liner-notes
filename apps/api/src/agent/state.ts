@@ -172,6 +172,12 @@ export interface AudioMeasurement {
   unavailableDetail?: string;
   /** Mood heads the service returned outside their range; they are null in `audio`. */
   outOfRange?: string[];
+  /**
+   * Set on a cached measurement served while the service could not say its analyzer version
+   * (down, or naming none): a newer analyzer may measure it differently, so a result built on it
+   * is not stored.
+   */
+  servedUnversioned?: true;
 }
 
 export interface ResearchData {

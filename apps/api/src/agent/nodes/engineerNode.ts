@@ -10,10 +10,11 @@
  * passes both to the analysis. The audio cache is then read by the track's keys and the analyzer
  * version /health names (store/measuredAudio.ts): a measurement by another version is a miss and
  * the track is measured again. When the service does not answer or names no version, the newest
- * cached measurement is served, saying which analyzer made it and when. An `isrc:` row is served
- * only when this run's own preview resolution accepted the same Deezer entry by ISRC. A
- * measurement with a tempo and a key is cached under `isrc:<ISRC>` when its clip was the Deezer
- * entry found by the ISRC, and under `spotify:<id>` otherwise.
+ * cached measurement this track may be served is served, saying which analyzer made it and when,
+ * and the result is not stored. A measurement with a tempo and a key is cached under the track's
+ * own `spotify:<id>`, and also under `isrc:<ISRC>:<Deezer id>` when its clip was a Deezer entry
+ * taken by the ISRC; another track is served that row only when its own preview resolution took
+ * the same entry by ISRC this run.
  *
  * The clip is a preview of the chosen recording only (sources/audio.ts resolvePreview). The node
  * writes it for the player (`previewUrl`, for this run only: it is signed and expires), and how
@@ -42,7 +43,7 @@ import { type CachedAudio, getCache, type SonicCache } from "../../store/cache.j
 import {
   audioConfidence,
   audioLookupKeys,
-  audioTrackKey,
+  audioTrackKeys,
   isrcRowServes,
 } from "../../store/measuredAudio.js";
 import type { AudioMeasurement, AudioUnavailableReason, SonicAgentStateType } from "../state.js";
@@ -168,14 +169,16 @@ interface CacheHit {
 }
 
 /**
- * The cached measurement this run serves, or null to measure:
- * - the service names its analyzer version: the rows of that version under the track's keys;
- * - it does not answer, or names no version: the newest row under each key, of any version (its
- *   block and the result's run.analyzerVersion name the analyzer that made it; no version is
- *   made up);
- * an `isrc:` row only when this run's own preview resolution accepted the same Deezer entry by
- * ISRC (measuredAudio.ts isrcRowServes). Of the rows left, a complete one is preferred, then the
- * ISRC's: a partial `isrc:` row never hides a complete row of the track's own.
+ * The cached measurement this run serves, or null to measure. The track is looked up under its
+ * own `spotify:` key and under the `isrc:` key of the Deezer entry this run's own preview
+ * resolution took by ISRC, if any (measuredAudio.ts audioLookupKeys; isrcRowServes checks the
+ * row's entry again):
+ * - the service names its analyzer version: the rows of that version; a complete one is
+ *   preferred, then the ISRC's, so a partial `isrc:` row never hides a complete row of the
+ *   track's own;
+ * - it does not answer, or names no version: the newest of the rows this track may be served,
+ *   of any version (its block and the result's run.analyzerVersion name the analyzer that made
+ *   it; no version is made up).
  */
 function cachedMeasurement(
   cache: SonicCache,
@@ -185,26 +188,26 @@ function cachedMeasurement(
   fresh: PreviewResolution,
 ): CacheHit | null {
   const version = health?.analyzerVersion ?? null;
+  const keys = audioLookupKeys(spotifyId, isrc, fresh.match);
+  if (version) {
+    const hits = keys.flatMap((key): CacheHit[] => {
+      const measurement = cache.getAudio(key, version);
+      return measurement && isrcRowServes(key, measurement, fresh.match) ? [{ measurement }] : [];
+    });
+    return hits.find((hit) => audioConfidence(hit.measurement) === "high") ?? hits[0] ?? null;
+  }
   const reason = health
     ? "The audio service did not name its analyzer version."
     : "The audio service is unavailable.";
-  const hits = audioLookupKeys(spotifyId, isrc).flatMap((key): CacheHit[] => {
-    let hit: CacheHit | null = null;
-    if (version) {
-      const measurement = cache.getAudio(key, version);
-      hit = measurement ? { measurement } : null;
-    } else {
-      const newest = cache.getNewestAudio(key);
-      hit = newest
-        ? {
-            measurement: newest.measurement,
-            unversioned: { reason, measuredAt: newest.measuredAt },
-          }
-        : null;
-    }
-    return hit && isrcRowServes(key, hit.measurement, fresh.match) ? [hit] : [];
-  });
-  return hits.find((hit) => audioConfidence(hit.measurement) === "high") ?? hits[0] ?? null;
+  const newest = keys
+    .flatMap((key) => {
+      const found = cache.getNewestAudio(key);
+      return found && isrcRowServes(key, found.measurement, fresh.match) ? [found] : [];
+    })
+    .sort((a, b) => b.measuredAt.getTime() - a.measuredAt.getTime())[0];
+  return newest
+    ? { measurement: newest.measurement, unversioned: { reason, measuredAt: newest.measuredAt } }
+    : null;
 }
 
 export async function engineerNode(
@@ -222,8 +225,10 @@ export async function engineerNode(
 
   // What the run asks once: the service's health (its analyzer version) and the chosen track's
   // preview. Both are passed on to the analysis, so neither is asked twice.
-  const health = await audioServiceHealth(config.signal);
-  const fresh = await resolvePreview(request, config.signal);
+  const [health, fresh] = await Promise.all([
+    audioServiceHealth(config.signal),
+    resolvePreview(request, config.signal),
+  ]);
 
   let cache: SonicCache | null = null;
   try {
@@ -250,7 +255,9 @@ export async function engineerNode(
     });
     // The cache keeps no clip URL (they expire): the player gets this run's clip or none.
     return {
-      audioFeatures: hit.measurement,
+      // A measurement served without the service's version is marked, so the result built on
+      // it is not stored (composerNode.ts) and the note above is never lost.
+      audioFeatures: old ? { ...hit.measurement, servedUnversioned: true } : hit.measurement,
       preview: previewProvenance(hit.measurement.previewMatch),
       previewUrl:
         fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null,
@@ -317,17 +324,15 @@ export async function engineerNode(
     };
   }
 
-  // Only measurements with a tempo and a key are cached, under the key their clip's match
-  // allows. A failed write is logged and the run continues; nothing reports the result as
-  // cached. Nothing is cached for a cancelled run.
+  // Only measurements with a tempo and a key are cached: under the track's own key, and under
+  // the key of the Deezer entry when the clip was taken by ISRC. A failed write is logged and the
+  // run continues; nothing reports the result as cached. Nothing is cached for a cancelled run.
   config.signal?.throwIfAborted();
   if (cache && measurement.previewMatch) {
     try {
-      cache.putAudio(
-        audioTrackKey(measurement.previewMatch, track.id, request.isrc),
-        track.id,
-        measurement,
-      );
+      for (const key of audioTrackKeys(measurement.previewMatch, track.id, request.isrc)) {
+        cache.putAudio(key, track.id, measurement);
+      }
     } catch (error) {
       log.warn("Could not cache audio", { err: error });
     }

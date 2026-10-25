@@ -572,7 +572,11 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // the preview links and the search match belong to this run, not to a later one served from
     // the cache.
     const store = getStore();
-    const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
+    // Audio that may be measured later, or a measurement the cache served while the service
+    // could not say its analyzer version (a newer analyzer may measure it otherwise).
+    const transientAudio =
+      TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "") ||
+      state.audioFeatures?.servedUnversioned === true;
     // The errors a stored result keeps: none of them blocks it (see blockingSourceErrors).
     const runSourceErrors = state.sourceErrors;
     const transientSources =

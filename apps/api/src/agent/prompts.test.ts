@@ -37,25 +37,31 @@ const input = (title: string, year: string | null = null): ComposerPromptInput =
 });
 
 describe("measured audio in the composer's prompt", () => {
-  const measuredLine = (prompt: string) =>
-    prompt.split("\n")[prompt.split("\n").indexOf(MEASURED_HEADING) + 1];
+  const lineAfter = (prompt: string, heading: string) =>
+    prompt.split("\n")[prompt.split("\n").indexOf(heading) + 1];
+  const measuredLine = (prompt: string) => lineAfter(prompt, MEASURED_HEADING);
   const MEASURED_HEADING = "Measured audio (our analysis of a preview clip; null = not measured):";
+  const ESTIMATES_HEADING =
+    "Audio-model estimates on the same clip (scores, not measurements; null = not produced):";
 
   it("gives the model the result's own copies and the loudness in dBFS, to read only", () => {
     const prompt = composerUserPrompt({
       ...input("Ice Ice Baby"),
       audio: measurementOf(audioV2()),
     });
-    expect(JSON.parse(measuredLine(prompt))).toEqual({
+    expect(JSON.parse(lineAfter(prompt, MEASURED_HEADING))).toEqual({
       tempoBpm: 116,
       key: "D Minor",
       loudnessDbfsRms: -14.9,
+    });
+    expect(lineAfter(prompt, MEASURED_HEADING)).not.toContain("energy");
+    // The models' scores apart, headed as estimates.
+    expect(JSON.parse(lineAfter(prompt, ESTIMATES_HEADING))).toEqual({
       valence: 0.21,
       danceability: 0.64,
       acousticness: 0.05,
       instrumentalness: 0.01,
     });
-    expect(measuredLine(prompt)).not.toContain("energy");
   });
 
   it("calls the mood scores model estimates, never measurements", () => {

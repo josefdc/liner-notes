@@ -4,7 +4,7 @@ import type { AudioFeatures } from "@liner-notes/contract";
 import { MIGRATION_3_FROZEN, MIGRATIONS, runMigrations } from "./migrations.js";
 import {
   audioLookupKeys,
-  audioTrackKey,
+  audioTrackKeys,
   type CachedAudio,
   canonicalIsrc,
   isrcRowServes,
@@ -68,25 +68,37 @@ describe("SonicCache audio", () => {
     expect(MIGRATIONS.find((m) => m.name === "audio_cache_by_analyzer")?.version).toBe(14);
   });
 
-  it("files a measurement under the ISRC only when its clip was found by the ISRC", () => {
-    expect(audioTrackKey(ISRC_MATCH, "sp1", ISRC)).toBe(`isrc:${ISRC}`);
+  it("files a measurement under the track's own key, and under the entry's ISRC key when taken by ISRC", () => {
+    const own = "spotify:sp1";
+    const byIsrc = `isrc:${ISRC}:3366332`;
+    expect(audioTrackKeys(ISRC_MATCH, "sp1", ISRC)).toEqual([byIsrc, own]);
     // A Deezer entry read by id that carries the ISRC is an ISRC match (no score).
     expect(
-      audioTrackKey({ provider: "deezer", method: "id", deezerId: 2, score: null }, "sp1", ISRC),
-    ).toBe(`isrc:${ISRC}`);
-    expect(audioTrackKey(SEARCH_MATCH, "sp1", ISRC)).toBe("spotify:sp1");
+      audioTrackKeys({ provider: "deezer", method: "id", deezerId: 2, score: null }, "sp1", ISRC),
+    ).toEqual([`isrc:${ISRC}:2`, own]);
+    expect(audioTrackKeys(SEARCH_MATCH, "sp1", ISRC)).toEqual([own]);
     expect(
-      audioTrackKey({ provider: "deezer", method: "id", deezerId: 2, score: 0.9 }, "sp1", ISRC),
-    ).toBe("spotify:sp1");
-    expect(audioTrackKey({ provider: "spotify", method: "id", score: null }, "sp1", ISRC)).toBe(
-      "spotify:sp1",
+      audioTrackKeys({ provider: "deezer", method: "id", deezerId: 2, score: 0.9 }, "sp1", ISRC),
+    ).toEqual([own]);
+    expect(audioTrackKeys({ provider: "spotify", method: "id", score: null }, "sp1", ISRC)).toEqual(
+      [own],
     );
-    // No ISRC, or a malformed one: the track's own key.
-    expect(audioTrackKey(ISRC_MATCH, "sp1", null)).toBe("spotify:sp1");
-    expect(audioTrackKey(ISRC_MATCH, "sp1", "not-an-isrc")).toBe("spotify:sp1");
+    // No ISRC, or a malformed one: the track's own key only.
+    expect(audioTrackKeys(ISRC_MATCH, "sp1", null)).toEqual([own]);
+    expect(audioTrackKeys(ISRC_MATCH, "sp1", "not-an-isrc")).toEqual([own]);
     expect(canonicalIsrc("us-sb2-90-00129")).toBe(ISRC);
-    expect(audioLookupKeys("sp1", ISRC)).toEqual([`isrc:${ISRC}`, "spotify:sp1"]);
-    expect(audioLookupKeys("sp1", null)).toEqual(["spotify:sp1"]);
+    // Looked up under the entry this run's resolution took by ISRC, and nothing else.
+    expect(audioLookupKeys("sp1", ISRC, ISRC_MATCH)).toEqual([byIsrc, own]);
+    const entry7 = {
+      provider: "deezer" as const,
+      method: "isrc" as const,
+      deezerId: 7,
+      score: null,
+    };
+    expect(audioLookupKeys("sp1", ISRC, entry7)).toEqual([`isrc:${ISRC}:7`, own]);
+    expect(audioLookupKeys("sp1", ISRC, SEARCH_MATCH)).toEqual([own]);
+    expect(audioLookupKeys("sp1", ISRC, null)).toEqual([own]);
+    expect(audioLookupKeys("sp1", null, ISRC_MATCH)).toEqual([own]);
   });
 
   it("serves a measurement for the analyzer version that measured it, and misses for another", () => {
@@ -141,9 +153,9 @@ describe("SonicCache audio", () => {
     expect(isrcRowServes("spotify:sp1", own, null)).toBe(true);
   });
 
-  it("files a clip found by the ISRC under the ISRC only with its Deezer entry's id", () => {
+  it("files a clip under an ISRC key only with its Deezer entry's id", () => {
     const { deezerId: _id, ...noId } = ISRC_MATCH as { deezerId: number };
-    expect(audioTrackKey(noId as never, "sp1", ISRC)).toBe("spotify:sp1");
+    expect(audioTrackKeys(noId as never, "sp1", ISRC)).toEqual(["spotify:sp1"]);
   });
 
   it("gives the newest measurement under a key, of any analyzer version, with when it was stored", () => {
@@ -168,10 +180,11 @@ describe("SonicCache audio", () => {
 
   it("files a search-matched measurement under its own track only", () => {
     const measured = measurementOf(audioV2(), SEARCH_MATCH);
-    cache.putAudio(audioTrackKey(SEARCH_MATCH, "sp1", ISRC), "sp1", measured);
+    for (const key of audioTrackKeys(SEARCH_MATCH, "sp1", ISRC))
+      cache.putAudio(key, "sp1", measured);
 
     expect(cache.getAudio("spotify:sp1", ANALYZER_VERSION)).toEqual(measured);
-    expect(cache.getAudio(`isrc:${ISRC}`, ANALYZER_VERSION)).toBeNull();
+    expect(db.prepare("SELECT track_key FROM audio_cache").pluck().all()).toEqual(["spotify:sp1"]);
     expect(cache.getAudio("spotify:sp2", ANALYZER_VERSION)).toBeNull();
   });
 

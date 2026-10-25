@@ -10,8 +10,10 @@
  * its key version is no longer read (agent/cacheKeys.ts).
  *
  * The audio cache holds measurements only: the audio service's AudioFeatures v2 block with how
- * its clip was matched, filed under (track key, analyzer version) (see measuredAudio.ts). A row
- * is served only for the analyzer version asked for and only when it is still such a
+ * its clip was matched, filed under (track key, analyzer version) (see measuredAudio.ts).
+ * `getAudio` serves a row only for the analyzer version asked for; `getNewestAudio` serves the
+ * newest row under a key of any version, for when the service cannot say its version (the block
+ * names the analyzer that made it). Either serves a row only while it is still such a
  * measurement; a measurement with low confidence is served too, with its confidence. Writes of
  * anything else are refused.
  *

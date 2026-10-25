@@ -176,26 +176,30 @@ export interface ComposerPromptInput {
 }
 
 /**
- * The measured values the model may read (never write), or null when nothing was measured: the
- * result's own copies (finalize.ts), the loudness in dBFS RMS (no 0..1 energy: it saturates on
- * loud masters) and the instrumental head's score.
+ * The audio values the model may read (never write), each part null when it has nothing: the
+ * signal measurements (the result's own tempo and key copies, finalize.ts, and the loudness in
+ * dBFS RMS; no 0..1 energy, it saturates on loud masters), and apart from them the audio models'
+ * scores, which are estimates, not measurements.
  */
-function measuredForPrompt(measurement: AudioMeasurement | null) {
+function audioForPrompt(measurement: AudioMeasurement | null) {
   const fields = measuredAudioFields(measurement);
-  const rmsMean = fields.audio?.gate.passed ? fields.audio.loudness?.rmsMean : undefined;
+  const passed = fields.audio?.gate.passed === true;
+  const rmsMean = passed ? fields.audio?.loudness?.rmsMean : undefined;
   const level = rmsMean != null ? loudnessDbfs(rmsMean) : null;
-  const values = {
+  const measured = {
     tempoBpm: fields.bpm,
     key: fields.key,
     loudnessDbfsRms: level !== null ? Math.round(level * 10) / 10 : null,
+  };
+  const estimates = {
     valence: fields.valence ?? null,
     danceability: fields.danceability ?? null,
     acousticness: fields.acousticness ?? null,
-    instrumentalness: fields.audio?.gate.passed
-      ? moodScore(fields.audio.fingerprint?.moods?.instrumental)
-      : null,
+    instrumentalness: passed ? moodScore(fields.audio?.fingerprint?.moods?.instrumental) : null,
   };
-  return Object.values(values).every((v) => v === null) ? null : values;
+  const some = (values: Record<string, unknown>) =>
+    Object.values(values).some((v) => v !== null) ? values : null;
+  return { measured: some(measured), estimates: some(estimates) };
 }
 
 /** The research lists, each with the label its blocks get. Song-meaning text is never sent. */
@@ -278,7 +282,7 @@ function promptEvidence(evidence: readonly Evidence[], max: number): { lines: st
 
 export function composerUserPrompt(input: ComposerPromptInput): string {
   const material = researchBlocks(input.research);
-  const measured = measuredForPrompt(input.audio);
+  const audio = audioForPrompt(input.audio);
   return [
     "Write the liner notes for this track.",
     "",
@@ -289,7 +293,10 @@ export function composerUserPrompt(input: ComposerPromptInput): string {
     input.recording ? json(input.recording) : "(not available)",
     "",
     "Measured audio (our analysis of a preview clip; null = not measured):",
-    measured ? json(measured) : "(not measured)",
+    audio.measured ? json(audio.measured) : "(not measured)",
+    "",
+    "Audio-model estimates on the same clip (scores, not measurements; null = not produced):",
+    audio.estimates ? json(audio.estimates) : "(none)",
     "",
     "Evidence pack (cite these ids only):",
     evidenceForPrompt(input.evidence),

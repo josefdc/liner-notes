@@ -302,6 +302,37 @@ describe("scoutNode's stored results", () => {
     expect(out.trackData ?? null).toBeNull();
     expect(spotify.calls).toBe(1);
   });
+
+  it("does not serve a result stored before a primary source's credential was set", async () => {
+    const before = configuredSources();
+    for (const [variable, flag] of [
+      ["DISCOGS_TOKEN", "discogs"],
+      ["GENIUS_ACCESS_TOKEN", "genius"],
+    ] as const) {
+      const saved = process.env[variable];
+      delete process.env[variable];
+      try {
+        const store = new InMemoryStore();
+        const without = configuredSources();
+        expect(without[flag]).toBe(false);
+        await store.put(TRACKS_NAMESPACE, resultCacheKey(track.id, without), stored);
+        process.env[variable] = "a-test-credential";
+        expect(configuredSources()[flag]).toBe(true);
+        expect(resultCacheKey(track.id, configuredSources())).not.toBe(
+          resultCacheKey(track.id, without),
+        );
+        const { graph } = scoutGraph(store);
+
+        const out = await graph.invoke({ songQuery: "Song A" });
+
+        expect(out.trackData ?? null, variable).toBeNull();
+      } finally {
+        if (saved === undefined) delete process.env[variable];
+        else process.env[variable] = saved;
+      }
+    }
+    expect(configuredSources()).toEqual(before);
+  });
 });
 
 describe("scoutNode's track picker", () => {

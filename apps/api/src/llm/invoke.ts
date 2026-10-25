@@ -93,6 +93,9 @@ import {
   UNSOURCED_PRICE_MULTIPLIER,
 } from "./prices.js";
 import { type LlmUsageRow, recordToOpenDatabase } from "./usage.js";
+import { logger } from "../logger.js";
+
+const log = logger("llm");
 
 export type { LlmMessage } from "./cassette.js";
 
@@ -537,8 +540,8 @@ function consistentUsage(
   const tooMuchReasoning = (usage.reasoningTokens ?? 0) > usage.outputTokens;
   const silentText = usage.outputTokens === 0 && answerText(response).text.length > 0;
   if (!tooMuchReasoning && !silentText) return usage;
-  console.warn(
-    `[llm] ${callSite}: the reported usage is inconsistent (${usage.outputTokens} output, ` +
+  log.warn(
+    `${callSite}: the reported usage is inconsistent (${usage.outputTokens} output, ` +
       `${usage.reasoningTokens ?? "no"} reasoning tokens); counting the worst case instead`,
   );
   return null;
@@ -560,8 +563,8 @@ function priceForAnswer(
   const model = (response as { model?: unknown } | null)?.model;
   if (price.source === null || typeof model !== "string" || model === "") return price;
   if (modelKey(model).startsWith(modelKey(deployment))) return price;
-  console.warn(
-    `[llm] ${callSite}: the answer came from a model outside the priced family of the ` +
+  log.warn(
+    `${callSite}: the answer came from a model outside the priced family of the ` +
       "deployment; charging the fallback prices × 1.5",
   );
   return { ...FALLBACK_PRICE, deployment, multiplier: UNSOURCED_PRICE_MULTIPLIER };
@@ -727,7 +730,7 @@ export function createLlm(deps: LlmDependencies): Llm {
     try {
       recordUsage(row);
     } catch (error) {
-      console.warn(`[llm] usage row not recorded: ${(error as Error).message}`);
+      log.warn(`usage row not recorded: ${(error as Error).message}`);
     }
   }
 
@@ -857,7 +860,7 @@ export function createLlm(deps: LlmDependencies): Llm {
             secrets,
             settings.azureApiKey,
           ).catch((error: unknown) => {
-            console.warn(`[llm] LLM_CASSETTE=record: ${(error as Error).message}`);
+            log.warn(`LLM_CASSETTE=record: ${(error as Error).message}`);
           });
         }
         return {
@@ -1014,8 +1017,8 @@ export function createLlm(deps: LlmDependencies): Llm {
       estimated = true;
     }
     if (usdEst > worstCase) {
-      console.warn(
-        `[llm] ${a.callSite}: the reported cost (USD ${usdEst}) is above the reservation ` +
+      log.warn(
+        `${a.callSite}: the reported cost (USD ${usdEst}) is above the reservation ` +
           `(USD ${worstCase}); the input bound was exceeded`,
       );
     }
@@ -1033,7 +1036,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       })
       .catch((settleError: unknown) => {
         // The reservation stays in the log and keeps counting at the worst case.
-        console.warn(`[llm] ${a.callSite}: not settled: ${(settleError as Error).message}`);
+        log.warn(`${a.callSite}: not settled: ${(settleError as Error).message}`);
       });
     record({
       id: reservation.id,

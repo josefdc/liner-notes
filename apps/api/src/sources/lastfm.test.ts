@@ -10,6 +10,7 @@
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import {
   getLastfmArtistInfo,
   getLastfmArtistTags,
@@ -34,13 +35,12 @@ describe("Last.fm tools without an API key", () => {
   let networkCalls = 0;
   let savedKey: string | undefined;
   let savedFetch: typeof fetch;
-  const savedWarn = console.warn;
-  const warnings: string[] = [];
+  // Captured for the whole block: the warning is logged once per process.
+  let logs: CapturedLogs;
+  const warnings = () => logs.messages("warn");
 
   beforeAll(() => {
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(" "));
-    };
+    logs = captureLogsForTests();
     // Importing the tools loads apps/api/.env; remove the key so the no-key path is
     // exercised regardless of local configuration.
     savedKey = process.env.LASTFM_API_KEY;
@@ -53,7 +53,7 @@ describe("Last.fm tools without an API key", () => {
   });
 
   afterAll(() => {
-    console.warn = savedWarn;
+    logs.restore();
     globalThis.fetch = savedFetch;
     if (savedKey !== undefined) process.env.LASTFM_API_KEY = savedKey;
   });
@@ -79,7 +79,7 @@ describe("Last.fm tools without an API key", () => {
     // Runs tools itself, so it holds in any test order.
     await getLastfmTrackTags.invoke({ title: "Bohemian Rhapsody", artist: "Queen" });
     await getLastfmArtistTags.invoke({ artist: "Queen" });
-    expect(warnings.filter((line) => line.includes("LASTFM_API_KEY"))).toHaveLength(1);
+    expect(warnings().filter((line) => line.includes("LASTFM_API_KEY"))).toHaveLength(1);
   });
 });
 

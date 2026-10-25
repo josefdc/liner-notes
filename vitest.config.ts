@@ -9,9 +9,14 @@ export default defineConfig({
           name: "api",
           root: "apps/api",
           environment: "node",
-          // Tests never load a settings file (see test/setup/noDotenv.ts) and replay model calls
-          // from cassettes by default (test/setup/llmReplay.ts).
-          setupFiles: ["test/setup/noDotenv.ts", "test/setup/llmReplay.ts"],
+          // Tests never load a settings file (see test/setup/noDotenv.ts), replay model calls
+          // from cassettes by default (test/setup/llmReplay.ts) and write no log lines unless
+          // they capture them (test/setup/logging.ts).
+          setupFiles: [
+            "test/setup/noDotenv.ts",
+            "test/setup/llmReplay.ts",
+            "test/setup/logging.ts",
+          ],
           include: ["src/**/*.test.ts", "test/**/*.test.ts"],
         },
       },

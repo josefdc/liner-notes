@@ -77,7 +77,8 @@ describe("ListenBrainz similar artists", () => {
 
     const data = JSON.parse(await getListenBrainzSimilarArtists.invoke({ artistMbid: DAFT_PUNK }));
 
-    expect(data).toMatchObject({ found: false, code: "invalid_response" });
+    // Not JSON (an error or bot-challenge page): usually passing, so unavailable.
+    expect(data).toMatchObject({ found: false, code: "unavailable" });
     expect(data.error).toMatch(/expected JSON, got text\//);
   });
 

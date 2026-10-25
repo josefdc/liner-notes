@@ -273,6 +273,37 @@ describe("clarificationNode's stored results", () => {
     expect(events).toContainEqual({ type: "complete", data: update.trackData });
   });
 
+  it("reports again the sources its stored result could not read", async () => {
+    const lasting = {
+      source: "secondhandsongs",
+      code: "invalid_response",
+      message: "unexpected answer: work 4196 has no versions list",
+    };
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf("track-b"), {
+      ...storedFor("track-b"),
+      sourceErrors: [lasting],
+    });
+    const events: Array<{ type?: string; message?: string; code?: string }> = [];
+    const { graph, node, thread } = await pausedAtChoice(
+      (event) => events.push(event as never),
+      store,
+    );
+    spotify.details.mockRejectedValue(UNAVAILABLE);
+
+    await graph.invoke(new Command({ resume: "track-b" }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.trackData).toMatchObject({ id: "track-b" });
+    expect(update.sourceErrors).toEqual(expect.arrayContaining([lasting]));
+    const line =
+      "⚠️ Stored result: SecondHandSongs could not be read when it was composed (invalid_response)";
+    expect(update.statusMessages).toContain(line);
+    const warned = events.findIndex((e) => e.code === "SYS-WARN" && e.message === line);
+    expect(warned).toBeGreaterThan(-1);
+    expect(warned).toBeLessThan(events.findIndex((e) => e.type === "complete"));
+  });
+
   it("does not serve a result stored for another candidate", async () => {
     const store = new InMemoryStore();
     await store.put(TRACKS_NAMESPACE, keyOf("track-a"), storedFor("track-a"));

@@ -6,6 +6,9 @@ import { describeError } from "../../sources/http.js";
 import { searchTracks } from "../../sources/spotify.js";
 import { asyncRoute, sendError } from "../middleware/errors.js";
 import { boundedText, describeIssues } from "../validation.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Search");
 
 const router = Router();
 
@@ -73,7 +76,7 @@ router.get(
       });
     } catch (error) {
       // Spotify's errors are typed (sources/http.ts); the client gets a generic message.
-      console.error("[Search] Suggest failed:", describeError(error));
+      log.error(`Suggest failed: ${describeError(error)}`);
       sendError(res, "upstream_unavailable", { suggestions: [] });
     }
   }),

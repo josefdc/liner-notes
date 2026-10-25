@@ -14,6 +14,7 @@
  * @see https://musicbrainz.org/doc/MusicBrainz_API
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import {
@@ -25,6 +26,9 @@ import {
   SourceError,
 } from "./http.js";
 import { type NotAskedReason, notAnswered, toolFailure } from "./toolResult.js";
+import { logger } from "../logger.js";
+
+const log = logger("MusicBrainz");
 
 // =============================================================================
 // TypeScript Interfaces
@@ -199,14 +203,16 @@ class MusicBrainzRateLimiter {
         if (index >= 0) this.queue.splice(index, 1);
         reject(signal?.reason);
       };
-      const task = async () => {
+      // The queue is drained by whichever caller found it idle; bound here, the request runs in
+      // its own caller's context, so what it logs carries that caller's run id.
+      const task = AsyncLocalStorage.bind(async () => {
         signal?.removeEventListener("abort", onAbort);
         try {
           resolve(await fn());
         } catch (error) {
           reject(error);
         }
-      };
+      });
       signal?.addEventListener("abort", onAbort, { once: true });
       this.queue.push(task);
 
@@ -391,7 +397,7 @@ async function mbFetch<T>(
   url.searchParams.set("fmt", "json");
   const attempt = () =>
     rateLimiter.execute(() => {
-      console.log(`🧠 [MusicBrainz] Request: /${path}`);
+      log.info(`Request: /${path}`);
       return fetchJson<T>({
         source: "musicbrainz",
         url,
@@ -783,7 +789,7 @@ export const getMusicBrainzRelations = tool(
   async ({ title, artist, artistNames, album }, config): Promise<string> => {
     const signal = config?.signal;
     try {
-      console.log(`🧠 [MusicBrainz] Searching: "${title}" by ${artist}`);
+      log.info(`Searching: "${title}" by ${artist}`);
 
       // Step 1: Search for recording
       const search = await searchRecording(title, artist, artistNames, album, signal);
@@ -798,7 +804,7 @@ export const getMusicBrainzRelations = tool(
       }
       const recording = search.recording;
 
-      console.log(`🧠 [MusicBrainz] Found MBID: ${recording.id}`);
+      log.info(`Found MBID: ${recording.id}`);
 
       // Step 2: Get full recording with relationships
       const fullRecording = await getRecordingWithRelations(recording.id, signal);
@@ -814,8 +820,8 @@ export const getMusicBrainzRelations = tool(
       const djMixes = genealogy.filter((r) => r.type === "dj-mix");
       const influences = genealogy.filter((r) => r.type === "influence");
 
-      console.log(
-        `✅ [MusicBrainz] Found ${genealogy.length} genealogy relations: ` +
+      log.info(
+        `Found ${genealogy.length} genealogy relations: ` +
           `${samples.length} samples, ${covers.length} covers, ${remixes.length} remixes ` +
           `(${djMixes.length} DJ-mix inclusions kept apart, not genealogy)`,
       );
@@ -841,7 +847,7 @@ export const getMusicBrainzRelations = tool(
     } catch (error) {
       // A cancelled run rejects: nothing is reported for it.
       if (signal?.aborted) throw error;
-      console.error("❌ [MusicBrainz] Error:", describeError(error));
+      log.error(`Error: ${describeError(error)}`);
       return JSON.stringify(toolFailure(error));
     }
   },
@@ -890,7 +896,7 @@ export const getMusicBrainzArtist = tool(
       let id = isMbid(artistMbid) ? artistMbid : null;
       let verified = false;
       if (!id) {
-        console.log(`🧠 [MusicBrainz] Searching artist: "${artistName}"`);
+        log.info(`Searching artist: "${artistName}"`);
         const match = await findArtist(artistName, { artistNames, spotifyArtistId, signal });
         if (!match.artist) {
           return JSON.stringify(notAnswered(ARTIST_REASON[match.reason], match.detail));
@@ -946,7 +952,7 @@ export const getMusicBrainzArtist = tool(
       });
     } catch (error) {
       if (signal?.aborted) throw error;
-      console.error("❌ [MusicBrainz] Artist error:", describeError(error));
+      log.error(`Artist error: ${describeError(error)}`);
       return JSON.stringify(toolFailure(error));
     }
   },

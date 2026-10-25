@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
 import { runIssues, TrackAnalysis } from "@liner-notes/contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { captureLogsForTests } from "../logger.js";
 
 const tools = vi.hoisted(() => {
   const tool = (answer: () => string) => ({
@@ -315,7 +316,17 @@ describe("the analysis graph", () => {
     expect(replayed.composerRuns).toBe(1);
     const { run: recordedRun, ...recordedData } = recorded.trackData!;
     const { run: replayedRun, ...replayedData } = replayed.trackData!;
-    expect(replayedData).toEqual(recordedData);
+    // Only the model's answers are replayed: the sources were read again, so each run's
+    // evidence says it was retrieved at that run's time.
+    const retrieved = (data: typeof recordedData) => data.evidence?.map((e) => e.retrievedAt);
+    expect(recordedData.evidence?.length).toBeGreaterThan(0);
+    expect(new Set(retrieved(recordedData))).toEqual(new Set(["2026-03-01T10:00:00.000Z"]));
+    expect(new Set(retrieved(replayedData))).toEqual(new Set(["2026-09-09T22:22:22.000Z"]));
+    const undated = (data: typeof recordedData) => ({
+      ...data,
+      evidence: data.evidence?.map(({ retrievedAt: _at, ...item }) => item),
+    });
+    expect(undated(replayedData)).toEqual(undated(recordedData));
     // Answers from cassettes make a replayed run; the recording run called the provider.
     expect(replayedRun).toMatchObject({ id: "thread-b", fallback: false, mode: "replay" });
     expect(recordedRun).toMatchObject({ id: "thread-a", fallback: false, mode: "live" });
@@ -339,7 +350,8 @@ describe("the analysis graph", () => {
       const { recordedAt: _at, commit: _commit, ...older } = JSON.parse(readFileSync(path, "utf8"));
       writeFileSync(path, JSON.stringify(older));
     }
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     const unknown = await run(replayer, { threadId: "thread-c", at: "2026-09-09T22:22:22.000Z" });
     expect(unknown.trackData?.run).toMatchObject({
       mode: "replay",
@@ -347,7 +359,7 @@ describe("the analysis graph", () => {
       recordedAt: null,
       commit: null,
     });
-    expect(warn.mock.calls.map(([message]) => String(message)).join("\n")).toMatch(
+    expect(logs.messages("warn").join("\n")).toMatch(
       /run information breaks the contract's run rules/,
     );
     expect(replayedData.factoids[0]).toMatchObject({ title: "Borrowed bass" });

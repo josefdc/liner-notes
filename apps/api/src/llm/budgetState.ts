@@ -31,6 +31,9 @@ import { capViolation, SpendGuard } from "./budget.js";
 import { isLlmError } from "./errors.js";
 import { FALLBACK_PRICE } from "./prices.js";
 import type { SpendTotals } from "./spendLog.js";
+import { logger } from "../logger.js";
+
+const log = logger("Budget");
 
 /**
  * The design target of one live analysis at the fallback prices: 30k input and 6k output
@@ -107,13 +110,13 @@ export function liveBudgetState(env: NodeJS.ProcessEnv, purpose: LlmPurpose): Pr
     // A spent budget is logged once per read of the log (at most once per TTL, as it is
     // cached). An unusable log is read again on every request, so its warning is throttled
     // to the same rate.
-    if (read.state === "exhausted") console.warn(`[Budget] Live analysis paused: ${read.reason}`);
+    if (read.state === "exhausted") log.warn(`Live analysis paused: ${read.reason}`);
     if (read.state === "unverifiable") {
       if (cached?.state === state) cached = null;
       const at = Date.now();
       if (at - lastUnverifiableWarning >= BUDGET_STATE_TTL_MS) {
         lastUnverifiableWarning = at;
-        console.warn(`[Budget] Live analysis off (the budget cannot be checked): ${read.reason}`);
+        log.warn(`Live analysis off (the budget cannot be checked): ${read.reason}`);
       }
     }
     return read;

@@ -1,5 +1,8 @@
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
 import { refuseStream } from "../sse.js";
+import { logger } from "../../logger.js";
+
+const log = logger("HTTP");
 
 /**
  * Errors the client can see: a code, a status and a short generic message. Details (stack,
@@ -147,13 +150,13 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const where = `${req.method} ${logText(req.path)}`;
 
   if (type === "request.aborted") {
-    console.warn(`[HTTP] ${where}: client aborted the request body`);
+    log.warn(`${where}: client aborted the request body`);
     return;
   }
 
   if (res.headersSent) {
     // Too late for a status: close the response so the client is not left waiting.
-    console.error(`[HTTP] ${where}: error after the response started`, err);
+    log.error(`${where}: error after the response started`, { err });
     if (!res.writableEnded) res.end();
     return;
   }
@@ -163,11 +166,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 
   if (bodyCode || clientError) {
     const code = bodyCode ?? "bad_request";
-    console.warn(`[HTTP] ${where}: ${code} (${logText(err instanceof Error ? err.message : err)})`);
+    log.warn(`${where}: ${code} (${logText(err instanceof Error ? err.message : err)})`);
     sendError(res, code);
     return;
   }
 
-  console.error(`[HTTP] ${where}: unhandled error`, err);
+  log.error(`${where}: unhandled error`, { err });
   sendError(res, "internal_error");
 };

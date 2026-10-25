@@ -7,11 +7,12 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { FactoidsOutput } from "@liner-notes/contract";
 import { LlmError } from "../../llm/errors.js";
 import { createTestApp } from "../testApp.js";
 import { llm } from "../../llm/invoke.js";
+import { captureLogsForTests } from "../../logger.js";
 import factoidsRouter, { createFactoidsRouter, FACTOIDS_SYSTEM_PROMPT } from "./factoids.js";
 
 const model = vi.hoisted(() => ({
@@ -388,11 +389,12 @@ describe("GET /api/factoids/decrypt/stream", () => {
     await stream.waitFor(ofType("connected"));
     await until(() => model.invoke.mock.calls.length === 1);
 
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     stream.close();
     await until(() => vi.getTimerCount() === 0); // the heartbeat is cleared on close
     // The route stops waiting for the call in flight as soon as the client is gone.
-    const log = vi.mocked(console.log);
-    await until(() => log.mock.calls.some(([line]) => String(line).includes("Client left")));
+    await until(() => logs.entries().some((entry) => String(entry.msg).includes("Client left")));
 
     // The call in flight was given the stream's signal, which aborted when the client left.
     expect((model.invoke.mock.calls[0][4] as { signal: AbortSignal }).signal.aborted).toBe(true);

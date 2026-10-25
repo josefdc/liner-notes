@@ -306,6 +306,36 @@ describe("composerNode", () => {
     expect(out.claims).toEqual(claims);
   });
 
+  it("keeps a citation only of an item the prompt showed", async () => {
+    // More items than the prompt's evidence budget holds: the last ones are not shown.
+    const pack: Evidence[] = [
+      ...evidence,
+      ...Array.from({ length: 120 }, (_, i) => ({
+        ...evidence[0],
+        id: `secondhandsongs:work/work/1/covered-by/${i}`,
+        source: "secondhandsongs" as const,
+        recordRef: `work/work/1/covered-by/${i}`,
+        excerpt: `SecondHandSongs: cover ${i}. ${"x".repeat(400)}`,
+      })),
+    ];
+    const last = pack[pack.length - 1].id;
+    const llm = stubLlm(() => ({
+      ...output,
+      claims: [{ ...output.claims[0], evidenceIds: ["ev-mb-1", last] }],
+    }));
+    const out = await createComposerNode(testRuntime(llm))(
+      { ...stateWith(measured), evidence: pack } as SonicAgentStateType,
+      config(),
+    );
+
+    const { user } = messagesOf(llm.calls[0]);
+    expect(user).toContain(JSON.stringify("ev-mb-1"));
+    expect(user).not.toContain(JSON.stringify(last));
+    expect(out.trackData?.claims?.[0].evidenceIds).toEqual(["ev-mb-1"]);
+    // The pack itself is kept whole in the result.
+    expect(out.trackData?.evidence).toHaveLength(pack.length);
+  });
+
   it("draws every node the model proposes as a related influence, never as a sample", async () => {
     const out = await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
 
@@ -724,7 +754,7 @@ describe("composerNode", () => {
       );
       expect(store.put).toHaveBeenCalledTimes(1);
       const [, key, value] = store.put.mock.calls[0];
-      expect(key).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
+      expect(key).toMatch(/^x\|lastfm=[01]:tavily=[01]:discogs=[01]:genius=[01]$/);
       expect(value.trackData).toMatchObject({ id: "x" });
     });
 
@@ -807,6 +837,76 @@ describe("composerNode", () => {
       expect(store.put).toHaveBeenCalledTimes(1);
     });
 
+    it("stores a result only past errors marked lasting, and stores it with them", async () => {
+      type Error = { source: string; code: string; message?: string };
+      const run = (errors: Error[], lasting: Error[] = []) =>
+        createComposerNode(testRuntime(succeeding()))(
+          {
+            ...stateWith(measured),
+            sourceErrors: errors,
+            lastingSourceErrors: lasting,
+          } as SonicAgentStateType,
+          config(),
+        );
+      const shape = {
+        source: "secondhandsongs",
+        code: "invalid_response",
+        message: "unexpected answer: work 4196 has no versions list",
+      };
+      // [errors, the ones marked lasting, stored?]
+      const table: Array<[string, Error[], Error[], boolean]> = [
+        // A primary reader marked it: the same answer would come again.
+        ["a shape the reader does not know, marked lasting", [shape], [shape], true],
+        ["a source only not configured", [{ source: "discogs", code: "not_configured" }], [], true],
+        // The marker decides, never the source or the code alone.
+        ["the same error without the marker", [shape], [], false],
+        [
+          "a MusicBrainz invalid_response from the researcher",
+          [{ source: "musicbrainz", code: "invalid_response", message: "not a list" }],
+          [],
+          false,
+        ],
+        // A lasting error does not excuse another one of the same source.
+        [
+          "a marked error and another of the same source",
+          [shape, { ...shape, message: "unexpected answer: something else" }],
+          [shape],
+          false,
+        ],
+        // An HTML or bot-challenge page is unavailable: passing.
+        ["an HTML page", [{ source: "secondhandsongs", code: "unavailable" }], [], false],
+        [
+          "a reader's bug",
+          [
+            {
+              source: "musicbrainz",
+              code: "unavailable",
+              message: "internal error: x is undefined",
+            },
+          ],
+          [],
+          false,
+        ],
+        // Lost records block whatever their code.
+        [
+          "lost records",
+          [{ source: "musicbrainz", code: "invalid_response", message: "work not read" }],
+          [],
+          false,
+        ],
+        ["a timeout", [{ source: "secondhandsongs", code: "timeout" }], [], false],
+      ];
+      for (const [name, errors, lasting, stored] of table) {
+        store.put.mockClear();
+        await run(errors, lasting);
+        expect(store.put.mock.calls.length, name).toBe(stored ? 1 : 0);
+      }
+      store.put.mockClear();
+      await run([shape], [shape]);
+      // Stored with the errors its run met, so serving it reports them.
+      expect(store.put.mock.calls[0][2]).toMatchObject({ sourceErrors: [shape] });
+    });
+
     it("stores a result with measured audio, without this run's information", async () => {
       await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
       expect(store.put).toHaveBeenCalledTimes(1);
@@ -815,7 +915,9 @@ describe("composerNode", () => {
       // sources: adding a key later composes the result again.
       // Keyed by the track (its Spotify id), never by the search text.
       expect(namespace).toEqual(["tracks", "v5"]);
-      expect(store.put.mock.calls[0][1]).toMatch(/^x\|lastfm=[01]:tavily=[01]$/);
+      expect(store.put.mock.calls[0][1]).toMatch(
+        /^x\|lastfm=[01]:tavily=[01]:discogs=[01]:genius=[01]$/,
+      );
       expect(value.trackData).not.toHaveProperty("run");
       expect(value.timestamp).toBe(Date.parse("2026-01-01T00:00:00.000Z"));
     });

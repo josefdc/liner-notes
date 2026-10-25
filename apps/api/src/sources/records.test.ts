@@ -16,6 +16,7 @@ import {
   parseClockDuration,
   primaryEvidence,
   titlesMatch,
+  unexpectedShape,
 } from "./records.js";
 
 describe("titlesMatch", () => {
@@ -134,9 +135,14 @@ describe("results and Evidence", () => {
     });
   });
 
-  it("reports a malformed answer as an invalid response, and a deadline as a timeout", () => {
-    expect(failed("discogs", new TypeError("x is not iterable"))).toMatchObject({
+  it("reports a malformed answer as an invalid response, a reader's bug as an internal error, and a deadline as a timeout", () => {
+    expect(failed("discogs", unexpectedShape("discogs", "no tracklist"))).toMatchObject({
       error: { code: "invalid_response" },
+    });
+    // A TypeError past the shape checks is a bug of the reader, not the source's answer: it is
+    // reported, and keeps the result from being stored, rather than read as a lasting answer.
+    expect(failed("discogs", new TypeError("x is not iterable"))).toMatchObject({
+      error: { code: "unavailable", message: "internal error: x is not iterable" },
     });
     expect(failed("discogs", new SourceError("discogs", "timeout", "deadline"))).toMatchObject({
       error: { code: "timeout" },

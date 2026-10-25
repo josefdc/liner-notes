@@ -27,6 +27,9 @@ import {
   type SearchCandidate,
 } from "@liner-notes/contract";
 import { API_ROOT } from "../config/apiPackage.js";
+import { logger } from "../logger.js";
+
+const log = logger("Replay");
 
 /** fixtures/replays at the repository root. */
 export const DEFAULT_REPLAY_DIR = resolve(API_ROOT, "..", "..", "fixtures", "replays");
@@ -215,9 +218,9 @@ export function replays(env: NodeJS.ProcessEnv = process.env): ReplaySet {
   const dir = replayDir(env);
   if (loaded?.dir === dir) return loaded;
   loaded = loadReplays(dir);
-  for (const problem of loaded.problems) console.error(`[Replay] Record left out: ${problem}`);
-  for (const warning of loaded.warnings) console.warn(`[Replay] ${warning}`);
-  console.log(`[Replay] ${loaded.records.length} recorded runs in ${dir}`);
+  for (const problem of loaded.problems) log.error(`Record left out: ${problem}`);
+  for (const warning of loaded.warnings) log.warn(warning);
+  log.info(`${loaded.records.length} recorded runs in ${dir}`);
   return loaded;
 }
 

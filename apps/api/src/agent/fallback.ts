@@ -18,6 +18,9 @@ import {
   type ResearchData,
   type SpotifyData,
 } from "./state.js";
+import { logger } from "../logger.js";
+
+const log = logger("Fallback");
 
 /** Splits a research entry such as `[MusicBrainz Samples] [...]` into its tag and body. */
 function splitTag(entry: string): { tag: string | null; body: string } {
@@ -120,7 +123,7 @@ export async function createFallbackTrackData(
   const factoids: Factoid[] = [];
   const research: ResearchData = state.researchData || emptyResearch();
 
-  console.log("📊 [Fallback] Building factoids from research data:", {
+  log.info("Building factoids from research data", {
     samples: research.samples?.length || 0,
     productionTrivia: research.productionTrivia?.length || 0,
     collaborators: research.collaborators?.length || 0,
@@ -204,8 +207,8 @@ export async function createFallbackTrackData(
     });
   }
 
-  console.log(
-    `✅ [Fallback] Generated ${factoids.length} factoids (${factoids.filter((f) => f.entities?.length).length} with entities)`,
+  log.info(
+    `Generated ${factoids.length} factoids (${factoids.filter((f) => f.entities?.length).length} with entities)`,
   );
 
   return {

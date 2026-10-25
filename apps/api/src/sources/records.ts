@@ -15,9 +15,9 @@ import {
   type SourceError as SourceErrorRecord,
   type SourceId,
 } from "@liner-notes/contract";
-import { describeError, type SourceName, SourceError } from "./http.js";
+import { type SourceName, SourceError } from "./http.js";
 import { normalizeName, withoutFeatured } from "./musicbrainz.js";
-import { sourceErrorCode } from "./toolResult.js";
+import { failureMessage, sourceErrorCode } from "./toolResult.js";
 
 // =============================================================================
 // The track
@@ -251,12 +251,23 @@ export type SourceResult<T> =
       evidence: Evidence[];
       /** Set when part of the record could not be read (e.g. a second request failed). */
       incomplete: string | null;
+      /**
+       * Set when records were lost because a request failed (not for a note such as "3 more
+       * not listed"): the run's source error, so the result is not kept as complete.
+       */
+      error?: SourceErrorRecord;
     })
   | (ResultBase & {
       status: "missing";
       reason: string;
       /** Set when the source could not be read, for the run's source errors. */
       error: SourceErrorRecord | null;
+      /**
+       * Set only by a reader whose source answered JSON of a shape it does not know
+       * (`unexpectedShape`): a retry gets the same answer until the reader changes, so the error
+       * does not keep a result from being stored (it is stored and reported with it).
+       */
+      lasting?: true;
     });
 
 /**
@@ -267,7 +278,12 @@ export function found<T>(
   source: SourceId,
   records: T[],
   evidence: Evidence[],
-  options: { omitted?: Omission[]; matched?: number; incomplete?: string | null } = {},
+  options: {
+    omitted?: Omission[];
+    matched?: number;
+    incomplete?: string | null;
+    error?: SourceErrorRecord | null;
+  } = {},
 ): SourceResult<T> {
   const omitted = options.omitted ?? [];
   return {
@@ -277,6 +293,7 @@ export function found<T>(
     evidence,
     omitted,
     incomplete: options.incomplete ?? null,
+    ...(options.error ? { error: options.error } : {}),
     identity: {
       matched: options.matched ?? 1,
       rejected: omitted.length,
@@ -295,7 +312,12 @@ export function found<T>(
 export function missing<T>(
   source: SourceId,
   reason: string,
-  options: { omitted?: Omission[]; error?: SourceErrorRecord | null; matched?: number } = {},
+  options: {
+    omitted?: Omission[];
+    error?: SourceErrorRecord | null;
+    matched?: number;
+    lasting?: boolean;
+  } = {},
 ): SourceResult<T> {
   const omitted = options.omitted ?? [];
   const matched = options.matched ?? 0;
@@ -305,6 +327,7 @@ export function missing<T>(
     source,
     reason,
     error: options.error ?? null,
+    ...(options.lasting && options.error ? { lasting: true as const } : {}),
     omitted,
     identity: {
       matched,
@@ -325,13 +348,17 @@ export function notConfigured<T>(source: SourceId, variable: string): SourceResu
 
 /**
  * A failure as the run's source error. A deadline is a timeout; a request the caller cancelled
- * is "unavailable", not a timeout.
+ * is "unavailable", not a timeout; a bug in our own reader (a TypeError past the shape checks)
+ * is "unavailable" with an internal-error message, never the source's answer.
  */
 export function errorRecord(source: SourceId, error: unknown): SourceErrorRecord {
-  return { source, code: sourceErrorCode(error), message: describeError(error) };
+  return { source, code: sourceErrorCode(error), message: failureMessage(error) };
 }
 
-/** Any failure while reading a source, as "missing" with a typed error; never a throw. */
+/**
+ * Any failure while reading a source, as "missing" with a typed error; never a throw. Only an
+ * `unexpectedShape` failure is marked lasting.
+ */
 export function failed<T>(
   source: SourceId,
   error: unknown,
@@ -339,12 +366,30 @@ export function failed<T>(
   matched = 0,
 ): SourceResult<T> {
   const record = errorRecord(source, error);
-  return missing(source, record.message ?? "", { omitted, error: record, matched });
+  return missing<T>(source, record.message ?? "", {
+    omitted,
+    error: record,
+    matched,
+    lasting: isShapeFailure(error),
+  });
 }
 
-/** A payload that is not the shape the source documents; reported as an invalid response. */
+/** The errors `unexpectedShape` made; no other error is a shape failure. */
+const shapeFailures = new WeakSet<object>();
+
+/**
+ * A JSON payload that is not the shape the source documents, found by a primary-record reader;
+ * reported as an invalid response, and the one failure marked lasting (see `failed`).
+ */
 export function unexpectedShape(source: SourceName, what: string): SourceError {
-  return new SourceError(source, "parse", `unexpected answer: ${what}`);
+  const error = new SourceError(source, "parse", `unexpected answer: ${what}`);
+  shapeFailures.add(error);
+  return error;
+}
+
+/** True for an error `unexpectedShape` made. */
+export function isShapeFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && shapeFailures.has(error);
 }
 
 /** Per-source identity counts summed over results, for the run's identity accuracy report. */
@@ -395,13 +440,23 @@ export function evidenceScope(evidence: Pick<Evidence, "recordRef">): EvidenceSc
   return scope === "track" || scope === "work" || scope === "release" ? scope : null;
 }
 
-/** An Evidence item for a primary record; the excerpt is cut to the contract's limit. */
+/**
+ * The items `primaryEvidence` built. Each source module builds its items from the payload it
+ * read, so an item in this set came from a source's answer; a copy, an object parsed from text
+ * or one written by hand is not in it.
+ */
+const builtFromPayload = new WeakSet<object>();
+
+/**
+ * An Evidence item for a primary record, frozen; the excerpt is cut to the contract's limit.
+ * Called by the source modules only, with what they read from the source's payload.
+ */
 export function primaryEvidence(input: EvidenceInput): Evidence {
   const excerpt =
     input.excerpt.length > EVIDENCE_EXCERPT_MAX
       ? `${input.excerpt.slice(0, EVIDENCE_EXCERPT_MAX - 1)}…`
       : input.excerpt;
-  return {
+  const item: Evidence = Object.freeze({
     id: `${input.source}:${input.recordRef}`,
     source: input.source,
     sourceTier: "primary-record",
@@ -410,7 +465,14 @@ export function primaryEvidence(input: EvidenceInput): Evidence {
     retrievedAt: input.retrievedAt,
     excerpt,
     recordRef: input.recordRef,
-  };
+  });
+  builtFromPayload.add(item);
+  return item;
+}
+
+/** True for an item `primaryEvidence` built (that very object, not a copy of it). */
+export function isPrimaryRecordEvidence(item: unknown): item is Evidence {
+  return typeof item === "object" && item !== null && builtFromPayload.has(item);
 }
 
 /** "Title" by Artist, for excerpts. */

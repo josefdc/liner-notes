@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { captureLogsForTests } from "../logger.js";
 import {
   cassetteKey,
   credential,
@@ -479,19 +480,17 @@ describe("cassettes", () => {
     writeFileSync(join(dir, "deezer.json.lock"), String(dead));
     process.env.SOURCE_CASSETTE = "record";
     stubFetch(() => json({ ok: true }));
-    const errors: string[] = [];
-    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-      errors.push(args.map(String).join(" "));
-    });
+    const logs = captureLogsForTests();
 
     const started = Date.now();
     try {
       await fetchJson({ source: "deezer", url: "https://api.deezer.test/after-crash" });
     } finally {
+      logs.restore();
       vi.restoreAllMocks();
     }
 
-    expect(errors).toEqual([]);
+    expect(logs.messages("error")).toEqual([]);
     expect(Date.now() - started).toBeLessThan(2000);
     const entries = JSON.parse(readFileSync(join(dir, "deezer.json"), "utf8")).entries;
     expect(Object.keys(entries)).toEqual(["GET https://api.deezer.test/after-crash"]);
@@ -506,14 +505,22 @@ describe("cassettes", () => {
     const blocked = join(dir, "not-a-dir");
     writeFileSync(blocked, "");
 
-    const { stderr } = await promisify(execFile)(
+    const { stdout } = await promisify(execFile)(
       process.execPath,
       ["--import", "tsx", worker, blocked, "lost", "3"],
-      { env: { ...process.env, SOURCE_CASSETTE: undefined, NODE_ENV: "test" } },
+      {
+        env: {
+          ...process.env,
+          SOURCE_CASSETTE: undefined,
+          NODE_ENV: "test",
+          LOG_LEVEL: "info",
+          LOG_FILE: undefined,
+        },
+      },
     );
 
-    expect(stderr).toMatch(/3 answer\(s\) could not be recorded/);
-    expect(stderr.match(/could not be recorded/g)).toHaveLength(1);
+    expect(stdout).toMatch(/3 answer\(s\) could not be recorded/);
+    expect(stdout.match(/could not be recorded/g)).toHaveLength(1);
   });
 
   it("an unreadable cassette is a typed cassette_io error", async () => {
@@ -531,33 +538,33 @@ describe("cassettes", () => {
     const blocked = join(dir, "not-a-dir");
     writeFileSync(blocked, "");
     process.env.SOURCE_CASSETTE_DIR = blocked;
-    const logged: string[] = [];
-    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-      logged.push(args.map(String).join(" "));
-    });
+    const logs = captureLogsForTests();
     stubFetch(() => json(live));
 
     try {
       await expect(fetchJson(request)).resolves.toEqual(live);
-      expect(logged.some((line) => line.includes("cannot write cassette"))).toBe(true);
+      expect(logs.messages("error").some((line) => line.includes("cannot write cassette"))).toBe(
+        true,
+      );
     } finally {
+      logs.restore();
       vi.restoreAllMocks();
     }
   });
 
   it("logs the active mode when it changes", async () => {
-    const logged: string[] = [];
-    vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-      logged.push(args.map(String).join(" "));
-    });
+    const logs = captureLogsForTests();
     stubFetch(() => json(live));
     try {
       process.env.SOURCE_CASSETTE = "replay";
       await rejection(fetchJson(request));
       process.env.SOURCE_CASSETTE = "record";
       await fetchJson(request);
-      expect(logged.some((line) => line.includes("SOURCE_CASSETTE=record"))).toBe(true);
+      expect(logs.messages("warn").some((line) => line.includes("SOURCE_CASSETTE=record"))).toBe(
+        true,
+      );
     } finally {
+      logs.restore();
       vi.restoreAllMocks();
     }
   });

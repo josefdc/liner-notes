@@ -776,14 +776,22 @@ describe("opening a database that cannot be used", () => {
             SPOTIFY_CLIENT_ID: "test-client-id",
             SPOTIFY_CLIENT_SECRET: "test-client-secret",
             PORT: "3122",
+            LOG_LEVEL: "info",
+            LOG_FILE: "",
           },
         });
       } finally {
         chmodSync(dbPath, 0o644);
       }
       expect(result.status).toBe(1);
-      expect(String(result.stderr)).toContain("[Database] Cannot open database");
-      expect(String(result.stderr)).toContain("left untouched");
+      // The log is JSON lines on stdout.
+      const failure = String(result.stdout)
+        .split("\n")
+        .filter((line) => line.startsWith("{"))
+        .map((line) => JSON.parse(line) as { component?: string; msg?: string })
+        .find((entry) => entry.component === "Database");
+      expect(failure?.msg).toContain("Cannot open database");
+      expect(failure?.msg).toContain("left untouched");
       expect(readFileSync(dbPath).equals(original)).toBe(true);
       expect(readdirSync(tmpDir)).toEqual(["test.db"]);
     },
@@ -1262,6 +1270,32 @@ describe("migrations", () => {
       "Queen",
       "David Bowie",
     ]);
+  });
+
+  it("adds the runs' evidence column, filled from each stored result's pack", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "run_evidence");
+    expect(MIGRATIONS[migration].version).toBe(10);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    const insert = raw.prepare(
+      "INSERT INTO runs (run_id, thread_id, query, status, created_at, analysis) VALUES (?, ?, 'q', 'completed', 1, ?)",
+    );
+    const item = { id: "tavily:https://example.test/", source: "tavily" };
+    insert.run("cited", "cited", JSON.stringify({ id: "x", evidence: [item] }));
+    insert.run("empty", "empty", JSON.stringify({ id: "x", evidence: [] }));
+    insert.run("older", "older", JSON.stringify({ id: "x" }));
+    insert.run("broken", "broken", "{not json");
+    insert.run("open", "open", null);
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    const evidence = (id: string) =>
+      db.prepare("SELECT evidence FROM runs WHERE run_id = ?").pluck().get(id);
+
+    expect(JSON.parse(evidence("cited") as string)).toEqual([item]);
+    expect(evidence("empty")).toBe("[]");
+    for (const id of ["older", "broken", "open"]) expect(evidence(id)).toBeNull();
   });
 
   it("requires migrations numbered 1..n in order", () => {

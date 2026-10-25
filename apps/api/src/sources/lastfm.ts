@@ -29,6 +29,9 @@ import {
   type ToolFailure,
   toolFailure,
 } from "./toolResult.js";
+import { logger } from "../logger.js";
+
+const log = logger("Last.fm");
 
 // =============================================================================
 // Configuration
@@ -148,7 +151,7 @@ export function lastfmConfigured(): boolean {
   if (credential("LASTFM_API_KEY")) return true;
   if (!reportedMissingKey) {
     reportedMissingKey = true;
-    console.warn(`⚠️ [Last.fm] ${NOT_CONFIGURED}; Last.fm tags and similar items are unavailable.`);
+    log.warn(`${NOT_CONFIGURED}; Last.fm tags and similar items are unavailable.`);
   }
   return false;
 }
@@ -342,7 +345,7 @@ function cleanBio(bio: string, maxLength = 300): string {
  */
 export const getLastfmTrackTags = tool(
   async ({ title, artist }, config): Promise<string> => {
-    console.log(`🏷️ [Last.fm] Getting track tags: "${title}" by ${artist}`);
+    log.info(`Getting track tags: "${title}" by ${artist}`);
     const result = await askLastfm<{ toptags?: TagsAnswer }>(
       {
         params: { method: "track.getTopTags", track: title, artist },
@@ -352,12 +355,12 @@ export const getLastfmTrackTags = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Track tags error:", why(result));
+      log.error(`Track tags error: ${why(result)}`);
       return failure(result);
     }
 
     const tags = cleanTags(result.data.toptags?.tag);
-    console.log(`✅ [Last.fm] Found ${tags.length} track tags`);
+    log.info(`Found ${tags.length} track tags`);
     return JSON.stringify({ found: tags.length > 0, tags });
   },
   {
@@ -377,7 +380,7 @@ export const getLastfmTrackTags = tool(
  */
 export const getLastfmArtistTags = tool(
   async ({ artist }, config): Promise<string> => {
-    console.log(`🏷️ [Last.fm] Getting artist tags: "${artist}"`);
+    log.info(`Getting artist tags: "${artist}"`);
     const result = await askLastfm<{ toptags?: TagsAnswer }>(
       {
         params: { method: "artist.getTopTags", artist },
@@ -387,12 +390,12 @@ export const getLastfmArtistTags = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Artist tags error:", why(result));
+      log.error(`Artist tags error: ${why(result)}`);
       return failure(result);
     }
 
     const tags = cleanTags(result.data.toptags?.tag);
-    console.log(`✅ [Last.fm] Found ${tags.length} artist tags`);
+    log.info(`Found ${tags.length} artist tags`);
     return JSON.stringify({ found: tags.length > 0, tags });
   },
   {
@@ -411,7 +414,7 @@ export const getLastfmArtistTags = tool(
  */
 export const getLastfmSimilarTracks = tool(
   async ({ title, artist }, config): Promise<string> => {
-    console.log(`🔗 [Last.fm] Getting similar tracks: "${title}" by ${artist}`);
+    log.info(`Getting similar tracks: "${title}" by ${artist}`);
     const result = await askLastfm<{
       similartracks?: { track?: LastfmSimilarTrack | LastfmSimilarTrack[] } & AnsweredFor;
     }>(
@@ -423,7 +426,7 @@ export const getLastfmSimilarTracks = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Similar tracks error:", why(result));
+      log.error(`Similar tracks error: ${why(result)}`);
       return failure(result);
     }
 
@@ -436,7 +439,7 @@ export const getLastfmSimilarTracks = tool(
         match: Number(t.match) || 0,
       }));
 
-    console.log(`✅ [Last.fm] Found ${tracks.length} similar tracks`);
+    log.info(`Found ${tracks.length} similar tracks`);
     return JSON.stringify({ found: tracks.length > 0, tracks });
   },
   {
@@ -456,7 +459,7 @@ export const getLastfmSimilarTracks = tool(
  */
 export const getLastfmSimilarArtists = tool(
   async ({ artist }, config): Promise<string> => {
-    console.log(`🔗 [Last.fm] Getting similar artists: "${artist}"`);
+    log.info(`Getting similar artists: "${artist}"`);
     const result = await askLastfm<{
       similarartists?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] } & AnsweredFor;
     }>(
@@ -468,7 +471,7 @@ export const getLastfmSimilarArtists = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Similar artists error:", why(result));
+      log.error(`Similar artists error: ${why(result)}`);
       return failure(result);
     }
 
@@ -481,7 +484,7 @@ export const getLastfmSimilarArtists = tool(
         mbid: a.mbid || undefined,
       }));
 
-    console.log(`✅ [Last.fm] Found ${artists.length} similar artists`);
+    log.info(`Found ${artists.length} similar artists`);
     return JSON.stringify({ found: artists.length > 0, artists });
   },
   {
@@ -500,7 +503,7 @@ export const getLastfmSimilarArtists = tool(
  */
 export const getLastfmArtistInfo = tool(
   async ({ artist }, config): Promise<string> => {
-    console.log(`📋 [Last.fm] Getting artist info: "${artist}"`);
+    log.info(`Getting artist info: "${artist}"`);
     const result = await askLastfm<{ artist?: LastfmArtistInfo }>(
       {
         params: { method: "artist.getInfo", artist },
@@ -510,7 +513,7 @@ export const getLastfmArtistInfo = tool(
       config?.signal,
     );
     if (!result.ok) {
-      console.error("❌ [Last.fm] Artist info error:", why(result));
+      log.error(`Artist info error: ${why(result)}`);
       return failure(result);
     }
 
@@ -542,7 +545,7 @@ export const getLastfmArtistInfo = tool(
       );
     }
 
-    console.log(`✅ [Last.fm] Got artist info: ${info.name}`);
+    log.info(`Got artist info: ${info.name}`);
     return JSON.stringify({
       found: true,
       name: info.name,

@@ -6,13 +6,27 @@
  * preview URLs (handed out for one run, and they expire) and how that run's search text matched
  * the track. It is served for 24 hours, only for the track it is about and only while the
  * contract accepts it; the run that serves it adds how its own search text matched the track.
+ *
+ * It is stored with the sources its run could not read without that blocking storage (a source
+ * not configured, a primary-record answer of a shape its reader does not know), and the run
+ * that serves it reports them again: in its source errors and a status line per source, so a
+ * source that was not read is never served as one that had nothing.
  */
 
 import type { BaseStore } from "@langchain/langgraph";
-import { type QueryMatch, TrackAnalysis } from "@liner-notes/contract";
+import {
+  type QueryMatch,
+  type SourceError,
+  SourceError as SourceErrorSchema,
+  TrackAnalysis,
+} from "@liner-notes/contract";
+import { SOURCE_NAMES } from "./prompts.js";
 import { withoutPreviewUrls } from "../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "./cacheKeys.js";
 import type { TrackData } from "./schema.js";
+import { logger } from "../logger.js";
+
+const log = logger("Store");
 
 /** How long a stored result is served. */
 export const STORED_RESULT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -22,6 +36,21 @@ const CLOCK_SKEW_MS = 5 * 60 * 1000;
 interface StoredValue {
   trackData?: unknown;
   timestamp?: unknown;
+  sourceErrors?: unknown;
+}
+
+/** A stored result, with the sources its run could not read. */
+export interface StoredResult {
+  trackData: TrackData;
+  sourceErrors: SourceError[];
+}
+
+/** The stored source errors the contract reads; an unreadable entry is dropped. */
+function storedErrors(value: unknown): SourceError[] {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const parsed = SourceErrorSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 /**
@@ -33,7 +62,7 @@ export async function readStoredResult(
   store: BaseStore | undefined,
   trackId: string,
   now: Date,
-): Promise<TrackData | null> {
+): Promise<StoredResult | null> {
   if (!store) return null;
   try {
     const item = await store.get(TRACKS_NAMESPACE, resultCacheKey(trackId, configuredSources()));
@@ -47,16 +76,19 @@ export async function readStoredResult(
     // expires: it is composed again instead.
     const checked = TrackAnalysis.safeParse(value.trackData);
     if (!checked.success) {
-      console.warn("⚠️ [Store] Stored result does not fit the contract; composing again");
+      log.warn("Stored result does not fit the contract; composing again");
       return null;
     }
     if (checked.data.id !== trackId) {
-      console.warn(`⚠️ [Store] Stored result for ${trackId} is about another track; ignored`);
+      log.warn(`Stored result for ${trackId} is about another track; ignored`);
       return null;
     }
-    return checked.data as TrackData;
+    return {
+      trackData: checked.data as TrackData,
+      sourceErrors: storedErrors(value.sourceErrors),
+    };
   } catch (error) {
-    console.warn("⚠️ [Store] Stored result could not be read:", error);
+    log.warn("Stored result could not be read", { err: error });
     return null;
   }
 }
@@ -86,14 +118,35 @@ export function storableResult(trackData: TrackData): unknown {
   return withoutPreviewUrls(kept);
 }
 
-/** Stores a result under its track for the sources configured now. Throws on a store error. */
+/**
+ * Stores a result under its track for the sources configured now, with the sources its run
+ * could not read (none of them blocked storing it). Throws on a store error.
+ */
 export async function storeResult(
   store: BaseStore,
   trackData: TrackData,
   now: Date,
+  sourceErrors: readonly SourceError[] = [],
 ): Promise<void> {
   await store.put(TRACKS_NAMESPACE, resultCacheKey(trackData.id, configuredSources()), {
     trackData: storableResult(trackData),
     timestamp: now.getTime(),
+    ...(sourceErrors.length > 0 ? { sourceErrors: [...sourceErrors] } : {}),
+  });
+}
+
+/**
+ * The status lines of a served result: one per source its run could not read, so the reader
+ * knows that data is missing, not empty.
+ */
+export function storedErrorStatus(errors: readonly SourceError[]): string[] {
+  const seen = new Set<string>();
+  return errors.flatMap((e) => {
+    const key = `${e.source}:${e.code}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [
+      `⚠️ Stored result: ${SOURCE_NAMES[e.source]} could not be read when it was composed (${e.code})`,
+    ];
   });
 }

@@ -31,6 +31,9 @@ import { isMatchedMeasurement } from "../../store/measuredAudio.js";
 import type { SonicAgentStateType, AudioFeatures, AudioUnavailableReason } from "../state.js";
 import { isAbortError } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Engineer");
 
 function unavailableFeatures(reason: AudioUnavailableReason, detail?: string): AudioFeatures {
   return {
@@ -155,10 +158,10 @@ export async function engineerNode(
     // Cache not available — proceed with fresh analysis
   }
   if (cachedAudio && !isMatchedMeasurement(cachedAudio)) {
-    console.log("🎧 [Engineer] Ignoring unmarked cached audio for:", state.spotifyData.title);
+    log.info(`Ignoring unmarked cached audio for: ${state.spotifyData.title}`);
   }
   if (isMatchedMeasurement(cachedAudio)) {
-    console.log("🎧 [Engineer] Cache hit for:", state.spotifyData.title);
+    log.info(`Cache hit for: ${state.spotifyData.title}`);
     writer?.({
       type: "status",
       code: "AUDIO-COMPLETE",
@@ -176,7 +179,7 @@ export async function engineerNode(
       lookupError = fresh.sourceError;
     } catch (error) {
       if (config.signal?.aborted || isAbortError(error)) throw error;
-      console.warn("⚠️ [Engineer] Could not look up a preview:", error);
+      log.warn("Could not look up a preview", { err: error });
     }
     return {
       audioFeatures: cachedAudio,
@@ -195,7 +198,7 @@ export async function engineerNode(
     timestamp: timestampOf(runtime),
   });
 
-  console.log("🎧 [Engineer] Analyzing:", state.spotifyData.title);
+  log.info(`Analyzing: ${state.spotifyData.title}`);
 
   let audioFeatures: AudioFeatures;
   let analysis: AudioAnalysisResult | null = null;
@@ -213,7 +216,7 @@ export async function engineerNode(
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    console.error("❌ [Engineer] Error:", message);
+    log.error(`Error: ${message}`);
     audioFeatures = unavailableFeatures("analysis_failed", message);
   }
   // The clip for the player, and how it was matched when the service measured it.
@@ -238,7 +241,7 @@ export async function engineerNode(
       node: "engineer",
       timestamp: timestampOf(runtime),
     });
-    console.log(`⚠️ [Engineer] ${summary}`);
+    log.info(summary);
     return {
       audioFeatures,
       ...previewOut,
@@ -253,7 +256,7 @@ export async function engineerNode(
   try {
     getCache().putAudio(state.spotifyData.id, audioFeatures);
   } catch (error) {
-    console.warn("⚠️ [Engineer] Could not cache audio:", error);
+    log.warn("Could not cache audio", { err: error });
   }
 
   const partial =
@@ -265,7 +268,7 @@ export async function engineerNode(
     node: "engineer",
     timestamp: timestampOf(runtime),
   });
-  console.log("✅ [Engineer] Analysis complete:", audioFeatures.bpm, "BPM,", audioFeatures.key);
+  log.info(`Analysis complete: ${audioFeatures.bpm} BPM, ${audioFeatures.key}`);
 
   return {
     audioFeatures,

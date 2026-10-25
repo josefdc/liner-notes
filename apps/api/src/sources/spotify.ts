@@ -6,6 +6,9 @@
 
 import { credential, fetchJson, isSourceError, type Shape, SourceError } from "./http.js";
 import { normalizeIsrc } from "./musicbrainz.js";
+import { logger } from "../logger.js";
+
+const log = logger("Spotify");
 
 // =============================================================================
 // TypeScript Interfaces for Spotify API Responses
@@ -170,7 +173,7 @@ class SpotifyAuthManager {
       );
     }
 
-    console.log("🔄 [Spotify] Refreshing access token...");
+    log.info("Refreshing access token...");
     const startedAt = Date.now();
 
     const data = await fetchJson<SpotifyToken>({
@@ -191,7 +194,7 @@ class SpotifyAuthManager {
     this.token = data.access_token;
     this.tokenExpiresAt = startedAt + data.expires_in * 1000;
 
-    console.log("✅ [Spotify] Token refreshed, expires in", data.expires_in, "seconds");
+    log.info(`Token refreshed, expires in ${data.expires_in} seconds`);
     return this.token;
   }
 

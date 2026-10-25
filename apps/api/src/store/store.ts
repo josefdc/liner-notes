@@ -23,6 +23,9 @@ import type {
   ListNamespacesOperation,
   MatchCondition,
 } from "@langchain/langgraph-checkpoint";
+import { logger } from "../logger.js";
+
+const log = logger("SqliteStore");
 
 // =============================================================================
 // Type Guards
@@ -143,7 +146,7 @@ export class SqliteStore extends BaseStore {
           results.push(null);
         }
       } catch (err) {
-        console.error("[SqliteStore] Read error:", err);
+        log.error("Read error", { err });
         results.push(isSearchOp(op) || isListNamespacesOp(op) ? [] : null);
       }
     }

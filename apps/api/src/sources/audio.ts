@@ -34,6 +34,9 @@ import {
 import { describeError, fetchJson, isSourceError } from "./http.js";
 import type { SourceErrorCode } from "./toolResult.js";
 import type { AudioUnavailableReason } from "../agent/state.js";
+import { logger } from "../logger.js";
+
+const log = logger("Audio");
 
 // =============================================================================
 // TypeScript Interfaces
@@ -247,7 +250,7 @@ export async function resolvePreview(
       : {};
 
   if (request.spotifyPreviewUrl) {
-    console.log("🎵 [Audio] Using Spotify's own preview of the chosen track");
+    log.info("Using Spotify's own preview of the chosen track");
     return {
       previewUrl: request.spotifyPreviewUrl,
       match: { provider: "spotify", method: "id", score: null },
@@ -263,7 +266,8 @@ export async function resolvePreview(
   const detail = failed.sourceError
     ? `Deezer could not be read and Spotify has no preview of this track: ${failed.sourceError.message}`
     : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
-  console.log(`⚠️ [Audio] ${detail}`);
+  if (failed.sourceError) log.warn(detail);
+  else log.info(detail);
   return { previewUrl: null, match: null, detail, ...failed };
 }
 
@@ -334,7 +338,7 @@ export const analyzeAudioPreview = tool(
   async ({ previewUrl, title, artist, artistNames, album, isrc, durationMs }, config) => {
     // The run's signal stops every request below (Deezer, the service's health and analysis).
     const signal = config?.signal;
-    console.log(`🎧 [Audio] Analyzing: "${title}" by ${artist}`);
+    log.info(`Analyzing: "${title}" by ${artist}`);
 
     const preview = await resolvePreview(
       {
@@ -350,7 +354,7 @@ export const analyzeAudioPreview = tool(
     );
     const lookupError = preview.sourceError ? { previewSourceError: preview.sourceError } : {};
     if (preview.previewUrl === null) {
-      console.log("⚠️ [Audio] No preview of the chosen recording; audio not measured");
+      log.info("No preview of the chosen recording; audio not measured");
       return JSON.stringify({
         ...unavailable("no_preview", preview.detail),
         previewUrl: null,
@@ -369,7 +373,7 @@ export const analyzeAudioPreview = tool(
       });
 
     if (!isAllowedPreviewUrl(effectivePreviewUrl)) {
-      console.log("⚠️ [Audio] Preview URL host not allowed; audio not measured");
+      log.info("Preview URL host not allowed; audio not measured");
       // Neither analysed nor given to the player.
       return JSON.stringify({
         ...unavailable("preview_rejected", "Preview URL is not on an allowed audio CDN host"),
@@ -384,18 +388,18 @@ export const analyzeAudioPreview = tool(
       const serviceAvailable = await isServiceAvailable(signal);
 
       if (!serviceAvailable) {
-        console.log("⚠️ [Audio] Analysis service unavailable; audio not measured");
+        log.warn("Analysis service unavailable; audio not measured");
         return withPreview(
           unavailable("service_unavailable", "Audio analysis service did not respond"),
         );
       }
 
-      console.log("🎧 [Audio] Calling analysis service...");
+      log.info("Calling analysis service...");
       signal?.throwIfAborted();
       const result = await analyzeWithService(effectivePreviewUrl, signal);
 
-      console.log(
-        `✅ [Audio] Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
+      log.info(
+        `Analysis complete: ${result.bpm} BPM, ${result.key} ${result.mode}, ${result.keyMoments?.length || 0} key moments`,
       );
 
       // Only a reply that says it analysed the clip is a measurement.
@@ -444,7 +448,7 @@ export const analyzeAudioPreview = tool(
       // A cancelled run rejects: no "analysis failed" is reported for it.
       if (signal?.aborted) throw error;
       const message = error instanceof Error ? error.message : String(error);
-      console.error("❌ [Audio] Analysis failed:", message);
+      log.error(`Analysis failed: ${message}`);
       return withPreview(unavailable("analysis_failed", message));
     }
   },

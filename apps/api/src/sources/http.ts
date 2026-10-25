@@ -23,6 +23,9 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
+import { logger } from "../logger.js";
+
+const log = logger("sources");
 
 // =============================================================================
 // Redaction
@@ -266,8 +269,8 @@ export function cassetteMode(): CassetteMode {
   const mode = requestedMode();
   if (mode !== "off" && loggedMode !== mode) {
     loggedMode = mode;
-    console.warn(
-      `[sources] SOURCE_CASSETTE=${mode}: ${
+    log.warn(
+      `SOURCE_CASSETTE=${mode}: ${
         mode === "replay" ? "answers come from" : "answers are recorded to"
       } ${cassetteDir()}`,
     );
@@ -538,8 +541,8 @@ let lostRecordings = 0;
 function recordingLost(): void {
   if (lostRecordings++ === 0) {
     process.once("exit", () => {
-      console.warn(
-        `[sources] SOURCE_CASSETTE=record: ${lostRecordings} answer(s) could not be recorded; ` +
+      log.warn(
+        `SOURCE_CASSETTE=record: ${lostRecordings} answer(s) could not be recorded; ` +
           `the cassettes in ${cassetteDir()} are incomplete. Record again.`,
       );
     });
@@ -804,7 +807,7 @@ export async function fetchJson<T>(req: SourceRequest): Promise<T> {
       await queueWrite(req.source, key, forCassette(req, answer));
     } catch (error) {
       // The live answer is still good; only the recording is lost.
-      console.error(`[sources] ${describeError(error)}`);
+      log.error(`${describeError(error)}`);
       recordingLost();
     }
   }

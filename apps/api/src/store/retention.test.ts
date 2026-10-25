@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { captureLogsForTests } from "../logger.js";
 import Database from "better-sqlite3";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
@@ -238,7 +239,8 @@ describe("startRetention", () => {
 
   it("keeps pruning when the cache purge fails", () => {
     vi.useFakeTimers({ now: NOW });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     const db = new Database(":memory:");
     runMigrations(db);
     db.prepare(
@@ -250,9 +252,15 @@ describe("startRetention", () => {
       },
     });
     expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
-    expect(error).toHaveBeenCalledWith("[Retention] Cache purge failed:", expect.any(Error));
+    expect(logs.entries()).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        component: "Retention",
+        msg: "Cache purge failed",
+        err: expect.objectContaining({ message: "purge failed" }),
+      }),
+    );
     stop();
-    error.mockRestore();
     db.close();
   });
 });
@@ -268,7 +276,8 @@ describe("retentionFromEnv", () => {
   });
 
   it("reads overrides and ignores invalid values", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     expect(
       retentionFromEnv({
         CHECKPOINT_RETENTION_HOURS: "6",
@@ -282,14 +291,14 @@ describe("retentionFromEnv", () => {
       runRetentionMs: 7 * DAY,
       runEventRetentionMs: 2 * DAY,
     });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("STORE_RETENTION_DAYS"));
-    warn.mockRestore();
+    expect(logs.messages("warn")).toContainEqual(expect.stringContaining("STORE_RETENTION_DAYS"));
   });
 });
 
 describe("retention settings", () => {
   it("raises values below the minimum: 1 hour for checkpoints, 1 day for store and runs", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     expect(
       retentionFromEnv({
         CHECKPOINT_RETENTION_HOURS: "0.0001",
@@ -303,9 +312,10 @@ describe("retention settings", () => {
       runRetentionMs: DAY,
       runEventRetentionMs: DAY,
     });
-    expect(warn).toHaveBeenCalledTimes(4);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("CHECKPOINT_RETENTION_HOURS"));
-    warn.mockRestore();
+    expect(logs.messages("warn")).toHaveLength(4);
+    expect(logs.messages("warn")).toContainEqual(
+      expect.stringContaining("CHECKPOINT_RETENTION_HOURS"),
+    );
   });
 });
 

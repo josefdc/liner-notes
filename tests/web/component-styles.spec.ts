@@ -373,15 +373,21 @@ for (const fixture of ["full-result", "missing-states"]) {
   }
 }
 
+const DASHBOARD_MODULE =
+  /\/(?:assets\/Dashboard-[\w-]+\.js|src\/components\/Dashboard\.tsx)(?:\?|$)/;
+
 test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ page }) => {
   await useMockApi(page, loadFixture("full-result"));
   await page.setViewportSize({ width: 1440, height: 900 });
-  // Hold the Dashboard module so its loading skeleton stays on screen.
+  // Hold the Dashboard module so its loading skeleton stays on screen: the built chunk the tests
+  // are served (assets/Dashboard-<hash>.js), or the source file on a dev server.
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await page.route(/\/src\/components\/Dashboard\.tsx/, async (route) => {
+  let holding = false;
+  await page.route(DASHBOARD_MODULE, async (route) => {
+    holding = true;
     await held;
     await route.continue();
   });
@@ -390,6 +396,9 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
   await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
   await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
 
+  // Measured only while the module is held: a pattern that no longer matches the chunk's name
+  // fails here instead of measuring whatever else is on screen.
+  await expect.poll(() => holding).toBe(true);
   const skeleton = page.locator("div.animate-progress-shimmer").first().locator("xpath=../../..");
   await expect(skeleton).toBeVisible();
   const spacing = await skeleton.evaluate((element) => {

@@ -87,12 +87,17 @@ const fitScale = (page: Page) =>
     .locator(":scope > g")
     .evaluate((g) => Number(/scale\(([\d.]+)/.exec(g.getAttribute("transform") ?? "")?.[1]));
 
+/** Page time that covers the force layout (about 300 ticks) and the fit's half-second ease. */
+const LAYOUT_MS = 15_000;
+
 /**
  * Waits until the layout has settled and the graph has fitted itself to the panel: the fit's
- * transform is set and holds still (it eases in over half a second). Under load the layout
- * takes a while.
+ * transform is set and holds still (it eases in over half a second). The layout runs on the
+ * page's clock (installed in beforeEach), which is first run forward through the force ticks and
+ * the fit: on a loaded machine, waiting for them frame by frame takes most of a minute.
  */
 async function graphFitted(page: Page) {
+  await page.clock.runFor(LAYOUT_MS);
   const transform = () =>
     graphOf(page)
       .locator(":scope > g")
@@ -116,8 +121,8 @@ test("the mock result is one the API may send, but for the two links planted on 
 
 test.describe("the genealogy graph", () => {
   test.beforeEach(async ({ page }) => {
-    // The force layout settles over a few seconds, longer on a loaded machine.
-    test.slow();
+    // A clock graphFitted can run forward; until then it keeps real time.
+    await page.clock.install();
     await useMockApi(page, fixture);
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Bright Lines");

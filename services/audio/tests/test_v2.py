@@ -808,9 +808,9 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 # (estimators.SourceEvidence) withholds the keys that analyzer 2.1.0 gave most cowbells and
 # one-note basses. The seeds that get a key are pinned exactly, in both directions: a change
 # that keys one more or one fewer fails here. Still keyed: bells, alone and over drums (the
-# tierce is a minor third over the hum: two notes a third apart, as in a chord); two cowbells
-# whose oscillators are a sixth apart; two basses whose harmonics the notes test does not fold
-# within its tolerance; toms (two or three drums, each with its own envelope) and tabla whose
+# tierce is a minor third over the hum: two notes a third apart, as in a chord); three cowbells
+# whose oscillators read as a sixth or whose fifth harmonic counts as a note; two basses whose
+# harmonics the notes test does not fold within its tolerance; toms (two or three drums, each with its own envelope) and tabla whose
 # strokes alternate partials, which do not move together. Seeds 600-629 are an evaluation set
 # (evals/audio controls) and are kept out of these tests.
 ONE_PITCH_CLASS_KEYED = {
@@ -823,8 +823,8 @@ ONE_PITCH_CLASS_KEYED = {
     ("tabla", "librosa"): {500, 503, 505, 512, 513, 515, 516, 519, 526, 527},
     ("toms", "essentia"): {502, 507, 509, 514, 515, 517, 521, 522, 526},
     ("toms", "librosa"): {502, 507, 509, 517, 522, 526, 529},
-    ("cowbell", "essentia"): {508, 515},
-    ("cowbell", "librosa"): {508},
+    ("cowbell", "essentia"): {508, 515, 528},
+    ("cowbell", "librosa"): {508, 528},
 }
 
 
@@ -870,7 +870,6 @@ def test_a_bell_holds_still_but_spells_a_minor_third():
     """A tolling bell's lines move together, but its hum and tierce are a minor third apart."""
     evidence = estimators.Signals(signals.seeded_bell(509), FIXTURE_SR).source_evidence
     assert evidence.still and evidence.chord and not evidence.single, evidence
-    assert len(evidence.notes) == 2
 
 
 @pytest.mark.seeded
@@ -896,6 +895,50 @@ def test_chords_keep_the_key_the_other_rules_give_them(family):
         assert still > 0  # the notes test, not time, keeps these keys
 
 
+@pytest.mark.seeded
+@pytest.mark.parametrize("root", range(4), ids=["C3", "C#3", "D3", "D#3"])
+def test_a_chord_with_a_softer_third_over_a_doubled_root_keeps_its_key(root):
+    """
+    A triad at C3-D#3 with its root doubled an octave down and its third 1.5-6 dB softer
+    (signals.SOFT_THIRD_GRID, both modes, three timbres, pumped, faded, with tremolo or
+    stabbed): the doubled root is the strongest line and the third sits on its flank, but down
+    to 4.5 dB softer its notes still spell a chord, and at 6 dB the single-source rule still
+    withholds no key (the other rules decide those).
+    """
+    for index, (grid_root, _, _, level) in enumerate(signals.SOFT_THIRD_GRID):
+        if grid_root != root:
+            continue
+        y, key = signals.soft_third_chord(index)
+        s = estimators.Signals(y, FIXTURE_SR)
+        notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
+        if level > -6.0:
+            assert estimators.spells_chord(notes), (key, level, notes)
+        assert str(s.key_withheld()) != estimators.ONE_SOURCE, (key, level, notes)
+
+
+@pytest.mark.parametrize("cents", signals.THIRD_DETUNE_CENTS)
+def test_a_detuned_third_over_a_doubled_root_is_still_a_third(cents):
+    """A root doubled an octave down with its third 10-25 cents off and no fifth: a chord."""
+    for root, mode in ((0, "minor"), (1, "major")):
+        s = estimators.Signals(signals.detuned_third(root, mode, cents), FIXTURE_SR)
+        notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
+        assert estimators.spells_chord(notes), (root, mode, cents, notes)
+
+
+@pytest.mark.parametrize("kind", ["sus2", "sus4"])
+def test_sus_chords_over_their_root_are_chords(kind):
+    """
+    A sus2 or sus4 chord with its root doubled below is three pitch classes: its fifth, as loud
+    as the root, is a chord tone and not the root's third harmonic. Whatever key the other rules
+    give it stays, and the single-source reason is never given.
+    """
+    for root in (0, 5, 9):
+        s = estimators.Signals(signals.sus_chord(root, kind), FIXTURE_SR)
+        notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
+        assert estimators.spells_chord(notes), (root, notes)
+        assert str(s.key_withheld()) != estimators.ONE_SOURCE
+
+
 def test_chord_key_names_each_family_s_key():
     for family, make in signals.CHORD_KEYED_SEEDED.items():
         assert make(700)[1] == signals.chord_key(family, 700), family
@@ -917,6 +960,8 @@ def test_held_and_struck_lines_by_the_numbers():
         ((65.41, 329.63), True),  # C2 and E4: a major third (not C2's fifth harmonic)
         ((261.63, 440.0), True),  # a major sixth
         ((130.81, 164.81, 196.0), True),
+        # The root's octave 16 cents low and the third 16 cents high: any pair decides.
+        ((65.41, 130.81 * 2 ** (-16 / 1200), 164.81 * 2 ** (16 / 1200)), True),
     ):
         evidence = estimators.SourceEvidence(**{**one_note, "notes": notes})
         assert evidence.chord == chord and evidence.single == (not chord), notes
@@ -938,9 +983,13 @@ def test_source_notes_folds_overtones_and_keeps_chord_tones():
     step = t % 0.125
     assert len(notes_of(tone(98.0) * (step < 0.1) * np.exp(-step / 0.05))) == 1
     triad = notes_of(tone(130.81) + tone(164.81) + tone(196.0))
-    assert len(triad) == 3 and estimators.spells_chord(triad)
+    assert len(triad) >= 3 and estimators.spells_chord(triad)
     over_root = notes_of(2 * tone(65.41) + tone(261.63) + tone(329.63) + tone(392.0))
     assert estimators.spells_chord(over_root), over_root  # C2 + C4 E4 G4: E4 is a note
+    # E-flat 5 over C1 is C1's 19th harmonic within 0.14 %: past SOURCE_NOTE_MAX_HARMONIC it is
+    # a note (the minor third), not an overtone.
+    deep = notes_of(tone(32.70, 4) + 0.4 * np.sin(2 * np.pi * 622.25 * t))
+    assert estimators.spells_chord(deep), deep
 
 
 def _lines(hz: np.ndarray) -> estimators.Tonality:

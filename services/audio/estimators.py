@@ -215,31 +215,40 @@ LIBROSA_MIN_KEY_STRENGTH = 0.4
 #    variation of at least SOURCE_MIN_DEPTH. A struck source passes; so does a chord that is
 #    struck, faded, swelled, pumped or played with tremolo, since time cannot tell one sound
 #    from several sounding together.
-# 2. Notes (SourceEvidence.chord, source_notes): what the lines spell. The line spectrum is
-#    taken from the phase of the shared STFT, frame by frame, so that a note repeated every
-#    sixteenth gives its partials and not the comb of lines its repetition leaves in a long-term
-#    spectrum. A line is an overtone when it lies within SOURCE_NOTE_TOLERANCE of a whole
-#    multiple of a lower note: the fifth of a chord over its root in the bass is the root's own
-#    third harmonic, but an equal-tempered major third is 0.79 % off the fifth harmonic and stays
-#    a note (a third sung or played 8 cents flat or more folds into the root). Three pitch
-#    classes, or two a third or a sixth apart (within SOURCE_THIRD_CENTS), are a chord and keep
-#    the key; one note, or two a fourth, fifth or tritone apart, is one source.
-# Measured on the controls of tests/signals.py, with analyzer 2.1.0 as the reference:
+# 2. Notes (SourceEvidence.chord, source_notes): what the lines spell. Every bin of the
+#    shared STFT votes for the frequency its phase advance gives, weighted by its magnitude, so
+#    a quiet third on the flank of a louder root still has its line, and a note repeated every
+#    sixteenth gives its partials and not the comb of lines its repetition leaves in a
+#    long-term spectrum. A line is an overtone of a lower note when it lies on one of its
+#    harmonics: an octave within SOURCE_OCTAVE_TOLERANCE, another harmonic within
+#    SOURCE_NOTE_TOLERANCE and only if it is at most SOURCE_OVERTONE_RATIO of the note (a fifth
+#    as loud as the root under it is a chord tone, as in a sus chord). An equal-tempered major
+#    third is 0.79 % off the fifth harmonic and stays a note (one sung or played 8 cents flat or
+#    more folds into the root). Notes count down to SOURCE_NOTE_COUNT of the strongest note, so
+#    a third a few dB softer than a root doubled an octave down (the strongest line) still
+#    counts. Three pitch classes, or two with a third or a sixth (within SOURCE_THIRD_CENTS)
+#    between any note of one and any note of the other, are a chord and keep the key; one note,
+#    or two a fourth, fifth or tritone apart, is one source.
+# Measured on the controls of tests/signals.py, with analyzer 2.1.0 as the reference (a lost key
+# is one it served that the rule withholds):
 # - the chords of CHORD_KEYED_SEEDED (seeds 700-729): held chords faded, swelling, getting
 #   louder or pumped by a 128 BPM sidechain pass the time test at all 30 seeds, with tremolo at
-#   26, and so do C major stabs and the bass and chord riffs on one chord at all 30 (the one-bar
-#   riffs move: 0). Their notes are three classes or more, or a root with its third over it (the
-#   fifth folded into a root doubled below): the rule withholds none of their keys (none at
-#   seeds 800-829 either, an evaluation set);
+#   26, and so do C major stabs and the bass and chord riffs on one chord (the one-bar riffs
+#   move). Their notes spell a chord: no key lost (none at seeds 800-829 either, an evaluation
+#   set). Nor on SOFT_THIRD_GRID (288 triads, third 1.5-6 dB under a doubled root, every root,
+#   both modes, three timbres, four shapes), on a third 10-25 cents off over a doubled root (144)
+#   or on sus2 and sus4 chords (48), where the rule never fires; the same holds for 528 more
+#   softer-third chords built another way (the same families with the third 3 dB softer, and
+#   stabbed or pumped triads at every root with the third 1.5 or 3 dB softer). The cut has
+#   room: notes counted down to 0.12-0.22 of the strongest lose nothing on any of them;
 # - the one-pitch-class controls (seeds 500-529): of the keys analyzer 2.1.0 gave, it withholds
-#   17 of 19 cowbells' with Essentia and 8 of 9 with librosa (two oscillators a fourth to a
-#   minor sixth apart; the two kept are read as a sixth), and 4 of 6 one-note basses' with
-#   Essentia (in the two kept, lines next to the fundamental, or harmonics 0.37-0.46 % from where
-#   the fundamental puts them, count as notes). Bells, alone and over drums, pass the time test
-#   but keep their key: the tierce is a minor third over the hum, as in a chord. Toms do not
-#   pass the time test (two or three drums, each with its own envelope: shared 0.37-0.55), nor
-#   do 27 of 30 tabla (strokes with envelopes of their own); the other three spell three
-#   classes or more;
+#   16 of 19 cowbells' with Essentia and 7 of 9 with librosa (two oscillators a fourth to a
+#   minor sixth apart; the three kept are read as a chord), and 4 of 6 one-note basses' with
+#   Essentia (in the two kept, lines next to the fundamental count as notes). Bells, alone and
+#   over drums, pass the time test but keep their key: the tierce is a minor third over the
+#   hum, as in a chord. Toms do not pass the time test (two or three drums, each with its own
+#   envelope: shared 0.37-0.55), nor do 27 of 30 tabla (strokes with envelopes of their own);
+#   the other three spell three classes or more;
 # - GiantSteps+ (evals/audio key suite, --limit 250, clip seeds 1-3, 750 windows): no window
 #   whose key the other rules let through passes the time test: the stillest of the 155 keyed
 #   windows moves 0.049 but shares 0.41, the next ones move 0.057 and more.
@@ -249,14 +258,18 @@ SOURCE_WINDOW_S = 2.0
 SOURCE_MAX_MOVEMENT = 0.05
 SOURCE_MIN_SHARED = 0.6
 SOURCE_MIN_DEPTH = 0.15
-# The notes test (source_notes): the harmonic part's line spectrum from the phase of the shared
-# STFT, peaks within SOURCE_NOTE_MERGE_CENTS of a stronger one merged, then every peak of at
-# least SOURCE_NOTE_LEVEL of the strongest that is not within SOURCE_NOTE_TOLERANCE of harmonic
-# 2-SOURCE_NOTE_MAX_HARMONIC of a lower note is a note.
+# The notes test (source_notes): lines within SOURCE_NOTE_MERGE_CENTS of a stronger one are part
+# of it; lines under SOURCE_NOTE_FLOOR of the strongest are left out; a note folds overtones
+# only when it reaches SOURCE_NOTE_LEVEL of the strongest line; notes count from
+# SOURCE_NOTE_COUNT of the strongest note.
 SOURCE_NOTE_CENTS_BIN = 2.0
 SOURCE_NOTE_MERGE_CENTS = 70.0
+SOURCE_NOTE_FLOOR = 0.1
 SOURCE_NOTE_LEVEL = 0.28
+SOURCE_NOTE_COUNT = 0.15
 SOURCE_NOTE_TOLERANCE = 0.003
+SOURCE_OCTAVE_TOLERANCE = 0.01
+SOURCE_OVERTONE_RATIO = 0.5
 SOURCE_NOTE_MAX_HARMONIC = 16
 SOURCE_THIRD_CENTS = 30.0
 ONE_SOURCE = "one pitched source (its partials hold still and rise and fall together)"
@@ -697,12 +710,22 @@ def source_evidence(lines: Tonality, stft: np.ndarray, sr: int, hop: int) -> Sou
 
 def source_notes(stft: np.ndarray, sr: int, hop: int) -> tuple[float, ...]:
     """
-    The notes (Hz, lowest first) that the spectral peaks of `stft` spell. Each frame's peak
-    frequencies come from the phase advance between frames (a 93 ms frame holds less than one
-    repetition of a note played every sixteenth, so they are the note's partials, without the
-    comb of lines its repetition puts into a long-term spectrum). Their magnitudes are summed
-    in a histogram of SOURCE_NOTE_CENTS_BIN cents, whose peaks are the lines; a line is a note
-    when it is not an overtone of a lower note (see SOURCE_NOTE_TOLERANCE).
+    The notes (Hz, lowest first) that the lines of `stft` spell. Every bin of every frame votes
+    for the frequency its phase advance between frames gives, weighted by its magnitude: the
+    bins around a partial all point at it, so a quiet third on the flank of a louder root an
+    octave below still has its line, and a 93 ms frame holds less than one repetition of a note
+    played every sixteenth, so a repeated note gives its partials and not the comb of lines its
+    repetition leaves in a long-term spectrum. The votes are summed in a histogram of
+    SOURCE_NOTE_CENTS_BIN cents; its peaks are the lines, and those within
+    SOURCE_NOTE_MERGE_CENTS of a stronger one are part of it. Lowest first, a line of at least
+    SOURCE_NOTE_FLOOR of the strongest is an overtone of a lower note that reaches
+    SOURCE_NOTE_LEVEL of the strongest line when it lies on one of its harmonics 2 to
+    SOURCE_NOTE_MAX_HARMONIC: an octave within SOURCE_OCTAVE_TOLERANCE (it cannot change the
+    pitch class), another harmonic within SOURCE_NOTE_TOLERANCE and only when it is at most
+    SOURCE_OVERTONE_RATIO of the note (a fifth as loud as its root is a chord tone, not the
+    root's third harmonic). The other lines are notes, and those of at least SOURCE_NOTE_COUNT
+    of the strongest note count: the strongest line can be a root doubled an octave down, and
+    a third a few dB softer than root and fifth must still count.
     """
     lo, hi = SERIES_LOW_HZ, HARMONIC_MAX_HZ
     n_fft = 2 * (stft.shape[0] - 1)
@@ -718,12 +741,10 @@ def source_notes(stft: np.ndarray, sr: int, hop: int) -> tuple[float, ...]:
     weight = np.sqrt(magnitude[:, 1:] * magnitude[:, :-1])
     if not weight.max() > 0:
         return ()
-    peak = np.zeros_like(weight, dtype=bool)
-    peak[1:-1] = (weight[1:-1] >= weight[:-2]) & (weight[1:-1] > weight[2:])
-    peak &= (weight > 1e-3 * weight.max()) & (freqs >= lo) & (freqs <= hi)
-    position = 1200 * np.log2(freqs[peak] / lo) / SOURCE_NOTE_CENTS_BIN
+    vote = (weight > 1e-3 * weight.max()) & (freqs >= lo) & (freqs <= hi)
+    position = 1200 * np.log2(freqs[vote] / lo) / SOURCE_NOTE_CENTS_BIN
     size = int(1200 * np.log2(hi / lo) / SOURCE_NOTE_CENTS_BIN) + 1
-    histogram = np.bincount(position.astype(int), weights=weight[peak], minlength=size)
+    histogram = np.bincount(position.astype(int), weights=weight[vote], minlength=size)
     smooth = scipy.ndimage.gaussian_filter1d(histogram, 2.0)
     if not smooth.max() > 0:
         return ()
@@ -741,40 +762,51 @@ def source_notes(stft: np.ndarray, sr: int, hop: int) -> tuple[float, ...]:
             kept.append((f, a))
     if not kept:
         return ()
-    level = SOURCE_NOTE_LEVEL * kept[0][1]
-    notes: list[float] = []
+    strongest = kept[0][1]
+    notes: list[tuple[float, float]] = []
     for f, a in sorted(kept):
-        if a < level:
+        if a < SOURCE_NOTE_FLOOR * strongest:
             continue
-        overtone = any(
-            2 <= round(f / f0) <= SOURCE_NOTE_MAX_HARMONIC
-            and abs(f - round(f / f0) * f0) <= SOURCE_NOTE_TOLERANCE * f
-            for f0 in notes
-        )
-        if not overtone:
-            notes.append(f)
-    return tuple(notes)
+        if not any(_overtone(f, a, f0, a0, strongest) for f0, a0 in notes):
+            notes.append((f, a))
+    loudest = max(a for _, a in notes)
+    return tuple(f for f, a in notes if a >= SOURCE_NOTE_COUNT * loudest)
+
+
+def _overtone(f: float, a: float, f0: float, a0: float, strongest: float) -> bool:
+    """Whether the line (f, a) is an overtone of the note (f0, a0) (see source_notes)."""
+    harmonic = round(f / f0)
+    if a0 < SOURCE_NOTE_LEVEL * strongest or not 2 <= harmonic <= SOURCE_NOTE_MAX_HARMONIC:
+        return False
+    if harmonic & (harmonic - 1) == 0:  # an octave
+        return abs(f - harmonic * f0) <= SOURCE_OCTAVE_TOLERANCE * f
+    return abs(f - harmonic * f0) <= SOURCE_NOTE_TOLERANCE * f and a <= SOURCE_OVERTONE_RATIO * a0
 
 
 def spells_chord(notes: tuple[float, ...]) -> bool:
     """
-    Three pitch classes or more, or two a third or a sixth apart (within SOURCE_THIRD_CENTS of
-    equal temperament): a chord, or the third over a root whose fifth is the root's own third
-    harmonic. Fewer, or two a fourth, fifth or tritone apart (two oscillators of a cowbell), is
-    one source.
+    Three pitch classes or more, or two with a third or a sixth between any note of one and
+    any note of the other (within SOURCE_THIRD_CENTS of equal temperament): a chord, or the
+    third over a root whose fifth is the root's own third harmonic. Fewer, or two a fourth,
+    fifth or tritone apart (two oscillators of a cowbell), is one source.
     """
-    midi = [69 + 12 * np.log2(f / 440.0) for f in notes]
-    classes = {int(round(m)) % 12: m for m in midi}
-    if len(classes) >= 3:
+    by_class: dict[int, list[float]] = {}
+    for f in notes:
+        midi = 69 + 12 * np.log2(f / 440.0)
+        by_class.setdefault(int(round(midi)) % 12, []).append(midi)
+    if len(by_class) >= 3:
         return True
-    if len(classes) < 2:
+    if len(by_class) < 2:
         return False
-    low, high = classes.values()
-    apart = (high - low) % 12
-    interval = min(apart, 12 - apart)
-    return int(round(interval)) in (3, 4) and abs(interval - round(interval)) * 100 <= (
-        SOURCE_THIRD_CENTS
-    )
+    first, second = by_class.values()
+    for low in first:
+        for high in second:
+            apart = (high - low) % 12
+            interval = min(apart, 12 - apart)
+            close = abs(interval - round(interval)) * 100 <= SOURCE_THIRD_CENTS
+            if int(round(interval)) in (3, 4) and close:
+                return True
+    return False
 
 
 def chroma_movement(chroma: np.ndarray, sr: int, hop: int) -> float:

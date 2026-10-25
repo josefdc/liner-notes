@@ -193,16 +193,6 @@ def test_one_pitched_source_is_withheld_under_the_rules_that_have_the_rule():
     assert cal.Rules.from_dict(recorded) == cal.BASELINE
 
 
-def test_the_choice_does_not_see_the_evaluation_controls():
-    kept = cal.choice_controls(
-        [
-            {"name": "a", "group": "one-pitch-class-seeded"},
-            {"name": "b", "group": "held-out-seeded"},
-        ]
-    )
-    assert [c["name"] for c in kept] == ["a"]
-
-
 def test_a_derivation_that_disagrees_with_the_service_is_reported():
     clips = [tempo_clip("a"), tempo_clip("b", served=None)]
     bad = cal.mismatches(clips, ["essentia"], "tempo", cal.BASELINE)
@@ -430,6 +420,35 @@ def test_librosa_s_clips_veto_a_shared_change():
     assert all("librosa's check" in c["verdict"]["failed"] for c in group["candidates"][1:])
 
 
+def test_the_choice_does_not_see_the_evaluation_controls():
+    kept = cal.choice_controls(
+        [
+            {"name": "a", "group": "one-pitch-class-seeded"},
+            {"name": "b", "group": "held-out-seeded"},
+        ]
+    )
+    assert [c["name"] for c in kept] == ["a"]
+    # A loosening that breaks a control fails L4, unless that control is evaluation only.
+    runs, ctl = onset_runs(control_raw=tempo_raw(onset_off=True))
+    group = family(cal.select(runs, ctl["controls"]), "onset")["groups"][0]
+    assert group["candidates"][1]["verdict"]["failed"] == ["L4"]
+    ctl["controls"][0]["group"] = "held-out-seeded"
+    group = family(cal.select(runs, ctl["controls"]), "onset")["groups"][0]
+    assert group["candidates"][1]["controls"]["broken"] == []
+    assert group["candidates"][1]["verdict"]["failed"] == []
+    # The confirmation reports the controls a change breaks, never an evaluation-only one.
+    runs, ctl = drift_runs()
+    choice = cal.select(runs, ctl["controls"])
+    band = as_control(
+        both("band", "calibration", tempo_raw(drift=0.2), tempo_raw(drift=0.2)), "band"
+    )
+    band["truth"]["tempo"] = 120.0
+    for group_name, broken in (("tempo", ["band"]), ("held-out-seeded", [])):
+        controls = [*ctl["controls"], {**band, "group": group_name}]
+        (change,) = cal.confirm(runs, controls, choice)["changes"]
+        assert change["rows"]["essentia"]["controls"]["broken"] == broken, group_name
+
+
 def test_a_change_that_fails_on_the_evaluation_clips_is_reverted():
     runs, ctl = drift_runs()
     kept = cal.confirm(runs, ctl["controls"], cal.select(runs, ctl["controls"]))
@@ -478,6 +497,17 @@ def test_a_service_value_that_differs_from_the_choice_is_flagged():
     text = render(calibration_doc(shipped=False))
     assert "**no**" in text
     assert "The service's values differ from those that remain in 2 rows" in text
+
+
+def test_the_controls_table_uses_the_controls_run_s_own_rules():
+    """A controls run made with newer values than the clips' runs is shown as it was served."""
+    doc = calibration_doc(shipped=False)
+    after = cal.BASELINE.set("drift", {n: [6.0, 0.15] for n in cal.BASELINE.drift})
+    swing = [line for line in render(doc).splitlines() if line.startswith("| swing |")]
+    assert swing and "120.0 ✗" in swing[0]
+    doc["runs"][-1]["rules"] = after.as_dict()
+    swing = [line for line in render(doc).splitlines() if line.startswith("| swing |")]
+    assert swing and "120.0 → – ✓" in swing[0]
 
 
 def test_the_section_counts_every_p_value_it_prints():

@@ -320,7 +320,9 @@ GROUPS = {
     "noise": "noise: nothing to measure",
     "chord-keyed-seeded": "a key: chords that keep the key the other rules give them (held "
     "chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs, "
-    "a bass and chord riff on one chord, one-bar I-V-vi-IV riffs), 30 seeds each",
+    "a bass and chord riff on one chord, one-bar I-V-vi-IV riffs, 30 seeds each; triads with "
+    "the third 1.5-6 dB softer than a doubled root at every root, mode and three timbres; a "
+    "third 10-25 cents off over a doubled root; sus2 and sus4 chords, their key not scored)",
     "held-out-seeded": "evaluation only: the one-pitch-class families at seeds 600-629 and the "
     "chord families at 800-829; no rule value is chosen on them",
 }
@@ -639,6 +641,42 @@ def controls() -> list[Control]:
             )
             for family, make in s.CHORD_KEYED_SEEDED.items()
             for seed in s.CHORD_KEYED_SEEDS
+        ),
+        # a third softer than root and fifth over a doubled root, a detuned third, sus chords
+        *(
+            c(
+                f"soft-third-{index}",
+                "chord-keyed-seeded",
+                f"a chord in one key, its third {level:g} dB under a doubled root "
+                f"({s.PITCH_NAMES[root]} {mode}, {timbre}, {s.soft_third_shape(index)})",
+                lambda index=index: s.soft_third_chord(index)[0],
+                key=(s.PITCH_NAMES[root], mode),
+            )
+            for index, (root, mode, timbre, level) in enumerate(s.SOFT_THIRD_GRID)
+        ),
+        *(
+            c(
+                f"detuned-third-{s.PITCH_NAMES[root]}-{mode}-{cents:+g}",
+                "chord-keyed-seeded",
+                f"a doubled root with its {mode} third {cents:+g} cents off, no fifth",
+                lambda root=root, mode=mode, cents=cents: s.detuned_third(root, mode, cents),
+                key=(s.PITCH_NAMES[root], mode),
+            )
+            for root in range(12)
+            for mode in ("minor", "major")
+            for cents in s.THIRD_DETUNE_CENTS
+        ),
+        *(
+            c(
+                f"{kind}-{s.PITCH_NAMES[root]}-{shape}",
+                "chord-keyed-seeded",
+                f"a {kind} chord with its root doubled below ({shape}): a chord, its key not scored",
+                lambda root=root, kind=kind, shape=shape: s.sus_chord(root, kind, shape=shape),
+                key=NOT_SCORED,
+            )
+            for root in range(12)
+            for kind in ("sus2", "sus4")
+            for shape in ("stabs", "pumped")
         ),
         # evaluation only: unseen seeds of both
         *(

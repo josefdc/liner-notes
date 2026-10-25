@@ -202,14 +202,18 @@ times are seconds from the start of the preview. Every block is `null` when it w
   no key either, whatever its strength: when the harmonic part's spectral lines keep the same
   proportions over the whole window (followed in 2 s steps) and rise and fall together, and
   what they spell is one note, or two a fourth, a fifth or a tritone apart, the key is withheld
-  as "one pitched source". That is a cowbell or one note repeated on a bass. A chord keeps its
-  key, however its level moves: three pitch classes, or two a third or a sixth apart (a third
-  over its root, whose fifth is the root's own third harmonic), are a chord. So a pad faded in
-  and out, swelling or pumped by a sidechain, chord stabs and a bass and chord riff on one chord
-  keep theirs. A bell is not caught (its tierce is a minor third over the hum, as in a chord),
-  nor are several drums (toms, tabla strokes with partials of their own), and a major third
-  sung or played 8 cents flat or more over its root two octaves down reads as the root's fifth
-  harmonic, so such a chord, if it also holds still, counts as one source. Neither strength
+  as "one pitched source". That is a cowbell or one note repeated on a bass. A chord is three
+  pitch classes, or two a third or a sixth apart; a fifth or a third about as loud as the root
+  below it is a chord tone, not one of the root's harmonics. What the tests and controls show
+  holds: held chords faded, swelling, getting louder, with tremolo or pumped by a sidechain,
+  chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose third is 1.5-6 dB
+  softer than a root doubled an octave down (every root, both modes, three timbres), a third
+  10-25 cents off over a doubled root, and sus2 and sus4 chords over their root lose no key to
+  this rule, and it never gives them its reason. It is not proven beyond those levels and
+  tunings: a third much softer still, or a major third sung or played 8 cents flat or more over
+  its root two octaves down (which reads as the root's fifth harmonic), can make a still chord
+  count as one source. A bell is not caught (its tierce is a minor third over the hum, as in a
+  chord), nor are several drums (toms, tabla strokes with partials of their own). Neither strength
   separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
   still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are
   what keep keys off pitchless sound, and they also withhold many keys of electronic dance
@@ -339,8 +343,9 @@ lines with vibrato, band mixes with and without drums, a pad, a drone, speech wi
 syllables, from `tests/music.py`), loudness, key moments, sections and the fingerprint. Service tests pin exactly which one-pitch-class seeds get a key (equality, both directions)
 and that the single-source rule withholds no key of the chord families at seeds 700-729 (held
 chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs, riffs on
-one chord and one-bar riffs); seeds 600-629 and 800-829 are evaluation-only `evals/audio`
-controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
+one chord and one-bar riffs), of triads at C3-D#3 with a third 1.5-6 dB softer than a doubled
+root, or of sus chords, and that a third 10-25 cents off still makes a chord; seeds 600-629 and
+800-829 are evaluation-only `evals/audio` controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
 marker `seeded`, and CI runs them in a job of their own (`uv run pytest -m seeded`, next to
 `uv run pytest -m "not seeded"`); a plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round

@@ -842,6 +842,83 @@ CHORD_KEYED_SEEDED = {
 CHORD_KEYED_SEEDS = range(700, 730)
 
 
+# A triad with its root doubled an octave down and its third softer than root and fifth
+# (THIRD_LEVELS_DB), at every root C3-B3, both modes and three timbres, each pumped, faded,
+# with tremolo or stabbed (soft_third_shape: every level meets every shape, 18 times). The stacked root is
+# the strongest line, and the third sits within its STFT main lobe at C3-D#3: what is still a
+# chord at these levels must stay one.
+THIRD_LEVELS_DB = (-1.5, -3.0, -4.5, -6.0)
+SHAPES = ("pumped", "faded", "tremolo", "stabs")
+SOFT_THIRD_GRID = tuple(
+    (root, mode, timbre, level)
+    for root in range(12)
+    for mode in ("minor", "major")
+    for timbre in ("pad", "organ", "saw")
+    for level in THIRD_LEVELS_DB
+)
+
+
+def _shaped(y_of, shape: str) -> np.ndarray:
+    """`y_of(t)` held for 30 s and shaped: pumped at 128 BPM, faded, with tremolo, or stabbed."""
+    t = seconds_of(30.0)
+    if shape == "stabs":
+        beat = 60.0 / 120.0
+        length = 0.3
+        ts = seconds_of(length)
+        sound = y_of(ts) * np.exp(-ts / 0.12) * np.minimum(1, ts / 0.004)
+        sound *= np.minimum(1, (length - ts) / 0.01)
+        y = np.zeros(t.size)
+        for start in np.arange(0.0, 30.0, beat):
+            place(y, float(start), sound)
+        return normalise(y)
+    y = y_of(t) * np.minimum(1, t / 0.05) * np.minimum(1, (30 - t) / 0.05)
+    if shape == "pumped":
+        y = y * (1 - 0.8 * np.exp(-(t % (60.0 / 128.0)) / 0.1))
+    elif shape == "faded":
+        y = y * np.minimum(1, t / 1.5) * np.minimum(1, (30 - t) / 1.5)
+    elif shape == "tremolo":
+        y = y * (1 - 0.5 * (0.5 + 0.5 * np.sin(2 * np.pi * 6.0 * t)))
+    return normalise(y)
+
+
+def soft_third_chord(index: int):
+    """SOFT_THIRD_GRID[index] as a signal, with its key."""
+    root, mode, timbre, level = SOFT_THIRD_GRID[index]
+    triad = _triad(root, mode)
+    gain = 10 ** (level / 20)
+
+    def y_of(t):
+        return _chord_tone([triad[0], triad[2], triad[0] - 12], t, timbre) + gain * _chord_tone(
+            [triad[1]], t, timbre
+        )
+
+    return _shaped(y_of, soft_third_shape(index)), (PITCH_NAMES[root], mode)
+
+
+def soft_third_shape(index: int) -> str:
+    return SHAPES[(index + index // len(THIRD_LEVELS_DB)) % len(SHAPES)]
+
+
+# A root doubled an octave down with its third over it and no fifth, the third detuned by
+# THIRD_DETUNE_CENTS: still a third (the key of the dyad is the root's major or minor).
+THIRD_DETUNE_CENTS = (-25.0, -20.0, -10.0, 10.0, 20.0, 25.0)
+
+
+def detuned_third(root: int, mode: str, cents: float, timbre: str = "saw") -> np.ndarray:
+    third = _triad(root, mode)[1] + cents / 100
+
+    def y_of(t):
+        return _chord_tone([48 + root, 36 + root], t, timbre) + _chord_tone([third], t, timbre)
+
+    return _shaped(y_of, "pumped")
+
+
+def sus_chord(root: int, kind: str, timbre: str = "organ", shape: str = "stabs") -> np.ndarray:
+    """A sus2 or sus4 chord (root, second or fourth, fifth) with its root doubled below."""
+    notes = [48 + root, 48 + root + (2 if kind == "sus2" else 5), 48 + root + 7, 36 + root]
+    return _shaped(lambda t: _chord_tone(notes, t, timbre), shape)
+
+
 def chord_key(family: str, seed: int) -> tuple[str, str]:
     """The key of CHORD_KEYED_SEEDED[family](seed), without making the signal."""
     if family == "c-major-stabs":

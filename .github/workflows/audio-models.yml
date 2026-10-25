@@ -1,8 +1,10 @@
 name: audio models
 
 # The audio service as it runs in production: with essentia-tensorflow (the "models" extra)
-# and the Essentia models, so the Essentia estimators and the model tests run too. The ci
-# workflow's python job covers the service without them.
+# and the Essentia models, so the Essentia estimators and the model tests run too, and every
+# test, the seeded control families included (their Essentia pins only run here). The ci
+# workflow's python job ("not seeded") and python-seeded job ("seeded") cover the service
+# without them.
 on:
   pull_request:
     paths:

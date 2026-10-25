@@ -174,8 +174,12 @@ SOURCE_CONSTANTS = {
     "minDepth": "SOURCE_MIN_DEPTH",
     "noteCentsBin": "SOURCE_NOTE_CENTS_BIN",
     "noteMergeCents": "SOURCE_NOTE_MERGE_CENTS",
+    "noteFloor": "SOURCE_NOTE_FLOOR",
     "noteLevel": "SOURCE_NOTE_LEVEL",
+    "noteCount": "SOURCE_NOTE_COUNT",
     "noteTolerance": "SOURCE_NOTE_TOLERANCE",
+    "octaveTolerance": "SOURCE_OCTAVE_TOLERANCE",
+    "overtoneRatio": "SOURCE_OVERTONE_RATIO",
     "noteMaxHarmonic": "SOURCE_NOTE_MAX_HARMONIC",
     "thirdCents": "SOURCE_THIRD_CENTS",
 }

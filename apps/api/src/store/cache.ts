@@ -39,6 +39,21 @@ const log = logger("Cache");
 // =============================================================================
 
 /**
+ * What a node's preview is decided on, of the track a search found (agent/enricher.ts): none of
+ * it is a link. Kept as a JSON object in the artwork cache's `track_details` (migration 13).
+ */
+export interface CachedTrackDetails {
+  /** The track's ISRC, canonical; null when Spotify gave none. */
+  isrc: string | null;
+  /** The track's duration in milliseconds; null when unknown. */
+  durationMs: number | null;
+  /** The name of the release the track is on; null when unknown. */
+  album: string | null;
+  /** The release's date as Spotify gives it (YYYY, YYYY-MM or YYYY-MM-DD); null when unknown. */
+  releaseDate: string | null;
+}
+
+/**
  * What the artwork cache keeps of a Spotify search: the cover and the track it belongs to. No
  * preview URL: previews are looked up afresh for each run and never stored (the table's
  * `preview_url` column is left null; migration 6 cleared the values older code wrote).
@@ -52,6 +67,11 @@ export interface SpotifySearchResult {
   trackArtist: string | null;
   /** Every credited artist, lead first; null when unknown (rows written before migration 9). */
   trackArtists?: string[] | null;
+  /**
+   * The found track's details; absent or null when the row keeps none (rows written before
+   * migration 13, or a row kept without the track's identity).
+   */
+  trackDetails?: CachedTrackDetails | null;
 }
 
 /**
@@ -118,6 +138,25 @@ const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const stringList = z.array(z.string());
 
+/** Text that holds a link; a track's details never do. */
+const LINK = /\b(?:https?:|www\.)/i;
+const noLink = z.string().refine((text) => !LINK.test(text));
+
+const TrackDetailsSchema = z
+  .object({
+    isrc: z
+      .string()
+      .regex(/^[A-Z]{2}[A-Z0-9]{3}\d{7}$/)
+      .nullable(),
+    durationMs: z.number().int().positive().nullable(),
+    album: noLink.nullable(),
+    releaseDate: z
+      .string()
+      .regex(/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/)
+      .nullable(),
+  })
+  .strict();
+
 const RecordingSchema = z.object({
   mbid: z.string(),
   title: z.string(),
@@ -172,6 +211,13 @@ function parseJson(text: string): unknown {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
+/** Stored track details, or null when there are none or they are not valid details. */
+function trackDetails(text: string | null): CachedTrackDetails | null {
+  if (!text) return null;
+  const parsed = TrackDetailsSchema.safeParse(parseJson(text));
+  return parsed.success ? parsed.data : null;
+}
+
 /** A stored JSON list of artist names, or null when there is none or it cannot be read. */
 function artistList(text: string | null): string[] | null {
   if (!text) return null;
@@ -221,14 +267,15 @@ function prepareStatements(db: Database.Database) {
         track_title: string | null;
         track_artist: string | null;
         track_artists: string | null;
+        track_details: string | null;
         expires_at: number;
       }
     >(
-      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at FROM artwork_cache WHERE search_key = ?",
+      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, track_details, expires_at FROM artwork_cache WHERE search_key = ?",
     ),
     putArtwork: db.prepare(
-      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, track_details, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(search_key) DO UPDATE SET
          cover_url = excluded.cover_url,
          spotify_url = excluded.spotify_url,
@@ -237,6 +284,7 @@ function prepareStatements(db: Database.Database) {
          track_title = excluded.track_title,
          track_artist = excluded.track_artist,
          track_artists = excluded.track_artists,
+         track_details = excluded.track_details,
          expires_at = excluded.expires_at`,
     ),
     purgeAudio: db.prepare("DELETE FROM audio_cache WHERE expires_at <= ?"),
@@ -351,11 +399,17 @@ export class SonicCache {
   // Artwork Cache
   // ---------------------------------------------------------------------------
 
+  /**
+   * A cached search, or null (missing or expired). Its track details are left out when the row
+   * has none or they are not valid details (a row of older code); the enricher then searches
+   * again for a row that carries a Spotify id (agent/enricher.ts `servable`).
+   */
   getArtwork(searchKey: string): SpotifySearchResult | null {
     try {
       const row = this.stmt.getArtwork.get(searchKey);
       if (!row || nowSec() >= row.expires_at) return null;
 
+      const details = trackDetails(row.track_details);
       return {
         coverUrl: row.cover_url,
         spotifyUrl: row.spotify_url,
@@ -363,6 +417,7 @@ export class SonicCache {
         trackTitle: row.track_title,
         trackArtist: row.track_artist,
         ...(artistList(row.track_artists) ? { trackArtists: artistList(row.track_artists) } : {}),
+        ...(details ? { trackDetails: details } : {}),
       };
     } catch (err) {
       log.error("Could not read an artwork row", { err });
@@ -370,8 +425,20 @@ export class SonicCache {
     }
   }
 
+  /**
+   * Caches a search. Only the fields named here are written (a preview URL never is); track
+   * details that are not valid details (a link, a malformed ISRC or date) are not written.
+   */
   putArtwork(searchKey: string, result: SpotifySearchResult, ttlMs: number = TTL_ARTWORK): void {
     try {
+      const details = result.trackDetails
+        ? TrackDetailsSchema.safeParse({
+            isrc: result.trackDetails.isrc,
+            durationMs: result.trackDetails.durationMs,
+            album: result.trackDetails.album,
+            releaseDate: result.trackDetails.releaseDate,
+          })
+        : null;
       this.stmt.putArtwork.run(
         searchKey,
         result.coverUrl,
@@ -380,6 +447,7 @@ export class SonicCache {
         result.trackTitle,
         result.trackArtist,
         result.trackArtists?.length ? JSON.stringify(result.trackArtists) : null,
+        details?.success ? JSON.stringify(details.data) : null,
         nowSec() + Math.floor(ttlMs / 1000),
       );
     } catch (err) {

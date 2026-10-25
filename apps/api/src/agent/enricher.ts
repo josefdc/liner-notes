@@ -18,7 +18,10 @@
  * release must also date from within a year of the year the node's label names, if it names
  * one (see `releaseYearFits`). The search's answer is cached for a week by the node's label
  * (without the track's identity when its release names another recording); a preview is never
- * cached.
+ * cached. The cached answer keeps what the preview is decided on (the track's ISRC, duration,
+ * album and release date; none of them a link), so a node served from the cache is judged as a
+ * fresh one is and gets the same Deezer lookup (Spotify's own clip is not cached, so a cached
+ * node has only Deezer's).
  *
  * A strictly matched node's preview is Spotify's own clip of the track found, when it has one
  * the player may load (sources/audio.ts isAllowedPreviewUrl); else the Deezer entry for that
@@ -28,9 +31,11 @@
  * another recording. A preview is optional, so its cost is bounded (see deezerPreviews): one
  * lookup per strictly matched node without a Spotify clip, a few at once, at most
  * MAX_DEEZER_LOOKUPS per run, a time budget for the Deezer lookups after which the remaining
- * nodes simply get none (the run goes on), and none after Deezer failed (see `stops`). A node
- * served from the cache gets none (the cache keeps no ISRC). Preview links are signed and expire: they are
- * returned for this run's player only, never cached or logged.
+ * nodes simply get none (the run goes on), and none after Deezer failed (see `stops`); a node
+ * served from the cache counts as a fresh one does. A row older code cached with a Spotify id but
+ * no track details is not served (see `servable`): its release cannot be checked, so the node is
+ * searched again and the row written with the details. Preview links are signed and expire: they
+ * are returned for this run's player only, never cached or logged.
  *
  * Features:
  * - Parallel batch search for performance
@@ -44,7 +49,7 @@ import { deezerPreviewByIsrc, type PreviewRequest } from "../sources/deezer.js";
 import { describeError, isSourceError } from "../sources/http.js";
 import { sourceErrorCode } from "../sources/toolResult.js";
 import { searchTracks, type SpotifyTrackSummary } from "../sources/spotify.js";
-import { getCache, type SpotifySearchResult } from "../store/cache.js";
+import { type CachedTrackDetails, getCache, type SpotifySearchResult } from "../store/cache.js";
 import { isAbortError } from "./errors.js";
 import type { Genealogy, GenealogyNode } from "./schema.js";
 import { recordingTitleDifference, sameArtistName } from "./trackMatch.js";
@@ -77,6 +82,7 @@ function setCachedArtwork(label: string, result: SpotifySearchResult): void {
       trackTitle: result.trackTitle,
       trackArtist: result.trackArtist,
       trackArtists: result.trackArtists ?? null,
+      trackDetails: result.trackDetails ?? null,
     });
   } catch {
     // Non-critical
@@ -120,8 +126,16 @@ export const LOOKUP_TIMEOUT_MS = 4_000;
 /** Failures of other kinds than those in `stops` after which no more lookups are made. */
 const MAX_FAILURES = 2;
 
-/** The strictly matched track, as deezerPreviewByIsrc checks a Deezer entry against it. */
-function isrcRequest(found: SpotifyTrackSummary): PreviewRequest | null {
+/**
+ * The strictly matched track, as deezerPreviewByIsrc checks a Deezer entry against it: from a
+ * fresh search, or from the cache (cachedTrack), which gives the same request for the same track.
+ */
+function isrcRequest(
+  found: Pick<SpotifyTrackSummary, "title" | "artist" | "artistNames" | "isrc"> & {
+    album?: string | null;
+    durationMs?: number | null;
+  },
+): PreviewRequest | null {
   if (!found.isrc) return null;
   return {
     title: found.title,
@@ -130,6 +144,16 @@ function isrcRequest(found: SpotifyTrackSummary): PreviewRequest | null {
     ...(found.album ? { album: found.album } : {}),
     isrc: found.isrc,
     durationMs: found.durationMs || null,
+  };
+}
+
+/** What the cache keeps of the found track to decide its preview later; none of it a link. */
+function detailsOf(found: SpotifyTrackSummary): CachedTrackDetails {
+  return {
+    isrc: found.isrc,
+    durationMs: found.durationMs || null,
+    album: found.album || null,
+    releaseDate: found.releaseDate || null,
   };
 }
 
@@ -385,8 +409,9 @@ export function releaseYearFits(label: string, releaseDate: string | undefined):
 }
 
 /**
- * The cached track's identity, for strictlyMatches: every credited artist when the row keeps
- * them, else (rows written before the cache kept them) the lead artist only.
+ * The cached track, for strictlyMatches and isrcRequest: every credited artist when the row keeps
+ * them, else (rows written before the cache kept them) the lead artist only; its album, ISRC,
+ * duration and release date when the row keeps them (rows written before have none).
  */
 function cachedTrack(cached: SpotifySearchResult) {
   const names = cached.trackArtists?.length
@@ -394,7 +419,16 @@ function cachedTrack(cached: SpotifySearchResult) {
     : cached.trackArtist
       ? [cached.trackArtist]
       : [];
-  return { title: cached.trackTitle ?? "", artist: names.join(", "), artistNames: names };
+  const details = cached.trackDetails ?? null;
+  return {
+    title: cached.trackTitle ?? "",
+    artist: names.join(", "),
+    artistNames: names,
+    ...(details?.album ? { album: details.album } : {}),
+    isrc: details?.isrc ?? null,
+    durationMs: details?.durationMs ?? null,
+    releaseDate: details?.releaseDate ?? undefined,
+  };
 }
 
 /** The cover alone, without the track's identity: for a track that is not strictly the node's. */
@@ -404,23 +438,47 @@ const withoutId = (artwork: SpotifySearchResult): SpotifySearchResult => ({
   trackTitle: null,
   trackArtist: null,
   trackArtists: null,
+  trackDetails: null,
 });
+
+/**
+ * Whether a cached row may be served: a row with the track's details, or one without its
+ * identity (the cover only). A row with a Spotify id but no details (older code's, or details
+ * that were not valid) is a miss: without its album the release cannot be checked, and code from
+ * before the album check cached the ids of live and re-recorded releases.
+ */
+const servable = (cached: SpotifySearchResult) => !cached.spotifyId || !!cached.trackDetails;
+
+/**
+ * A node served from the cache, under the rules of a fresh search: the Spotify id only for a
+ * strict match (its album is checked as a fresh one's is: a row cached for a release that names
+ * other recordings gives the cover only), and a Deezer lookup by ISRC only when the release's
+ * year also fits the label. A row without the track's identity gives the cover only. The cache
+ * keeps no Spotify clip, so none is offered.
+ */
+function fromCache(node: GenealogyNode, cached: SpotifySearchResult): NodeLookup {
+  const track = cachedTrack(cached);
+  if (!cached.spotifyId || !strictlyMatches(node, track)) {
+    return { artwork: withoutId(cached), previewUrl: null, byIsrc: null };
+  }
+  if (!cached.trackDetails || !releaseYearFits(node.label, track.releaseDate)) {
+    return { artwork: cached, previewUrl: null, byIsrc: null };
+  }
+  return { artwork: cached, previewUrl: null, byIsrc: isrcRequest(track) };
+}
 
 /**
  * Artwork for a node, from the cache or a Spotify search, with the Spotify id and a preview of
  * the track found only when that track strictly matches the node: a loose match still gives the
  * cover, but a click on the node then searches its text, and nothing plays. The preview is
  * Spotify's own clip when the player may load it, else the track is to be looked up on Deezer
- * by its ISRC (`byIsrc`, when it has one). A cached entry gives no preview and no lookup (no
- * preview and no ISRC is stored). A failed search gives nothing and caches nothing, so a later
- * run tries again; a cancelled run rejects.
+ * by its ISRC (`byIsrc`, when it has one). A cached entry that may be served (servable) is
+ * judged the same way (fromCache), with the Deezer lookup only: no preview is stored. A failed
+ * search gives nothing and caches nothing, so a later run tries again; a cancelled run rejects.
  */
 async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<NodeLookup> {
   const cached = getCachedArtwork(node.label);
-  if (cached) {
-    const strict = strictlyMatches(node, cachedTrack(cached));
-    return { artwork: strict ? cached : withoutId(cached), previewUrl: null, byIsrc: null };
-  }
+  if (cached && servable(cached)) return fromCache(node, cached);
 
   let found: SpotifyTrackSummary | undefined;
   try {
@@ -439,6 +497,7 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
         trackTitle: found.title || null,
         trackArtist: found.artistNames[0] || found.artist || null,
         trackArtists: found.artistNames.length > 0 ? found.artistNames : null,
+        trackDetails: detailsOf(found),
       }
     : NO_ARTWORK;
   signal?.throwIfAborted();

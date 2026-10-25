@@ -1272,6 +1272,48 @@ describe("migrations", () => {
     ]);
   });
 
+  it("adds the track details to the artwork cache; the rows it has keep none", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "artwork_track_details");
+    expect(MIGRATIONS[migration].version).toBe(13);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        `INSERT INTO artwork_cache (search_key, cover_url, spotify_id, track_title, track_artist, track_artists, expires_at)
+         VALUES ('under pressure - queen', 'https://i.scdn.co/image/c', 'u', 'Under Pressure', 'Queen', '["Queen"]', unixepoch() + 86400)`,
+      )
+      .run();
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    const cache = new SonicCache(db);
+
+    expect(cache.getArtwork("under pressure - queen")).toEqual({
+      coverUrl: "https://i.scdn.co/image/c",
+      spotifyUrl: null,
+      spotifyId: "u",
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen",
+      trackArtists: ["Queen"],
+    });
+    const details = {
+      isrc: "GBUM71029601",
+      durationMs: 248000,
+      album: "Hot Space",
+      releaseDate: "1982-05-21",
+    };
+    cache.putArtwork("under pressure - queen", {
+      coverUrl: "https://i.scdn.co/image/c",
+      spotifyUrl: null,
+      spotifyId: "u",
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen",
+      trackDetails: details,
+    });
+    expect(cache.getArtwork("under pressure - queen")?.trackDetails).toEqual(details);
+  });
+
   it("adds the runs' evidence column, filled from each stored result's pack", () => {
     const migration = MIGRATIONS.findIndex((m) => m.name === "run_evidence");
     expect(MIGRATIONS[migration].version).toBe(10);

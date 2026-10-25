@@ -20,9 +20,11 @@
 //
 // Last, it stops the API and requires every process to report 0 outbound attempts, and checks
 // the API's log (LOG_FILE): JSON lines, the A1 run's lines carry its run id, and no line holds
-// an IP address, a query string, the typed query or any of the dummy keys.
+// an IP address, a query string, the typed query or any of the dummy keys. Then
+// `npm run report -w apps/api` over the API's database counts the replays it served, and prints
+// nothing anyone typed.
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -92,6 +94,7 @@ const env = {
   LOG_LEVEL: "info",
   LOG_FILE: logFile,
   LOG_IP_SALT: "",
+  RUN_RETENTION_DAYS: "",
 };
 
 const failures = [];
@@ -395,6 +398,50 @@ const dummySecrets = Object.entries(env)
 check(
   dummySecrets.every((secret) => !logText.includes(secret)),
   "log: none of the dummy keys or the endpoint",
+);
+
+// The run report over the database the API wrote (two days, in case the runs crossed midnight).
+const reportRun = spawnSync(
+  "npm",
+  ["run", "report", "-w", "apps/api", "--", "--days", "2", "--json"],
+  {
+    cwd: ROOT,
+    env,
+    encoding: "utf8",
+    timeout: START_TIMEOUT_MS,
+  },
+);
+const reportOut = reportRun.stdout ?? "";
+let runReport = null;
+try {
+  runReport = JSON.parse(reportOut.slice(reportOut.indexOf("{")));
+} catch {
+  // checked below
+}
+const reportTotal = runReport?.total;
+console.log(
+  `report: exit ${reportRun.status}, ${reportTotal?.runs ?? "?"} runs, ` +
+    `${reportTotal?.replay ?? "?"} replays, ${reportTotal?.live ?? "?"} live, ` +
+    `${reportTotal?.model?.calls ?? "?"} model calls`,
+);
+check(
+  reportRun.status === 0 &&
+    reportTotal?.replay >= 2 &&
+    reportTotal.live === 0 &&
+    reportTotal.model?.calls === 0,
+  "report: counts the replays the API served, and no live run or model call",
+  reportRun.status === 0
+    ? ""
+    : String(reportRun.error ?? reportRun.stderr ?? "")
+        .slice(-300)
+        .trim(),
+);
+check(
+  reportOut !== "" &&
+    !reportOut.toLowerCase().includes(TYPED_QUERY.toLowerCase()) &&
+    !reportOut.toLowerCase().includes(SHOWCASE_QUERY.toLowerCase()) &&
+    (replayRunId === undefined || !reportOut.includes(replayRunId)),
+  "report: no typed query and no run id",
 );
 
 rmSync(scratch, { recursive: true, force: true });

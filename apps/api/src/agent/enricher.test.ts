@@ -793,8 +793,9 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       // budget, and the third is cut off by it.
       const net = stub({ spotify, byIsrc: (isrc, call) => slowly(call, 3_000, isrcEntry(isrc)) });
       const report = vi.fn();
+      const logs = captureLogsForTests();
 
-      const { out, elapsed, run } = await timed(nodes, report);
+      const { out, elapsed, run } = await timed(nodes, report).finally(() => logs.restore());
 
       expect(run.aborted).toBe(false);
       expect(out.nodes).toHaveLength(10);
@@ -804,9 +805,9 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       expect(elapsed).toBeLessThan(PREVIEW_BUDGET_MS + 1_000);
       // A spent budget is not a Deezer failure: it is said once, in the log only.
       expect(report).not.toHaveBeenCalled();
-      const said = vi
-        .mocked(console.log)
-        .mock.calls.filter(([line]) => String(line).includes("budget for Deezer lookups"));
+      const said = logs
+        .messages("info")
+        .filter((message) => message.includes("budget for Deezer lookups"));
       expect(said).toHaveLength(1);
     });
 
@@ -847,11 +848,14 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       byIsrc: () => ({ error: { type: "Exception", message: `bad link ${echoed}`, code: 100 } }),
     });
     const report = vi.fn();
+    const logs = captureLogsForTests();
 
-    const out = await enrichAll([{ size: 22, ...underPressure }], undefined, report);
+    const out = await enrichAll([{ size: 22, ...underPressure }], undefined, report).finally(() =>
+      logs.restore(),
+    );
 
     expect(out.nodes[0].previewUrl).toBeUndefined();
-    const warned = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    const warned = JSON.stringify(logs.messages("warn"));
     expect(warned).toContain("Deezer");
     expect(warned).not.toMatch(/dzcdn|hdnea/);
     expect(report).toHaveBeenCalledTimes(1);

@@ -23,7 +23,9 @@
     "prereplay:record": "npm run build -w @liner-notes/contract",
     "replay:record": "tsx src/replay/record.ts",
     "presmoke:llm": "npm run build -w @liner-notes/contract",
-    "smoke:llm": "tsx src/scripts/smokeLlm.ts"
+    "smoke:llm": "tsx src/scripts/smokeLlm.ts",
+    "prereport": "npm run build -w @liner-notes/contract",
+    "report": "tsx src/scripts/report.ts"
   },
   "dependencies": {
     "@langchain/core": "1.2.17",

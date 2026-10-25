@@ -10,6 +10,9 @@ import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
+import type { TrackRelation } from './genealogy/links';
+import { resultClaims, withoutHiddenRelations } from './provenance/claims';
+import { useLinkReader } from './genealogy/useLinkReader';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -59,8 +62,9 @@ function generateGradientColors(label: string, group: number): { from: string; t
   };
 }
 
-// Tracks connected to this one in its genealogy (empty when there are none: no stand-ins)
-function getRelatedTracks(trackData: TrackData | null): Array<{
+type LinkReader = typeof import('./genealogy/links');
+
+interface RelatedTrack {
   id: string;
   /** The Spotify track the node was strictly matched to, when there is one. */
   spotifyId?: string;
@@ -68,31 +72,70 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
   query: string;
   title: string;
   artist: string;
-  reason: string;
+  relation: TrackRelation;
+  /** The relation as a sentence naming both tracks (null when no link joins them). */
+  sentence: string | null;
+  /** Where the relation comes from (null when no link joins them). */
+  provenance: string | null;
   img: string | null;
   group: number;
-}> {
-  // Filter out the current song (group 1) and get related nodes
-  const relatedNodes = (trackData?.genealogy?.nodes ?? [])
-    .filter((node) => node.group !== 1)
-    .slice(0, 4);
+}
 
-  const groupLabels: Record<number, string> = {
-    2: 'Sampled in this track',
-    3: 'Samples this track',
-    4: 'Related influence',
-  };
+/**
+ * The genealogy the main view shows: without the relations whose claim it hides (rejected, or
+ * unreadable) and the tracks only those related, as in the Player.
+ */
+function shownGenealogy(trackData: TrackData | null) {
+  if (!trackData) return null;
+  const claims = resultClaims(trackData);
+  return { claims, genealogy: withoutHiddenRelations(trackData.genealogy, claims.isHidden) };
+}
 
-  return relatedNodes.map((node) => ({
-    id: node.id,
-    ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
-    query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
-    title: node.label,
-    artist: '', // Genealogy nodes don't have separate artist field
-    reason: groupLabels[node.group] || 'Related',
-    img: isValidImageUrl(node.img) ? node.img : null,
-    group: node.group,
-  }));
+/** The tracks other than the analysed one; the link reader is needed only when there are some. */
+const relatedNodes = (shown: ReturnType<typeof shownGenealogy>) =>
+  (shown?.genealogy.nodes ?? []).filter((node) => node.group !== 1);
+
+/**
+ * Tracks connected to this one in its genealogy (empty when there are none: no stand-ins), the
+ * best known first. Each says how it is related by the link that joins it to this track, read
+ * with the contract's rule and the reader's stricter ones: a documented relation (a sample, a
+ * cover…) only for a sourced link with evidence in the pack, never from the node's group. Null
+ * while the link reader loads.
+ */
+function getRelatedTracks(
+  trackData: TrackData | null,
+  shown: ReturnType<typeof shownGenealogy>,
+  reader: LinkReader | null,
+): RelatedTrack[] | null {
+  const others = relatedNodes(shown);
+  if (!trackData || !shown || others.length === 0) return [];
+  if (!reader) return null;
+  const nodes = shown.genealogy.nodes;
+  const links = reader.shownLinks(
+    shown.genealogy,
+    reader.linkContext(trackData.evidence, shown.claims, { releaseYear: trackData.releaseYear }),
+  );
+  const named = reader.nodesById(nodes, reader.yearFrom(trackData.releaseYear));
+  const nameOf = (id: string) => reader.nodeName(named.get(id), id);
+  const currentId = nodes.find((node) => node.group === 1)?.id ?? null;
+  const strength = (relation: TrackRelation) => (relation.link ? reader.rank(relation.link) : -1);
+
+  return others
+    .map((node) => ({ node, relation: reader.relationToTrack(links, node.id, currentId) }))
+    .sort((a, b) => strength(b.relation) - strength(a.relation))
+    .slice(0, 4)
+    .map(({ node, relation }) => ({
+      id: node.id,
+      ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
+      query: [node.trackTitle, node.trackArtist].filter(Boolean).join(' ') || node.label,
+      title: node.label,
+      artist: '', // Genealogy nodes don't have separate artist field
+      relation,
+      sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
+      provenance: relation.link ? reader.provenanceText(relation.link) : null,
+      img: isValidImageUrl(node.img) ? node.img : null,
+      group: node.group,
+    }));
 }
 
 const EMPTY_LOGS: AgentLog[] = [];
@@ -129,7 +172,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     () => (rawTrackData ? normalizeTrack(rawTrackData) : null),
     [rawTrackData],
   );
-  const relatedTracks = useMemo(() => getRelatedTracks(trackData), [trackData]);
+  // The link reader (and the contract's schemas it validates with) loads only when there are
+  // connected tracks to read.
+  const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
+  const relatedCount = relatedNodes(shown).length;
+  const { reader, failed: readerFailed, retry: retryReader } = useLinkReader(relatedCount > 0);
+  const relatedTracks = useMemo(
+    () => getRelatedTracks(trackData, shown, reader),
+    [trackData, shown, reader],
+  );
   const hasGenreProfile = (trackData?.genreProfile?.length ?? 0) > 0;
   // The audio models' style and tag scores; null for a result without an `audio` block.
   const fingerprint = useMemo(
@@ -391,24 +442,42 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-[10px] font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
-                  : 'From the genealogy graph — model inference from research'}
+                  : 'From the genealogy graph — each card says whether its link is sourced or a model inference'}
               </p>
             </div>
-            {relatedTracks.length > 0 && (
+            {relatedTracks !== null && relatedTracks.length > 0 && (
               <span className="text-xs font-mono text-analog">
-                {relatedTracks.length} RELATED ARTIFACTS
+                {/* What the cards show, out of how many connected tracks there are */}
+                {relatedTracks.length < relatedCount
+                  ? `${relatedTracks.length} OF ${relatedCount} RELATED TRACKS`
+                  : `${relatedCount} RELATED ${relatedCount === 1 ? 'TRACK' : 'TRACKS'}`}
               </span>
             )}
           </div>
 
-          {relatedTracks.length === 0 && (
+          {relatedTracks !== null && relatedTracks.length === 0 && (
             <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
               No connected tracks found for this song.
             </p>
           )}
+          {relatedTracks === null && readerFailed && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4"
+            >
+              <span>Connected tracks could not be loaded.</span>
+              <Button variant="ghost" size="sm" onClick={retryReader}>
+                TRY AGAIN
+              </Button>
+            </div>
+          )}
 
-          <div className="flex gap-(--space-lg) overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain">
-            {relatedTracks.map((rec) => (
+          {/* Busy while the link reader loads: the cards follow once their relations are read */}
+          <div
+            aria-busy={relatedTracks === null && !readerFailed}
+            className="flex gap-(--space-lg) overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain"
+          >
+            {(relatedTracks ?? []).map((rec, index) => (
               <div
                 key={rec.id}
                 role="button"
@@ -423,9 +492,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
                 data-hovered={hoveredCardId === rec.id || undefined}
-                className="relative min-w-[280px] rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
+                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
-                  animationDelay: `${relatedTracks.indexOf(rec) * 80}ms`,
+                  animationDelay: `${index * 80}ms`,
                   animationFillMode: 'forwards',
                 }}
               >
@@ -453,10 +522,33 @@ const Dashboard: React.FC<DashboardProps> = ({
                     )}
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-white/5">
-                    <Badge variant="analog" glow>
-                      <span className="font-bold">LOGIC:</span> {rec.reason}
+                  <div className="mt-4 pt-3 border-t border-white/5 flex flex-col items-start gap-1.5">
+                    {/* A documented relation is named only for a sourced link; an inferred one
+                        says so in words, not by colour alone. The neutral badge's text is raised
+                        to secondary: on a hovered card its chip grey is under 4.5:1. */}
+                    <Badge
+                      variant={rec.relation.link?.kind === 'sourced' ? 'analog' : 'gray'}
+                      glow={rec.relation.link?.kind === 'sourced'}
+                      data-link-kind={rec.relation.link?.kind ?? 'none'}
+                    >
+                      <span
+                        className={
+                          rec.relation.link?.kind === 'sourced' ? undefined : 'text-text-secondary'
+                        }
+                      >
+                        <span className="font-bold">LOGIC:</span> {rec.relation.text}
+                      </span>
                     </Badge>
+                    {rec.sentence && (
+                      <p data-link-relation className="text-chrome font-mono text-text-secondary">
+                        {rec.sentence}
+                      </p>
+                    )}
+                    {rec.provenance && (
+                      <p data-link-provenance className="text-chrome font-mono text-text-chip">
+                        {rec.provenance}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

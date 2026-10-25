@@ -107,7 +107,10 @@ async function graphFitted(page: Page) {
         const after = g.getAttribute("transform");
         return before !== null && before === after && after.includes("scale(") ? after : null;
       });
-  await expect.poll(transform, { timeout: 40_000 }).not.toBeNull();
+  // Well inside the test's 30 s, so a graph that never settles fails here, with this message.
+  await expect
+    .poll(transform, { message: "the graph's fit holds still", timeout: 10_000 })
+    .not.toBeNull();
 }
 
 test("the mock result is one the API may send, but for the two links planted on purpose", () => {

@@ -121,13 +121,31 @@ const over = (top: Rgba, bottom: Rgba): Rgba => ({
 
 /**
  * Waits until what is drawn behind the text is final: every image on the page decoded (the
- * Player's blurred background cover shows only once its image is in) and the page's animations
- * settled.
+ * Player's blurred background cover shows only once its image is in), and so every SVG <image>
+ * and CSS url() background (loaded through the same cache), and the page's animations settled.
  */
 async function backgroundSettled(page: Page) {
-  await page.evaluate(() =>
-    Promise.all([...document.images].map((image) => image.decode().catch(() => {}))),
-  );
+  await page.evaluate(() => {
+    const urls = new Set<string>();
+    for (const image of document.querySelectorAll("svg image")) {
+      const href = image.getAttribute("href") ?? image.getAttribute("xlink:href");
+      if (href) urls.add(new URL(href, document.baseURI).href);
+    }
+    for (const element of document.querySelectorAll("*")) {
+      for (const pseudo of [null, "::before", "::after"]) {
+        const { backgroundImage } = getComputedStyle(element, pseudo);
+        for (const [, url] of backgroundImage.matchAll(/url\("([^"]*)"\)/g)) urls.add(url);
+      }
+    }
+    const loads = [...urls].map((url) => {
+      const image = new Image();
+      image.src = url;
+      return image;
+    });
+    return Promise.all(
+      [...document.images, ...loads].map((image) => image.decode().catch(() => {})),
+    );
+  });
   await animationsSettled(page);
 }
 
@@ -140,35 +158,34 @@ const MEASURE_GAP = 8;
  * (cover image, blur and every translucent layer included), and its brightest pixel is the
  * background. Coloured values inside a badge (cyan, amber, pink) are not measured here.
  *
- * It waits once for the background to settle. Then the badges in view together are measured
- * from one screenshot: the first one not yet measured is scrolled into view, and every other one
- * fully in view that keeps MEASURE_GAP px from the badges already picked is hidden and measured
- * with it. So each badge's area shows what it would on its own (only its own text and icons
- * hidden), with a few screenshots per page instead of one per badge. An area's pixels are those
- * at least half inside it. The results are in document order.
+ * The pointer is first moved off the page's content and focus is dropped, so every badge is
+ * measured at rest: a test that hovers or focuses on purpose says so with `keepHover` or
+ * `keepFocus`, and a badge hovered or focused otherwise is an error. Then it waits once for the
+ * background to settle, and the badges in view together are measured from one screenshot: the
+ * first one not yet measured is scrolled into view, and every other one fully in view that keeps
+ * MEASURE_GAP px from the badges already picked is read (its text and colour, as drawn now),
+ * hidden and measured with it. So each badge's area shows what it would on its own (only its own
+ * text and icons hidden), with a few screenshots per page instead of one per badge. An area's
+ * pixels are those at least half inside it, and an area with none is an error. The results are
+ * in document order.
  */
-async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/15") {
+async function neutralBadgeContrast(
+  page: Page,
+  selector = "span.border-white\\/15",
+  { keepHover = false, keepFocus = false } = {},
+) {
+  if (!keepHover) await page.mouse.move(0, 0);
+  if (!keepFocus) {
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  }
   await backgroundSettled(page);
   await page.addStyleTag({
     content:
       "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
   });
   const badges = page.locator(selector);
-  // Each badge's text, with the colour it is drawn in.
-  const texts = await badges.evaluateAll((elements) =>
-    elements.map((element) => {
-      const found: Array<{ text: string; color: string }> = [];
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        if (!text.textContent?.trim() || !text.parentElement) continue;
-        found.push({
-          text: text.textContent.trim(),
-          color: getComputedStyle(text.parentElement).color,
-        });
-      }
-      return found;
-    }),
-  );
+  type Found = Array<{ text: string; color: string }>;
+  const texts: Array<Found | undefined> = Array(await badges.count()).fill(undefined);
   const backgrounds: Array<Rgba | undefined> = texts.map(() => undefined);
   for (
     let first = backgrounds.indexOf(undefined);
@@ -178,9 +195,10 @@ async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/
     await badges.nth(first).scrollIntoViewIfNeeded();
     const pending = backgrounds.flatMap((background, i) => (background ? [] : [i]));
     // The first pending badge, and each other one fully in view (not clipped by the viewport
-    // or a scrolling box) and MEASURE_GAP px clear of those picked; they are hidden together.
+    // or a scrolling box) and MEASURE_GAP px clear of those picked; their text and colour are
+    // read as drawn now, then they are hidden together.
     const picked = await badges.evaluateAll(
-      (elements, { pending, gap }) => {
+      (elements, { pending, gap, keepHover, keepFocus }) => {
         const inView = (element: Element, box: DOMRect) => {
           if (box.top < 0 || box.left < 0) return false;
           if (box.bottom > innerHeight || box.right > innerWidth) return false;
@@ -207,16 +225,27 @@ async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/
           if (!chosen.every((other) => apart(other.box, box))) continue;
           chosen.push({ index, box });
         }
-        for (const { index } of chosen) elements[index].setAttribute("data-measuring", "");
-        return chosen.map(({ index, box }) => ({
-          index,
-          x: box.x,
-          y: box.y,
-          width: box.width,
-          height: box.height,
-        }));
+        return chosen.map(({ index, box }) => {
+          const element = elements[index];
+          const label = element.textContent?.trim().slice(0, 60);
+          if (!keepHover && element.matches(":hover")) throw new Error(`"${label}" is hovered`);
+          if (!keepFocus && element.matches(":focus-within")) {
+            throw new Error(`"${label}" has the focus`);
+          }
+          const found: Array<{ text: string; color: string }> = [];
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+            if (!text.textContent?.trim() || !text.parentElement) continue;
+            found.push({
+              text: text.textContent.trim(),
+              color: getComputedStyle(text.parentElement).color,
+            });
+          }
+          element.setAttribute("data-measuring", "");
+          return { index, found, x: box.x, y: box.y, width: box.width, height: box.height };
+        });
       },
-      { pending, gap: MEASURE_GAP },
+      { pending, gap: MEASURE_GAP, keepHover, keepFocus },
     );
     // One screenshot of the smallest whole-pixel area around them, inside the viewport.
     const viewport = page.viewportSize();
@@ -232,12 +261,18 @@ async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/
       Math.ceil(Math.max(...picked.map((b) => b.y + b.height))),
     );
     const clip = { x: left, y: top, width: right - left, height: bottom - top };
+    const label = (box: (typeof picked)[number]) =>
+      `"${box.found.map(({ text }) => text).join(" ")}"`;
+    if (clip.width <= 0 || clip.height <= 0) {
+      throw new Error(`${picked.map(label).join(", ")}: nothing of it in view to measure`);
+    }
     const png = await page.screenshot({ clip, animations: "disabled" });
     await badges.evaluateAll((elements) => {
       for (const element of elements) element.removeAttribute("data-measuring");
     });
-    // The brightest pixel inside each picked badge's border (2 px in from its box).
-    const brightest: Rgba[] = await page.evaluate(
+    // The brightest pixel inside each picked badge's border (2 px in from its box), or null
+    // when no whole pixel is inside it.
+    const brightest: Array<Rgba | null> = await page.evaluate(
       async ({ base64, boxes, clip }) => {
         const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
         const bitmap = await createImageBitmap(blob);
@@ -254,6 +289,7 @@ async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/
           const top = Math.max(0, Math.round((y + 2) * scale));
           const right = Math.min(bitmap.width, Math.round((x + box.width - 2) * scale));
           const bottom = Math.min(bitmap.height, Math.round((y + box.height - 2) * scale));
+          if (right <= left || bottom <= top) return null;
           let best = { r: 0, g: 0, b: 0, a: 1 };
           for (let y = top; y < bottom; y += 1) {
             for (let x = left; x < right; x += 1) {
@@ -268,14 +304,17 @@ async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/
       },
       { base64: png.toString("base64"), boxes: picked, clip },
     );
-    picked.forEach(({ index }, i) => {
-      backgrounds[index] = brightest[i];
+    picked.forEach((box, i) => {
+      const background = brightest[i];
+      if (!background) throw new Error(`${label(box)}: no whole pixel inside its border`);
+      texts[box.index] = box.found;
+      backgrounds[box.index] = background;
     });
   }
   const result: Array<{ text: string; ratio: number }> = [];
   texts.forEach((found, i) => {
     const background = backgrounds[i] as Rgba;
-    for (const { text, color } of found) {
+    for (const { text, color } of found ?? []) {
       const match = /rgba?\(([^)]+)\)/.exec(color);
       if (!match) continue;
       const [r, g, b, a = 1] = match[1]
@@ -436,7 +475,9 @@ for (const cover of ["no cover", "a white cover"]) {
       .filter({ has: page.locator('[data-link-kind="inferred"]') });
     await inferred.first().hover();
     await animationsSettled(page);
-    dashboard.push(...(await neutralBadgeContrast(page, 'span[data-link-kind="inferred"]')));
+    dashboard.push(
+      ...(await neutralBadgeContrast(page, 'span[data-link-kind="inferred"]', { keepHover: true })),
+    );
     await page.mouse.move(0, 0);
     await openPlayer(page);
     // The list opens over the graph; then, closed again, a focused link's detail.
@@ -445,7 +486,7 @@ for (const cover of ["no cover", "a white cover"]) {
     const player = await neutralBadgeContrast(page, GENEALOGY_TEXT.player);
     await summary.click();
     await page.locator("#panel-genealogy g.link-targets line").first().focus();
-    player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail)));
+    player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail, { keepFocus: true })));
     // Inferred badges, every relation and provenance line (sourced badges are amber, not
     // measured here).
     expect(dashboard.length).toBeGreaterThanOrEqual(8);
@@ -473,7 +514,8 @@ const CLAIM_TEXT = [
 
 for (const cover of ["no cover", "a white cover"]) {
   test(`claim provenance and rejected-claim text meet 4.5:1 (${cover})`, async ({ page }) => {
-    // Some eighty lines in a scrolling panel, close together: about eighteen screenshots.
+    // Reaching the Player's claims takes most of this test on a loaded machine; measuring their
+    // eighty-odd lines adds another 5–6 s.
     test.slow();
     await page.route("https://i.scdn.co/**", (route) =>
       route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),

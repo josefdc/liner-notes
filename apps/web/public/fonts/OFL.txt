@@ -1,12 +1,13 @@
-The font files in this directory are licensed under the SIL Open Font License, Version 1.1.
-They are the latin subsets published in the Fontsource packages @fontsource-variable/inter 5.3.0
-and @fontsource/ibm-plex-mono 5.3.0, unmodified.
+The font files in this directory are licensed under the SIL Open Font License, Version 1.1,
+copied in full below. Each file is an unmodified copy of the file in the package named below.
 
-Inter (inter-latin-wght-normal.woff2)
+Inter (inter-*-wght-normal.woff2)
+From the Fontsource package @fontsource-variable/inter 5.3.0.
 Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
 
-IBM Plex Mono (ibm-plex-mono-latin-400-normal.woff2, ibm-plex-mono-latin-500-normal.woff2)
-Copyright 2017 IBM Corp. All rights reserved.
+IBM Plex Mono (IBMPlexMono-*.woff2)
+From IBM's release package @ibm/plex-mono 2.5.0 (fonts/split/woff2).
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
@@ -38,6 +39,7 @@ DEFINITIONS
 Holder(s) under this license and clearly marked as such. This may
 include source files, build scripts and documentation.
 
+"Reserved Font Name" refers to any names specified as such after the
 copyright statement(s).
 
 "Original Version" refers to the collection of Font Software components as

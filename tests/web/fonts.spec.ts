@@ -1,22 +1,53 @@
-import { expect, test } from "@playwright/test";
+import { type CDPSession, expect, type Page, type Request, test } from "@playwright/test";
 import { analyzeAndOpenDashboard, loadFixture, useMockApi } from "./mock";
 
 // Inter and IBM Plex Mono are served with the app (apps/web/public/fonts, styles/fonts.css), so
-// the page renders in its own fonts without asking a third party for them. The Dashboard sets
-// body text in Inter and measured values in IBM Plex Mono, so both families are in use there.
-const fixture = loadFixture("full-result");
+// the page renders in its own fonts without asking a third party for them. Each script is a
+// separate file with its unicode-range: a Latin page fetches only the Latin files, and a name such
+// as "Dvořák" or "Кино" brings in the faces it needs instead of falling back to a system font.
+const fixture = loadFixture("measured-v2");
+const NAMES = "Dvořák Łona Beyoncé Кино";
+const PRELOADED = "/fonts/inter-latin-wght-normal.woff2";
+// The files a Latin-only page uses: Inter's latin subset and IBM Plex Mono's Latin1 split.
+const LATIN_FILE = /^\/fonts\/(inter-latin-wght-normal|IBMPlexMono-\w+-Latin1)\.woff2$/;
 
-// FontFace.family may come back quoted ("IBM Plex Mono").
-const unquote = (family: string) => family.replace(/^["']|["']$/g, "");
-
-test("Inter and IBM Plex Mono load from the app and nothing is asked of Google Fonts", async ({
-  page,
-}) => {
-  const thirdParty: string[] = [];
-  const fontResponses: string[] = [];
-  page.on("request", (request) => {
-    if (/googleapis|gstatic/.test(new URL(request.url()).hostname)) thirdParty.push(request.url());
+/** Records every request: the ones to another origin, and the font files by path. */
+function recordRequests(page: Page, origin: string) {
+  const offOrigin: string[] = [];
+  const fonts: string[] = [];
+  page.on("request", (request: Request) => {
+    const url = new URL(request.url());
+    // data: and blob: URLs never leave the page.
+    if (url.protocol !== "data:" && url.protocol !== "blob:" && url.origin !== origin) {
+      offOrigin.push(request.url());
+    }
+    if (url.origin === origin && url.pathname.startsWith("/fonts/")) fonts.push(url.pathname);
   });
+  return { offOrigin, fonts };
+}
+
+/** The fonts Chromium used to draw an element's text (CDP CSS.getPlatformFontsForNode). */
+async function platformFonts(cdp: CDPSession, selector: string) {
+  const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
+  const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+  const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+  return fonts.map((font) => `${font.isCustomFont ? "" : "system "}${font.postScriptName}`);
+}
+
+async function openCdp(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("DOM.enable");
+  await cdp.send("CSS.enable");
+  return cdp;
+}
+
+test("a Latin page loads Inter and IBM Plex Mono from the app, and only their Latin files", async ({
+  page,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL ?? "").origin;
+  const requests = recordRequests(page, origin);
+  const fontResponses: string[] = [];
   page.on("response", (response) => {
     const url = new URL(response.url());
     if (url.pathname.startsWith("/fonts/")) {
@@ -30,26 +61,107 @@ test("Inter and IBM Plex Mono load from the app and nothing is asked of Google F
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await page.evaluate(() => document.fonts.ready);
 
-  const fonts = await page.evaluate(() => ({
-    inter: document.fonts.check("16px Inter"),
-    mono: document.fonts.check('16px "IBM Plex Mono"'),
-    loaded: [...document.fonts]
-      .filter((face) => face.status === "loaded")
-      .map((face) => ({ family: face.family, weight: face.weight })),
-  }));
-  expect(fonts.inter).toBe(true);
-  expect(fonts.mono).toBe(true);
-  // check() also answers true for a family it has no face for, so the faces themselves must
-  // have loaded: the variable Inter and at least the regular IBM Plex Mono.
-  const loaded = fonts.loaded.map(({ family, weight }) => `${unquote(family)} ${weight}`);
-  expect(loaded).toContain("Inter 100 900");
-  expect(loaded).toContain("IBM Plex Mono 400");
+  expect(await page.evaluate(() => document.fonts.check("16px Inter"))).toBe(true);
+  expect(await page.evaluate(() => document.fonts.check('16px "IBM Plex Mono"'))).toBe(true);
 
-  for (const line of fontResponses) expect(line).toMatch(/^\/fonts\/[\w-]+\.woff2 200 font\/woff2/);
-  expect(
-    fontResponses.some((line) => line.startsWith("/fonts/inter-latin-wght-normal.woff2")),
-  ).toBe(true);
-  expect(thirdParty).toEqual([]);
+  // A measured value's provenance line is set in IBM Plex Mono, and drawn with it.
+  const line = page
+    .getByRole("list", { name: "Audio values" })
+    .getByText(/^Measured · /)
+    .first();
+  expect(await line.evaluate((element) => getComputedStyle(element).fontFamily)).toMatch(
+    /^"IBM Plex Mono"/,
+  );
+  await line.evaluate((element) => element.setAttribute("data-font-probe", ""));
+  const cdp = await openCdp(page);
+  expect(await platformFonts(cdp, "[data-font-probe]")).toEqual(["IBMPlexMono"]);
+  // Headings and body text are set in Inter.
+  const heading = page.getByRole("heading", { name: "Command Center" });
+  expect(await heading.evaluate((element) => getComputedStyle(element).fontFamily)).toMatch(
+    /^Inter\b/,
+  );
+
+  // The preload, with crossorigin so the stylesheet's request can use it: Inter is fetched once,
+  // by the preload.
+  const preload = page.locator('link[rel="preload"][as="font"]');
+  await expect(preload).toHaveAttribute("href", PRELOADED);
+  await expect(preload).toHaveAttribute("crossorigin", "");
+  const entries = await page.evaluate(
+    (path) =>
+      performance
+        .getEntriesByType("resource")
+        .filter((entry) => new URL(entry.name).pathname === path)
+        .map((entry) => (entry as PerformanceResourceTiming).initiatorType),
+    PRELOADED,
+  );
+  expect(entries).toEqual(["link"]);
+
+  // Each file once, all of them Latin, all served as woff2.
+  expect(requests.fonts).toContain(PRELOADED);
+  expect(requests.fonts).toContain("/fonts/IBMPlexMono-Regular-Latin1.woff2");
+  expect(new Set(requests.fonts).size).toBe(requests.fonts.length);
+  for (const path of requests.fonts) expect(path).toMatch(LATIN_FILE);
+  for (const response of fontResponses) expect(response).toMatch(/ 200 font\/woff2$/);
+  expect(requests.offOrigin).toEqual([]);
+});
+
+test("names outside Latin-1 are drawn in Inter and IBM Plex Mono throughout", async ({
+  page,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL ?? "").origin;
+  const requests = recordRequests(page, origin);
+  await useMockApi(page, fixture);
+  await page.goto("/");
+  await expect(page.getByPlaceholder(/Song title/)).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  for (const path of requests.fonts) expect(path).toMatch(LATIN_FILE);
+
+  // The same text in the body face, the mono face, and the mono face at semibold: IBM Plex Mono
+  // 600 is a face of its own (PostScript name IBMPlexMono-SmBld), not the medium one made bold.
+  const probes = [
+    { id: "sans", family: "var(--font-sans)", weight: "400", face: /^Inter/ },
+    { id: "mono", family: "var(--font-mono)", weight: "400", face: /^IBMPlexMono$/ },
+    { id: "mono-600", family: "var(--font-mono)", weight: "600", face: /^IBMPlexMono-SmBld$/ },
+  ];
+  await page.evaluate(
+    ({ text, probes }) => {
+      for (const { id, family, weight } of probes) {
+        const element = document.createElement("p");
+        element.id = `probe-${id}`;
+        element.textContent = text;
+        element.style.fontFamily = family;
+        element.style.fontWeight = weight;
+        document.body.append(element);
+      }
+    },
+    { text: NAMES, probes: probes.map(({ id, family, weight }) => ({ id, family, weight })) },
+  );
+
+  const cdp = await openCdp(page);
+  for (const { id, face } of probes) {
+    // font-display: swap draws a fallback until the faces arrive; then every glyph is theirs.
+    await expect
+      .poll(async () => {
+        const fonts = await platformFonts(cdp, `#probe-${id}`);
+        return fonts.length > 0 && fonts.every((font) => face.test(font)) ? "ours" : fonts;
+      })
+      .toBe("ours");
+  }
+
+  // The extra scripts were fetched for this text, each file once.
+  for (const path of [
+    "/fonts/inter-latin-ext-wght-normal.woff2",
+    "/fonts/inter-cyrillic-wght-normal.woff2",
+    "/fonts/IBMPlexMono-Regular-Latin2.woff2",
+    "/fonts/IBMPlexMono-Regular-Cyrillic.woff2",
+    "/fonts/IBMPlexMono-SemiBold-Latin2.woff2",
+    "/fonts/IBMPlexMono-SemiBold-Cyrillic.woff2",
+  ]) {
+    expect(requests.fonts).toContain(path);
+  }
+  expect(new Set(requests.fonts).size).toBe(requests.fonts.length);
+  expect(requests.offOrigin).toEqual([]);
 });
 
 test("the page names itself to search engines and link previews, and has an icon", async ({
@@ -60,13 +172,13 @@ test("the page names itself to search engines and link previews, and has an icon
 
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
-    /samples, credits and history.*measured, sourced or inferred/,
+    /samples, credits and history.*claims are measured, sourced or inferred/,
   );
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "Liner Notes");
   await expect(page.locator('meta[property="og:type"]')).toHaveAttribute("content", "website");
   await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
     "content",
-    /measured, sourced or inferred/,
+    /claims are measured, sourced or inferred/,
   );
 
   const icon = await page.locator('link[rel="icon"]').getAttribute("href");

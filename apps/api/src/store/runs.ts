@@ -28,7 +28,8 @@
  *                   without preview URLs); null when it has none
  *   code_commit     the commit of the code that ran the run (the checkout's, "-dirty" when it had
  *                   uncommitted changes), read when the server started; null when it could not
- *                   be read or the run was stored before commits were kept (migration 7)
+ *                   be read, the run was stored before commits were kept (migration 7), or it
+ *                   was resumed by a server at another commit (clearRunCommitUnless)
  *
  * Columns of `run_events`:
  *   run_id          the run that sent the event
@@ -140,6 +141,22 @@ export function startRun(
 }
 
 /**
+ * A resumed run went on with the code of the server that resumed it: when that server's commit
+ * differs from the one stored (or is unknown), the run no longer has a single commit to name, and
+ * the stored one is cleared. Unchanged when they are the same.
+ */
+export function clearRunCommitUnless(
+  db: Database.Database,
+  runId: string,
+  commit: string | null,
+): void {
+  db.prepare("UPDATE runs SET code_commit = NULL WHERE run_id = ? AND code_commit IS NOT ?").run(
+    runId,
+    commit,
+  );
+}
+
+/**
  * Updates a run's status and flags. A final status sets finished_at; an open status clears it
  * (a resumed run is open again). Fields left undefined keep their stored value.
  */
@@ -178,11 +195,31 @@ export function updateRun(
   return result.changes > 0;
 }
 
-export function getRun(db: Database.Database, runId: string): RunRecord | null {
-  const row = db.prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE run_id = ?`).get(runId) as
+/**
+ * A run by id. `withoutCommit` reads a database migrated before commits were kept (no
+ * code_commit column, schema below 7), whose runs have none: the replay recorder opens databases
+ * read-only and never migrates them.
+ */
+export function getRun(
+  db: Database.Database,
+  runId: string,
+  { withoutCommit = false }: { withoutCommit?: boolean } = {},
+): RunRecord | null {
+  const columns = withoutCommit
+    ? RUN_COLUMNS.replace("code_commit", "NULL AS code_commit")
+    : RUN_COLUMNS;
+  const row = db.prepare(`SELECT ${columns} FROM runs WHERE run_id = ?`).get(runId) as
     | RunRow
     | undefined;
   return row ? toRecord(row) : null;
+}
+
+/** True when the database keeps each run's commit (migration 7 applied). */
+export function keepsRunCommits(db: Database.Database): boolean {
+  return (
+    db.prepare("SELECT 1 FROM pragma_table_info('runs') WHERE name = 'code_commit'").get() !==
+    undefined
+  );
 }
 
 /**

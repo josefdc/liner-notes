@@ -4,11 +4,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkoutCommit, checkoutCommitOrNull } from "./checkoutCommit.js";
+import { API_ROOT } from "./apiPackage.js";
+import { checkoutCommit, checkoutCommitOrNull, recordingDirs } from "./checkoutCommit.js";
 
 let dir: string;
 let repo: string;
@@ -88,6 +89,57 @@ describe("checkoutCommit", () => {
     // A change elsewhere still counts.
     writeFileSync(join(repo, "code.ts"), "export const a = 3;\n");
     expect(checkoutCommit(sub, { exclude })).toBe(`${head}-dirty`);
+  });
+
+  it("reports changes the user's own git settings would hide", () => {
+    const head = git(repo, "rev-parse", "--short=12", "HEAD");
+    const home = join(dir, "home");
+    mkdirSync(home);
+    writeFileSync(join(home, "ignore-all"), "*.ts\n");
+    writeFileSync(
+      join(home, ".gitconfig"),
+      `[status]\n\tshowUntrackedFiles = no\n[core]\n\texcludesFile = ${join(home, "ignore-all")}\n`,
+    );
+    vi.stubEnv("HOME", home);
+    writeFileSync(join(repo, "new.ts"), "export const b = 1;\n");
+    expect(checkoutCommit(repo, { exclude: [] })).toBe(`${head}-dirty`);
+  });
+
+  it("gives git only PATH, HOME and LANG, never credentials", () => {
+    // A stand-in git that writes the environment it was given, then fails.
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const seen = join(dir, "env.txt");
+    writeFileSync(join(bin, "git"), `#!/bin/sh\nenv > ${seen}\nexit 1\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    vi.stubEnv("PATH", `${bin}:/usr/bin:/bin`);
+    vi.stubEnv("AZURE_OPENAI_API_KEY", "secret-key-value-123");
+    vi.stubEnv("GIT_DIR", "/elsewhere/.git");
+    expect(checkoutCommitOrNull(repo)).toBeNull();
+    const names = readFileSync(seen, "utf8")
+      .split("\n")
+      .map((line) => line.split("=")[0])
+      .filter((name) => name && !["PWD", "SHLVL", "_", "OLDPWD"].includes(name));
+    expect(new Set(names)).toEqual(
+      new Set(
+        ["PATH", "HOME", "LANG", "GIT_OPTIONAL_LOCKS"].filter(
+          (n) => n !== "LANG" || process.env.LANG !== undefined,
+        ),
+      ),
+    );
+    expect(readFileSync(seen, "utf8")).not.toContain("secret-key-value-123");
+  });
+
+  it("does not count recordings, by default or as configured, as code", () => {
+    const dirs = recordingDirs({ LLM_CASSETTE_DIR: "./elsewhere/llm", REPLAY_DIR: "/abs/replays" });
+    expect(dirs).toEqual(
+      expect.arrayContaining([
+        join(API_ROOT, "cassettes"),
+        resolve(API_ROOT, "..", "..", "fixtures", "replays"),
+        resolve(API_ROOT, "elsewhere", "llm"),
+        "/abs/replays",
+      ]),
+    );
   });
 
   it("is unknown outside a repository and without git, never a guess", () => {

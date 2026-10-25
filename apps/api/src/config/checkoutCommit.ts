@@ -5,20 +5,39 @@
  * LLM cassettes) are made from a checkout; a deployed image has no repository, and its runs say
  * null (unknown), never a guess.
  *
- * Recorded artefacts (`exclude`, by default apps/api/cassettes) do not make the code dirty: a
- * session that records cassettes would otherwise make every later one "-dirty".
+ * Recorded artefacts (`exclude`: the cassette and replay directories) do not make the code
+ * dirty: otherwise every recording would make each later run "-dirty".
  *
- * git runs at the checkout itself: GIT_DIR, GIT_WORK_TREE and the other GIT_* variables a hook
- * or a shell may have exported are dropped, so another repository is never read, and it takes
- * no optional locks, so a concurrent git command in the same checkout is not disturbed.
+ * git runs at the checkout itself, with a minimal environment (PATH, HOME, LANG: no GIT_*
+ * variable, so another repository is never read, and no credentials), a timeout, and settings
+ * that make it report every change whatever the user's configuration says (untracked files
+ * shown, no global excludes file, submodules counted, no fsmonitor hook). It takes no optional
+ * locks, so a concurrent git command in the same checkout is not disturbed.
  */
 
 import { execFileSync } from "node:child_process";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { API_ROOT } from "./apiPackage.js";
 
-/** Where recorded cassettes live by default (LLM and source cassettes). */
-export const DEFAULT_RECORDING_DIRS = [join(API_ROOT, "cassettes")];
+/** Longest a git command may take before the commit counts as unknown. */
+const GIT_TIMEOUT_MS = 5_000;
+
+/**
+ * Where recordings are written, by default and as configured: LLM and source cassettes
+ * (apps/api/cassettes, LLM_CASSETTE_DIR, SOURCE_CASSETTE_DIR) and replay records
+ * (fixtures/replays, REPLAY_DIR). Relative settings are taken from the API package.
+ */
+export function recordingDirs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const configured = [env.LLM_CASSETTE_DIR, env.SOURCE_CASSETTE_DIR, env.REPLAY_DIR]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .map((value) => resolve(API_ROOT, value));
+  return [
+    join(API_ROOT, "cassettes"),
+    resolve(API_ROOT, "..", "..", "fixtures", "replays"),
+    ...configured,
+  ];
+}
 
 export interface CheckoutCommitOptions {
   /** Directories whose changes do not count as changes to the code (absolute paths). */
@@ -26,26 +45,38 @@ export interface CheckoutCommitOptions {
 }
 
 function gitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [name, value] of Object.entries(process.env)) {
-    if (!name.startsWith("GIT_")) env[name] = value;
+  const env: NodeJS.ProcessEnv = { GIT_OPTIONAL_LOCKS: "0" };
+  for (const name of ["PATH", "HOME", "LANG"]) {
+    if (process.env[name] !== undefined) env[name] = process.env[name];
   }
-  env.GIT_OPTIONAL_LOCKS = "0";
   return env;
 }
+
+/** Settings that would hide a change, set so that none is hidden. */
+const REPORT_EVERY_CHANGE = [
+  "-c",
+  "status.showUntrackedFiles=normal",
+  "-c",
+  "core.excludesFile=",
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  "diff.ignoreSubmodules=none",
+];
 
 /** The checkout's commit; throws when git or the repository cannot be read. */
 export function checkoutCommit(
   cwd: string = API_ROOT,
-  { exclude = DEFAULT_RECORDING_DIRS }: CheckoutCommitOptions = {},
+  { exclude = recordingDirs() }: CheckoutCommitOptions = {},
 ): string {
   const env = gitEnv();
   const git = (...args: string[]) =>
-    execFileSync("git", ["--no-optional-locks", ...args], {
+    execFileSync("git", ["--no-optional-locks", ...REPORT_EVERY_CHANGE, ...args], {
       cwd,
       env,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      timeout: GIT_TIMEOUT_MS,
     }).trim();
   const head = git("rev-parse", "--short=12", "HEAD");
   const top = git("rev-parse", "--show-toplevel");
@@ -53,7 +84,15 @@ export function checkoutCommit(
     .map((dir) => relative(top, dir))
     .filter((path) => path !== "" && !path.startsWith("..") && !isAbsolute(path))
     .map((path) => `:(top,exclude)${path.split("\\").join("/")}`);
-  const status = git("status", "--porcelain", "--", ":(top)", ...excluded);
+  const status = git(
+    "status",
+    "--porcelain",
+    "--untracked-files=normal",
+    "--ignore-submodules=none",
+    "--",
+    ":(top)",
+    ...excluded,
+  );
   return status === "" ? head : `${head}-dirty`;
 }
 
@@ -72,8 +111,9 @@ export function checkoutCommitOrNull(
 let running: { value: string | null } | null = null;
 
 /**
- * The commit of the code this process runs, read once (when the analysis routes are loaded, at
- * server start) and stored with each run the server starts.
+ * The commit of the code this process runs, read once: when the analysis routes are loaded (at
+ * server start), or at the first recording of a process without them. Stored with each run the
+ * server starts, and recorded with each cassette.
  */
 export function runningCommit(): string | null {
   running ??= { value: checkoutCommitOrNull() };

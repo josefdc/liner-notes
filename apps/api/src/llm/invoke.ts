@@ -53,7 +53,7 @@ import { assertAzureStrict, LLM_SCHEMAS, toJsonSchema } from "@liner-notes/contr
 import type { BaseMessage } from "@langchain/core/messages";
 import type OpenAI from "openai";
 import type { z } from "zod";
-import { checkoutCommitOrNull, DEFAULT_RECORDING_DIRS } from "../config/checkoutCommit.js";
+import { runningCommit } from "../config/checkoutCommit.js";
 import {
   LLM_PURPOSES,
   type LlmPurpose,
@@ -163,8 +163,8 @@ export interface LlmDependencies {
   /** Where credential values are looked up for scrubbing (default process.env). */
   env?: NodeJS.ProcessEnv;
   /**
-   * The commit recorded with each cassette (LLM_CASSETTE=record); default: the checkout's, read
-   * once when the layer is created. Null when it cannot be read.
+   * The commit recorded with each cassette (LLM_CASSETTE=record); default: the process's
+   * (runningCommit). Null when it cannot be read.
    */
   commit?: () => string | null;
 }
@@ -689,19 +689,11 @@ export function createLlm(deps: LlmDependencies): Llm {
     now,
   });
   const semaphore = new Semaphore(settings.concurrency);
-  // Read once, when the layer is created in record mode (the code the process started with):
-  // every cassette of a session names the same commit. Cassettes themselves are not code.
-  const sessionCommit =
-    settings.cassette === "record"
-      ? (
-          deps.commit ??
-          (() =>
-            checkoutCommitOrNull(undefined, {
-              exclude: [...DEFAULT_RECORDING_DIRS, cassetteDir],
-            }))
-        )()
-      : null;
-  const recordingCommit = () => sessionCommit;
+  // The process's commit (runningCommit: read once per process, at server start when the
+  // analysis routes are loaded), the same one stored with each run; recordings, cassettes
+  // included, are not counted as changes to the code.
+  const recordedCommit = settings.cassette === "record" ? (deps.commit ?? runningCommit)() : null;
+  const recordingCommit = () => recordedCommit;
   const runCalls = new Map<string, number>();
   const secrets = knownSecrets(deps.env ?? process.env, [
     settings.azureApiKey,

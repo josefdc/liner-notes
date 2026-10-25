@@ -14,6 +14,7 @@ import {
   appendRunEvent,
   deleteRunEvents,
   getRun,
+  clearRunCommitUnless,
   nextEventStream,
   type RunStatus,
   runExists,
@@ -152,11 +153,17 @@ function startAnalysis(query: string): string {
   return threadId;
 }
 
-/** Reopens the thread's run (or records one, for a thread paused before runs were recorded). */
+/**
+ * Reopens the thread's run (or records one, for a thread paused before runs were recorded). The
+ * rest of the run goes on with this server's code: a commit stored by a server at another commit
+ * is cleared, and a run recorded here only now has none (its start ran on code unknown here).
+ */
 function reopenRun(threadId: string, query: string): void {
   recordRun("reopen a run", (db) => {
-    if (!updateRun(db, threadId, { status: "running" })) {
-      startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT });
+    if (updateRun(db, threadId, { status: "running" })) {
+      clearRunCommitUnless(db, threadId, SERVER_COMMIT);
+    } else {
+      startRun(db, { runId: threadId, threadId, query, commit: null });
     }
   });
 }

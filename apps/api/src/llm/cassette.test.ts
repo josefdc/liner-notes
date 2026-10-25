@@ -242,7 +242,7 @@ describe("recording provenance", () => {
       expect(entry.commit).toBeNull();
       expect(Number.isNaN(Date.parse(entry.recordedAt))).toBe(false);
     }
-    // Read once per session.
+    // Read once, when the layer is created.
     expect(commit).toHaveBeenCalledTimes(1);
   });
 });

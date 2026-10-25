@@ -1,31 +1,87 @@
-import { describe, expect, it } from "vitest";
-import { recordCommit } from "./record.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MIGRATIONS, runMigrations } from "../store/migrations.js";
+import { main, recordCommit } from "./record.js";
 
 describe("the commit a record names", () => {
   it("is the one the run ran at, whatever is checked out now", () => {
-    expect(recordCommit({ stored: "aaa111", given: null, checkout: "aaa111" })).toEqual({
-      commit: "aaa111",
+    expect(recordCommit({ stored: "aaa1111", given: null, checkout: "aaa1111" })).toEqual({
+      commit: "aaa1111",
     });
-    const moved = recordCommit({ stored: "aaa111", given: null, checkout: "bbb222-dirty" });
-    expect(moved).toMatchObject({ commit: "aaa111" });
-    expect("warning" in moved && moved.warning).toMatch(/checkout is at bbb222-dirty/);
-    expect(recordCommit({ stored: "aaa111", given: "aaa111", checkout: null })).toEqual({
-      commit: "aaa111",
+    const moved = recordCommit({ stored: "aaa1111", given: null, checkout: "bbb2222-dirty" });
+    expect(moved).toMatchObject({ commit: "aaa1111" });
+    expect("warning" in moved && moved.warning).toMatch(/checkout is at bbb2222-dirty/);
+    expect(recordCommit({ stored: "aaa1111", given: "aaa1111", checkout: null })).toEqual({
+      commit: "aaa1111",
     });
   });
 
   it("refuses a --commit that contradicts the stored one", () => {
-    expect(recordCommit({ stored: "aaa111", given: "bbb222", checkout: "bbb222" })).toMatchObject({
-      refused: expect.stringMatching(/differs from the commit the run ran at \(aaa111\)/),
+    expect(
+      recordCommit({ stored: "aaa1111", given: "bbb2222", checkout: "bbb2222" }),
+    ).toMatchObject({
+      refused: expect.stringMatching(/differs from the commit the run ran at \(aaa1111\)/),
     });
   });
 
   it("takes only an explicit --commit for a run stored without one, never the checkout's", () => {
-    expect(recordCommit({ stored: null, given: null, checkout: "bbb222" })).toMatchObject({
+    expect(recordCommit({ stored: null, given: null, checkout: "bbb2222" })).toMatchObject({
       refused: expect.stringMatching(/has no stored commit.*pass --commit/),
     });
-    expect(recordCommit({ stored: null, given: "ccc333", checkout: "bbb222" })).toEqual({
-      commit: "ccc333",
+    expect(recordCommit({ stored: null, given: "ccc3333", checkout: "bbb2222" })).toEqual({
+      commit: "ccc3333",
     });
+  });
+});
+
+describe("--commit", () => {
+  it("is a commit hash, never a ref or a name", () => {
+    for (const given of ["HEAD", "main", "abc", "ABC1234", "abc1234 ", "abc1234-clean"]) {
+      expect(recordCommit({ stored: null, given, checkout: null }), given).toMatchObject({
+        refused: expect.stringMatching(/is not a commit/),
+      });
+    }
+    for (const given of ["abc1234", "abc1234-dirty", "0123456789abcdef0123456789abcdef01234567"]) {
+      expect(recordCommit({ stored: null, given, checkout: null })).toEqual({ commit: given });
+    }
+  });
+});
+
+describe("replay:record on a database migrated before commits were kept", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "record-old-db-"));
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses with its pass --commit message, not a database error", () => {
+    const path = join(dir, "old.db");
+    const db = new Database(path);
+    runMigrations(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < 7),
+    );
+    db.prepare(
+      "INSERT INTO runs (run_id, thread_id, query, status, created_at) VALUES ('old', 'old', 'q', 'completed', 1)",
+    ).run();
+    db.close();
+    vi.stubEnv("SQLITE_DB_PATH", path);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = main(["--run", "old", "--slug", "old", "--out", dir], {
+      settingsFileValues: () => ({}),
+      checkout: () => "bbbbbbbbbbbb",
+    });
+    expect(code).toBe(1);
+    expect(errors.mock.calls.map(([message]) => String(message)).join("\n")).toMatch(
+      /has no stored commit.*pass --commit/,
+    );
   });
 });

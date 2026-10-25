@@ -18,10 +18,10 @@
 //   track's are refused with live_disabled; POST /api/analyze replays or refuses the same way;
 //   both resume routes are refused; HEAD on the stream answers.
 //
-// Last, it stops the API (scripts/stop-server.mjs: SIGTERM to the server process, then a wait for
-// every process of the tree to exit), requires it to exit 0, every process to report 0 outbound
-// attempts and the server process to write its exit report, and checks
-// the API's log (LOG_FILE): JSON lines, the A1 run's lines carry its run id, and no line holds
+// Last, it stops the API (scripts/stop-server.mjs: SIGTERM to the server process, then a wait
+// until the API's output closes, that is until every process holding it has exited), requires it
+// to exit 0, every process that loaded tests/deny-network.mjs to have written its exit report
+// with 0 outbound attempts and every report line to be readable, and checks the API's log (LOG_FILE): JSON lines, the A1 run's lines carry its run id, and no line holds
 // an IP address, a query string, the typed query or any of the dummy keys. Then
 // `npm run report -w apps/api` over the API's database counts the replays it served, and prints
 // nothing anyone typed.
@@ -31,12 +31,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readReport, runs, stopServer } from "./stop-server.mjs";
+import { readReport, readReportFile, runs, stopServer } from "./stop-server.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PRELOAD = join(ROOT, "tests", "deny-network.mjs");
 const FIXTURES = join(ROOT, "fixtures", "replays");
-// The API's server process, which tsx runs as a child of its own.
+// The script of the API's server process (`npm start` runs it with node, tsx loaded by --import).
 const API_ENTRY = "apps/api/src/index.ts";
 
 const TRACK_ID = "0DiWol3AO6WpXZgp0goxAV";
@@ -44,6 +44,9 @@ const SHOWCASE_QUERY = "One More Time Daft Punk";
 const TYPED_QUERY = "DAFT punk: one MORE time";
 const START_TIMEOUT_MS = 120_000;
 const STOP_TIMEOUT_MS = 20_000;
+// How long after the SIGTERM the output may stay open (held by a process outside the API's group,
+// which the SIGKILL at STOP_TIMEOUT_MS does not reach) before the stop gives up and fails.
+const GIVE_UP_MS = 30_000;
 // Each request, body included: a stream that never ends fails the check instead of hanging CI.
 const REQUEST_TIMEOUT_MS = 30_000;
 const timeout = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
@@ -123,9 +126,20 @@ api.stdout.on("data", (chunk) => {
 api.stderr.on("data", (chunk) => {
   output += chunk;
 });
-const exited = new Promise((resolveExit) => api.on("exit", (code) => resolveExit(code)));
-// Once every process holding the API's output (npm, sh, tsx, the server) has exited.
-const closed = new Promise((resolveClose) => api.on("close", (code) => resolveClose(code)));
+// A failure to start npm at all ends both waits below, with code null.
+let spawnError;
+api.once("error", (error) => {
+  spawnError = error;
+});
+const exited = new Promise((resolveExit) => {
+  api.on("exit", (code) => resolveExit(code));
+  api.once("error", () => resolveExit(null));
+});
+// Once every process holding the API's output (npm, sh, the server) has exited.
+const closed = new Promise((resolveClose) => {
+  api.on("close", (code) => resolveClose(code));
+  api.once("error", () => resolveClose(null));
+});
 
 const port = await new Promise((resolvePort, reject) => {
   const timer = setTimeout(() => reject(new Error("the API did not start")), START_TIMEOUT_MS);
@@ -140,7 +154,13 @@ const port = await new Promise((resolvePort, reject) => {
   exited.then((code) => {
     clearInterval(poll);
     clearTimeout(timer);
-    reject(new Error(`the API exited with ${code} before listening`));
+    reject(
+      new Error(
+        spawnError
+          ? `npm could not be started (${spawnError.message})`
+          : `the API exited with ${code} before listening`,
+      ),
+    );
   });
 }).catch((error) => {
   console.error(output);
@@ -350,9 +370,19 @@ check(
   "the API shut down and exited 0",
   `exit ${stopped.code}, SIGTERM to ${stopped.signalled > 0 ? "the server process" : "the group"}`,
 );
-// Every process of the tree has exited: the report is complete. A process writes a line when it
-// starts, at each blocked attempt and when it exits: keep its highest count.
-const reportLines = readReport(report);
+check(
+  !stopped.held,
+  "the API's output closed after the stop",
+  stopped.held ? "a process outside the API's process group still holds it" : "",
+);
+// The API's output has closed: every process that held it has exited. A process writes a line
+// when it starts, at each blocked attempt and when it exits: keep its highest count.
+const { lines: reportLines, unreadable } = readReportFile(report);
+check(
+  unreadable.length === 0,
+  "every line of the deny-network report is readable",
+  unreadable.length > 0 ? `${unreadable.length} not: ${unreadable[0].slice(0, 80)}` : "",
+);
 const byProcess = new Map();
 for (const line of reportLines) {
   if ((byProcess.get(line.pid)?.attempts ?? -1) < line.attempts) byProcess.set(line.pid, line);
@@ -368,6 +398,14 @@ for (const line of processes) {
 check(
   reportLines.some((line) => runs(line, API_ENTRY) && line.event === "exit"),
   "the API process reported its outbound attempts at exit",
+);
+// A process that started but wrote no exit report was killed, or is still running (one that left
+// the API's process group and its output, say): its attempts so far are known, later ones not.
+const unreported = processes.filter((line) => !exitedPids.has(line.pid));
+check(
+  unreported.length === 0,
+  "every process covered by the network guard reported at exit",
+  unreported.map((line) => `pid ${line.pid}`).join(", "),
 );
 check(
   processes.every((line) => line.attempts === 0),
@@ -471,10 +509,22 @@ console.log("\nreplay e2e: all checks passed");
 
 // --- stopping ---------------------------------------------------------------------------------
 
-/** Stops the API: SIGTERM to its server process once known, and a wait for the whole tree. */
+/** Stops the API: SIGTERM to its server process once known, and a wait until its output closes. */
 async function stop() {
   const server = readReport(report).find((line) => runs(line, API_ENTRY) && line.event === "start");
-  return stopServer({ group: api.pid, pid: server?.pid, closed, timeoutMs: STOP_TIMEOUT_MS });
+  const stopped = await stopServer({
+    group: api.pid,
+    pid: server?.pid,
+    closed,
+    timeoutMs: STOP_TIMEOUT_MS,
+    giveUpMs: GIVE_UP_MS,
+  });
+  if (stopped.held) {
+    // Stop reading, so this script can exit.
+    api.stdout.destroy();
+    api.stderr.destroy();
+  }
+  return stopped;
 }
 
 async function stopAndExit(code) {

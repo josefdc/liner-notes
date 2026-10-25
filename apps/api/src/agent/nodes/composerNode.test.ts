@@ -813,42 +813,47 @@ describe("composerNode", () => {
       expect(JSON.stringify(store.put.mock.calls[0][2])).not.toContain("dzcdn.net");
     });
 
-    it("sends the preview URLs with this run's result but stores none, so a cache hit shows none", async () => {
-      const trackPreview = "https://p.scdn.co/mp3-preview/track";
-      const nodePreview = "https://p.scdn.co/mp3-preview/node";
-      enrich.nodePreview = nodePreview;
-      const runtime = testRuntime(succeeding());
-      const writer = vi.fn();
+    it.each([
+      ["Spotify's", "https://p.scdn.co/mp3-preview/node"],
+      ["Deezer's", "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y"],
+    ])(
+      "sends the preview URLs with this run's result but stores none, so a cache hit shows none (node clip %s)",
+      async (_label, nodePreview) => {
+        const trackPreview = "https://p.scdn.co/mp3-preview/track";
+        enrich.nodePreview = nodePreview;
+        const runtime = testRuntime(succeeding());
+        const writer = vi.fn();
 
-      const state = { ...stateWith(measured), previewUrl: trackPreview } as SonicAgentStateType;
-      await createComposerNode(runtime)(state, {
-        writer,
-        configurable: { thread_id: "run-1" },
-      } as never);
+        const state = { ...stateWith(measured), previewUrl: trackPreview } as SonicAgentStateType;
+        await createComposerNode(runtime)(state, {
+          writer,
+          configurable: { thread_id: "run-1" },
+        } as never);
 
-      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
-      expect(complete.data.previewUrl).toBe(trackPreview);
-      expect(complete.data.genealogy.nodes[0].previewUrl).toBe(nodePreview);
-      expect(store.put).toHaveBeenCalledTimes(1);
-      const [namespace, key, value] = store.put.mock.calls[0];
-      expect(JSON.stringify(value)).not.toContain("mp3-preview");
-      expect(value.trackData).not.toHaveProperty("previewUrl");
+        const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+        expect(complete.data.previewUrl).toBe(trackPreview);
+        expect(complete.data.genealogy.nodes[0].previewUrl).toBe(nodePreview);
+        expect(store.put).toHaveBeenCalledTimes(1);
+        const [namespace, key, value] = store.put.mock.calls[0];
+        expect(JSON.stringify(value)).not.toMatch(/mp3-preview|dzcdn|hdnea/);
+        expect(value.trackData).not.toHaveProperty("previewUrl");
 
-      // The next search that finds the song is served from the store.
-      store.get.mockImplementation(async (ns: string[], k: string) =>
-        JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
-      );
-      const served = vi.fn();
-      const out = await scoutNode(
-        { songQuery: "Ice Ice Baby Vanilla Ice", hitlConfig: { maxCandidates: 5 } } as never,
-        { writer: served } as never,
-        runtime,
-      );
-      expect(out.trackData).toBeTruthy();
-      expect(out.trackData).not.toHaveProperty("previewUrl");
-      const hit = served.mock.calls.find(([event]) => event.type === "complete")?.[0];
-      expect(JSON.stringify(hit.data)).not.toContain("mp3-preview");
-    });
+        // The next search that finds the song is served from the store.
+        store.get.mockImplementation(async (ns: string[], k: string) =>
+          JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
+        );
+        const served = vi.fn();
+        const out = await scoutNode(
+          { songQuery: "Ice Ice Baby Vanilla Ice", hitlConfig: { maxCandidates: 5 } } as never,
+          { writer: served } as never,
+          runtime,
+        );
+        expect(out.trackData).toBeTruthy();
+        expect(out.trackData).not.toHaveProperty("previewUrl");
+        const hit = served.mock.calls.find(([event]) => event.type === "complete")?.[0];
+        expect(JSON.stringify(hit.data)).not.toMatch(/mp3-preview|dzcdn|hdnea/);
+      },
+    );
   });
 
   it("emits the LLM-* status codes", async () => {

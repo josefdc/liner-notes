@@ -11,10 +11,21 @@
  *
  * The search goes through the Spotify source (sources/spotify.ts): every request has a timeout
  * and fails with a typed error, and a failed search leaves the node without artwork. A node gets
- * the cover of the track found; its Spotify id and its preview only when that track is strictly
+ * the cover of the track found; its Spotify id and a preview only when that track is strictly
  * the one the model named (see `strictlyMatches`), so a click on a node whose search found a
  * cover, a remix or another song searches the node's text instead. The search's answer is cached
  * for a week by the node's label; a preview is never cached.
+ *
+ * A strictly matched node's preview is Spotify's own clip of the track found, when it has one
+ * the player may load (sources/audio.ts isAllowedPreviewUrl); else the Deezer entry for that
+ * track's ISRC (or the readable alternative Deezer names for it), checked as the analysed
+ * track's is (sources/deezer.ts deezerPreviewByIsrc: the same lead artist, title and version,
+ * and a duration within 3 s). There is no Deezer search for a node, so a node gets no preview of
+ * another recording. That is at most one Deezer lookup per strictly matched node without a
+ * Spotify clip, at most DEEZER_CONCURRENCY at once, none once Deezer has failed during the
+ * enrichment (its quota, the network), and none for a node served from the cache (it keeps no
+ * ISRC). Preview links are signed and expire: they are returned for this run's player only,
+ * never cached or logged.
  *
  * Features:
  * - Parallel batch search for performance
@@ -22,6 +33,8 @@
  * - Graceful fallback when songs aren't found
  */
 
+import { isAllowedPreviewUrl } from "../sources/audio.js";
+import { deezerPreviewByIsrc, type PreviewRequest } from "../sources/deezer.js";
 import { describeError } from "../sources/http.js";
 import { searchTracks, type SpotifyTrackSummary } from "../sources/spotify.js";
 import { getCache, type SpotifySearchResult } from "../store/cache.js";
@@ -74,11 +87,74 @@ const NO_ARTWORK: SpotifySearchResult = {
 
 /**
  * What a node gets from Spotify: the artwork of the track found, and only when that track is
- * strictly the one the model named its Spotify id (a click analyses that id) and its preview.
+ * strictly the one the model named its Spotify id (a click analyses that id) and its preview:
+ * Spotify's own clip, or else (`byIsrc`) the track to look up on Deezer by its ISRC.
  */
 interface NodeLookup {
   artwork: SpotifySearchResult;
   previewUrl: string | null;
+  byIsrc: PreviewRequest | null;
+}
+
+/** At most this many Deezer lookups of one enrichment run at once. */
+const DEEZER_CONCURRENCY = 2;
+
+/** The strictly matched track, as deezerPreviewByIsrc checks a Deezer entry against it. */
+function isrcRequest(found: SpotifyTrackSummary): PreviewRequest | null {
+  if (!found.isrc) return null;
+  return {
+    title: found.title,
+    artist: found.artist,
+    ...(found.artistNames.length > 0 ? { artistNames: found.artistNames } : {}),
+    ...(found.album ? { album: found.album } : {}),
+    isrc: found.isrc,
+    durationMs: found.durationMs || null,
+  };
+}
+
+/** Runs at most `limit` tasks at once; the others wait their turn, in order. */
+function limiter(limit: number) {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active < limit) active++;
+    else await new Promise<void>((resolve) => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      // A finished task hands its slot to the next one waiting.
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+
+/**
+ * Deezer previews by ISRC for one enrichment: at most DEEZER_CONCURRENCY lookups at once, and
+ * none after a lookup failed (its quota, the network: the next would most likely fail the same
+ * way). A lookup gives the preview only of an entry deezerPreviewByIsrc accepts and the player
+ * may load; anything else is no preview. A cancelled run rejects.
+ */
+function deezerPreviews(signal: AbortSignal | undefined) {
+  const run = limiter(DEEZER_CONCURRENCY);
+  let failed = false;
+  return (request: PreviewRequest): Promise<string | null> =>
+    run(async () => {
+      signal?.throwIfAborted();
+      if (failed) return null;
+      try {
+        const result = await deezerPreviewByIsrc(request, signal);
+        return result.found && isAllowedPreviewUrl(result.previewUrl) ? result.previewUrl : null;
+      } catch (error) {
+        if (signal?.aborted || isAbortError(error)) throw error;
+        failed = true;
+        console.warn(
+          `⚠️ [Enricher] Deezer lookup for "${request.title}" failed: ${describeError(error)}`,
+        );
+        return null;
+      }
+    });
 }
 
 /** The artists a credit names: "Queen & David Bowie", "Daft Punk feat. Pharrell Williams". */
@@ -148,17 +224,19 @@ const withoutId = (artwork: SpotifySearchResult): SpotifySearchResult => ({
 });
 
 /**
- * Artwork for a node, from the cache or a Spotify search, with the Spotify id and the preview
- * of the track found only when that track strictly matches the node: a loose match still gives
- * the cover, but a click on the node then searches its text, and nothing plays. A cached entry
- * gives no preview (none is stored). A failed search gives nothing and caches nothing, so a
- * later run tries again; a cancelled run rejects.
+ * Artwork for a node, from the cache or a Spotify search, with the Spotify id and a preview of
+ * the track found only when that track strictly matches the node: a loose match still gives the
+ * cover, but a click on the node then searches its text, and nothing plays. The preview is
+ * Spotify's own clip when the player may load it, else the track is to be looked up on Deezer
+ * by its ISRC (`byIsrc`, when it has one). A cached entry gives no preview and no lookup (no
+ * preview and no ISRC is stored). A failed search gives nothing and caches nothing, so a later
+ * run tries again; a cancelled run rejects.
  */
 async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<NodeLookup> {
   const cached = getCachedArtwork(node.label);
   if (cached) {
     const strict = strictlyMatches(node, cachedTrack(cached));
-    return { artwork: strict ? cached : withoutId(cached), previewUrl: null };
+    return { artwork: strict ? cached : withoutId(cached), previewUrl: null, byIsrc: null };
   }
 
   let found: SpotifyTrackSummary | undefined;
@@ -167,7 +245,7 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
     console.warn(`⚠️ [Enricher] Spotify search for "${node.label}" failed: ${describeError(error)}`);
-    return { artwork: NO_ARTWORK, previewUrl: null };
+    return { artwork: NO_ARTWORK, previewUrl: null, byIsrc: null };
   }
 
   const artwork: SpotifySearchResult = found
@@ -182,9 +260,14 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
     : NO_ARTWORK;
   signal?.throwIfAborted();
   setCachedArtwork(node.label, artwork);
-  if (!found) return { artwork: NO_ARTWORK, previewUrl: null };
-  if (!strictlyMatches(node, found)) return { artwork: withoutId(artwork), previewUrl: null };
-  return { artwork, previewUrl: found.previewUrl || null };
+  if (!found) return { artwork: NO_ARTWORK, previewUrl: null, byIsrc: null };
+  if (!strictlyMatches(node, found)) {
+    return { artwork: withoutId(artwork), previewUrl: null, byIsrc: null };
+  }
+  if (found.previewUrl && isAllowedPreviewUrl(found.previewUrl)) {
+    return { artwork, previewUrl: found.previewUrl, byIsrc: null };
+  }
+  return { artwork, previewUrl: null, byIsrc: isrcRequest(found) };
 }
 
 // =============================================================================
@@ -224,6 +307,7 @@ export async function enrichGenealogyWithArtwork(
   console.log(`🎨 [Enricher] Enriching ${genealogy.nodes.length} genealogy nodes with artwork...`);
 
   try {
+    const deezerPreview = deezerPreviews(signal);
     // Process nodes in parallel (with concurrency limit to avoid rate limits)
     const BATCH_SIZE = 5;
     const enrichedNodes: GenealogyNode[] = [];
@@ -256,15 +340,16 @@ export async function enrichGenealogyWithArtwork(
           }
 
           // Search Spotify for this song; the model's title and artist decide the preview
-          const { artwork, previewUrl } = await lookUpNode(
+          const { artwork, previewUrl, byIsrc } = await lookUpNode(
             { ...safeNode, trackTitle: node.trackTitle, trackArtist: node.trackArtist },
             signal,
           );
+          const preview = previewUrl ?? (byIsrc ? await deezerPreview(byIsrc) : null);
 
           return {
             ...safeNode,
             img: artwork.coverUrl || undefined,
-            previewUrl: previewUrl || undefined,
+            previewUrl: preview || undefined,
             spotifyId: artwork.spotifyId || undefined,
             trackTitle: artwork.trackTitle || undefined,
             trackArtist: artwork.trackArtist || undefined,

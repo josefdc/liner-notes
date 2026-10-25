@@ -101,7 +101,7 @@ import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { evidenceScope } from "../../sources/records.js";
 import { json, stubFetch } from "../../sources/testing/fetchStub.js";
 import shsWork from "../../sources/fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
-import { primaryRoute } from "../../sources/testing/iceIceBaby.js";
+import { runRoute } from "../../sources/testing/iceIceBaby.js";
 import { TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { runMigrations } from "../../store/migrations.js";
 import { startRun, storeRunResult } from "../../store/runs.js";
@@ -133,8 +133,8 @@ beforeEach(() => {
   for (const name of ["DISCOGS_TOKEN", "GENIUS_ACCESS_TOKEN", "SHS_API_KEY", "SOURCE_CASSETTE"]) {
     delete process.env[name];
   }
-  // Only the primary sources' requests are answered; any other request fails the source.
-  net = stubFetch(primaryRoute);
+  // Only the run's requests about the track are answered; any other request fails the source.
+  net = stubFetch(runRoute);
   cache.getResearch.mockReset().mockReturnValue(null);
   cache.putResearch.mockClear();
   for (const method of ["log", "warn", "error"] as const) {
@@ -237,7 +237,11 @@ describe("the historian's evidence pack", () => {
       { writer: (event: never) => events.push(event) } as never,
       testRuntime(stubLlm(answer), AT),
     );
-    expect(out.researchData).toEqual({ samples: ["cached"], productionTrivia: [] });
+    // The cached research, with this run's MusicBrainz sample relations (not from the cache).
+    expect(out.researchData).toEqual({
+      samples: ["cached", expect.stringMatching(/^\[MusicBrainz Samples\] .*"Under Pressure"/)],
+      productionTrivia: [],
+    });
     expect(new Set(out.evidence?.map((e) => e.source))).toEqual(
       new Set(["musicbrainz", "secondhandsongs"]),
     );
@@ -302,7 +306,7 @@ describe("a run whose primary sources fail", () => {
 
   it("does not take an HTML page for the work for an answer: lost, nothing kept", async () => {
     net = stubFetch((call) =>
-      call.url.startsWith(WORK) ? html("<html>challenge</html>") : primaryRoute(call),
+      call.url.startsWith(WORK) ? html("<html>challenge</html>") : runRoute(call),
     );
     const { trackData, stored } = await runGraph();
 
@@ -322,7 +326,7 @@ describe("a run whose primary sources fail", () => {
         ? new Response('{"title": "Ice Ice Baby", "versions": [', {
             headers: { "content-type": "application/json" },
           })
-        : primaryRoute(call),
+        : runRoute(call),
     );
     const { trackData, stored } = await runGraph();
 
@@ -335,7 +339,7 @@ describe("a run whose primary sources fail", () => {
   it("keeps the result on a research-cache hit past a lasting primary-source error", async () => {
     cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
     net = stubFetch((call) =>
-      call.url === SHS_WORK ? json({ unexpected: true }) : primaryRoute(call),
+      call.url === SHS_WORK ? json({ unexpected: true }) : runRoute(call),
     );
     const { stored } = await runGraph();
     expect(stored).toBe(1);
@@ -343,7 +347,7 @@ describe("a run whose primary sources fail", () => {
 
   it("does not keep the result when SecondHandSongs answers with an HTML page", async () => {
     net = stubFetch((call) =>
-      call.url === SHS_WORK ? html("<html>are you a robot?</html>") : primaryRoute(call),
+      call.url === SHS_WORK ? html("<html>are you a robot?</html>") : runRoute(call),
     );
     const { trackData, stored } = await runGraph();
 
@@ -359,7 +363,7 @@ describe("a run whose primary sources fail", () => {
     net = stubFetch((call) =>
       call.url.startsWith("https://musicbrainz.org/")
         ? new Response("bad gateway", { status: 502 })
-        : primaryRoute(call),
+        : runRoute(call),
     );
     const { events } = await runGraph();
 
@@ -373,7 +377,7 @@ describe("a run whose primary sources fail", () => {
   it("does not keep the result on a research-cache hit when a primary source fails", async () => {
     cache.getResearch.mockReturnValue({ samples: ["cached"], productionTrivia: [] });
     net = stubFetch((call) =>
-      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : primaryRoute(call),
+      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : runRoute(call),
     );
     const { trackData, stored } = await runGraph();
 
@@ -388,13 +392,13 @@ describe("a run whose primary sources fail", () => {
   it("serves a result stored past a lasting error with that error reported again", async () => {
     const store = new InMemoryStore();
     net = stubFetch((call) =>
-      call.url === SHS_WORK ? json({ unexpected: true }) : primaryRoute(call),
+      call.url === SHS_WORK ? json({ unexpected: true }) : runRoute(call),
     );
     const first = await runGraph("run-first", store);
     expect(first.stored).toBe(1);
 
     // SecondHandSongs answers now, but the stored result is served: it says what it misses.
-    net = stubFetch(primaryRoute);
+    net = stubFetch(runRoute);
     const served = await runGraph("run-served", store);
 
     expect(served.llm.calls).toEqual([]);
@@ -413,7 +417,7 @@ describe("a run whose primary sources fail", () => {
 
   it("reports the work's covers as missing and keeps neither the result nor the research", async () => {
     net = stubFetch((call) =>
-      call.url.startsWith(WORK) ? new Response("busy", { status: 503 }) : primaryRoute(call),
+      call.url.startsWith(WORK) ? new Response("busy", { status: 503 }) : runRoute(call),
     );
     const { trackData, events, stored } = await runGraph();
 
@@ -434,7 +438,7 @@ describe("a run whose primary sources fail", () => {
 
   it("keeps the result when a primary source answers in a shape its reader does not know", async () => {
     net = stubFetch((call) =>
-      call.url === SHS_WORK ? json({ unexpected: true }) : primaryRoute(call),
+      call.url === SHS_WORK ? json({ unexpected: true }) : runRoute(call),
     );
     const { trackData, stored } = await runGraph();
 
@@ -451,7 +455,7 @@ describe("a run whose primary sources fail", () => {
     // A performer whose name is not text: the reader fails on it with a TypeError.
     const broken = structuredClone(shsWork) as { versions: Array<{ performer?: unknown }> };
     broken.versions[0].performer = { name: { first: "Vanilla" } };
-    net = stubFetch((call) => (call.url === SHS_WORK ? json(broken) : primaryRoute(call)));
+    net = stubFetch((call) => (call.url === SHS_WORK ? json(broken) : runRoute(call)));
     const { trackData, stored, events } = await runGraph();
 
     const error = TrackAnalysis.parse(trackData).run?.sourceErrors?.find(
@@ -468,7 +472,7 @@ describe("a run whose primary sources fail", () => {
 
   it("does not keep the result when a primary source could not be read, but caches the research", async () => {
     net = stubFetch((call) =>
-      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : primaryRoute(call),
+      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : runRoute(call),
     );
     const { trackData, stored } = await runGraph();
 

@@ -1,10 +1,15 @@
 /**
  * Historian Node — Deep Dive Research
  * Runs in parallel with Engineer
- * Uses the ResearcherSubgraph for iterative research. It has no graph retry policy: a retry
- * would repeat the planner's model calls. When the research stops early on a provider or
- * source failure, what it found, its model calls and its source errors are kept and the status
- * says so; a bug fails the run.
+ * Runs the run's research plan (research/plan.ts): the primary sources from the track's ISRC,
+ * each Last.fm method once, then the ResearcherSubgraph: its fixed steps together (the
+ * sample-history search, and with an identified recording the production-history search and the
+ * credited artist's ListenBrainz similar artists and MusicBrainz collaborators, by MBID), then at
+ * most two follow-ups chosen by the planner. The MusicBrainz recording the ISRC identifies is read once:
+ * its credited artist is the researcher's artist (by MBID) and the recording goes to the
+ * composer (`isrcRecording`). It has no graph retry policy: a retry would repeat the planner's
+ * model calls. When the research stops early on a provider or source failure, what it found, its
+ * model calls and its source errors are kept and the status says so; a bug fails the run.
  *
  * It writes the run's evidence pack (research/runEvidence.ts): the primary sources' records,
  * read from the track's ISRC (MusicBrainz, Discogs, SecondHandSongs, Genius), and the web
@@ -27,6 +32,8 @@ import {
   getLastfmSimilarTracks,
 } from "../../sources/lastfm.js";
 import {
+  type ArtistRef,
+  artistFromCredit,
   getCachedResearcherSubgraph,
   mergeTags,
   type NoneLabel,
@@ -41,12 +48,14 @@ import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
+import { fixedSteps, researcherSteps } from "../research/plan.js";
 import {
   lastingAmong,
   runEvidence,
   sendStatus,
   startPrimarySources,
 } from "../research/runEvidence.js";
+import type { IdentifiedRecording } from "../../sources/identity.js";
 import {
   emptyResearch,
   mergeResearch,
@@ -106,12 +115,18 @@ export async function historianNode(
     // The cached research holds no evidence: the primary sources are read for this run.
     const reading = isrc ? readingPrimary() : null;
     if (reading) sendStatus(config, runtime, "RESEARCH-FOUND", reading);
-    const pack = await runEvidence(primary, [], config, runtime);
+    const pack = await runEvidence(primary.run, [], config, runtime);
     const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
     const lasting = lastingAmong(pack.lasting, notConfigured);
     return {
-      researchData: cachedResearch,
+      // The recording's MusicBrainz sample relations of this run join the cached research (for
+      // the result built without the model); the cache holds no primary record.
+      researchData: {
+        ...cachedResearch,
+        samples: [...(cachedResearch.samples ?? []), ...pack.samples],
+      },
       evidence: pack.evidence,
+      isrcRecording: await primary.recording,
       ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
       ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),
       statusMessages: [
@@ -139,24 +154,45 @@ export async function historianNode(
   const options = { signal: config.signal };
   console.log("📚 [Historian] Deep dive research for:", title, "by", artist);
 
-  // Pre-fetch Last.fm tags and similar tracks in parallel (outside the researcher loop)
-  // This ensures genre tags are always available regardless of which actions the LLM picks.
-  // Each result is read by its type: data, "nothing found" (recorded, never a fact) or the
-  // source's error (a source error, and the prompts say Last.fm was unavailable).
+  // The plan's Last.fm step, each method at most once per run (outside the researcher subgraph,
+  // which does not ask them again): the track's tags and similar tracks while the ISRC identifies
+  // the recording, and the artist's tags, by the credited artist's MusicBrainz id once it is
+  // known (a request Last.fm cannot answer by that id may be made once more by name, kept only
+  // when the name is that artist's alone). Each result is read by its type: data, "nothing
+  // found" (recorded, never a fact) or the source's error (a source error, and the prompts say
+  // Last.fm was unavailable).
   const prefetch = new StepReader();
   console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
   config.signal?.throwIfAborted();
-  const [trackTagsResult, artistTagsResult, similarTracksResult] = await Promise.allSettled([
-    getLastfmTrackTags.invoke({ title: query.title, artist: query.primary }, options),
-    getLastfmArtistTags.invoke({ artist: query.primary }, options),
-    getLastfmSimilarTracks.invoke({ title: query.title, artist: query.primary }, options),
-  ]);
+  const identified = primary.recording.then((found) => ({
+    recording: found,
+    artist: found ? artistOf(found, query.primary) : null,
+  }));
+  const [[trackTagsResult, artistTagsResult, similarTracksResult], { recording, artist: own }] =
+    await Promise.all([
+      Promise.allSettled([
+        getLastfmTrackTags.invoke({ title: query.title, artist: query.primary }, options),
+        identified.then(({ artist: credited }) =>
+          getLastfmArtistTags.invoke(
+            { artist: query.primary, ...(credited ? { mbid: credited.mbid } : {}) },
+            options,
+          ),
+        ),
+        getLastfmSimilarTracks.invoke({ title: query.title, artist: query.primary }, options),
+      ]),
+      identified,
+    ]);
   config.signal?.throwIfAborted();
+  /** The requests whose source could not be read: their step says so, and is not asked again. */
+  const unread = new Set<NoneLabel>();
   const settled = (result: PromiseSettledResult<string>, label: NoneLabel) => {
-    if (result.status === "fulfilled") return prefetch.read("lastfm", result.value, label);
-    if (isAbortError(result.reason)) throw result.reason;
-    prefetch.errors.push(errorRecord("lastfm", result.reason));
-    return null;
+    const before = prefetch.errors.length;
+    let data: Record<string, unknown> | null = null;
+    if (result.status === "fulfilled") data = prefetch.read("lastfm", result.value, label);
+    else if (isAbortError(result.reason)) throw result.reason;
+    else prefetch.errors.push(errorRecord("lastfm", result.reason));
+    if (prefetch.errors.length > before) unread.add(label);
+    return data;
   };
   const trackTags = settled(trackTagsResult, "trackTags");
   const artistTags = settled(artistTagsResult, "artistTags");
@@ -174,7 +210,15 @@ export async function historianNode(
       `(${prefetch.errors.length} source errors)`,
   );
   const prefetchErrors = uniqueErrors(prefetch.errors);
-  const prefetchStatus = unreadableStatus(prefetchErrors, prefetch.rejected);
+  const prefetchStatus = [
+    ...unreadableStatus(prefetchErrors, prefetch.rejected),
+    // The artist's tags were not asked by name: Last.fm does not know the artist's MBID and the
+    // name may be another artist's.
+    ...prefetch.notAsked
+      .filter(() => prefetch.reasons.includes("lastfm_unknown_mbid"))
+      .filter((line) => line.startsWith("Last.fm artist tags"))
+      .map((line) => `⚠️ ${line}`),
+  ];
   for (const message of prefetchStatus) {
     writer?.({
       type: "status",
@@ -211,6 +255,17 @@ export async function historianNode(
         runId: runIdFor(state, config, runtime),
         // The planner reads which sources could not be read.
         sourceErrors: prefetchErrors,
+        // The steps already read are not offered again; the artist the identified recording
+        // credits is the artist of every artist-level step.
+        ranSteps: fixedSteps({
+          recordingIdentified: recording !== null,
+          lastfmUnread: {
+            tags: unread.has("trackTags") || unread.has("artistTags"),
+            similarTracks: unread.has("similarTracks"),
+          },
+        }),
+        plannedSteps: researcherSteps({ recordingIdentified: own !== null }),
+        ...(own ? { artistResolution: { status: "identified", verified: true, ...own } } : {}),
       },
       {
         streamMode: ["values", "custom"],
@@ -252,7 +307,7 @@ export async function historianNode(
   ]);
 
   // The run's evidence: the primary sources' records, then the web search's results.
-  const pack = await runEvidence(primary, finalState.webFindings ?? [], config, runtime);
+  const pack = await runEvidence(primary.run, finalState.webFindings ?? [], config, runtime);
 
   // Nothing is written for a cancelled run. Research is cached only when it is complete: not
   // when it stopped early, a source could not be read for a passing reason (an outage, a
@@ -282,7 +337,7 @@ export async function historianNode(
 
   const summary = failure
     ? "⚠️ Research stopped early; showing what was found"
-    : `Intelligence extraction complete: ${finalState.researchIteration || 0} layers processed`;
+    : `Intelligence extraction complete: ${finalState.stepsRun ?? 0} layers processed`;
   writer?.({
     type: "status",
     code: failure ? "SYS-WARN" : "RESEARCH-FOUND",
@@ -292,8 +347,11 @@ export async function historianNode(
   });
 
   return {
-    researchData: mergedResearch,
+    // With this run's MusicBrainz sample relations (for the result built without the model);
+    // they are not part of the cached research, which holds no primary record.
+    researchData: mergeResearch(mergedResearch, { samples: pack.samples }),
     evidence: pack.evidence,
+    isrcRecording: recording,
     usage: finalState.usage ?? [],
     // The primary sources' errors are the run's too; they do not block the research cache,
     // which does not hold their records.
@@ -306,6 +364,14 @@ export async function historianNode(
       ...(failure ? [summary] : []),
     ],
   };
+}
+
+/**
+ * The researcher's artist from the recording the ISRC identified: its credited artist (the
+ * track's first artist among the credits, else the first credit), verified by the identification.
+ */
+function artistOf(recording: IdentifiedRecording, primary: string): ArtistRef | null {
+  return artistFromCredit(recording.artists, primary);
 }
 
 /** Research without Last.fm's artist-level data, when `uncertain` says it is not this artist's. */

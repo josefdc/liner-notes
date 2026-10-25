@@ -45,3 +45,32 @@ export const primaryRoute: FetchRoute = (call) => {
   }
   return undefined;
 };
+
+/** The artist the recording credits (Vanilla Ice), as MusicBrainz identifies it. */
+export const ICE_ARTIST = "2d5583be-aafd-41ec-addd-df85913855ef";
+
+/**
+ * A whole run's requests about the track with an ISRC: `primaryRoute`, plus what the research
+ * asks of the credited artist by its MusicBrainz id (its MusicBrainz collaborators, its
+ * ListenBrainz similar artists).
+ */
+export const runRoute: FetchRoute = (call) => {
+  if (call.url.startsWith(`${MB}/artist/${ICE_ARTIST}?`)) {
+    return json({
+      id: ICE_ARTIST,
+      name: "Vanilla Ice",
+      relations: [
+        {
+          type: "supporting musician",
+          artist: { id: "5e1e2d3c-0000-4000-8000-0000000000b2", name: "Earthquake" },
+        },
+      ],
+    });
+  }
+  if (call.url.startsWith("https://labs.api.listenbrainz.org/similar-artists/json?")) {
+    return json([
+      { artist_mbid: "5e1e2d3c-0000-4000-8000-000000000001", name: "MC Hammer", score: 900 },
+    ]);
+  }
+  return primaryRoute(call);
+};

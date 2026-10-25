@@ -86,6 +86,10 @@ class Rules:
     class_level: float
     min_classes: int
     min_strength: dict
+    # The single-source rule (Signals.source_evidence), at the service's own values. It was
+    # added after this calibration and is not varied; off before it and in the runs recorded
+    # without it.
+    one_source: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -156,6 +160,7 @@ def service_rules() -> Rules:
         class_level=est.KEY_PITCH_CLASS_LEVEL,
         min_classes=est.KEY_MIN_PITCH_CLASSES,
         min_strength={n: c.min_key_strength for n, c in classes.items()},
+        one_source=hasattr(est.Signals, "source_evidence"),
     )
 
 
@@ -253,7 +258,16 @@ def evidence(signals) -> dict:
         "movement": _f(signals.chroma_movement),
         "classes": vectors,
         "voice": None,
+        "source": None,
     }
+    source = getattr(signals, "source_evidence", None)
+    if source is not None:
+        record["source"] = {
+            "bins": int(source.bins),
+            "movement": _f(source.movement),
+            "shared": _f(source.shared),
+            "depth": _f(source.depth),
+        }
     if voice is not None:
         record["voice"] = {
             "single": voice.single,
@@ -419,8 +433,30 @@ def derive_tempo(
 ONE_SERIES = "one harmonic series"
 
 
+def one_source(ev: dict) -> bool:
+    """SourceEvidence.single on the recorded evidence (False when it was not recorded)."""
+    _, est = service.load()
+    source = ev.get("source")
+    if not source:
+        return False
+    return (
+        source["bins"] >= est.SOURCE_MIN_BINS
+        and source["movement"] <= est.SOURCE_MAX_MOVEMENT
+        and source["shared"] >= est.SOURCE_MIN_SHARED
+        and source["depth"] >= est.SOURCE_MIN_DEPTH
+    )
+
+
 def evidence_withheld(ev: dict, rules: Rules, name: str) -> str | None:
     """Signals.key_withheld for estimator `name`, on the recorded evidence, under `rules`."""
+    withheld = _evidence_withheld(ev, rules)
+    if withheld is None and rules.one_source and one_source(ev):
+        _, est = service.load()
+        return est.ONE_SOURCE
+    return withheld
+
+
+def _evidence_withheld(ev: dict, rules: Rules) -> str | None:
     _, est = service.load()
     has_beat = ev["periodicity"] >= rules.min_periodicity
     ratio = ev["tonalRatio"] if rules.tonal_source == "mix" else ev["harmonicTonalRatio"]

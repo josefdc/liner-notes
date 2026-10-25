@@ -132,11 +132,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.1.0+librosa"
-    assert main.analyzer_version("essentia") == "2.1.0+essentia"
+    assert main.analyzer_version("librosa") == "2.2.0+librosa"
+    assert main.analyzer_version("essentia") == "2.2.0+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.1.0+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.2.0+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -148,7 +148,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.1.0+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.2.0+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -803,28 +803,16 @@ def test_no_key_for_pitchless_material_at_control_seeds(family):
 
 
 # One pitched source, 30 seeds each (signals.ONE_PITCH_CLASS_SEEDED): a note's overtones, its
-# octaves or a bell's or a drum's partials can spell three pitch classes, and the service keys
-# some of this material, as it did before the calibration (the cowbell, tabla, toms and bells
-# most). Families it never keys must stay at none; for the others the count may not rise
-# above what is measured here (the shipped values give no more keys than before on any of
-# them). An overtone-aware check for one source is the follow-up, not a lower level.
-ONE_PITCH_CLASS_CEILING = {
-    ("one-note-bass", "essentia"): 6,
-    ("one-note-bass", "librosa"): 0,
-    ("octave-riff", "essentia"): 0,
-    ("octave-riff", "librosa"): 0,
-    ("bell", "essentia"): 7,
-    ("bell", "librosa"): 7,
-    ("bell-over-drums", "essentia"): 4,
-    ("bell-over-drums", "librosa"): 4,
-    ("tabla", "essentia"): 11,
-    ("tabla", "librosa"): 10,
-    ("toms", "essentia"): 9,
-    ("toms", "librosa"): 7,
-    ("cowbell", "essentia"): 19,
-    ("cowbell", "librosa"): 9,
-    ("synth-note-over-drums", "essentia"): 0,
-    ("synth-note-over-drums", "librosa"): 0,
+# octaves or a bell's or a drum's partials can spell three pitch classes. The single-source rule
+# (estimators.SourceEvidence) withholds the keys that analyzer 2.1.0 gave the one-note basses,
+# the bells, alone and over drums, and the cowbells. What still gets a key is pinned seed by
+# seed: toms (two or three drums, each with its own envelope) and tabla whose strokes alternate
+# partials are not one source by that rule, and the strength minimum lets these keys through.
+ONE_PITCH_CLASS_KEYED = {
+    ("tabla", "essentia"): {500, 503, 505, 512, 513, 515, 521, 526, 527},
+    ("tabla", "librosa"): {500, 503, 505, 512, 513, 515, 519, 526, 527},
+    ("toms", "essentia"): {502, 507, 509, 514, 515, 517, 521, 522, 526},
+    ("toms", "librosa"): {502, 507, 509, 517, 522, 526, 529},
 }
 
 
@@ -840,7 +828,79 @@ def test_one_pitch_class_material_gets_no_more_keys_than_measured(family):
             if key is not None:
                 keyed[name][seed] = (key.tonic, key.mode, round(key.strength, 2))
     for name in KEY_ESTIMATORS:
-        assert len(keyed[name]) <= ONE_PITCH_CLASS_CEILING[(family, name)], (name, keyed[name])
+        allowed = ONE_PITCH_CLASS_KEYED.get((family, name), set())
+        assert set(keyed[name]) <= allowed, (name, keyed[name])
+
+
+@pytest.mark.parametrize(
+    "family, seed",
+    [("cowbell", 500), ("bell", 509), ("bell-over-drums", 509), ("one-note-bass", 504)],
+)
+def test_one_pitched_source_has_no_key(family, seed):
+    """
+    Material that every other key rule lets through (analyzer 2.1.0 keyed these seeds): its
+    partials hold still and rise and fall together, so the key is withheld as one source. The
+    reason does not judge the input not music: the fingerprint is kept.
+    """
+    signals_ = estimators.Signals(signals.ONE_PITCH_CLASS_SEEDED[family](seed), FIXTURE_SR)
+    evidence = signals_.source_evidence
+    assert evidence.single, evidence
+    withheld = signals_.key_withheld()
+    assert str(withheld) == estimators.ONE_SOURCE
+    assert not withheld.one_source and signals_.not_music() is None
+    for name in KEY_ESTIMATORS:
+        assert estimators.select_estimator(name).key(signals_) is None
+
+
+@pytest.mark.parametrize(
+    "make, why",
+    [(music.ambient_pad, "depth"), (lambda: music.band_mix("C-vamp", False), "shared")],
+    ids=["held-pad", "C-vamp"],
+)
+def test_a_held_chord_or_a_vamp_is_not_one_source(make, why):
+    """
+    A pad held for the whole window does not move either, but it is not struck; in a one-chord
+    vamp the bass and the chords keep their own rhythms. Both keep their key
+    (MUSIC_WITHOUT_A_BEAT).
+    """
+    evidence = estimators.Signals(make(), FIXTURE_SR).source_evidence
+    assert not evidence.single
+    if why == "depth":
+        assert evidence.movement <= estimators.SOURCE_MAX_MOVEMENT
+        assert evidence.depth < estimators.SOURCE_MIN_DEPTH
+    else:
+        assert evidence.shared < estimators.SOURCE_MIN_SHARED
+
+
+def _lines(hz: np.ndarray) -> estimators.Tonality:
+    return estimators.Tonality(1.0, np.ones(12), None, hz, np.ones(hz.size))
+
+
+def test_source_evidence_needs_partials_that_share_one_struck_envelope():
+    """SourceEvidence on lines and STFT magnitudes made up for the test (2048-point STFT)."""
+    sr, hop, frames = FIXTURE_SR, 512, 1300
+    bins = np.arange(10, 90, 10)  # eight lines, one per STFT bin
+    hz = bins * sr / 2048
+    rng = np.random.default_rng(1)
+    strokes = np.exp(-(np.arange(frames) % 11) / 2.0)  # one stroke every 11 frames
+    stft = np.zeros((1025, frames))
+    stft[bins] = strokes * rng.uniform(0.5, 1.0, (bins.size, 1))
+    one = estimators.source_evidence(_lines(hz), stft, sr, hop)
+    assert one.bins == bins.size and one.single, one
+    # Each line struck on its own pattern: no shared envelope.
+    for k, b in enumerate(bins):
+        stft[b] = np.exp(-(np.arange(frames) % (7 + 2 * k)) / 2.0)
+    assert not estimators.source_evidence(_lines(hz), stft, sr, hop).single
+    # Too few lines to tell: two lines struck together.
+    stft[bins] = strokes
+    two = estimators.source_evidence(_lines(hz[:2]), stft, sr, hop)
+    assert two.bins == 2 and two.shared > 0.99 and not two.single
+    # Held, not struck.
+    stft[bins] = 1.0 + 0.01 * rng.standard_normal((bins.size, frames))
+    assert not estimators.source_evidence(_lines(hz), stft, sr, hop).single
+    assert estimators.source_evidence(_lines(np.zeros(0)), stft, sr, hop) == (
+        estimators.NO_SOURCE_EVIDENCE
+    )
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -1849,7 +1909,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.1.0+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.2.0+{main.ESTIMATOR.name}"
     assert result["valence"] is None and result["danceability"] is None
 
 

@@ -14,8 +14,10 @@ Both refine the tempo from the beat positions they track (``refine_bpm``), so th
 limited to the grid of the onset envelope (23.2 ms frames at 22.05 kHz with a 512-sample hop,
 which turns 120 BPM into 117 and 140 into 144), and both withhold a tempo that the beat grid
 does not keep (``steady_tempo``). A key is only estimated from tonal evidence that both share
-(``Tonality``): pitchless sound (drums, clicks, noise) and a single harmonic series (a tone,
-mains hum) get no key, whatever an estimator would answer.
+(``Tonality``): pitchless sound (drums, clicks, noise), a single harmonic series (a tone,
+mains hum) and one pitched source whose partials never change and rise and fall together (a
+cowbell, a bell, one note repeated on a bass: ``SourceEvidence``) get no key, whatever an
+estimator would answer.
 """
 
 from __future__ import annotations
@@ -198,6 +200,46 @@ MOVEMENT_WINDOW_S = 0.5  # the chromagram is averaged over this before it is com
 # keep keys off pitchless sound.
 ESSENTIA_MIN_KEY_STRENGTH = 0.4
 LIBROSA_MIN_KEY_STRENGTH = 0.4
+# One pitched source (SourceEvidence) is no key, whatever its strength: a cowbell, a bell, one
+# note repeated on a bass. Its overtones or partials can spell three pitch classes that the
+# series and pitch-class rules let through, and the estimators then find a key in them. What
+# gives one source away is time, not the spectrum: its partials keep the same proportions from
+# one second to the next (the pitch content never changes) and rise and fall together at each
+# stroke. The harmonic part's spectral lines are grouped into the bins of the shared STFT (10.8
+# Hz, so that the sidebands of a note repeated every sixteenth fall into the note's bin), and the
+# bins holding SOURCE_COVER of the line amplitude are followed through the window by their STFT
+# magnitude. The source is single when there are at least SOURCE_MIN_BINS of them (with fewer,
+# a large shared component is close to chance) and
+# (1) movement: their envelopes, averaged over SOURCE_WINDOW_S and normalised per frame, stay
+#     within SOURCE_MAX_MOVEMENT of their mean proportions (total-variation distance, weighted
+#     by level);
+# (2) shared: the first principal component of their envelopes (each centred and normalised)
+#     holds at least SOURCE_MIN_SHARED of the variance;
+# (3) depth: their summed envelope varies (coefficient of variation at least SOURCE_MIN_DEPTH):
+#     the source is struck, not held.
+# Measured on the one-pitch-class controls of tests/signals.py (seeds 500-529) that analyzer
+# 2.1.0 keyed, on the 48 GiantSteps+ clips it keyed (evals/audio key suite, --limit 250 --seed
+# 1) and on the music controls of evals/audio:
+# - movement: bells, bells over drums, cowbells and one-note basses 0.003-0.032, tabla
+#   0.010-0.095, toms 0.019-0.082; the keyed GiantSteps+ clips 0.068 and 0.072 (the second
+#   with two bins), all others 0.104-0.393; a C major vamp 0.085-0.101, band mixes with chord
+#   changes 0.22 and more, a held A minor pad 0.012;
+# - shared: bells 0.86-0.94, bells over drums 0.70-0.90, cowbells 0.83-0.97, one-note basses
+#   0.64-0.81, tabla 0.49-0.67, toms 0.37-0.55 (two or three drums, each with its own
+#   envelope); the C vamp 0.16 (bass and chords keep their own rhythms), the held pad 0.78;
+# - depth: the struck controls 0.21-7.1, the held pad 0.09 (it keeps its key);
+# - bins: the struck controls 12-37, toms 6-8; a sung line with vibrato leaves 2.
+# Toms, and tabla whose strokes alternate partials, keep the key the other rules give them:
+# several drums, or strokes with envelopes of their own, are not one source by this measure.
+# A single chord struck the same way for the whole window is one source by it too: of the 250
+# GiantSteps+ clips it holds for one, whose key the spectral-line rule already withholds.
+SOURCE_COVER = 0.9
+SOURCE_MIN_BINS = 6
+SOURCE_WINDOW_S = 2.0
+SOURCE_MAX_MOVEMENT = 0.05
+SOURCE_MIN_SHARED = 0.6
+SOURCE_MIN_DEPTH = 0.15
+ONE_SOURCE = "one pitched source (its partials hold still and rise and fall together)"
 
 # The harmonic part is separated below this frequency (see Signals.harmonic).
 HARMONIC_MAX_HZ = 5000.0
@@ -310,6 +352,28 @@ class Withheld:
 
 
 SPEECH_LIKE = "one voice without stable notes (speech-like)"
+
+
+@dataclass(frozen=True)
+class SourceEvidence:
+    """How the harmonic part's spectral lines behave over time (see SOURCE_COVER)."""
+
+    bins: int  # STFT bins holding SOURCE_COVER of the line amplitude
+    movement: float  # change of their proportions over SOURCE_WINDOW_S (0 = none)
+    shared: float  # share of their envelopes' variance in one component, 0..1
+    depth: float  # coefficient of variation of their summed envelope
+
+    @property
+    def single(self) -> bool:
+        return (
+            self.bins >= SOURCE_MIN_BINS
+            and self.movement <= SOURCE_MAX_MOVEMENT
+            and self.shared >= SOURCE_MIN_SHARED
+            and self.depth >= SOURCE_MIN_DEPTH
+        )
+
+
+NO_SOURCE_EVIDENCE = SourceEvidence(0, 1.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -505,7 +569,24 @@ class Signals:
         """The spectral lines of the harmonic part (drums left out)."""
         return tonality(self.harmonic, self.sr)
 
+    @cached_property
+    def source_evidence(self) -> SourceEvidence:
+        """Whether the harmonic part's lines behave as one source (see SOURCE_COVER)."""
+        return source_evidence(self.harmonic_tonality, self.harmonic_stft, self.sr, self.hop)
+
     def key_withheld(self) -> Withheld | None:
+        """
+        Why no key can be measured (see _evidence_withheld); when nothing else withholds it, one
+        pitched source (SourceEvidence) still has no key. That reason is about the key only: it
+        does not mark the input as not music (Withheld.one_source), so a cowbell pattern or a
+        tolling bell keeps its fingerprint.
+        """
+        withheld = self._evidence_withheld()
+        if withheld is None and self.source_evidence.single:
+            return Withheld(ONE_SOURCE)
+        return withheld
+
+    def _evidence_withheld(self) -> Withheld | None:
         """
         Why no key can be measured. Without a beat, the pitch track and the chromagram's
         movement decide with the lines. With a beat, the lines decide first; then a voice
@@ -533,6 +614,45 @@ class Signals:
             withheld = self.tonality.key_withheld(NO_VOICE, self.chroma_movement)
             return withheld or Withheld("no pitch track")
         return self.tonality.key_withheld(self.voice, self.chroma_movement)
+
+
+def source_evidence(lines: Tonality, stft: np.ndarray, sr: int, hop: int) -> SourceEvidence:
+    """
+    The movement, shared variance and depth (SourceEvidence) of the STFT bins that hold
+    SOURCE_COVER of the line amplitude of `lines`, followed through `stft`.
+    """
+    if lines.line_hz.size == 0 or stft.size == 0:
+        return NO_SOURCE_EVIDENCE
+    n_fft = 2 * (stft.shape[0] - 1)
+    index = np.clip(np.round(lines.line_hz * n_fft / sr).astype(int), 0, stft.shape[0] - 1)
+    amplitude = np.bincount(index, weights=np.sqrt(lines.line_power), minlength=stft.shape[0])
+    order = np.argsort(-amplitude)
+    cumulative = np.cumsum(amplitude[order])
+    if not cumulative[-1] > 0:
+        return NO_SOURCE_EVIDENCE
+    count = int(np.searchsorted(cumulative, SOURCE_COVER * cumulative[-1]) + 1)
+    envelopes = np.abs(stft[order[:count]]).astype(np.float64)
+    if count < 2 or envelopes.shape[1] < 2:
+        return SourceEvidence(count, 1.0, 0.0, 0.0)
+
+    width = max(1, int(round(SOURCE_WINDOW_S * sr / hop)))
+    smooth = scipy.ndimage.uniform_filter1d(envelopes, width, axis=1, mode="nearest")
+    level = smooth.sum(axis=0)
+    if not level.sum() > 0:
+        return SourceEvidence(count, 1.0, 0.0, 0.0)
+    shape = smooth / np.maximum(level, 1e-12)
+    mean = (shape * level).sum(axis=1, keepdims=True) / level.sum()
+    movement = float(np.sum(0.5 * np.abs(shape - mean).sum(axis=0) * level) / level.sum())
+
+    centred = envelopes - envelopes.mean(axis=1, keepdims=True)
+    centred /= np.maximum(np.linalg.norm(centred, axis=1, keepdims=True), 1e-12)
+    singular = np.linalg.svd(centred, compute_uv=False)
+    total = float(np.sum(singular**2))
+    shared = float(singular[0] ** 2 / total) if total > 0 else 0.0
+
+    summed = envelopes.sum(axis=0)
+    depth = float(summed.std() / summed.mean()) if summed.mean() > 0 else 0.0
+    return SourceEvidence(count, movement, shared, depth)
 
 
 def chroma_movement(chroma: np.ndarray, sr: int, hop: int) -> float:

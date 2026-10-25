@@ -146,6 +146,38 @@ def test_the_key_evidence_and_strength_are_applied_to_the_recorded_key():
     assert cal.derive_key(True, evidence(), stats, "librosa", strict) == ["C", "major"]
 
 
+def test_one_pitched_source_is_withheld_under_the_rules_that_have_the_rule():
+    """The single-source rule at the service's values, applied after the other key rules."""
+    stats = {"tonic": "C", "mode": "major", "strength": 0.8}
+    single = {"bins": 12, "movement": 0.01, "shared": 0.9, "depth": 0.4}
+    ev = {**evidence(), "source": single}
+    with_rule = cal.BASELINE.set("one_source", True)
+    _, est = cal.service.load()
+    assert cal.evidence_withheld(ev, with_rule, "essentia") == est.ONE_SOURCE
+    assert cal.derive_key(True, ev, stats, "librosa", with_rule) is None
+    # Before the rule, and for runs recorded without its measurements: the key stays.
+    assert not cal.BASELINE.one_source
+    assert cal.derive_key(True, ev, stats, "essentia", cal.BASELINE) == ["C", "major"]
+    assert cal.derive_key(True, evidence(), stats, "essentia", with_rule) == ["C", "major"]
+    # Each measurement on its own side of the service's value keeps the key.
+    for field, value in (
+        ("bins", est.SOURCE_MIN_BINS - 1),
+        ("movement", est.SOURCE_MAX_MOVEMENT * 1.01),
+        ("shared", est.SOURCE_MIN_SHARED * 0.99),
+        ("depth", est.SOURCE_MIN_DEPTH * 0.99),
+    ):
+        apart = {**ev, "source": {**single, field: value}}
+        assert cal.evidence_withheld(apart, with_rule, "essentia") is None, field
+    # Another rule's reason comes first.
+    weak = {**evidence(ratio=0.01), "source": single}
+    assert cal.evidence_withheld(weak, with_rule, "essentia") == "no sustained pitch"
+    # The service's values have the rule; rules recorded before it load without it.
+    assert cal.service_rules().one_source
+    recorded = cal.BASELINE.as_dict()
+    del recorded["one_source"]
+    assert cal.Rules.from_dict(recorded) == cal.BASELINE
+
+
 def test_a_derivation_that_disagrees_with_the_service_is_reported():
     clips = [tempo_clip("a"), tempo_clip("b", served=None)]
     bad = cal.mismatches(clips, ["essentia"], "tempo", cal.BASELINE)

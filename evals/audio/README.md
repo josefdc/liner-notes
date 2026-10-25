@@ -91,8 +91,10 @@ probe sets of the service's own tests, whose generators they reuse
 (`services/audio/tests/signals.py` and `music.py`, loaded by path). They include pitchless material drawn at 30
 seeds each (two drum kits, noise with a beat, a siren over drums, clicks), on which no value was
 set beforehand: none of it may get a key. One-pitch-class material (a one-note bass, octave
-riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way; the service
-still keys some of it, as before this calibration.
+riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way. The service's
+single-source rule, added after this calibration, withholds the keys of the one-note basses,
+bells and cowbells; toms and some tabla still get one. The calibration records what that rule
+measures and applies it at the service's values (`Rules.one_source`); it does not vary it.
 
 To compare estimators on held-out clips only, run the tempo and key suites with
 `--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller

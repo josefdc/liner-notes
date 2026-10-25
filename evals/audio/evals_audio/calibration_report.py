@@ -88,6 +88,15 @@ PROTOCOL_NOTES = (
     "them; the choice sees them like the other controls.",
 )
 
+# Shown when the runs were made with the single-source rule (Rules.one_source).
+ONE_SOURCE_NOTE = (
+    "The single-source rule (no key for one pitched source, whose spectral lines keep their "
+    "proportions over the window and rise and fall together: a cowbell, a bell, one note "
+    "repeated on a bass) was added after this calibration, from the one-pitch-class controls "
+    "and the GiantSteps+ keys the service gave without it. The procedure does not vary it: "
+    "before is without it, after with it, and the choice below is made without it."
+)
+
 
 def count_p_values(doc: dict) -> int:
     """The p-values this section prints: one McNemar per evaluation row, one per AUC line."""
@@ -160,6 +169,7 @@ def section(doc: dict) -> list[str]:
         "the ones the choice saw, so a change made for a control is not tested on new controls "
         "there; a change that alters no evaluation clip stays.",
         *(f"- {note}" for note in PROTOCOL_NOTES),
+        *([f"- {ONE_SOURCE_NOTE}"] if after.one_source else []),
         "- The families are taken in turn, each with the earlier choices in place: "
         + "; ".join(f"{f['title']}" for f in choice["families"])
         + ".",

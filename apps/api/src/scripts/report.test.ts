@@ -594,6 +594,45 @@ describe("buildReport on a database pruned before it recorded its cutoffs", () =
           "and usage rows up to 2026-10-22 12:00 UTC. The 18 days marked ? show what is left: " +
           "they may have had more, and so may the total.",
       );
+
+      // Over 40 days the window also reaches past the recorded cutoff: those days are pruned,
+      // whatever an unrecorded prune did.
+      const longer = buildReport(db, { days: 40, now: NOW, retentionDays: 30 });
+      const longerByDay = new Map(longer.perDay.map((row) => [row.day, row]));
+      expect(longerByDay.get("2026-09-20")).toEqual({ day: "2026-09-20", retention: "pruned" });
+      expect(longerByDay.get("2026-09-22")).toEqual({ day: "2026-09-22", retention: "pruned" });
+      expect(longerByDay.get("2026-09-23")).toMatchObject({ retention: "unknown" });
+      expect(longer.perDay.filter(isPrunedDay)).toHaveLength(7);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("marks days unknown on a database pruned to empty before the upgrade", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(Date.parse("2026-10-01T00:00:00Z"));
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      // Migrated first on 2026-10-01 (the runner stamps the real time).
+      db.prepare("UPDATE schema_migrations SET applied_at = ?").run(
+        Date.parse("2026-10-01T00:00:00Z") / 1000,
+      );
+      recordRuns(db, [{ id: "only", status: "completed", start: "2026-10-15T10:00:00Z" }]);
+      // RUN_RETENTION_DAYS=7 on 2026-10-22 12:00: its only run is deleted, so it is empty.
+      const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+      expect(pruneDatabase(db, sevenDays, Date.parse("2026-10-22T12:00:00Z")).runs).toBe(1);
+      expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
+      vi.setSystemTime(Date.parse("2026-10-23T12:00:00Z"));
+      runMigrations(db);
+      pruneDatabase(db, DEFAULT_RETENTION, Date.parse("2026-10-23T12:00:01Z"));
+
+      const report = buildReport(db, { days: 21, now: NOW, retentionDays: 30 });
+
+      expect(report.unrecordedUntil).toBe("2026-10-22T12:00:00.000Z");
+      const oct15 = report.perDay.find((row) => row.day === "2026-10-15");
+      expect(oct15).toMatchObject({ retention: "unknown", runs: 0 });
+      expect(formatReport(report)).toMatch(/^2026-10-15\?\s+0\s/m);
+      expect(formatReport(report)).toContain("Retention before schema v12 was not recorded");
     } finally {
       db.close();
     }
@@ -634,6 +673,14 @@ describe("buildReport on usage rows recorded before sends were kept", () => {
       ).run(Date.parse("2026-10-24T10:00:00Z") / 1000);
       const before = buildReport(db, { days: 2, now: NOW });
       expect(before.schemaVersion).toBe(11);
+      // Read unmigrated: no cutoff is recorded, and the report says what that means.
+      expect(before.cutoffSource).toBe("setting");
+      expect(formatReport(before)).toContain(
+        "Retention: the database is at schema v11, which records no cutoff applied by retention " +
+          "(start the API once to migrate it), so days are marked from the current " +
+          "RUN_RETENTION_DAYS=30: none in this window is past it. Days deleted under a shorter " +
+          "setting would show as kept.",
+      );
       expect(before.total.model).toMatchObject({
         calls: 0,
         sentUnknownCalls: 1,

@@ -267,7 +267,7 @@ describe("pruneDatabase", () => {
     vi.setSystemTime(NOW);
     // A new database: nothing can have been deleted unrecorded.
     expect(retentionRecord(db)).toEqual({ runCutoff: null, recordedSince: null });
-    for (const held of ["runs", "llm_usage"] as const) {
+    for (const held of ["runs", "llm_usage", "migrated two days before"] as const) {
       const old = new Database(":memory:");
       try {
         runMigrations(old, MIGRATIONS.slice(0, 11));
@@ -277,6 +277,11 @@ describe("pruneDatabase", () => {
               "INSERT INTO runs (run_id, thread_id, query, status) VALUES ('r', 't', 'q', 'completed')",
             )
             .run();
+        } else if (held === "migrated two days before") {
+          // Empty, but old enough to have been pruned to empty.
+          old
+            .prepare("UPDATE schema_migrations SET applied_at = ?")
+            .run(NOW / 1000 - (2 * DAY) / 1000);
         } else {
           old
             .prepare(
@@ -296,6 +301,16 @@ describe("pruneDatabase", () => {
       } finally {
         old.close();
       }
+    }
+    // Empty and first migrated an hour before: nothing can have been old enough to prune.
+    const young = new Database(":memory:");
+    try {
+      runMigrations(young, MIGRATIONS.slice(0, 11));
+      young.prepare("UPDATE schema_migrations SET applied_at = ?").run(NOW / 1000 - HOUR / 1000);
+      runMigrations(young);
+      expect(retentionRecord(young)).toEqual({ runCutoff: null, recordedSince: null });
+    } finally {
+      young.close();
     }
   });
 

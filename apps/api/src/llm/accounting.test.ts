@@ -380,6 +380,18 @@ describe("HTTP statuses", () => {
     ],
     // fetch refuses the ports browsers block before connecting, with no code.
     ["a port fetch blocks", undiciCause("Error", "bad port")],
+    [
+      "every address of the name unreachable",
+      Object.assign(new AggregateError([], ""), {
+        code: "EHOSTUNREACH",
+        errors: ["10.0.0.1", "10.0.0.2"].map((address) =>
+          Object.assign(new Error(`connect EHOSTUNREACH ${address}:443`), {
+            code: "EHOSTUNREACH",
+            syscall: "connect",
+          }),
+        ),
+      }),
+    ],
   ])("settles at zero and records the attempts as not sent for %s", async (_, cause) => {
     const { llm, rows } = setup(() => {
       throw new TypeError("fetch failed", { cause });
@@ -391,6 +403,48 @@ describe("HTTP statuses", () => {
     expect(summarise(lines()).totalUsd).toBe(0);
     expect(rows.length).toBe(settles().length);
     expect(rows.every((row) => row.sent === false && row.usdEst === 0)).toBe(true);
+  });
+
+  it.each([
+    // An established socket's error: the request may have been written.
+    ["read EHOSTUNREACH", { code: "EHOSTUNREACH", syscall: "read" }],
+    ["read ENETUNREACH", { code: "ENETUNREACH", syscall: "read" }],
+    // No syscall says where it came from (e.g. a refusal by a network policy).
+    ["ENETUNREACH from no syscall", { code: "ENETUNREACH" }],
+  ])("keeps the worst case and records the attempts as sent for %s", async (message, fields) => {
+    const { llm, rows } = setup(() => {
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error(message), fields) });
+    });
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
+    expectWorstCaseKept();
+    expect(rows.length).toBe(settles().length);
+    expect(rows.every((row) => row.sent === true && row.estimated)).toBe(true);
+  });
+
+  it("keeps the worst case for a 200 whose body was lost, recording it as sent", async () => {
+    // Even with a code that would mean no connection had connect() raised it.
+    const lost = new TypeError("terminated", {
+      cause: Object.assign(new Error("connect EHOSTUNREACH 10.0.0.1:443"), {
+        code: "EHOSTUNREACH",
+        syscall: "connect",
+      }),
+    });
+    const { llm, rows } = setup(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(lost);
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error)).toBe(true);
+    expectWorstCaseKept();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.sent === true && row.estimated)).toBe(true);
   });
 
   it("keeps the worst case for a reset connection, recording the attempts as sent", async () => {

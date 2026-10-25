@@ -360,9 +360,8 @@ export const MIGRATIONS: readonly Migration[] = [
       // `run_cutoff`, the latest run cutoff retention has applied (unix seconds: runs and usage
       // rows at or before it may have been deleted; null until the first prune after this
       // migration), and `recorded_since`, when cutoffs began to be recorded. The prunes before
-      // that were not recorded, so on a database that already holds runs or usage rows it is
-      // this migration's time; on one that holds none (a new database) it is null: no record
-      // can have been deleted unseen.
+      // that were not recorded, so on a database that may have been pruned (below) it is this
+      // migration's time; on a new one it is null: no record can have been deleted unseen.
       // `llm_usage.sent` is 1 when the attempt's request was sent to the provider, 0 when it was
       // not (stopped before sending, no connection made, or answered from stored answers), and
       // null for rows written before this migration (llm/usage.ts).
@@ -375,11 +374,17 @@ export const MIGRATIONS: readonly Migration[] = [
         );
         ALTER TABLE llm_usage ADD COLUMN sent INTEGER;
       `);
+      // A database may have had records pruned unseen if it holds runs or usage rows, or if it
+      // was first migrated more than a day ago (the shortest run retention: a younger one can
+      // have had nothing old enough), since it may have been pruned to empty.
       const now = Math.floor(Date.now() / 1000);
       const held = db
-        .prepare("SELECT EXISTS (SELECT 1 FROM runs) OR EXISTS (SELECT 1 FROM llm_usage)")
+        .prepare(
+          `SELECT EXISTS (SELECT 1 FROM runs) OR EXISTS (SELECT 1 FROM llm_usage)
+             OR (SELECT MIN(applied_at) FROM schema_migrations) <= ?`,
+        )
         .pluck()
-        .get();
+        .get(now - 24 * 60 * 60);
       db.prepare(
         "INSERT INTO retention_state (id, run_cutoff, recorded_since, updated_at) VALUES (1, NULL, ?, ?)",
       ).run(held ? now : null, now);

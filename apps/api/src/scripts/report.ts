@@ -38,8 +38,9 @@
  * have been deleted (retention.ts records the cutoff), so they are not counted, and the total
  * leaves them out. The day of the cutoff is marked as partly pruned (*). A database that records
  * no cutoff (schema before 12, or not pruned since) is marked from RUN_RETENTION_DAYS, and the
- * report says so. On a database that held runs before it was migrated to 12, the prunes made
- * before were not recorded: the days they may have emptied (up to a day, the shortest retention,
+ * report says so. On a database that may have been pruned before it was migrated to 12 (it
+ * held runs or usage rows, or was first migrated more than a day before), the prunes made then
+ * were not recorded: the days they may have emptied (up to a day, the shortest retention,
  * before the migration) are marked unknown (?) until the recorded cutoff passes them; their
  * counts are what is left.
  *
@@ -58,8 +59,9 @@
  *   - Attempts whose request left the process count as sent unless the failure shows no
  *     connection was made; an abort or LLM_TIMEOUT_MS firing while the connection was being made
  *     cannot be told apart from one after the request was sent, and counts as sent.
- *   - A database whose runs and usage rows had all been pruned when it was migrated to 12 is
- *     taken as new: no day is marked unknown.
+ *   - A database is taken as new when it was migrated to 12 holding no runs or usage rows and
+ *     within a day of its first migration: no day is marked unknown. It can have had no record
+ *     old enough to prune, unless records were written with times in the past.
  *
  * Never prints what anyone typed, a run id, a key or an endpoint. Exits 1 when the database
  * cannot be read, 2 for a bad option.

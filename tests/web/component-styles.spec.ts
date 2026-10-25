@@ -122,7 +122,7 @@ const over = (top: Rgba, bottom: Rgba): Rgba => ({
 async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/15") {
   await page.addStyleTag({
     content:
-      "[data-measuring],[data-measuring] *{color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
+      "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
   });
   const badges = page.locator(selector);
   const result: Array<{ text: string; ratio: number }> = [];
@@ -288,6 +288,8 @@ const CLAIM_TEXT = [
   "[data-claim-kind] > p",
   "#panel-context section li > p",
   "#panel-context section > p.text-chrome",
+  "#panel-context section > h4",
+  "#panel-context > p.text-chrome",
   'section[aria-label="Rejected claims"] p',
   'section[aria-label="Rejected claims"] button',
 ].join(", ");
@@ -313,7 +315,10 @@ for (const cover of ["no cover", "a white cover"]) {
       "Partly supported",
       "MusicBrainz · primary record",
       "1 cited source is not in this result",
-      "Rejected by the verifier (3)",
+      "Rejected by the verifier (6)",
+      "Credits",
+      "More claims",
+      "1 fact is not shown",
     ]) {
       expect(
         texts.some((text) => text.includes(line)),

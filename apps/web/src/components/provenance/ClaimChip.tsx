@@ -1,34 +1,28 @@
 import type { Claim, ClaimKind } from '@liner-notes/contract';
 import { BookOpenCheck, Gauge } from 'lucide-react';
 import type React from 'react';
-import { formatSeconds, type Reading } from '../../constants';
+import { formatBpm, formatSeconds, type Reading } from '../../constants';
 import { InferenceLabel, ReadingValue } from '../EstimatedWarning';
+import { keyLabel, type MeasuredAudio } from '../measured/audio';
 import { Badge } from '../ui/Badge';
 import type { ShownClaim } from './claims';
 import { SourceLink } from './SourceLink';
 
-// Where one claim comes from, as text: its kind (measured, sourced or model inference), the
-// sources it cites with their tier, what the verifier said ("not checked" when it has not
-// judged it), and, when the claim's number disagrees with the measurement, both values.
+// Where one claim comes from, as text: its kind (measured, sourced or inferred), the sources it
+// cites with their tier, what the verifier said ("not checked by the verifier" when it has not
+// judged it, and its reason when it found the claim only partly supported or not supported),
+// and, when the claim's number disagrees with the measurement, both values.
 //
 // A claim shown as measured is shown with the measured value itself (MeasuredValue, with its
 // confidence and basis); a claim about a value that was not measured is shown with that value
-// as missing, and why. A model claim's citations are listed as citations, never with a tier:
-// only a claim shown as sourced carries its sources' tiers.
+// as missing, and why. The measured side of a conflict is always the result's own measurement,
+// never a number the claim carries. A claim not shown as sourced lists what it cites without a
+// tier: only a claim shown as sourced carries its sources' tiers.
 
 export const KIND_TEXT: Record<ClaimKind, string> = {
   measured: 'Measured',
   sourced: 'Sourced',
   inferred: 'Model inference',
-};
-
-/** What the verifier's judge said of a claim, in words; "not checked" when it did not judge. */
-export const VERDICT_TEXT: Record<NonNullable<Claim['verdict']> | 'none', string> = {
-  supported: 'supported by its sources',
-  partial: 'partly supported by its sources',
-  unsupported: 'not supported by its sources',
-  contradicted: 'contradicted by its sources',
-  none: 'not checked',
 };
 
 /** The provenance lines carry the meaning of the claim: text-chip keeps them at WCAG AA. */
@@ -41,39 +35,93 @@ export function readingFor(claim: Claim, readings: readonly Reading[]): Reading 
   return readings.find((reading) => reading.field === field) ?? null;
 }
 
+/**
+ * The measured value a claim's field names, from the result's measurement: the value, its
+ * method and the preview window; null when the measurement does not hold it (no block, a gate
+ * that did not pass, a field that was not measured, or a claim that names no field).
+ */
+export function measuredSide(
+  claim: Claim,
+  audio: MeasuredAudio | null | undefined,
+): { value: string; method: string; window: string } | null {
+  if (!audio?.gate.passed || claim.field === undefined) return null;
+  const window = `${formatSeconds(audio.windowSeconds)} s preview`;
+  if (claim.field === 'tempo') {
+    return audio.tempo
+      ? { value: `${formatBpm(audio.tempo.bpm)} BPM`, method: audio.tempo.method, window }
+      : null;
+  }
+  return audio.key ? { value: keyLabel(audio.key), method: audio.key.method, window } : null;
+}
+
 const show = (value: number | string) => (typeof value === 'number' ? String(value) : value);
 
 /**
- * The two values of a numeric check, as the result gives them; null without a comparison (the
- * values are never made up).
+ * The two sides of a numeric check: the claim's value as the result gives it, and the value the
+ * result's measurement holds. A side the result does not hold is said to be missing, never
+ * filled in.
  */
-export function comparisonText(claim: Claim, windowSeconds?: number): string | null {
+export function comparisonText(claim: Claim, audio: MeasuredAudio | null | undefined): string {
   const comparison = claim.numericComparison;
-  if (!comparison) return null;
-  const window =
-    windowSeconds !== undefined ? `${formatSeconds(windowSeconds)} s preview` : '30 s preview';
-  return `the claim says ${show(comparison.claimed)} · measured ${show(comparison.measured)} (${comparison.method}, ${window})`;
+  const claimed = comparison
+    ? `the claim says ${show(comparison.claimed)}`
+    : "the result does not give the claim's value";
+  const measured = measuredSide(claim, audio);
+  const measuredPart = measured
+    ? `measured ${measured.value} (${measured.method}, ${measured.window})`
+    : 'the measured value is not available in this result';
+  return `${claimed} · ${measuredPart}`;
 }
 
-/** The conflict line: both values, or that the result does not give them. */
-export function conflictText(claim: Claim, windowSeconds?: number): string {
-  const both = comparisonText(claim, windowSeconds);
-  if (both) return `Conflict with the measurement: ${both}`;
-  const reason = claim.numericReason ? ` (${claim.numericReason})` : '';
-  return `Conflict with the measurement${reason}; the result does not give the two values`;
-}
+/** The conflict line: what was compared, both sides as the result holds them. */
+export const conflictText = (claim: Claim, audio: MeasuredAudio | null | undefined): string =>
+  `Conflict with the measurement: ${comparisonText(claim, audio)}`;
 
-/** The verifier's status of a shown claim, in words. */
-export function statusText(shown: ShownClaim): string {
+/**
+ * The verifier's status of a shown claim, in words; null for a measured claim (the verifier does
+ * not judge measurements). A partly supported or unsupported claim says so with its reason
+ * instead (verdictReasonText).
+ */
+export function statusText(shown: ShownClaim): string | null {
   const { claim, kind } = shown;
-  const verdict = VERDICT_TEXT[claim.verdict ?? 'none'];
-  return kind === 'sourced' && claim.origin === 'code'
-    ? `taken from the source record · ${verdict}`
-    : verdict;
+  if (kind === 'measured') return null;
+  const parts: string[] = [];
+  if (kind === 'sourced' && claim.origin === 'code') parts.push('taken from the source record');
+  if (claim.verdict === null) {
+    // Beside a conflict, the numeric check did run: only the text has no verdict.
+    parts.push(
+      claim.numericCheck === 'conflict'
+        ? 'no verifier verdict on its text'
+        : 'not checked by the verifier',
+    );
+  } else if (claim.verdict === 'supported') {
+    parts.push('supported by its sources');
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-const KindBadge: React.FC<{ kind: ClaimKind }> = ({ kind }) => {
-  if (kind === 'inferred') return <InferenceLabel />;
+/** What the verifier objected to: its reason for a partial or unsupported verdict. */
+export function verdictReasonText(claim: Claim): string | null {
+  const reason = claim.verdictReason?.trim();
+  if (claim.verdict === 'partial') {
+    return `Partly supported: ${reason || 'the verifier did not say which part is unsupported'}`;
+  }
+  if (claim.verdict === 'unsupported') {
+    return `Not supported by its sources: ${reason || 'the verifier gave no reason'}`;
+  }
+  return null;
+}
+
+/** How a claim's citations are introduced: by who cited them, or as the claim's sources. */
+export function citationsText(shown: ShownClaim): string {
+  if (shown.kind === 'sourced') return 'Sources:';
+  return shown.claim.origin === 'code' ? 'Cites:' : 'Cited by the model:';
+}
+
+const KindBadge: React.FC<{ kind: ClaimKind; origin: Claim['origin'] }> = ({ kind, origin }) => {
+  // A code-built claim that cannot be shown as measured or sourced is inferred, not the model's.
+  if (kind === 'inferred')
+    return <InferenceLabel>{origin === 'code' ? 'Inferred' : undefined}</InferenceLabel>;
   if (kind === 'sourced') {
     return (
       <Badge variant="green" icon={<BookOpenCheck size={10} />}>
@@ -92,15 +140,15 @@ interface ClaimChipProps {
   shown: ShownClaim;
   /** The result's signal readings (tempo, key), for a claim about a measured value. */
   readings?: readonly Reading[];
-  /** Length of the measured preview window, for the conflict line. */
-  windowSeconds?: number;
+  /** The result's measurement, for the measured side of a conflict. */
+  audio?: MeasuredAudio | null;
   className?: string;
 }
 
 export const ClaimChip: React.FC<ClaimChipProps> = ({
   shown,
   readings = [],
-  windowSeconds,
+  audio = null,
   className = '',
 }) => {
   const { claim, kind, cited, missingCitations } = shown;
@@ -110,7 +158,10 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
   const measuredValue = kind === 'measured' && reading?.state === 'shown' ? reading : null;
   const missingValue = reading?.state === 'missing' ? reading : null;
   const partial = kind === 'sourced' && claim.verdict === 'partial';
+  const unsupported = kind === 'sourced' && claim.verdict === 'unsupported';
   const conflict = claim.numericCheck === 'conflict';
+  const status = statusText(shown);
+  const reason = verdictReasonText(claim);
   return (
     <div
       data-claim-kind={kind}
@@ -121,16 +172,18 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
         <ReadingValue reading={measuredValue} />
       ) : (
         <div className="flex flex-wrap items-center gap-1.5">
-          <KindBadge kind={kind} />
+          <KindBadge kind={kind} origin={claim.origin} />
           {partial && <Badge variant="gray">Partly supported</Badge>}
+          {unsupported && <Badge variant="amber">Not supported</Badge>}
           {conflict && <Badge variant="amber">Conflict</Badge>}
-          {kind !== 'measured' && !partial && <span className={LINE}>{statusText(shown)}</span>}
+          {status && <span className={LINE}>{status}</span>}
         </div>
       )}
       {missingValue && <ReadingValue reading={missingValue} />}
+      {reason && <p className={LINE}>{reason}</p>}
       {cited.length > 0 && (
         <p className={`${LINE} flex flex-wrap items-center gap-x-2 gap-y-1`}>
-          <span>{kind === 'sourced' ? 'Sources:' : 'Cited by the model:'}</span>
+          <span>{citationsText(shown)}</span>
           {cited.map((evidence) => (
             <SourceLink key={evidence.id} evidence={evidence} showTier={kind === 'sourced'} />
           ))}
@@ -143,7 +196,7 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
             : `${missingCitations} cited sources are not in this result`}
         </p>
       )}
-      {conflict && <p className={LINE}>{conflictText(claim, windowSeconds)}</p>}
+      {conflict && <p className={LINE}>{conflictText(claim, audio)}</p>}
     </div>
   );
 };

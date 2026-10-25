@@ -42,7 +42,7 @@ describe('CreditsList', () => {
     expect(screen.queryByText(/No credits found/)).toBeNull();
   });
 
-  it("lists an older result's credits as model inference with no source, never as sourced", () => {
+  it("lists a result's model-written credits as inference with no source, never as sourced", () => {
     const { container } = render(
       <CreditsList
         credits={[]}
@@ -55,7 +55,7 @@ describe('CreditsList', () => {
     );
     const list = container.querySelector('dl[aria-label="Credits without a source"]');
     expect(list?.textContent).toBe('ProducersCleo ExampleWritersAda Example, Ben Example');
-    expect(container.textContent).toContain('Model inferenceno source cited');
+    expect(container.textContent).toContain('Model inferencemodel-written, no source cited');
     expect(container.textContent).not.toContain('Sourced');
     expect(container.querySelector('[data-claim-kind]')?.getAttribute('data-claim-kind')).toBe(
       'inferred',

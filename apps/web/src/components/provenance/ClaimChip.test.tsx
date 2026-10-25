@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { audioReadings } from '../../constants';
 import type { TrackData } from '../../types';
 import { audioBlock, measuredTrack } from '../measured/testing';
-import { resultClaims, type ShownClaim } from './claims';
+import { resultClaims } from './claims';
 import { ClaimChip } from './ClaimChip';
 import { claim, evidence } from './testing';
 
@@ -13,23 +13,26 @@ afterEach(cleanup);
 const track = (claims: unknown[], items: unknown[] = [evidence()], audio = audioBlock()) =>
   measuredTrack(audio, { claims, evidence: items } as Partial<TrackData>);
 
-/** The one claim of a result, as shown, and the result's signal readings. */
-function shownOf(result: TrackData): {
-  shown: ShownClaim;
-  readings: ReturnType<typeof audioReadings>['signal'];
-} {
-  const [shown] = resultClaims(result).all;
-  if (!shown) throw new Error('no claim');
-  return { shown, readings: audioReadings(result).signal };
-}
-
+/** The one claim of a result, as shown, with the result's signal readings and measurement. */
 function renderChip(result: TrackData) {
-  const { shown, readings } = shownOf(result);
+  const claims = resultClaims(result);
+  const [shown] = claims.all;
+  if (!shown) throw new Error('no claim');
   const { container } = render(
-    <ClaimChip shown={shown} readings={readings} windowSeconds={29.75} />,
+    <ClaimChip shown={shown} readings={audioReadings(result).signal} audio={claims.audio} />,
   );
   return container.firstElementChild as HTMLElement;
 }
+
+const TEMPO = 'essentia.RhythmExtractor2013';
+const conflicting = (overrides: Partial<Claim> = {}) =>
+  claim({
+    numericCheck: 'conflict',
+    field: 'tempo',
+    // The measured side is never read from here.
+    numericComparison: { claimed: 246, measured: 99, method: 'stated by the producer' },
+    ...overrides,
+  });
 
 describe('ClaimChip', () => {
   it('shows a sourced claim with its kind, its source as a link and the tier, as text', () => {
@@ -38,14 +41,18 @@ describe('ClaimChip', () => {
     );
     expect(chip.dataset.claimKind).toBe('sourced');
     expect(chip.textContent).toContain('Sourced');
-    expect(chip.textContent).toContain('MusicBrainz · primary record');
-    expect(chip.textContent).toContain('taken from the source record · not checked');
+    expect(chip.textContent).toContain('Sources:MusicBrainz · primary record');
+    expect(chip.textContent).toContain(
+      'taken from the source record · not checked by the verifier',
+    );
     const link = screen.getByRole('link', {
       name: 'MusicBrainz · primary record — Some Recording, opens in a new tab',
     });
     expect(link.getAttribute('href')).toBe('https://musicbrainz.org/recording/1');
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    // The title is announced once, in the name.
+    expect(link.hasAttribute('title')).toBe(false);
   });
 
   it('never links a source whose address is not http or https', () => {
@@ -60,19 +67,100 @@ describe('ClaimChip', () => {
     expect(chip.textContent).toContain('Genius · primary record (record track/recording/1)');
   });
 
-  it('marks a partly supported model claim', () => {
+  it('never shows a web search result as a primary record', () => {
     const chip = renderChip(
-      track([claim({ kind: 'sourced', evidenceIds: ['ev1'], verdict: 'partial' })]),
+      track(
+        [claim({ kind: 'sourced', origin: 'code', evidenceIds: ['ev1'] })],
+        [evidence({ source: 'tavily', sourceTier: 'primary-record', recordRef: null })],
+      ),
+    );
+    expect(chip.textContent).toContain('Web search · web page');
+    expect(chip.textContent).not.toContain('primary record');
+  });
+
+  it.each([
+    ['work/9', 'about the song, not this recording'],
+    ['release/3/credit/1', 'about a whole release'],
+  ])('says a %s record is not about this recording, with or without a link', (recordRef, text) => {
+    const linked = renderChip(
+      track(
+        [claim({ kind: 'sourced', origin: 'code', evidenceIds: ['ev1'] })],
+        [evidence({ recordRef })],
+      ),
+    );
+    expect(screen.getByRole('link').textContent).toMatch(
+      new RegExp(`^MusicBrainz · primary record · ${text} — `),
+    );
+    cleanup();
+    const unlinked = renderChip(
+      track([claim({ evidenceIds: ['ev1'] })], [evidence({ recordRef, url: null })]),
+    );
+    expect(unlinked.textContent).toContain(`MusicBrainz · ${text} (record ${recordRef})`);
+    expect(linked).toBeTruthy();
+  });
+
+  it('names the part of a partly supported claim the verifier did not find, from its reason', () => {
+    const chip = renderChip(
+      track([
+        claim({
+          kind: 'sourced',
+          evidenceIds: ['ev1'],
+          verdict: 'partial',
+          verdictReason: 'No engineer is listed.',
+        }),
+      ]),
     );
     expect(chip.dataset.claimKind).toBe('sourced');
     expect(chip.textContent).toContain('Partly supported');
+    expect(chip.textContent).toContain('Partly supported: No engineer is listed.');
+    cleanup();
+    const noReason = renderChip(
+      track([claim({ kind: 'sourced', evidenceIds: ['ev1'], verdict: 'partial' })]),
+    );
+    expect(noReason.textContent).toContain(
+      'Partly supported: the verifier did not say which part is unsupported',
+    );
+  });
+
+  it('never shows a code claim the verifier did not support as plainly sourced', () => {
+    const chip = renderChip(
+      track([
+        claim({
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev1'],
+          verdict: 'unsupported',
+          verdictReason: 'The record lists no mastering engineer.',
+        }),
+      ]),
+    );
+    expect(chip.dataset.claimKind).toBe('sourced');
+    expect(chip.textContent).toContain('Not supported');
+    expect(chip.textContent).toContain(
+      'Not supported by its sources: The record lists no mastering engineer.',
+    );
+  });
+
+  it('gives the reason of a model claim the verifier did not support', () => {
+    const chip = renderChip(
+      track([
+        claim({
+          kind: 'sourced',
+          evidenceIds: ['ev1'],
+          verdict: 'unsupported',
+          verdictReason: 'No studio is named.',
+        }),
+      ]),
+    );
+    expect(chip.dataset.claimKind).toBe('inferred');
+    expect(chip.textContent).toContain('Not supported by its sources: No studio is named.');
   });
 
   it('says "not checked" for a model claim without a verdict, and never calls it sourced', () => {
     const chip = renderChip(track([claim({ evidenceIds: ['ev1'] })]));
     expect(chip.dataset.claimKind).toBe('inferred');
     expect(chip.textContent).toContain('Model inference');
-    expect(chip.textContent).toContain('not checked');
+    expect(chip.textContent).toContain('not checked by the verifier');
     expect(chip.textContent).not.toContain('Sourced');
     // A model's citation is listed, without a tier.
     expect(chip.textContent).toContain('Cited by the model:');
@@ -83,22 +171,36 @@ describe('ClaimChip', () => {
   it.each([
     [
       'cites evidence that is not in the pack',
-      { kind: 'sourced', origin: 'code', evidenceIds: ['gone'] },
+      { kind: 'sourced', origin: 'code', evidenceIds: ['gone', 'ev1'] },
+      'Inferred',
     ],
     [
       'is a model claim the judge did not support',
       { kind: 'sourced', evidenceIds: ['ev1'], verdict: 'unsupported' },
+      'Model inference',
     ],
-    ['cites nothing', { kind: 'sourced', origin: 'code', evidenceIds: [] }],
-  ] satisfies Array<[string, Partial<Claim>]>)(
-    'shows a sourced claim that %s as model inference',
-    (_case, change) => {
+    ['cites nothing', { kind: 'sourced', origin: 'code', evidenceIds: [] }, 'Inferred'],
+  ] satisfies Array<[string, Partial<Claim>, string]>)(
+    'shows a sourced claim that %s as inferred, by whoever wrote it',
+    (_case, change, label) => {
       const chip = renderChip(track([claim(change)]));
       expect(chip.dataset.claimKind).toBe('inferred');
-      expect(chip.textContent).toContain('Model inference');
+      expect(chip.querySelector('span.border')?.textContent).toBe(label);
       expect(chip.textContent).not.toMatch(/Sourced|primary record/);
+      if ('origin' in change && change.origin === 'code') {
+        expect(chip.textContent).not.toContain('Model inference');
+        expect(chip.textContent).not.toContain('Cited by the model');
+      }
     },
   );
+
+  it('lists what a code claim cites without saying the model cited it', () => {
+    const chip = renderChip(
+      track([claim({ kind: 'measured', origin: 'code', field: 'tempo', evidenceIds: ['ev1'] })]),
+    );
+    expect(chip.textContent).toContain('Cites:MusicBrainz');
+    expect(chip.textContent).not.toContain('Cited by the model');
+  });
 
   it('counts the cited sources that are not in the result', () => {
     const chip = renderChip(track([claim({ evidenceIds: ['ev1', 'gone', 'lost'] })]));
@@ -122,37 +224,49 @@ describe('ClaimChip', () => {
     );
     const chip = renderChip({ ...result, audioUnavailableReason: 'not_detected' });
     expect(chip.dataset.claimKind).toBe('inferred');
-    expect(chip.textContent).toContain('Model inference');
+    expect(chip.textContent).toContain('Inferred');
     const missing = chip.querySelector('[data-value-kind="missing"]');
     expect(missing?.textContent).toMatch(/^Key not measured— /);
   });
 
-  it('shows both values of a conflict with the measurement, with the method and window', () => {
-    const chip = renderChip(
-      track([
-        claim({
-          numericCheck: 'conflict',
-          field: 'tempo',
-          numericComparison: {
-            claimed: 246,
-            measured: 123.05,
-            method: 'essentia.RhythmExtractor2013',
-          },
-        }),
-      ]),
-    );
+  it("takes a conflict's measured side from the result's measurement, never from the claim", () => {
+    const chip = renderChip(track([conflicting()]));
     expect(chip.textContent).toContain('Conflict');
     expect(chip.textContent).toContain(
-      'Conflict with the measurement: the claim says 246 · measured 123.05 (essentia.RhythmExtractor2013, 29.8 s preview)',
+      `Conflict with the measurement: the claim says 246 · measured 123.1 BPM (${TEMPO}, 29.8 s preview)`,
     );
+    expect(chip.textContent).not.toContain('99');
+    // What was compared is said; its text has no verdict, its number was checked.
+    expect(chip.textContent).toContain('no verifier verdict on its text');
+    expect(chip.textContent).not.toContain('not checked');
   });
 
-  it('says there is a conflict without making up values when the result gives none', () => {
-    const chip = renderChip(track([claim({ numericCheck: 'conflict', field: 'tempo' })]));
+  it.each([
+    ['no measurement', null],
+    [
+      'a gate that did not pass',
+      audioBlock({
+        gate: { passed: false, reason: 'silence' },
+        tempo: null,
+        key: null,
+        loudness: null,
+        keyMoments: [],
+      }),
+    ],
+    ['no tempo', audioBlock({ tempo: null })],
+  ])('says the measured side is not available with %s, inventing no window', (_case, audio) => {
+    const chip = renderChip(track([conflicting()], [], audio as ReturnType<typeof audioBlock>));
     expect(chip.textContent).toContain(
-      'Conflict with the measurement; the result does not give the two values',
+      'Conflict with the measurement: the claim says 246 · the measured value is not available in this result',
     );
-    expect(chip.textContent).not.toMatch(/measured \d/);
+    expect(chip.textContent).not.toMatch(/s preview|measured \d/);
+  });
+
+  it("says when the result does not give the claim's value", () => {
+    const chip = renderChip(track([conflicting({ numericComparison: undefined })]));
+    expect(chip.textContent).toContain(
+      `Conflict with the measurement: the result does not give the claim's value · measured 123.1 BPM (${TEMPO}, 29.8 s preview)`,
+    );
   });
 
   it('shows no conflict when the numbers agree', () => {

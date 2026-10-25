@@ -54,11 +54,15 @@ const claimItem = (region: Locator, text: string) =>
 
 test("the mock result is a result the API may send, with only the faults planted in it", () => {
   const data = resultOf(provenance);
-  // Each planted fault is a claim the reader must show as model inference.
+  // Each planted fault is one the reader must show for what it is: a web search result as a
+  // web page, claims as inference, and cards whose claim cannot be read not at all.
   expect(analysisIssues(TrackAnalysis.parse(data))).toEqual([
+    "evidence[4].sourceTier: a web search result is not a primary record",
     "claims[1].field: key was not measured",
     'claims[6].evidenceIds: cites "ev-gone", which is not in the evidence pack',
     "claims[7].verdict: a model claim is sourced only when supported or partial",
+    'factoids[3].claimId: unknown claim "c-future-rejected"',
+    'factoids[4].claimId: unknown claim "c-future"',
   ]);
 });
 
@@ -87,9 +91,12 @@ test.describe("a result with claims", () => {
     // sourced: a link to the record, named with the source and its tier
     const writers = claimItem(credits, "Written by Ada Example and Ben Example.");
     await expect(writers).toContainText("Sourced");
-    await expect(writers).toContainText("taken from the source record · not checked");
+    await expect(writers).toContainText(
+      "taken from the source record · not checked by the verifier",
+    );
+    // A record of the song, not of this recording, says so.
     const link = writers.getByRole("link", {
-      name: "MusicBrainz · primary record — Paper Lanterns (work), opens in a new tab",
+      name: "MusicBrainz · primary record · about the song, not this recording — Paper Lanterns (work), opens in a new tab",
     });
     await expect(link).toHaveAttribute(
       "href",
@@ -97,8 +104,21 @@ test.describe("a result with claims", () => {
     );
     await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     const producer = claimItem(credits, "Produced by Cleo Example");
-    await expect(producer).toContainText("Partly supported");
-    await expect(producer).toContainText("Discogs · primary record");
+    // Which part the verifier did not find, from its reason.
+    await expect(producer).toContainText(
+      "Partly supported: The release credits name the producer; no engineer is listed.",
+    );
+    await expect(producer).toContainText("Discogs · primary record · about a whole release");
+    // A code-built credit the verifier did not support is never plainly sourced.
+    const mastered = claimItem(credits, "Mastered by Gil Example.");
+    await expect(mastered).toContainText("SourcedNot supported");
+    await expect(mastered).toContainText(
+      "Not supported by its sources: The release credits list no mastering engineer.",
+    );
+    // A web search result labelled a primary record is shown as a web page.
+    const blog = claimItem(more, "A blog calls it the band's breakthrough.");
+    await expect(blog).toContainText("Web search · web page");
+    await expect(blog).not.toContainText("primary record");
     const card = page
       .locator("#panel-context .group")
       .filter({ hasText: "The album was recorded in two days." });
@@ -108,17 +128,21 @@ test.describe("a result with claims", () => {
     ).toBeVisible();
 
     // inferred: model claims, and sourced claims that cannot be shown as sourced
-    for (const [text, status] of [
-      ["The song was a club favourite in 2011.", "not checked"],
-      ["The single reached the top 40.", "1 cited source is not in this result"],
-      ["The song was recorded at Abbey Road.", "not supported by its sources"],
+    for (const [text, label, status] of [
+      ["The song was a club favourite in 2011.", "Model inference", "not checked by the verifier"],
+      ["The single reached the top 40.", "Inferred", "1 cited source is not in this result"],
+      [
+        "The song was recorded at Abbey Road.",
+        "Model inference",
+        "Not supported by its sources: The release record does not name a studio.",
+      ],
     ]) {
       const item = claimItem(more, text);
       await expect(item.locator("[data-claim-kind]")).toHaveAttribute(
         "data-claim-kind",
         "inferred",
       );
-      await expect(item).toContainText("Model inference");
+      await expect(item.locator("[data-claim-kind] span.border").first()).toHaveText(label);
       await expect(item).toContainText(status);
       await expect(item).not.toContainText("Sourced");
       await expect(item).not.toContainText("primary record");
@@ -145,7 +169,9 @@ test.describe("a result with claims", () => {
       page.getByRole("region", { name: "More claims" }),
       "The preview's key, as measured.",
     );
-    await expect(key).toContainText("Model inference");
+    // Written by code, but its value was not measured: inferred, not the model's.
+    await expect(key).toContainText("Inferred");
+    await expect(key).not.toContainText("Model inference");
     await expect(key.locator('[data-value-kind="missing"]')).toHaveText(
       "Key not measured— not detected in the preview",
     );
@@ -163,12 +189,17 @@ test.describe("a result with claims", () => {
     const more = page.getByRole("region", { name: "More claims" });
     const sleeve = claimItem(more, "The sleeve gives the tempo as 246 BPM.");
     await expect(sleeve).toContainText("Conflict");
+    // The measured side is the result's own measurement, as the audio values show it.
     await expect(sleeve).toContainText(
-      "Conflict with the measurement: the claim says 246 · measured 123.04 (essentia.RhythmExtractor2013, 22.4 s preview)",
+      "Conflict with the measurement: the claim says 246 · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)",
     );
+    await expect(sleeve).toContainText(
+      "taken from the source record · no verifier verdict on its text",
+    );
+    await expect(sleeve).not.toContainText("not checked");
     const noValues = claimItem(more, "It feels like 61 BPM.");
     await expect(noValues).toContainText(
-      "Conflict with the measurement; the result does not give the two values",
+      "Conflict with the measurement: the result does not give the claim's value · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)",
     );
     // Numbers that agree with the measurement raise no conflict.
     await expect(claimItem(more, "It runs at roughly 123 BPM.")).not.toContainText("Conflict");
@@ -181,21 +212,43 @@ test.describe("a result with claims", () => {
     const rejectedTexts = [
       "Paper Lanterns was first released in 1998.",
       "Mixed by Eve Example.",
+      "A horn stab from a 1975 record plays at the bridge.",
+      "The band toured Japan in 2009.",
       "The song runs at 90 BPM.",
     ];
-    const button = page.getByRole("button", { name: "Rejected by the verifier (3)" });
+    // Five it can read, and one it cannot.
+    const button = page.getByRole("button", { name: "Rejected by the verifier (6)" });
     await expect(button).toHaveAttribute("aria-expanded", "false");
-    // Collapsed: none of them, nor the card that states one, is on the page.
-    for (const text of [...rejectedTexts, "A 1998 release"]) {
+    // Collapsed: none of them, nor a card, sample or relation that states one, is on the page.
+    for (const text of [
+      ...rejectedTexts,
+      "A 1998 release",
+      "A lighthouse",
+      "The band toured Japan in 2012.",
+    ]) {
       await expect(page.getByText(text)).toBeHidden();
     }
+    const timeline = page.getByRole("group", { name: "Song structure" });
+    await expect(timeline.getByRole("img", { name: /^Sample: Vocal chop/ })).toHaveCount(1);
+    await expect(timeline.getByRole("img", { name: /Horn stab/ })).toHaveCount(0);
+    const graph = page.locator("#panel-genealogy svg");
+    await expect(graph.locator("g.nodes > g")).toHaveCount(3);
+    await expect(graph.locator("g.links line")).toHaveCount(2);
+    await expect(page.locator("#panel-genealogy")).not.toContainText("Rejected Source");
+    await expect(page.locator("#panel-genealogy")).toContainText("Kept Influence - Other (2005)");
+    // A card whose claim cannot be read is left out, and the page says so.
+    await expect(page.locator("#panel-context")).toContainText(
+      "1 fact is not shown: this page cannot read the claim it states.",
+    );
+    await expect(page.getByText("Leaving home")).toHaveCount(0);
     await screenshot(page, testInfo, "rejected-collapsed", button);
 
     await button.click();
     await expect(button).toHaveAttribute("aria-expanded", "true");
     const panel = page.locator(`[id="${await button.getAttribute("aria-controls")}"]`);
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole("listitem")).toHaveCount(3);
+    await expect(panel.getByRole("listitem")).toHaveCount(5);
+    await expect(panel).toContainText("1 more rejected claim could not be read by this page.");
     for (const text of rejectedTexts) {
       // Shown once, in the panel.
       await expect(page.getByText(text)).toHaveCount(1);
@@ -205,7 +258,7 @@ test.describe("a result with claims", () => {
       "Contradicted by its sources: The release credits name Fay Example as the mixer.",
     );
     await expect(panel).toContainText(
-      "Contradicted by the measurement: the claim says 90 · measured 123.04 (essentia.RhythmExtractor2013, 22.4 s preview)",
+      "Contradicted by the measurement: the claim says 90 · measured 123 BPM (essentia.RhythmExtractor2013, 22.4 s preview)",
     );
     // A contradicted credit is not a credit.
     await expect(page.getByRole("region", { name: "Credits" })).not.toContainText("Eve Example");
@@ -227,7 +280,7 @@ test("on a phone the rejected claims are reachable from the Analysis tab", async
   await analyzeAndOpenDashboard(page, "Paper Lanterns");
   await openPlayer(page);
   await page.getByRole("tab", { name: "Analysis" }).click();
-  const button = page.getByRole("button", { name: "Rejected by the verifier (3)" });
+  const button = page.getByRole("button", { name: "Rejected by the verifier (6)" });
   await button.scrollIntoViewIfNeeded();
   await expect(button).toBeInViewport();
   await button.focus();
@@ -252,7 +305,7 @@ test("a result without claims says that no credits were found", async ({ page })
   await expect(page.getByRole("button", { name: /Rejected by the verifier/ })).toHaveCount(0);
 });
 
-test("an older result's credits are listed as model inference with no source", async ({
+test("model-written credit lists are shown as inference with no source", async ({
   page,
 }, testInfo) => {
   await useMockApi(
@@ -262,7 +315,7 @@ test("an older result's credits are listed as model inference with no source", a
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await openPlayer(page);
   const credits = page.getByRole("region", { name: "Credits" });
-  await expect(credits).toContainText("Model inferenceno source cited");
+  await expect(credits).toContainText("Model inferencemodel-written, no source cited");
   await expect(credits).toContainText("ProducersCleo ExampleWritersAda Example");
   await expect(credits).not.toContainText("Sourced");
   await screenshot(page, testInfo, "uncited-credits", credits);
@@ -275,6 +328,6 @@ test("a result built without the model says its facts have no citations", async 
   const insights = page.locator("#panel-context");
   await expect(insights).toContainText("From source data");
   await expect(insights).toContainText(
-    "No citations: these facts come from source records but do not link to them.",
+    "No citations: the facts taken from source records do not link to them.",
   );
 });

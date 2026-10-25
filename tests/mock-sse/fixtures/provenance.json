@@ -80,7 +80,18 @@
             }
           ],
           "segmentsSource": "inferred",
-          "samples": [],
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record",
+              "claimId": "c-sample-kept"
+            },
+            {
+              "time": 120,
+              "description": "Horn stab from a 1975 record",
+              "claimId": "c-sample-rejected"
+            }
+          ],
           "keyMoments": [
             {
               "time": 3.1,
@@ -115,6 +126,20 @@
               "content": "Paper Lanterns was first released in 1998.",
               "type": "trivia",
               "claimId": "c-1998"
+            },
+            {
+              "id": "f4",
+              "title": "A lighthouse",
+              "content": "The lyrics mention a lighthouse.",
+              "type": "trivia",
+              "claimId": "c-future-rejected"
+            },
+            {
+              "id": "f5",
+              "title": "Leaving home",
+              "content": "The lyrics are about leaving home.",
+              "type": "trivia",
+              "claimId": "c-future"
             }
           ],
           "genealogy": {
@@ -124,9 +149,54 @@
                 "group": 1,
                 "label": "Paper Lanterns - Test Artist (2011)",
                 "size": 40
+              },
+              {
+                "id": "n-rejected",
+                "group": 2,
+                "label": "Rejected Source - Someone (1998)",
+                "size": 30
+              },
+              {
+                "id": "n-kept",
+                "group": 4,
+                "label": "Kept Influence - Other (2005)",
+                "size": 25
+              },
+              {
+                "id": "n-free",
+                "group": 4,
+                "label": "Unclaimed Influence - Third (1990)",
+                "size": 25
               }
             ],
-            "links": []
+            "links": [
+              {
+                "source": "n-rejected",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "inferred",
+                "claimId": "c-1998",
+                "evidenceIds": []
+              },
+              {
+                "source": "n-kept",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "inferred",
+                "claimId": "c-club",
+                "evidenceIds": []
+              },
+              {
+                "source": "n-free",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "inferred",
+                "evidenceIds": []
+              }
+            ]
           },
           "audioSource": "unavailable",
           "audioConfidence": "low",
@@ -221,6 +291,16 @@
               "retrievedAt": "2026-10-20T12:00:00.000Z",
               "excerpt": "Paper Lanterns appears on the soundtrack of a 2012 short film.",
               "recordRef": "track/song/998877"
+            },
+            {
+              "id": "ev-blog",
+              "source": "tavily",
+              "sourceTier": "primary-record",
+              "url": "https://blog.example.net/paper-lanterns",
+              "title": "Paper Lanterns, a breakthrough",
+              "retrievedAt": "2026-10-20T12:00:00.000Z",
+              "excerpt": "Paper Lanterns was the band breakthrough.",
+              "recordRef": null
             }
           ],
           "claims": [
@@ -387,6 +467,94 @@
               "evidenceIds": ["ev-discogs-release"],
               "verdict": "contradicted",
               "verdictReason": "The release credits name Fay Example as the mixer.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-mastered",
+              "text": "Mastered by Gil Example.",
+              "about": "credit",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": "unsupported",
+              "verdictReason": "The release credits list no mastering engineer.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-blog",
+              "text": "A blog calls it the band's breakthrough.",
+              "about": "history",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-blog"],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-sample-kept",
+              "text": "A vocal chop from an older record opens the song.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-sample-rejected",
+              "text": "A horn stab from a 1975 record plays at the bridge.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "No record lists a horn sample.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-dup",
+              "text": "The band toured Japan in 2012.",
+              "about": "history",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-dup",
+              "text": "The band toured Japan in 2009.",
+              "about": "history",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "The tour dates list 2012 only.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-future-rejected",
+              "text": "The lyrics mention a lighthouse.",
+              "about": "lyrics",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "The lyrics page does not mention a lighthouse.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-future",
+              "text": "The lyrics are about leaving home.",
+              "about": "lyrics",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
               "numericCheck": "n/a"
             },
             {

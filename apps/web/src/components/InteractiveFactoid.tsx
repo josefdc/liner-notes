@@ -4,6 +4,7 @@ import type { Reading } from '../constants';
 import type { Factoid, FactoidEntity } from '../types';
 import type { ShownClaim } from './provenance/claims';
 import { InferenceLabel } from './EstimatedWarning';
+import type { MeasuredAudio } from './measured/audio';
 import { ClaimChip } from './provenance/ClaimChip';
 
 interface InteractiveFactoidProps {
@@ -21,8 +22,8 @@ interface InteractiveFactoidProps {
   label?: string;
   /** The result's signal readings, for a claim about a measured value. */
   readings?: readonly Reading[];
-  /** Length of the measured preview window, for a conflict with the measurement. */
-  windowSeconds?: number;
+  /** The result's measurement, for the measured side of a conflict. */
+  audio?: MeasuredAudio | null;
 }
 
 // Color mapping for entity types
@@ -100,7 +101,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
   claim,
   label,
   readings,
-  windowSeconds,
+  audio,
 }) => {
   // Memoized content with clickable entities highlighted
   const renderedContent = useMemo(() => {
@@ -206,12 +207,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
 
       {/* Where the statement comes from: its claim's kind, sources and verifier status */}
       {claim ? (
-        <ClaimChip
-          shown={claim}
-          readings={readings}
-          windowSeconds={windowSeconds}
-          className="relative mt-3"
-        />
+        <ClaimChip shown={claim} readings={readings} audio={audio} className="relative mt-3" />
       ) : (
         label && <InferenceLabel className="relative mt-3">{label}</InferenceLabel>
       )}

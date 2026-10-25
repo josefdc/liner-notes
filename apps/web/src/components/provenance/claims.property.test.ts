@@ -12,6 +12,7 @@ import {
   NumericCheck,
   SourceId,
   SourceTier,
+  Timestamp,
   Verdict,
 } from '@liner-notes/contract';
 import { describe, expect, it } from 'vitest';
@@ -32,6 +33,8 @@ import {
   readEvidence,
   SOURCE_IDS,
   SOURCE_TIERS,
+  sourceTier,
+  UTC_DATE_TIME,
   VERDICTS,
 } from './claims';
 
@@ -182,6 +185,35 @@ describe("the page's copy of the contract's enums", () => {
     same(CLAIM_FIELDS, ClaimField.options);
     same(FACTOID_TYPES, FactoidType.options);
     same(FACTOID_ENTITY_TYPES, FactoidEntityType.options);
+  });
+});
+
+describe("the page's copy of the contract's timestamp pattern", () => {
+  it("is the pattern of the contract's Timestamp", () => {
+    const { pattern } = (Timestamp as unknown as { _zod: { def: { pattern: RegExp } } })._zod.def;
+    expect(UTC_DATE_TIME.source).toBe(pattern.source);
+    expect(UTC_DATE_TIME.flags).toBe(pattern.flags);
+  });
+});
+
+describe('the tier shown for an evidence item', () => {
+  const RANK = { web: 0, editorial: 1, 'primary-record': 2 } as const;
+
+  it('is never a primary record for a web search result, and never above what the item states', () => {
+    let searches = 0;
+    for (const seed of SEEDS) {
+      for (const recordRef of [null, 'track/recording/1', 'work/9', 'release/3', 'other/1']) {
+        const item = Evidence.parse({ ...validEvidence(seed), recordRef });
+        const shown = sourceTier(item);
+        expect(RANK[shown]).toBeLessThanOrEqual(RANK[item.sourceTier]);
+        if (item.source === 'tavily') {
+          expect(shown).not.toBe('primary-record');
+          searches += 1;
+        }
+        if (shown === 'primary-record') expect(recordRef).toMatch(/^(track|work|release)\//);
+      }
+    }
+    expect(searches).toBeGreaterThan(0);
   });
 });
 

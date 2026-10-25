@@ -210,9 +210,10 @@ export function claimDisplayKind(claim: Claim, context: ClaimContext): ClaimKind
 /**
  * A claim rejected by the verifier: its judge found it contradicted by its cited excerpts, or
  * the numeric check found its number contradicted by the measurement. Whatever its kind, it is
- * shown only in the rejected claims, with why.
+ * shown only in the rejected claims, with why. It takes any item, read or not, so a claim this
+ * page cannot read is still kept out of the main view when it was rejected.
  */
-export function claimIsRejected(claim: Claim): boolean {
+export function claimIsRejected(claim: { verdict?: unknown; numericCheck?: unknown }): boolean {
   return claim.verdict === 'contradicted' || claim.numericCheck === 'contradicted';
 }
 
@@ -239,22 +240,90 @@ export const SOURCE_TIER_TEXT: Record<SourceTier, string> = {
   web: 'web page',
 };
 
-/** An evidence item's tier, in words. */
-export const sourceTierText = (evidence: Pick<Evidence, 'sourceTier'>): string =>
-  SOURCE_TIER_TEXT[evidence.sourceTier];
+/** What a primary record states a fact about: the first segment of its recordRef. */
+export type RecordScope = 'recording' | 'song' | 'release';
+const SCOPES: Record<string, RecordScope> = {
+  track: 'recording',
+  work: 'song',
+  release: 'release',
+};
+
+/** The scope of an item's record, or null when its recordRef names none the contract knows. */
+export function recordScope(evidence: Pick<Evidence, 'recordRef'>): RecordScope | null {
+  const prefix = evidence.recordRef?.split('/')[0] ?? '';
+  return Object.hasOwn(SCOPES, prefix) ? (SCOPES[prefix] as RecordScope) : null;
+}
+
+/**
+ * An item's tier as the contract's evidence rules allow it, never above what it states: a web
+ * search result is never a primary record (`evidenceIssues`), and a primary record names its
+ * record with a scoped recordRef (evidence.ts). A primary record that breaks either rule is
+ * shown as a web page; "editorial" and "web" are shown as stated.
+ */
+export function sourceTier(evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>) {
+  if (evidence.sourceTier !== 'primary-record') return evidence.sourceTier;
+  return evidence.source !== 'tavily' && recordScope(evidence) !== null
+    ? 'primary-record'
+    : ('web' as const);
+}
+
+/** An evidence item's tier, in words (see sourceTier). */
+export const sourceTierText = (
+  evidence: Pick<Evidence, 'source' | 'sourceTier' | 'recordRef'>,
+): string => SOURCE_TIER_TEXT[sourceTier(evidence)];
+
+/** What a record is about when that is not this recording, in words; null for this recording. */
+export function scopeText(evidence: Pick<Evidence, 'recordRef'>): string | null {
+  const scope = recordScope(evidence);
+  if (scope === 'song') return 'about the song, not this recording';
+  if (scope === 'release') return 'about a whole release';
+  return null;
+}
+
+// Preview clips and signed links (the API's isPreviewUrl, apps/api/src/store/runs.ts): Deezer's
+// and Spotify's preview hosts, and URLs signed with an expiring token. Producers keep them out
+// of results; a link to one would expire, or carry a credential.
+const PREVIEW_HOST =
+  /^https?:\/\/(?:[^/?#@\s]*\.)?(?:(?:e-)?cdn[st]-preview(?:-[a-z0-9]+)?\.dzcdn\.net|p\.scdn\.co)(?::\d+)?(?:[/?#]\S*)?$/i;
+const SIGNED_URL = /^https?:\/\/\S*[?&;~](?:hdnea|hdnts|x-amz-signature)=\S*$/i;
+// Query parameters that carry a credential.
+const CREDENTIAL_PARAMS = new Set([
+  'access_token',
+  'api_key',
+  'apikey',
+  'token',
+  'signature',
+  'x-amz-credential',
+  'x-amz-signature',
+  'x-goog-credential',
+  'x-goog-signature',
+  'hdnea',
+  'hdnts',
+]);
 
 /**
  * A link that may be opened: an absolute http or https URL, as the browser resolves it; null for
- * anything else (javascript:, data:, a relative path, text that is not a URL).
+ * anything else (javascript:, data:, a relative path, text that is not a URL), and for a URL that
+ * carries a credential (a user name or password, a signed or token query) or is a preview clip.
  */
 export function safeHref(url: string | null | undefined): string | null {
   if (!url) return null;
+  let parsed: URL;
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
+    parsed = new URL(url);
   } catch {
     return null;
   }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (parsed.username || parsed.password) return null;
+  if ([...parsed.searchParams.keys()].some((key) => CREDENTIAL_PARAMS.has(key.toLowerCase()))) {
+    return null;
+  }
+  const href = parsed.href;
+  for (const value of [url.trim(), href]) {
+    if (PREVIEW_HOST.test(value) || SIGNED_URL.test(value)) return null;
+  }
+  return href;
 }
 
 // =============================================================================
@@ -264,22 +333,44 @@ export function safeHref(url: string | null | undefined): string | null {
 /** A claim with how it is shown and the evidence it cites. */
 export interface ShownClaim {
   claim: Claim;
+  /** A key unique within the result (claim ids may repeat): its position and id. */
+  key: string;
   /** How it is shown (`claimDisplayKind`). */
   kind: ClaimKind;
   /** The cited items found in the evidence pack, in the claim's order. */
   cited: Evidence[];
   /** How many cited ids are not in the evidence pack. */
   missingCitations: number;
+  /** The claim itself was rejected (`claimIsRejected`). */
   rejected: boolean;
 }
 
 export interface ResultClaims {
   /** Every claim the page can read, in the result's order. */
   all: ShownClaim[];
+  /** The first claim the page can read with each id. */
   byId: ReadonlyMap<string, ShownClaim>;
-  /** The claims of the main view: every claim not rejected. */
+  /**
+   * The claims of the main view: the first readable claim with each id, unless that id is
+   * hidden (see `isHidden`).
+   */
   shown: ShownClaim[];
+  /** Every readable claim the verifier rejected. */
   rejected: ShownClaim[];
+  /** Rejected claims this page cannot read (listed by count only). */
+  unreadableRejected: number;
+  /**
+   * True for an id the main view must not show anything for: an id any claim with it was
+   * rejected under, read or not, or an id only unreadable claims carry. Cards, samples and
+   * genealogy links that state such a claim are left out.
+   */
+  isHidden: (id: unknown) => boolean;
+  /** True for an id only claims this page cannot read carry. */
+  isUnreadable: (id: unknown) => boolean;
+  /** True for an id any claim with it was rejected under, read or not. */
+  isRejected: (id: unknown) => boolean;
+  /** The page's reading of the measurement, for the conflict lines. */
+  audio: MeasuredAudio | null;
 }
 
 /** The claim context of a result: its evidence pack's ids and its measurement. */
@@ -290,29 +381,82 @@ export function claimContextOf(track: TrackData, evidence = readEvidence(track.e
   } satisfies ClaimContext;
 }
 
+const idOf = (item: unknown): string | null =>
+  isObject(item) && isId(item.id) ? (item.id as string) : null;
+
 /** A result's claims, each with how it is shown, split into shown and rejected. */
 export function resultClaims(track: TrackData): ResultClaims {
   const evidence = readEvidence(track.evidence);
   const context = claimContextOf(track, evidence);
   const pack = new Map<string, Evidence>();
   for (const item of evidence) if (!pack.has(item.id)) pack.set(item.id, item);
-  const all = readClaims(track.claims).map((claim): ShownClaim => {
+  const raw: unknown[] = Array.isArray(track.claims) ? track.claims : [];
+
+  const all: ShownClaim[] = [];
+  const rejectedIds = new Set<string>();
+  const readableIds = new Set<string>();
+  const unreadableIds = new Set<string>();
+  let unreadableRejected = 0;
+  raw.forEach((item, index) => {
+    const id = idOf(item);
+    const rejected = isObject(item) && claimIsRejected(item);
+    if (id !== null && rejected) rejectedIds.add(id);
+    if (!isClaim(item)) {
+      if (id !== null) unreadableIds.add(id);
+      if (rejected) unreadableRejected += 1;
+      return;
+    }
+    const claim = readClaim(item);
+    readableIds.add(claim.id);
     const ids = [...new Set(claim.evidenceIds)];
-    const cited = ids.flatMap((id) => pack.get(id) ?? []);
-    return {
+    const cited = ids.flatMap((citedId) => pack.get(citedId) ?? []);
+    all.push({
       claim,
+      key: `${index}:${claim.id}`,
       kind: claimDisplayKind(claim, context),
       cited,
       missingCitations: ids.length - cited.length,
-      rejected: claimIsRejected(claim),
-    };
+      rejected,
+    });
   });
+
   const byId = new Map<string, ShownClaim>();
   for (const shown of all) if (!byId.has(shown.claim.id)) byId.set(shown.claim.id, shown);
+  const isUnreadable = (id: unknown) =>
+    typeof id === 'string' && unreadableIds.has(id) && !readableIds.has(id);
+  const isRejected = (id: unknown) => typeof id === 'string' && rejectedIds.has(id);
+  const isHidden = (id: unknown) => isRejected(id) || isUnreadable(id);
   return {
     all,
     byId,
-    shown: all.filter((shown) => !shown.rejected),
+    shown: [...byId.values()].filter((shown) => !isHidden(shown.claim.id)),
     rejected: all.filter((shown) => shown.rejected),
+    unreadableRejected,
+    isHidden,
+    isUnreadable,
+    isRejected,
+    audio: context.audio,
   };
+}
+
+/**
+ * A genealogy without the relations the main view must not show: links whose claim is hidden
+ * (rejected, or unreadable), and the nodes those links alone related to this track. The current
+ * track, and nodes no link named, stay as they were.
+ */
+export function withoutHiddenRelations(
+  genealogy: TrackData['genealogy'],
+  isHidden: (id: unknown) => boolean,
+): TrackData['genealogy'] {
+  const claimOf = (link: object) => (link as { claimId?: unknown }).claimId;
+  const links = genealogy.links.filter((link) => !isHidden(claimOf(link)));
+  if (links.length === genealogy.links.length) return genealogy;
+  const ends = (list: TrackData['genealogy']['links']) =>
+    new Set(list.flatMap((link) => [link.source, link.target]));
+  const linkedBefore = ends(genealogy.links);
+  const linkedAfter = ends(links);
+  const nodes = genealogy.nodes.filter(
+    (node) => node.group === 1 || linkedAfter.has(node.id) || !linkedBefore.has(node.id),
+  );
+  return { nodes, links };
 }

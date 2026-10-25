@@ -9,7 +9,10 @@ import {
   readEvidence,
   resultClaims,
   safeHref,
+  scopeText,
+  sourceTier,
   sourceTierText,
+  withoutHiddenRelations,
 } from './claims';
 import { claim, evidence, provenanceTrack } from './testing';
 
@@ -108,44 +111,118 @@ describe('safeHref', () => {
       expect(safeHref(url), String(url)).toBeNull();
     }
   });
+
+  it('never links a preview clip, a signed address or one that carries a credential', () => {
+    for (const url of [
+      'https://p.scdn.co/mp3-preview/abc?cid=1',
+      'https://cdnt-preview.dzcdn.net/api/1/1/a/b/c.mp3?hdnea=exp=1~acl=/*~hmac=x',
+      'https://e-cdns-preview-a.dzcdn.net/stream/c-1.mp3',
+      'https://bucket.s3.amazonaws.com/a.mp3?X-Amz-Signature=abc',
+      'https://user:pass@evil.example/',
+      'https://user@evil.example/',
+      'https://example.org/a?token=abc',
+      'https://example.org/a?access_token=abc',
+      'https://example.org/a?API_KEY=abc',
+    ]) {
+      expect(safeHref(url), url).toBeNull();
+    }
+    // Images on Deezer's CDN and ordinary query strings stay links.
+    expect(safeHref('https://e-cdns-images.dzcdn.net/images/cover/1.jpg')).not.toBeNull();
+    expect(safeHref('https://www.discogs.com/search?q=Paper+Lanterns&type=all')).not.toBeNull();
+  });
 });
 
-describe('sourceTierText', () => {
+describe('sourceTier', () => {
   it('names each tier', () => {
     expect(sourceTierText(evidence())).toBe('primary record');
     expect(sourceTierText(evidence({ sourceTier: 'editorial' }))).toBe('editorial');
     expect(sourceTierText(evidence({ sourceTier: 'web' }))).toBe('web page');
   });
+
+  it('never shows an item as a primary record against the evidence rules', () => {
+    // A web search result is never a primary record (evidenceIssues).
+    const search = evidence({ source: 'tavily', sourceTier: 'primary-record', recordRef: null });
+    expect(sourceTier(search)).toBe('web');
+    expect(sourceTier({ ...search, recordRef: 'track/recording/1' })).toBe('web');
+    // A primary record names its record with a scope.
+    expect(sourceTier(evidence({ recordRef: null }))).toBe('web');
+    expect(sourceTier(evidence({ recordRef: 'recording/1' }))).toBe('web');
+    for (const recordRef of ['track/recording/1', 'work/9', 'release/3/credit/1']) {
+      expect(sourceTier(evidence({ recordRef }))).toBe('primary-record');
+    }
+    // A stated lower tier is never raised.
+    expect(sourceTier(evidence({ sourceTier: 'web' }))).toBe('web');
+    expect(sourceTier(evidence({ sourceTier: 'editorial' }))).toBe('editorial');
+  });
+
+  it('says what a record is about when it is not this recording', () => {
+    expect(scopeText(evidence({ recordRef: 'track/recording/1' }))).toBeNull();
+    expect(scopeText(evidence({ recordRef: 'work/9' }))).toBe('about the song, not this recording');
+    expect(scopeText(evidence({ recordRef: 'release/3/credit/1' }))).toBe('about a whole release');
+    expect(scopeText(evidence({ recordRef: null }))).toBeNull();
+  });
 });
 
 describe('resultClaims on the provenance fixture', () => {
   const claims = resultClaims(provenanceTrack());
-  const kinds = Object.fromEntries(claims.all.map((shown) => [shown.claim.id, shown.kind]));
+  const kinds = claims.all.map((shown) => [shown.claim.id, shown.kind]);
 
-  it('reads each claim with how it is shown', () => {
-    expect(kinds).toEqual({
-      'c-tempo': 'measured',
-      'c-key': 'inferred',
-      'c-writers': 'sourced',
-      'c-producer': 'sourced',
-      'c-two-days': 'sourced',
-      'c-club': 'inferred',
-      'c-gone': 'inferred',
-      'c-unsupported': 'inferred',
-      'c-roughly': 'inferred',
-      'c-sleeve-tempo': 'sourced',
-      'c-half-time': 'inferred',
-      'c-film': 'sourced',
-      'c-1998': 'inferred',
-      'c-mixed': 'sourced',
-      'c-90': 'inferred',
-    });
+  it('reads each claim with how it is shown, and drops the claims it cannot read', () => {
+    expect(kinds).toEqual([
+      ['c-tempo', 'measured'],
+      ['c-key', 'inferred'],
+      ['c-writers', 'sourced'],
+      ['c-producer', 'sourced'],
+      ['c-two-days', 'sourced'],
+      ['c-club', 'inferred'],
+      ['c-gone', 'inferred'],
+      ['c-unsupported', 'inferred'],
+      ['c-roughly', 'inferred'],
+      ['c-sleeve-tempo', 'sourced'],
+      ['c-half-time', 'inferred'],
+      ['c-film', 'sourced'],
+      ['c-1998', 'inferred'],
+      ['c-mixed', 'sourced'],
+      ['c-mastered', 'sourced'],
+      ['c-blog', 'sourced'],
+      ['c-sample-kept', 'inferred'],
+      ['c-sample-rejected', 'inferred'],
+      ['c-dup', 'inferred'],
+      ['c-dup', 'inferred'],
+      ['c-90', 'inferred'],
+    ]);
+    // Keys stay unique when ids repeat.
+    expect(new Set(claims.all.map((shown) => shown.key)).size).toBe(claims.all.length);
   });
 
   it('puts the contradicted claims, whatever their kind, in the rejected list only', () => {
-    expect(claims.rejected.map((shown) => shown.claim.id)).toEqual(['c-1998', 'c-mixed', 'c-90']);
-    expect(claims.shown.map((shown) => shown.claim.id)).not.toContain('c-mixed');
-    expect(claims.shown).toHaveLength(12);
+    expect(claims.rejected.map((shown) => shown.claim.text)).toEqual([
+      'Paper Lanterns was first released in 1998.',
+      'Mixed by Eve Example.',
+      'A horn stab from a 1975 record plays at the bridge.',
+      'The band toured Japan in 2009.',
+      'The song runs at 90 BPM.',
+    ]);
+    expect(claims.unreadableRejected).toBe(1);
+    const shownIds = claims.shown.map((shown) => shown.claim.id);
+    for (const id of ['c-1998', 'c-mixed', 'c-sample-rejected', 'c-90']) {
+      expect(shownIds).not.toContain(id);
+    }
+    // An id any claim was rejected under leaves the main view, whichever claim came first.
+    expect(shownIds).not.toContain('c-dup');
+    expect(claims.isHidden('c-dup')).toBe(true);
+    expect(claims.shown).toHaveLength(15);
+  });
+
+  it('hides the ids only unreadable claims carry, and says which were rejected', () => {
+    expect(claims.isHidden('c-future-rejected')).toBe(true);
+    expect(claims.isRejected('c-future-rejected')).toBe(true);
+    expect(claims.isHidden('c-future')).toBe(true);
+    expect(claims.isUnreadable('c-future')).toBe(true);
+    expect(claims.isRejected('c-future')).toBe(false);
+    expect(claims.isHidden('c-club')).toBe(false);
+    expect(claims.isHidden('no-such-claim')).toBe(false);
+    expect(claims.isHidden(undefined)).toBe(false);
   });
 
   it('keeps the cited items in the pack, and counts the cited ids that are not', () => {
@@ -153,5 +230,33 @@ describe('resultClaims on the provenance fixture', () => {
     expect(gone?.cited).toEqual([]);
     expect(gone?.missingCitations).toBe(1);
     expect(claims.byId.get('c-writers')?.cited.map((item) => item.id)).toEqual(['ev-mb-work']);
+  });
+});
+
+describe('withoutHiddenRelations', () => {
+  it('drops the relations whose claim is hidden, and the nodes only they related', () => {
+    const track = provenanceTrack();
+    const claims = resultClaims(track);
+    const genealogy = withoutHiddenRelations(track.genealogy, claims.isHidden);
+    expect(genealogy.nodes.map((node) => node.id)).toEqual(['current', 'n-kept', 'n-free']);
+    expect(genealogy.links.map((link) => link.source)).toEqual(['n-kept', 'n-free']);
+  });
+
+  it('keeps nodes no link named, and the same genealogy when nothing is hidden', () => {
+    const genealogy = {
+      nodes: [
+        { id: 'current', group: 1, label: 'A', size: 40 },
+        { id: 'lone', group: 4, label: 'B', size: 20 },
+        { id: 'both', group: 4, label: 'C', size: 20 },
+      ],
+      links: [
+        { source: 'both', target: 'current', value: 1, claimId: 'bad' },
+        { source: 'both', target: 'current', value: 1, claimId: 'good' },
+      ],
+    } as unknown as TrackData['genealogy'];
+    const hidden = withoutHiddenRelations(genealogy, (id) => id === 'bad');
+    expect(hidden.nodes.map((node) => node.id)).toEqual(['current', 'lone', 'both']);
+    expect(hidden.links).toHaveLength(1);
+    expect(withoutHiddenRelations(genealogy, () => false)).toBe(genealogy);
   });
 });

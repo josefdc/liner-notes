@@ -1,0 +1,492 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "runId": "thread-genealogy-kinds",
+        "seq": 0,
+        "threadId": "thread-genealogy-kinds"
+      },
+      {
+        "type": "heartbeat",
+        "runId": "thread-genealogy-kinds"
+      },
+      {
+        "type": "status",
+        "runId": "thread-genealogy-kinds",
+        "seq": 1,
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "runId": "thread-genealogy-kinds",
+        "seq": 2,
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "runId": "thread-genealogy-kinds",
+        "seq": 3,
+        "data": {
+          "id": "t-genealogy-kinds",
+          "title": "Bright Lines",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-full",
+          "releaseYear": "2011",
+          "bpm": null,
+          "key": null,
+          "energy": null,
+          "valence": null,
+          "danceability": null,
+          "acousticness": null,
+          "durationSeconds": 240,
+          "genreProfile": [
+            {
+              "genre": "Synthpop",
+              "value": 80
+            },
+            {
+              "genre": "Electronic",
+              "value": 70
+            },
+            {
+              "genre": "Rock",
+              "value": 20
+            },
+            {
+              "genre": "Pop",
+              "value": 55
+            },
+            {
+              "genre": "Ambient",
+              "value": 30
+            }
+          ],
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record"
+            }
+          ],
+          "keyMoments": [],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Sonic Profile",
+              "content": "105 BPM in A Minor. High measured energy.",
+              "type": "production"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Bright Lines - Test Artist (2011)",
+                "size": 40,
+                "trackTitle": "Bright Lines",
+                "trackArtist": "Test Artist"
+              },
+              {
+                "id": "sample-sourced",
+                "group": 2,
+                "label": "Sourced Sample - Someone (1984)",
+                "size": 24
+              },
+              {
+                "id": "interpolation-sourced",
+                "group": 2,
+                "label": "Sourced Interpolation - Someone (1984)",
+                "size": 24
+              },
+              {
+                "id": "cover-sourced",
+                "group": 2,
+                "label": "Sourced Cover - Someone (1984)",
+                "size": 24
+              },
+              {
+                "id": "remix-sourced",
+                "group": 3,
+                "label": "Sourced Remix - Someone (2015)",
+                "size": 24
+              },
+              {
+                "id": "producer-sourced",
+                "group": 4,
+                "label": "Sourced Producer - Someone (1984)",
+                "size": 24
+              },
+              {
+                "id": "influence-sourced",
+                "group": 4,
+                "label": "Sourced Influence - Someone (1984)",
+                "size": 24
+              },
+              {
+                "id": "sample-inferred",
+                "group": 2,
+                "label": "Inferred Sample - Someone Else (1990)",
+                "size": 22
+              },
+              {
+                "id": "interpolation-inferred",
+                "group": 4,
+                "label": "Inferred Interpolation - Someone Else (1990)",
+                "size": 22
+              },
+              {
+                "id": "cover-inferred",
+                "group": 4,
+                "label": "Inferred Cover - Someone Else (1990)",
+                "size": 22
+              },
+              {
+                "id": "remix-inferred",
+                "group": 4,
+                "label": "Inferred Remix - Someone Else (1990)",
+                "size": 22
+              },
+              {
+                "id": "producer-inferred",
+                "group": 4,
+                "label": "Inferred Producer - Someone Else (1990)",
+                "size": 22
+              },
+              {
+                "id": "influence-inferred",
+                "group": 4,
+                "label": "Inferred Influence - Someone Else (1990)",
+                "size": 22
+              },
+              {
+                "id": "ghost-cite",
+                "group": 2,
+                "label": "Ghost Citation - Nobody (1979)",
+                "size": 22
+              },
+              {
+                "id": "no-cite",
+                "group": 2,
+                "label": "No Citation - Nobody (1977)",
+                "size": 22
+              },
+              {
+                "id": "model-sourced",
+                "group": 2,
+                "label": "Model Says Sourced - Someone (1983)",
+                "size": 22
+              },
+              {
+                "id": "model-verified",
+                "group": 2,
+                "label": "Verified Model Sample - Someone (1982)",
+                "size": 22
+              },
+              {
+                "id": "rejected",
+                "group": 2,
+                "label": "Rejected Sample - Someone (1981)",
+                "size": 22
+              },
+              {
+                "id": "backwards",
+                "group": 2,
+                "label": "Backwards Sample - Someone (2020)",
+                "size": 22
+              }
+            ],
+            "links": [
+              {
+                "source": "sample-sourced",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "interpolation-sourced",
+                "target": "current",
+                "value": 3,
+                "type": "interpolation",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-shs-1"]
+              },
+              {
+                "source": "cover-sourced",
+                "target": "current",
+                "value": 2,
+                "type": "cover",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-shs-1"]
+              },
+              {
+                "source": "current",
+                "target": "remix-sourced",
+                "value": 2,
+                "type": "remix",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "producer-sourced",
+                "target": "current",
+                "value": 1,
+                "type": "producer",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-discogs-1"]
+              },
+              {
+                "source": "influence-sourced",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-web-1"]
+              },
+              {
+                "source": "sample-inferred",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "interpolation-inferred",
+                "target": "current",
+                "value": 3,
+                "type": "interpolation",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "cover-inferred",
+                "target": "current",
+                "value": 2,
+                "type": "cover",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "remix-inferred",
+                "target": "current",
+                "value": 2,
+                "type": "remix",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "producer-inferred",
+                "target": "current",
+                "value": 1,
+                "type": "producer",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": []
+              },
+              {
+                "source": "influence-inferred",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "inferred",
+                "origin": "model",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "ghost-cite",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-ghost"]
+              },
+              {
+                "source": "no-cite",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": []
+              },
+              {
+                "source": "model-sourced",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "model",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "model-verified",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "model",
+                "claimId": "cl-supported",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "rejected",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "claimId": "cl-contradicted",
+                "evidenceIds": ["ev-mb-1"]
+              },
+              {
+                "source": "backwards",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "sourced",
+                "origin": "code",
+                "evidenceIds": ["ev-mb-1"]
+              }
+            ]
+          },
+          "audioSource": "unavailable",
+          "audioConfidence": "low",
+          "evidence": [
+            {
+              "id": "ev-mb-1",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/recording/00000000-0000-4000-8000-000000000001",
+              "title": "Bright Lines (recording)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "track/recording/00000000-0000-4000-8000-000000000001"
+            },
+            {
+              "id": "ev-shs-1",
+              "source": "secondhandsongs",
+              "sourceTier": "primary-record",
+              "url": "https://secondhandsongs.com/performance/1",
+              "title": "Bright Lines (performance)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "work/performance/1"
+            },
+            {
+              "id": "ev-discogs-1",
+              "source": "discogs",
+              "sourceTier": "primary-record",
+              "url": "https://www.discogs.com/release/1",
+              "title": "Test Album (release)",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": "release/1"
+            },
+            {
+              "id": "ev-web-1",
+              "source": "tavily",
+              "sourceTier": "web",
+              "url": "https://example.org/article",
+              "title": "An article about Bright Lines",
+              "retrievedAt": "2026-10-20T10:00:00.000Z",
+              "excerpt": "Excerpt of the record.",
+              "recordRef": null
+            }
+          ],
+          "audioUnavailableReason": "no_preview",
+          "audio": null,
+          "claims": [
+            {
+              "id": "cl-supported",
+              "text": "Bright Lines samples Verified Model Sample.",
+              "about": "sample",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-mb-1"],
+              "verdict": "supported",
+              "verdictReason": "The record lists the sample.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "cl-contradicted",
+              "text": "Bright Lines samples Rejected Sample.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "The record says otherwise.",
+              "numericCheck": "n/a"
+            }
+          ]
+        }
+      },
+      {
+        "type": "done",
+        "runId": "thread-genealogy-kinds",
+        "seq": 4,
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

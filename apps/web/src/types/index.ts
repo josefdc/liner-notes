@@ -76,12 +76,20 @@ export interface GenealogyNode {
   trackArtist?: string;
 }
 
+/**
+ * A relation between two genealogy nodes (the contract's GenealogyLink). Shown through
+ * `shownLinks` (components/genealogy/links.ts), which reads it with the contract's schema:
+ * sourced only when it says so and cites evidence that is all in the result's pack.
+ */
 export interface GenealogyLink {
   source: string;
   target: string;
   value: number;
-  // Semantic relationship type for visual styling
-  type?: 'sample' | 'cover' | 'remix' | 'producer' | 'influence';
+  type?: 'sample' | 'interpolation' | 'cover' | 'remix' | 'producer' | 'influence';
+  kind?: 'sourced' | 'inferred';
+  origin?: 'code' | 'model';
+  claimId?: string;
+  evidenceIds?: string[];
 }
 
 // Key moment detected in audio (drops, peaks, transitions)

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { countInText, rules } from "./guard-honest.mjs";
+import { countInText, PROTOTYPE_PHRASES, rules } from "./guard-honest.mjs";
 
 const rule = (id) => rules.find((candidate) => candidate.id === id);
 // `path` decides how comments and strings are read; snippets default to a TSX file.
@@ -63,7 +63,7 @@ describe("hex-colours-outside-tokens", () => {
   });
 });
 
-describe("comment stripping", () => {
+describe("what a rule scans", () => {
   it("keeps `//` inside a string and in JSX text, and counts code after a block comment", () => {
     expect(count("hex-colours-outside-tokens", "const url = 'a // #fff';")).toBe(1);
     expect(count("prototype-copy", "<p>X9-ALPHA {'//'} STATUS: ONLINE</p>")).toBe(2);
@@ -80,31 +80,140 @@ describe("comment stripping", () => {
     ).toBe(0);
   });
 
-  it("reports matches on their own line numbers", () => {
+  it("reports matches on the line where they start", () => {
     const text = "/*\n * Command Center\n */\nconst a = 'Command Center';\n";
     expect(countInText(rule("prototype-copy"), text, "apps/web/src/a.ts")).toEqual({
       total: 1,
       lines: [4],
+      matches: [{ line: 4, text: "Command Center" }],
     });
+  });
+
+  it("scans only text a user can read for prototype copy, not code or module paths", () => {
+    expect(count("prototype-copy", "const x = Decrypt(payload);")).toBe(0);
+    expect(count("prototype-copy", "import Decrypted from './Decrypted';")).toBe(0);
+    expect(count("prototype-copy", "export { Decrypted } from './Decrypted';")).toBe(0);
+    expect(count("prototype-copy", "const m = await import('./Decrypted');")).toBe(0);
+    expect(count("prototype-copy", "const label = 'Decrypted';")).toBe(1);
   });
 });
 
 describe("prototype-copy", () => {
+  // One sample per pattern, so a pattern that is dropped, mistyped or added without a sample
+  // fails here, whatever the repository's count is.
+  const samples = {
+    anyCase: {
+      "Sonic(?:[-_]| )?Agent(?!\\.db\\b)": "The Sonic Agent",
+      "Command Center": "PROCEED TO COMMAND CENTER",
+      "\\bAGENT_ID\\b": "AGENT_ID: X9",
+      "X9-ALPHA": "X9-ALPHA",
+      "STATUS: ONLINE": "STATUS: ONLINE",
+      "\\b(?:ANALYZE_SONG|DEEP_DIVE_MODE|PROCESSING_DATA_STREAM)\\b": "PROCESSING_DATA_STREAM",
+      "BACK TO BASE": "BACK TO BASE",
+      "D3\\.JS FORCE SIMULATION": "D3.JS FORCE SIMULATION",
+      "INTERACTIVE: ENABLED": "INTERACTIVE: ENABLED",
+      "\\bINTEL\\b": "NEW INTEL DECODED",
+      "RELATED ARTIFACTS": "3 RELATED ARTIFACTS",
+      "NO CONNECTIONS MAPPED": "NO CONNECTIONS MAPPED.",
+      "\\bCLICK (?:NODE )?TO (?:ANALYZE|EXPLORE)\\b": "CLICK NODE TO EXPLORE",
+      "\\bEVENTS RECORDED\\b": "12 EVENTS RECORDED",
+      "\\bAWAITING DATA\\b": "AWAITING DATA...",
+      "\\bPROCESS COMPLETE\\b": "PROCESS COMPLETE",
+      "[●◉](?:\\s|&nbsp;)*[a-z]{3,}": "◉ BUSY",
+      "\\bAgent Analysis\\b": "Agent Analysis",
+      "\\bFrequency analysis:": "Frequency analysis: 120 BPM",
+      "Cross-referencing visual artifacts": "Cross-referencing visual artifacts from Spotify...",
+      "Intelligence extraction": "Intelligence extraction complete",
+      "intelligence already extracted": "Research cache hit — intelligence already extracted",
+      "intelligence briefing": "Assembling your intelligence briefing...",
+      "deep-web research protocols": "Activating deep-web research protocols...",
+      "\\bdeep dive\\b": "Starting deep dive research...",
+      "Target acquired": "Target acquired: One More Time",
+      "Establishing connection to": "Establishing connection to Spotify API...",
+      "waveform parser": "Initializing audio waveform parser...",
+      "insights decoded": "4 insights decoded",
+      "\\buplink\\b": "ESTABLISHING UPLINK...",
+      "\\b(?:audio|musical|sample|its) DNA\\b": "Deconstructing audio DNA",
+      "Signal lost": "Signal lost. Check your query.",
+      "Unexpected interference": "Unexpected interference.",
+    },
+    exactCase: {
+      "\\b(?:DECRYPT(?:ING|ED)?|Decrypt(?:ing|ed)?)\\b": "DECRYPTING...",
+      "\\bLOGIC:": "LOGIC: related influence",
+      "\\[\\s+[A-Z]+(?:\\s+[A-Z]+)*\\s+\\]": "[ COMPLETE ]",
+    },
+  };
+
+  it("has a sample for every phrase pattern, and no sample without a pattern", () => {
+    expect(Object.keys(samples.anyCase)).toEqual(PROTOTYPE_PHRASES.anyCase);
+    expect(Object.keys(samples.exactCase)).toEqual(PROTOTYPE_PHRASES.exactCase);
+  });
+
+  it.each(Object.entries(samples.anyCase))("counts /%s/ in any case", (_pattern, sample) => {
+    for (const text of [sample, sample.toUpperCase(), sample.toLowerCase()]) {
+      expect(count("prototype-copy", `const s = ${JSON.stringify(text)};`)).toBe(1);
+    }
+  });
+
+  it.each(Object.entries(samples.exactCase))("counts /%s/ as written", (_pattern, sample) => {
+    expect(count("prototype-copy", `const s = ${JSON.stringify(sample)};`)).toBe(1);
+  });
+
+  it.each([
+    ["the lowercase decrypt route", 'fetch("/api/factoids/decrypt/stream")'],
+    ["a lowercase logic key", "const s = 'logic: a';"],
+    ["a lowercase bracket", "const s = '[ complete ]';"],
+  ])("does not count %s", (_name, line) => {
+    expect(count("prototype-copy", line)).toBe(0);
+  });
+
   it.each([
     ["the old product name in JSX text", "<h1>The Sonic Agent</h1>"],
     ["the old product name in the page title", "<title>The Sonic Agent</title>"],
-    ["a dashboard heading", "<h2>Command Center</h2>"],
-    ["an upper-case variant", "const done = 'INTEL READY';"],
-    ["a button label", "<button>ANALYZE_SONG</button>"],
+    ["a sentence-case heading", "<h2>Back to base</h2>"],
     ["the decrypt button", "<span>[ DECRYPT MORE ]</span>"],
     [
       "a progress message",
       'status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");',
     ],
     ["a template literal", `const m = \`Target acquired: \${title}\`;`],
-    ["a word in any case", "return 'Uplink unstable. Check your connection.';"],
+    ["the name without a space", "const ua = 'SonicAgent/1.0';"],
+    ["the name with a hyphen", "<span>sonic-agent://analysis.log</span>"],
+    ["the name with a non-breaking space", "const t = 'The Sonic Agent';"],
+    ["the name with an escaped non-breaking space", "const t = 'The Sonic\\u00a0Agent';"],
+    ["the name with &nbsp;", "<h1>The Sonic&nbsp;Agent</h1>"],
+    ["words split by a JSX space", "<p>\n  The Sonic{' '}\n  Agent\n</p>"],
+    ["a status light", "{done ? '● IDLE' : 'x'}"],
   ])("counts %s", (_name, line) => {
     expect(count("prototype-copy", line)).toBe(1);
+  });
+
+  it.each([
+    [
+      "a phrase the formatter wrapped",
+      [
+        "export const P = () => (",
+        '  <p className="text-text-secondary">',
+        "    Paste the title of a song and press the enter key to jump right away straight into the Command",
+        "    Center where the results are shown.",
+        "  </p>",
+        ");",
+      ].join("\n"),
+      "apps/web/src/P.tsx",
+      3,
+    ],
+    ["a heading over two lines", "<h1>The Sonic\n  Agent</h1>", "apps/web/src/a.tsx", 1],
+    [
+      "a page title over two lines",
+      "<head>\n  <title>The Sonic\n    Agent</title>\n</head>",
+      "apps/web/index.html",
+      2,
+    ],
+  ])("counts %s, on the line where it starts", (_name, text, path, line) => {
+    expect(countInText(rule("prototype-copy"), text, path)).toMatchObject({
+      total: 1,
+      lines: [line],
+    });
   });
 
   it("counts each phrase on a line", () => {
@@ -118,6 +227,8 @@ describe("prototype-copy", () => {
     ["the route path", 'router.post("/api/factoids/decrypt", handler);'],
     ["the database file name", 'join(root, "data", "sonic-agent.db")'],
     ["a word that only contains a phrase", "const intelligent = 'INTELLIGENT';"],
+    ["two separate strings", "const a = ['Command', 'Center'];"],
+    ["a status light with a number", "const s = '● 120 BPM';"],
   ])("ignores %s", (_name, line) => {
     expect(count("prototype-copy", line)).toBe(0);
   });
@@ -151,6 +262,9 @@ describe("emoji-in-progress", () => {
   it.each([
     ["a status message", 'statusMessages: ["❌ No usable matches"],'],
     ["a template literal", `status(\`🔍 \${plan.reasoning}\`);`],
+    ["an emoji after an interpolation", `status(\`\${n} ✅ done\`);`],
+    ["an emoji in a middle part", `addLog(\`a \${b} 🔎 c \${d}\`);`],
+    ["an emoji in the last of several parts", `addLog(\`a \${b} c \${d} 🔎\`);`],
     ["an emoji with a variation selector", 'const m = "⚠️ Skipping audio analysis";'],
     ["a sequence of several code points", 'const m = "👩‍🔬 Researching";'],
     ["a web log line", "addLog(`🎵 Resuming with selected track...`);"],
@@ -168,14 +282,50 @@ describe("emoji-in-progress", () => {
     expect(count("emoji-in-progress", line, api.replace(/\.ts$/, ".tsx"))).toBe(0);
   });
 
-  it("scans API source and the web's agent hooks, but not components or tests", () => {
+  it("scans API and web source, but not tests or test helpers", () => {
     const { files } = rule("emoji-in-progress");
     expect(files("apps/api/src/agent/researcherSubgraph.ts")).toBe(true);
     expect(files("apps/web/src/hooks/useAgent.ts")).toBe(true);
-    expect(files("apps/web/src/components/GenealogyGraph.tsx")).toBe(false);
+    expect(files("apps/web/src/components/GenealogyGraph.tsx")).toBe(true);
     expect(files("apps/api/src/agent/researcherSubgraph.test.ts")).toBe(false);
     expect(files("apps/web/src/hooks/useAgent.test.ts")).toBe(false);
     expect(files("apps/api/src/sources/testing/iceIceBaby.ts")).toBe(false);
+  });
+});
+
+describe("recordings", () => {
+  const path = "fixtures/replays/one-more-time-daft-punk.json";
+  const recording = JSON.stringify(
+    {
+      events: [
+        { event: { type: "status", message: "🔎 Searching samples..." } },
+        { event: { type: "status", message: "Establishing connection to Spotify API..." } },
+        { event: { type: "status", message: "Found 3 records" } },
+      ],
+    },
+    null,
+    2,
+  );
+
+  it("counts prototype copy and emoji in the strings of a recorded run", () => {
+    expect(countInText(rule("prototype-copy-recordings"), recording, path)).toMatchObject({
+      total: 1,
+      lines: [12],
+    });
+    expect(countInText(rule("emoji-in-recordings"), recording, path)).toMatchObject({
+      total: 1,
+      lines: [6],
+    });
+  });
+
+  it("scans the recorded runs only", () => {
+    for (const id of ["prototype-copy-recordings", "emoji-in-recordings"]) {
+      expect(rule(id).files(path)).toBe(true);
+      expect(rule(id).files("apps/api/src/sources/fixtures/discogs-release-249504.json")).toBe(
+        false,
+      );
+      expect(rule(id).files("fixtures/replays/notes.md")).toBe(false);
+    }
   });
 });
 
@@ -247,6 +397,8 @@ describe("baselines", () => {
       "string-sentinel-tool-results": 0,
       "prototype-copy": 0,
       "emoji-in-progress": 0,
+      "prototype-copy-recordings": 0,
+      "emoji-in-recordings": 0,
       ...baseline,
     };
     writeFileSync(join(dir, "scripts/guard-baseline.json"), `${JSON.stringify(full)}\n`);
@@ -302,6 +454,8 @@ describe("baselines", () => {
         "string-sentinel-tool-results": 0,
         "prototype-copy": 0,
         "emoji-in-progress": 0,
+        "prototype-copy-recordings": 0,
+        "emoji-in-recordings": 0,
       }),
     );
     const result = run("--base", "HEAD");
@@ -320,6 +474,19 @@ describe("baselines", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toMatch(/prototype-copy\s+1 \/ 0\s+ABOVE BASELINE/);
     expect(result.stdout).toMatch(/emoji-in-progress\s+1 \/ 0\s+ABOVE BASELINE/);
+  });
+
+  it("marks the occurrences that are not at --base, even when lines moved", () => {
+    repo({ "prototype-copy": 1 }, 'status("Target acquired");\n');
+    writeFileSync(
+      join(dir, "apps/api/src/a.ts"),
+      'status("Signal lost");\nstatus("Target acquired");\n',
+    );
+    const result = run("--base", "HEAD");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/prototype-copy\s+2 \/ 1\s+ABOVE BASELINE/);
+    expect(result.stdout).toContain("  + apps/api/src/a.ts:1  Signal lost\n");
+    expect(result.stdout).toContain("    apps/api/src/a.ts:2  Target acquired\n");
   });
 
   it("rejects a baseline that is not a non-negative integer", () => {

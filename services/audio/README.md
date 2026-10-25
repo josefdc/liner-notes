@@ -202,7 +202,8 @@ times are seconds from the start of the preview. Every block is `null` when it w
   no key either, whatever its strength: when the harmonic part's spectral lines keep the same
   proportions over the whole window (followed in 2 s steps) and rise and fall together, and
   what they spell is one note, or two a fourth, a fifth or a tritone apart, the key is withheld
-  as "one pitched source". That is a cowbell or one note repeated on a bass. A chord is three
+  as "one pitched source". That catches most cowbells, but one note repeated on a bass only
+  sometimes: lines next to the note often count as notes of their own. A chord is three
   pitch classes, or two a second, a third, a sixth or a seventh apart; a fifth or a third about
   as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
   and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
@@ -351,8 +352,13 @@ one chord and one-bar riffs), of triads at C3-D#3 with a third 1.5-6 dB softer t
 root, or of sus chords, and that a third 10-25 cents off and a seventh over a doubled root
 whose third is quiet still make a chord; the two known limits are pinned as expected failures;
 seeds 600-629 and 800-829 are evaluation-only `evals/audio` controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
-marker `seeded`, and CI runs them in a job of their own (`uv run pytest -m seeded`, next to
-`uv run pytest -m "not seeded"`); a plain `uv run pytest` runs everything. Every
+marker `seeded`, and the ci workflow runs them in two jobs next to `python`
+(`uv run pytest -m "not seeded"`): `python-seeded`, the one-pitch-class pins, the pitchless
+families and the softer thirds, and `python-seeded-chords`, the chord families and the seventh
+chords (`-k "chords_keep_the_key or seventh_chord"` and its complement). The
+seeded tests that run the key estimators also carry the marker `estimators`: the audio-models
+workflow, with Essentia, runs `-m "not seeded or estimators"` for their Essentia half; the
+others do not depend on the estimator. A plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round
 trip, and for v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model
 tests are reported as skipped without the `models` extra and the models; run

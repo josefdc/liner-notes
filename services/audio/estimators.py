@@ -765,7 +765,7 @@ def source_notes(stft: np.ndarray, sr: int, hop: int) -> tuple[float, ...]:
     ]
     kept: list[tuple[float, float]] = []
     for f, a in sorted(lines, key=lambda line: -line[1]):
-        if all(abs(1200 * np.log2(f / g)) > SOURCE_NOTE_MERGE_CENTS for g, _ in kept):
+        if all(_cents(f, g) > SOURCE_NOTE_MERGE_CENTS for g, _ in kept):
             kept.append((f, a))
     if not kept:
         return ()
@@ -790,29 +790,43 @@ def _overtone(f: float, a: float, f0: float, a0: float, strongest: float) -> boo
     return abs(f - harmonic * f0) <= SOURCE_NOTE_TOLERANCE * f and a <= SOURCE_OVERTONE_RATIO * a0
 
 
+def _cents(high: float, low: float) -> float:
+    """
+    The distance between two notes in whole steps of the notes' own grid (SOURCE_NOTE_CENTS_BIN
+    cents, as source_notes reads them), returned in cents: always an exact multiple of the step,
+    so a threshold on the grid is met or not by integer arithmetic, never by float rounding.
+    """
+    return abs(int(round(1200 * np.log2(high / low) / SOURCE_NOTE_CENTS_BIN))) * (
+        SOURCE_NOTE_CENTS_BIN
+    )
+
+
 def spells_chord(notes: tuple[float, ...]) -> bool:
     """
     Three pitch classes or more, or two with a second, a third, a sixth or a seventh between any
     note of one and any note of the other (a third or a sixth within SOURCE_THIRD_CENTS of equal
     temperament): a chord, as the third over a root whose fifth is the root's own third
     harmonic, or the seventh over it when the third is too quiet to count. Fewer, or two a
-    fourth, fifth or tritone apart (two oscillators of a cowbell), is one source.
+    fourth, fifth or tritone apart (two oscillators of a cowbell), is one source. The interval
+    between two notes is measured on their grid (_cents) and folded into 0-600 cents: a second
+    or a seventh is more than 50 and at most 250, a third or a sixth within SOURCE_THIRD_CENTS of
+    300 or 400 (both limits included).
     """
     by_class: dict[int, list[float]] = {}
     for f in notes:
-        midi = 69 + 12 * np.log2(f / 440.0)
-        by_class.setdefault(int(round(midi)) % 12, []).append(midi)
+        by_class.setdefault(int(round(69 + 12 * np.log2(f / 440.0))) % 12, []).append(f)
     if len(by_class) >= 3:
         return True
     if len(by_class) < 2:
         return False
     first, second = by_class.values()
-    for low in first:
-        for high in second:
-            apart = (high - low) % 12
-            interval = min(apart, 12 - apart)
-            close = abs(interval - round(interval)) * 100 <= SOURCE_THIRD_CENTS
-            if int(round(interval)) in (1, 2) or (int(round(interval)) in (3, 4) and close):
+    for a in first:
+        for b in second:
+            cents = _cents(max(a, b), min(a, b)) % 1200
+            cents = min(cents, 1200 - cents)
+            if 50 < cents <= 250:
+                return True
+            if any(abs(cents - third) <= SOURCE_THIRD_CENTS for third in (300, 400)):
                 return True
     return False
 

@@ -110,8 +110,9 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
     "2.2.0+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
-    cache is keyed by track, not by this version, so a version change does not by itself
-    invalidate cached results.)
+    cache is keyed by track and this version, so a version change measures again; a row of
+    another version is served, labelled with its analyzer, only when the service cannot say its
+    version.)
     """
     build = [estimator_name or ESTIMATOR.name]
     if MODELS_LOADED:

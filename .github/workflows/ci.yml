@@ -162,16 +162,16 @@ jobs:
           cache-dependency-glob: services/audio/uv.lock
       # Drums and one pitched source at 30 seeds each, pinned seed by seed (librosa here; the
       # Essentia half runs in audio-models), and triads with a softer third over a doubled root.
-      # The chord families run in python-seeded-chords: the two -k expressions cover every
-      # seeded test between them.
+      # The chord families and seventh chords run in python-seeded-chords: the two -k
+      # expressions are complements, so every seeded test runs in exactly one of the two jobs.
       - run: uv sync --frozen
       - name: Pytest
         run: |
           uv run --frozen python -VV
-          uv run --frozen pytest -rsxX -m seeded -k "not chords_keep_the_key"
+          uv run --frozen pytest -rsxX -m seeded -k "not (chords_keep_the_key or seventh_chord)"
 
   python-seeded-chords:
-    name: audio service, seeded chord families (pytest)
+    name: audio service, seeded chord families and seventh chords (pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -185,11 +185,11 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: services/audio/uv.lock
-      # Chords that hold still and keep their key, 30 seeds each: the single-source rule must
-      # withhold none of them. The rule and the other key rules are the same with or without
+      # Chords that hold still and keep their key, 30 seeds each, and seventh chords with a quiet
+      # third: the single-source rule must withhold none of them. The rule and the other key rules are the same with or without
       # Essentia, so these run here only.
       - run: uv sync --frozen
       - name: Pytest
         run: |
           uv run --frozen python -VV
-          uv run --frozen pytest -rsxX -m seeded -k chords_keep_the_key
+          uv run --frozen pytest -rsxX -m seeded -k "chords_keep_the_key or seventh_chord"

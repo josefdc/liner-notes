@@ -960,6 +960,7 @@ def test_a_seventh_chord_with_a_quiet_third_is_a_chord():
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="a known limit: a fourth (G2 under C3) with its third 15 dB down reads as two notes "
     "a fourth apart; without the rule librosa gives the right C major (0.768), Essentia C minor",
 )
@@ -970,6 +971,7 @@ def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="a known limit: a sine bass 15 dB over an A major triad (third 3 dB down) reads as one "
     "note; without the rule both estimators give the right A major (0.75 and 0.862)",
 )
@@ -1012,6 +1014,32 @@ def test_held_and_struck_lines_by_the_numbers():
         evidence = estimators.SourceEvidence(**{**one_note, "notes": notes})
         assert evidence.chord == chord and evidence.single == (not chord), notes
     assert not estimators.SourceEvidence(**{**one_note, "notes": None}).single
+
+
+def test_intervals_on_the_notes_grid_are_decided_in_whole_steps():
+    """
+    Notes are 2-cent bin centres, so their intervals sit on the same grid as the limits: a tie
+    is decided by integer steps, both limits included, never by float rounding.
+    """
+
+    def up(cents):
+        return 440.0 * 2 ** (cents / 1200)
+
+    assert estimators._cents(up(70), 440.0) == 70.0
+    for cents, chord in (
+        (830, True),  # a sixth 30 cents wide: on the limit, a chord
+        (832, False),
+        (270, True),  # a third 30 cents narrow
+        (268, False),
+        (250, True),  # a second or seventh: more than 50, at most 250
+        (252, False),
+        (52, True),
+        (50, False),
+        (2030, True),  # an octave higher changes nothing
+    ):
+        assert estimators.spells_chord((440.0, up(cents))) == chord, cents
+    # The pinned cowbell-515 (Essentia keyed): its oscillators read exactly 830 cents apart.
+    assert estimators.spells_chord((517.7304143215058, 836.2114159454611))
 
 
 def test_source_notes_folds_overtones_and_keeps_chord_tones():

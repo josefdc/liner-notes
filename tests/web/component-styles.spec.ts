@@ -128,7 +128,7 @@ const over = (top: Rgba, bottom: Rgba): Rgba => ({
 async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/15") {
   await page.addStyleTag({
     content:
-      "[data-measuring],[data-measuring] *{color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
+      "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
   });
   const badges = page.locator(selector);
   const result: Array<{ text: string; ratio: number }> = [];
@@ -351,6 +351,57 @@ for (const cover of ["no cover", "a white cover"]) {
     // Two kinds and three relations in the legend, the summary, three links and the detail.
     expect(player.length).toBeGreaterThanOrEqual(10);
     for (const { text, ratio } of [...dashboard, ...player]) {
+      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
+// Where each claim comes from: its verifier status, its sources and their tier, a conflict with
+// the measurement, the credits, and the rejected claims (opened), in the Player's analysis panel.
+const CLAIM_TEXT = [
+  "[data-claim-kind] > div > span.text-chrome",
+  "[data-claim-kind] > div > span.border-white\\/15",
+  "[data-claim-kind] > p",
+  "#panel-context section li > p",
+  "#panel-context section > p.text-chrome",
+  "#panel-context section > h4",
+  "#panel-context > p.text-chrome",
+  'section[aria-label="Rejected claims"] p',
+  'section[aria-label="Rejected claims"] button',
+].join(", ");
+
+for (const cover of ["no cover", "a white cover"]) {
+  test(`claim provenance and rejected-claim text meet 4.5:1 (${cover})`, async ({ page }) => {
+    // Some fifty lines, each screenshotted on its own.
+    test.slow();
+    await page.route("https://i.scdn.co/**", (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
+    );
+    const data = loadFixture("provenance");
+    await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    await openPlayer(page);
+    await page.getByRole("button", { name: /Rejected by the verifier/ }).click();
+    await page.waitForTimeout(500);
+    const measured = await neutralBadgeContrast(page, CLAIM_TEXT);
+    const texts = measured.map(({ text }) => text);
+    for (const line of [
+      "not checked",
+      "Partly supported",
+      "MusicBrainz · primary record",
+      "1 cited source is not in this result",
+      "Rejected by the verifier (6)",
+      "Credits",
+      "More claims",
+      "1 fact is not shown",
+    ]) {
+      expect(
+        texts.some((text) => text.includes(line)),
+        line,
+      ).toBe(true);
+    }
+    for (const { text, ratio } of measured) {
       expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
     }
   });

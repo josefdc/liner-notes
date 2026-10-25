@@ -12,6 +12,7 @@ import {
   LockOpen,
 } from 'lucide-react';
 import {
+  audioReadings,
   audioValues,
   displayableFactoids,
   formatBpm,
@@ -29,6 +30,10 @@ import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
+import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
+import { ClaimList } from './provenance/ClaimList';
+import { CreditsList } from './provenance/CreditsList';
+import { RejectedClaims } from './provenance/RejectedClaims';
 import type { ResultMode } from '../hooks/agent/types';
 import type {
   TrackData,
@@ -64,6 +69,12 @@ interface PlayerProps {
 
 // ─── P2:24 Default visible factoids count ───────────────────────────────────
 const INITIAL_VISIBLE_FACTOIDS = 3;
+
+// The card a result built without the model writes from the audio measurement, not from a
+// source record (apps/api/src/agent/fallback.ts).
+const MEASUREMENT_CARD_TITLES = new Set(['sonic profile']);
+const isMeasurementCard = (factoid: Factoid) =>
+  MEASUREMENT_CARD_TITLES.has(factoid.title.trim().toLowerCase());
 
 /** Shown when there is no analysis to display: never a demo track in its place. */
 const NoAnalysis: React.FC<Pick<PlayerProps, 'onBack' | 'onNewSearch' | 'headingRef'>> = ({
@@ -124,6 +135,76 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const keyMoments = useMemo(() => measuredKeyMoments(track), [track]);
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
+  // The result's claims, each with how it is shown; the ones the verifier rejected are listed
+  // apart and leave the main view, with the factoid cards, samples and genealogy relations that
+  // state them (and those whose claim this page cannot read).
+  const claims = useMemo(() => resultClaims(track), [track]);
+  const readings = useMemo(() => audioReadings(track).signal, [track]);
+  const claimOf = useCallback(
+    (factoid: Factoid): ShownClaim | undefined =>
+      factoid.claimId ? claims.byId.get(factoid.claimId) : undefined,
+    [claims],
+  );
+  const resultFactoids = useMemo(
+    () => track.factoids.filter((factoid) => !claims.isHidden(factoid.claimId)),
+    [track.factoids, claims],
+  );
+  // Cards left out because the claim they state cannot be read (not rejected: those are listed).
+  const unreadableCards = track.factoids.filter(
+    (factoid) => claims.isUnreadable(factoid.claimId) && !claims.isRejected(factoid.claimId),
+  ).length;
+  const genealogy = useMemo(
+    () => withoutHiddenRelations(track.genealogy, claims.isHidden),
+    [track.genealogy, claims],
+  );
+  // Cards without a claim of their own are labelled by their section, or each on its own when
+  // the cards beside it carry claims.
+  const unclaimedFactoids = resultFactoids.some((factoid) => !claimOf(factoid));
+  const claimedFactoids = resultFactoids.some((factoid) => claimOf(factoid));
+  // A result built without the model: its facts name no record. A card written from the audio
+  // measurement says so instead of being counted with them.
+  const fallbackNote = useMemo(() => {
+    if (!track.modelUnavailable) return null;
+    const unclaimed = resultFactoids.filter((factoid) => !claimOf(factoid));
+    const fromRecords = unclaimed.filter((factoid) => !isMeasurementCard(factoid));
+    const fromMeasurement = unclaimed.filter(isMeasurementCard);
+    const parts = [
+      fromRecords.length > 0
+        ? 'No citations: the facts taken from source records do not link to them.'
+        : null,
+      ...fromMeasurement.map(
+        (factoid) => `"${factoid.title}" is written from the audio measurement.`,
+      ),
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(' ') : null;
+  }, [track.modelUnavailable, resultFactoids, claimOf]);
+  const samples = useMemo(
+    () => track.samples.filter((sample) => !claims.isHidden(sample.claimId)),
+    [track.samples, claims],
+  );
+  // Claims a card shows are not listed again, as credits or as other claims.
+  const onCards = useMemo(
+    () => new Set(resultFactoids.map((factoid) => factoid.claimId)),
+    [resultFactoids],
+  );
+  const creditClaims = useMemo(
+    () =>
+      claims.shown.filter(
+        (shown) => shown.claim.about === 'credit' && !onCards.has(shown.claim.id),
+      ),
+    [claims, onCards],
+  );
+  const creditsOnCards = claims.shown.filter(
+    (shown) => shown.claim.about === 'credit' && onCards.has(shown.claim.id),
+  ).length;
+  // Claims no card or credit shows.
+  const otherClaims = useMemo(
+    () =>
+      claims.shown.filter(
+        (shown) => shown.claim.about !== 'credit' && !onCards.has(shown.claim.id),
+      ),
+    [claims, onCards],
+  );
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
@@ -131,16 +212,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);
   // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
   const allFactoids = useMemo(
-    () => [...track.factoids, ...additionalFactoids],
-    [track.factoids, additionalFactoids],
+    () => [...resultFactoids, ...additionalFactoids],
+    [resultFactoids, additionalFactoids],
   );
 
   // P2:24 — Visible factoids, split by where they come from so each part carries its label
   const visibleFactoids = showAllFactoids
     ? allFactoids
     : allFactoids.slice(0, INITIAL_VISIBLE_FACTOIDS);
-  const visibleResultFactoids = visibleFactoids.slice(0, track.factoids.length);
-  const visibleDecryptedFactoids = visibleFactoids.slice(track.factoids.length);
+  const visibleResultFactoids = visibleFactoids.slice(0, resultFactoids.length);
+  const visibleDecryptedFactoids = visibleFactoids.slice(resultFactoids.length);
   const hiddenCount = allFactoids.length - INITIAL_VISIBLE_FACTOIDS;
 
   // Refs for transient values in handleDecryptMore
@@ -345,8 +426,19 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Agent Analysis
             </h3>
-            {track.factoids.length > 0 && <InferenceLabel>{provenance}</InferenceLabel>}
+            {unclaimedFactoids && !claimedFactoids && <InferenceLabel>{provenance}</InferenceLabel>}
           </div>
+          {/* Facts built without the model name no record they were taken from */}
+          {fallbackNote && (
+            <p className="text-chrome font-mono text-text-chip mb-2">{fallbackNote}</p>
+          )}
+          {unreadableCards > 0 && (
+            <p className="text-chrome font-mono text-text-chip mb-2">
+              {unreadableCards === 1
+                ? '1 fact is not shown: this page cannot read the claim it states.'
+                : `${unreadableCards} facts are not shown: this page cannot read the claims they state.`}
+            </p>
+          )}
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">
               {allFactoids.length} insights decoded
@@ -362,7 +454,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <div className="space-y-6">
               {visibleResultFactoids.map((fact, idx) => (
                 <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
-                  <InteractiveFactoid factoid={fact} onEntityClick={handleEntityClick} />
+                  <InteractiveFactoid
+                    factoid={fact}
+                    onEntityClick={handleEntityClick}
+                    claim={claimOf(fact)}
+                    label={claimedFactoids ? provenance : undefined}
+                    readings={readings}
+                    audio={measurement}
+                  />
                 </div>
               ))}
 
@@ -450,6 +549,28 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               )}
             </div>
           )}
+
+          {/* Credits, the claims no card shows, and the claims the verifier rejected */}
+          <div className="mt-10 space-y-8">
+            <CreditsList
+              credits={creditClaims}
+              onCards={creditsOnCards}
+              uncited={track.credits}
+              readings={readings}
+              audio={measurement}
+            />
+            <ClaimList
+              title="More claims"
+              claims={otherClaims}
+              readings={readings}
+              audio={measurement}
+            />
+            <RejectedClaims
+              rejected={claims.rejected}
+              unreadable={claims.unreadableRejected}
+              audio={measurement}
+            />
+          </div>
 
           {/* P3:25 — Decrypt complete toast */}
           {showDecryptToast && (
@@ -559,7 +680,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               segments={track.segments}
               segmentsSource={track.segmentsSource}
               durationSeconds={track.durationSeconds}
-              samples={track.samples}
+              samples={samples}
               keyMoments={keyMoments}
               audioAnalyzed={noMomentsReason === null}
               noMomentsReason={noMomentsReason}
@@ -582,10 +703,10 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
               Genealogy Network
             </h3>
-            {track.genealogy.nodes.length > 1 && <InferenceLabel>{provenance}</InferenceLabel>}
+            {genealogy.nodes.length > 1 && <InferenceLabel>{provenance}</InferenceLabel>}
           </div>
-          {track.genealogy.nodes.length > 1 ? (
-            <GenealogyGraph data={track.genealogy} onNodeClick={handleNodeClick} />
+          {genealogy.nodes.length > 1 ? (
+            <GenealogyGraph data={genealogy} onNodeClick={handleNodeClick} />
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">

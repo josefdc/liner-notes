@@ -20,6 +20,13 @@
  * RMS (rmsMean 0.27, ordinary for modern masters) it reads 1 for every track, and at or below
  * -34 dBFS it reads 0, the same as silence. There the copy is null rather than a saturated
  * number; the loudness stays in the block as measured. No other energy scale is made up.
+ *
+ * Why a value is missing. The contract has no per-field reason yet; the audio service slice adds
+ * one (`withheld`, next to the block). Until then two reasons are known only here: a mood head
+ * the service returned outside its own range is null in the block and named in the measurement's
+ * `outOfRange` (kept in the run's state and in the audio cache, not in the result), and a null
+ * `energy` beside a measured loudness means the scale saturates (ENERGY_RMS_OFFSET and
+ * ENERGY_RMS_SPAN below). Both belong in that per-field reason when it exists.
  */
 
 import {

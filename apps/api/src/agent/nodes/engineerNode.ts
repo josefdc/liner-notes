@@ -6,11 +6,14 @@
  * service sent it, or why there is none (`unavailableReason`). It derives no value itself: the
  * result's copies come from the block in finalize.ts. Nothing is cached without a measurement.
  *
- * The audio cache is read first, by the track's keys and the analyzer version the service reports
- * on /health (store/measuredAudio.ts): a measurement by another analyzer version is a miss, and
- * when the service does not say its version the cache is not read and the track is measured. A
- * measurement with a tempo and a key is cached under `isrc:<ISRC>` when its clip was found by the
- * ISRC, and under `spotify:<id>` otherwise.
+ * The run probes the service's /health once and resolves the chosen track's preview once, and
+ * passes both to the analysis. The audio cache is then read by the track's keys and the analyzer
+ * version /health names (store/measuredAudio.ts): a measurement by another version is a miss and
+ * the track is measured again. When the service does not answer or names no version, the newest
+ * cached measurement is served, saying which analyzer made it and when. An `isrc:` row is served
+ * only when this run's own preview resolution accepted the same Deezer entry by ISRC. A
+ * measurement with a tempo and a key is cached under `isrc:<ISRC>` when its clip was the Deezer
+ * entry found by the ISRC, and under `spotify:<id>` otherwise.
  *
  * The clip is a preview of the chosen recording only (sources/audio.ts resolvePreview). The node
  * writes it for the player (`previewUrl`, for this run only: it is signed and expires), and how
@@ -25,15 +28,23 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   analyzeAudioPreview,
   type AudioAnalysisResult,
-  audioServiceVersion,
+  type AudioRunContext,
+  type AudioServiceHealth,
+  audioServiceHealth,
   isAllowedPreviewUrl,
   type PreviewLookupError,
+  type PreviewResolution,
   type PreviewSourceMatch,
   resolvePreview,
   type TrackPreviewRequest,
 } from "../../sources/audio.js";
 import { type CachedAudio, getCache, type SonicCache } from "../../store/cache.js";
-import { audioLookupKeys, audioTrackKey } from "../../store/measuredAudio.js";
+import {
+  audioConfidence,
+  audioLookupKeys,
+  audioTrackKey,
+  isrcRowServes,
+} from "../../store/measuredAudio.js";
 import type { AudioMeasurement, AudioUnavailableReason, SonicAgentStateType } from "../state.js";
 import { isAbortError } from "../errors.js";
 import { measuredAudioFields } from "../finalize.js";
@@ -146,6 +157,56 @@ function previewRequest(state: SonicAgentStateType): TrackPreviewRequest {
   };
 }
 
+/** A cached measurement the run serves. */
+interface CacheHit {
+  measurement: CachedAudio;
+  /**
+   * Set when the service did not say its analyzer version: the newest row was served, and the
+   * run says so, with the analyzer that made it and when.
+   */
+  unversioned?: { reason: string; measuredAt: Date };
+}
+
+/**
+ * The cached measurement this run serves, or null to measure:
+ * - the service names its analyzer version: the rows of that version under the track's keys;
+ * - it does not answer, or names no version: the newest row under each key, of any version (its
+ *   block and the result's run.analyzerVersion name the analyzer that made it; no version is
+ *   made up);
+ * an `isrc:` row only when this run's own preview resolution accepted the same Deezer entry by
+ * ISRC (measuredAudio.ts isrcRowServes). Of the rows left, a complete one is preferred, then the
+ * ISRC's: a partial `isrc:` row never hides a complete row of the track's own.
+ */
+function cachedMeasurement(
+  cache: SonicCache,
+  spotifyId: string,
+  isrc: string | null | undefined,
+  health: AudioServiceHealth | null,
+  fresh: PreviewResolution,
+): CacheHit | null {
+  const version = health?.analyzerVersion ?? null;
+  const reason = health
+    ? "The audio service did not name its analyzer version."
+    : "The audio service is unavailable.";
+  const hits = audioLookupKeys(spotifyId, isrc).flatMap((key): CacheHit[] => {
+    let hit: CacheHit | null = null;
+    if (version) {
+      const measurement = cache.getAudio(key, version);
+      hit = measurement ? { measurement } : null;
+    } else {
+      const newest = cache.getNewestAudio(key);
+      hit = newest
+        ? {
+            measurement: newest.measurement,
+            unversioned: { reason, measuredAt: newest.measuredAt },
+          }
+        : null;
+    }
+    return hit && isrcRowServes(key, hit.measurement, fresh.match) ? [hit] : [];
+  });
+  return hits.find((hit) => audioConfidence(hit.measurement) === "high") ?? hits[0] ?? null;
+}
+
 export async function engineerNode(
   state: SonicAgentStateType,
   config: LangGraphRunnableConfig,
@@ -159,49 +220,46 @@ export async function engineerNode(
   const track = state.spotifyData;
   const request = previewRequest(state);
 
-  // The audio cache first, by the track's keys and the analyzer version the service reports.
-  // Without that version (the service does not answer) the cache is not read: a measurement of
-  // another version must not be served.
+  // What the run asks once: the service's health (its analyzer version) and the chosen track's
+  // preview. Both are passed on to the analysis, so neither is asked twice.
+  const health = await audioServiceHealth(config.signal);
+  const fresh = await resolvePreview(request, config.signal);
+
   let cache: SonicCache | null = null;
   try {
     cache = getCache();
   } catch {
     // Cache not available — proceed with fresh analysis
   }
-  let cached: CachedAudio | null = null;
-  if (cache) {
-    const version = await audioServiceVersion(config.signal);
-    if (version) cached = cache.getAudio(audioLookupKeys(track.id, request.isrc), version);
-    else log.info("The audio service did not say its analyzer version; the cache is not read");
-  }
-  if (cached) {
-    const summary = measuredSummary(cached).text;
-    log.info(`Cache hit for: ${track.title}`);
+  const hit = cache ? cachedMeasurement(cache, track.id, request.isrc, health, fresh) : null;
+  if (hit) {
+    const summary = measuredSummary(hit.measurement).text;
+    // When the service cannot say its version, the newest measurement is served, and the run
+    // says which analyzer made it and when.
+    const old = hit.unversioned;
+    const served = old
+      ? `${old.reason} Showing the measurement by analyzer ${hit.measurement.audio.analyzerVersion} from ${old.measuredAt.toISOString().slice(0, 10)}: ${summary}`
+      : `Audio cache hit: ${summary}`;
+    log.info(`Cache hit for: ${track.title}${old ? " (service version unknown)" : ""}`);
     writer?.({
       type: "status",
       code: "AUDIO-COMPLETE",
-      message: `Audio cache hit: ${summary}`,
+      message: served,
       node: "engineer",
       timestamp: timestampOf(runtime),
     });
-    // The cache keeps no clip URL (they expire): the player gets a fresh clip or none.
-    let previewUrl: string | null = null;
-    let lookupError: PreviewLookupError | undefined;
-    try {
-      const fresh = await resolvePreview(request, config.signal);
-      previewUrl =
-        fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null;
-      lookupError = fresh.sourceError;
-    } catch (error) {
-      if (config.signal?.aborted || isAbortError(error)) throw error;
-      log.warn("Could not look up a preview", { err: error });
-    }
+    // The cache keeps no clip URL (they expire): the player gets this run's clip or none.
     return {
-      audioFeatures: cached,
-      preview: previewProvenance(cached.previewMatch),
-      previewUrl,
-      ...lookupErrors(lookupError),
-      statusMessages: [`🎵 Audio (cached): ${summary.replace(" // ", ", ")}`],
+      audioFeatures: hit.measurement,
+      preview: previewProvenance(hit.measurement.previewMatch),
+      previewUrl:
+        fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null,
+      ...lookupErrors(fresh.sourceError),
+      statusMessages: [
+        old
+          ? `⚠️ ${served.replace(" // ", ", ")}`
+          : `🎵 Audio (cached): ${summary.replace(" // ", ", ")}`,
+      ],
     };
   }
 
@@ -222,9 +280,10 @@ export async function engineerNode(
     // The run's abort signal stops the analysis when the client leaves.
     config.signal?.throwIfAborted();
     const { spotifyPreviewUrl, ...trackRequest } = request;
+    const audioRun: AudioRunContext = { preview: fresh, serviceAvailable: health !== null };
     const analysisResult = await analyzeAudioPreview.invoke(
       { ...trackRequest, previewUrl: spotifyPreviewUrl },
-      { signal: config.signal },
+      { signal: config.signal, configurable: { audioRun } },
     );
     analysis = JSON.parse(analysisResult) as AudioAnalysisResult;
     measurement = toAudioMeasurement(analysis);

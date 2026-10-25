@@ -15,16 +15,26 @@ import {
   audioV2,
   gatedV2,
   ISRC_MATCH,
+  SEARCH_MATCH,
   serviceAnswer,
   signalOnlyV2,
 } from "../testing/measuredAudio.js";
 
 const cache = vi.hoisted(() => ({
   getAudio: vi.fn((..._args: unknown[]): unknown => null),
+  getNewestAudio: vi.fn((..._args: unknown[]): unknown => null),
   putAudio: vi.fn(),
+  /** A real cache, for the tests that run two tracks through it; the stub when unset. */
+  real: null as unknown,
 }));
-vi.mock("../../store/cache.js", () => ({ getCache: () => cache }));
+vi.mock("../../store/cache.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../store/cache.js")>()),
+  getCache: () => cache.real ?? cache,
+}));
 
+import Database from "better-sqlite3";
+import { SonicCache } from "../../store/cache.js";
+import { runMigrations } from "../../store/migrations.js";
 import { engineerNode } from "./engineerNode.js";
 import type { SonicAgentStateType } from "../state.js";
 
@@ -134,7 +144,10 @@ describe("engineerNode", () => {
     delete process.env.AUDIO_SERVICE_TOKEN;
     cache.getAudio.mockReset();
     cache.getAudio.mockReturnValue(null);
+    cache.getNewestAudio.mockReset();
+    cache.getNewestAudio.mockReturnValue(null);
     cache.putAudio.mockReset();
+    cache.real = null;
     deezer.isrc = null;
     deezer.search = null;
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -161,10 +174,12 @@ describe("engineerNode", () => {
       unavailableReason: "service_unavailable",
       unavailableDetail: "Audio analysis service did not respond",
     });
-    // Without the service's analyzer version the cache is not read.
+    // Without the service's analyzer version only the newest rows are looked at: none here.
     expect(cache.getAudio).not.toHaveBeenCalled();
+    expect(cache.getNewestAudio).toHaveBeenCalledWith("spotify:A");
     expect(cache.putAudio).not.toHaveBeenCalled();
-    expect(stub.calls.filter((url) => url === `${AUDIO_URL}/health`)).toHaveLength(2);
+    // One health probe for the run, passed on to the analysis.
+    expect(stub.calls.filter((url) => url === `${AUDIO_URL}/health`)).toHaveLength(1);
     expect(text).not.toMatch(/verified|analy[sz]ed|\d+ BPM/i);
   });
 
@@ -213,7 +228,20 @@ describe("engineerNode", () => {
   });
 
   describe("cache", () => {
-    const cachedRow = { audio: SIGNAL_ONLY, previewMatch: ISRC_MATCH };
+    const ISRC = "USSB29000129";
+    const healthCalls = (stub: Stub) => stub.calls.filter((url) => url === `${AUDIO_URL}/health`);
+    /** A measurement of the track's own clip (a search match), filed under its Spotify id. */
+    const ownRow = { audio: SIGNAL_ONLY, previewMatch: SEARCH_MATCH };
+    /** A measurement of the Deezer entry for the ISRC (id 3366332), filed under the ISRC. */
+    const isrcRow = { audio: SIGNAL_ONLY, previewMatch: ISRC_MATCH };
+    /** Deezer's entry for the ISRC: the one isrcRow was measured on. */
+    const isrcEntry = (id = 3366332) => ({
+      ...deezerEntry(id, "Ice Ice Baby", "Vanilla Ice", PREVIEW),
+      isrc: ISRC,
+    });
+    /** The stub cache answers `rows[key]` for the service's version. */
+    const rowsByKey = (rows: Record<string, unknown>) =>
+      cache.getAudio.mockImplementation((key) => rows[key as string] ?? null);
 
     it("looks the track up by its ISRC's key, then its own, for the service's analyzer version", async () => {
       stubNetwork("up", PREVIEW, serviceAnswer(audioV2()), {
@@ -221,87 +249,202 @@ describe("engineerNode", () => {
         analyzer_version: ANALYZER_VERSION,
         models: true,
       });
-      await run("L", "USSB29000129");
-      expect(cache.getAudio).toHaveBeenCalledWith(
-        ["isrc:USSB29000129", "spotify:L"],
-        ANALYZER_VERSION,
-      );
+      await run("L", ISRC);
+      expect(cache.getAudio.mock.calls).toEqual([
+        [`isrc:${ISRC}`, ANALYZER_VERSION],
+        ["spotify:L", ANALYZER_VERSION],
+      ]);
     });
 
-    it("measures again when the cache has nothing for the service's analyzer version", async () => {
+    it("measures again when the cache has nothing for the service's analyzer version, with one health probe", async () => {
       // The stub cache serves only for an older version.
-      cache.getAudio.mockImplementation((_keys, version) =>
-        version === "2.0.0+essentia" ? cachedRow : null,
+      cache.getAudio.mockImplementation((_key, version) =>
+        version === "2.0.0+essentia" ? ownRow : null,
       );
       const stub = stubNetwork("up");
       const { out } = await run("V");
-      expect(cache.getAudio).toHaveBeenCalledWith(["spotify:V"], "2.1.0+essentia");
+      expect(cache.getAudio).toHaveBeenCalledWith("spotify:V", "2.1.0+essentia");
       expect(out.audioFeatures).toEqual(searchMeasured(SIGNAL_ONLY));
       expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
+      expect(healthCalls(stub)).toHaveLength(1);
+      // Deezer is asked once for the run, not again by the analysis.
+      expect(stub.calls.filter((url) => url.includes("/search/track"))).toHaveLength(1);
     });
 
-    it("does not read the cache when the service names no analyzer version", async () => {
-      cache.getAudio.mockReturnValue(cachedRow);
-      const stub = stubNetwork("up", PREVIEW, serviceAnswer(SIGNAL_ONLY), { status: "ok" });
-      const { out } = await run("NV");
-      expect(cache.getAudio).not.toHaveBeenCalled();
-      expect(out.audioFeatures).toEqual(searchMeasured(SIGNAL_ONLY));
-      expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
-    });
-
-    it("reuses a cached measurement and looks up a fresh clip for the player", async () => {
+    it("reuses a cached measurement with one health probe, and gives the player this run's clip", async () => {
       const stub = stubNetwork("up");
-      cache.getAudio.mockReturnValue(cachedRow);
+      rowsByKey({ "spotify:NEW": ownRow });
       const { out, text } = await run("NEW");
-      expect(out.audioFeatures).toEqual(cachedRow);
-      expect(out.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+      expect(out.audioFeatures).toEqual(ownRow);
+      expect(out.preview).toEqual({ provider: "deezer", method: "search", score: 1 });
       expect(out.previewUrl).toBe(PREVIEW);
       expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expect(healthCalls(stub)).toHaveLength(1);
       expect(cache.putAudio).not.toHaveBeenCalled();
       expect(text).toContain("Audio cache hit: 116 BPM // D Minor");
     });
 
-    it("gives the player no fresh clip from a host the service would refuse", async () => {
+    it("serves the newest measurement when the service is down, saying it is down and which analyzer made it", async () => {
+      const stub = stubNetwork("down");
+      cache.getNewestAudio.mockImplementation((key) =>
+        key === "spotify:DOWN"
+          ? { measurement: ownRow, measuredAt: new Date("2026-10-20T08:00:00.000Z") }
+          : null,
+      );
+      const { out, text } = await run("DOWN");
+      expect(out.audioFeatures).toEqual(ownRow);
+      expect(cache.getAudio).not.toHaveBeenCalled();
+      expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expect(healthCalls(stub)).toHaveLength(1);
+      expect(text).toContain(
+        "The audio service is unavailable. Showing the measurement by analyzer 2.1.0+essentia from 2026-10-20: 116 BPM // D Minor",
+      );
+    });
+
+    it("serves the newest measurement when the service names no analyzer version, and says so", async () => {
+      const stub = stubNetwork("up", PREVIEW, serviceAnswer(SIGNAL_ONLY), { status: "ok" });
+      cache.getNewestAudio.mockReturnValue({
+        measurement: ownRow,
+        measuredAt: new Date("2026-10-21T00:00:00.000Z"),
+      });
+      const { out, text } = await run("NV");
+      expect(out.audioFeatures).toEqual(ownRow);
+      expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expect(text).toContain(
+        "The audio service did not name its analyzer version. Showing the measurement by analyzer 2.1.0+essentia from 2026-10-21",
+      );
+    });
+
+    it("measures when the service names no version and nothing is cached", async () => {
+      const stub = stubNetwork("up", PREVIEW, serviceAnswer(SIGNAL_ONLY), { status: "ok" });
+      const { out } = await run("NV2");
+      expect(out.audioFeatures).toEqual(searchMeasured(SIGNAL_ONLY));
+      expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
+      expect(healthCalls(stub)).toHaveLength(1);
+    });
+
+    it("gives the player no clip from a host the service would refuse", async () => {
       stubNetwork("up", "http://cdnt-preview.dzcdn.net/api/1/x.mp3");
-      cache.getAudio.mockReturnValue(cachedRow);
+      rowsByKey({ "spotify:HOST": ownRow });
       const { out } = await run("HOST");
-      expect(out.audioFeatures).toEqual(cachedRow);
+      expect(out.audioFeatures).toEqual(ownRow);
       expect(out.previewUrl).toBeNull();
     });
 
-    it("reports a Deezer outage on a cache hit as a source error", async () => {
+    it("serves an ISRC row when this run's own resolution took the same Deezer entry by ISRC", async () => {
+      stubNetwork("up");
+      deezer.isrc = isrcEntry();
+      rowsByKey({ [`isrc:${ISRC}`]: isrcRow });
+      const { out } = await run("SAME", ISRC);
+      expect(out.audioFeatures).toEqual(isrcRow);
+      expect(out.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+    });
+
+    it("does not serve an ISRC row of another Deezer entry, and measures", async () => {
+      const stub = stubNetwork("up");
+      deezer.isrc = isrcEntry(4242);
+      rowsByKey({ [`isrc:${ISRC}`]: isrcRow });
+      const { out } = await run("OTHER", ISRC);
+      expect(out.audioFeatures?.previewMatch).toMatchObject({ method: "isrc", deezerId: 4242 });
+      expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
+    });
+
+    it("does not serve an ISRC row when Deezer cannot be read, but serves the track's own", async () => {
       stubNetwork("up");
       deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
-      cache.getAudio.mockReturnValue(cachedRow);
-      const { out } = await run("HITQ", "USSB29000129");
-      expect(out.audioFeatures).toEqual(cachedRow);
+      rowsByKey({ [`isrc:${ISRC}`]: isrcRow, "spotify:HITQ": ownRow });
+      const { out } = await run("HITQ", ISRC);
+      expect(out.audioFeatures).toEqual(ownRow);
       expect(out.previewUrl).toBeNull();
       expect(out.sourceErrors).toEqual([
         { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
       ]);
     });
 
-    it("keeps the cached measurement but gives the player no clip when none matches now", async () => {
+    it("keeps the track's own measurement when no clip matches now, but no ISRC row", async () => {
       stubNetwork("up");
       deezer.search = [deezerEntry(2, "Ice Ice Baby (Live)", "Vanilla Ice", PREVIEW)];
-      cache.getAudio.mockReturnValue(cachedRow);
-      const { out } = await run("NEW");
-      expect(out.audioFeatures).toEqual(cachedRow);
+      rowsByKey({ "spotify:NOW": ownRow });
+      const { out } = await run("NOW", ISRC);
+      expect(out.audioFeatures).toEqual(ownRow);
       expect(out.previewUrl).toBeNull();
+
+      rowsByKey({ [`isrc:${ISRC}`]: isrcRow });
+      const { out: none } = await run("NOW2", ISRC);
+      expect(none.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
     });
 
-    it("files a clip found by the ISRC under the ISRC, so tracks sharing it share the row", async () => {
-      const clip = "https://cdnt-preview.dzcdn.net/api/1/isrc.mp3?hdnea=exp=1";
-      deezer.isrc = {
-        ...deezerEntry(9, "Ice Ice Baby", "Vanilla Ice", clip),
-        isrc: "USSB29000129",
-      };
+    it("never lets a partial ISRC row hide a complete row of the track's own", async () => {
       stubNetwork("up");
-      await run("I", "USSB29000129");
+      deezer.isrc = isrcEntry();
+      const completeOwn = {
+        audio: { ...audioV2(), analyzerVersion: "2.1.0+essentia" },
+        previewMatch: SEARCH_MATCH,
+      };
+      rowsByKey({ [`isrc:${ISRC}`]: isrcRow, "spotify:BOTH": completeOwn });
+      const { out } = await run("BOTH", ISRC);
+      expect(out.audioFeatures).toEqual(completeOwn);
+    });
+
+    it("files a clip found by the ISRC under the ISRC, with its Deezer entry", async () => {
+      const clip = "https://cdnt-preview.dzcdn.net/api/1/isrc.mp3?hdnea=exp=1";
+      deezer.isrc = { ...deezerEntry(9, "Ice Ice Baby", "Vanilla Ice", clip), isrc: ISRC };
+      stubNetwork("up");
+      await run("I", ISRC);
       expect(cache.putAudio).toHaveBeenCalledWith(
-        "isrc:USSB29000129",
+        `isrc:${ISRC}`,
         "I",
-        expect.objectContaining({ audio: SIGNAL_ONLY }),
+        expect.objectContaining({
+          audio: SIGNAL_ONLY,
+          previewMatch: expect.objectContaining({ method: "isrc", deezerId: 9 }),
+        }),
+      );
+    });
+
+    describe("with a real cache, two tracks that share an ISRC", () => {
+      // Deezer's entry for the ISRC is the original: "Ice Ice Baby" by Vanilla Ice, 270 s.
+      const original = stateFor("ORIGINAL", ISRC);
+      const other = (title: string, artist: string, durationMs: number) => {
+        const state = stateFor("OTHER", ISRC);
+        state.spotifyData = { ...state.spotifyData!, title, artist, durationMs };
+        return state;
+      };
+      const writer = { writer: () => {} } as never;
+
+      beforeEach(() => {
+        const db = new Database(":memory:");
+        runMigrations(db);
+        cache.real = new SonicCache(db);
+        deezer.isrc = isrcEntry();
+        // No search result either: the other track has no clip of its own.
+        deezer.search = [];
+      });
+
+      it.each([
+        ["a karaoke version", other("Ice Ice Baby (Karaoke Version)", "Ameritz Karaoke", 200_000)],
+        ["a 200 s radio edit", other("Ice Ice Baby (Radio Edit)", "Vanilla Ice", 200_000)],
+      ])(
+        "never serves the original's ISRC row to %s its own checks turn down",
+        async (_name, state) => {
+          const stub = stubNetwork("up");
+          const first = await engineerNode(original, writer);
+          expect(first.audioFeatures?.previewMatch).toMatchObject({
+            method: "isrc",
+            deezerId: 3366332,
+          });
+
+          stub.calls.length = 0;
+          const out = await engineerNode(state, writer);
+
+          expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
+          expect(out.preview).toBeNull();
+          expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+          // The original is still served its own row.
+          stub.calls.length = 0;
+          const again = await engineerNode(original, writer);
+          expect(again.audioFeatures).toEqual(first.audioFeatures);
+          expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+        },
       );
     });
   });

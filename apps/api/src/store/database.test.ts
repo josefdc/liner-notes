@@ -231,27 +231,27 @@ async function testSonicCacheAudio(): Promise<void> {
     // Put and get, by track key and analyzer version
     const tempo = (bpm: number) => ({ ...audioV2().tempo!, bpm });
     cache.putAudio("spotify:123", "123", measurementOf(audioV2({ tempo: tempo(105) })));
-    const retrieved = cache.getAudio(["spotify:123"], ANALYZER_VERSION);
+    const retrieved = cache.getAudio("spotify:123", ANALYZER_VERSION);
     assert(retrieved != null, "Audio cache hit");
     assertEqual(retrieved?.audio.tempo?.bpm, 105, "BPM matches");
     assertEqual(retrieved?.audio.key?.tonic, "D", "Key matches");
-    assertEqual(cache.getAudio(["spotify:123"], "9.9.9"), null, "Another analyzer: a miss");
+    assertEqual(cache.getAudio("spotify:123", "9.9.9"), null, "Another analyzer: a miss");
 
     // Overwrite protection: don't downgrade high → low (no models: a partial measurement)
     const partial = (bpm: number) =>
       measurementOf(signalOnlyV2({ analyzerVersion: ANALYZER_VERSION, tempo: tempo(bpm) }));
     cache.putAudio("spotify:123", "123", partial(100));
-    const afterDowngrade = cache.getAudio(["spotify:123"], ANALYZER_VERSION);
+    const afterDowngrade = cache.getAudio("spotify:123", ANALYZER_VERSION);
     assertEqual(afterDowngrade?.audio.tempo?.bpm, 105, "High confidence not overwritten by low");
 
     // Allow upgrade: low → high
     cache.putAudio("spotify:456", "456", partial(90));
     cache.putAudio("spotify:456", "456", measurementOf(audioV2({ tempo: tempo(95) })));
-    const upgraded = cache.getAudio(["spotify:456"], ANALYZER_VERSION);
+    const upgraded = cache.getAudio("spotify:456", ANALYZER_VERSION);
     assertEqual(upgraded?.audio.tempo?.bpm, 95, "Low confidence overwritten by high");
 
     // Missing key
-    assertEqual(cache.getAudio(["spotify:none"], ANALYZER_VERSION), null, "Missing audio is null");
+    assertEqual(cache.getAudio("spotify:none", ANALYZER_VERSION), null, "Missing audio is null");
   } finally {
     cleanup();
   }
@@ -310,7 +310,7 @@ async function testSonicCacheTTL(): Promise<void> {
     cache.putAudio("spotify:expired-1", "expired-1", measurementOf(), 0);
 
     // Should be expired
-    const expired = cache.getAudio(["spotify:expired-1"], ANALYZER_VERSION);
+    const expired = cache.getAudio("spotify:expired-1", ANALYZER_VERSION);
     assertEqual(expired, null, "Expired audio entry returns null");
 
     // Purge expired
@@ -405,7 +405,7 @@ async function testConcurrentWrites(): Promise<void> {
     await Promise.all([engineerWrite, historianWrite, storeWrite]);
 
     // Verify all data persisted
-    const audio = cache.getAudio(["spotify:concurrent-1"], ANALYZER_VERSION);
+    const audio = cache.getAudio("spotify:concurrent-1", ANALYZER_VERSION);
     const research = cache.getResearch("concurrent-1");
     const storeItem = await store.get(["tracks"], "concurrent-1");
 
@@ -886,8 +886,8 @@ describe("migrations", () => {
 
     const cache = new SonicCache(db);
     cache.putAudio("isrc:USSB29000129", "sp1", measurementOf());
-    expect(cache.getAudio(["spotify:sp1"], ANALYZER_VERSION)).toBeNull();
-    expect(cache.getAudio(["isrc:USSB29000129"], ANALYZER_VERSION)).toEqual(measurementOf());
+    expect(cache.getAudio("spotify:sp1", ANALYZER_VERSION)).toBeNull();
+    expect(cache.getAudio("isrc:USSB29000129", ANALYZER_VERSION)).toEqual(measurementOf());
   });
 
   it("keeps only audio rows the cache would serve and caps low-confidence expiry at a day", () => {

@@ -316,18 +316,43 @@ async function isServiceAvailable(signal: AbortSignal | undefined): Promise<bool
   return (await readHealth(signal)) !== null;
 }
 
-/**
- * The analyzer version the audio service reports on /health (`analyzer_version`, e.g.
- * "2.1.0+essentia.models-5c5c0c7f"), or null when the service does not answer or names none.
- * The audio cache is keyed by it: a measurement by another version is not served.
- */
-export async function audioServiceVersion(signal: AbortSignal | undefined): Promise<string | null> {
+/** What the audio service said on /health: it answered, and the analyzer version it names. */
+export interface AudioServiceHealth {
+  /**
+   * `analyzer_version`, e.g. "2.1.0+essentia.models-5c5c0c7f"; null when the service names
+   * none. The audio cache is keyed by it: a measurement by another version is not served.
+   */
+  analyzerVersion: string | null;
+}
+
+/** The audio service's /health answer, or null when it does not answer. One probe. */
+export async function audioServiceHealth(
+  signal: AbortSignal | undefined,
+): Promise<AudioServiceHealth | null> {
   const health = await readHealth(signal);
+  if (health === null) return null;
   const version =
-    health !== null && typeof health === "object"
-      ? (health as { analyzer_version?: unknown }).analyzer_version
-      : undefined;
-  return typeof version === "string" && version.trim() !== "" ? version : null;
+    typeof health === "object" ? (health as { analyzer_version?: unknown }).analyzer_version : null;
+  return {
+    analyzerVersion: typeof version === "string" && version.trim() !== "" ? version : null,
+  };
+}
+
+/**
+ * What the run already knows when it asks for an analysis, passed in the tool call's config
+ * (`configurable.audioRun`) so nothing is asked twice: the preview it resolved for the chosen
+ * track, and whether the service answered its health check. What is not given is looked up.
+ */
+export interface AudioRunContext {
+  preview?: PreviewResolution;
+  serviceAvailable?: boolean;
+}
+
+/** The run context in a tool call's config, when the caller gave one. */
+function audioRunContext(config: unknown): AudioRunContext {
+  const context = (config as { configurable?: { audioRun?: unknown } } | undefined)?.configurable
+    ?.audioRun;
+  return context !== null && typeof context === "object" ? (context as AudioRunContext) : {};
 }
 
 /**
@@ -374,20 +399,24 @@ export const analyzeAudioPreview = tool(
   async ({ previewUrl, title, artist, artistNames, album, isrc, durationMs }, config) => {
     // The run's signal stops every request below (Deezer, the service's health and analysis).
     const signal = config?.signal;
+    const known = audioRunContext(config);
     log.info(`Analyzing: "${title}" by ${artist}`);
 
-    const preview = await resolvePreview(
-      {
-        title: title ?? "",
-        artist: artist ?? "",
-        artistNames,
-        album,
-        isrc,
-        durationMs,
-        spotifyPreviewUrl: previewUrl,
-      },
-      signal,
-    );
+    // The preview the run resolved already, or looked up here.
+    const preview =
+      known.preview ??
+      (await resolvePreview(
+        {
+          title: title ?? "",
+          artist: artist ?? "",
+          artistNames,
+          album,
+          isrc,
+          durationMs,
+          spotifyPreviewUrl: previewUrl,
+        },
+        signal,
+      ));
     const lookupError = preview.sourceError ? { previewSourceError: preview.sourceError } : {};
     if (preview.previewUrl === null) {
       log.info("No preview of the chosen recording; audio not measured");
@@ -421,7 +450,8 @@ export const analyzeAudioPreview = tool(
 
     // Try the audio analysis service with the resolved preview URL
     try {
-      const serviceAvailable = await isServiceAvailable(signal);
+      // The run's health answer when it has one; else one probe.
+      const serviceAvailable = known.serviceAvailable ?? (await isServiceAvailable(signal));
 
       if (!serviceAvailable) {
         log.warn("Analysis service unavailable; audio not measured");

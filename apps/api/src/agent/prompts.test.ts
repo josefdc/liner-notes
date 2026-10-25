@@ -58,6 +58,13 @@ describe("measured audio in the composer's prompt", () => {
     expect(measuredLine(prompt)).not.toContain("energy");
   });
 
+  it("calls the mood scores model estimates, never measurements", () => {
+    expect(COMPOSER_SYSTEM_PROMPT).toContain(
+      "scores are estimates of audio models run on that clip, not measurements",
+    );
+    expect(COMPOSER_SYSTEM_PROMPT).not.toMatch(/mood scores were measured/);
+  });
+
   it("says nothing was measured without a block, or with one whose gate measured nothing", () => {
     for (const audio of [
       null,

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import {
   analyzeAudioPreview,
-  audioServiceVersion,
+  audioServiceHealth,
   checkAudioServiceHealth,
   isAllowedPreviewUrl,
   readServiceMeasurement,
@@ -237,13 +237,44 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
 
   it("reads the analyzer version the service reports on /health, or none", async () => {
     service(null, { status: "ok", analyzer_version: ANALYZER_VERSION, models: true });
-    expect(await audioServiceVersion(undefined)).toBe(ANALYZER_VERSION);
+    expect(await audioServiceHealth(undefined)).toEqual({ analyzerVersion: ANALYZER_VERSION });
 
     service(null, { status: "ok" });
-    expect(await audioServiceVersion(undefined)).toBeNull();
+    expect(await audioServiceHealth(undefined)).toEqual({ analyzerVersion: null });
 
     stubFetch((call) => (call.url === `${SERVICE}/health` ? json({}, { status: 503 }) : undefined));
-    expect(await audioServiceVersion(undefined)).toBeNull();
+    expect(await audioServiceHealth(undefined)).toBeNull();
+  });
+
+  it("asks neither Deezer nor /health again for what the run already knows", async () => {
+    const net = service(serviceAnswer(audioV2()));
+    const audioRun = {
+      preview: { previewUrl: CLIP, match: { provider: "spotify", method: "id", score: null } },
+      serviceAvailable: true,
+    };
+
+    const data = JSON.parse(
+      await analyzeAudioPreview.invoke(
+        { title: "Ice Ice Baby", artist: "Vanilla Ice", isrc: "USSB29000129" },
+        { configurable: { audioRun } },
+      ),
+    );
+
+    expect(data).toMatchObject({ source: "analyzed", previewUrl: CLIP });
+    expect(net.calls.map((call) => call.url)).toEqual([`${SERVICE}/analyze`]);
+  });
+
+  it("measures nothing when the run knows the service did not answer", async () => {
+    const net = service(serviceAnswer(audioV2()));
+    const audioRun = {
+      preview: { previewUrl: CLIP, match: { provider: "spotify", method: "id", score: null } },
+      serviceAvailable: false,
+    };
+    const data = JSON.parse(
+      await analyzeAudioPreview.invoke(TRACK, { configurable: { audioRun } }),
+    );
+    expect(data).toMatchObject({ source: "unavailable", reason: "service_unavailable" });
+    expect(net.calls).toEqual([]);
   });
 });
 

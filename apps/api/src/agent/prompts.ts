@@ -134,7 +134,7 @@ Where facts come from
 - Do not quote or paraphrase lyrics.
 
 Measured audio
-- Tempo, key, loudness and mood scores were measured by our own analysis of a preview clip and are shown separately. Do not present them as facts you found. null means not measured: never guess a value.
+- Tempo, key and loudness were measured by our own analysis of a preview clip; the valence, danceability, acousticness and instrumentalness scores are estimates of audio models run on that clip, not measurements. All of them are shown separately. Do not present them as facts you found. null means not measured: never guess a value.
 - Set a claim's field to "tempo" or "key" only when the statement gives the track's tempo or key; otherwise null.
 
 Untrusted text

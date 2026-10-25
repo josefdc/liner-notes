@@ -245,6 +245,14 @@ function prepareStatements(db: Database.Database) {
     getAudio: db.prepare<[string, string], { full_data: string; expires_at: number }>(
       "SELECT full_data, expires_at FROM audio_cache WHERE track_key = ? AND analyzer_version = ?",
     ),
+    newestAudio: db.prepare<
+      [string, number],
+      { full_data: string; analyzer_version: string; created_at: number | null }
+    >(
+      `SELECT full_data, analyzer_version, created_at FROM audio_cache
+       WHERE track_key = ? AND expires_at > ?
+       ORDER BY created_at DESC, rowid DESC`,
+    ),
     putAudio: db.prepare(
       `INSERT INTO audio_cache (track_key, analyzer_version, spotify_id, confidence, full_data, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -314,26 +322,41 @@ export class SonicCache {
   // ---------------------------------------------------------------------------
 
   /**
-   * The measurement cached under the first of `trackKeys` that has one by `analyzerVersion`, or
-   * null: none, expired, measured by another analyzer version, or no longer a measurement the
-   * cache serves (measuredAudio.ts cacheableAudio).
+   * The measurement cached under `trackKey` by `analyzerVersion`, or null: none, expired, or no
+   * longer a measurement the cache serves (measuredAudio.ts cacheableAudio). The row's own block
+   * must name that version too.
    */
-  getAudio(trackKeys: readonly string[], analyzerVersion: string): CachedAudio | null {
+  getAudio(trackKey: string, analyzerVersion: string): CachedAudio | null {
     try {
-      for (const trackKey of trackKeys) {
-        const row = this.stmt.getAudio.get(trackKey, analyzerVersion);
-        if (!row || nowSec() >= row.expires_at) continue;
+      const row = this.stmt.getAudio.get(trackKey, analyzerVersion);
+      if (!row || nowSec() >= row.expires_at) return null;
+      const cached = parseCachedAudio(row.full_data);
+      if (!cached) {
+        log.warn(`Ignoring audio row for ${trackKey}: not a measurement the cache serves`);
+        return null;
+      }
+      if (cached.audio.analyzerVersion !== analyzerVersion) {
+        log.warn(`Ignoring audio row for ${trackKey}: filed under another analyzer version`);
+        return null;
+      }
+      return cached;
+    } catch (err) {
+      log.error("Could not read an audio row", { err });
+      return null;
+    }
+  }
+
+  /**
+   * The newest measurement cached under `trackKey` by any analyzer version, with when it was
+   * stored, or null. For when the audio service cannot say its version (it is down): the block
+   * names the analyzer that measured it.
+   */
+  getNewestAudio(trackKey: string): { measurement: CachedAudio; measuredAt: Date } | null {
+    try {
+      for (const row of this.stmt.newestAudio.all(trackKey, nowSec())) {
         const cached = parseCachedAudio(row.full_data);
-        if (!cached) {
-          log.warn(`Ignoring audio row for ${trackKey}: not a measurement the cache serves`);
-          continue;
-        }
-        // The row's own block must say it was measured by the version asked for.
-        if (cached.audio.analyzerVersion !== analyzerVersion) {
-          log.warn(`Ignoring audio row for ${trackKey}: filed under another analyzer version`);
-          continue;
-        }
-        return cached;
+        if (!cached || cached.audio.analyzerVersion !== row.analyzer_version) continue;
+        return { measurement: cached, measuredAt: new Date((row.created_at ?? 0) * 1000) };
       }
       return null;
     } catch (err) {

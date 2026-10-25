@@ -5,7 +5,9 @@ import { MIGRATION_3_FROZEN, MIGRATIONS, runMigrations } from "./migrations.js";
 import {
   audioLookupKeys,
   audioTrackKey,
+  type CachedAudio,
   canonicalIsrc,
+  isrcRowServes,
   LOW_CONFIDENCE_AUDIO_TTL_MS,
 } from "./measuredAudio.js";
 import { SonicCache } from "./cache.js";
@@ -90,10 +92,10 @@ describe("SonicCache audio", () => {
   it("serves a measurement for the analyzer version that measured it, and misses for another", () => {
     cache.putAudio(`isrc:${ISRC}`, "sp1", complete());
 
-    expect(cache.getAudio([`isrc:${ISRC}`], ANALYZER_VERSION)).toEqual(complete());
+    expect(cache.getAudio(`isrc:${ISRC}`, ANALYZER_VERSION)).toEqual(complete());
     // A newer analyzer (or an older one): a miss, the track is measured again.
-    expect(cache.getAudio([`isrc:${ISRC}`], NEXT_VERSION)).toBeNull();
-    expect(cache.getAudio([`isrc:${ISRC}`], "2.0.0+essentia")).toBeNull();
+    expect(cache.getAudio(`isrc:${ISRC}`, NEXT_VERSION)).toBeNull();
+    expect(cache.getAudio(`isrc:${ISRC}`, "2.0.0+essentia")).toBeNull();
   });
 
   it("keeps the measurements of two analyzer versions apart", () => {
@@ -106,30 +108,71 @@ describe("SonicCache audio", () => {
         tempo: { ...audioV2().tempo!, bpm: 231.6 },
       }),
     );
-    expect(bpmOf(cache.getAudio([`isrc:${ISRC}`], ANALYZER_VERSION))).toBe(115.8);
-    expect(bpmOf(cache.getAudio([`isrc:${ISRC}`], NEXT_VERSION))).toBe(231.6);
+    expect(bpmOf(cache.getAudio(`isrc:${ISRC}`, ANALYZER_VERSION))).toBe(115.8);
+    expect(bpmOf(cache.getAudio(`isrc:${ISRC}`, NEXT_VERSION))).toBe(231.6);
     expect(db.prepare("SELECT COUNT(*) FROM audio_cache").pluck().get()).toBe(2);
   });
 
-  it("shares a row matched by ISRC between two Spotify tracks with that ISRC", () => {
-    const trackKey = audioTrackKey(ISRC_MATCH, "album-version", ISRC);
-    cache.putAudio(trackKey, "album-version", complete());
-
-    // The single's Spotify id is another, its ISRC the same: the same clip, the same row.
-    expect(cache.getAudio(audioLookupKeys("single-version", ISRC), ANALYZER_VERSION)).toEqual(
-      complete(),
+  it("serves an ISRC row only to a track whose own resolution took the same Deezer entry by ISRC", () => {
+    const row = complete() as CachedAudio;
+    const sameEntry = { ...ISRC_MATCH };
+    // The track's own resolution took that entry: the same clip, the same measurement.
+    expect(isrcRowServes(`isrc:${ISRC}`, row, sameEntry)).toBe(true);
+    // Its alternative read by id that carries the ISRC is an ISRC match too, when it is that entry.
+    expect(isrcRowServes(`isrc:${ISRC}`, row, { ...ISRC_MATCH, method: "id", score: null })).toBe(
+      true,
     );
-    // A track with another ISRC, or none, does not get it.
-    expect(cache.getAudio(audioLookupKeys("other", "GBUM71029601"), ANALYZER_VERSION)).toBeNull();
-    expect(cache.getAudio(audioLookupKeys("other", null), ANALYZER_VERSION)).toBeNull();
+    // Another entry for the ISRC, a search match, Spotify's own clip, or no clip at all (the
+    // entry turned down by this track's checks, or Deezer not read): not served.
+    for (const fresh of [
+      { ...ISRC_MATCH, deezerId: 1 },
+      SEARCH_MATCH,
+      { provider: "spotify" as const, method: "id" as const, score: null },
+      null,
+    ]) {
+      expect(isrcRowServes(`isrc:${ISRC}`, row, fresh)).toBe(false);
+    }
+    // A row without the entry's id is never served under the ISRC.
+    const { deezerId: _id, ...noId } = ISRC_MATCH as { deezerId: number };
+    const unidentified = { ...row, previewMatch: noId as never };
+    expect(isrcRowServes(`isrc:${ISRC}`, unidentified, sameEntry)).toBe(false);
+    // The track's own row is its own measurement, whatever this run's resolution.
+    const own = measurementOf(audioV2(), SEARCH_MATCH) as never;
+    expect(isrcRowServes("spotify:sp1", own, null)).toBe(true);
   });
 
-  it("serves a search-matched measurement only to its own track", () => {
+  it("files a clip found by the ISRC under the ISRC only with its Deezer entry's id", () => {
+    const { deezerId: _id, ...noId } = ISRC_MATCH as { deezerId: number };
+    expect(audioTrackKey(noId as never, "sp1", ISRC)).toBe("spotify:sp1");
+  });
+
+  it("gives the newest measurement under a key, of any analyzer version, with when it was stored", () => {
+    cache.putAudio("spotify:n", "n", complete());
+    db.prepare("UPDATE audio_cache SET created_at = created_at - 86400").run();
+    const newer = complete({ analyzerVersion: NEXT_VERSION });
+    cache.putAudio("spotify:n", "n", newer);
+
+    const newest = cache.getNewestAudio("spotify:n");
+    expect(newest?.measurement).toEqual(newer);
+    expect(Math.abs((newest?.measuredAt.getTime() ?? 0) - Date.now())).toBeLessThan(5_000);
+    expect(cache.getNewestAudio("spotify:none")).toBeNull();
+
+    // An expired row is not served, nor a row whose block names another version than its key.
+    cache.putAudio("spotify:gone", "gone", complete(), 0);
+    expect(cache.getNewestAudio("spotify:gone")).toBeNull();
+    db.prepare(
+      "INSERT INTO audio_cache (track_key, analyzer_version, spotify_id, confidence, full_data, expires_at) VALUES ('spotify:mis', '9.9.9', 'mis', 'high', ?, unixepoch() + 86400)",
+    ).run(JSON.stringify(complete()));
+    expect(cache.getNewestAudio("spotify:mis")).toBeNull();
+  });
+
+  it("files a search-matched measurement under its own track only", () => {
     const measured = measurementOf(audioV2(), SEARCH_MATCH);
     cache.putAudio(audioTrackKey(SEARCH_MATCH, "sp1", ISRC), "sp1", measured);
 
-    expect(cache.getAudio(audioLookupKeys("sp1", ISRC), ANALYZER_VERSION)).toEqual(measured);
-    expect(cache.getAudio(audioLookupKeys("sp2", ISRC), ANALYZER_VERSION)).toBeNull();
+    expect(cache.getAudio("spotify:sp1", ANALYZER_VERSION)).toEqual(measured);
+    expect(cache.getAudio(`isrc:${ISRC}`, ANALYZER_VERSION)).toBeNull();
+    expect(cache.getAudio("spotify:sp2", ANALYZER_VERSION)).toBeNull();
   });
 
   it("does not serve a row that is not a v2 measurement, nor one filed under another version", () => {
@@ -162,7 +205,7 @@ describe("SonicCache audio", () => {
       JSON.stringify(complete({ analyzerVersion: NEXT_VERSION })),
     );
     for (const key of ["flat", "broken", "gated", "unmatched", "v1-block", "mislabelled"]) {
-      expect(cache.getAudio([`spotify:${key}`], ANALYZER_VERSION), key).toBeNull();
+      expect(cache.getAudio(`spotify:${key}`, ANALYZER_VERSION), key).toBeNull();
     }
   });
 
@@ -185,13 +228,13 @@ describe("SonicCache audio", () => {
     cache.putAudio("spotify:p", "p", partial());
     const row = db.prepare("SELECT confidence FROM audio_cache").pluck().get();
     expect(row).toBe("low");
-    expect(cache.getAudio(["spotify:p"], ANALYZER_VERSION)).toEqual(partial());
+    expect(cache.getAudio("spotify:p", ANALYZER_VERSION)).toEqual(partial());
   });
 
   it("caches a loud master whose energy copy is null, with its loudness", () => {
     const loud = complete({ loudness: { rmsMean: 0.538, method: "rms", basis: "signal" } });
     cache.putAudio("spotify:loud", "loud", loud);
-    expect(cache.getAudio(["spotify:loud"], ANALYZER_VERSION)?.audio.loudness?.rmsMean).toBe(0.538);
+    expect(cache.getAudio("spotify:loud", ANALYZER_VERSION)?.audio.loudness?.rmsMean).toBe(0.538);
     expect(db.prepare("SELECT confidence FROM audio_cache").pluck().get()).toBe("high");
   });
 
@@ -207,17 +250,17 @@ describe("SonicCache audio", () => {
     const slower = (bpm: number) => ({ ...audioV2().tempo!, bpm });
     cache.putAudio("spotify:live", "live", complete({ tempo: slower(100) }));
     cache.putAudio("spotify:live", "live", partial({ tempo: slower(90) }));
-    expect(bpmOf(cache.getAudio(["spotify:live"], ANALYZER_VERSION))).toBe(100);
+    expect(bpmOf(cache.getAudio("spotify:live", ANALYZER_VERSION))).toBe(100);
 
     cache.putAudio("spotify:expired", "expired", complete({ tempo: slower(100) }), 0);
     cache.putAudio("spotify:expired", "expired", partial({ tempo: slower(90) }));
-    expect(bpmOf(cache.getAudio(["spotify:expired"], ANALYZER_VERSION))).toBe(90);
+    expect(bpmOf(cache.getAudio("spotify:expired", ANALYZER_VERSION))).toBe(90);
   });
 
   it("lets a measurement replace a stored row that is not one", () => {
     insertRaw("spotify:broken", ANALYZER_VERSION, "{not json", "high");
     cache.putAudio("spotify:broken", "broken", partial());
-    expect(cache.getAudio(["spotify:broken"], ANALYZER_VERSION)).toEqual(partial());
+    expect(cache.getAudio("spotify:broken", ANALYZER_VERSION)).toEqual(partial());
   });
 });
 

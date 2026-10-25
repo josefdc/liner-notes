@@ -71,18 +71,11 @@ function describeMeasuredAudio(audio: MeasuredAudioFields): string | null {
   const rmsMean = audio.audio?.loudness?.rmsMean;
   const level = rmsMean != null ? loudnessDbfs(rmsMean) : null;
   if (level !== null) parts.push(`Measured level ${level.toFixed(1)} dBFS RMS on the preview.`);
-  // Mood and danceability come from audio models run over the clip: they are estimates by
-  // those models, not signal measurements, and are labelled that way.
+  // Valence and danceability come from audio models run over the clip: they are estimates by
+  // those models, not signal measurements, and are labelled that way. Valence is the DEAM head's
+  // 1..9 output put on 0..1, so it is given as a score, not named as a mood.
   if (audio.valence != null) {
-    const mood =
-      audio.valence > 0.7
-        ? "euphoric"
-        : audio.valence > 0.5
-          ? "positive"
-          : audio.valence > 0.3
-            ? "melancholic"
-            : "dark";
-    parts.push(`Mood (audio model estimate): ${mood}.`);
+    parts.push(`Valence score (audio model estimate, 0 to 1): ${audio.valence}.`);
   }
   if (audio.danceability != null) {
     parts.push(`Danceability score (audio model estimate): ${audio.danceability}.`);

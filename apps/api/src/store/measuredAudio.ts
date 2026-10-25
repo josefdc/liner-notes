@@ -4,14 +4,15 @@
  *
  * A row holds the audio service's AudioFeatures v2 block as measured and how its clip was matched
  * to the track. It is filed under (track key, analyzer version):
- * - the track key is `isrc:<ISRC>` when the measured clip was matched by the track's ISRC, and
- *   `spotify:<Spotify id>` otherwise. ISRCs are reused (a karaoke or an extended entry can carry
- *   the original's), so only a clip found by the ISRC itself is filed under it: every track with
- *   that ISRC would be measured on that same clip. A clip matched by search or Spotify's own clip
- *   is the chosen track's only;
+ * - the track key is `isrc:<ISRC>` when the measured clip was the Deezer entry found by the
+ *   track's ISRC (its Deezer id is kept in the row), and `spotify:<Spotify id>` otherwise;
  * - the analyzer version is the block's `analyzerVersion` (semver of the analysis plus the
- *   estimator and the model set). A row measured by any other version is a miss and the track is
- *   measured again.
+ *   estimator and the model set). A row measured by another version is a miss when the service
+ *   names its version, and the track is measured again.
+ * An `isrc:` row is not every track's with that ISRC: ISRCs are reused (a karaoke or an edit can
+ * carry the original's), and Deezer's ISRC entry is judged against each requesting track (its
+ * artist, title, version and duration). Such a row is served to a track only when that track's
+ * own preview resolution, this run, accepted the same Deezer entry by ISRC (`isrcRowServes`).
  * Rows written before migration 14 (flat values without the block) were dropped with their table:
  * a v2 block is never made up from them.
  */
@@ -30,7 +31,8 @@ import type { PreviewSourceMatch } from "../sources/audio.js";
 
 /**
  * A partial measurement (low confidence, e.g. the perceptual models were unavailable) is cached
- * for a day, so a complete measurement replaces it soon after the models are back.
+ * for a day. Loading the models changes the analyzer version, so a complete measurement is filed
+ * under a key of its own and the partial row is simply no longer read.
  */
 export const LOW_CONFIDENCE_AUDIO_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -53,11 +55,15 @@ export function canonicalIsrc(isrc: string | null | undefined): string | null {
   return ISRC.test(canonical) ? canonical : null;
 }
 
-/** True when the clip was found by the track's ISRC (the contract's PreviewMatch `isrc`). */
-function matchedByIsrc(match: PreviewSourceMatch): boolean {
-  if (match.provider !== "deezer") return false;
+/**
+ * The Deezer entry's id when the clip was the entry found by the track's ISRC (the contract's
+ * PreviewMatch `isrc`), else null.
+ */
+export function isrcEntryId(match: PreviewSourceMatch | null | undefined): number | null {
+  if (match?.provider !== "deezer" || typeof match.deezerId !== "number") return null;
   // A Deezer entry read by id that carries the requested ISRC has no score (deezer.ts).
-  return match.method === "isrc" || (match.method === "id" && match.score === null);
+  const byIsrc = match.method === "isrc" || (match.method === "id" && match.score === null);
+  return byIsrc ? match.deezerId : null;
 }
 
 /** The track key a measurement is filed under (see the top of this file). */
@@ -67,12 +73,28 @@ export function audioTrackKey(
   isrc: string | null | undefined,
 ): string {
   const canonical = canonicalIsrc(isrc);
-  return canonical && matchedByIsrc(match) ? `isrc:${canonical}` : `spotify:${spotifyId}`;
+  return canonical && isrcEntryId(match) !== null ? `isrc:${canonical}` : `spotify:${spotifyId}`;
 }
 
 /**
- * The track keys to look a track up under, in order: its ISRC's (a clip found by that ISRC is the
- * clip this track would be measured on first), then its own.
+ * Whether a row found under `trackKey` may be served to the track whose preview resolution this
+ * run gave `freshMatch`: a track's own (`spotify:`) row always; an `isrc:` row only when the
+ * track's own resolution accepted, by ISRC, the same Deezer entry the row was measured on. With
+ * no resolution (none found, Deezer not read) an `isrc:` row is not served.
+ */
+export function isrcRowServes(
+  trackKey: string,
+  row: CachedAudio,
+  freshMatch: PreviewSourceMatch | null | undefined,
+): boolean {
+  if (!trackKey.startsWith("isrc:")) return true;
+  const fresh = isrcEntryId(freshMatch);
+  return fresh !== null && fresh === isrcEntryId(row.previewMatch);
+}
+
+/**
+ * The track keys to look a track up under: its ISRC's (served only as isrcRowServes allows),
+ * then its own.
  */
 export function audioLookupKeys(spotifyId: string, isrc: string | null | undefined): string[] {
   const canonical = canonicalIsrc(isrc);

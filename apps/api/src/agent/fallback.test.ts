@@ -91,7 +91,7 @@ describe("createFallbackTrackData", () => {
     expect(td.audio).toEqual(signalOnlyV2());
     const profile = td.factoids.find((f) => f.title === "Sonic Profile");
     expect(profile?.content).toContain("116 BPM in D Minor");
-    expect(profile?.content).not.toMatch(/mood|Danceability/i);
+    expect(profile?.content).not.toMatch(/valence|mood|Danceability/i);
   });
 
   it("prints the same BPM as the payload", async () => {
@@ -197,7 +197,8 @@ describe("createFallbackTrackData", () => {
     expect(profile).toContain("116 BPM in D Minor.");
     // The level in dBFS RMS, never a 0..1 energy that saturates on loud masters.
     expect(profile).toContain("Measured level -14.9 dBFS RMS on the preview.");
-    expect(profile).toContain("Mood (audio model estimate): dark.");
+    expect(profile).toContain("Valence score (audio model estimate, 0 to 1): 0.21.");
+    expect(profile).not.toMatch(/dark|euphoric|melancholic|positive/);
     expect(profile).toContain("Danceability score (audio model estimate): 0.64.");
     expect(profile).not.toMatch(/%|Measured mood|energy/);
   });

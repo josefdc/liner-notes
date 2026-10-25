@@ -97,6 +97,40 @@ const WHITE_COVER = "https://i.scdn.co/image/white-cover";
 const WHITE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640"><rect width="100%" height="100%" fill="#fff"/></svg>';
 
+/**
+ * Serves every image from `origin` as a white square. The function it returns checks, on the view
+ * about to be measured, that the white cover was requested and is drawn there: an <img> from
+ * `origin` on screen, loaded and decoded. A route that stops matching the cover's URL, or a view
+ * that stops showing the cover, then fails instead of measuring against no cover at all.
+ */
+async function serveWhiteCover(page: Page, origin: string) {
+  let served = 0;
+  await page.route(`${origin}**`, (route) => {
+    served += 1;
+    return route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG });
+  });
+  return async () => {
+    await expect.poll(() => served, "the white cover is requested").toBeGreaterThan(0);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            (origin) =>
+              [...document.images].filter(
+                (image) =>
+                  image.currentSrc.startsWith(origin) &&
+                  image.complete &&
+                  image.naturalWidth > 0 &&
+                  image.getClientRects().length > 0,
+              ).length,
+            origin,
+          ),
+        { message: "the white cover is drawn" },
+      )
+      .toBeGreaterThan(0);
+  };
+}
+
 /** A fixture whose result shows the white cover. */
 function withWhiteCover(fixture: ReturnType<typeof loadFixture>) {
   const complete = fixture.streams["/api/analyze/stream"].find(
@@ -355,15 +389,15 @@ for (const fixture of ["full-result", "missing-states"]) {
     test(`neutral badge text meets 4.5:1 on the Dashboard and the Player (${fixture}, ${cover})`, async ({
       page,
     }) => {
-      await page.route("https://i.scdn.co/**", (route) =>
-        route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
-      );
+      const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
       const data = fixture === "full-result" ? explicitResult() : loadFixture(fixture);
       await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
       await page.setViewportSize({ width: 1440, height: 900 });
       await analyzeAndOpenDashboard(page, "Track");
+      if (cover !== "no cover") await whiteCoverShown();
       const dashboard = await neutralBadgeContrast(page);
       await openPlayer(page);
+      if (cover !== "no cover") await whiteCoverShown();
       const player = await neutralBadgeContrast(page);
       expect(dashboard.length).toBeGreaterThan(0);
       expect(player.length).toBeGreaterThan(0);
@@ -374,15 +408,21 @@ for (const fixture of ["full-result", "missing-states"]) {
   }
 }
 
+const DASHBOARD_MODULE =
+  /\/(?:assets\/Dashboard-[\w-]+\.js|src\/components\/Dashboard\.tsx)(?:\?|$)/;
+
 test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ page }) => {
   await useMockApi(page, loadFixture("full-result"));
   await page.setViewportSize({ width: 1440, height: 900 });
-  // Hold the Dashboard module so its loading skeleton stays on screen.
+  // Hold the Dashboard module so its loading skeleton stays on screen: the built chunk the tests
+  // are served (assets/Dashboard-<hash>.js), or the source file on a dev server.
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await page.route(/\/src\/components\/Dashboard\.tsx/, async (route) => {
+  let holding = false;
+  await page.route(DASHBOARD_MODULE, async (route) => {
+    holding = true;
     await held;
     await route.continue();
   });
@@ -391,6 +431,9 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
   await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
   await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
 
+  // Measured only while the module is held: a pattern that no longer matches the chunk's name
+  // fails here instead of measuring whatever else is on screen.
+  await expect.poll(() => holding).toBe(true);
   const skeleton = page.locator("div.animate-progress-shimmer").first().locator("xpath=../../..");
   await expect(skeleton).toBeVisible();
   const spacing = await skeleton.evaluate((element) => {
@@ -427,15 +470,15 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
     test(`provenance and missing-value lines meet 4.5:1 (${fixture}, ${cover})`, async ({
       page,
     }) => {
-      await page.route("https://i.scdn.co/**", (route) =>
-        route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
-      );
+      const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
       const data = loadFixture(fixture);
       await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
       await page.setViewportSize({ width: 1440, height: 900 });
       await analyzeAndOpenDashboard(page, "Track");
+      if (cover !== "no cover") await whiteCoverShown();
       const dashboard = await neutralBadgeContrast(page, PROVENANCE_TEXT);
       await openPlayer(page);
+      if (cover !== "no cover") await whiteCoverShown();
       const player = await neutralBadgeContrast(page, PROVENANCE_TEXT);
       expect(dashboard.length).toBeGreaterThan(4);
       expect(player.length).toBeGreaterThan(2);
@@ -462,9 +505,11 @@ const GENEALOGY_TEXT = {
 
 for (const cover of ["no cover", "a white cover"]) {
   test(`genealogy relation, legend and link text meet 4.5:1 (${cover})`, async ({ page }) => {
-    await page.route("https://i.scdn.co/**", (route) =>
-      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
-    );
+    // Three passes: the Dashboard's cards at rest, then each card hovered and measured on its own
+    // (a settle and a screenshot per card), then the Player's legend, list and link detail. In a
+    // full parallel run on a loaded machine that comes close to the default limit.
+    test.slow();
+    const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
     // Sourced and inferred relations both, so both badge styles are on the Dashboard.
     const data = loadFixture("genealogy-kinds");
     const complete = data.streams["/api/analyze/stream"].find(
@@ -488,6 +533,7 @@ for (const cover of ["no cover", "a white cover"]) {
     await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
+    if (cover !== "no cover") await whiteCoverShown();
     const dashboard = await neutralBadgeContrast(page, GENEALOGY_TEXT.dashboard);
     // A hovered card lightens behind its badge, relation and provenance: each card, hovered.
     const cards = page.getByRole("button").filter({ has: page.locator("[data-link-kind]") });
@@ -500,7 +546,7 @@ for (const cover of ["no cover", "a white cover"]) {
       const pointer = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
       await page.mouse.move(pointer.x, pointer.y);
       await expect(card).toHaveAttribute("data-hovered", "true");
-      await animationsSettled(page);
+      // neutralBadgeContrast waits for the hover's transitions (backgroundSettled) itself.
       const hovered = await neutralBadgeContrast(page, hoveredText, { keepHover: true });
       expect(hovered.length, `card ${i + 1}, hovered`).toBeGreaterThan(0);
       // Measured hovered: the card is still the one under the pointer.
@@ -514,6 +560,7 @@ for (const cover of ["no cover", "a white cover"]) {
     }
     await page.mouse.move(0, 0);
     await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
     // The list opens over the graph; then, closed again, a focused link's detail.
     const summary = page.getByText(/^Links as a list/);
     await summary.click();
@@ -551,14 +598,13 @@ for (const cover of ["no cover", "a white cover"]) {
     // Reaching the Player's claims takes most of this test on a loaded machine; measuring their
     // eighty-odd lines adds another 5–6 s.
     test.slow();
-    await page.route("https://i.scdn.co/**", (route) =>
-      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
-    );
+    const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
     const data = loadFixture("provenance");
     await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
     await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
     await page.getByRole("button", { name: /Rejected by the verifier/ }).click();
     const measured = await neutralBadgeContrast(page, CLAIM_TEXT);
     const texts = measured.map(({ text }) => text);
@@ -589,9 +635,7 @@ for (const cover of ["no cover", "a white archive cover"]) {
   test(`album cover text meets 4.5:1 on the Dashboard and the Player (${cover})`, async ({
     page,
   }) => {
-    await page.route("https://coverartarchive.org/**", (route) =>
-      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
-    );
+    const whiteCoverShown = await serveWhiteCover(page, "https://coverartarchive.org/");
     const data = loadFixture("recorded-cover");
     if (cover === "no cover") {
       const complete = data.streams["/api/analyze/stream"].find(
@@ -602,8 +646,10 @@ for (const cover of ["no cover", "a white archive cover"]) {
     await useMockApi(page, data);
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
+    if (cover !== "no cover") await whiteCoverShown();
     const dashboard = await neutralBadgeContrast(page, "[data-cover-text]");
     await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
     await page.waitForTimeout(500);
     const player = await neutralBadgeContrast(page, "[data-cover-text]");
     const expected = cover === "no cover" ? "Cover not available" : "Cover: Cover Art Archive";

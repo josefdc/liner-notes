@@ -243,8 +243,22 @@ export const RunInfo = z.object({
   id: z.string().min(1),
   mode: RunMode,
   recordedAt: Timestamp.nullable().describe("When the run was recorded; null for live runs"),
-  commit: z.string().nullable().describe("Commit of the code that recorded the run"),
+  commit: z
+    .string()
+    .nullable()
+    .describe(
+      "Commit of the code that recorded the run. A replay of model answers recorded at " +
+        'several commits lists each one, in recording order, separated by ", "',
+    ),
   analyzerVersion: z.string().nullable().describe("AudioFeatures analyzerVersion; null if none"),
+  replayed: z
+    .enum(["run", "model_answers"])
+    .optional()
+    .describe(
+      "What a replay replayed: the whole recorded run, or only the model's answers (stored " +
+        "answers, used in development and evaluation; the rest of the run was live). Absent on " +
+        "live runs and on results from before it was sent",
+    ),
   startedAt: Timestamp.optional(),
   durationMs: z.int().min(0).nullable().optional(),
   fallback: z

@@ -69,8 +69,9 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   // Estimated (not measured) values come back null here: shown as not measured.
   const { bpm, key, energy, valence, danceability, acousticness } = audioValues(track);
   const hasModelScores = valence !== null || danceability !== null || acousticness !== null;
-  // A replayed result's values were measured when its run was recorded, not now.
-  const measuredTitle = recordingOf(track)
+  // A whole recording's values were measured when it was recorded. A run whose model answers
+  // alone were replayed measured its audio live, in this run.
+  const measuredTitle = isWholeRecording(track.run)
     ? 'Measured from the audio preview when this run was recorded'
     : 'Measured from the audio preview';
   const iconSize = size === 'md' ? 12 : 10;
@@ -251,9 +252,10 @@ export const ResultNotices: React.FC<{ track: TrackData; className?: string }> =
  * Says that a result is a recorded run served again, with when (and from which commit) it was
  * recorded, so a replay never reads as a live analysis. Renders nothing for a live result.
  *
- * A result whose run says "replay" but neither when nor where it was recorded is a live run
- * whose model answers were replayed from stored answers (a development setting): it is labelled
- * as that, not as a whole recording.
+ * A run whose model answers alone were replayed from stored answers (development and
+ * evaluation; `run.replayed` is "model_answers", or, from servers that do not say, a "replay"
+ * that names neither when nor where it was recorded) is labelled as that, with when and from
+ * which commit the answers were recorded where it says: the rest of it ran live.
  */
 export const RecordedRunNotice: React.FC<{
   track: TrackData;
@@ -265,18 +267,19 @@ export const RecordedRunNotice: React.FC<{
   if (!recording) return null;
   const date = recordedDate(recording.recordedAt);
   const modelOnly = !isWholeRecording(track.run);
+  const known = date ? `on ${date}` : null;
+  const commit = recording.commit ? ` (commit ${recording.commit})` : '';
   const title = modelOnly
-    ? 'Model answers replayed · not a live model call'
+    ? `Model answers replayed · ${date ? `recorded ${date}` : 'recording date not stored'}`
     : `Recorded run · ${date ?? 'date not recorded'} · replayed`;
   const text = modelOnly
-    ? "The model's answers in this result were replayed from stored answers that do not say " +
-      'when they were recorded. Other parts of it may have run live.'
-    : `This result was recorded ${date ? `on ${date}` : 'earlier'}` +
-      `${recording.commit ? ` (commit ${recording.commit})` : ''} and is shown again as it was ` +
+    ? `The model's answers in this result were replayed from answers recorded ${known ?? 'at a time that was not stored'}${commit}. ` +
+      'The rest of it may have run live; it is not a live model call.'
+    : `This result was recorded ${known ?? 'earlier'}${commit} and is shown again as it was ` +
       'then. Nothing was analysed live for it.';
   return (
     <section
-      aria-label="Recorded run"
+      aria-label={modelOnly ? 'Replayed model answers' : 'Recorded run'}
       title={compact ? text : undefined}
       className={`flex gap-3 items-start border border-cyber/30 bg-cyber/5 rounded-md ${compact ? 'px-3 py-1.5' : 'px-4 py-3'} ${className}`}
     >

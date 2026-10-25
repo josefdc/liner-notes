@@ -109,9 +109,11 @@ export const FactoidsResponse = z.object({
  *
  * `mode` says how the result the run sent was produced: `live`, computed by this run, or
  * `replay`, a recorded result served again (a replayed run, or a cached result an earlier run
- * composed; such a run has no `analysis` of its own). A run that sent no result (open, failed,
- * cancelled) or was stored before modes were kept reads `live`, which then says nothing about
- * how a result was produced: show a mode only alongside a result.
+ * composed; such a run has no `analysis` of its own). A run whose model answers were replayed
+ * from stored answers (development and evaluation) also reads `replay`, though the rest of it
+ * ran live: its analysis's `run.replayed` says `model_answers`. A run that sent no result
+ * (open, failed, cancelled) or was stored before modes were kept reads `live`, which then says
+ * nothing about how a result was produced: show a mode only alongside a result.
  */
 export const StoredRun = z.object({
   id: z.string().min(1),
@@ -216,8 +218,8 @@ type ReplayRecordShape = z.infer<typeof ReplayRecordShape>;
 /**
  * A recorded run, replayed with the same events at accelerated timing. The record is checked
  * strictly when it is loaded:
- * - `analysis.run` exists, says `mode: "replay"`, and its `recordedAt`, `commit` and
- *   `analyzerVersion` are the record's own;
+ * - `analysis.run` exists, says `mode: "replay"` (of the whole run, never `replayed:
+ *   "model_answers"`), and its `recordedAt`, `commit` and `analyzerVersion` are the record's own;
  * - every `complete` event's result says `mode: "replay"` too, with the same recording date,
  *   commit and analyzer version, so a replay is never shown as live or misdated;
  * - events hold no heartbeats (the replayer sends its own) and are numbered 0, 1, 2, ... in
@@ -234,6 +236,13 @@ export const ReplayRecord = refineNamed(
       }
       if (run.mode !== "replay") {
         ctx.addIssue({ code: "custom", path: ["analysis", "run", "mode"], message: "not replay" });
+      }
+      if (run.replayed === "model_answers") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["analysis", "run", "replayed"],
+          message: "a record replays the whole run, not only its model answers",
+        });
       }
       for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {
         if (run[field] !== record[field]) {
@@ -256,6 +265,13 @@ export const ReplayRecord = refineNamed(
             code: "custom",
             path: [...path, "mode"],
             message: "a recorded result must say it is a replay",
+          });
+        }
+        if (run?.replayed === "model_answers") {
+          ctx.addIssue({
+            code: "custom",
+            path: [...path, "replayed"],
+            message: "a record replays the whole run, not only its model answers",
           });
         }
         for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {

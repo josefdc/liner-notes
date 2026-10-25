@@ -24,6 +24,7 @@ import {
   type FactoidType,
   type LinkType,
   type RunInfo,
+  runIssues,
   type SourceError,
   TrackAnalysis,
 } from "@liner-notes/contract";
@@ -32,7 +33,13 @@ import type { InvokeResult } from "../../llm/invoke.js";
 import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
 import { pickRecording } from "../../sources/identity.js";
 import { errorRecord } from "../../sources/records.js";
-import { answeredCall, failedCall, refusedAnswer, runUsage } from "../callRecords.js";
+import {
+  answeredCall,
+  failedCall,
+  refusedAnswer,
+  replayedRecording,
+  runUsage,
+} from "../callRecords.js";
 import { enrichGenealogyWithArtwork } from "../enricher.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
@@ -441,22 +448,32 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         node: "composer",
         timestamp: timestampOf(runtime),
       });
-    const runInfo = (
-      fallback: boolean,
-      calls: LlmCallRecord[],
-      errors: SourceError[],
-    ): RunInfo => ({
-      id: runId,
-      // A run whose model answers came from cassettes is a replay, not a live run. Cassettes
-      // carry no recording time or commit, so those stay null (see the review notes).
-      mode: [...state.usage, ...calls].some((call) => call.mode === "replay") ? "replay" : "live",
-      recordedAt: null,
-      commit: null,
-      analyzerVersion: null,
-      fallback,
-      usage: runUsage([...state.usage, ...calls], runtime.llm.callsForRun(runId)),
-      sourceErrors: [...state.sourceErrors, ...errors],
-    });
+    const runInfo = (fallback: boolean, calls: LlmCallRecord[], errors: SourceError[]): RunInfo => {
+      const records = [...state.usage, ...calls];
+      // A run whose model answers came from cassettes is a replay of those answers, not a live
+      // run: it says when and from which commit they were recorded (replayedRecording; null
+      // where a cassette does not say), and that only the model's answers were replayed.
+      const replayed = records.some((call) => call.mode === "replay");
+      const info: RunInfo = {
+        id: runId,
+        mode: replayed ? "replay" : "live",
+        ...(replayed ? replayedRecording(records) : { recordedAt: null, commit: null }),
+        ...(replayed && { replayed: "model_answers" as const }),
+        // The result carries no AudioFeatures block (its measured values are flat fields).
+        analyzerVersion: null,
+        fallback,
+        usage: runUsage(records, runtime.llm.callsForRun(runId)),
+        sourceErrors: [...state.sourceErrors, ...errors],
+      };
+      const issues = runIssues(info, undefined);
+      if (issues.length > 0) {
+        console.warn(
+          `[Composer] Run ${runId}: the run information breaks the contract's run rules ` +
+            `(${issues.join("; ")}); record its cassettes again so they say when and where`,
+        );
+      }
+      return info;
+    };
 
     status("LLM-CONNECT", "Composing the liner notes...");
     console.log("🎼 [Composer] Synthesizing data for:", spotify.title);

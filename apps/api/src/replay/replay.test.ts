@@ -11,7 +11,7 @@
  * cover URL and the typed query in a field the contract does not name.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -19,7 +19,7 @@ import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   AnalyzeStreamEvent,
-  type ReplayRecord,
+  ReplayRecord,
   ReplaysResponse,
   RunResponse,
   runIssues,
@@ -29,6 +29,8 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SonicAgentStateType } from "../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
+import { runningCommit } from "../config/checkoutCommit.js";
+import { main as recordMain } from "./record.js";
 import { createApp } from "../http/app.js";
 import { resolveSpendLogPath } from "../llm/budget.js";
 import { resetBudgetStateForTests } from "../llm/budgetState.js";
@@ -326,11 +328,70 @@ function fixtureAsLiveRun(fixture: ReplayRecord, typed: string) {
     spotifyId: fixture.analysis.id,
     mode: "live" as const,
     analysis,
+    commit: "abc1234",
   };
   return { run, events };
 }
 
 describe("the recorder", () => {
+  it("replay:record names the commit stored with the run, never the checkout's", async () => {
+    const runId = await liveRun("source run");
+    vi.stubEnv("SQLITE_DB_PATH", join(dir, "test.db"));
+    const out = join(dir, "recorded");
+    const warn = vi.mocked(console.warn);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = { settingsFileValues: () => ({}), checkout: () => "bbbbbbbbbbbb" };
+    const args = (slug: string, ...extra: string[]) => [
+      "--run",
+      runId,
+      "--slug",
+      slug,
+      "--out",
+      out,
+      ...extra,
+    ];
+
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", runId);
+    expect(recordMain(args("stored"), deps)).toBe(0);
+    const written = JSON.parse(readFileSync(join(out, "stored.json"), "utf8"));
+    expect(written.commit).toBe("aaaaaaaaaaaa");
+    expect(written.analysis.run.commit).toBe("aaaaaaaaaaaa");
+    expect(warn.mock.calls.map(([m]) => String(m)).join("\n")).toMatch(
+      /checkout is at bbbbbbbbbbbb; the record names aaaaaaaaaaaa/,
+    );
+
+    // A contradicting --commit is refused; so is a run with none and no --commit.
+    expect(recordMain(args("contradicted", "--commit", "bbbbbbbbbbbb"), deps)).toBe(1);
+    getDb().prepare("UPDATE runs SET code_commit = NULL WHERE run_id = ?").run(runId);
+    expect(recordMain(args("unknown"), deps)).toBe(1);
+    expect(errors.mock.calls.map(([m]) => String(m)).join("\n")).toMatch(
+      /differs from the commit the run ran at[\s\S]*has no stored commit/,
+    );
+    expect(recordMain(args("vouched", "--commit", "ccccccc"), deps)).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, "vouched.json"), "utf8")).commit).toBe("ccccccc");
+  });
+
+  it("a run resumed by a server at another commit keeps no commit; on the same server it keeps it", async () => {
+    const pausedRun = async () => {
+      const events = await sse(streamPath("ambiguous one"));
+      expect(events.some((event) => event.type === "interrupt")).toBe(true);
+      return events[0].runId as string;
+    };
+    const resume = (runId: string) =>
+      sse(`/api/analyze/stream/resume?threadId=${runId}&selectedTrackId=${CHOICE_A}`);
+
+    const same = await pausedRun();
+    expect(stored(same).run.commit).toBe(runningCommit());
+    await resume(same);
+    expect(stored(same).run).toMatchObject({ status: "completed", commit: runningCommit() });
+
+    // Paused by a server running other code (as after a restart on an edit).
+    const other = await pausedRun();
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", other);
+    await resume(other);
+    expect(stored(other).run).toMatchObject({ status: "completed", commit: null });
+  });
+
   it("records a live run as it was sent: only previews, images and the run id are changed", async () => {
     const typed = "zebra typed words";
     const runId = await liveRun(typed);
@@ -340,11 +401,31 @@ describe("the recorder", () => {
     expect(built.analysis.run).toMatchObject({
       id: recordedRunId("recorded-song"),
       mode: "replay",
+      replayed: "run",
       recordedAt: built.recordedAt,
       commit: "abc1234",
       analyzerVersion: null,
     });
     expect(runIssues(built.analysis.run!, built.analysis.audio)).toEqual([]);
+    const complete = built.events.find((e) => (e.event as Event).type === "complete");
+    expect((complete?.event as { data?: TrackAnalysis } | undefined)?.data?.run?.replayed).toBe(
+      "run",
+    );
+    // The server stored the commit it runs with on the run, which a recording names.
+    expect(stored(runId).run.commit).toBe(runningCommit());
+
+    // A record is a whole run: one that says only its model answers were replayed is refused.
+    const modelOnly = structuredClone(built);
+    modelOnly.analysis.run = { ...modelOnly.analysis.run!, replayed: "model_answers" };
+    expect(
+      ReplayRecord.safeParse(modelOnly).error?.issues.map((issue) => issue.path.join(".")),
+    ).toEqual(["analysis.run.replayed"]);
+    for (const item of modelOnly.events) {
+      if (item.event.type === "complete") item.event.data = modelOnly.analysis;
+    }
+    expect(
+      ReplayRecord.safeParse(modelOnly).error?.issues.map((issue) => issue.path.join(".")),
+    ).toEqual(["analysis.run.replayed", "events.3.event.data.run.replayed"]);
     expect(built.analysis.coverUrl).toBe("");
     expect(built.analysis).not.toHaveProperty("previewUrl");
     expect(built.analysis.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
@@ -669,6 +750,7 @@ describe("REPLAY_MODE", () => {
     expect(result.run).toMatchObject({
       id: runId,
       mode: "replay",
+      replayed: "run",
       recordedAt: fixture.recordedAt,
       commit: "abc1234",
     });

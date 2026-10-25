@@ -10,13 +10,12 @@
  * recorded or the record still holds anything it must not; an existing file is kept unless
  * --force is given.
  *
- * --commit is the commit of the code the run was made with; by default the checkout's HEAD, with
- * "-dirty" when the working tree has uncommitted changes.
+ * The record names the commit the run ran at, which the server stored with the run (see
+ * recordCommit). --commit is needed only for a run stored without one, and must match otherwise.
  * The credentials the record is checked against are the environment's and those in
  * apps/api/.env, read here only for that check and never printed.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -24,9 +23,10 @@ import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
+import { checkoutCommitOrNull } from "../config/checkoutCommit.js";
 import { knownSecrets } from "../llm/cassette.js";
 import { getDefaultDbPath } from "../store/database.js";
-import { getRun, listRunEvents } from "../store/runs.js";
+import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
 import { buildRecord, RecordRefused } from "./recorder.js";
 import { replayDir } from "./records.js";
 
@@ -41,18 +41,64 @@ function settingsFileValues(): NodeJS.ProcessEnv {
   }
 }
 
+/** A commit hash as --commit takes it: 7 to 40 hex digits, "-dirty" when the tree had changes. */
+const COMMIT_PATTERN = /^[0-9a-f]{7,40}(-dirty)?$/;
+
 /**
- * The checkout's HEAD, with "-dirty" when the working tree has changes: a recording then names
- * no commit that holds exactly the code it ran with.
+ * The commit a record names: the one the run ran at, as the server stored it with the run.
+ *   - stored: that commit. A checkout now at another commit gets a warning (the record still
+ *     names the run's); a --commit that differs is refused, since it would contradict it.
+ *   - none stored (a run from before commits were kept, or a server that could not read its
+ *     own): only an explicit --commit, which the person recording vouches for; never the
+ *     checkout's, which may hold other code than the run did.
  */
-function headCommit(): string {
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd: API_ROOT, encoding: "utf8" }).trim();
-  const head = git("rev-parse", "--short=12", "HEAD");
-  return git("status", "--porcelain") === "" ? head : `${head}-dirty`;
+export function recordCommit({
+  stored,
+  given,
+  checkout,
+}: {
+  stored: string | null;
+  given: string | null;
+  checkout: string | null;
+}): { commit: string; warning?: string } | { refused: string } {
+  if (given !== null && !COMMIT_PATTERN.test(given)) {
+    return {
+      refused: `--commit ${JSON.stringify(given)} is not a commit: give its hash (7 to 40 hex digits, "-dirty" allowed)`,
+    };
+  }
+  if (stored) {
+    if (given && given !== stored) {
+      return {
+        refused:
+          `--commit ${given} differs from the commit the run ran at (${stored}), which the ` +
+          "server stored with it; leave --commit out",
+      };
+    }
+    if (checkout && checkout !== stored) {
+      return {
+        commit: stored,
+        warning: `the checkout is at ${checkout}; the record names ${stored}, the commit the run ran at`,
+      };
+    }
+    return { commit: stored };
+  }
+  if (given) return { commit: given };
+  return {
+    refused:
+      "The run has no stored commit (it ran before commits were kept, its server could not read " +
+      "one, or it was resumed by a server at another commit); pass --commit with the commit it " +
+      "ran at",
+  };
 }
 
-export function main(argv: string[]): number {
+export interface RecordDependencies {
+  /** The settings file's values for the credential check (default: apps/api/.env). */
+  settingsFileValues?: () => NodeJS.ProcessEnv;
+  /** The checkout's commit now (default: read from git). */
+  checkout?: () => string | null;
+}
+
+export function main(argv: string[], deps: RecordDependencies = {}): number {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -81,7 +127,8 @@ export function main(argv: string[]): number {
   let events: ReturnType<typeof listRunEvents>;
   let otherRunIds: string[];
   try {
-    run = getRun(db, values.run);
+    // A database not yet migrated to keep commits (the API has not started since) has none.
+    run = getRun(db, values.run, { withoutCommit: !keepsRunCommits(db) });
     events = run ? listRunEvents(db, values.run) : [];
     // Every other run's ids, which a record must not hold.
     otherRunIds = db
@@ -98,17 +145,22 @@ export function main(argv: string[]): number {
     return 1;
   }
 
-  let commit = values.commit ?? "";
-  if (!commit) {
-    try {
-      commit = headCommit();
-    } catch {
-      console.error("Could not read the checkout's commit; pass --commit");
-      return 1;
-    }
+  const chosen = recordCommit({
+    stored: run.commit,
+    given: values.commit?.trim() || null,
+    checkout: (deps.checkout ?? checkoutCommitOrNull)(),
+  });
+  if ("refused" in chosen) {
+    console.error(chosen.refused);
+    return 1;
   }
+  if (chosen.warning) console.warn(`Warning: ${chosen.warning}`);
+  const { commit } = chosen;
 
-  const secrets = knownSecrets({ ...settingsFileValues(), ...process.env });
+  const secrets = knownSecrets({
+    ...(deps.settingsFileValues ?? settingsFileValues)(),
+    ...process.env,
+  });
   let record: ReturnType<typeof buildRecord>["record"];
   try {
     const built = buildRecord(run, events, { slug: values.slug, commit, secrets, otherRunIds });

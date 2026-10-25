@@ -265,12 +265,17 @@
             "description": "When the run was recorded; null for live runs"
           },
           "commit": {
-            "description": "Commit of the code that recorded the run",
+            "description": "Commit of the code that recorded the run. A replay of model answers recorded at several commits lists each one, in recording order, separated by \", \"",
             "type": ["string", "null"]
           },
           "analyzerVersion": {
             "description": "AudioFeatures analyzerVersion; null if none",
             "type": ["string", "null"]
+          },
+          "replayed": {
+            "description": "What a replay replayed: the whole recorded run, or only the model's answers (stored answers, used in development and evaluation; the rest of the run was live). Absent on live runs and on results from before it was sent",
+            "type": "string",
+            "enum": ["run", "model_answers"]
           },
           "startedAt": {
             "type": "string",
@@ -649,12 +654,17 @@
             "description": "When the run was recorded; null for live runs"
           },
           "commit": {
-            "description": "Commit of the code that recorded the run",
+            "description": "Commit of the code that recorded the run. A replay of model answers recorded at several commits lists each one, in recording order, separated by \", \"",
             "type": ["string", "null"]
           },
           "analyzerVersion": {
             "description": "AudioFeatures analyzerVersion; null if none",
             "type": ["string", "null"]
+          },
+          "replayed": {
+            "description": "What a replay replayed: the whole recorded run, or only the model's answers (stored answers, used in development and evaluation; the rest of the run was live). Absent on live runs and on results from before it was sent",
+            "type": "string",
+            "enum": ["run", "model_answers"]
           },
           "startedAt": {
             "type": "string",

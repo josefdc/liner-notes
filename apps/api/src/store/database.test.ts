@@ -33,7 +33,7 @@ import {
   getDefaultDbPath,
 } from "./database.js";
 import { LATEST_SCHEMA_VERSION, MIGRATIONS, runMigrations, type Migration } from "./migrations.js";
-import { appendRunEvent, getRun, listRunEvents, storeRunResult } from "./runs.js";
+import { appendRunEvent, getRun, listRunEvents, startRun, storeRunResult } from "./runs.js";
 import { SqliteStore } from "./store.js";
 import { SonicCache } from "./cache.js";
 
@@ -1188,6 +1188,26 @@ describe("migrations", () => {
     expect(
       db.prepare("SELECT namespace FROM store_items ORDER BY namespace").pluck().all(),
     ).toEqual(['["disambiguation"]', '["tracks","v4"]']);
+  });
+
+  it("keeps the commit a run ran at; runs stored before say none", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "run_commit");
+    expect(MIGRATIONS[migration].version).toBe(7);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        "INSERT INTO runs (run_id, thread_id, query, status, created_at) VALUES ('old', 'old', 'q', 'completed', 1)",
+      )
+      .run();
+    raw.close();
+    const db = initializeDatabase(dbPath);
+    expect(getRun(db, "old")).toMatchObject({ commit: null });
+    startRun(db, { runId: "new", threadId: "new", query: "q", commit: "abc123def456-dirty" });
+    expect(getRun(db, "new")).toMatchObject({ commit: "abc123def456-dirty" });
+    startRun(db, { runId: "unknown", threadId: "unknown", query: "q" });
+    expect(getRun(db, "unknown")).toMatchObject({ commit: null });
   });
 
   it("requires migrations numbered 1..n in order", () => {

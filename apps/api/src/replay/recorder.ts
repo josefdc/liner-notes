@@ -413,7 +413,15 @@ export function buildRecord(
   const { queryMatch: _match, ...recorded } = analysis;
   const recordedAnalysis = withoutMediaFields({
     ...recorded,
-    run: { ...runInfo, id: placeholder, mode: "replay", recordedAt, commit, analyzerVersion },
+    run: {
+      ...runInfo,
+      id: placeholder,
+      mode: "replay",
+      replayed: "run",
+      recordedAt,
+      commit,
+      analyzerVersion,
+    },
   }) as TrackAnalysis;
 
   const recordEvents = joined

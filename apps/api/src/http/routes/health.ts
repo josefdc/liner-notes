@@ -21,10 +21,10 @@ router.get("/api/health", (_req, res) => {
 });
 
 /**
- * Readiness: 200 when the API can serve an analysis, 503 with the failing checks otherwise
- * (http/readiness.ts): the database, its migrations, the audio service, the model provider and
- * the budget's state. A spent budget is reported and is not a failure: replays and stored
- * results are still served. `checks` maps each check to its status; `details` has each in full.
+ * Readiness: 200 when the API can serve what it is set up to serve, 503 with the failing checks
+ * otherwise (http/readiness.ts): the database, its migrations, the audio service, the model
+ * provider and the budget's state; the audio service and the provider only while live analysis
+ * is served. `checks` maps each check to its status; `details` has each in full.
  */
 router.get("/api/ready", async (_req, res) => {
   const { ready, checks } = await readiness();

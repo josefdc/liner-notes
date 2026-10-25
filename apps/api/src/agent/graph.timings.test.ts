@@ -53,6 +53,14 @@ vi.mock("./nodes/index.js", () => {
 
 const INPUT = { songQuery: "INPUT-MARKER typed text" };
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Settles once `signal` aborts, rejecting with its reason. */
+const aborted = (signal: AbortSignal | undefined) =>
+  new Promise((_resolve, reject) => {
+    signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+
 let logs: CapturedLogs;
 
 beforeEach(() => {
@@ -119,6 +127,18 @@ describe("node timings", () => {
     const lines = timings();
     expect(lines).toHaveLength(4);
     for (const line of lines) expect(line.runId).toBe("run-from-route");
+  });
+
+  it("carries the run's id when it differs from the thread's", async () => {
+    const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
+
+    await withRun("ctx-id", () =>
+      graph.invoke(INPUT, { configurable: { thread_id: "thread-id" } }),
+    );
+
+    const lines = timings();
+    expect(lines).toHaveLength(4);
+    for (const line of lines) expect(line.runId).toBe("ctx-id");
   });
 
   it("outside a thread, carries the run id the scout sets", async () => {
@@ -210,5 +230,62 @@ describe("node timings", () => {
       outcome: "cancelled",
       runId: "thread-cancelled",
     });
+  });
+
+  it("does not count the time the run waits for the user's choice", async () => {
+    stub.scout = async () => ({ candidates: [{ id: "a" }, { id: "b" }] });
+    const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
+    const thread = { configurable: { thread_id: "thread-picker" } };
+
+    await graph.invoke(INPUT, thread);
+    await wait(150); // the user choosing
+    stub.scout = null;
+    await graph.invoke(new Command({ resume: "a" }), thread);
+
+    const clarification = timings().filter((line) => line.node === "clarification");
+    expect(clarification.map((line) => line.outcome)).toEqual(["interrupted", "ok"]);
+    for (const line of clarification) expect(line.durationMs).toBeLessThan(100);
+  });
+
+  it("logs a node stopped because another node of its step failed as aborted", async () => {
+    stub.engineer = async () => {
+      await wait(5);
+      throw new Error("engineer bug");
+    };
+    stub.historian = async (_state, config) => aborted((config as LangGraphRunnableConfig).signal);
+    const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
+
+    await expect(
+      graph.invoke(INPUT, { configurable: { thread_id: "thread-sibling" } }),
+    ).rejects.toThrow("engineer bug");
+    await wait(20);
+
+    const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));
+    expect(outcomes).toEqual({ scout: "ok", engineer: "error", historian: "aborted" });
+  });
+
+  it("logs a node that returns after its run was cancelled as cancelled, not ok", async () => {
+    const controller = new AbortController();
+    // Ignores the signal and returns once the run is over.
+    stub.engineer = async () => {
+      await wait(60);
+      return {};
+    };
+    stub.historian = async (_state, config) => {
+      setTimeout(() => controller.abort(), 10);
+      return aborted((config as LangGraphRunnableConfig).signal);
+    };
+    const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
+
+    await expect(
+      graph.invoke(INPUT, {
+        configurable: { thread_id: "thread-late" },
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow();
+    await wait(120);
+
+    const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));
+    expect(outcomes).toEqual({ scout: "ok", engineer: "cancelled", historian: "cancelled" });
   });
 });

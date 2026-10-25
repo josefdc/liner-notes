@@ -52,11 +52,17 @@ const log = logger("Graph");
 export type NodeName = "scout" | "clarification" | "engineer" | "historian" | "composer";
 
 /**
- * How a node ended: `ok`; `error` when it threw or returned an `error`; `interrupted` when it
- * paused the run for the user's choice (the time waiting for the choice is not the node's: the
- * node runs again on resume and logs a line of its own); `cancelled` when the run was cancelled.
+ * How a node ended:
+ *
+ *   ok           it returned, with no `error`
+ *   error        it threw, or returned an `error`
+ *   interrupted  it paused the run for the user's choice (the time waiting for the choice is not
+ *                the node's: the node runs again on resume and logs a line of its own)
+ *   cancelled    the run was cancelled (the client left, or the route stopped it), whether the
+ *                node then threw or still returned
+ *   aborted      LangGraph stopped it without a cancel: another node of the same step failed
  */
-export type NodeOutcome = "ok" | "error" | "interrupted" | "cancelled";
+export type NodeOutcome = "ok" | "error" | "interrupted" | "cancelled" | "aborted";
 
 type GraphNode<U> = (state: SonicAgentStateType, config: LangGraphRunnableConfig) => Promise<U>;
 
@@ -64,6 +70,28 @@ const elapsedMs = (started: bigint) => Number((process.hrtime.bigint() - started
 
 const reportedError = (update: unknown) =>
   typeof update === "object" && update !== null && Boolean(Reflect.get(update, "error"));
+
+/**
+ * The run's own signal as LangGraph hands it to a node: the caller's signal (a cancel) apart from
+ * the one LangGraph aborts when another node of the step fails. `config.signal` combines both.
+ * Read from LangGraph's configurable (`__pregel_abort_signals`, @langchain/langgraph 1.4); null
+ * when it is not there, and then a stop is reported as `aborted`.
+ */
+function cancelSignal(config: LangGraphRunnableConfig): AbortSignal | null {
+  const signals: unknown = config.configurable?.__pregel_abort_signals;
+  const external =
+    typeof signals === "object" && signals !== null
+      ? Reflect.get(signals, "externalAbortSignal")
+      : null;
+  return external instanceof AbortSignal ? external : null;
+}
+
+/** `cancelled` or `aborted` when the node's signal was aborted, else null. */
+function stopOf(config: LangGraphRunnableConfig, error?: unknown): NodeOutcome | null {
+  if (cancelSignal(config)?.aborted) return "cancelled";
+  if (config.signal?.aborted || (error !== undefined && isAbortError(error))) return "aborted";
+  return null;
+}
 
 /**
  * `node`, logging one line when it ends: `{component: "Graph", node, runId, durationMs,
@@ -77,11 +105,11 @@ function timed<U>(name: NodeName, node: GraphNode<U>): GraphNode<U> {
     let update: U | undefined;
     try {
       update = await node(state, config);
-      outcome = reportedError(update) ? "error" : "ok";
+      // A node that ignores its signal still returns after a cancel: the run is over by then.
+      outcome = stopOf(config) ?? (reportedError(update) ? "error" : "ok");
       return update;
     } catch (error) {
-      if (isGraphInterrupt(error)) outcome = "interrupted";
-      else if (isAbortError(error) || config.signal?.aborted) outcome = "cancelled";
+      outcome = isGraphInterrupt(error) ? "interrupted" : (stopOf(config, error) ?? "error");
       throw error;
     } finally {
       const threadId: unknown = config.configurable?.thread_id;

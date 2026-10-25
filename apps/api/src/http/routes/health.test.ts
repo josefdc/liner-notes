@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -34,6 +34,8 @@ const READY_ENV = [
   "AZURE_OPENAI_BASE_URL",
   "LLM_SPEND_LOG",
   "BUDGET_TOTAL_USD",
+  "SPOTIFY_CLIENT_ID",
+  "SPOTIFY_CLIENT_SECRET",
 ];
 let savedEnv: Record<string, string | undefined> = {};
 const servers: Server[] = [];
@@ -324,7 +326,7 @@ describe("GET /api/ready", () => {
     }
   });
 
-  it("answers 200 with a spent budget: replays and stored results are still served", async () => {
+  it("answers 503 with a spent budget under REPLAY_MODE=off, with no amount", async () => {
     openDatabase();
     process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
     process.env.BUDGET_TOTAL_USD = "25";
@@ -332,24 +334,39 @@ describe("GET /api/ready", () => {
 
     const res = await ready();
 
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe("ready");
-    expect(detail(res.body, "budget")).toMatchObject({ ok: true, status: "exhausted" });
+    expect(res.status).toBe(503);
+    expect(detail(res.body, "budget")).toMatchObject({
+      ok: false,
+      status: "exhausted",
+      reason: expect.stringContaining("REPLAY_MODE=off serves no recorded runs"),
+    });
     // The checks, without the timestamp (whose date may hold the same digits).
     const text = JSON.stringify({ checks: res.body.checks, details: res.body.details });
     for (const amount of ["30", "25", "BUDGET_TOTAL_USD", "USD"])
       expect(text).not.toContain(amount);
   });
 
-  it("reports a budget that cannot be checked without failing", async () => {
+  it("answers 200 with a spent budget under REPLAY_MODE=fallback: recordings are served", async () => {
     openDatabase();
-    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
-    liveProvider(null); // the spend log does not exist
+    const audio = await audioStub(healthy);
+    process.env.AUDIO_ANALYSIS_URL = audio.url;
+    process.env.REPLAY_MODE = "fallback";
+    process.env.SPOTIFY_CLIENT_ID = "dummy-spotify-id";
+    process.env.SPOTIFY_CLIENT_SECRET = "dummy-spotify-secret";
+    liveProvider(30);
 
     const res = await ready();
 
     expect(res.status).toBe(200);
-    expect(detail(res.body, "budget")).toMatchObject({ ok: true, status: "unverifiable" });
+    expect(res.text).toContain('"status":"ready"');
+    expect(detail(res.body, "budget")).toMatchObject({
+      ok: true,
+      status: "exhausted",
+      reason: expect.stringContaining("recorded runs and stored results are served"),
+    });
+    expect(res.body.checks).toMatchObject({ audio: "not_needed", provider: "not_needed" });
+    // Not needed: not asked.
+    expect(audio.requests()).toBe(0);
   });
 
   it("with REPLAY_MODE=only, needs neither the audio service nor a model provider", async () => {
@@ -364,7 +381,94 @@ describe("GET /api/ready", () => {
 
     expect(res.status).toBe(200);
     expect(res.text).toContain('"status":"ready"');
-    expect(res.body.checks).toMatchObject({ audio: "skipped", provider: "replay_only" });
+    expect(res.body.checks).toMatchObject({ audio: "not_needed", provider: "not_needed" });
+    expect(detail(res.body, "audio")?.reason).toContain("REPLAY_MODE=only");
+  });
+
+  type Mode = "off" | "fallback" | "only";
+  type Budget = "available" | "exhausted" | "unverifiable" | "no provider";
+  type Row = [Mode, Budget, "up" | "down", number, string, string, boolean];
+  // mode, budget (with a provider set, or no provider: not_live), audio service →
+  // HTTP status, audio check, provider check, budget check ok.
+  const MATRIX: Row[] = [
+    ["off", "available", "up", 200, "ok", "configured", true],
+    ["off", "available", "down", 503, "unreachable", "configured", true],
+    ["off", "exhausted", "up", 503, "ok", "configured", false],
+    ["off", "exhausted", "down", 503, "unreachable", "configured", false],
+    ["off", "unverifiable", "up", 503, "ok", "configured", false],
+    ["off", "unverifiable", "down", 503, "unreachable", "configured", false],
+    ["off", "no provider", "up", 503, "ok", "not_configured", true],
+    ["off", "no provider", "down", 503, "unreachable", "not_configured", true],
+    ["fallback", "available", "up", 200, "ok", "configured", true],
+    ["fallback", "available", "down", 503, "unreachable", "configured", true],
+    ["fallback", "exhausted", "up", 200, "not_needed", "not_needed", true],
+    ["fallback", "exhausted", "down", 200, "not_needed", "not_needed", true],
+    ["fallback", "unverifiable", "up", 200, "not_needed", "not_needed", true],
+    ["fallback", "unverifiable", "down", 200, "not_needed", "not_needed", true],
+    ["fallback", "no provider", "up", 503, "ok", "not_configured", true],
+    ["fallback", "no provider", "down", 503, "unreachable", "not_configured", true],
+    ["only", "available", "up", 200, "not_needed", "not_needed", true],
+    ["only", "available", "down", 200, "not_needed", "not_needed", true],
+    ["only", "exhausted", "up", 200, "not_needed", "not_needed", true],
+    ["only", "exhausted", "down", 200, "not_needed", "not_needed", true],
+    ["only", "unverifiable", "up", 200, "not_needed", "not_needed", true],
+    ["only", "unverifiable", "down", 200, "not_needed", "not_needed", true],
+    ["only", "no provider", "up", 200, "not_needed", "not_needed", true],
+    ["only", "no provider", "down", 200, "not_needed", "not_needed", true],
+  ];
+
+  it.each(MATRIX)(
+    "REPLAY_MODE=%s, budget %s, audio service %s → %i (audio %s, provider %s, budget ok %s)",
+    async (mode, budget, audio, status, audioStatus, providerStatus, budgetOk) => {
+      openDatabase();
+      process.env.REPLAY_MODE = mode;
+      process.env.SPOTIFY_CLIENT_ID = "dummy-spotify-id";
+      process.env.SPOTIFY_CLIENT_SECRET = "dummy-spotify-secret";
+      process.env.BUDGET_TOTAL_USD = "25";
+      const stub = audio === "up" ? await audioStub(healthy) : null;
+      process.env.AUDIO_ANALYSIS_URL = stub ? stub.url : await closedPort();
+      if (budget === "no provider") {
+        process.env.LLM_CASSETTE = "off";
+        delete process.env.AZURE_OPENAI_API_KEY;
+        delete process.env.AZURE_OPENAI_ENDPOINT;
+        delete process.env.AZURE_OPENAI_BASE_URL;
+        delete process.env.LLM_SPEND_LOG;
+      } else {
+        liveProvider({ available: 0.5, exhausted: 30, unverifiable: null }[budget]);
+      }
+
+      const res = await ready();
+
+      expect(res.status).toBe(status);
+      expect(res.body.status).toBe(status === 200 ? "ready" : "unavailable");
+      expect(res.body.checks).toMatchObject({
+        database: "ok",
+        migrations: "ok",
+        audio: audioStatus,
+        provider: providerStatus,
+        budget: budget === "no provider" ? "not_live" : budget,
+      });
+      expect(detail(res.body, "budget")).toMatchObject({ ok: budgetOk });
+      // A service that is not needed is not asked.
+      if (stub && audioStatus === "not_needed") expect(stub.requests()).toBe(0);
+    },
+  );
+
+  it("with REPLAY_MODE=fallback and no Spotify keys, serves recordings without audio or a provider", async () => {
+    openDatabase();
+    process.env.REPLAY_MODE = "fallback";
+    delete process.env.SPOTIFY_CLIENT_ID;
+    delete process.env.SPOTIFY_CLIENT_SECRET;
+    process.env.AUDIO_ANALYSIS_URL = await closedPort();
+    process.env.LLM_CASSETTE = "off";
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_OPENAI_ENDPOINT;
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(res.body.checks).toMatchObject({ audio: "not_needed", provider: "not_needed" });
+    expect(detail(res.body, "provider")?.reason).toContain("live_disabled");
   });
 
   it("answers 503 when no database is open", async () => {
@@ -430,4 +534,28 @@ describe("GET /api/ready", () => {
       reason: "open and writable",
     });
   });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "answers 503 when the database file cannot be written",
+    async () => {
+      openDatabase();
+      closeDatabase();
+      chmodSync(dbPath, 0o444);
+      // SQLite opens a file it cannot write read-only; the API starts on it.
+      initializeDatabase(dbPath);
+      process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+
+      const res = await ready();
+
+      expect(res.status).toBe(503);
+      expect(detail(res.body, "database")).toMatchObject({
+        ok: false,
+        status: "read_only",
+        reason: "the database file cannot be written",
+      });
+      // The probe kept nothing, and left the connection as it was.
+      expect(getDb().inTransaction).toBe(false);
+      expect(getDb().pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    },
+  );
 });

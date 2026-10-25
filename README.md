@@ -184,10 +184,11 @@ docker-compose up --build
 | Audio Analysis | internal to the API (direct: http://127.0.0.1:3002)     |
 
 `GET /api/health` is the liveness probe the containers' health checks use. `GET /api/ready`
-answers 200 when the API can serve an analysis and 503 otherwise, listing each check (database
-and migrations, audio service and its models, model provider, budget state); a spent budget is
-reported but still answers 200, since replays and stored results are served. See
-`apps/api/.env.example`.
+answers 200 when the API can serve what it is set up to serve and 503 otherwise, listing each
+check (database and migrations, audio service and its models, model provider, budget state).
+While live analysis is not served (`REPLAY_MODE=only`, or `fallback` with live analysis off or
+the budget spent) the audio service and the provider are not needed; with `REPLAY_MODE=off` a
+spent budget answers 503. See `apps/api/.env.example`.
 
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with

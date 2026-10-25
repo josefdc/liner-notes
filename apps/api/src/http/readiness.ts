@@ -1,31 +1,45 @@
 /**
- * Readiness: whether this API can serve an analysis now. GET /api/ready (routes/health.ts) runs
- * these checks; /api/health stays the liveness probe.
+ * Readiness: whether this API can serve what it is set up to serve now. GET /api/ready
+ * (routes/health.ts) runs these checks; /api/health stays the liveness probe.
  *
- *   database    open, answers a query, and its write lock can be taken (nothing is written)
+ *   database    open, answers a query, and can write: a page write inside a transaction that
+ *               is rolled back (nothing is kept), without waiting for another connection's lock
  *   migrations  every migration of this code is recorded, and none other
- *   audio       the audio service's /health answers (ok, or degraded without its models);
- *               not probed with REPLAY_MODE=only, where nothing is analysed
- *   provider    the model provider is configured (variable names only, never a value); with
- *               REPLAY_MODE=only no model is called
- *   budget      the state of the model budget only: available, exhausted, unverifiable or
- *               not_live. Never a failure: a spent budget still serves replays and stored
- *               results. Never an amount.
+ *   audio       the audio service's /health answers (ok, or degraded without its models)
+ *   provider    the model provider is configured (variable names only, never a value)
+ *   budget      the state of the model budget only (available, exhausted, unverifiable or
+ *               not_live), never an amount
+ *
+ * Whether live analysis is served comes from the decision the routes take (replay/mode.ts
+ * `liveRefused`). When it is refused (REPLAY_MODE=only; fallback without the Spotify keys, with
+ * a spend log that cannot be used or with the budget spent), only recorded runs and stored
+ * results are served: the audio and provider checks are `not_needed`, the budget is reported
+ * and readiness rests on the database and its migrations. When live analysis is served, the
+ * audio service and the provider must be there; with REPLAY_MODE=off, where nothing else is
+ * served, an exhausted or unverifiable budget fails too (every model call would be refused).
+ * Should that decision not come within the timeout, live analysis is taken as needed.
  *
  * Every check reports its name, whether it is ok, a status and a short reason. No reason holds
  * a key, an endpoint, a host or an amount. No check makes a paid call: the provider check reads
  * the configuration, the budget check reads the spend log (llm/budgetState.ts, cached there).
  * A check that does not answer within READY_CHECK_TIMEOUT_MS is cut and reported as timed out.
- * The audio probe's answer is shared by the probes of the next AUDIO_PROBE_TTL_MS, so frequent
- * readiness probes do not become frequent requests to the audio service.
+ *
+ * Known limits:
+ * - The audio probe's answer, a failure included, is reused for AUDIO_PROBE_TTL_MS (from when
+ *   the probe started), so frequent probes do not become frequent requests to the audio
+ *   service, and a recovery shows up to that much later.
+ * - /health answering does not prove /analyze works (e.g. a wrong AUDIO_SERVICE_TOKEN).
+ * - Another connection holding the write lock reads as ok (the file takes writes), even if it
+ *   never lets go; the API's own writes would then fail after the busy timeout.
  */
 
 import type { ReadyCheck } from "@liner-notes/contract";
+import type { ReplayMode } from "../config/settings.js";
 import { defaultAgentRuntime } from "../agent/runtime.js";
 import { readLlmSettings } from "../config/settings.js";
 import { liveBudgetState } from "../llm/budgetState.js";
 import { assertProviderConfigured } from "../llm/factory.js";
-import { currentReplayMode } from "../replay/mode.js";
+import { currentReplayMode, type LiveRefusal, liveRefused } from "../replay/mode.js";
 import { getDb } from "../store/database.js";
 import { LATEST_SCHEMA_VERSION } from "../store/migrations.js";
 import { DEFAULT_AUDIO_SERVICE_URL } from "../sources/audio.js";
@@ -67,8 +81,10 @@ const sqliteCode = (error: unknown): string | undefined => {
 };
 
 /**
- * Open, answering, writable: takes the write lock and lets it go at once (BEGIN IMMEDIATE,
- * ROLLBACK), without waiting for another connection's lock.
+ * Open, answering, writable: takes the write lock (BEGIN IMMEDIATE) without waiting for another
+ * connection's, writes a page (PRAGMA user_version set to its own value) and rolls back. A file
+ * SQLite could only open read-only (e.g. mode 0444) still takes the lock in WAL mode; the write
+ * is what fails there, with SQLITE_READONLY.
  */
 export function databaseCheck(): ReadyCheck {
   let db: ReturnType<typeof getDb>;
@@ -91,6 +107,8 @@ export function databaseCheck(): ReadyCheck {
   try {
     db.pragma("busy_timeout = 0");
     db.exec("BEGIN IMMEDIATE");
+    const version = Number(db.pragma("user_version", { simple: true })) || 0;
+    db.pragma(`user_version = ${version}`);
     db.exec("ROLLBACK");
     return check("database", true, "ok", "open and writable");
   } catch (error) {
@@ -204,13 +222,6 @@ let audioProbe: { url: string; at: number; result: Promise<ReadyCheck> } | null 
 
 /** The audio service's state, probed at most once per AUDIO_PROBE_TTL_MS. */
 export function audioCheck(env: NodeJS.ProcessEnv = process.env): Promise<ReadyCheck> {
-  if (currentReplayMode(env) === "only") {
-    return Promise.resolve(
-      check("audio", true, "skipped", "not needed: REPLAY_MODE=only analyses nothing", {
-        models: null,
-      }),
-    );
-  }
   const url = audioServiceUrl(env);
   const now = Date.now();
   if (audioProbe && audioProbe.url === url && now - audioProbe.at < AUDIO_PROBE_TTL_MS) {
@@ -232,9 +243,6 @@ const variableNames = (errors: string[]) => [
 
 /** The model provider can be called: configuration only, no request. */
 export function providerCheck(env: NodeJS.ProcessEnv = process.env): ReadyCheck {
-  if (currentReplayMode(env) === "only") {
-    return check("provider", true, "replay_only", "not needed: REPLAY_MODE=only calls no model");
-  }
   const { settings, errors } = readLlmSettings(env);
   if (errors.length > 0) {
     const names = variableNames(errors);
@@ -258,37 +266,101 @@ export function providerCheck(env: NodeJS.ProcessEnv = process.env): ReadyCheck 
   return check("provider", true, "configured", `${settings.provider}: key and endpoint set`);
 }
 
-const BUDGET_REASONS: Record<string, string> = {
-  available: "live analysis can start",
-  exhausted:
-    "a budget cap is reached: live analysis is paused, replays and stored results are served",
-  unverifiable: "the spend log cannot be used: live model calls are refused",
-  not_live: "no paid provider is configured: nothing is spent",
-};
+export type BudgetStateName = "available" | "exhausted" | "unverifiable" | "not_live";
 
-/** The budget's state, never its amounts. Always ok: a spent budget still serves replays. */
-export async function budgetCheck(env: NodeJS.ProcessEnv = process.env): Promise<ReadyCheck> {
-  let state: string;
+/** The budget's state, never its amounts or caps. */
+export async function budgetState(env: NodeJS.ProcessEnv = process.env): Promise<BudgetStateName> {
   try {
-    state = (await liveBudgetState(env, defaultAgentRuntime.purpose)).state;
+    return (await liveBudgetState(env, defaultAgentRuntime.purpose)).state;
   } catch {
-    state = "unverifiable";
+    return "unverifiable";
   }
-  return check("budget", true, state, BUDGET_REASONS[state] ?? state);
+}
+
+const SERVED_RECORDED = "recorded runs and stored results are served";
+
+/**
+ * The budget check for `state` under `mode`. It fails only with REPLAY_MODE=off, where live
+ * analysis is all that is served: there an exhausted or unverifiable budget refuses every model
+ * call. In fallback and only mode recorded runs and stored results are still served.
+ */
+export function budgetCheck(
+  state: BudgetStateName,
+  mode: ReplayMode,
+  refusal: LiveRefusal | null = null,
+): ReadyCheck {
+  if (mode === "off") {
+    switch (state) {
+      case "exhausted":
+        return check(
+          "budget",
+          false,
+          state,
+          "a budget cap is reached: every model call is refused, and REPLAY_MODE=off serves no recorded runs",
+        );
+      case "unverifiable":
+        return check(
+          "budget",
+          false,
+          state,
+          "the spend log cannot be used: every model call is refused, and REPLAY_MODE=off serves no recorded runs",
+        );
+      case "available":
+        return check("budget", true, state, "live analysis can start");
+      default:
+        return check("budget", true, state, "no paid provider is configured: nothing is spent");
+    }
+  }
+  if (mode === "only") {
+    return check("budget", true, state, "REPLAY_MODE=only calls no model: nothing is spent");
+  }
+  switch (state) {
+    case "exhausted":
+      return check(
+        "budget",
+        true,
+        state,
+        `a budget cap is reached: live analysis is paused; ${SERVED_RECORDED}`,
+      );
+    case "unverifiable":
+      return check(
+        "budget",
+        true,
+        state,
+        `the spend log cannot be used: live analysis is off; ${SERVED_RECORDED}`,
+      );
+    case "available":
+      return check(
+        "budget",
+        true,
+        state,
+        refusal ? `within the caps; ${refusalReason(refusal, mode)}` : "live analysis can start",
+      );
+    default:
+      return check("budget", true, state, "no paid provider is configured: nothing is spent");
+  }
+}
+
+/** Why live analysis is not served, as a check's reason. */
+function refusalReason(refusal: LiveRefusal, mode: ReplayMode): string {
+  if (mode === "only") return `REPLAY_MODE=only: ${SERVED_RECORDED} only`;
+  return refusal === "budget_exhausted"
+    ? `live analysis is paused (budget_exhausted): ${SERVED_RECORDED} only`
+    : `live analysis is off (live_disabled): ${SERVED_RECORDED} only`;
 }
 
 // =============================================================================
 // All checks
 // =============================================================================
 
-/** `run()`, or the check `onTimeout` gives once READY_CHECK_TIMEOUT_MS has passed. */
-async function withTimeout(
-  run: () => Promise<ReadyCheck>,
-  onTimeout: () => ReadyCheck,
+/** `run()`, or what `onTimeout` gives once `timeoutMs` has passed. */
+async function withTimeout<T>(
+  run: () => Promise<T>,
+  onTimeout: () => T,
   timeoutMs: number,
-): Promise<ReadyCheck> {
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
-  const timedOut = new Promise<ReadyCheck>((resolve) => {
+  const timedOut = new Promise<T>((resolve) => {
     timer = setTimeout(() => resolve(onTimeout()), timeoutMs);
     timer.unref();
   });
@@ -304,25 +376,46 @@ export interface Readiness {
   checks: ReadyCheck[];
 }
 
-/** Runs every check (the slow ones at once, each cut at `timeoutMs`). */
+/** Runs every check (the slow ones cut at `timeoutMs`). */
 export async function readiness(
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = READY_CHECK_TIMEOUT_MS,
 ): Promise<Readiness> {
   const cut = `no answer within ${timeoutMs} ms`;
-  const [audio, budget] = await Promise.all([
+  const mode = currentReplayMode(env);
+  const [state, refusal] = await Promise.all([
     withTimeout(
-      () => audioCheck(env),
-      () => check("audio", false, "timeout", cut, { models: null }),
+      () => budgetState(env),
+      (): BudgetStateName | "timeout" => "timeout",
       timeoutMs,
     ),
+    // The routes' own decision; undecided in time: live analysis is taken as needed.
     withTimeout(
-      () => budgetCheck(env),
-      () => check("budget", true, "unverifiable", cut),
+      () => liveRefused(env).catch(() => null),
+      () => null,
       timeoutMs,
     ),
   ]);
-  const checks = [databaseCheck(), migrationsCheck(), audio, providerCheck(env), budget];
+
+  let audio: ReadyCheck;
+  let provider: ReadyCheck;
+  if (refusal !== null) {
+    const reason = refusalReason(refusal, mode);
+    audio = check("audio", true, "not_needed", reason, { models: null });
+    provider = check("provider", true, "not_needed", reason);
+  } else {
+    audio = await withTimeout(
+      () => audioCheck(env),
+      () => check("audio", false, "timeout", cut, { models: null }),
+      timeoutMs,
+    );
+    provider = providerCheck(env);
+  }
+  const budget =
+    state === "timeout"
+      ? { ...budgetCheck("unverifiable", mode, refusal), reason: cut }
+      : budgetCheck(state, mode, refusal);
+  const checks = [databaseCheck(), migrationsCheck(), audio, provider, budget];
   return { ready: checks.every((c) => c.ok), checks };
 }
 

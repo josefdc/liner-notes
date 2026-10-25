@@ -38,6 +38,8 @@ vi.mock("../../sources/audio.js", async (importOriginal) => ({
     invoke: async () => JSON.stringify({ source: "unavailable", reason: "no_preview" }),
   },
 }));
+/** The web search's answer when set (else the default results below). */
+const web = vi.hoisted(() => ({ results: null as unknown[] | null }));
 const cache = vi.hoisted(() => ({ putResearch: vi.fn(), research: null as unknown }));
 vi.mock("../../store/cache.js", () => ({
   getCache: () => ({
@@ -56,6 +58,7 @@ import geniusSearch from "../../sources/fixtures/genius-search-ice-ice-baby.json
 };
 import geniusSong from "../../sources/fixtures/genius-song-ice-ice-baby.json" with { type: "json" };
 import { LlmError } from "../../llm/errors.js";
+import { withRun } from "../../logger.js";
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import {
   type FetchCall,
@@ -64,7 +67,9 @@ import {
   stubFetch,
 } from "../../sources/testing/fetchStub.js";
 import { ICE_ARTIST, runRoute } from "../../sources/testing/iceIceBaby.js";
+import { TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { buildSonicAgentGraph } from "../graph.js";
+import { combineSteps } from "../researcherSubgraph.js";
 import type { TrackData } from "../schema.js";
 import { emptyResearch, mergeResearch, type ResearchData } from "../state.js";
 import { messagesOf, type StubCall, stubLlm, testRuntime } from "../testing/stubLlm.js";
@@ -134,6 +139,7 @@ function route(call: FetchCall): ReturnType<FetchRoute> {
     return method in lastfm ? json(lastfm[method]) : undefined;
   }
   if (call.url === TAVILY) {
+    if (web.results) return json({ results: web.results });
     return json({
       results: [
         {
@@ -181,6 +187,9 @@ beforeEach(() => {
   for (const name of ["SHS_API_KEY", "SOURCE_CASSETTE"]) delete process.env[name];
   for (const [name, value] of Object.entries(KEYS)) vi.stubEnv(name, value);
   track.isrc = "USCA29001716";
+  track.title = "Ice Ice Baby";
+  track.artist = "Vanilla Ice";
+  web.results = null;
   net = stubFetch(route);
   cache.putResearch.mockClear();
   cache.research = null;
@@ -214,7 +223,11 @@ const COMPOSED = {
  * One run of the whole graph whose planner picks `picks` in order (then "done"); what it asked
  * of every source, and what it kept. `composerFails`: the composer's model call fails.
  */
-async function runPlan(picks: ResearchAction[], options: { composerFails?: boolean } = {}) {
+async function runPlan(
+  picks: ResearchAction[],
+  options: { composerFails?: boolean; query?: string } = {},
+) {
+  const store = new InMemoryStore();
   let step = 0;
   const llm = stubLlm((call: StubCall) => {
     if (call.callSite !== "research_planner") {
@@ -232,15 +245,17 @@ async function runPlan(picks: ResearchAction[], options: { composerFails?: boole
   const graph = buildSonicAgentGraph({
     runtime: testRuntime(llm, "2026-10-20T12:00:00.000Z"),
     checkpointer: new MemorySaver(),
-    store: new InMemoryStore(),
+    store,
   });
   let trackData: TrackData | null = null;
   const status: string[] = [];
   const stream = await graph.stream(
-    { songQuery: "Ice Ice Baby Vanilla Ice" },
+    { songQuery: options.query ?? "Ice Ice Baby Vanilla Ice" },
     { configurable: { thread_id: "run-plan" }, streamMode: ["updates", "custom"] },
   );
   let research: ResearchData | null = null;
+  // The nodes' status lines, as the run's state holds them.
+  const messages: string[] = [];
   for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
     if (mode === "custom") {
       const event = chunk as { type: string; message?: string };
@@ -248,9 +263,14 @@ async function runPlan(picks: ResearchAction[], options: { composerFails?: boole
       continue;
     }
     for (const update of Object.values(chunk as Record<string, unknown>)) {
-      const node = (update ?? {}) as { trackData?: TrackData; researchData?: ResearchData };
+      const node = (update ?? {}) as {
+        trackData?: TrackData;
+        researchData?: ResearchData;
+        statusMessages?: string[];
+      };
       if (node.trackData) trackData = node.trackData;
       if (node.researchData) research = node.researchData;
+      messages.push(...(node.statusMessages ?? []));
     }
   }
   const asked = (prefix: string) => net.calls.filter((c) => c.url.startsWith(prefix));
@@ -258,7 +278,19 @@ async function runPlan(picks: ResearchAction[], options: { composerFails?: boole
   const tavilyQueries = asked(TAVILY).map((c) => JSON.parse(c.body ?? "{}").query as string);
   const planner = llm.calls.filter((c) => c.callSite === "research_planner");
   const composer = llm.calls.find((c) => c.callSite === "composer");
-  return { trackData, research, status, asked, lastfmMethods, tavilyQueries, planner, composer };
+  const stored = (await store.search(TRACKS_NAMESPACE)).length;
+  return {
+    trackData,
+    research,
+    status,
+    asked,
+    lastfmMethods,
+    tavilyQueries,
+    planner,
+    composer,
+    stored,
+    messages,
+  };
 }
 
 /** How often each item of `list` occurs. */
@@ -437,6 +469,82 @@ describe("the research plan of a track with an ISRC", () => {
     // Not cached with the research: the cache holds no primary record.
     expect(JSON.stringify(cache.putResearch.mock.calls)).not.toContain("[MusicBrainz Samples]");
   });
+
+  it("reports a fixed step whose source could not be read, and keeps neither result nor research", async () => {
+    net = stubFetch((call) =>
+      call.url.startsWith(LISTENBRAINZ) ? new Response("busy", { status: 503 }) : route(call),
+    );
+    const run = await runPlan([]);
+
+    expect(run.trackData?.run?.sourceErrors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "listenbrainz" })]),
+    );
+    expect(run.stored).toBe(0);
+    expect(cache.putResearch).not.toHaveBeenCalled();
+    // The steps run with it are kept, each with its own status line.
+    expect(run.messages).toEqual(
+      expect.arrayContaining([
+        "Found samples information (1 web results kept, 2 left out: error pages or no text)",
+        "Found production information (1 web results kept, 2 left out: error pages or no text)",
+        "Found artist collaborators information",
+        "⚠️ ListenBrainz could not be read (unavailable)",
+      ]),
+    );
+    expect(run.research?.collaborators).toEqual(["Earthquake (supporting musician)"]);
+  });
+
+  it("asks no Last.fm artist data by name when Last.fm does not know the MBID and the name is shared", async () => {
+    net = stubFetch((call) => {
+      if (call.url.startsWith(LASTFM) && new URL(call.url).searchParams.has("mbid")) {
+        return json({ error: 6, message: "The artist you supplied could not be found" });
+      }
+      if (call.url.startsWith(`${MB}/artist?`)) {
+        return json({
+          count: 2,
+          artists: [
+            { id: ARTIST, name: "Vanilla Ice" },
+            { id: "33333333-3333-4333-8333-333333333333", name: "Vanilla Ice" },
+          ],
+        });
+      }
+      return route(call);
+    });
+    // Inside a run, as the analyze route runs it: MusicBrainz is asked about the name once.
+    const run = await withRun("run-shared-name", () => runPlan(["search_lastfm_artist_info"]));
+
+    // Asked by the MBID only, never by name.
+    const artistLevel = run
+      .asked(LASTFM)
+      .filter((c) => /artist\.(getTopTags|getInfo)/.test(c.url))
+      .map((c) => new URL(c.url).searchParams);
+    expect(artistLevel.map((p) => p.has("mbid"))).toEqual([true, true]);
+    expect(run.research?.lastfmArtistTags).toEqual([]);
+    expect(run.research?.lastfmArtistBio).toBeUndefined();
+    const why = "not asked: Last.fm does not know this artist's MusicBrainz id";
+    expect(run.research?.notAsked?.some((l) => l.startsWith(`Last.fm artist tags (${why}`))).toBe(
+      true,
+    );
+    expect(run.status.some((l) => l.startsWith(`⚠️ Last.fm artist tags (${why}`))).toBe(true);
+    expect(
+      run.messages.some((l) =>
+        l.startsWith("Not asked: lastfm artist info (Last.fm does not know"),
+      ),
+    ).toBe(true);
+    // MusicBrainz is asked once for the name, for the run's two artist requests.
+    expect(run.asked(`${MB}/artist?`)).toHaveLength(1);
+  });
+
+  it("says once that the web search could not be read when the fixed steps run together", async () => {
+    vi.stubEnv("TAVILY_API_KEY", "");
+    const run = await runPlan([]);
+
+    const warnings = run.status.filter((l) => l.startsWith("⚠️ Web search (Tavily)"));
+    expect(warnings).toHaveLength(1);
+    // Only the recording's MusicBrainz sample relations: no web text.
+    expect((run.research?.samples ?? []).every((e) => e.startsWith("[MusicBrainz Samples]"))).toBe(
+      true,
+    );
+  });
 });
 
 describe("the research plan of a track without an ISRC", () => {
@@ -467,6 +575,106 @@ describe("the research plan of a track without an ISRC", () => {
     // No fixed step needs an MBID: the sample history, then the planner's production search.
     expect(run.asked(LISTENBRAINZ)).toHaveLength(0);
     expect(run.tavilyQueries).toHaveLength(2);
+  });
+});
+
+describe("a track whose title reads like an error page", () => {
+  it('keeps the pages about "Just a Moment" by Nas, and drops the real error pages', async () => {
+    track.isrc = null;
+    track.title = "Just a Moment";
+    track.artist = "Nas";
+    web.results = [
+      {
+        title: "Just a Moment by Nas feat. Quan - Samples, Covers and Remixes | WhoSampled",
+        url: "https://www.whosampled.com/Nas/Just-a-Moment/",
+        content: "Just a Moment by Nas feat. Quan samples a recording by The Main Ingredient.",
+      },
+      {
+        title: "Just a Moment (Nas song) - Wikipedia",
+        url: "https://en.wikipedia.org/wiki/Just_a_Moment_(Nas_song)",
+        content: "Just a Moment is a song by Nas from his 2004 album Street's Disciple.",
+      },
+      {
+        title: "Just a moment...",
+        url: "https://example.test/wall",
+        content: "Checking your browser before accessing the site.",
+      },
+      { title: "404 Not Found", url: ERROR_PAGE, content: "The requested URL was not found." },
+    ];
+    const run = await runPlan([], { query: "Just a Moment Nas" });
+
+    const samples = (run.research?.samples ?? []).join("\n");
+    expect(samples).toContain("The Main Ingredient");
+    expect(samples).toContain("Street's Disciple");
+    expect(samples).not.toContain("Checking your browser");
+    const urls = (run.trackData?.evidence ?? []).map((e) => e.url);
+    expect(urls).toEqual(
+      expect.arrayContaining([
+        "https://www.whosampled.com/Nas/Just-a-Moment/",
+        "https://en.wikipedia.org/wiki/Just_a_Moment_(Nas_song)",
+      ]),
+    );
+    expect(urls).not.toContain("https://example.test/wall");
+    expect(urls).not.toContain(ERROR_PAGE);
+    expect(run.research?.noneFound ?? []).not.toContain("web search: sample history");
+    expect(run.messages).toContain(
+      "Found samples information (2 web results kept, 2 left out: error pages or no text)",
+    );
+  });
+});
+
+describe("steps run together", () => {
+  it("merge into one update: research, errors, web results, status lines and the artist", () => {
+    const artist = {
+      status: "identified" as const,
+      verified: true,
+      mbid: ARTIST,
+      name: "Vanilla Ice",
+    };
+    const merged = combineSteps([
+      {
+        researchData: { ...emptyResearch(), samples: ["a"] },
+        ranSteps: [{ action: "search_samples", why: "x" }],
+        stepsRun: 1,
+        webFindings: [
+          { result: { title: "t", url: "https://example.test/a", content: "c" }, retrievedAt: "r" },
+        ],
+        statusMessages: ["Found samples information"],
+      },
+      {
+        researchData: { ...emptyResearch(), collaborators: ["B (collaboration)"] },
+        ranSteps: [{ action: "search_artist_collaborators", why: "x" }],
+        stepsRun: 1,
+        artistResolution: artist,
+        statusMessages: ["Found artist collaborators information"],
+      },
+      {
+        ranSteps: [{ action: "search_listenbrainz_similar", why: "y" }],
+        stepsRun: 1,
+        sourceErrors: [{ source: "listenbrainz", code: "unavailable", message: "busy" }],
+        lastfmArtistUncertain: "shared",
+        statusMessages: ["⚠️ ListenBrainz could not be read (unavailable)"],
+      },
+    ]);
+    expect(merged.researchData?.samples).toEqual(["a"]);
+    expect(merged.researchData?.collaborators).toEqual(["B (collaboration)"]);
+    expect(merged.ranSteps?.map((s) => s.action)).toEqual([
+      "search_samples",
+      "search_artist_collaborators",
+      "search_listenbrainz_similar",
+    ]);
+    expect(merged.stepsRun).toBe(3);
+    expect(merged.webFindings).toHaveLength(1);
+    expect(merged.sourceErrors).toEqual([
+      { source: "listenbrainz", code: "unavailable", message: "busy" },
+    ]);
+    expect(merged.statusMessages).toEqual([
+      "Found samples information",
+      "Found artist collaborators information",
+      "⚠️ ListenBrainz could not be read (unavailable)",
+    ]);
+    expect(merged.artistResolution).toEqual(artist);
+    expect(merged.lastfmArtistUncertain).toBe("shared");
   });
 });
 
@@ -501,21 +709,56 @@ describe("placeholders", () => {
     { title: "404 Not Found", content: "The requested URL was not found on this server." },
     { title: "Error 503: Service Unavailable", content: "Try again later." },
     { title: "Page not found | Example", content: "Sorry, we looked everywhere." },
+    { title: "Access denied - Example", content: "You do not have access." },
+    { title: "Not Found", content: "" },
     { title: "Just a moment...", content: "Checking your browser before accessing the site." },
     { title: "Example", content: "Please enable JavaScript to view this page." },
-  ])("$title is an error page", (result) => {
+    { title: "Example", content: "404 Not Found. The page you requested does not exist." },
+  ])("$title / $content is an error page", (result) => {
     expect(isErrorPage(result)).toBe(true);
   });
 
+  // Real titles of pages about songs, albums and articles that name an error phrase.
   it.each([
-    { title: "500 Miles - The Proclaimers", content: "The song was released in 1988." },
-    { title: "Lost and Found", content: "A page about the album." },
-    {
-      title: "Ice Ice Baby",
-      content: `The bass line comes from Under Pressure. ${"Long page text. ".repeat(20)} page not found`,
-    },
-  ])("$title is a page", (result) => {
-    expect(isErrorPage(result)).toBe(false);
+    "Just a Moment by Nas feat. Quan - Samples, Covers and Remixes | WhoSampled",
+    "Just a Moment (Nas song) - Wikipedia",
+    "Access Denied by Raven - Songfacts",
+    "Not Found - Single by Some Artist",
+    "Internal Server Error (Original Mix) by DJ Someone",
+    "The Story Behind 'Service Unavailable', the Album",
+    "Bad Gateway - EP by Some Band",
+    "Attention Required (feat. X)",
+    "500 Pages of Hip-Hop History",
+    "500 Miles - The Proclaimers",
+  ])("%j is a page", (title) => {
+    expect(isErrorPage({ title, content: "A page about the music, long enough to read." })).toBe(
+      false,
+    );
+  });
+
+  it("reads a short text about a single called 'Page Not Found' as a page", () => {
+    expect(
+      isErrorPage({
+        title: "New releases",
+        content: "Their single 'Page Not Found' came out in May and reached number 12.",
+      }),
+    ).toBe(false);
+    expect(isErrorPage({ title: "Cloudflare", content: "Just a moment..." })).toBe(false);
+    // Cloudflare's wall needs its title and its own text.
+    expect(isErrorPage({ title: "Just a moment...", content: "A song by Nas." })).toBe(false);
+  });
+
+  it("never takes a page naming the searched track or artist for an error page", () => {
+    const track = { title: "Not Found", artist: "Some Artist" };
+    expect(isErrorPage({ title: "Not Found | Genius", content: "x" }, track)).toBe(false);
+    expect(isErrorPage({ title: "Not Found | Genius", content: "x" })).toBe(true);
+  });
+
+  it("keeps a web search's formatted results whatever their first title says", () => {
+    const entry =
+      "Error: The Sample Behind Ice Ice Baby\nhttps://example.test/a\nThe bass line comes from Under Pressure.";
+    expect(isPlaceholder(entry)).toBe(false);
+    expect(mergeResearch(emptyResearch(), { samples: [entry] }).samples).toEqual([entry]);
   });
 
   it("are never web evidence, even without the researcher's own filter", () => {

@@ -618,6 +618,19 @@ async function searchArtistsExact(name: string, signal?: AbortSignal): Promise<M
   return exact.filter((a, i) => exact.findIndex((b) => b.id === a.id) === i);
 }
 
+/**
+ * True when MusicBrainz has exactly one artist with this exact name and it is `mbid`: the name
+ * then stands for that artist alone (the check behind asking another source by name).
+ */
+export async function onlyArtistNamed(
+  name: string,
+  mbid: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const matches = await searchArtistsExact(name, signal);
+  return matches.length === 1 && matches[0].id === mbid;
+}
+
 const SPOTIFY_ARTIST_ID = /^[A-Za-z0-9]{22}$/;
 const SPOTIFY_ARTIST_URL = /^https?:\/\/open\.spotify\.com\/artist\/([A-Za-z0-9]{22})(?:[/?#]|$)/;
 

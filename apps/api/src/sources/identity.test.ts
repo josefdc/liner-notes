@@ -421,6 +421,36 @@ describe("collectPrimarySources", () => {
     expect(none).toEqual([null]);
   });
 
+  it("is served ahead of MusicBrainz requests made outside it, queued first", async () => {
+    const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(30);
+    try {
+      const OTHER = ["GBUM71106916", "USUM72401994"];
+      const net = stubFetch((call) =>
+        OTHER.some((isrc) => call.url.includes(`/isrc/${isrc}`))
+          ? json({ recordings: [] })
+          : withShs(call),
+      );
+      // A request just made: the next ones wait their turn.
+      await lookupIsrc(OTHER[0]);
+      net.calls.length = 0;
+      // A researcher's two requests are queued first; then the chain starts.
+      const research = Promise.all(OTHER.map((isrc) => lookupIsrc(isrc)));
+      const chain = collectPrimarySources(ICE_TRACK, { now });
+      await Promise.all([research, chain]);
+
+      const mb = net.calls.filter((c) => c.url.startsWith(MB)).map((c) => c.url);
+      const firstOther = mb.findIndex((url) => OTHER.some((isrc) => url.includes(isrc)));
+      // Every MusicBrainz request of the chain (lookup, recording, work, dating) came first.
+      expect(firstOther).toBe(mb.length - 2);
+      expect(mb.slice(0, firstOther).every((url) => !OTHER.some((i) => url.includes(i)))).toBe(
+        true,
+      );
+      expect(firstOther).toBeGreaterThanOrEqual(4);
+    } finally {
+      restore();
+    }
+  });
+
   it("checks the Discogs release the chain reaches and omits one without the track", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token";
     // A release shaped like the Discogs API's, whose only track is a different song.

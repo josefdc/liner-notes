@@ -20,7 +20,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
-import { isMbid, normalizeName } from "./musicbrainz.js";
+import { isMbid, normalizeName, onlyArtistNamed } from "./musicbrainz.js";
 import {
   failureWith,
   keyRejected,
@@ -29,7 +29,7 @@ import {
   type ToolFailure,
   toolFailure,
 } from "./toolResult.js";
-import { logger } from "../logger.js";
+import { currentRunId, logger } from "../logger.js";
 
 const log = logger("Last.fm");
 
@@ -183,7 +183,39 @@ const KEY_REJECTED: ReadonlySet<number> = new Set([4, 10, 26]);
  */
 type NothingFound = NotAnswered;
 
-type LastfmResult<T> = { ok: true; data: T } | { ok: false; answer: ToolFailure | NothingFound };
+type LastfmResult<T> =
+  | {
+      ok: true;
+      data: T /** How Last.fm was asked: by the artist's MBID, or by its name. */;
+      by?: "mbid" | "name";
+    }
+  | { ok: false; answer: ToolFailure | NothingFound };
+
+/**
+ * Whether the name stands for the identified artist alone, per run and name (each run asks
+ * MusicBrainz once for its three artist methods): a few hundred answers are kept, the oldest
+ * dropped first.
+ */
+const nameChecks = new Map<string, Promise<boolean>>();
+const NAME_CHECKS_MAX = 500;
+
+function nameIsOnly(name: string, mbid: string, signal?: AbortSignal): Promise<boolean> {
+  const runId = currentRunId();
+  // Outside a run nothing is kept: the answer may change between calls.
+  if (!runId) return onlyArtistNamed(name, mbid, signal).catch(() => false);
+  const key = `${runId}|${mbid}|${normalizeName(name)}`;
+  let check = nameChecks.get(key);
+  if (!check) {
+    // A MusicBrainz that cannot be read leaves the name unchecked: not kept.
+    check = onlyArtistNamed(name, mbid, signal).catch(() => false);
+    nameChecks.set(key, check);
+    if (nameChecks.size > NAME_CHECKS_MAX) {
+      const oldest = nameChecks.keys().next().value;
+      if (oldest !== undefined) nameChecks.delete(oldest);
+    }
+  }
+  return check;
+}
 
 /**
  * Last.fm's own error answer as a tool result: "not found" is nothing found, not a failure; a
@@ -210,7 +242,8 @@ interface LastfmRequest<T> {
   /**
    * The artist's MusicBrainz id, when the run identified it: Last.fm is asked for that artist,
    * not for a name several artists may share. When Last.fm knows no artist with that id, the
-   * name is asked instead (with its checks).
+   * request is made once more by name, and its answer kept only when MusicBrainz has exactly
+   * one artist of that name, this one (`lastfm_unknown_mbid` otherwise).
    */
   mbid?: string;
   /** The artist Last.fm answered for (its "@attr" or the artist object's name). */
@@ -231,11 +264,25 @@ async function askLastfm<T extends object>(
   if (empty) {
     return { ok: false, answer: notAnswered("no_input", `no ${empty[0]} name to ask for`) };
   }
+  let byName = false;
   if (request.mbid && isMbid(request.mbid)) {
     // By id: the answer is that artist's, whatever name Last.fm gives it.
     const { artist: _name, ...rest } = request.params;
     const byId = await callLastfm<T>({ ...rest, mbid: request.mbid }, signal);
-    if (byId.ok || !("reason" in byId.answer) || byId.answer.reason !== "not_found") return byId;
+    if (byId.ok) return { ...byId, by: "mbid" };
+    if (!("reason" in byId.answer) || byId.answer.reason !== "not_found") return byId;
+    // Last.fm knows no artist with this id. Its page for the name is this artist's only when
+    // MusicBrainz has no other artist of that name.
+    if (!(await nameIsOnly(request.artist, request.mbid, signal))) {
+      return {
+        ok: false,
+        answer: notAnswered(
+          "lastfm_unknown_mbid",
+          `Last.fm knows no artist with MusicBrainz id ${request.mbid}, and MusicBrainz does not have exactly one artist named "${request.artist}"`,
+        ),
+      };
+    }
+    byName = true;
   }
   const result = await callLastfm<T>(request.params, signal);
   if (!result.ok) return result;
@@ -249,7 +296,7 @@ async function askLastfm<T extends object>(
       ),
     };
   }
-  return result;
+  return byName ? { ...result, by: "name" } : result;
 }
 
 /**
@@ -543,6 +590,16 @@ export const getLastfmArtistInfo = tool(
     const info = result.data.artist;
     if (!info || typeof info.name !== "string") {
       return JSON.stringify(notAnswered("not_found", "Artist not found"));
+    }
+    // Asked by name for an identified artist: a page Last.fm files under another MusicBrainz id
+    // is another artist's.
+    if (result.by === "name" && mbid && isMbid(info.mbid) && info.mbid !== mbid) {
+      return JSON.stringify(
+        notAnswered(
+          "other_artist",
+          `Last.fm's page for "${info.name}" is filed under another MusicBrainz artist`,
+        ),
+      );
     }
 
     const tags = cleanTags(info.tags?.tag);

@@ -2,8 +2,10 @@
  * Historian Node — Deep Dive Research
  * Runs in parallel with Engineer
  * Runs the run's research plan (research/plan.ts): the primary sources from the track's ISRC,
- * Last.fm once, then the ResearcherSubgraph (the sample-history search and at most two
- * follow-ups chosen by the planner). The MusicBrainz recording the ISRC identifies is read once:
+ * each Last.fm method once, then the ResearcherSubgraph: its fixed steps together (the
+ * sample-history search, and with an identified recording the production-history search and the
+ * credited artist's ListenBrainz similar artists and MusicBrainz collaborators, by MBID), then at
+ * most two follow-ups chosen by the planner. The MusicBrainz recording the ISRC identifies is read once:
  * its credited artist is the researcher's artist (by MBID) and the recording goes to the
  * composer (`isrcRecording`). It has no graph retry policy: a retry would repeat the planner's
  * model calls. When the research stops early on a provider or source failure, what it found, its
@@ -152,11 +154,13 @@ export async function historianNode(
   const options = { signal: config.signal };
   console.log("📚 [Historian] Deep dive research for:", title, "by", artist);
 
-  // The plan's Last.fm step, each request at most once per run (outside the researcher
-  // subgraph, which does not ask them again): the track's tags and similar tracks while the ISRC
-  // identifies the recording, and the artist's tags, by the credited artist's MusicBrainz id once
-  // it is known. Each result is read by its type: data, "nothing found" (recorded, never a fact)
-  // or the source's error (a source error, and the prompts say Last.fm was unavailable).
+  // The plan's Last.fm step, each method at most once per run (outside the researcher subgraph,
+  // which does not ask them again): the track's tags and similar tracks while the ISRC identifies
+  // the recording, and the artist's tags, by the credited artist's MusicBrainz id once it is
+  // known (a request Last.fm cannot answer by that id may be made once more by name, kept only
+  // when the name is that artist's alone). Each result is read by its type: data, "nothing
+  // found" (recorded, never a fact) or the source's error (a source error, and the prompts say
+  // Last.fm was unavailable).
   const prefetch = new StepReader();
   console.log("🏷️ [Historian] Pre-fetching Last.fm data in parallel...");
   config.signal?.throwIfAborted();
@@ -206,7 +210,15 @@ export async function historianNode(
       `(${prefetch.errors.length} source errors)`,
   );
   const prefetchErrors = uniqueErrors(prefetch.errors);
-  const prefetchStatus = unreadableStatus(prefetchErrors, prefetch.rejected);
+  const prefetchStatus = [
+    ...unreadableStatus(prefetchErrors, prefetch.rejected),
+    // The artist's tags were not asked by name: Last.fm does not know the artist's MBID and the
+    // name may be another artist's.
+    ...prefetch.notAsked
+      .filter(() => prefetch.reasons.includes("lastfm_unknown_mbid"))
+      .filter((line) => line.startsWith("Last.fm artist tags"))
+      .map((line) => `⚠️ ${line}`),
+  ];
   for (const message of prefetchStatus) {
     writer?.({
       type: "status",

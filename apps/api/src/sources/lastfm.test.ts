@@ -121,28 +121,65 @@ describe("Last.fm tools with a key", () => {
       expect(net.calls).toHaveLength(1);
     });
 
-    it("asks by name when Last.fm knows no artist with that id", async () => {
-      const net = stubFetch((call) => {
+    const MB_SEARCH = "https://musicbrainz.org/ws/2/artist?";
+    /** Last.fm knows no artist with the id; MusicBrainz has `artists` named "Queen". */
+    const unknownId = (artists: Array<{ id: string; name: string }>, byName: unknown) =>
+      stubFetch((call) => {
+        if (call.url.startsWith(MB_SEARCH)) return json({ count: artists.length, artists });
         if (!call.url.startsWith(API)) return undefined;
         return new URL(call.url).searchParams.has("mbid")
           ? json({ error: 6, message: "The artist you supplied could not be found" })
-          : json({
-              similarartists: {
-                artist: [{ name: "Other", match: "1" }],
-                "@attr": { artist: "Queen" },
-              },
-            });
+          : json(byName);
       });
+    const similar = {
+      similarartists: { artist: [{ name: "Other", match: "1" }], "@attr": { artist: "Queen" } },
+    };
+
+    it("asks by name when Last.fm knows no artist with that id and the name is this artist's alone", async () => {
+      const net = unknownId([{ id: MBID, name: "Queen" }], similar);
 
       const data = JSON.parse(
         await getLastfmSimilarArtists.invoke({ artist: "Queen", mbid: MBID }),
       );
 
       expect(data).toEqual({ found: true, artists: [{ name: "Other", match: 1 }] });
-      expect(net.calls.map((c) => new URL(c.url).searchParams.get("artist"))).toEqual([
-        null,
-        "Queen",
-      ]);
+      const lastfm = net.calls.filter((c) => c.url.startsWith(API));
+      expect(lastfm.map((c) => new URL(c.url).searchParams.get("artist"))).toEqual([null, "Queen"]);
+    });
+
+    it("does not ask by name when MusicBrainz has another artist of that name", async () => {
+      const net = unknownId(
+        [
+          { id: MBID, name: "Queen" },
+          { id: "11111111-1111-4111-8111-111111111111", name: "Queen" },
+        ],
+        similar,
+      );
+
+      const data = JSON.parse(
+        await getLastfmSimilarArtists.invoke({ artist: "Queen", mbid: MBID }),
+      );
+
+      expect(data).toMatchObject({ found: false, reason: "lastfm_unknown_mbid" });
+      // One request by id, none by name.
+      const lastfm = net.calls.filter((c) => c.url.startsWith(API));
+      expect(lastfm).toHaveLength(1);
+      expect(new URL(lastfm[0].url).searchParams.has("mbid")).toBe(true);
+    });
+
+    it("drops artist info asked by name that Last.fm files under another MusicBrainz id", async () => {
+      unknownId([{ id: MBID, name: "Queen" }], {
+        artist: {
+          name: "Queen",
+          mbid: "22222222-2222-4222-8222-222222222222",
+          bio: { summary: "Another band called Queen." },
+          tags: { tag: [{ name: "rock", count: 1 }] },
+        },
+      });
+
+      const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Queen", mbid: MBID }));
+
+      expect(data).toMatchObject({ found: false, reason: "other_artist" });
     });
 
     it("does not ask again by name when Last.fm could not be read", async () => {

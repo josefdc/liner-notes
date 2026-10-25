@@ -88,7 +88,7 @@ import {
 export const PLANNER_CALL_SITE = "research_planner";
 /** Output budget of a planner call, reasoning included (fast tier: low effort). */
 export const PLANNER_MAX_OUTPUT_TOKENS = 1500;
-/** Research steps chosen by the planner, after the fixed first step. */
+/** Research steps chosen by the planner, after the fixed steps (`plannedSteps`). */
 export const MAX_PLANNED_STEPS = MAX_FOLLOW_UPS;
 /** Wait before a search's one retry after a transient failure. */
 export const SEARCH_RETRY_MS = 500;
@@ -480,6 +480,8 @@ const NOT_ASKED: Record<NotAskedReason, string> = {
   invalid_request: "not answered: Last.fm refused the request",
   other_artist: "dropped: Last.fm answered for another artist",
   shared_page: "dropped: Last.fm keeps one page for several artists of this name",
+  lastfm_unknown_mbid:
+    "not asked: Last.fm does not know this artist's MusicBrainz id, and the name alone may be another artist's",
 };
 
 const isNotAsked = (reason: string | null): reason is NotAskedReason =>
@@ -595,14 +597,18 @@ async function researchToolNode(
   runtime: AgentRuntime,
 ): Promise<Partial<ResearcherStateType>> {
   const plans = state.pendingPlans.length > 0 ? state.pendingPlans : [state.researchPlan];
+  // The warnings already sent by a step of this batch ("Web search could not be read").
+  const warned = new Set<string>();
   const updates = await Promise.all(
-    plans.map((plan) => researchStep(state, plan, config, runtime)),
+    plans.map((plan) => researchStep(state, plan, config, runtime, warned)),
   );
   return { ...combineSteps(updates), pendingPlans: [] };
 }
 
 /** The updates of steps run together, as one update (the channels' own merge rules). */
-function combineSteps(updates: Array<Partial<ResearcherStateType>>): Partial<ResearcherStateType> {
+export function combineSteps(
+  updates: Array<Partial<ResearcherStateType>>,
+): Partial<ResearcherStateType> {
   if (updates.length === 1) return updates[0];
   const out: Partial<ResearcherStateType> & {
     researchData: ResearchData;
@@ -660,6 +666,7 @@ async function researchStep(
   plan: ResearchPlan | null,
   config: LangGraphRunnableConfig,
   runtime: AgentRuntime,
+  warned: Set<string> = new Set(),
 ): Promise<Partial<ResearcherStateType>> {
   const writer = config.writer;
 
@@ -673,6 +680,8 @@ async function researchStep(
   // note: the joined Spotify string is no artist, and a quoted search for it finds nothing.
   const query = trackQuery(state.spotifyData);
   const { primary, names: artistNames, spotifyArtistId, title } = query;
+  // A web result naming the track or its artist is about it, whatever its title looks like.
+  const searched = { title, artist: primary };
   const resolution = state.artistResolution;
   const known = resolution?.status === "identified" ? resolution : null;
   const uncertain = state.lastfmArtistUncertain;
@@ -711,6 +720,9 @@ async function researchStep(
     reader: StepReader;
     /** The web search's results, for the run's web-tier evidence. */
     web: WebFinding[];
+    /** How many web results were kept, and left out (an error page, no text). */
+    webKept: number;
+    webLeftOut: number;
     resolution?: ArtistResolution;
     lastfmUncertain?: string;
   }
@@ -719,16 +731,23 @@ async function researchStep(
   const search = async (): Promise<Step> => {
     const newData = emptyResearch();
     const reader = new StepReader();
-    const step: Step = { data: newData, reader, web: [] };
+    const step: Step = { data: newData, reader, web: [], webKept: 0, webLeftOut: 0 };
     const webText = (raw: unknown, none: NoneLabel): string | null => {
       const found = reader.read<WebResults>("tavily", raw, none);
-      // A result that is a placeholder or an error page ("404 Not Found") is no answer.
-      const results = (Array.isArray(found?.results) ? found.results : []).filter(
-        (r) => !isPlaceholder(r?.content) && !isErrorPage(r),
-      );
-      if (found && results.length === 0) reader.nothing(none);
+      // Each result is judged on its own: one without text or that is an error page ("404 Not
+      // Found") is no answer, and the others are kept.
+      const all = Array.isArray(found?.results) ? found.results : [];
+      const results = all.filter((r) => !isPlaceholder(r?.content) && !isErrorPage(r, searched));
+      step.webKept += results.length;
+      step.webLeftOut += all.length - results.length;
+      if (found && results.length === 0) {
+        reader.nothing(
+          none,
+          all.length > 0 ? "every result was an error page or had no text" : undefined,
+        );
+      }
       const retrievedAt = timestampOf(runtime);
-      for (const result of results) step.web.push({ result, retrievedAt });
+      for (const result of results) step.web.push({ result, retrievedAt, track: searched });
       return results.length > 0 ? formatResults(results) : null;
     };
     /** The artist did not resolve: the run asks no artist-level question about it again. */
@@ -999,21 +1018,31 @@ async function researchStep(
     });
     const errors = uniqueErrors(step.reader.errors);
     console.log(`✅ [Research Tool] Read ${plan.nextAction} (${errors.length} source errors)`);
-    // The status says what happened: a source that could not be read is never "found".
-    const warnings = unreadableStatus(errors, step.reader.rejected);
+    // The status says what happened: a source that could not be read is never "found". Steps
+    // run together say a source's warning once.
+    const warnings = unreadableStatus(errors, step.reader.rejected).filter(
+      (message) => !warned.has(message) && Boolean(warned.add(message)),
+    );
     for (const message of warnings) {
       writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
     }
     // A step whose source was not asked, or could not identify the track, did not find
-    // "nothing": it has its own status.
-    const empty =
-      step.reader.none.length === 0 && step.reader.notAsked.length > 0
+    // "nothing": it has its own status, which says why when Last.fm was not asked by name.
+    const unknownMbid = step.reader.reasons.includes("lastfm_unknown_mbid");
+    const empty = unknownMbid
+      ? `Not asked: ${label} (${NOT_ASKED.lastfm_unknown_mbid.replace(/^not asked: /, "")})`
+      : step.reader.none.length === 0 && step.reader.notAsked.length > 0
         ? `Not asked or not identified: ${label}`
         : `Nothing found: ${label}`;
+    // A web step says how many results it kept when it left some out.
+    const kept =
+      step.webLeftOut > 0
+        ? ` (${step.webKept} web results kept, ${step.webLeftOut} left out: error pages or no text)`
+        : "";
     const status = [
       ...warnings,
       ...(holdsData(step.data)
-        ? [`Found ${label} information`]
+        ? [`Found ${label} information${kept}`]
         : errors.length === 0
           ? [empty]
           : []),

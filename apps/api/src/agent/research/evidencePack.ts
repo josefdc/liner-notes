@@ -34,7 +34,7 @@ import {
 } from "../../sources/records.js";
 import { isLyricPage, type WebResult } from "../../sources/search.js";
 import { isPreviewUrl } from "../../store/runs.js";
-import { isErrorPage, isPlaceholder } from "./plan.js";
+import { isErrorPage, isPlaceholder, type SearchedTrack } from "./plan.js";
 
 /** The most items a run's pack keeps; the lowest-ranked are left out and counted. */
 export const EVIDENCE_PACK_MAX_ITEMS = 80;
@@ -145,6 +145,8 @@ export function lastingErrors(sources: PrimarySources): SourceError[] {
 export interface WebFinding {
   result: WebResult;
   retrievedAt: string;
+  /** The track the search was about: a result naming it is never taken for an error page. */
+  track?: SearchedTrack;
 }
 
 /**
@@ -169,11 +171,11 @@ function webPage(url: string): string | null {
 export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvidence[] {
   const items: SourcedEvidence[] = [];
   const seen = new Set<string>();
-  for (const { result, retrievedAt } of findings) {
+  for (const { result, retrievedAt, track } of findings) {
     const raw = typeof result?.url === "string" ? result.url.trim() : "";
     const url = raw ? webPage(raw) : null;
     const text = typeof result?.content === "string" ? result.content.trim() : "";
-    if (!url || isPlaceholder(text) || isErrorPage(result)) continue;
+    if (!url || isPlaceholder(text) || isErrorPage(result, track)) continue;
     if (isLyricPage(url) || isPreviewUrl(url) || isPreviewUrl(raw)) continue;
     if (seen.has(url)) continue;
     seen.add(url);

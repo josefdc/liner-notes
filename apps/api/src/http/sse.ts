@@ -21,6 +21,9 @@ import {
 } from "@liner-notes/contract";
 import type { Response } from "express";
 import type { z } from "zod";
+import { logger } from "../logger.js";
+
+const log = logger("SSE");
 
 /** An event as a route builds it: its type and fields, without `runId` and `seq`. */
 export type EventBody = { type: string; [field: string]: unknown };
@@ -68,10 +71,10 @@ export function droppedEventCount(): number {
 
 function dropEvent(stream: string, type: string, reason: string, detail?: unknown): void {
   droppedEvents += 1;
-  console.error(
-    `[SSE ${stream}] ${type} event dropped: ${reason} (${droppedEvents} dropped since start)`,
-    detail ?? "",
-  );
+  log.error(`${type} event dropped: ${reason} (${droppedEvents} dropped since start)`, {
+    stream,
+    ...(detail !== undefined ? { detail } : {}),
+  });
 }
 
 export interface EventStream {
@@ -133,7 +136,7 @@ function openStream(
     try {
       onSent?.(event);
     } catch (err) {
-      console.error(`[SSE ${kind.name}] ${event.type} event sent but not observed:`, err);
+      log.error(`${event.type} event sent but not observed`, { stream: kind.name, err });
     }
   };
 
@@ -177,10 +180,10 @@ function openStream(
   const write = (event: Record<string, unknown> & { type: string }): SentEvent | null => {
     const encoded = encode(event);
     if ("problem" in encoded) {
-      console.error(
-        `[SSE ${kind.name}] ${event.type} event not sent: ${encoded.problem}`,
-        encoded.detail,
-      );
+      log.error(`${event.type} event not sent: ${encoded.problem}`, {
+        stream: kind.name,
+        detail: encoded.detail,
+      });
       return null;
     }
     res.write(encoded.line);
@@ -192,10 +195,10 @@ function openStream(
     if ("problem" in encoded) {
       if (kind.replaced.has(body.type)) {
         // The client is waiting for this event: it is told the request failed instead.
-        console.error(
-          `[SSE ${kind.name}] ${body.type} event not sent: ${encoded.problem}; sending an error`,
-          encoded.detail,
-        );
+        log.error(`${body.type} event not sent: ${encoded.problem}; sending an error`, {
+          stream: kind.name,
+          detail: encoded.detail,
+        });
         sendError("failed", INVALID_EVENT_MESSAGE, replacedWith);
       } else {
         // Progress the client can do without: the run goes on, and the event takes no seq.
@@ -267,7 +270,7 @@ function openStream(
         return false;
       }
       if (outcome) {
-        console.log(`[SSE ${kind.name}] ${body.type} event after ${outcome}; not sent`);
+        log.info(`${body.type} event after ${outcome}; not sent`, { stream: kind.name });
         return false;
       }
       return sendNumbered(body, replacedWith);

@@ -9,6 +9,7 @@
 
 import { join } from "node:path";
 import dotenv from "dotenv";
+import { configureLogger, logger } from "../logger.js";
 import { API_ROOT } from "./apiPackage.js";
 import { readSettings, type Settings } from "./settings.js";
 
@@ -16,14 +17,17 @@ export const ENV_PATH = join(API_ROOT, ".env");
 
 dotenv.config({ path: ENV_PATH });
 
+const log = logger("config");
+// The log's level, file and the values it scrubs come from the loaded environment.
+// A relative LOG_FILE is taken from apps/api, like SQLITE_DB_PATH.
+for (const warning of configureLogger(process.env, { baseDir: API_ROOT })) log.warn(warning);
+
 const result = readSettings(process.env);
 if (!result.ok) {
-  for (const error of result.errors) console.error(`[config] ${error}`);
-  console.error(
-    `[config] Set them in ${ENV_PATH} (see .env.example) or in the process environment.`,
-  );
+  for (const error of result.errors) log.error(error);
+  log.error(`Set them in ${ENV_PATH} (see .env.example) or in the process environment.`);
   process.exit(1);
 }
-for (const warning of result.warnings) console.warn(`[config] ${warning}`);
+for (const warning of result.warnings) log.warn(warning);
 
 export const settings: Settings = result.settings;

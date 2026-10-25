@@ -21,6 +21,9 @@
 
 import type Database from "better-sqlite3";
 import { getDb } from "../store/database.js";
+import { logger } from "../logger.js";
+
+const log = logger("llm");
 
 export interface LlmUsageRow {
   id: string;
@@ -124,8 +127,8 @@ export function recordToOpenDatabase(row: LlmUsageRow): void {
   try {
     recordLlmUsage(db, row);
   } catch (error) {
-    console.warn(
-      `[llm] could not record usage row ${row.id}: ${error instanceof Error ? error.message : String(error)}`,
+    log.warn(
+      `could not record usage row ${row.id}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

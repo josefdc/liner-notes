@@ -24,6 +24,9 @@ import { SOURCE_NAMES } from "./prompts.js";
 import { withoutPreviewUrls } from "../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "./cacheKeys.js";
 import type { TrackData } from "./schema.js";
+import { logger } from "../logger.js";
+
+const log = logger("Store");
 
 /** How long a stored result is served. */
 export const STORED_RESULT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -73,11 +76,11 @@ export async function readStoredResult(
     // expires: it is composed again instead.
     const checked = TrackAnalysis.safeParse(value.trackData);
     if (!checked.success) {
-      console.warn("⚠️ [Store] Stored result does not fit the contract; composing again");
+      log.warn("Stored result does not fit the contract; composing again");
       return null;
     }
     if (checked.data.id !== trackId) {
-      console.warn(`⚠️ [Store] Stored result for ${trackId} is about another track; ignored`);
+      log.warn(`Stored result for ${trackId} is about another track; ignored`);
       return null;
     }
     return {
@@ -85,7 +88,7 @@ export async function readStoredResult(
       sourceErrors: storedErrors(value.sourceErrors),
     };
   } catch (error) {
-    console.warn("⚠️ [Store] Stored result could not be read:", error);
+    log.warn("Stored result could not be read", { err: error });
     return null;
   }
 }

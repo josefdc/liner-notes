@@ -8,6 +8,7 @@ import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import type { PickedBy, ScoutFailure } from "../../agent/state.js";
 import { runningCommit } from "../../config/checkoutCommit.js";
 import { llm } from "../../llm/invoke.js";
+import { logger, withRun } from "../../logger.js";
 import { chooseReplay, liveRefused } from "../../replay/mode.js";
 import { playRecord, replayedAnalysis } from "../../replay/player.js";
 import { replays } from "../../replay/records.js";
@@ -30,6 +31,7 @@ import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middlew
 import { nodeEvent, openAnalysisStream } from "../sse.js";
 
 const router = Router();
+const log = logger("Run");
 
 /**
  * The commit of the code this server runs, read when the routes are loaded and stored with each
@@ -157,18 +159,34 @@ function recordRun(action: string, write: (db: ReturnType<typeof getDb>) => void
   try {
     write(getDb());
   } catch (err) {
-    console.error(`[Runs] Could not ${action}:`, err);
+    logger("Runs").error(`Could not ${action}`, { err });
   }
 }
 
+/**
+ * Runs `body` as part of run `runId`: every line it logs, and the request's own line, carries
+ * the run id (logger.ts).
+ */
+function asRun<T>(res: Response, runId: string, body: () => T): T {
+  res.locals.runId = runId;
+  return withRun(runId, body);
+}
+
+/**
+ * The first line of a run: how it was asked for, and the length of the query. What the visitor
+ * typed is written at debug level only.
+ */
+function logRunStart(runId: string, how: string, query: string): void {
+  log.info(how, { runId, queryLength: [...query].length });
+  log.debug(`${how}: query`, { runId, query });
+}
+
 /** Starts a new analysis: a fresh thread, claimed and recorded as an open run. */
-function startAnalysis(query: string): string {
-  const threadId = randomUUID();
+function startAnalysis(threadId: string, query: string): void {
   activeThreads.add(threadId);
   recordRun("record a run", (db) =>
     startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT }),
   );
-  return threadId;
 }
 
 /**
@@ -236,7 +254,7 @@ class RunControl {
   private abort(reason: string): void {
     if (this.controller.signal.aborted) return;
     this.controller.abort();
-    console.warn(`[Run ${this.threadId}] ${reason}; run aborted`);
+    log.warn(`${reason}; run aborted`, { runId: this.threadId });
   }
 }
 
@@ -358,7 +376,7 @@ async function runGraph(
           seen.interrupt = first?.value ?? {};
           continue;
         }
-        console.log(`[Run ${threadId}] ${node} finished`);
+        log.info(`${node} finished`, { runId: threadId, node });
         const state = update as {
           trackData?: TrackData;
           error?: string;
@@ -366,7 +384,7 @@ async function runGraph(
         } | null;
         if (state?.trackData) completeWith(state.trackData);
         if (state?.error) {
-          console.error(`[Run ${threadId}] ${node} reported an error:`, state.error);
+          log.error(`${node} reported an error: ${state.error}`, { runId: threadId, node });
           if (!seen.failure && node === "scout" && state.scoutFailure?.kind === "rate_limited") {
             seen.rateLimit = { retryAfterMs: state.scoutFailure.retryAfterMs };
           }
@@ -379,14 +397,14 @@ async function runGraph(
   }
 
   if (seen.refused) {
-    console.error(`[Run ${threadId}] The result fails the contract; run failed`);
+    log.error("The result fails the contract; run failed", { runId: threadId });
     return { kind: "failed", code: "failed" };
   }
   if (seen.trackData) return { kind: "complete", trackData: seen.trackData };
   if (seen.interrupt) return { kind: "interrupted", candidates: seen.interrupt.candidates ?? [] };
   if (signal.aborted) return { kind: "cancelled" };
-  if (threw) console.error(`[Run ${threadId}] Graph error:`, threw);
-  else if (!seen.failure) console.error(`[Run ${threadId}] Graph ended without a result`);
+  if (threw) log.error("Graph error", { runId: threadId, err: threw });
+  else if (!seen.failure) log.error("Graph ended without a result", { runId: threadId });
   return {
     kind: "failed",
     code: seen.failure ?? "failed",
@@ -423,7 +441,7 @@ async function executeRun(
   if (outcome.kind === "cancelled" && control.timedOut)
     outcome = { kind: "failed", code: "timeout" };
   if (outcome.kind === "complete" && !TrackAnalysis.safeParse(outcome.trackData).success) {
-    console.error(`[Run ${threadId}] The result fails the contract; run failed`);
+    log.error("The result fails the contract; run failed", { runId: threadId });
     outcome = { kind: "failed", code: "failed" };
   }
 
@@ -432,7 +450,7 @@ async function executeRun(
     try {
       if ((await pendingChoice(threadId)).choice) status = "interrupted";
     } catch (err) {
-      console.error(`[Run ${threadId}] Could not read the thread:`, err);
+      log.error("Could not read the thread", { runId: threadId, err });
     }
   }
   if (recordOutcome(threadId, status, outcome) && outcome.kind === "complete") {
@@ -441,7 +459,11 @@ async function executeRun(
   // A finished run's model calls are no longer counted; a paused one keeps its count, so the
   // per-run cap still covers it when it is resumed.
   if (status !== "interrupted") endModelRun(threadId);
-  console.log(`[Run ${threadId}] ${outcome.kind}; recorded ${status}`);
+  log.info(`${outcome.kind}; recorded ${status}`, {
+    runId: threadId,
+    outcome: outcome.kind,
+    status,
+  });
   return outcome;
 }
 
@@ -463,15 +485,15 @@ function recordOutcome(runId: string, status: RunStatus, outcome: RunOutcome): b
       if (stored === "another_run") deleteRunEvents(db, runId);
     })();
   } catch (err) {
-    console.error(`[Runs] Could not record the outcome of run ${runId}:`, err);
+    logger("Runs").error("Could not record the outcome of the run", { runId, err });
     recordRun("update a run", (db) => updateRun(db, runId, { status }));
     return false;
   }
   if (stored === "another_run") {
-    console.log(`[Run ${runId}] Sent a result composed by another run; not stored as its own`);
+    log.info("Sent a result composed by another run; not stored as its own", { runId });
     return true;
   }
-  if (stored && stored !== "stored") console.error(`[Run ${runId}] Result not stored: ${stored}`);
+  if (stored && stored !== "stored") log.error(`Result not stored: ${stored}`, { runId });
   return false;
 }
 
@@ -480,7 +502,7 @@ function endModelRun(runId: string): void {
   try {
     llm.endRun(runId);
   } catch (err) {
-    console.warn(`[Run ${runId}] Could not end the model run:`, err);
+    log.warn("Could not end the model run", { runId, err });
   }
 }
 
@@ -531,7 +553,7 @@ async function claimResume(threadId: string, selectedTrackId: string): Promise<R
     return check;
   } catch (err) {
     activeThreads.delete(threadId);
-    console.error(`[Run ${threadId}] Could not read the thread:`, err);
+    log.error("Could not read the thread", { runId: threadId, err });
     return { ok: false, code: "failed" };
   }
 }
@@ -556,19 +578,19 @@ async function resumeThread(
   pickedBy: PickedBy | null,
   reply: ResumeReply,
 ): Promise<void> {
-  console.log(`[Run ${threadId}] Resuming with track ${selectedTrackId}`);
+  log.info(`Resuming with track ${selectedTrackId}`, { runId: threadId });
   const control = new RunControl(req, res, threadId);
 
   const check = await claimResume(threadId, selectedTrackId);
   if (!check.ok) {
-    console.warn(`[Run ${threadId}] Resume refused: ${check.code}`);
+    log.warn(`Resume refused: ${check.code}`, { runId: threadId, code: check.code });
     reply.refuse(check.code);
     return;
   }
 
   try {
     if (control.clientGone) {
-      console.warn(`[Run ${threadId}] Client left before the resume started; choice kept`);
+      log.warn("Client left before the resume started; choice kept", { runId: threadId });
       return;
     }
     // Reopened first, so a run paused before runs were recorded has a record to store events in.
@@ -630,10 +652,10 @@ function openEventStream(res: Response, runId?: string) {
       } catch (err) {
         storedAs = null;
         unstoredStreams += 1;
-        console.error(
-          `[Runs] Could not store event ${event.seq} of run ${runId}; the rest of this stream ` +
-            `is not stored (${unstoredStreams} streams cut short since start):`,
-          err,
+        logger("Runs").error(
+          `Could not store event ${event.seq} of the run; the rest of this stream is not ` +
+            `stored (${unstoredStreams} streams cut short since start)`,
+          { runId, err },
         );
       }
     },
@@ -705,7 +727,7 @@ async function guardStream(stream: AnalysisStream, body: () => Promise<void>): P
   try {
     await body();
   } catch (err) {
-    console.error(`[Run ${stream.stream.runId}] Stream route failed:`, err);
+    log.error("Stream route failed", { runId: stream.stream.runId, err });
     stream.error("failed");
     stream.done();
   }
@@ -782,8 +804,7 @@ const replayOf = (record: ReplayRecord) => ({
  * Starts a replay of `record`: a fresh run, claimed and recorded as a replay from the start
  * (storeReplayOf), so it never reads as live whatever its outcome.
  */
-function startReplay(query: string, record: ReplayRecord): string {
-  const runId = randomUUID();
+function startReplay(runId: string, query: string, record: ReplayRecord): void {
   activeThreads.add(runId);
   recordRun("record a replay", (db) =>
     db.transaction(() => {
@@ -791,7 +812,6 @@ function startReplay(query: string, record: ReplayRecord): string {
       storeReplayOf(db, runId, replayOf(record));
     })(),
   );
-  return runId;
 }
 
 /**
@@ -815,9 +835,20 @@ function recordReplay(runId: string, status: RunStatus, record: ReplayRecord): v
  * the stream sends are not stored.
  */
 async function replayStreamRun(res: Response, query: string, record: ReplayRecord): Promise<void> {
-  const runId = startReplay(query, record);
+  const runId = randomUUID();
+  await asRun(res, runId, () => replayStream(res, runId, query, record));
+}
+
+async function replayStream(
+  res: Response,
+  runId: string,
+  query: string,
+  record: ReplayRecord,
+): Promise<void> {
+  startReplay(runId, query, record);
   const stream = openEventStream(res, runId);
-  console.log(`[Run ${runId}] Replaying the recorded run ${record.slug}`);
+  logRunStart(runId, "Streaming a replay", query);
+  log.info(`Replaying the recorded run ${record.slug}`, { runId, replay: record.slug });
   await guardStream(stream, async () => {
     try {
       const analysis = await playRecord(
@@ -832,9 +863,11 @@ async function replayStreamRun(res: Response, query: string, record: ReplayRecor
           ? { kind: "cancelled" }
           : { kind: "failed", code: "failed" };
       recordReplay(runId, OUTCOME_STATUS[outcome.kind], record);
-      console.log(
-        `[Run ${runId}] Replay ${outcome.kind}; recorded ${OUTCOME_STATUS[outcome.kind]}`,
-      );
+      log.info(`Replay ${outcome.kind}; recorded ${OUTCOME_STATUS[outcome.kind]}`, {
+        runId,
+        outcome: outcome.kind,
+        status: OUTCOME_STATUS[outcome.kind],
+      });
       sendStreamOutcome(stream, outcome, runId);
     } finally {
       activeThreads.delete(runId);
@@ -844,16 +877,20 @@ async function replayStreamRun(res: Response, query: string, record: ReplayRecor
 
 /** POST /api/analyze for a recorded track: the recorded result as a new, completed run. */
 function replayJsonRun(res: Response, query: string, record: ReplayRecord): void {
-  const runId = startReplay(query, record);
-  try {
-    const analysis = replayedAnalysis(record, runId);
-    const outcome: RunOutcome = { kind: "complete", trackData: analysis as unknown as TrackData };
-    recordReplay(runId, "completed", record);
-    console.log(`[Run ${runId}] Served the recorded run ${record.slug}`);
-    sendJsonOutcome(res, outcome, runId, { query, durationMs: 0 });
-  } finally {
-    activeThreads.delete(runId);
-  }
+  const runId = randomUUID();
+  asRun(res, runId, () => {
+    startReplay(runId, query, record);
+    try {
+      logRunStart(runId, "Analysis of a recorded track", query);
+      const analysis = replayedAnalysis(record, runId);
+      const outcome: RunOutcome = { kind: "complete", trackData: analysis as unknown as TrackData };
+      recordReplay(runId, "completed", record);
+      log.info(`Served the recorded run ${record.slug}`, { runId, replay: record.slug });
+      sendJsonOutcome(res, outcome, runId, { query, durationMs: 0 });
+    } finally {
+      activeThreads.delete(runId);
+    }
+  });
 }
 
 /**
@@ -930,20 +967,23 @@ router.post(
       return;
     }
 
-    const threadId = startAnalysis(query);
-    console.log(`[Run ${threadId}] Analysis: "${query}"`);
-    const control = new RunControl(req, res, threadId);
-    try {
-      const outcome = await executeRun(
-        runInput(query, trackId, parsePickedBy(req.body?.pickedBy)),
-        threadId,
-        control,
-      );
-      sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
-    } finally {
-      control.dispose();
-      activeThreads.delete(threadId);
-    }
+    const threadId = randomUUID();
+    await asRun(res, threadId, async () => {
+      startAnalysis(threadId, query);
+      logRunStart(threadId, "Analysis", query);
+      const control = new RunControl(req, res, threadId);
+      try {
+        const outcome = await executeRun(
+          runInput(query, trackId, parsePickedBy(req.body?.pickedBy)),
+          threadId,
+          control,
+        );
+        sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
+      } finally {
+        control.dispose();
+        activeThreads.delete(threadId);
+      }
+    });
   }),
 );
 
@@ -999,25 +1039,28 @@ router.get(
     }
 
     // The run id is the thread id.
-    const threadId = startAnalysis(query);
-    const stream = openEventStream(res, threadId);
-    stream.storeEvents();
-    console.log(`[Run ${threadId}] Streaming analysis: "${query}"`);
-    const control = new RunControl(req, res, threadId);
-    await guardStream(stream, async () => {
-      try {
-        stream.stream.send({ type: "connected", threadId, timestamp: timestamp() });
-        const outcome = await executeRun(
-          runInput(query, trackId, parsePickedBy(req.query.pickedBy)),
-          threadId,
-          control,
-          stream.emit,
-        );
-        sendStreamOutcome(stream, outcome, threadId);
-      } finally {
-        control.dispose();
-        activeThreads.delete(threadId);
-      }
+    const threadId = randomUUID();
+    await asRun(res, threadId, async () => {
+      startAnalysis(threadId, query);
+      const stream = openEventStream(res, threadId);
+      stream.storeEvents();
+      logRunStart(threadId, "Streaming analysis", query);
+      const control = new RunControl(req, res, threadId);
+      await guardStream(stream, async () => {
+        try {
+          stream.stream.send({ type: "connected", threadId, timestamp: timestamp() });
+          const outcome = await executeRun(
+            runInput(query, trackId, parsePickedBy(req.query.pickedBy)),
+            threadId,
+            control,
+            stream.emit,
+          );
+          sendStreamOutcome(stream, outcome, threadId);
+        } finally {
+          control.dispose();
+          activeThreads.delete(threadId);
+        }
+      });
     });
   }),
 );
@@ -1051,11 +1094,13 @@ router.post(
       return;
     }
 
-    await resumeThread(req, res, threadId, selectedTrackId, parsePickedBy(req.body?.pickedBy), {
-      refuse: (code) => sendJsonError(res, code),
-      started: () => {},
-      finish: (outcome) => sendJsonOutcome(res, outcome, threadId, { selectedTrackId }),
-    });
+    await asRun(res, threadId, () =>
+      resumeThread(req, res, threadId, selectedTrackId, parsePickedBy(req.body?.pickedBy), {
+        refuse: (code) => sendJsonError(res, code),
+        started: () => {},
+        finish: (outcome) => sendJsonOutcome(res, outcome, threadId, { selectedTrackId }),
+      }),
+    );
   }),
 );
 
@@ -1087,21 +1132,23 @@ router.get(
       return;
     }
 
-    await guardStream(stream, () =>
-      resumeThread(req, res, threadId, selectedTrackId, parsePickedBy(req.query.pickedBy), {
-        refuse: (code) => {
-          stream.error(code);
-          stream.done();
-        },
-        started: () => {
-          stream.storeEvents();
-          stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() });
-        },
-        emit: stream.emit,
-        finish: (outcome) => {
-          sendStreamOutcome(stream, outcome, threadId);
-        },
-      }),
+    await asRun(res, threadId, () =>
+      guardStream(stream, () =>
+        resumeThread(req, res, threadId, selectedTrackId, parsePickedBy(req.query.pickedBy), {
+          refuse: (code) => {
+            stream.error(code);
+            stream.done();
+          },
+          started: () => {
+            stream.storeEvents();
+            stream.stream.send({ type: "resuming", threadId, timestamp: timestamp() });
+          },
+          emit: stream.emit,
+          finish: (outcome) => {
+            sendStreamOutcome(stream, outcome, threadId);
+          },
+        }),
+      ),
     );
   }),
 );

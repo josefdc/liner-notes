@@ -65,6 +65,9 @@ import {
   type SonicAgentStateType,
   type SpotifyData,
 } from "../state.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Composer");
 
 export const COMPOSER_CALL_SITE = "composer";
 /** Output budget of the composer call, reasoning included (main tier: low effort). */
@@ -376,7 +379,7 @@ async function withArtwork(
     return { genealogy: { nodes, links: genealogy.links }, sourceErrors };
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
-    console.warn("⚠️ [Composer] Could not enrich genealogy:", error);
+    log.warn("Could not enrich genealogy", { err: error });
     return { genealogy, sourceErrors };
   }
 }
@@ -493,8 +496,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       };
       const issues = runIssues(info, undefined);
       if (issues.length > 0) {
-        console.warn(
-          `[Composer] Run ${runId}: the run information breaks the contract's run rules ` +
+        log.warn(
+          `Run ${runId}: the run information breaks the contract's run rules ` +
             `(${issues.join("; ")}); record its cassettes again so they say when and where`,
         );
       }
@@ -502,7 +505,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     };
 
     status("LLM-CONNECT", "Composing the liner notes...");
-    console.log("🎼 [Composer] Synthesizing data for:", spotify.title);
+    log.info(`Synthesizing data for: ${spotify.title}`);
 
     // state.isrc is null when Spotify gave no ISRC: no lookup is made then.
     const { recording, errors: sourceErrors } = await musicBrainzRecording(
@@ -610,7 +613,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         await storeResult(store, trackData, runtime.now(), runSourceErrors);
       } catch (e) {
         if (signal?.aborted) throw e;
-        console.warn("⚠️ [Composer] Store write error:", e);
+        log.warn("Store write error", { err: e });
       }
     }
 
@@ -631,7 +634,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       calls: LlmCallRecord[],
       errors: SourceError[],
     ): Partial<SonicAgentStateType> {
-      console.error(`❌ [Composer] The result does not fit the contract: ${problems}`);
+      log.error(`The result does not fit the contract: ${problems}`);
       return {
         error: `Composer result does not fit the contract: ${problems}`,
         usage: calls,
@@ -646,9 +649,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       failed: LlmCallRecord,
     ): Promise<Partial<SonicAgentStateType>> {
       const reason = modelErrorCategory(error);
-      console.warn(
-        `⚠️ [Composer] Model unavailable (${failed.status}); building the result from source data:`,
-        error instanceof Error ? error.message : String(error),
+      log.warn(
+        `Model unavailable (${failed.status}); building the result from source data: ${error instanceof Error ? error.message : String(error)}`,
       );
       status(
         "LLM-ERROR",

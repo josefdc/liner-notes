@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
 import { runIssues, TrackAnalysis } from "@liner-notes/contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { captureLogsForTests } from "../logger.js";
 
 const tools = vi.hoisted(() => {
   const tool = (answer: () => string) => ({
@@ -349,7 +350,8 @@ describe("the analysis graph", () => {
       const { recordedAt: _at, commit: _commit, ...older } = JSON.parse(readFileSync(path, "utf8"));
       writeFileSync(path, JSON.stringify(older));
     }
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logs = captureLogsForTests();
+    onTestFinished(() => logs.restore());
     const unknown = await run(replayer, { threadId: "thread-c", at: "2026-09-09T22:22:22.000Z" });
     expect(unknown.trackData?.run).toMatchObject({
       mode: "replay",
@@ -357,7 +359,7 @@ describe("the analysis graph", () => {
       recordedAt: null,
       commit: null,
     });
-    expect(warn.mock.calls.map(([message]) => String(message)).join("\n")).toMatch(
+    expect(logs.messages("warn").join("\n")).toMatch(
       /run information breaks the contract's run rules/,
     );
     expect(replayedData.factoids[0]).toMatchObject({ title: "Borrowed bass" });

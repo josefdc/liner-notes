@@ -22,6 +22,7 @@ import { getRun, startRun } from "./store/runs.js";
 
 const ENTRY = join(import.meta.dirname, "index.ts");
 const PROCESS_ERRORS_FIXTURE = join(import.meta.dirname, "../test/fixtures/process-errors.ts");
+const ODD_EXCEPTION_FIXTURE = join(import.meta.dirname, "../test/fixtures/odd-exception.ts");
 const CLOSED_LOG_READER_FIXTURE = join(
   import.meta.dirname,
   "../test/fixtures/closed-log-reader.mjs",
@@ -140,8 +141,31 @@ const apiEnv = (port: number, dbPath: string, extra: Record<string, string> = {}
   AZURE_OPENAI_API_KEY: "",
   LLM_CASSETTE: "replay",
   LLM_SPEND_LOG: "",
+  // Debug level, so the bound address is in the log; no log file; a per-process IP key.
+  LOG_LEVEL: "debug",
+  LOG_FILE: "",
+  LOG_IP_SALT: "",
   ...extra,
 });
+
+/** The JSON lines of a child's output; other lines (a fixture's own prints) are skipped. */
+function logEntries(output: string): Array<Record<string, unknown>> {
+  return output.split("\n").flatMap((line) => {
+    try {
+      const entry: unknown = JSON.parse(line);
+      return entry && typeof entry === "object" ? [entry as Record<string, unknown>] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/** True when the output holds a log line of `component` whose message contains `message`. */
+function logged(output: string, component: string, message: string): boolean {
+  return logEntries(output).some(
+    (entry) => entry.component === component && String(entry.msg).includes(message),
+  );
+}
 
 const CONTINUE = "HTTP/1.1 100 Continue\r\n\r\n";
 
@@ -255,7 +279,24 @@ describe("the API process", () => {
   }, 15_000);
 
   it("binds 127.0.0.1 by default", () => {
-    expect(api.output()).toContain(`listening on http://127.0.0.1:${port}`);
+    expect(logged(api.output(), "Server", `Listening on http://127.0.0.1:${port}`)).toBe(true);
+  });
+
+  it("writes its log as JSON lines, one object per line", () => {
+    const lines = api
+      .output()
+      .split("\n")
+      .filter((line) => line.trim() !== "");
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(() => JSON.parse(line), line).not.toThrow();
+    // The health probes it answered are logged at debug level, without the client's address.
+    const probes = logEntries(api.output()).filter((entry) => entry.path === "/api/health");
+    expect(probes.length).toBeGreaterThan(0);
+    for (const probe of probes) {
+      expect(probe).toMatchObject({ level: "debug", method: "GET", status: 200 });
+      expect(probe.ipHash).toMatch(/^[0-9a-f]{16}$/);
+    }
+    expect(api.output()).not.toMatch(/"(?:ip|remoteAddress)"/);
   });
 
   it("cancels runs left open by a previous process once it listens", () => {
@@ -287,9 +328,9 @@ describe("the API process", () => {
     expect(Date.now() - signalledAt).toBeLessThan(7000);
     expect(received()).toBe(CONTINUE); // held until the drain closed it, never answered
 
-    expect(api.output()).toContain("ignored as a duplicate");
-    expect(api.output()).toContain("[Database] Connection closed.");
-    expect(api.output()).toContain("[Server] Stopped");
+    expect(logged(api.output(), "Server", "ignored as a duplicate")).toBe(true);
+    expect(logged(api.output(), "Database", "Connection closed.")).toBe(true);
+    expect(logged(api.output(), "Server", "Stopped")).toBe(true);
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
   }, 15_000);
 });
@@ -299,8 +340,8 @@ describe("an API process stopped by SIGINT", () => {
     const { api } = await startApi();
     api.process.kill("SIGINT");
     expect(await api.exit).toBe(0);
-    expect(api.output()).toContain("SIGINT received");
-    expect(api.output()).toContain("[Server] Stopped");
+    expect(logged(api.output(), "Server", "SIGINT received")).toBe(true);
+    expect(logged(api.output(), "Server", "Stopped")).toBe(true);
   }, 40_000);
 });
 
@@ -348,7 +389,7 @@ describe("an API process that cannot listen", () => {
     const api = start(ENTRY, dir, apiEnv(port, dbPath));
     expect(await api.exit).toBe(1);
 
-    expect(api.output()).toContain("Could not listen");
+    expect(logged(api.output(), "Server", "Could not listen")).toBe(true);
     expect(withDatabase(dbPath, (db) => getRun(db, "left-open")?.status)).toBe("running");
   }, 30_000);
 });
@@ -367,10 +408,11 @@ describe("an API process with invalid configuration", () => {
       const api = start(ENTRY, dir, apiEnv(await freePort(), dbPath, extra));
       expect(await api.exit).toBe(1);
 
-      expect(api.output()).toContain("[config]");
-      expect(api.output()).toContain(key);
-      expect(api.output()).not.toContain("[Database] Initialized");
-      expect(api.output()).not.toMatch(/\n\s+at /); // a message, not a crash
+      expect(logged(api.output(), "config", key)).toBe(true);
+      expect(logged(api.output(), "Database", "Initialized")).toBe(false);
+      // A message, not a crash.
+      expect(api.output()).not.toMatch(/\n\s+at /);
+      expect(api.output()).not.toContain('"stack"');
     },
     30_000,
   );
@@ -385,12 +427,45 @@ describe("process-level error handlers", () => {
     expect(await child.exit).toBe(1);
 
     const output = child.output();
-    expect(output).toContain("[Process] Unhandled promise rejection");
-    expect(output).toContain("rejection nobody handled");
+    const entries = logEntries(output);
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        component: "Process",
+        msg: "Unhandled promise rejection",
+        err: expect.objectContaining({ message: "rejection nobody handled" }),
+      }),
+    );
     expect(output).toContain("still running after the rejection");
-    expect(output).toContain("[Process] Uncaught exception; exiting");
-    expect(output).toContain("exception nobody caught");
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        component: "Process",
+        msg: "Uncaught exception; exiting",
+        err: expect.objectContaining({ message: "exception nobody caught" }),
+      }),
+    );
     expect(output).toContain("fatal hook ran");
     expect(output).not.toContain("still running after the exception");
+  }, 30_000);
+
+  it("log an exception the log cannot read whole, still run the fatal hook and exit 1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "api-errors-"));
+    dirs.push(dir);
+
+    const child = start(ODD_EXCEPTION_FIXTURE, dir, {});
+    expect(await child.exit).toBe(1);
+
+    const output = child.output();
+    expect(logEntries(output)).toContainEqual(
+      expect.objectContaining({
+        component: "Process",
+        msg: "Uncaught exception; exiting",
+        err: expect.objectContaining({
+          type: "Error",
+          stack: expect.stringContaining("odd-exception.ts"),
+        }),
+      }),
+    );
+    expect(output).toContain("fatal hook ran");
+    expect(output).not.toContain("getter exploded");
   }, 30_000);
 });

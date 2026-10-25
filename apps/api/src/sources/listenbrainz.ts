@@ -15,6 +15,9 @@ import { z } from "zod";
 import { describeError, fetchJson, type Shape, SourceError } from "./http.js";
 import { ARTIST_REASON, findArtist, isMbid } from "./musicbrainz.js";
 import { notAnswered, toolFailure } from "./toolResult.js";
+import { logger } from "../logger.js";
+
+const log = logger("ListenBrainz");
 
 // =============================================================================
 // Configuration
@@ -108,7 +111,7 @@ export const getListenBrainzSimilarArtists = tool(
         ? { mbid: artistMbid, name: artistName ?? null, verified: false }
         : null;
       if (!artist) {
-        console.log(`🔍 [ListenBrainz] Resolving MBID for "${artistName ?? ""}"...`);
+        log.info(`Resolving MBID for "${artistName ?? ""}"...`);
         const match = await findArtist(artistName ?? "", { artistNames, spotifyArtistId, signal });
         if (!match.artist) {
           // Nothing is asked of ListenBrainz for an artist MusicBrainz cannot identify, nor for a
@@ -120,12 +123,12 @@ export const getListenBrainzSimilarArtists = tool(
           name: match.artist.name,
           verified: match.via === "spotify",
         };
-        console.log(`✅ [ListenBrainz] Resolved MBID: ${match.artist.id}`);
+        log.info(`Resolved MBID: ${match.artist.id}`);
       }
 
-      console.log(`🔗 [ListenBrainz] Getting similar artists for MBID: ${artist.mbid}`);
+      log.info(`Getting similar artists for MBID: ${artist.mbid}`);
       const artists = await fetchSimilarArtists(artist.mbid, MAX_ARTISTS, signal);
-      console.log(`✅ [ListenBrainz] Found ${artists.length} similar artists`);
+      log.info(`Found ${artists.length} similar artists`);
       return JSON.stringify(
         artists.length > 0
           ? { found: true, artist, artists }
@@ -134,7 +137,7 @@ export const getListenBrainzSimilarArtists = tool(
     } catch (error) {
       // A cancelled run rejects: nothing is reported for it.
       if (signal?.aborted) throw error;
-      console.error("❌ [ListenBrainz] Similar artists error:", describeError(error));
+      log.error(`Similar artists error: ${describeError(error)}`);
       // A failure while resolving the name on MusicBrainz names MusicBrainz as the source.
       return JSON.stringify(toolFailure(error));
     }

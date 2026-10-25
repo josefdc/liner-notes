@@ -18,7 +18,9 @@
 //   track's are refused with live_disabled; POST /api/analyze replays or refuses the same way;
 //   both resume routes are refused; HEAD on the stream answers.
 //
-// Last, it stops the API and requires every process to report 0 outbound attempts.
+// Last, it stops the API and requires every process to report 0 outbound attempts, and checks
+// the API's log (LOG_FILE): JSON lines, the A1 run's lines carry its run id, and no line holds
+// an IP address, a query string, the typed query or any of the dummy keys.
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -41,6 +43,7 @@ const timeout = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
 const scratch = mkdtempSync(join(tmpdir(), "replay-e2e-"));
 const report = join(scratch, "deny-network.jsonl");
+const logFile = join(scratch, "api.jsonl");
 
 const env = {
   PATH: process.env.PATH ?? "",
@@ -86,6 +89,9 @@ const env = {
   LANGCHAIN_TRACING_V2: "",
   LANGCHAIN_TRACING: "",
   OPENAI_CUSTOM_HEADERS: "",
+  LOG_LEVEL: "info",
+  LOG_FILE: logFile,
+  LOG_IP_SALT: "",
 };
 
 const failures = [];
@@ -114,7 +120,7 @@ const exited = new Promise((resolveExit) => api.on("exit", (code) => resolveExit
 const port = await new Promise((resolvePort, reject) => {
   const timer = setTimeout(() => reject(new Error("the API did not start")), START_TIMEOUT_MS);
   const poll = setInterval(() => {
-    const match = output.match(/listening on http:\/\/127\.0\.0\.1:(\d+)/);
+    const match = output.match(/"msg":"Liner Notes API listening on port (\d+)"/);
     if (match) {
       clearInterval(poll);
       clearTimeout(timer);
@@ -168,6 +174,9 @@ async function json(path, init) {
   return { status: res.status, text: await res.clone().text(), body: await res.json() };
 }
 
+/** The A1 run's id, for the log checks after the API stopped. */
+let replayRunId;
+
 try {
   // A1: a full replay of the recorded track.
   const replay = await stream(SHOWCASE_QUERY);
@@ -175,6 +184,7 @@ try {
   console.log(`A1 events with "type": ${(replay.text.match(/"type"/g) ?? []).length}`);
   console.log(`A1 stream: ${types.join(" ")}`);
   const runId = replay.events[0]?.runId;
+  replayRunId = runId;
   const complete = replay.events.find((event) => event.type === "complete");
   const run = complete?.data?.run;
   check(types[0] === "connected", "A1 the stream starts with connected");
@@ -342,6 +352,49 @@ check(
   processes.every((line) => line.attempts === 0),
   "0 outbound attempts in every process",
   `${processes.reduce((sum, line) => sum + line.attempts, 0)} in total`,
+);
+
+// The API's log, as written to LOG_FILE.
+let logText = "";
+try {
+  logText = readFileSync(logFile, "utf8");
+} catch {
+  // checked below
+}
+const logLines = logText.split("\n").filter((line) => line.trim() !== "");
+const logEntries = logLines.flatMap((line) => {
+  try {
+    return [JSON.parse(line)];
+  } catch {
+    return [];
+  }
+});
+const runLines = logEntries.filter((entry) => entry.runId !== undefined);
+console.log(
+  `log: ${logLines.length} lines, ${runLines.length} with "runId", ` +
+    `${logEntries.filter((entry) => entry.runId === replayRunId).length} of the A1 run`,
+);
+check(logLines.length > 0 && logEntries.length === logLines.length, "log: every line is JSON");
+check(
+  logEntries.some((entry) => entry.runId === replayRunId && entry.component === "Run") &&
+    logEntries.some((entry) => entry.runId === replayRunId && entry.path === "/api/analyze/stream"),
+  "log: the A1 run's route and request lines carry its run id",
+);
+check(!/\b(?:\d{1,3}\.){3}\d{1,3}\b|::1\b|::ffff:/i.test(logText), "log: no IP address");
+check(!logText.includes("query="), "log: no query string");
+check(
+  !logText.toLowerCase().includes(TYPED_QUERY.toLowerCase()) &&
+    !logText.toLowerCase().includes(SHOWCASE_QUERY.toLowerCase()),
+  "log: no typed query at info level",
+);
+// The dummy keys and tokens, and the dummy model endpoint's host.
+const dummySecrets = Object.entries(env)
+  .filter(([name, value]) => /KEY|SECRET|TOKEN/.test(name) && value)
+  .map(([, value]) => value)
+  .concat([new URL(env.AZURE_OPENAI_ENDPOINT).host]);
+check(
+  dummySecrets.every((secret) => !logText.includes(secret)),
+  "log: none of the dummy keys or the endpoint",
 );
 
 rmSync(scratch, { recursive: true, force: true });

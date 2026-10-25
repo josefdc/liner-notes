@@ -21,6 +21,9 @@ import {
   storedErrorStatus,
 } from "../storedResults.js";
 import { matchTrack } from "../trackMatch.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Clarification");
 
 /** What the route resumes a paused run with: the picked track, and how it was picked. */
 export interface PickResume {
@@ -51,7 +54,7 @@ export async function clarificationNode(
   config: LangGraphRunnableConfig,
   runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
-  console.log("⏸️ [Clarification] Waiting for user to select track...");
+  log.info("Waiting for user to select track...");
 
   // Pauses the run: the first time through, interrupt() stops the graph and the route sends the
   // payload's candidates to the client. On resume (Command({ resume })) the node runs again from
@@ -106,7 +109,7 @@ export async function clarificationNode(
   try {
     config.signal?.throwIfAborted();
     spotifyData = await fetchTrack(selectedId, config.signal);
-    console.log("✅ [Clarification] User selected:", spotifyData.title);
+    log.info(`User selected: ${spotifyData.title}`);
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
     // Fallback: minimal SpotifyData from the candidate. What the candidate does not carry is
@@ -114,7 +117,7 @@ export async function clarificationNode(
     // is explicit (null), its ISRC and its popularity.
     detailed = false;
     sourceErrors = [errorRecord("spotify", error)];
-    console.warn("⚠️ [Clarification] Track details not read; using the candidate:", selectedId);
+    log.warn(`Track details not read; using the candidate: ${selectedId}`);
     spotifyData = {
       id: selected.id,
       title: selected.title,
@@ -152,7 +155,7 @@ export async function clarificationNode(
   const stored = await readStoredResult(getStore(), selectedId, runtime.now());
   config.signal?.throwIfAborted();
   if (stored) {
-    console.log("📦 [Clarification] Stored result for:", selectedId);
+    log.info(`Stored result for: ${selectedId}`);
     const trackData = servedResult(stored.trackData, shownQueryMatch(picked));
     writer?.({
       type: "status",

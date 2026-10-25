@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import { type FetchCall, json, never, stubFetch } from "./testing/fetchStub.js";
 
 vi.hoisted(() => {
@@ -77,6 +78,13 @@ async function cancelDuring(
   return { sent, outcome };
 }
 
+// Every test's log lines, for the tests that check what is logged.
+let logs: CapturedLogs;
+beforeEach(() => {
+  logs = captureLogsForTests();
+});
+afterEach(() => logs.restore());
+
 describe("tools stop their requests when the run is cancelled", () => {
   beforeAll(() => {
     MusicBrainzRateLimiter.getInstance().setIntervalForTests(0);
@@ -125,8 +133,7 @@ describe("tools stop their requests when the run is cancelled", () => {
     expect(outcome).toHaveProperty("rejected");
     // Not reported as a failed analysis: the run is gone.
     await new Promise((resolve) => setTimeout(resolve, 20));
-    const logged = vi.mocked(console.error).mock.calls.map((args) => String(args[0]));
-    expect(logged.some((line) => line.includes("Analysis failed"))).toBe(false);
+    expect(logs.messages().some((line) => line.includes("Analysis failed"))).toBe(false);
   });
 
   it.each([

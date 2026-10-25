@@ -387,6 +387,27 @@ describe("a log call", () => {
     expect(logs.lines()).toHaveLength(4);
   });
 
+  it("keeps numbers and booleans under secret-looking names, and redacts token lists", () => {
+    logger("X").info("usage", {
+      apiKeyConfigured: true,
+      response: 503,
+      tokensIn: 12,
+      input_tokens_details: { cached_tokens: 4 },
+      refreshTokens: ["rt-0123456789abcdef"],
+      accessToken: "at-0123456789abcdef",
+    });
+    const entry = logs.entries()[0];
+    expect(entry).toMatchObject({
+      apiKeyConfigured: true,
+      response: 503,
+      tokensIn: 12,
+      input_tokens_details: { cached_tokens: 4 },
+      refreshTokens: "[redacted]",
+      accessToken: "[redacted]",
+    });
+    expect(JSON.stringify(entry)).not.toContain("0123456789abcdef");
+  });
+
   it("replaces fields whose name says they are secret, compound names included", () => {
     logger("X").info("fields", {
       spotifyAccessToken: "BQD-1",

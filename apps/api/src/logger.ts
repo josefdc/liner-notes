@@ -227,8 +227,8 @@ const SECRET_FIELD =
 /** …and any name that contains one of these. */
 const SECRET_FIELD_PART =
   /token|secret|api[-_]?key|password|passwd|subscription[-_]?key|credential|preview[-_]?url/i;
-/** Counts named after tokens (`inputTokens`, `tokenCount`): numbers, not secrets. */
-const TOKEN_COUNT_FIELD = /tokens$|token[-_]?count$/i;
+/** Counts named after tokens (`inputTokens`, `tokenCount`, `input_tokens_details`), not secrets. */
+const TOKEN_COUNT_FIELD = /tokens$|token[-_]?count$|tokens?[-_]details$/i;
 /** Fields that hold text a visitor typed: written at debug level only. */
 const QUERY_FIELD = /^(?:query|songQuery|q)$/;
 
@@ -238,9 +238,17 @@ const MAX_ERRORS = 10;
 const LEVEL_DEBUG = 20;
 const LEVEL_INFO = 30;
 
-function isSecretField(name: string): boolean {
+/**
+ * Whether a field's value is replaced. Numbers and booleans are kept whatever the name
+ * (`apiKeyConfigured: true`, `response: 503`); a list under a token-count name is still a list
+ * of secrets (`refreshTokens`).
+ */
+function isSecretField(name: string, value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number" || typeof value === "boolean") return false;
   if (SECRET_FIELD.test(name)) return true;
-  return SECRET_FIELD_PART.test(name) && !TOKEN_COUNT_FIELD.test(name);
+  if (!SECRET_FIELD_PART.test(name)) return false;
+  return Array.isArray(value) || !TOKEN_COUNT_FIELD.test(name);
 }
 
 /** How long a typed query was: characters of a string, items of a list, text of anything else. */
@@ -325,7 +333,7 @@ function sanitize(value: unknown, level: number, depth = 0): unknown {
     }
     const out: Record<string, unknown> = {};
     for (const [key, field] of Object.entries(value)) {
-      if (isSecretField(key)) out[key] = REDACTED;
+      if (isSecretField(key, field)) out[key] = REDACTED;
       else if (QUERY_FIELD.test(key) && level > LEVEL_DEBUG) {
         out[`${key}Length`] = queryLength(field);
       } else out[key] = sanitize(field, level, depth + 1);

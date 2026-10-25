@@ -301,5 +301,6 @@ describe("the chosen track's preview clip", () => {
     expect(logs.entries().some((entry) => entry.component === "Audio")).toBe(true);
     expect(logged).not.toContain("dzcdn.net");
     expect(logged).not.toContain("hdnea");
+    expect(logged).not.toContain("[preview link]");
   });
 });

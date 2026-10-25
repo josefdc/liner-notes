@@ -1179,6 +1179,7 @@ describe("Deezer preview of one recording", () => {
       expect(logged).toContain("Blinding Lights");
       expect(logged).not.toContain("dzcdn.net");
       expect(logged).not.toContain("hdnea");
+      expect(logged).not.toContain("[preview link]");
     });
 
     it("records the lookups with the fields the match reads, without preview or bpm", async () => {

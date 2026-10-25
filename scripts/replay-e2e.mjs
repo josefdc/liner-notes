@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end check of replay mode with outbound network denied:
 //
-//   npm run test:replay
+//   npm run test:replay   (then runs scripts/replay-interrupt.test.mjs, which interrupts this)
 //
 // Starts the API as `npm start -w apps/api` with REPLAY_MODE=only, tests/deny-network.mjs
 // preloaded in every node process (NODE_OPTIONS), dummy Spotify, model and source keys, a
@@ -19,25 +19,33 @@
 //   both resume routes are refused; HEAD on the stream answers.
 //
 // Last, it stops the API (scripts/stop-server.mjs: SIGTERM to the server process, then a wait
-// until the API's output closes, that is until every process holding it has exited), requires it
-// to exit 0, every process that loaded tests/deny-network.mjs to have written its exit report
-// with 0 outbound attempts and every report line to be readable, and checks the API's log (LOG_FILE): JSON lines, the A1 run's lines carry its run id, and no line holds
-// an IP address, a query string, the typed query or any of the dummy keys. Then
-// `npm run report -w apps/api` over the API's database counts the replays it served, and prints
-// nothing anyone typed.
+// until the API's output closes, that is until every process holding it has exited) and requires
+// it to exit 0 with no SIGKILL. It checks the API's log (LOG_FILE): JSON lines, the A1 run's lines
+// carry its run id, and no line holds an IP address, a query string, the typed query or any of the
+// dummy keys. Then `npm run report -w apps/api` over the API's database counts the replays it
+// served, and prints nothing anyone typed. The deny-network report is read twice: once the API's
+// output has closed, and once the report step's has. Every process that loaded
+// tests/deny-network.mjs and wrote its start line by then must have written its exit report with
+// 0 outbound attempts, and every line must be readable. A guarded process that starts only after
+// the last read (say, node run later by a detached shell the API left behind) is never seen.
+//
+// Interrupted (SIGINT, SIGTERM), it stops the API the same way (and the report step, when that
+// runs) and removes its scratch directory before it exits with 130 or 143.
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readReport, readReportFile, runs, stopServer } from "./stop-server.mjs";
+import { endGroup, readReport, readReportFile, runs, stopServer } from "./stop-server.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PRELOAD = join(ROOT, "tests", "deny-network.mjs");
 const FIXTURES = join(ROOT, "fixtures", "replays");
 // The script of the API's server process (`npm start` runs it with node, tsx loaded by --import).
 const API_ENTRY = "apps/api/src/index.ts";
+// The script of the report step's own process (`npm run report` runs it through the tsx CLI).
+const REPORT_ENTRY = "apps/api/src/scripts/report.ts";
 
 const TRACK_ID = "0DiWol3AO6WpXZgp0goxAV";
 const SHOWCASE_QUERY = "One More Time Daft Punk";
@@ -47,9 +55,17 @@ const STOP_TIMEOUT_MS = 20_000;
 // How long after the SIGTERM the output may stay open (held by a process outside the API's group,
 // which the SIGKILL at STOP_TIMEOUT_MS does not reach) before the stop gives up and fails.
 const GIVE_UP_MS = 30_000;
+// The report step's stop: SIGKILL to its group after REPORT_STOP_TIMEOUT_MS, and no more waiting
+// after REPORT_GIVE_UP_MS.
+const REPORT_STOP_TIMEOUT_MS = 5_000;
+const REPORT_GIVE_UP_MS = 10_000;
+// The longest an interrupt can take to stop both.
+const MAX_STOP_S = (GIVE_UP_MS + REPORT_GIVE_UP_MS) / 1000;
 // Each request, body included: a stream that never ends fails the check instead of hanging CI.
 const REQUEST_TIMEOUT_MS = 30_000;
 const timeout = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+// The API's line once it listens.
+const LISTENING = /"msg":"Liner Notes API listening on port (\d+)"/;
 
 const scratch = mkdtempSync(join(tmpdir(), "replay-e2e-"));
 const report = join(scratch, "deny-network.jsonl");
@@ -105,6 +121,14 @@ const env = {
   RUN_RETENTION_DAYS: "",
 };
 
+/** The stop of the API, once begun (see stop()), and the exit code an interrupt asked for. */
+let stopping;
+let interrupted;
+/** Whether the API's output was printed after an interrupt. */
+let outputShown = false;
+/** The report step, once started: its process and its close (see runReportStep()). */
+let reportStep;
+
 const failures = [];
 const check = (ok, label, detail = "") => {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}${detail ? ` (${detail})` : ""}`);
@@ -140,11 +164,27 @@ const closed = new Promise((resolveClose) => {
   api.on("close", (code) => resolveClose(code));
   api.once("error", () => resolveClose(null));
 });
+// From here on an interrupt stops the API (and the report step) and removes the scratch directory.
+// A second signal changes nothing but a line: each stop gives up waiting after a bounded time.
+for (const [name, code] of [
+  ["SIGINT", 130],
+  ["SIGTERM", 143],
+]) {
+  process.on(name, () => {
+    if (interrupted !== undefined) {
+      console.error(`${name}: still stopping (it gives up within ${MAX_STOP_S} s)`);
+      return;
+    }
+    interrupted = code;
+    console.error(`\n${name}: stopping the API and removing ${scratch}`);
+    stopAndExit(code);
+  });
+}
 
 const port = await new Promise((resolvePort, reject) => {
   const timer = setTimeout(() => reject(new Error("the API did not start")), START_TIMEOUT_MS);
   const poll = setInterval(() => {
-    const match = output.match(/"msg":"Liner Notes API listening on port (\d+)"/);
+    const match = output.match(LISTENING);
     if (match) {
       clearInterval(poll);
       clearTimeout(timer);
@@ -163,8 +203,11 @@ const port = await new Promise((resolvePort, reject) => {
     );
   });
 }).catch((error) => {
-  console.error(output);
-  console.error(String(error));
+  // Interrupted, the API was stopped on purpose (stopAndExit prints its output).
+  if (interrupted === undefined) {
+    console.error(output);
+    console.error(String(error));
+  }
   // Never returns: the script stops here.
   return stopAndExit(1);
 });
@@ -361,56 +404,47 @@ try {
   );
   check(head.status === 200, "HEAD on the stream answers its headers only");
 } catch (error) {
-  check(false, `checks ran (${error})`);
+  // An interrupt stops the API under a running check: that check did not fail on its own.
+  if (interrupted === undefined) check(false, `checks ran (${error})`);
 }
 
 const stopped = await stop();
+// Interrupted meanwhile: the checks below would not run to the end.
+if (interrupted !== undefined) await stopAndExit(interrupted);
+// npm's own exit, which passes on the server's code: known once npm exited, even when the stop
+// gave up waiting for the output to close.
 check(
-  stopped.code === 0 && !stopped.killed,
-  "the API shut down and exited 0",
-  `exit ${stopped.code}, SIGTERM to ${stopped.signalled > 0 ? "the server process" : "the group"}`,
+  api.exitCode === 0,
+  "the API exited 0",
+  `${
+    api.exitCode !== null
+      ? `exit ${api.exitCode}`
+      : api.signalCode !== null
+        ? `killed by ${api.signalCode}`
+        : "npm had not exited"
+  }, SIGTERM to ${stopped.signalled > 0 ? "the server process" : "the group"}`,
+);
+check(
+  !stopped.killed && !stopped.lingering,
+  `the API's process group ended within ${STOP_TIMEOUT_MS / 1000} s of the SIGTERM`,
+  stopped.killed
+    ? `SIGKILL sent after ${STOP_TIMEOUT_MS / 1000} s`
+    : stopped.lingering
+      ? "a process was still in the group when its output closed: SIGKILL sent then"
+      : "",
 );
 check(
   !stopped.held,
   "the API's output closed after the stop",
   stopped.held ? "a process outside the API's process group still holds it" : "",
 );
-// The API's output has closed: every process that held it has exited. A process writes a line
-// when it starts, at each blocked attempt and when it exits: keep its highest count.
-const { lines: reportLines, unreadable } = readReportFile(report);
+// The API's output has closed (every process that held it has exited), or the stop gave up
+// waiting for that (checked above): a process still holding it may write more lines later.
+const apiReport = readReportFile(report);
+const apiProcesses = checkGuarded("the API", apiReport);
 check(
-  unreadable.length === 0,
-  "every line of the deny-network report is readable",
-  unreadable.length > 0 ? `${unreadable.length} not: ${unreadable[0].slice(0, 80)}` : "",
-);
-const byProcess = new Map();
-for (const line of reportLines) {
-  if ((byProcess.get(line.pid)?.attempts ?? -1) < line.attempts) byProcess.set(line.pid, line);
-}
-const processes = [...byProcess.values()];
-const exitedPids = new Set(reportLines.filter((l) => l.event === "exit").map((l) => l.pid));
-for (const line of processes) {
-  console.log(
-    `deny-network: pid ${line.pid} ${line.argv.join(" ").slice(-60)}: ${line.attempts}` +
-      (exitedPids.has(line.pid) ? "" : " (no exit report)"),
-  );
-}
-check(
-  reportLines.some((line) => runs(line, API_ENTRY) && line.event === "exit"),
+  apiProcesses.some((line) => runs(line, API_ENTRY) && line.exited),
   "the API process reported its outbound attempts at exit",
-);
-// A process that started but wrote no exit report was killed, or is still running (one that left
-// the API's process group and its output, say): its attempts so far are known, later ones not.
-const unreported = processes.filter((line) => !exitedPids.has(line.pid));
-check(
-  unreported.length === 0,
-  "every process covered by the network guard reported at exit",
-  unreported.map((line) => `pid ${line.pid}`).join(", "),
-);
-check(
-  processes.every((line) => line.attempts === 0),
-  "0 outbound attempts in every process",
-  `${processes.reduce((sum, line) => sum + line.attempts, 0)} in total`,
 );
 
 // The API's log, as written to LOG_FILE.
@@ -457,16 +491,8 @@ check(
 );
 
 // The run report over the database the API wrote (two days, in case the runs crossed midnight).
-const reportRun = spawnSync(
-  "npm",
-  ["run", "report", "-w", "apps/api", "--", "--days", "2", "--json"],
-  {
-    cwd: ROOT,
-    env,
-    encoding: "utf8",
-    timeout: START_TIMEOUT_MS,
-  },
-);
+const reportRun = await runReportStep();
+if (interrupted !== undefined) await stopAndExit(interrupted);
 const reportOut = reportRun.stdout ?? "";
 let runReport = null;
 try {
@@ -501,36 +527,218 @@ check(
     (replayRunId === undefined || !reportOut.includes(replayRunId)),
   "report: no typed query and no run id",
 );
+check(
+  !reportRun.lingering,
+  "the report step's process group ended with its output",
+  reportRun.lingering ? "a process was still in the group: SIGKILL sent" : "",
+);
+// The report step's processes (npm, the contract build, tsx, the report script), from the lines
+// they added. Its output has closed, or it timed out and was stopped (the report check above
+// fails then): a process still holding the output may write more lines later.
+const reportProcesses = checkGuarded("the report step", readReportFile(report, apiReport.end));
+check(
+  reportProcesses.some((line) => runs(line, REPORT_ENTRY) && line.exited),
+  "the report script reported its outbound attempts at exit",
+);
 
-rmSync(scratch, { recursive: true, force: true });
+try {
+  rmSync(scratch, { recursive: true, force: true });
+} catch (error) {
+  check(false, `the scratch directory ${scratch} was removed`, String(error));
+}
 if (failures.length > 0) {
   console.error(`\n${failures.length} checks failed. API output:\n${output}`);
   process.exit(1);
 }
 console.log("\nreplay e2e: all checks passed");
 
-// --- stopping ---------------------------------------------------------------------------------
+// --- the network guard's report ---------------------------------------------------------------
 
-/** Stops the API: SIGTERM to its server process once known, and a wait until its output closes. */
-async function stop() {
-  const server = readReport(report).find((line) => runs(line, API_ENTRY) && line.event === "start");
-  const stopped = await stopServer({
-    group: api.pid,
-    pid: server?.pid,
-    closed,
-    timeoutMs: STOP_TIMEOUT_MS,
-    giveUpMs: GIVE_UP_MS,
-  });
-  if (stopped.held) {
-    // Stop reading, so this script can exit.
-    api.stdout.destroy();
-    api.stderr.destroy();
+/**
+ * The checks on the processes that wrote `lines` to the deny-network report during one step. A
+ * process writes a line when it starts, at each blocked attempt and when it exits: each process
+ * is listed with its highest count, its parent and whether it reported at exit.
+ */
+function checkGuarded(step, { lines, unreadable }) {
+  check(
+    unreadable.length === 0,
+    `${step}: every line of the deny-network report is readable`,
+    unreadable.length > 0 ? `${unreadable.length} not: ${unreadable[0].slice(0, 80)}` : "",
+  );
+  const byPid = new Map();
+  for (const line of lines) {
+    const known = byPid.get(line.pid);
+    byPid.set(line.pid, {
+      pid: line.pid,
+      // The parent when it started: a process whose parent exits is handed to another.
+      ppid: known?.ppid ?? line.ppid,
+      argv: line.argv,
+      execArgv: line.execArgv ?? [],
+      attempts: Math.max(known?.attempts ?? 0, line.attempts),
+      exited: Boolean(known?.exited) || line.event === "exit",
+    });
   }
-  return stopped;
+  const processes = [...byPid.values()];
+  for (const line of processes) {
+    console.log(
+      `deny-network: ${describeProcess(line)}: ${line.attempts}` +
+        (line.exited ? "" : " (no exit report)"),
+    );
+  }
+  // A process that started but wrote no exit report was killed, or is still running (one that left
+  // the step's process group and its output, say): its attempts so far are known, later ones not.
+  const unreported = processes.filter((line) => !line.exited);
+  check(
+    unreported.length === 0,
+    `${step}: every process covered by the network guard reported at exit`,
+    unreported.map(describeProcess).join("; "),
+  );
+  check(
+    processes.every((line) => line.attempts === 0),
+    `${step}: 0 outbound attempts in every process`,
+    `${processes.reduce((sum, line) => sum + line.attempts, 0)} in total`,
+  );
+  return processes;
 }
 
+/**
+ * A process of the report: its pid, its parent and its script. A process with no script
+ * (`node -e ...`) is named by its node options instead, and by its parent's script when the parent
+ * is in the report too.
+ */
+function describeProcess(line) {
+  const script = line.argv.join(" ").slice(-60);
+  if (script !== "") return `pid ${line.pid} (parent ${line.ppid}) ${script}`;
+  const parent = readReport(report).find((other) => other.pid === line.ppid);
+  const parentScript = parent ? ` ${parent.argv.join(" ").slice(-60)}` : "";
+  const options = line.execArgv.join(" ").slice(0, 60);
+  return `pid ${line.pid} (parent ${line.ppid}${parentScript}) node ${options}`;
+}
+
+// --- stopping ---------------------------------------------------------------------------------
+
+/**
+ * Stops the API: SIGTERM to its server process once known, and a wait until its output closes.
+ * Only the first call signals; any later one (an interrupt during or after the stop) gets its
+ * result, so a pid that may since have been reused is never signalled again.
+ */
+function stop() {
+  stopping ??= (async () => {
+    const server = readReport(report).find(
+      (line) => runs(line, API_ENTRY) && line.event === "start",
+    );
+    const stopped = await stopServer({
+      group: api.pid,
+      pid: server?.pid,
+      closed,
+      timeoutMs: STOP_TIMEOUT_MS,
+      giveUpMs: GIVE_UP_MS,
+    });
+    if (stopped.held) {
+      // Stop reading, so this script can exit.
+      api.stdout.destroy();
+      api.stderr.destroy();
+    }
+    return stopped;
+  })();
+  return stopping;
+}
+
+/**
+ * Runs `npm run report -w apps/api` in a process group of its own, so that an interrupt or its
+ * timeout stops all of it. Resolves with { status, stdout, stderr, error, lingering } once its
+ * output has closed and any process left in its group got SIGKILL (`lingering`); after
+ * START_TIMEOUT_MS, once stopReportStep() has stopped it or given up (status null, error says so).
+ */
+async function runReportStep() {
+  const child = spawn("npm", ["run", "report", "-w", "apps/api", "--", "--days", "2", "--json"], {
+    cwd: ROOT,
+    env,
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  // Decoded as a stream, so a character split across two chunks stays whole.
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  let error;
+  reportStep = { child, ended: false };
+  const stepClosed = new Promise((resolveClose) => {
+    child.on("close", (code) => {
+      reportStep.ended = true;
+      resolveClose(code);
+    });
+    child.once("error", (spawnError) => {
+      error = spawnError;
+      reportStep.ended = true;
+      resolveClose(null);
+    });
+  });
+  reportStep.closed = stepClosed;
+  let timer;
+  const timedOut = new Promise((resolveTimeout) => {
+    timer = setTimeout(async () => {
+      error = new Error(`the report step did not end within ${START_TIMEOUT_MS / 1000} s`);
+      await stopReportStep();
+      resolveTimeout(null);
+    }, START_TIMEOUT_MS);
+  });
+  const status = await Promise.race([stepClosed, timedOut]);
+  clearTimeout(timer);
+  // Closed on its own: a member that holds no output may still run (stopReportStep() ends it
+  // otherwise).
+  const lingering =
+    reportStep.stopping === undefined && child.pid !== undefined && (await endGroup(child.pid));
+  return { status: error ? null : status, stdout, stderr, error, lingering };
+}
+
+/**
+ * Stops the report step, when it still runs: SIGTERM to its whole process group (no server pid to
+ * single out here), SIGKILL to the group after REPORT_STOP_TIMEOUT_MS, and no more waiting after
+ * REPORT_GIVE_UP_MS (a process outside the group still holds its output: stop reading it). Once
+ * the step ended, its group id is never signalled.
+ */
+function stopReportStep() {
+  if (reportStep === undefined || (reportStep.ended && !reportStep.stopping)) {
+    return Promise.resolve();
+  }
+  reportStep.stopping ??= stopServer({
+    group: reportStep.child.pid,
+    closed: reportStep.closed,
+    timeoutMs: REPORT_STOP_TIMEOUT_MS,
+    giveUpMs: REPORT_GIVE_UP_MS,
+  }).then((stopped) => {
+    if (stopped.held) {
+      reportStep.child.stdout.destroy();
+      reportStep.child.stderr.destroy();
+    }
+  });
+  return reportStep.stopping;
+}
+
+/**
+ * Stops the API, removes the scratch directory and exits: with `code`, or an interrupt's, even
+ * when part of that fails. Interrupted before the API listened, it prints the API's output, the
+ * only clue to why it had not started.
+ */
 async function stopAndExit(code) {
-  await stop();
-  rmSync(scratch, { recursive: true, force: true });
-  process.exit(code);
+  try {
+    await stop();
+    await stopReportStep();
+    if (interrupted !== undefined && !LISTENING.test(output) && !outputShown) {
+      outputShown = true;
+      console.error(`The API's output (it had not started listening):\n${output}`);
+    }
+    rmSync(scratch, { recursive: true, force: true });
+  } catch (error) {
+    console.error(`Could not finish stopping and cleaning up: ${error}`);
+  }
+  process.exit(interrupted ?? code);
 }

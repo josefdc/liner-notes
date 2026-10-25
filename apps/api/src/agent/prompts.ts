@@ -12,6 +12,7 @@
 import type { Evidence, ResearchAction, SourceError, SourceId } from "@liner-notes/contract";
 import type { LlmMessage } from "../llm/invoke.js";
 import { type EvidenceScope, evidenceScope } from "../sources/records.js";
+import { followUpChoices, type RanStep } from "./research/plan.js";
 import type { AudioFeatures, ResearchData } from "./state.js";
 
 // =============================================================================
@@ -330,7 +331,7 @@ Choose the next step
 - Prefer structured sources (MusicBrainz, Last.fm, ListenBrainz) before web searches.
 - Fill the biggest gap first: samples and relationships, then production and credits.
 - Follow a specific lead the research already found (a sampled record, a producer) with a web search that names it.
-- Do not repeat a step or a query that already ran; choose "done" when nothing useful is left.
+- Choose only a step listed under "Steps you can choose": every other step already ran this run, and a step runs once. Choose "done" when nothing useful is left.
 - ${UNAVAILABLE_RULE} Do not choose another step of an unavailable source.
 - query: a specific web search query naming the track, the artist and the topic, for search_samples, search_production and search_general; null for every other step.
 - reasoning: one or two sentences, shown to the user as progress.
@@ -350,6 +351,8 @@ export interface PlannerPromptInput {
   /** This planning step, from 1. */
   step: number;
   maxSteps: number;
+  /** The steps that already ran this run (each runs once), with why. */
+  ran?: readonly RanStep[];
 }
 
 /** Longest piece of research the planner reads, in characters. */
@@ -398,6 +401,15 @@ export function plannerUserPrompt(input: PlannerPromptInput): string {
     "",
     "Steps not asked, or whose source could not identify the track (no answer either way):",
     labelList(r.notAsked),
+    "",
+    "Steps that already ran this run (not offered again):",
+    labelList((input.ran ?? []).map((step) => `${step.action}: ${step.why}`)),
+    "",
+    "Steps you can choose:",
+    followUpChoices(
+      RESEARCH_ACTIONS.map(([action]) => action),
+      input.ran ?? [],
+    ).join(", "),
     "",
     "Research collected so far (untrusted):",
     entries.length > 0 ? entries.join("\n\n") : "(none yet)",

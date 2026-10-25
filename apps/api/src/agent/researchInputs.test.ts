@@ -431,13 +431,15 @@ describe("research inputs", () => {
       "1. U Can't Touch This by MC Hammer (Last.fm match 1.00, relative to its closest match = 1)",
       "2. Jump Around by House of Pain (Last.fm match 0.42, relative to its closest match = 1)",
     ]);
+    // With the artist's MusicBrainz id when Last.fm gives one: artists of one name stay apart.
     expect(data.lastfmSimilarArtists?.[0]).toBe(
-      "1. MC Hammer (Last.fm match 1.00, relative to its closest match = 1)",
+      "1. MC Hammer (Last.fm match 1.00, relative to its closest match = 1, " +
+        "MusicBrainz 11111111-1111-4111-8111-111111111111)",
     );
     expect(data.listenbrainzSimilarArtists?.[0]).toBe(
       "1. Hammer fan (similar to Vanilla Ice (artist matched by name only, not linked to the " +
         "Spotify artist); ListenBrainz co-listening score 900, higher is more similar, no fixed " +
-        "maximum)",
+        "maximum, MusicBrainz 55555555-5555-4555-8555-555555555555)",
     );
     expect(textOf(data)).not.toContain("%");
     expect(textOf(data)).not.toContain("scale 0-1");

@@ -161,10 +161,24 @@ const ARTIST_SHAPE: Shape = {
 // MusicBrainz requires max 1 request per second
 // =============================================================================
 
+/** Set while the primary-source chain runs: its requests go ahead in the shared queue. */
+const chainPriority = new AsyncLocalStorage<true>();
+
+/**
+ * Runs `fn` as the primary-source chain: every MusicBrainz request made from it (sync or async)
+ * waits its turn ahead of any other request (the researcher's), so another run's research never
+ * pushes a chain past its deadline. The order within each lane stays first come, first served.
+ */
+export function withMusicBrainzPriority<T>(fn: () => T): T {
+  return chainPriority.run(true, fn);
+}
+
 class MusicBrainzRateLimiter {
   private static instance: MusicBrainzRateLimiter;
   private lastRequestTime: number = 0;
   private minInterval: number = 1100; // 1.1 seconds for safety margin
+  /** The primary-source chain's requests: served first. */
+  private urgent: Array<() => Promise<void>> = [];
   private queue: Array<() => Promise<void>> = [];
   private processing: boolean = false;
 
@@ -190,17 +204,18 @@ class MusicBrainzRateLimiter {
    * Execute a request with rate limiting. `fn` must settle on its own (every MusicBrainz request
    * has a timeout), so one request can never stall the queue. When `signal` aborts while the
    * request waits its turn, it leaves the queue at once, rejecting with the signal's reason,
-   * and takes no slot.
+   * and takes no slot. A request made inside `withMusicBrainzPriority` waits in the first lane.
    */
   async execute<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const lane = chainPriority.getStore() ? this.urgent : this.queue;
     return new Promise((resolve, reject) => {
       if (signal?.aborted) {
         reject(signal.reason);
         return;
       }
       const onAbort = () => {
-        const index = this.queue.indexOf(task);
-        if (index >= 0) this.queue.splice(index, 1);
+        const index = lane.indexOf(task);
+        if (index >= 0) lane.splice(index, 1);
         reject(signal?.reason);
       };
       // The queue is drained by whichever caller found it idle; bound here, the request runs in
@@ -214,7 +229,7 @@ class MusicBrainzRateLimiter {
         }
       });
       signal?.addEventListener("abort", onAbort, { once: true });
-      this.queue.push(task);
+      lane.push(task);
 
       if (!this.processing) {
         void this.processQueue();
@@ -224,22 +239,23 @@ class MusicBrainzRateLimiter {
 
   /** Requests waiting their turn (tests). */
   get pending(): number {
-    return this.queue.length;
+    return this.urgent.length + this.queue.length;
   }
 
   private async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) return;
+    if (this.processing || this.pending === 0) return;
 
     this.processing = true;
 
-    while (this.queue.length > 0) {
+    while (this.pending > 0) {
       const elapsed = Date.now() - this.lastRequestTime;
 
       if (elapsed < this.minInterval) {
         await this.delay(this.minInterval - elapsed);
       }
 
-      const task = this.queue.shift();
+      // Chosen after the wait: a chain request that came in meanwhile goes first.
+      const task = this.urgent.shift() ?? this.queue.shift();
       if (task) {
         this.lastRequestTime = Date.now();
         await task();
@@ -600,6 +616,19 @@ async function searchArtistsExact(name: string, signal?: AbortSignal): Promise<M
     (a) => isMbid(a?.id) && typeof a.name === "string" && normalizeName(a.name) === wanted,
   );
   return exact.filter((a, i) => exact.findIndex((b) => b.id === a.id) === i);
+}
+
+/**
+ * True when MusicBrainz has exactly one artist with this exact name and it is `mbid`: the name
+ * then stands for that artist alone (the check behind asking another source by name).
+ */
+export async function onlyArtistNamed(
+  name: string,
+  mbid: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const matches = await searchArtistsExact(name, signal);
+  return matches.length === 1 && matches[0].id === mbid;
 }
 
 const SPOTIFY_ARTIST_ID = /^[A-Za-z0-9]{22}$/;

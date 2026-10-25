@@ -73,6 +73,35 @@ function inGroup(pid, group) {
   return Number(fields[2]) === group;
 }
 
+/** Whether any process is in process group `group` (one of another user's counts too). */
+function groupAlive(group) {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+/**
+ * Ends what is left of process group `group` once its output has closed: a member that holds no
+ * output (a child started with stdio "ignore", say) outlives the close. Waits up to `graceMs` for
+ * the group to empty (a member exiting at that moment), then sends SIGKILL to the group. A group
+ * id is not reused while a member is alive, so the SIGKILL reaches only the group's own members.
+ * Resolves with whether a member was left (and got SIGKILL).
+ */
+export async function endGroup(group, graceMs = 1_000) {
+  const until = Date.now() + graceMs;
+  while (groupAlive(group)) {
+    if (Date.now() >= until) {
+      signal(-group, "SIGKILL");
+      return true;
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  return false;
+}
+
 function signal(pid, name) {
   try {
     process.kill(pid, name);
@@ -85,7 +114,7 @@ function signal(pid, name) {
 /**
  * Stops a server started with `spawn(..., { detached: true })` and waits until its output has
  * closed, that is until every process holding it has exited, so its output and its report are
- * complete.
+ * complete. Then any process still in the group gets SIGKILL (endGroup).
  *
  * - `group`: the spawned process's pid, which leads the process group;
  * - `pid`: the server process, if known (from its "start" report line). It alone gets SIGTERM;
@@ -96,8 +125,9 @@ function signal(pid, name) {
  * - after `giveUpMs` (default: `timeoutMs` and 10 s) it stops waiting: a process outside the
  *   group, which the SIGKILL does not reach, still holds the output.
  *
- * Returns { code, signalled, killed, held }: the exit code (null when it gave up), the pid or
- * group that got SIGTERM, whether SIGKILL was sent, and whether it gave up waiting.
+ * Returns { code, signalled, killed, held, lingering }: the exit code (null when it gave up), the
+ * pid or group that got SIGTERM, whether SIGKILL was sent after `timeoutMs`, whether it gave up
+ * waiting, and whether a process was still in the group after that (and got SIGKILL then).
  */
 export async function stopServer({ group, pid, closed, timeoutMs, giveUpMs = timeoutMs + 10_000 }) {
   const target = pid !== undefined && inGroup(pid, group) ? pid : -group;
@@ -116,6 +146,7 @@ export async function stopServer({ group, pid, closed, timeoutMs, giveUpMs = tim
   ]);
   clearTimeout(kill);
   clearTimeout(giveUp);
-  if (code === held) return { code: null, signalled: target, killed, held: true };
-  return { code, signalled: target, killed, held: false };
+  const lingering = await endGroup(group);
+  if (code === held) return { code: null, signalled: target, killed, held: true, lingering };
+  return { code, signalled: target, killed, held: false, lingering };
 }

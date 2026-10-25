@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end check of replay mode with outbound network denied:
 //
-//   npm run test:replay
+//   npm run test:replay   (then runs scripts/replay-interrupt.test.mjs, which interrupts this)
 //
 // Starts the API as `npm start -w apps/api` with REPLAY_MODE=only, tests/deny-network.mjs
 // preloaded in every node process (NODE_OPTIONS), dummy Spotify, model and source keys, a
@@ -37,7 +37,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readReport, readReportFile, runs, stopServer } from "./stop-server.mjs";
+import { endGroup, readReport, readReportFile, runs, stopServer } from "./stop-server.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PRELOAD = join(ROOT, "tests", "deny-network.mjs");
@@ -425,16 +425,21 @@ check(
   }, SIGTERM to ${stopped.signalled > 0 ? "the server process" : "the group"}`,
 );
 check(
-  !stopped.killed,
+  !stopped.killed && !stopped.lingering,
   `the API's process group ended within ${STOP_TIMEOUT_MS / 1000} s of the SIGTERM`,
-  stopped.killed ? `SIGKILL sent after ${STOP_TIMEOUT_MS / 1000} s` : "",
+  stopped.killed
+    ? `SIGKILL sent after ${STOP_TIMEOUT_MS / 1000} s`
+    : stopped.lingering
+      ? "a process was still in the group when its output closed: SIGKILL sent then"
+      : "",
 );
 check(
   !stopped.held,
   "the API's output closed after the stop",
   stopped.held ? "a process outside the API's process group still holds it" : "",
 );
-// The API's output has closed: every process that held it has exited.
+// The API's output has closed (every process that held it has exited), or the stop gave up
+// waiting for that (checked above): a process still holding it may write more lines later.
 const apiReport = readReportFile(report);
 const apiProcesses = checkGuarded("the API", apiReport);
 check(
@@ -522,15 +527,25 @@ check(
     (replayRunId === undefined || !reportOut.includes(replayRunId)),
   "report: no typed query and no run id",
 );
+check(
+  !reportRun.lingering,
+  "the report step's process group ended with its output",
+  reportRun.lingering ? "a process was still in the group: SIGKILL sent" : "",
+);
 // The report step's processes (npm, the contract build, tsx, the report script), from the lines
-// they added. The step has ended: its output has closed.
+// they added. Its output has closed, or it timed out and was stopped (the report check above
+// fails then): a process still holding the output may write more lines later.
 const reportProcesses = checkGuarded("the report step", readReportFile(report, apiReport.end));
 check(
   reportProcesses.some((line) => runs(line, REPORT_ENTRY) && line.exited),
   "the report script reported its outbound attempts at exit",
 );
 
-rmSync(scratch, { recursive: true, force: true });
+try {
+  rmSync(scratch, { recursive: true, force: true });
+} catch (error) {
+  check(false, `the scratch directory ${scratch} was removed`, String(error));
+}
 if (failures.length > 0) {
   console.error(`\n${failures.length} checks failed. API output:\n${output}`);
   process.exit(1);
@@ -631,9 +646,9 @@ function stop() {
 
 /**
  * Runs `npm run report -w apps/api` in a process group of its own, so that an interrupt or its
- * timeout stops all of it. Resolves with { status, stdout, stderr, error } once its output has
- * closed; after START_TIMEOUT_MS, once stopReportStep() has stopped it or given up (status null,
- * error says so).
+ * timeout stops all of it. Resolves with { status, stdout, stderr, error, lingering } once its
+ * output has closed and any process left in its group got SIGKILL (`lingering`); after
+ * START_TIMEOUT_MS, once stopReportStep() has stopped it or given up (status null, error says so).
  */
 async function runReportStep() {
   const child = spawn("npm", ["run", "report", "-w", "apps/api", "--", "--days", "2", "--json"], {
@@ -677,7 +692,11 @@ async function runReportStep() {
   });
   const status = await Promise.race([stepClosed, timedOut]);
   clearTimeout(timer);
-  return { status: error ? null : status, stdout, stderr, error };
+  // Closed on its own: a member that holds no output may still run (stopReportStep() ends it
+  // otherwise).
+  const lingering =
+    reportStep.stopping === undefined && child.pid !== undefined && (await endGroup(child.pid));
+  return { status: error ? null : status, stdout, stderr, error, lingering };
 }
 
 /**

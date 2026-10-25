@@ -21,7 +21,7 @@
     "guard:honest": "node scripts/guard-honest.mjs",
     "check:css": "node scripts/check-built-css.mjs",
     "test:e2e": "playwright test",
-    "test:replay": "node scripts/replay-e2e.mjs",
+    "test:replay": "node scripts/replay-e2e.mjs && REPLAY_INTERRUPT_TEST=1 vitest run --project scripts replay-interrupt",
     "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs"
   },
   "allowScripts": {

@@ -21,6 +21,7 @@ const TSX = join(ROOT, "node_modules", ".bin", "tsx");
 const PRELOAD = join(ROOT, "tests", "deny-network.mjs");
 const BUSY = "fixtures/stop-server/busy-server.mjs";
 const HOLDS_OUTPUT = "fixtures/stop-server/holds-output.mjs";
+const LEAVES_CHILD = "fixtures/stop-server/leaves-child.mjs";
 const STEP_TIMEOUT_MS = 20_000;
 
 const cleanups = [];
@@ -61,7 +62,7 @@ async function startServer(entry = BUSY) {
   let output = "";
   cleanups.push(() => {
     kill(-child.pid);
-    const holder = output.match(/holder (\d+)/);
+    const holder = output.match(/(?:holder|child) (\d+)/);
     if (holder) kill(Number(holder[1]));
     child.stdout.destroy();
     child.stderr.destroy();
@@ -111,7 +112,13 @@ describe("stopServer", () => {
 
       const stopped = await stopServer({ ...server, timeoutMs: STEP_TIMEOUT_MS });
 
-      expect(stopped).toEqual({ code: 0, signalled: server.pid, killed: false, held: false });
+      expect(stopped).toEqual({
+        code: 0,
+        signalled: server.pid,
+        killed: false,
+        held: false,
+        lingering: false,
+      });
       const exits = readReport(server.report).filter(
         (line) => line.pid === server.pid && line.event === "exit",
       );
@@ -173,8 +180,37 @@ describe("stopServer", () => {
       const stopped = await stopServer({ ...server, timeoutMs: 500, giveUpMs: 1_500 });
 
       // The group itself is gone by then (the SIGKILL finds no process); the holder is not in it.
-      expect(stopped).toEqual({ code: null, signalled: server.pid, killed: false, held: true });
+      expect(stopped).toEqual({
+        code: null,
+        signalled: server.pid,
+        killed: false,
+        held: true,
+        lingering: false,
+      });
       expect(alive(holder)).toBe(true); // out of reach: the cleanup kills it by pid
+    },
+    3 * STEP_TIMEOUT_MS,
+  );
+
+  it(
+    "sends SIGKILL to a process left in the group once the output closed, and says so",
+    async () => {
+      const server = await startServer(LEAVES_CHILD);
+      const child = Number(server.output().match(/child (\d+)/)?.[1]);
+      expect(alive(child)).toBe(true);
+
+      const stopped = await stopServer({ ...server, timeoutMs: STEP_TIMEOUT_MS });
+
+      expect(stopped).toEqual({
+        code: 0,
+        signalled: server.pid,
+        killed: false,
+        held: false,
+        lingering: true,
+      });
+      // SIGKILLed, and reaped by whoever adopted it.
+      await expect.poll(() => alive(child), { timeout: STEP_TIMEOUT_MS }).toBe(false);
+      expect(() => process.kill(-server.group, 0)).toThrow();
     },
     3 * STEP_TIMEOUT_MS,
   );

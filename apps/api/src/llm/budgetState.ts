@@ -86,15 +86,45 @@ export async function readBudgetState(
   }
 }
 
-let cached: { key: string; at: number; state: Promise<BudgetState> } | null = null;
+interface CachedState {
+  key: string;
+  at: number;
+  state: Promise<BudgetState>;
+  /** A spent budget of this read has been logged. */
+  warned: boolean;
+}
+
+let cached: CachedState | null = null;
 let lastUnverifiableWarning = Number.NEGATIVE_INFINITY;
+
+/** Logs what a read found: a spent budget once per read, an unusable log at most once per TTL. */
+function warnAbout(entry: CachedState, read: BudgetState): void {
+  if (read.state === "exhausted" && !entry.warned) {
+    entry.warned = true;
+    log.warn(`Live analysis paused: ${read.reason}`);
+  }
+  if (read.state === "unverifiable") {
+    const at = Date.now();
+    if (at - lastUnverifiableWarning >= BUDGET_STATE_TTL_MS) {
+      lastUnverifiableWarning = at;
+      log.warn(`Live analysis off (the budget cannot be checked): ${read.reason}`);
+    }
+  }
+}
 
 /**
  * The budget state for live work of purpose `purpose` under the model settings in `env`. An
  * answer about the budget is reused for BUDGET_STATE_TTL_MS while those settings and the purpose
- * stay the same.
+ * stay the same. A spent budget is logged once per read of the log (at most once per TTL, as it
+ * is cached), an unusable log (read again on every request) at most once per TTL. `quiet`
+ * callers (readiness probes) share the reads and log nothing: the warning is left to the next
+ * request that acts on the state.
  */
-export function liveBudgetState(env: NodeJS.ProcessEnv, purpose: LlmPurpose): Promise<BudgetState> {
+export function liveBudgetState(
+  env: NodeJS.ProcessEnv,
+  purpose: LlmPurpose,
+  options: { quiet?: boolean } = {},
+): Promise<BudgetState> {
   const { settings, errors } = readLlmSettings(env);
   // Invalid model settings refuse every call (not_configured): nothing can be spent.
   if (errors.length > 0) return Promise.resolve({ state: "not_live" });
@@ -105,24 +135,27 @@ export function liveBudgetState(env: NodeJS.ProcessEnv, purpose: LlmPurpose): Pr
     purpose,
   ]);
   const now = Date.now();
-  if (cached && cached.key === key && now - cached.at < BUDGET_STATE_TTL_MS) return cached.state;
-  const state = readBudgetState(settings, purpose).then((read) => {
-    // A spent budget is logged once per read of the log (at most once per TTL, as it is
-    // cached). An unusable log is read again on every request, so its warning is throttled
-    // to the same rate.
-    if (read.state === "exhausted") log.warn(`Live analysis paused: ${read.reason}`);
-    if (read.state === "unverifiable") {
-      if (cached?.state === state) cached = null;
-      const at = Date.now();
-      if (at - lastUnverifiableWarning >= BUDGET_STATE_TTL_MS) {
-        lastUnverifiableWarning = at;
-        log.warn(`Live analysis off (the budget cannot be checked): ${read.reason}`);
-      }
-    }
+  let entry = cached;
+  if (!entry || entry.key !== key || now - entry.at >= BUDGET_STATE_TTL_MS) {
+    const created: CachedState = {
+      key,
+      at: now,
+      state: readBudgetState(settings, purpose),
+      warned: false,
+    };
+    // An unverifiable answer is not kept.
+    void created.state.then((read) => {
+      if (read.state === "unverifiable" && cached === created) cached = null;
+    });
+    cached = created;
+    entry = created;
+  }
+  if (options.quiet) return entry.state;
+  const used = entry;
+  return used.state.then((read) => {
+    warnAbout(used, read);
     return read;
   });
-  cached = { key, at: now, state };
-  return state;
 }
 
 /** For tests: forgets the cached state, so the next request reads the spend log again. */

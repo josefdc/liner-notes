@@ -17,6 +17,13 @@
  *   estimated         1 when the provider reported no usage and the worst case was counted
  *   latency_ms        duration of the attempt
  *   created_at        unix seconds
+ *   sent              1 when the request was sent to the provider: it left the process, and
+ *                     did not fail in a way that shows no connection was made. 0 when it was not:
+ *                     stopped before it was sent, no connection made (DNS failure, connection
+ *                     refused, network or host unreachable while connecting, connect timeout,
+ *                     a port fetch blocks, and no HTTP answer), or a replayed call. An abort or
+ *                     timeout while connecting cannot be told from one after sending and counts
+ *                     as sent. Null for rows written before migration 12
  */
 
 import type Database from "better-sqlite3";
@@ -41,14 +48,19 @@ export interface LlmUsageRow {
   priceMultiplier: number;
   estimated: boolean;
   latencyMs: number;
+  /** Whether the request was sent to the provider (see `sent` above). */
+  sent: boolean;
 }
+
+/** A usage row as stored: `sent` is null for rows written before it was kept. */
+export type StoredLlmUsageRow = Omit<LlmUsageRow, "sent"> & { sent: boolean | null };
 
 export function recordLlmUsage(db: Database.Database, row: LlmUsageRow): void {
   db.prepare(
     `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
        input_tokens, output_tokens, reasoning_tokens, usd_est, price_multiplier, estimated,
-       latency_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       latency_ms, sent)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.id,
     row.runId,
@@ -65,6 +77,7 @@ export function recordLlmUsage(db: Database.Database, row: LlmUsageRow): void {
     row.priceMultiplier,
     row.estimated ? 1 : 0,
     Math.round(row.latencyMs),
+    row.sent ? 1 : 0,
   );
 }
 
@@ -84,10 +97,11 @@ interface UsageDbRow {
   price_multiplier: number;
   estimated: number;
   latency_ms: number;
+  sent: number | null;
 }
 
 /** Usage rows, oldest first; only those of `runId` when given. */
-export function listLlmUsage(db: Database.Database, runId?: string): LlmUsageRow[] {
+export function listLlmUsage(db: Database.Database, runId?: string): StoredLlmUsageRow[] {
   const rows = (
     runId === undefined
       ? db.prepare("SELECT * FROM llm_usage ORDER BY created_at, rowid").all()
@@ -109,6 +123,7 @@ export function listLlmUsage(db: Database.Database, runId?: string): LlmUsageRow
     priceMultiplier: r.price_multiplier,
     estimated: r.estimated === 1,
     latencyMs: r.latency_ms,
+    sent: r.sent === null ? null : r.sent === 1,
   }));
 }
 

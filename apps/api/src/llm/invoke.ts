@@ -32,9 +32,12 @@
  *   HTTP 400 with code content_filter                            input bound only, estimated
  *   HTTP 400 (incl. context overflow), 401, 403, 404, 429         0: rejected before processing
  *   any other HTTP status (408, 409, 5xx, …)                     worst case, estimated
- *   no connection made (DNS failure, connection refused)          0
- *   timeout, reset connection, abort after sending, a body
- *   that is not a Responses API object                           worst case, estimated
+ *   no connection made and no answer (DNS failure, connection
+ *   refused, network or host unreachable while connecting,
+ *   connect timeout, a port fetch blocks)                         0
+ *   timeout, reset connection, abort after sending (or while
+ *   connecting: the two cannot be told apart), a body that is
+ *   not a Responses API object                                    worst case, estimated
  *   stopped before the request was sent                           0
  * Azure's billing of a filtered prompt is not documented: its input is counted, its output not.
  * Usage that cannot be right (text answered with 0 output tokens, more reasoning than output
@@ -363,19 +366,77 @@ const NETWORK_CODES = new Set([
   "UND_ERR_SOCKET",
   "UND_ERR_CONNECT_TIMEOUT",
 ]);
-/** Codes that mean no connection was made: the request cannot have reached the provider. */
-const UNDELIVERED_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+/**
+ * Codes that mean no connection was made, so the request cannot have reached the provider: the
+ * name did not resolve, the connection was refused, or the connection was not made within
+ * undici's connect timeout (which covers the TLS handshake; the request is written only once it
+ * is made).
+ */
+const UNDELIVERED_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+/**
+ * Codes that mean no connection was made only when connect() raised them (the network or host
+ * was unreachable). An established socket reports them too (`read EHOSTUNREACH`), after the
+ * request may have been written.
+ */
+const CONNECT_ONLY_CODES = new Set(["ENETUNREACH", "EHOSTUNREACH"]);
 /** HTTP statuses the provider answers before processing a request: not billed. */
 const UNBILLED_STATUSES = new Set([400, 401, 403, 404, 429]);
 
-/** The first error code in an error's cause chain. */
-function errorCode(error: unknown): string | undefined {
+interface CodedError {
+  code: string;
+  syscall?: unknown;
+  /** The attempts of an AggregateError (net trying each address of a name). */
+  errors?: unknown;
+}
+
+/** Whether connect() raised `error`: itself, or every attempt of an AggregateError. */
+function raisedByConnect(error: CodedError): boolean {
+  if (Array.isArray(error.errors) && error.errors.length > 0) {
+    return error.errors.every((e) => (e as { syscall?: unknown } | null)?.syscall === "connect");
+  }
+  return error.syscall === "connect";
+}
+
+/**
+ * Whether an attempt's error shows that no connection was made: the first code in its cause
+ * chain is one of UNDELIVERED_CODES, or one of CONNECT_ONLY_CODES raised by connect(); or fetch
+ * refused the endpoint's port before connecting ("bad port", for the ports browsers block).
+ * The caller also requires that no HTTP answer came back.
+ */
+function neverConnected(error: unknown): boolean {
+  const coded = codedError(error);
+  if (coded !== undefined) {
+    if (UNDELIVERED_CODES.has(coded.code)) return true;
+    return CONNECT_ONLY_CODES.has(coded.code) && raisedByConnect(coded);
+  }
+  let current = error as { message?: unknown; cause?: unknown } | undefined;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (current.message === "bad port") return true;
+    current = current.cause as typeof current;
+  }
+  return false;
+}
+
+/** The first error in an error's cause chain that carries an error code. */
+function codedError(error: unknown): CodedError | undefined {
   let current = error as { code?: unknown; cause?: unknown } | undefined;
   for (let depth = 0; current && depth < 5; depth++) {
-    if (typeof current.code === "string" && /^[A-Z_]+$/.test(current.code)) return current.code;
+    if (typeof current.code === "string" && /^[A-Z_]+$/.test(current.code)) {
+      return current as CodedError;
+    }
     current = current.cause as typeof current;
   }
   return undefined;
+}
+
+/** The first error code in an error's cause chain. */
+function errorCode(error: unknown): string | undefined {
+  return codedError(error)?.code;
 }
 
 function names(error: unknown): Set<string> {
@@ -796,6 +857,7 @@ export function createLlm(deps: LlmDependencies): Llm {
         priceMultiplier: multiplier,
         estimated: false,
         latencyMs,
+        sent: false,
       });
       return {
         output: parsed.data,
@@ -996,6 +1058,12 @@ export function createLlm(deps: LlmDependencies): Llm {
     }
     const latencyMs = performance.now() - started;
     const error = "error" in answer ? answer.error : null;
+    // Whether the request was sent to the provider (the usage row's `sent`): it left this
+    // process, and an answer came back or the failure does not show that no connection was made.
+    // An HTTP answer (even one whose body was then lost) means it was.
+    const answered = (httpStatus as number | null) !== null;
+    const undelivered = !answered && thrown !== null && neverConnected(thrown);
+    const sentToProvider: boolean = (sent as boolean) && !undelivered;
 
     // The settlement table in the module comment.
     let usdEst: number;
@@ -1010,7 +1078,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       estimated = true;
     } else if (error?.status !== undefined && UNBILLED_STATUSES.has(error.status)) {
       usdEst = 0;
-    } else if (thrown !== null && UNDELIVERED_CODES.has(errorCode(thrown) ?? "")) {
+    } else if (undelivered) {
       usdEst = 0;
     } else {
       usdEst = worstCase;
@@ -1054,6 +1122,7 @@ export function createLlm(deps: LlmDependencies): Llm {
       priceMultiplier: price.multiplier,
       estimated,
       latencyMs,
+      sent: sentToProvider,
     });
     if (error) {
       // A failed answer that reported its tokens was billed: say what it cost.

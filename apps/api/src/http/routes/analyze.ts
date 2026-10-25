@@ -191,15 +191,17 @@ function startAnalysis(threadId: string, query: string): void {
 
 /**
  * Reopens the thread's run (or records one, for a thread paused before runs were recorded). The
- * rest of the run goes on with this server's code: a commit stored by a server at another commit
- * is cleared, and a run recorded here only now has none (its start ran on code unknown here).
+ * time the run waited for the choice is added to its paused time, which its duration leaves out
+ * (runs.ts). The rest of the run goes on with this server's code: a commit stored by a server at
+ * another commit is cleared, and a run recorded here only now has none (its start ran on code
+ * unknown here), nor a known duration (its start and its wait are not known here).
  */
 function reopenRun(threadId: string, query: string): void {
   recordRun("reopen a run", (db) => {
     if (updateRun(db, threadId, { status: "running" })) {
       clearRunCommitUnless(db, threadId, SERVER_COMMIT);
     } else {
-      startRun(db, { runId: threadId, threadId, query, commit: null });
+      startRun(db, { runId: threadId, threadId, query, commit: null, pausesKnown: false });
     }
   });
 }
@@ -376,7 +378,6 @@ async function runGraph(
           seen.interrupt = first?.value ?? {};
           continue;
         }
-        log.info(`${node} finished`, { runId: threadId, node });
         const state = update as {
           trackData?: TrackData;
           error?: string;
@@ -437,7 +438,11 @@ async function executeRun(
   emit: Emit = () => true,
 ): Promise<RunOutcome> {
   control.startDeadline();
-  let outcome = await runGraph(input, threadId, control.signal, emit);
+  // The run's own signal goes with the run's context, so a node stopped by it is told apart
+  // from one LangGraph stops because another node failed (agent/graph.ts).
+  let outcome = await withRun(threadId, () => runGraph(input, threadId, control.signal, emit), {
+    signal: control.signal,
+  });
   if (outcome.kind === "cancelled" && control.timedOut)
     outcome = { kind: "failed", code: "timeout" };
   if (outcome.kind === "complete" && !TrackAnalysis.safeParse(outcome.trackData).success) {

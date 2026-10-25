@@ -30,9 +30,7 @@ import {
 } from "@liner-notes/contract";
 import { isLlmError, LlmError } from "../../llm/errors.js";
 import type { InvokeResult } from "../../llm/invoke.js";
-import { creditString, lookupIsrc } from "../../sources/musicbrainz.js";
-import { pickRecording } from "../../sources/identity.js";
-import { errorRecord } from "../../sources/records.js";
+import type { IdentifiedRecording } from "../../sources/identity.js";
 import {
   answeredCall,
   failedCall,
@@ -155,45 +153,19 @@ export function promptTrack(spotify: SpotifyData): PromptTrack {
 }
 
 /**
- * The MusicBrainz recording filed under the track's ISRC that passes the identity checks, or
- * null (no ISRC, no match). A failed lookup is a source error, not a failed run.
+ * The MusicBrainz recording the track's ISRC identified, as the prompt shows it; null when the
+ * run has none (no ISRC, no match, MusicBrainz could not be read: the historian's identity chain
+ * reported it). It is the run's one ISRC lookup: the composer does not look it up again.
  */
-export async function musicBrainzRecording(
-  spotify: SpotifyData,
-  isrc: string | null,
-  signal: AbortSignal | undefined,
-): Promise<{ recording: PromptRecording | null; errors: SourceError[] }> {
-  if (!isrc) return { recording: null, errors: [] };
-  try {
-    const candidates = await lookupIsrc(isrc, signal);
-    const { recording } = pickRecording(
-      {
-        isrc,
-        title: spotify.title,
-        // The credited artists one by one: the joined name ("Coolio, L.V.") matches no credit.
-        artists: spotify.artistNames?.length ? spotify.artistNames : [spotify.artist],
-        durationMs: spotify.durationMs > 0 ? spotify.durationMs : null,
-      },
-      candidates,
-    );
-    if (!recording) return { recording: null, errors: [] };
-    return {
-      recording: {
-        mbid: recording.id,
-        title: recording.title,
-        artistCredit: creditString(recording["artist-credit"]),
-        firstReleaseDate: recording["first-release-date"] || null,
-        lengthSeconds:
-          typeof recording.length === "number" && recording.length > 0
-            ? Math.round(recording.length / 1000)
-            : null,
-      },
-      errors: [],
-    };
-  } catch (error) {
-    if (signal?.aborted || isAbortError(error)) throw error;
-    return { recording: null, errors: [errorRecord("musicbrainz", error)] };
-  }
+export function promptRecording(recording: IdentifiedRecording | null): PromptRecording | null {
+  if (!recording) return null;
+  return {
+    mbid: recording.mbid,
+    title: recording.title,
+    artistCredit: recording.artist,
+    firstReleaseDate: recording.firstReleaseDate,
+    lengthSeconds: recording.lengthMs !== null ? Math.round(recording.lengthMs / 1000) : null,
+  };
 }
 
 // =============================================================================
@@ -427,7 +399,9 @@ function withChannelDefaults(state: SonicAgentStateType): SonicAgentStateType {
     usage: state.usage ?? [],
     sourceErrors: state.sourceErrors ?? [],
     lastingSourceErrors: state.lastingSourceErrors ?? [],
+    primaryNotAsked: state.primaryNotAsked ?? [],
     isrc: state.isrc ?? null,
+    isrcRecording: state.isrcRecording ?? null,
     preview: state.preview ?? null,
     previewUrl: state.previewUrl ?? null,
     queryMatch: state.queryMatch ?? null,
@@ -507,19 +481,14 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     status("LLM-CONNECT", "Composing the liner notes...");
     log.info(`Synthesizing data for: ${spotify.title}`);
 
-    // state.isrc is null when Spotify gave no ISRC: no lookup is made then.
-    const { recording, errors: sourceErrors } = await musicBrainzRecording(
-      spotify,
-      state.isrc,
-      signal,
-    );
+    // The recording the historian's identity chain matched by ISRC; its errors are the run's.
     const messages = composerMessages({
       track: promptTrack(spotify),
-      recording,
+      recording: promptRecording(state.isrcRecording),
       audio: state.audioFeatures,
       evidence: state.evidence,
       research: state.researchData,
-      sourceErrors: [...state.sourceErrors, ...sourceErrors],
+      sourceErrors: state.sourceErrors,
     });
 
     // Only the model call is guarded: any failure of it gives the fallback. A bug in what
@@ -557,7 +526,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
     const enriched = await withArtwork(composed.genealogy, spotify.coverUrl, signal);
-    const runErrors = [...sourceErrors, ...enriched.sourceErrors];
+    const runErrors = enriched.sourceErrors;
     const trackData: TrackData = {
       ...baseFields(state, spotify),
       // A generic structure, not an analysis of this track
@@ -589,7 +558,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const store = getStore();
     const transientAudio = TRANSIENT_AUDIO_REASONS.has(trackData.audioUnavailableReason ?? "");
     // The errors a stored result keeps: none of them blocks it (see blockingSourceErrors).
-    const runSourceErrors = [...state.sourceErrors, ...sourceErrors];
+    const runSourceErrors = state.sourceErrors;
     const transientSources =
       blockingSourceErrors(runSourceErrors, state.lastingSourceErrors).length > 0;
     const plannerFailed = state.usage.some((u) => u.status !== "ok");
@@ -597,6 +566,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     // clarification node), whatever the reason, even a key that is not configured: a run that
     // reads them does better.
     const spotifyUnread = state.sourceErrors.some((e) => e.source === "spotify");
+    // A primary source the run did not ask, its request not sent (no source error): a later run
+    // asks it.
+    const primaryNotAsked = state.primaryNotAsked.length > 0;
     // The result is about the track the run chose, by the scout's match or the user's pick: it
     // is stored under that track, never under the text, so it is served only for that track.
     const chosen = state.selectedBy === "match" || state.selectedBy === "user";
@@ -606,7 +578,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       !transientAudio &&
       !transientSources &&
       !plannerFailed &&
-      !spotifyUnread
+      !spotifyUnread &&
+      !primaryNotAsked
     ) {
       try {
         signal?.throwIfAborted();
@@ -659,7 +632,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
       const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
       const enriched = await withArtwork(fallback.genealogy, spotify!.coverUrl, signal);
-      const runErrors = [...sourceErrors, ...enriched.sourceErrors];
+      const runErrors = enriched.sourceErrors;
       const trackData: TrackData = {
         ...fallback,
         ...baseFields(state, spotify!),

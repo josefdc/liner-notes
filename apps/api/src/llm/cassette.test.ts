@@ -119,7 +119,7 @@ describe("replay", () => {
       reasoningTokens: 5,
       usdEst: 0,
     });
-    expect(rows).toMatchObject([{ mode: "replay", usdEst: 0, status: "ok" }]);
+    expect(rows).toMatchObject([{ mode: "replay", usdEst: 0, status: "ok", sent: false }]);
     expect(globalFetch).not.toHaveBeenCalled();
     expect(readFileSync(join(dir, "spend.jsonl"), "utf8")).toBe(spendBefore);
 

@@ -124,7 +124,9 @@ interface AudioServiceResponse {
 // =============================================================================
 
 // Read when called, so the URL set by the environment loader (or a test) is used.
-const audioServiceUrl = () => process.env.AUDIO_ANALYSIS_URL || "http://localhost:3002";
+/** Where the audio service listens when AUDIO_ANALYSIS_URL is unset. */
+export const DEFAULT_AUDIO_SERVICE_URL = "http://localhost:3002";
+const audioServiceUrl = () => process.env.AUDIO_ANALYSIS_URL || DEFAULT_AUDIO_SERVICE_URL;
 const SERVICE_TIMEOUT = 30000; // 30 seconds for audio processing
 
 // Optional shared secret the service requires on /analyze when it is configured.
@@ -217,7 +219,9 @@ function rejectionSummary(results: DeezerPreviewResult[]): string {
  * The chosen track's preview clip, in this order: the Deezer entry for its ISRC (or that entry's
  * readable alternative), Spotify's own clip of the chosen track, a Deezer search result that is
  * strictly the same recording. Nothing else: with none of them there is no preview. A Deezer
- * error (its quota, the network) is reported, never read as "not found".
+ * error (its quota, the network) is reported, never read as "not found". A request Deezer's pace
+ * had no slot for in time was not sent: Deezer was not asked, which is said in the detail and is
+ * no source error (sources/pacing.ts).
  */
 export async function resolvePreview(
   request: TrackPreviewRequest,
@@ -236,7 +240,7 @@ export async function resolvePreview(
     }
   };
 
-  const byIsrc = await lookup(deezerPreviewByIsrc);
+  const byIsrc = await lookup((request, signal) => deezerPreviewByIsrc(request, signal));
   if (byIsrc.found) return { previewUrl: byIsrc.previewUrl, match: byIsrc.match };
   const failure = (result: DeezerPreviewResult) =>
     !result.found && result.error
@@ -258,14 +262,18 @@ export async function resolvePreview(
     };
   }
 
-  // After a Deezer error a search would fail the same way.
-  const bySearch = byIsrc.error ? byIsrc : await lookup(deezerPreviewBySearch, byIsrc.rejected);
+  // After a Deezer error a search would fail the same way, and one the pace had no slot for
+  // would wait as long.
+  const bySearch =
+    byIsrc.error || byIsrc.notAsked ? byIsrc : await lookup(deezerPreviewBySearch, byIsrc.rejected);
   if (bySearch.found) return { previewUrl: bySearch.previewUrl, match: bySearch.match };
 
   const failed = failure(bySearch);
   const detail = failed.sourceError
     ? `Deezer could not be read and Spotify has no preview of this track: ${failed.sourceError.message}`
-    : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
+    : bySearch.notAsked
+      ? "Deezer was not asked (its pace had no slot in time) and Spotify has no preview of this track"
+      : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
   if (failed.sourceError) log.warn(detail);
   else log.info(detail);
   return { previewUrl: null, match: null, detail, ...failed };

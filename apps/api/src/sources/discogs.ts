@@ -11,11 +11,17 @@
  * Needs DISCOGS_TOKEN, a personal access token sent as `Authorization: Discogs token=…`.
  * Without it the source is "missing" and nothing is requested.
  *
- * @see https://www.discogs.com/developers
+ * Requests are paced on the client (`DISCOGS_PACE`): Discogs allows 60 authenticated requests
+ * per minute per IP address, counted over a moving 60-second window, and answers 429 past it. A
+ * run reads at most three releases, one after the other. A request our pacing does not send is
+ * "not asked" (`failed` marks it paced), never a source error.
+ *
+ * @see https://www.discogs.com/developers (Rate Limiting)
  */
 
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
+import { credential, isSourceError, pacedFetchJson, type Shape } from "./http.js";
+import { type Pace, RequestPacer } from "./pacing.js";
 import {
   type Clock,
   checkIdentity,
@@ -99,6 +105,19 @@ const RELEASE_SHAPE: Shape = {
   ],
 };
 
+/**
+ * At most 55 requests a minute, at least 200 ms apart: under the 60 a minute Discogs allows over
+ * its moving window, also when its window and our clock disagree. A request is not sent when
+ * its slot comes after the run's deadline (the source is then "not asked").
+ */
+export const DISCOGS_PACE: Pace = {
+  intervalMs: 200,
+  budgets: [{ max: 55, windowMs: 60 * 1000 }],
+  maxWaitMs: 60_000,
+};
+
+const pacer = new RequestPacer("Discogs", () => DISCOGS_PACE);
+
 export function discogsConfigured(): boolean {
   return Boolean(credential(DISCOGS_TOKEN));
 }
@@ -117,19 +136,27 @@ export function discogsReleaseId(url: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-export async function getDiscogsRelease(id: number, signal?: AbortSignal): Promise<DiscogsRelease> {
-  const release = await fetchJson<DiscogsRelease>({
-    source: "discogs",
-    url: `${API}/releases/${id}`,
-    headers: {
-      Accept: "application/vnd.discogs.v2.discogs+json",
-      Authorization: `Discogs token=${credential(DISCOGS_TOKEN) ?? ""}`,
+export async function getDiscogsRelease(
+  id: number,
+  signal?: AbortSignal,
+  notAfter?: number,
+): Promise<DiscogsRelease> {
+  const release = await pacedFetchJson<DiscogsRelease>(
+    pacer,
+    {
+      source: "discogs",
+      url: `${API}/releases/${id}`,
+      headers: {
+        Accept: "application/vnd.discogs.v2.discogs+json",
+        Authorization: `Discogs token=${credential(DISCOGS_TOKEN) ?? ""}`,
+      },
+      scrub: RELEASE_SHAPE,
+      signal,
     },
-    scrub: RELEASE_SHAPE,
-    signal,
-  });
+    { notAfter },
+  );
   if (!release || typeof release !== "object" || typeof release.id !== "number") {
-    throw unexpectedShape("discogs", `release ${id} is not a release`);
+    throw unexpectedShape("discogs", `release ${id} is not a release`, release);
   }
   return release;
 }
@@ -313,7 +340,14 @@ function creditEvidence(release: DiscogsRelease, credit: DiscogsCredit, index: n
 export async function discogsTrackCredits(
   track: TrackRef,
   releaseIds: number[],
-  options: { maxReleases?: number; now?: Clock; signal?: AbortSignal; note?: string | null } = {},
+  options: {
+    maxReleases?: number;
+    now?: Clock;
+    signal?: AbortSignal;
+    /** On `pacingClock`: the latest a request may start (sources/pacing.ts). */
+    notAfter?: number;
+    note?: string | null;
+  } = {},
 ): Promise<SourceResult<DiscogsCredit>> {
   if (!discogsConfigured()) return notConfigured("discogs", DISCOGS_TOKEN);
   const note = options.note ?? null;
@@ -333,7 +367,7 @@ export async function discogsTrackCredits(
     for (const id of ids) {
       let release: DiscogsRelease;
       try {
-        release = await getDiscogsRelease(id, options.signal);
+        release = await getDiscogsRelease(id, options.signal, options.notAfter);
       } catch (error) {
         if (isSourceError(error, "http") && error.status === 404) {
           passed.push(`Discogs has no release ${id}`);

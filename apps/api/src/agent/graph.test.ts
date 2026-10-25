@@ -573,7 +573,7 @@ describe("the analysis graph under failure", () => {
     ]);
     expect(hooks.putResearch).toHaveBeenCalledTimes(1);
     const [key, research] = hooks.putResearch.mock.calls[0] as [string, Record<string, unknown>];
-    expect(key).toMatch(/^v3:3Fcfwhm8oRrBvBZ8KGhtea:lastfm=1:tavily=[01]$/);
+    expect(key).toMatch(/^v4:3Fcfwhm8oRrBvBZ8KGhtea:lastfm=1:tavily=[01]:discogs=0:genius=0$/);
     expect(research.notConfigured).toEqual([
       expect.objectContaining({ source: "lastfm", code: "not_configured" }),
     ]);

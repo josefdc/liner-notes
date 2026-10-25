@@ -44,7 +44,6 @@ import {
   musicBrainzRelationships,
   originalPerformance,
   pickRecording,
-  primarySourcesTool,
   resolveIdentity,
 } from "./identity.js";
 import {
@@ -205,8 +204,35 @@ describe("discogsCandidates on the recording's releases", () => {
 
 describe("resolveIdentity", () => {
   it("reaches the recording and the Genius, SecondHandSongs and Discogs links", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token";
     const net = stubFetch(musicBrainz);
-    const { identity, result } = await resolveIdentity(ICE_TRACK);
+    const told: unknown[] = [];
+    // The requests made when the recording is told: only the ISRC lookup and the recording's.
+    let madeWhenTold: string[] = [];
+    const { identity, result } = await resolveIdentity(ICE_TRACK, {
+      onRecording: (recording) => {
+        told.push(recording);
+        madeWhenTold = net.calls.map((c) => new URL(c.url).pathname);
+      },
+    });
+    expect(madeWhenTold).toEqual(["/ws/2/isrc/USCA29001716", `/ws/2/recording/${ICE}`]);
+    // The recording is told once, as soon as its lookup passed the checks.
+    expect(told).toEqual([
+      {
+        mbid: ICE,
+        title: "Ice Ice Baby",
+        artist: "Vanilla Ice",
+        lengthMs: 271_000,
+        firstReleaseDate: "1990-09-04",
+        artists: [
+          {
+            mbid: "2d5583be-aafd-41ec-addd-df85913855ef",
+            name: "Vanilla Ice",
+            credited: "Vanilla Ice",
+          },
+        ],
+      },
+    ]);
     expect(identity).toMatchObject({
       isrc: "USCA29001716",
       recording: { mbid: ICE, title: "Ice Ice Baby", artist: "Vanilla Ice", lengthMs: 271_000 },
@@ -231,6 +257,19 @@ describe("resolveIdentity", () => {
       "/ws/2/release",
       `/ws/2/work/${ICE_WORK}`,
       // The work's 117 recordings, in two pages, to date them.
+      "/ws/2/recording",
+      "/ws/2/recording",
+    ]);
+  });
+
+  it("reads no release without a Discogs token: only Discogs reads their links", async () => {
+    const net = stubFetch(musicBrainz);
+    const { identity } = await resolveIdentity(ICE_TRACK);
+    expect(identity).toMatchObject({ discogsReleaseIds: [], releasesError: null });
+    expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
+      "/ws/2/isrc/USCA29001716",
+      `/ws/2/recording/${ICE}`,
+      `/ws/2/work/${ICE_WORK}`,
       "/ws/2/recording",
       "/ws/2/recording",
     ]);
@@ -369,6 +408,48 @@ describe("collectPrimarySources", () => {
     });
   });
 
+  it("tells the identified recording once, and null when MusicBrainz identifies none", async () => {
+    stubFetch(withShs);
+    const told: Array<{ mbid: string } | null> = [];
+    await collectPrimarySources(ICE_TRACK, { now, onRecording: (r) => told.push(r) });
+    expect(told.map((r) => r?.mbid)).toEqual([ICE]);
+
+    stubFetch(() => new Response("bad gateway", { status: 502 }));
+    const none: unknown[] = [];
+    await collectPrimarySources(ICE_TRACK, { now, onRecording: (r) => none.push(r) });
+    expect(none).toEqual([null]);
+  });
+
+  it("is served ahead of MusicBrainz requests made outside it, queued first", async () => {
+    const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(30);
+    try {
+      const OTHER = ["GBUM71106916", "USUM72401994"];
+      const net = stubFetch((call) =>
+        OTHER.some((isrc) => call.url.includes(`/isrc/${isrc}`))
+          ? json({ recordings: [] })
+          : withShs(call),
+      );
+      // A request just made: the next ones wait their turn.
+      await lookupIsrc(OTHER[0]);
+      net.calls.length = 0;
+      // A researcher's two requests are queued first; then the chain starts.
+      const research = Promise.all(OTHER.map((isrc) => lookupIsrc(isrc)));
+      const chain = collectPrimarySources(ICE_TRACK, { now });
+      await Promise.all([research, chain]);
+
+      const mb = net.calls.filter((c) => c.url.startsWith(MB)).map((c) => c.url);
+      const firstOther = mb.findIndex((url) => OTHER.some((isrc) => url.includes(isrc)));
+      // Every MusicBrainz request of the chain (lookup, recording, work, dating) came first.
+      expect(firstOther).toBe(mb.length - 2);
+      expect(mb.slice(0, firstOther).every((url) => !OTHER.some((i) => url.includes(i)))).toBe(
+        true,
+      );
+      expect(firstOther).toBeGreaterThanOrEqual(4);
+    } finally {
+      restore();
+    }
+  });
+
   it("checks the Discogs release the chain reaches and omits one without the track", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token";
     // A release shaped like the Discogs API's, whose only track is a different song.
@@ -400,16 +481,9 @@ describe("collectPrimarySources", () => {
     ]);
   });
 
-  it("is callable as an agent tool that answers JSON", async () => {
+  it("answers in JSON-safe values", async () => {
     stubFetch(withShs);
-    const answer = JSON.parse(
-      await primarySourcesTool.invoke({
-        isrc: ICE_TRACK.isrc,
-        title: ICE_TRACK.title,
-        artists: ICE_TRACK.artists,
-        durationMs: ICE_TRACK.durationMs,
-      }),
-    );
+    const answer = JSON.parse(JSON.stringify(await collectPrimarySources(ICE_TRACK)));
     expect(answer.identity.recording.mbid).toBe(ICE);
     expect(answer.discogs).toMatchObject({ status: "missing", reason: "DISCOGS_TOKEN is not set" });
     expectValidEvidence(
@@ -852,29 +926,22 @@ describe("deadlines, cancellation and inputs", () => {
     });
   });
 
-  it("stops its requests when the agent's call is cancelled", async () => {
+  it("stops its requests when the caller cancels", async () => {
     const net = stubFetch(never);
     const controller = new AbortController();
-    const call = primarySourcesTool.invoke(
-      { isrc: ICE_TRACK.isrc, title: ICE_TRACK.title, artists: ICE_TRACK.artists },
-      { signal: controller.signal },
-    );
+    const call = collectPrimarySources(ICE_TRACK, { signal: controller.signal });
     await vi.waitFor(() => expect(net.calls).toHaveLength(1));
     controller.abort();
-    await expect(call).rejects.toThrow();
-    // The cancellation reached the request itself, not only the tool call.
+    // Never throws: the cancelled source is missing, unavailable.
+    expect((await call).musicbrainz).toMatchObject({
+      status: "missing",
+      error: { source: "musicbrainz", code: "unavailable" },
+    });
+    // The cancellation reached the request itself.
     await vi.waitFor(() => expect(net.calls[0].signal?.aborted).toBe(true));
   });
 
-  it("refuses a duration that is not positive, and survives bad inputs", async () => {
-    await expect(
-      primarySourcesTool.invoke({
-        isrc: "USCA29001716",
-        title: "x",
-        artists: ["y"],
-        durationMs: 0,
-      }),
-    ).rejects.toThrow();
+  it("survives bad inputs", async () => {
     const net = stubFetch(() => undefined);
     const noIsrc = await collectPrimarySources({ ...ICE_TRACK, isrc: undefined as never }, { now });
     expect(noIsrc.musicbrainz).toMatchObject({ reason: "the track has no valid ISRC" });
@@ -977,7 +1044,7 @@ describe("links MusicBrainz files more than once", () => {
   });
 });
 
-describe("what the tool output carries", () => {
+describe("what the primary sources answer carries", () => {
   it("keeps a failed release browse as a short error record, never the raw answer", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
     const page = `<html><body>${"502 Bad Gateway upstream nginx ".repeat(300)}</body></html>`;
@@ -986,12 +1053,7 @@ describe("what the tool output carries", () => {
         ? new Response(page, { status: 502, headers: { "content-type": "text/html" } })
         : musicBrainz(call),
     );
-    const out = await primarySourcesTool.invoke({
-      isrc: ICE_TRACK.isrc,
-      title: ICE_TRACK.title,
-      artists: ICE_TRACK.artists,
-      durationMs: ICE_TRACK.durationMs,
-    });
+    const out = JSON.stringify(await collectPrimarySources(ICE_TRACK));
     const parsed = JSON.parse(out);
     expect(Object.keys(parsed.identity.releasesFailure).sort()).toEqual([
       "code",

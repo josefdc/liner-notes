@@ -100,7 +100,9 @@ describe("usage the provider did not report", () => {
     expect(result.output).toEqual({ ok: true });
     expect(result.usage).toMatchObject({ inputTokens: null, outputTokens: null });
     expectWorstCaseKept();
-    expect(rows).toMatchObject([{ estimated: true, inputTokens: null, outputTokens: null }]);
+    expect(rows).toMatchObject([
+      { estimated: true, inputTokens: null, outputTokens: null, sent: true },
+    ]);
     expect(rows[0].usdEst).toBe(reserves()[0].usd_est);
   });
 
@@ -319,9 +321,12 @@ describe("HTTP statuses", () => {
   });
 
   it("settles a 429 at zero", async () => {
-    const { llm } = setup(() => errorResponse(429));
+    const { llm, rows } = setup(() => errorResponse(429));
     await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
     expect(settles().every((l) => l.usd_est === 0 && l.estimated === false)).toBe(true);
+    // The provider answered: the request reached it.
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.sent)).toBe(true);
   });
 
   it.each([408, 409, 500, 502, 503, 504])(
@@ -334,8 +339,8 @@ describe("HTTP statuses", () => {
     },
   );
 
-  it("settles at zero when no connection was made", async () => {
-    const { llm } = setup(() => {
+  it("settles at zero when no connection was made, recording the attempts as not sent", async () => {
+    const { llm, rows } = setup(() => {
       throw new TypeError("fetch failed", {
         cause: Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }),
       });
@@ -343,16 +348,117 @@ describe("HTTP statuses", () => {
     const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
     expect(isLlmError(error, "network")).toBe(true);
     expect(settles().every((l) => l.usd_est === 0)).toBe(true);
+    expect(rows.map((row) => [row.status, row.sent])).toEqual([
+      ["error:network", false],
+      ["error:network", false],
+    ]);
   });
 
-  it("keeps the worst case for a reset connection", async () => {
-    const { llm } = setup(() => {
+  // The errors fetch (undici) throws when no connection was made, as Node 24 shapes them.
+  const undiciCause = (name: string, message: string, code?: string) =>
+    Object.assign(new Error(message), { name, ...(code ? { code } : {}) });
+  it.each([
+    [
+      "a connect timeout",
+      undiciCause(
+        "ConnectTimeoutError",
+        "Connect Timeout Error (attempted address: 10.255.255.1:443, timeout: 10000ms)",
+        "UND_ERR_CONNECT_TIMEOUT",
+      ),
+    ],
+    [
+      "an unreachable network",
+      Object.assign(undiciCause("Error", "connect ENETUNREACH 10.0.0.1:443", "ENETUNREACH"), {
+        syscall: "connect",
+      }),
+    ],
+    [
+      "an unreachable host",
+      Object.assign(undiciCause("Error", "connect EHOSTUNREACH 10.0.0.1:443", "EHOSTUNREACH"), {
+        syscall: "connect",
+      }),
+    ],
+    // fetch refuses the ports browsers block before connecting, with no code.
+    ["a port fetch blocks", undiciCause("Error", "bad port")],
+    [
+      "every address of the name unreachable",
+      Object.assign(new AggregateError([], ""), {
+        code: "EHOSTUNREACH",
+        errors: ["10.0.0.1", "10.0.0.2"].map((address) =>
+          Object.assign(new Error(`connect EHOSTUNREACH ${address}:443`), {
+            code: "EHOSTUNREACH",
+            syscall: "connect",
+          }),
+        ),
+      }),
+    ],
+  ])("settles at zero and records the attempts as not sent for %s", async (_, cause) => {
+    const { llm, rows } = setup(() => {
+      throw new TypeError("fetch failed", { cause });
+    });
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error)).toBe(true);
+    expect(settles().length).toBeGreaterThan(0);
+    expect(settles().every((l) => l.usd_est === 0 && l.estimated === false)).toBe(true);
+    expect(summarise(lines()).totalUsd).toBe(0);
+    expect(rows.length).toBe(settles().length);
+    expect(rows.every((row) => row.sent === false && row.usdEst === 0)).toBe(true);
+  });
+
+  it.each([
+    // An established socket's error: the request may have been written.
+    ["read EHOSTUNREACH", { code: "EHOSTUNREACH", syscall: "read" }],
+    ["read ENETUNREACH", { code: "ENETUNREACH", syscall: "read" }],
+    // No syscall says where it came from (e.g. a refusal by a network policy).
+    ["ENETUNREACH from no syscall", { code: "ENETUNREACH" }],
+  ])("keeps the worst case and records the attempts as sent for %s", async (message, fields) => {
+    const { llm, rows } = setup(() => {
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error(message), fields) });
+    });
+    await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
+    expectWorstCaseKept();
+    expect(rows.length).toBe(settles().length);
+    expect(rows.every((row) => row.sent === true && row.estimated)).toBe(true);
+  });
+
+  it("keeps the worst case for a 200 whose body was lost, recording it as sent", async () => {
+    // Even with a code that would mean no connection had connect() raised it.
+    const lost = new TypeError("terminated", {
+      cause: Object.assign(new Error("connect EHOSTUNREACH 10.0.0.1:443"), {
+        code: "EHOSTUNREACH",
+        syscall: "connect",
+      }),
+    });
+    const { llm, rows } = setup(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(lost);
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error)).toBe(true);
+    expectWorstCaseKept();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.sent === true && row.estimated)).toBe(true);
+  });
+
+  it("keeps the worst case for a reset connection, recording the attempts as sent", async () => {
+    const { llm, rows } = setup(() => {
       throw new TypeError("fetch failed", {
         cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
       });
     });
     await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch(() => {});
     expectWorstCaseKept();
+    expect(rows.map((row) => [row.status, row.sent])).toEqual([
+      ["error:network", true],
+      ["error:network", true],
+    ]);
   });
 });
 
@@ -429,10 +535,11 @@ describe("aborts", () => {
   it("releases the reservation of an attempt aborted before its request was sent", async () => {
     const controller = new AbortController();
     const net = providerFetch(hang);
+    const rows: LlmUsageRow[] = [];
     const llm = createLlm({
       settings: testSettings({ LLM_SPEND_LOG: log }),
       fetch: net.fetch,
-      recordUsage: () => {},
+      recordUsage: (row) => rows.push(row),
     });
     // Aborts while the attempt waits for the spend log's lock, after it was admitted.
     const original = Date.prototype.toISOString;
@@ -453,11 +560,13 @@ describe("aborts", () => {
     expect(settles()).toMatchObject([{ usd_est: 0, status: "error:aborted", estimated: false }]);
     expect(summarise(lines()).totalUsd).toBe(0);
     expect(llm.callsForRun("run-1")).toBe(0);
+    // Recorded as an attempt, but not as one sent to the provider.
+    expect(rows).toMatchObject([{ status: "error:aborted", usdEst: 0, sent: false }]);
   });
 
   it("keeps the worst case for an abort after the request was sent", async () => {
     const controller = new AbortController();
-    const { llm, net } = setup(hang);
+    const { llm, net, rows } = setup(hang);
     setTimeout(() => controller.abort(), 50);
     await llm
       .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
@@ -465,6 +574,7 @@ describe("aborts", () => {
     expect(net.calls).toHaveLength(1);
     expect(net.calls[0].signal?.aborted).toBe(true);
     expectWorstCaseKept();
+    expect(rows).toMatchObject([{ status: "error:aborted", sent: true }]);
   });
 });
 

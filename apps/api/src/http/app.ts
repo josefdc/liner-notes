@@ -49,6 +49,9 @@ export function createApp({ http, routers }: AppDeps): express.Express {
   app.use(paidRoutes, listedOriginsOnly(http.corsOrigins));
   app.use(modelRoutes, perIpLimit(http.rateLimit), globalLimit(http.globalRateLimit));
   app.use("/api/search", perIpLimit(http.searchRateLimit));
+  // Readiness is public and does a little work per request (the database's write probe): the
+  // search limit, counted on its own. Liveness (/api/health) is not limited.
+  app.use("/api/ready", perIpLimit(http.searchRateLimit));
 
   app.use(acceptedEncodingsOnly);
   app.use(express.json({ limit: JSON_BODY_LIMIT }));

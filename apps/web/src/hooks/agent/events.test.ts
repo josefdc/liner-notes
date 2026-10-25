@@ -8,6 +8,7 @@ import {
   resetSkippedReports,
   streamGuard,
 } from './events';
+import { audioBlock } from '../../components/measured/testing';
 
 const json = (event: object) => JSON.stringify(event);
 const status = (seq: number, runId = 'run-1') => ({
@@ -38,6 +39,55 @@ beforeEach(() => {
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
+
+describe('the measurement of a result', () => {
+  const withAudio = (audio: unknown, change: object = {}) => ({
+    ...complete(3),
+    data: { ...result, ...change, audio },
+  });
+  const audioOf = (event: object) =>
+    (parseAnalysisEvent(json(event)) as { data: { audio?: unknown } }).data.audio;
+
+  it('reaches the app as the contract reads it', () => {
+    const block = audioBlock();
+    expect(audioOf(withAudio(block))).toEqual(block);
+  });
+
+  it.each([
+    [
+      'a malformed section',
+      audioBlock({ sections: { segments: 'A', method: 'x', basis: 'signal' } }),
+    ],
+    [
+      'a model without a licence',
+      audioBlock({
+        fingerprint: {
+          ...audioBlock().fingerprint,
+          styles: { model: { id: 'm' }, top: [], basis: 'model' },
+        },
+      }),
+    ],
+    ['an unknown gate reason', audioBlock({ gate: { passed: false, reason: 'clipping' } })],
+    ['another version', audioBlock({ version: 3 })],
+  ])('is null when the contract cannot read it (%s)', (_case, block) => {
+    expect(audioOf(withAudio(block))).toBeNull();
+  });
+
+  it('is null in a result read leniently, when the contract cannot read it', () => {
+    // A genealogy that is not an object makes the result itself not fit the contract.
+    const event = withAudio(audioBlock({ version: 3 }), { genealogy: 'none' });
+    expect(audioOf(event)).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('(complete): does not fit the contract; read leniently'),
+      expect.anything(),
+    );
+    expect(audioOf(withAudio(audioBlock(), { genealogy: 'none' }))).toEqual(audioBlock());
+  });
+
+  it('stays absent from a result without one', () => {
+    expect('audio' in (parseAnalysisEvent(json(complete(3))) as { data: object }).data).toBe(false);
+  });
+});
 
 describe('parseAnalysisEvent', () => {
   it('returns an event that fits the contract as it was sent', () => {

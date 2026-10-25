@@ -22,9 +22,21 @@ import {
   marksOtherRecording,
   PREVIEW_BUDGET_MS,
   releaseYearFits,
+  START_MARGIN_MS,
   strictlyMatches,
 } from "./enricher.js";
 import type { Genealogy } from "./schema.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolvePreview } from "../sources/audio.js";
+import {
+  DEEZER_MAX_PER_WINDOW,
+  DEEZER_NODE_MAX_PER_WINDOW,
+  DEEZER_WINDOW_MS,
+  deezerPreviewByIsrc,
+} from "../sources/deezer.js";
+import { PaceRefused, pacingClock, setUnpacedForTests } from "../sources/pacing.js";
 import { captureLogsForTests } from "../logger.js";
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -100,6 +112,14 @@ async function enrichOne(node: Record<string, unknown>) {
   );
   return out.nodes[1];
 }
+
+/** The track details this code caches, without an ISRC (so a hit makes no Deezer lookup). */
+const NO_ISRC_DETAILS = {
+  isrc: null,
+  durationMs: 248000,
+  album: "Hot Space",
+  releaseDate: "1982-05-21",
+};
 
 const underPressure = {
   id: "n1",
@@ -215,6 +235,7 @@ describe("enrichGenealogyWithArtwork's previews", () => {
         spotifyId: "x",
         trackTitle: title,
         trackArtist: artist,
+        trackDetails: NO_ISRC_DETAILS,
       });
 
       const node = await enrichOne(underPressure);
@@ -271,6 +292,7 @@ describe("enrichGenealogyWithArtwork's previews", () => {
       spotifyId: "x",
       trackTitle: "Under Pressure",
       trackArtist: "Queen",
+      trackDetails: NO_ISRC_DETAILS,
     });
 
     const node = await enrichOne(underPressure);
@@ -432,19 +454,204 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(deezerCalls(net)).toHaveLength(1);
   });
 
-  it("makes no Deezer lookup for a node served from the cache", async () => {
+  it("searches again for a row older code cached with a Spotify id and no details, and rewrites it", async () => {
+    // Older code cached the id of a plain title on a live album: its release cannot be checked.
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue({
       coverUrl: COVER,
-      spotifyUrl: "https://open.spotify.com/track/x",
-      spotifyId: "x",
+      spotifyUrl: "https://open.spotify.com/track/live",
+      spotifyId: "live",
       trackTitle: "Under Pressure",
       trackArtist: "Queen",
     });
 
     const node = await enrichOne(underPressure);
 
-    expect(node).toMatchObject({ spotifyId: "x" });
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
+    expect(node).toMatchObject({ img: COVER, spotifyId: "x", previewUrl: deezerClip(7) });
+    expect(cache.putArtwork).toHaveBeenCalledTimes(1);
+    const [key, rewritten] = cache.putArtwork.mock.calls[0];
+    expect(key).toBe("under pressure - queen");
+    expect(rewritten).toMatchObject({
+      spotifyId: "x",
+      trackDetails: {
+        isrc: ISRC,
+        durationMs: 248000,
+        album: "Hot Space",
+        releaseDate: "1982-05-21",
+      },
+    });
+    expect(JSON.stringify(rewritten)).not.toMatch(/dzcdn|hdnea|previewUrl|mp3-preview/);
+  });
+
+  it("serves a row older code cached without a Spotify id (the cover only), with no search", async () => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue({
+      coverUrl: COVER,
+      spotifyUrl: "https://open.spotify.com/track/x",
+      spotifyId: null,
+      trackTitle: null,
+      trackArtist: null,
+    });
+
+    const node = await enrichOne(underPressure);
+
+    expect(node.img).toBe(COVER);
+    expect(node.spotifyId).toBeUndefined();
+    expect(node.previewUrl).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+    expect(cache.putArtwork).not.toHaveBeenCalled();
+  });
+
+  /** A row older code cached: the cover and the id of a track, no details. */
+  const oldRow = {
+    coverUrl: COVER,
+    spotifyUrl: "https://open.spotify.com/track/live",
+    spotifyId: "live",
+    trackTitle: "Under Pressure",
+    trackArtist: "Queen",
+  };
+
+  it.each([
+    ["fails", () => json({ error: { status: 503 } }, { status: 503 })],
+    ["finds nothing", () => json({ tracks: { items: [], total: 0 } })],
+  ])(
+    "keeps the cover of a row older code cached, without its id, when the search again %s",
+    async (_label, answer) => {
+      const net = spotifyAnswers(answer);
+      cache.getArtwork.mockReturnValue(oldRow);
+
+      const node = await enrichOne(underPressure);
+
+      expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
+      expect(node.img).toBe(COVER);
+      expect(node.spotifyId).toBeUndefined();
+      expect(node.previewUrl).toBeUndefined();
+      // The row is kept as it is, not overwritten with nothing.
+      expect(cache.putArtwork).not.toHaveBeenCalled();
+    },
+  );
+
+  /** An artwork row for Under Pressure by Queen, as this code caches it. */
+  const cachedRow = (
+    details: Record<string, unknown> = {},
+    fields: Record<string, unknown> = {},
+  ) => ({
+    coverUrl: COVER,
+    spotifyUrl: "https://open.spotify.com/track/x",
+    spotifyId: "x",
+    trackTitle: "Under Pressure",
+    trackArtist: "Queen",
+    trackArtists: ["Queen"],
+    trackDetails: {
+      isrc: ISRC,
+      durationMs: 248000,
+      album: "Hot Space",
+      releaseDate: "1982-05-21",
+      ...details,
+    },
+    ...fields,
+  });
+
+  it("gives a node served from the artwork cache the Deezer entry for its ISRC", async () => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue(cachedRow());
+
+    const node = await enrichOne(underPressure);
+
+    expect(node).toMatchObject({ img: COVER, spotifyId: "x", previewUrl: deezerClip(7) });
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+    expect(deezerCalls(net).map((call) => call.url)).toEqual([`${DEEZER}/track/isrc:${ISRC}`]);
+    expect(cache.putArtwork).not.toHaveBeenCalled();
+  });
+
+  it("gives a node the same preview from the row its fresh search cached", async () => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+
+    const fresh = await enrichOne(underPressure);
+    const [, cached] = cache.putArtwork.mock.calls[0];
+    expect(JSON.stringify(cached)).not.toMatch(/dzcdn|hdnea|previewUrl|mp3-preview/);
+    cache.getArtwork.mockReturnValue(cached);
+    const again = await enrichOne(underPressure);
+
+    expect(fresh.previewUrl).toBe(deezerClip(7));
+    expect(again).toEqual(fresh);
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
+    expect(deezerCalls(net)).toHaveLength(2);
+    // The two lookups ask Deezer the same: the cached row gives the request a fresh search gives.
+    expect(deezerCalls(net)[0].url).toBe(deezerCalls(net)[1].url);
+  });
+
+  it.each([
+    ["carries another ISRC", { isrc: "USXX19990001" }],
+    ["is a live take", { title: "Under Pressure (Live at Wembley '86)" }],
+    ["is credited to another artist (a cover)", { artist: { id: 1, name: "Karaoke Stars" } }],
+    ["is 5 s longer", { duration: 253 }],
+    ["has a preview on a host the player may not load", { preview: "https://example.com/x.mp3" }],
+  ])("gives a cached node no preview when the entry for its ISRC %s", async (_label, fields) => {
+    stub({ spotify: spotifyTrack(), byIsrc: () => entry(fields) });
+    cache.getArtwork.mockReturnValue(cachedRow());
+
+    const node = await enrichOne(underPressure);
+
+    expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+    expect(node.previewUrl).toBeUndefined();
+  });
+
+  it.each([
+    ["a live album", { album: "Live at Wembley '86", releaseDate: "1992-05-26" }],
+    ["a karaoke album", { album: "Karaoke Hits", releaseDate: "2010" }],
+    ["a re-recorded album", { album: "Greatest Hits (Re-Recorded Versions)", releaseDate: "2004" }],
+  ])("serves a row cached for a plain title on %s with the cover only", async (_label, details) => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue(cachedRow(details));
+
+    const node = await enrichOne(underPressure);
+
+    expect(node.img).toBe(COVER);
+    expect(node.spotifyId).toBeUndefined();
+    expect(node.previewUrl).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("serves a row whose details keep no album with the cover only (its release cannot be checked)", async () => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue(cachedRow({ album: null }));
+
+    const node = await enrichOne(underPressure);
+
+    expect(node.img).toBe(COVER);
+    expect(node.spotifyId).toBeUndefined();
+    expect(node.previewUrl).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["the release dates from years after the label's year", { releaseDate: "1992" }],
+    ["the release date is not known", { releaseDate: null }],
+    ["the track has no ISRC", { isrc: null }],
+  ])("keeps a cached node's id but makes no lookup when %s", async (_label, details) => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue(cachedRow(details));
+
+    const node = await enrichOne({ ...underPressure, label: "Under Pressure - Queen (1981)" });
+
+    expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+    expect(node.previewUrl).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["a cover (another artist's track)", { trackArtist: "David Bowie" }],
+    ["a loose match (no title or artist named)", { trackTitle: undefined }],
+    ["another version", { trackTitle: "Under Pressure (Rah Mix)" }],
+  ])("makes no Deezer lookup for %s served from the cache", async (_label, named) => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue(cachedRow());
+
+    const node = await enrichOne({ ...underPressure, ...named });
+
+    expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
   });
@@ -751,6 +958,60 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
   });
 
+  /** The artwork row a fresh search of strictNodes' node `n` caches, read back from the cache. */
+  const cachedSong = (n: number) => ({
+    coverUrl: COVER,
+    spotifyUrl: "https://open.spotify.com/track/x",
+    spotifyId: `id${n}`,
+    trackTitle: `Song ${n}`,
+    trackArtist: "Queen",
+    trackArtists: ["Queen"],
+    trackDetails: {
+      isrc: `GBXXX99${String(n).padStart(5, "0")}`,
+      durationMs: 248000,
+      album: "Hot Space",
+      releaseDate: "1982-05-21",
+    },
+  });
+  /** The cache holds the odd songs of strictNodes; the even ones are searched afresh. */
+  const oddSongsCached = (label: string) => {
+    const n = Number(label.match(/song (\d+)/)?.[1]);
+    return n % 2 === 1 ? cachedSong(n) : null;
+  };
+
+  it(`counts the nodes served from the cache against the ${MAX_DEEZER_LOOKUPS} lookups of a run`, async () => {
+    const { nodes, spotify, isrcEntry } = strictNodes(MAX_DEEZER_LOOKUPS + 6);
+    cache.getArtwork.mockImplementation(oddSongsCached);
+    const net = stub({ spotify, byIsrc: (isrc) => isrcEntry(isrc) });
+
+    const out = await enrichAll(nodes);
+
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(13);
+    expect(deezerCalls(net)).toHaveLength(MAX_DEEZER_LOOKUPS);
+    expect(previews(out)).toBe(MAX_DEEZER_LOOKUPS);
+    expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
+  });
+
+  it("stops the lookups of cached nodes at Deezer's rate limit too, and reports it once", async () => {
+    const { nodes, spotify } = strictNodes(6);
+    cache.getArtwork.mockImplementation((label: string) =>
+      cachedSong(Number(label.match(/song (\d+)/)?.[1])),
+    );
+    const quota = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
+    const net = stub({ spotify, byIsrc: () => quota });
+    const report = vi.fn();
+
+    const out = await enrichAll(nodes, undefined, report);
+
+    expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
+    expect(previews(out)).toBe(0);
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+    expect(deezerCalls(net).length).toBeGreaterThanOrEqual(1);
+    expect(deezerCalls(net).length).toBeLessThanOrEqual(2);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0][0]).toMatchObject({ source: "deezer", code: "rate_limited" });
+  });
+
   describe("with the clock run by the test", () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -793,8 +1054,9 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       // budget, and the third is cut off by it.
       const net = stub({ spotify, byIsrc: (isrc, call) => slowly(call, 3_000, isrcEntry(isrc)) });
       const report = vi.fn();
+      const logs = captureLogsForTests();
 
-      const { out, elapsed, run } = await timed(nodes, report);
+      const { out, elapsed, run } = await timed(nodes, report).finally(() => logs.restore());
 
       expect(run.aborted).toBe(false);
       expect(out.nodes).toHaveLength(10);
@@ -804,10 +1066,29 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       expect(elapsed).toBeLessThan(PREVIEW_BUDGET_MS + 1_000);
       // A spent budget is not a Deezer failure: it is said once, in the log only.
       expect(report).not.toHaveBeenCalled();
-      const said = vi
-        .mocked(console.log)
-        .mock.calls.filter(([line]) => String(line).includes("budget for Deezer lookups"));
+      const said = logs
+        .messages("info")
+        .filter((message) => message.includes("budget for Deezer lookups"));
       expect(said).toHaveLength(1);
+    });
+
+    it("holds the lookups of cached nodes to the same budget", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(10);
+      cache.getArtwork.mockImplementation((label: string) =>
+        cachedSong(Number(label.match(/song (\d+)/)?.[1])),
+      );
+      const net = stub({ spotify, byIsrc: (isrc, call) => slowly(call, 3_000, isrcEntry(isrc)) });
+      const report = vi.fn();
+
+      const { out, elapsed, run } = await timed(nodes, report);
+
+      expect(run.aborted).toBe(false);
+      expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+      expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
+      expect(previews(out)).toBe(4);
+      expect(deezerCalls(net)).toHaveLength(5);
+      expect(elapsed).toBeLessThan(PREVIEW_BUDGET_MS + 1_000);
+      expect(report).not.toHaveBeenCalled();
     });
 
     it("does not count the Spotify searches against the previews' budget", async () => {
@@ -824,20 +1105,360 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     });
   });
 
-  it("rejects when the run is cancelled during a Deezer lookup, and stops the request", async () => {
-    const controller = new AbortController();
-    const net = stub({
-      spotify: spotifyTrack(),
-      byIsrc: (_isrc, call) => {
-        setTimeout(() => controller.abort(), 0);
-        return never(call);
-      },
+  const FAKE_CLOCK = ["setTimeout", "clearTimeout", "Date", "performance"] as const;
+
+  it.each([
+    ["a node searched afresh", false],
+    ["a node served from the cache", true],
+  ])(
+    "rejects at once when the run is cancelled during the Deezer lookup of %s, and stops it",
+    async (_label, cached) => {
+      vi.useFakeTimers({ toFake: [...FAKE_CLOCK] });
+      try {
+        const controller = new AbortController();
+        const net = stub({ spotify: spotifyTrack(), byIsrc: (_isrc, call) => never(call) });
+        if (cached) cache.getArtwork.mockReturnValue(cachedRow());
+        let settledAt = Number.NaN;
+        const pending = enrichAll([{ size: 22, ...underPressure }], controller.signal)
+          .then(
+            () => "resolved",
+            () => "rejected",
+          )
+          .finally(() => {
+            settledAt = pacingClock();
+          });
+        await vi.advanceTimersByTimeAsync(50);
+        expect(deezerCalls(net)).toHaveLength(1);
+
+        const abortedAt = pacingClock();
+        controller.abort();
+        await vi.advanceTimersByTimeAsync(100);
+
+        // At once, not when the lookup's own time runs out.
+        expect(settledAt - abortedAt).toBeLessThan(100);
+        expect(await pending).toBe("rejected");
+        expect(deezerCalls(net)[0].signal?.aborted).toBe(true);
+        const searches = net.calls.filter((call) => call.url.startsWith(SEARCH_URL));
+        expect(searches).toHaveLength(cached ? 0 : 1);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  describe("with Deezer paced for the whole process", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: [...FAKE_CLOCK] });
+      setUnpacedForTests(false);
+    });
+    afterEach(() => {
+      setUnpacedForTests(true);
+      vi.useRealTimers();
+      delete process.env.SOURCE_CASSETTE;
+      delete process.env.SOURCE_CASSETTE_DIR;
     });
 
-    await expect(enrichAll([{ size: 22, ...underPressure }], controller.signal)).rejects.toThrow();
+    /** The most of `starts` (ms) inside any window of Deezer's quota. */
+    const most = (starts: number[]) =>
+      Math.max(
+        0,
+        ...starts.map((t) => starts.filter((u) => u >= t && u < t + DEEZER_WINDOW_MS).length),
+      );
 
-    const lookup = deezerCalls(net)[0];
-    expect(lookup?.signal?.aborted).toBe(true);
+    const OTHER = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099", durationMs: 248_000 };
+    /** `count` node lookups of other runs, now: each takes a slot of the node previews' share. */
+    async function otherNodeLookups(count: number) {
+      for (let i = 0; i < count; i++) {
+        await deezerPreviewByIsrc(OTHER, undefined, { lane: "nodes" });
+      }
+    }
+
+    /** Runs the clock in 100 ms steps until `pending` settles (at most 20 s). */
+    async function settle<T>(pending: Promise<T>): Promise<T> {
+      let settled = false;
+      const watched = pending.finally(() => {
+        settled = true;
+      });
+      for (let i = 0; i < 200 && !settled; i++) await vi.advanceTimersByTimeAsync(100);
+      return watched;
+    }
+
+    const cachedSongs = () =>
+      cache.getArtwork.mockImplementation((label: string) =>
+        cachedSong(Number(label.match(/song (\d+)/)?.[1])),
+      );
+
+    it("serves the analysed tracks' requests first, and keeps the process under Deezer's quota", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(2 * MAX_DEEZER_LOOKUPS);
+      cachedSongs();
+      const analysedIsrc = (n: number) => `GBXXX98${String(n).padStart(5, "0")}`;
+      const isAnalysed = (isrc: string) => isrc.startsWith("GBXXX98");
+      const t0 = pacingClock();
+      const starts: Array<{ at: number; isrc: string }> = [];
+      const net = stub({
+        spotify,
+        byIsrc: (isrc) => {
+          starts.push({ at: pacingClock() - t0, isrc });
+          return isAnalysed(isrc)
+            ? entry({ id: 900 + Number(isrc.slice(-5)), title: "Analysed", isrc })
+            : isrcEntry(isrc);
+        },
+      });
+      // The engineer's own lookup of an analysed track's preview.
+      const analyse = (n: number) =>
+        resolvePreview(
+          { title: "Analysed", artist: "Queen", isrc: analysedIsrc(n), durationMs: 248_000 },
+          undefined,
+        );
+      const report = vi.fn();
+
+      // Twelve runs' analysed tracks, then two runs whose genealogies are all in the cache.
+      const first = Array.from({ length: 12 }, (_, i) => analyse(i + 1));
+      const runs = Promise.all([
+        enrichAll(nodes.slice(0, MAX_DEEZER_LOOKUPS), undefined, report),
+        enrichAll(nodes.slice(MAX_DEEZER_LOOKUPS), undefined, report),
+      ]);
+      await vi.advanceTimersByTimeAsync(1_000);
+      // Three more while node lookups wait for room in the window.
+      const later = Array.from({ length: 3 }, (_, i) => analyse(13 + i));
+      const [a, b] = await settle(runs);
+      const analysed = await settle(Promise.all([...first, ...later]));
+
+      expect(analysed.map((result) => result.previewUrl)).toEqual(
+        Array.from({ length: 15 }, (_, i) => deezerClip(901 + i)),
+      );
+      // No window holds more than the process may send, nor more node requests than their share.
+      expect(most(starts.map((start) => start.at))).toBeLessThanOrEqual(DEEZER_MAX_PER_WINDOW);
+      const nodeStarts = starts.filter((start) => !isAnalysed(start.isrc));
+      expect(most(nodeStarts.map((start) => start.at))).toBeLessThanOrEqual(
+        DEEZER_NODE_MAX_PER_WINDOW,
+      );
+      // The first twelve started at once; the three later ones as soon as the window had room,
+      // ahead of every node request that was waiting for it.
+      const analysedStarts = starts.filter((start) => isAnalysed(start.isrc));
+      expect(analysedStarts.slice(0, 12).every((start) => start.at < 50)).toBe(true);
+      expect(analysedStarts.slice(12).every((start) => start.at <= DEEZER_WINDOW_MS + 50)).toBe(
+        true,
+      );
+      let lastAnalysed = -1;
+      starts.forEach((start, i) => {
+        if (isAnalysed(start.isrc)) lastAnalysed = i;
+      });
+      // The node requests that started after the later three were made (at 1 s) were waiting.
+      const waited = starts.flatMap((start, i) =>
+        !isAnalysed(start.isrc) && start.at >= 1_000 ? [i] : [],
+      );
+      expect(waited.length).toBeGreaterThan(0);
+      expect(waited.every((i) => i > lastAnalysed)).toBe(true);
+      // Every node still got its preview, within its run's budget.
+      expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+      expect(previews(a) + previews(b)).toBe(2 * MAX_DEEZER_LOOKUPS);
+      expect(report).not.toHaveBeenCalled();
+    });
+
+    it("says Deezer was not asked, with no source error, when the pace has no slot for an analysed track in time", async () => {
+      stub({ spotify: spotifyTrack(), byIsrc: (isrc) => entry({ isrc }) });
+      const request = { title: "Under Pressure", artist: "Queen", durationMs: 248_000 };
+      // A full window, and as many requests again waiting for the next one.
+      const ahead = Array.from({ length: 2 * DEEZER_MAX_PER_WINDOW }, () =>
+        deezerPreviewByIsrc({ ...request, isrc: "GBUM71029601" }),
+      );
+
+      const result = await resolvePreview({ ...request, isrc: "GBUM71029601" }, undefined);
+
+      expect(result).toMatchObject({ previewUrl: null });
+      expect(result).not.toHaveProperty("sourceError");
+      expect(result.previewUrl === null && result.detail).toMatch(/Deezer was not asked/);
+      await settle(Promise.all(ahead));
+    });
+
+    it("gives a node lookup a slot that comes within its time", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(3);
+      cachedSongs();
+      const net = stub({ spotify, byIsrc: (isrc) => isrcEntry(isrc) });
+      // Other runs took the node previews' share 2.5 s ago: the next slot is in 2.5 s.
+      await otherNodeLookups(DEEZER_NODE_MAX_PER_WINDOW);
+      await vi.advanceTimersByTimeAsync(2_500);
+      const before = deezerCalls(net).length;
+
+      const out = await settle(enrichAll(nodes));
+
+      expect(deezerCalls(net).length - before).toBe(3);
+      expect(previews(out)).toBe(3);
+    });
+
+    it("starts a lookup's own time when its request gets its slot, not while it waits", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(3);
+      cachedSongs();
+      let slow = false;
+      const net = stub({
+        spotify,
+        byIsrc: (isrc, call) => (slow ? slowly(call, 1_500, isrcEntry(isrc)) : isrcEntry(isrc)),
+      });
+      await otherNodeLookups(DEEZER_NODE_MAX_PER_WINDOW);
+      slow = true;
+      await vi.advanceTimersByTimeAsync(2_100);
+      const before = deezerCalls(net).length;
+      const report = vi.fn();
+
+      // Two lookups wait 2.9 s for their slots, then Deezer answers in 1.5 s: 4.4 s in all.
+      const out = await settle(enrichAll(nodes, undefined, report));
+
+      expect(deezerCalls(net).length - before).toBe(3);
+      expect(previews(out)).toBe(3);
+      expect(report).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Strict cached nodes; the first's ISRC entry cannot be played and names a readable
+     * alternative (id 8).
+     */
+    function firstWithAlternative(count: number) {
+      const { nodes, spotify, isrcEntry } = strictNodes(count);
+      cachedSongs();
+      const net = stub({
+        spotify,
+        byIsrc: (isrc) =>
+          isrc === "GBXXX9900001"
+            ? entry({ id: 1, title: "Song 1", isrc, readable: false, alternative: { id: 8 } })
+            : isrcEntry(isrc),
+        byId: (id) => (id === 8 ? entry({ id: 8, title: "Song 1", isrc: "GBXXX9900001" }) : null),
+      });
+      return { nodes, net };
+    }
+    const alternativeCalls = (calls: FetchCall[]) =>
+      calls.filter(
+        (call) => call.url.startsWith(DEEZER) && /^\/track\/\d+$/.test(new URL(call.url).pathname),
+      );
+
+    it("counts a lookup whose alternative the pace refused after its ISRC request was sent", async () => {
+      const { nodes, net } = firstWithAlternative(MAX_DEEZER_LOOKUPS + 1);
+      // 29 node requests of other runs: the first node's ISRC request takes the share's last
+      // slot, and its alternative's would come after its own time (less the margin).
+      await otherNodeLookups(DEEZER_NODE_MAX_PER_WINDOW - 1);
+      const before = deezerCalls(net).length;
+      const logs = captureLogsForTests();
+
+      const out = await settle(enrichAll(nodes)).finally(() => logs.restore());
+
+      const sent = deezerCalls(net).slice(before);
+      // The first node's lookup was made (its ISRC request was sent): it counts against the
+      // cap, so 19 more are made and the 21st node gets none.
+      expect(sent.filter((call) => call.url.includes("/track/isrc:"))).toHaveLength(
+        MAX_DEEZER_LOOKUPS,
+      );
+      expect(alternativeCalls(sent)).toHaveLength(0);
+      expect(out.nodes[0].previewUrl).toBeUndefined();
+      expect(previews(out)).toBe(MAX_DEEZER_LOOKUPS - 1);
+      // Nor is it said to be skipped.
+      expect(logs.messages("info").some((line) => line.includes("no slot in time"))).toBe(false);
+    });
+
+    it.each([
+      [`less than ${START_MARGIN_MS} ms of the lookup's own time`, 1_500, 0],
+      [`${START_MARGIN_MS} ms of it or more`, 2_500, 1],
+    ])("refuses a request whose slot would leave %s", async (_label, after, made) => {
+      // 29 node requests of other runs, `after` ms before the lookup: its ISRC request takes the
+      // share's last slot, and its alternative's is free when those leave the window (at 5 s).
+      const { nodes, net } = firstWithAlternative(1);
+      await otherNodeLookups(DEEZER_NODE_MAX_PER_WINDOW - 1);
+      await vi.advanceTimersByTimeAsync(after);
+      const before = deezerCalls(net).length;
+
+      const out = await settle(enrichAll(nodes));
+
+      expect(alternativeCalls(deezerCalls(net).slice(before))).toHaveLength(made);
+      expect(previews(out)).toBe(made);
+    });
+
+    it("rejects at once when the run is cancelled while a lookup waits for its slot, and takes no slot", async () => {
+      const { nodes, spotify, isrcEntry } = strictNodes(1);
+      cachedSongs();
+      const net = stub({ spotify, byIsrc: (isrc) => isrcEntry(isrc) });
+      await otherNodeLookups(DEEZER_NODE_MAX_PER_WINDOW);
+      await vi.advanceTimersByTimeAsync(2_500);
+      const before = deezerCalls(net).length;
+      const controller = new AbortController();
+      let settledAt = Number.NaN;
+      const pending = enrichAll(nodes, controller.signal)
+        .then(
+          () => "resolved",
+          () => "rejected",
+        )
+        .finally(() => {
+          settledAt = pacingClock();
+        });
+      await vi.advanceTimersByTimeAsync(500);
+
+      const abortedAt = pacingClock();
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(settledAt - abortedAt).toBeLessThan(100);
+      expect(await pending).toBe("rejected");
+      expect(deezerCalls(net).length - before).toBe(0);
+      // It took no slot: a node lookup now gets the next one, in 2 s.
+      const next = deezerPreviewByIsrc(OTHER, undefined, {
+        lane: "nodes",
+        notAfter: () => pacingClock() + 2_100,
+      });
+      await vi.advanceTimersByTimeAsync(2_100);
+      await next;
+      expect(deezerCalls(net).length - before).toBe(1);
+    });
+
+    it("rejects at once when the run is cancelled while an analysed track's lookup waits for its slot", async () => {
+      const net = stub({ spotify: spotifyTrack(), byIsrc: (isrc) => entry({ isrc }) });
+      const request = { title: "Under Pressure", artist: "Queen", durationMs: 248_000 };
+      for (let i = 0; i < DEEZER_MAX_PER_WINDOW; i++) {
+        await deezerPreviewByIsrc({ ...request, isrc: "GBUM71029601" });
+      }
+      const before = deezerCalls(net).length;
+      const controller = new AbortController();
+      let settledAt = Number.NaN;
+      const pending = resolvePreview({ ...request, isrc: "GBUM71029601" }, controller.signal)
+        .then(
+          () => "resolved",
+          () => "rejected",
+        )
+        .finally(() => {
+          settledAt = pacingClock();
+        });
+      await vi.advanceTimersByTimeAsync(500);
+
+      const abortedAt = pacingClock();
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(settledAt - abortedAt).toBeLessThan(100);
+      expect(await pending).toBe("rejected");
+      expect(deezerCalls(net).length - before).toBe(0);
+    });
+
+    it("does not pace replayed answers: nothing reaches Deezer", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "liner-notes-replay-"));
+      process.env.SOURCE_CASSETTE = "replay";
+      process.env.SOURCE_CASSETTE_DIR = dir;
+      try {
+        const outcomes = await Promise.all(
+          Array.from({ length: DEEZER_MAX_PER_WINDOW + 5 }, (_, i) =>
+            deezerPreviewByIsrc(
+              { ...OTHER, isrc: `GBXXX97${String(i).padStart(5, "0")}` },
+              undefined,
+              { lane: "nodes", notAfter: () => pacingClock() },
+            ).then(
+              () => "answered",
+              (error: unknown) => (error instanceof PaceRefused ? "refused" : "missed"),
+            ),
+          ),
+        );
+
+        // Every lookup is answered from the cassette (here: none recorded) at once.
+        expect(outcomes.every((outcome) => outcome === "missed")).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   it("keeps a link a Deezer error echoes out of the warning and the source error", async () => {
@@ -847,11 +1468,14 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       byIsrc: () => ({ error: { type: "Exception", message: `bad link ${echoed}`, code: 100 } }),
     });
     const report = vi.fn();
+    const logs = captureLogsForTests();
 
-    const out = await enrichAll([{ size: 22, ...underPressure }], undefined, report);
+    const out = await enrichAll([{ size: 22, ...underPressure }], undefined, report).finally(() =>
+      logs.restore(),
+    );
 
     expect(out.nodes[0].previewUrl).toBeUndefined();
-    const warned = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    const warned = JSON.stringify(logs.messages("warn"));
     expect(warned).toContain("Deezer");
     expect(warned).not.toMatch(/dzcdn|hdnea/);
     expect(report).toHaveBeenCalledTimes(1);

@@ -222,6 +222,74 @@ describe("SonicCache artwork", () => {
     expect(cache.getArtwork("old")).not.toHaveProperty("trackArtists");
   });
 
+  const details = {
+    isrc: "GBUM71029601",
+    durationMs: 248000,
+    album: "Hot Space",
+    releaseDate: "1982-05-21",
+  };
+  const storedDetails = (key: string) =>
+    db.prepare("SELECT track_details FROM artwork_cache WHERE search_key = ?").pluck().get(key);
+
+  it("keeps the track's ISRC, duration, album and release date, and nothing else of it", () => {
+    cache.putArtwork("k", {
+      ...artwork,
+      trackDetails: { ...details, previewUrl: "https://p.scdn.co/mp3-preview/u" } as never,
+    });
+
+    expect(cache.getArtwork("k")).toEqual({ ...artwork, trackDetails: details });
+    expect(JSON.parse(String(storedDetails("k")))).toEqual(details);
+    expect(String(storedDetails("k"))).not.toMatch(/https?:|preview/i);
+    expect(storedPreview("k")).toBeNull();
+  });
+
+  it("keeps details with unknown parts, and none for a row kept without them", () => {
+    const partial = { isrc: null, durationMs: null, album: null, releaseDate: "1982" };
+    cache.putArtwork("k", { ...artwork, trackDetails: partial });
+    expect(cache.getArtwork("k")?.trackDetails).toEqual(partial);
+
+    cache.putArtwork("k", { ...artwork, trackDetails: null });
+    expect(storedDetails("k")).toBeNull();
+    expect(cache.getArtwork("k")).toEqual(artwork);
+  });
+
+  it.each([
+    ["an album name that holds a link", { album: "Hits https://example.com/album" }, "album"],
+    ["a malformed ISRC", { isrc: "not an isrc" }, "isrc"],
+    ["a release date that is not a date", { releaseDate: "https://example.com" }, "releaseDate"],
+    ["a duration that is not one", { durationMs: -1 }, "durationMs"],
+  ])("drops only %s, and keeps the other details", (_label, bad, field) => {
+    cache.putArtwork("k", { ...artwork, trackDetails: { ...details, ...bad } });
+
+    const kept = { ...details, [field]: null };
+    expect(JSON.parse(String(storedDetails("k")))).toEqual(kept);
+    expect(cache.getArtwork("k")).toEqual({ ...artwork, trackDetails: kept });
+  });
+
+  it("keeps an album name that only looks like an address (no link)", () => {
+    cache.putArtwork("k", { ...artwork, trackDetails: { ...details, album: "www.thug.com" } });
+
+    expect(cache.getArtwork("k")?.trackDetails).toEqual({ ...details, album: "www.thug.com" });
+  });
+
+  it("reads stored details field by field, and none that are not an object", () => {
+    const insert = db.prepare(
+      "INSERT INTO artwork_cache (search_key, spotify_id, track_title, track_artist, track_details, expires_at) VALUES (?, 'u', 'Under Pressure', 'Queen', ?, unixepoch() + 60)",
+    );
+    insert.run("broken", "not json");
+    insert.run("list", "[]");
+    insert.run("link", JSON.stringify({ ...details, album: "http://example.com" }));
+    insert.run("extra", JSON.stringify({ ...details, previewUrl: "https://p.scdn.co/x" }));
+
+    for (const key of ["broken", "list"]) {
+      expect(cache.getArtwork(key)).toMatchObject({ spotifyId: "u" });
+      expect(cache.getArtwork(key)).not.toHaveProperty("trackDetails");
+    }
+    expect(cache.getArtwork("link")?.trackDetails).toEqual({ ...details, album: null });
+    expect(cache.getArtwork("extra")?.trackDetails).toEqual(details);
+    expect(JSON.stringify(cache.getArtwork("extra"))).not.toMatch(/https?:\/\/p\.scdn|previewUrl/);
+  });
+
   it("clears a preview URL stored for the key by older code when it writes the row again", () => {
     db.prepare(
       "INSERT INTO artwork_cache (search_key, preview_url, expires_at) VALUES ('k', 'https://p.scdn.co/mp3-preview/old', unixepoch() + 60)",

@@ -22,8 +22,13 @@
  *
  * The result key also names which primary-record sources with a credential (Discogs, Genius)
  * are configured: a result stored while one was not configured says so and holds none of its
- * records, so adding the credential composes the result again. The research key does not: the
- * research cache holds no primary record.
+ * records, so adding the credential composes the result again.
+ *
+ * Research key v4: the research is cached with the run's evidence pack (the primary sources'
+ * records and the web search's results), so its key names the primary-record sources with a
+ * credential too; adding DISCOGS_TOKEN or GENIUS_ACCESS_TOKEN reads the research again. A
+ * SecondHandSongs key changes only its rate limit, not what it answers, and is not named. v3
+ * entries are never read again (they expire on their own).
  */
 
 import { discogsConfigured } from "../sources/discogs.js";
@@ -38,7 +43,7 @@ export const TRACKS_NAMESPACE: string[] = ["tracks", "v5"];
 export interface ConfiguredSources {
   lastfm: boolean;
   tavily: boolean;
-  /** Primary-record sources; only the result key names them. */
+  /** Primary-record sources with a credential. */
   discogs: boolean;
   genius: boolean;
 }
@@ -56,12 +61,13 @@ export function configuredSources(): ConfiguredSources {
 const flags = (configured: ConfiguredSources) =>
   `lastfm=${configured.lastfm ? 1 : 0}:tavily=${configured.tavily ? 1 : 0}`;
 
+const primaryFlags = (configured: ConfiguredSources) =>
+  `discogs=${configured.discogs ? 1 : 0}:genius=${configured.genius ? 1 : 0}`;
+
 /** Research cache key of a track, for the sources configured now. */
 export const researchCacheKey = (spotifyId: string, configured: ConfiguredSources) =>
-  `v3:${spotifyId}:${flags(configured)}`;
+  `v4:${spotifyId}:${flags(configured)}:${primaryFlags(configured)}`;
 
 /** Result cache key of a track (its Spotify id), for the sources configured now. */
 export const resultCacheKey = (spotifyId: string, configured: ConfiguredSources) =>
-  `${spotifyId}|${flags(configured)}:discogs=${configured.discogs ? 1 : 0}:genius=${
-    configured.genius ? 1 : 0
-  }`;
+  `${spotifyId}|${flags(configured)}:${primaryFlags(configured)}`;

@@ -178,6 +178,15 @@ describe("the log of one analysis", () => {
     for (const component of ["Scout", "Engineer", "Historian", "Composer", "Run", "HTTP"]) {
       expect(components, component).toContain(component);
     }
+    // One timing line per node of the run (agent/graph.ts).
+    const timings = entries.filter((entry) => entry.component === "Graph" && "node" in entry);
+    expect(timings.map((entry) => entry.node).sort()).toEqual(
+      ["composer", "engineer", "historian", "scout"].sort(),
+    );
+    for (const entry of timings) {
+      expect(entry).toMatchObject({ level: "info", runId, outcome: "ok" });
+      expect(entry.durationMs).toEqual(expect.any(Number));
+    }
     const requestLine = entries.find((entry) => entry.path === "/api/analyze/stream");
     expect(requestLine).toMatchObject({ method: "GET", status: 200, runId });
     expect(requestLine?.ipHash).toMatch(/^[0-9a-f]{16}$/);
@@ -223,5 +232,14 @@ describe("the log of one analysis", () => {
     const nodeLines = entries.filter((entry) => typeof entry.threadId === "string");
     expect(nodeLines.length).toBe(3 * 3);
     for (const entry of nodeLines) expect(entry.runId).toBe(entry.threadId);
+    // Each run's node timings carry its own id.
+    for (const runId of runIds) {
+      const timings = entries.filter(
+        (entry) => entry.component === "Graph" && entry.runId === runId,
+      );
+      expect(timings.map((entry) => entry.node).sort()).toEqual(
+        ["composer", "engineer", "historian", "scout"].sort(),
+      );
+    }
   });
 });

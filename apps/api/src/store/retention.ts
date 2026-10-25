@@ -15,6 +15,12 @@
  * - Stored stream events are deleted once they were sent longer ago than the event retention,
  *   whatever their run. They are kept only to record a run as a replay soon after it ran; the
  *   run's result stays with the run. The event retention is never longer than the run retention.
+ * - Model usage rows (`llm_usage`, the per-database copy of the spend log kept for reports) go
+ *   with their run; a row whose run has no record (an evaluation or smoke call, or a run already
+ *   deleted) goes once it was written longer ago than the run retention. The spend log itself
+ *   (LLM_SPEND_LOG) is never pruned here: it is the authoritative record of spend.
+ * - The run cutoff applied is recorded (`retention_state`, the latest one kept), so the run
+ *   report marks the days whose records were deleted even after the retention is raised.
  *
  * Defaults: checkpoints 24 hours, store items 30 days, runs 30 days, run events 7 days.
  * Override with CHECKPOINT_RETENTION_HOURS (at least 1), STORE_RETENTION_DAYS,
@@ -31,6 +37,9 @@ const log = logger("Retention");
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+/** The shortest run retention RUN_RETENTION_DAYS can set (smaller values are raised to it). */
+export const MIN_RUN_RETENTION_MS = DAY_MS;
+
 export interface RetentionPolicy {
   checkpointRetentionMs: number;
   storeRetentionMs: number;
@@ -45,22 +54,32 @@ export const DEFAULT_RETENTION: RetentionPolicy = {
   runEventRetentionMs: 7 * DAY_MS,
 };
 
-function setting(name: string, raw: string | undefined, fallback: number, minimum: number): number {
-  if (raw == null || raw.trim() === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    log.warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
-    return fallback;
-  }
-  if (value < minimum) {
-    log.warn(`${name}=${value} is below the minimum; using ${minimum}.`);
-    return minimum;
-  }
-  return value;
-}
-
-/** Reads the retention periods from the environment, falling back to the defaults. */
-export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): RetentionPolicy {
+/**
+ * Reads the retention periods from the environment, falling back to the defaults. A setting it
+ * cannot use is reported to `warn` (the log by default).
+ */
+export function retentionFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = (message) => log.warn(message),
+): RetentionPolicy {
+  const setting = (
+    name: string,
+    raw: string | undefined,
+    fallback: number,
+    minimum: number,
+  ): number => {
+    if (raw == null || raw.trim() === "") return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
+      return fallback;
+    }
+    if (value < minimum) {
+      warn(`${name}=${value} is below the minimum; using ${minimum}.`);
+      return minimum;
+    }
+    return value;
+  };
   return {
     checkpointRetentionMs:
       setting(
@@ -81,7 +100,7 @@ export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): Retentio
         "RUN_RETENTION_DAYS",
         env.RUN_RETENTION_DAYS,
         DEFAULT_RETENTION.runRetentionMs / DAY_MS,
-        1,
+        MIN_RUN_RETENTION_MS / DAY_MS,
       ) * DAY_MS,
     runEventRetentionMs:
       setting(
@@ -100,6 +119,7 @@ export interface PruneResult {
   storeItems: number;
   runs: number;
   runEvents: number;
+  llmUsage: number;
 }
 
 function tableExists(db: Database.Database, name: string): boolean {
@@ -137,6 +157,39 @@ function idleThreads(db: Database.Database, cutoffSec: number, openRunCutoffSec:
   return rows.map((r) => r.thread_id);
 }
 
+/**
+ * Records that runs and usage rows at or before `cutoffSec` (unix seconds) may have been
+ * deleted, keeping the latest cutoff recorded (migration 12).
+ */
+function recordRunCutoff(db: Database.Database, cutoffSec: number, now: number): void {
+  db.prepare(
+    `INSERT INTO retention_state (id, run_cutoff, updated_at) VALUES (1, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET
+       run_cutoff = MAX(COALESCE(run_cutoff, excluded.run_cutoff), excluded.run_cutoff),
+       updated_at = excluded.updated_at`,
+  ).run(cutoffSec, Math.floor(now / 1000));
+}
+
+/** What a database records of the deletions retention made (migration 12). */
+export interface RetentionRecord {
+  /** The latest run cutoff applied (unix seconds); null when not pruned since migration 12. */
+  runCutoff: number | null;
+  /**
+   * When cutoffs began to be recorded (unix seconds): the prunes before it were not recorded.
+   * Null when the database held no runs or usage rows then, so none was deleted unrecorded.
+   */
+  recordedSince: number | null;
+}
+
+/** The database's record of retention, or null when it keeps none (schema before 12). */
+export function retentionRecord(db: Database.Database): RetentionRecord | null {
+  if (!tableExists(db, "retention_state")) return null;
+  const row = db
+    .prepare("SELECT run_cutoff, recorded_since FROM retention_state WHERE id = 1")
+    .get() as { run_cutoff: number | null; recorded_since: number | null } | undefined;
+  return { runCutoff: row?.run_cutoff ?? null, recordedSince: row?.recorded_since ?? null };
+}
+
 /** Deletes everything older than the policy allows. Runs in one transaction. */
 export function pruneDatabase(
   db: Database.Database,
@@ -150,6 +203,7 @@ export function pruneDatabase(
     storeItems: 0,
     runs: 0,
     runEvents: 0,
+    llmUsage: 0,
   };
 
   const runCutoff = Math.floor((now - policy.runRetentionMs) / 1000);
@@ -185,18 +239,32 @@ export function pruneDatabase(
     result.runEvents = db
       .prepare(`DELETE FROM run_events WHERE sent_at <= ? OR run_id IN (${expired})`)
       .run(eventCutoffMs, runCutoff).changes;
+    result.llmUsage = db
+      .prepare(
+        `DELETE FROM llm_usage WHERE run_id IN (${expired})
+           OR (created_at <= ? AND run_id NOT IN (SELECT run_id FROM runs))`,
+      )
+      .run(runCutoff, runCutoff).changes;
     result.runs = db
       .prepare("DELETE FROM runs WHERE COALESCE(finished_at, created_at) <= ?")
       .run(runCutoff).changes;
+    // The cutoff applied, for the run report: the latest one, so raising RUN_RETENTION_DAYS
+    // never makes days already deleted look kept.
+    if (tableExists(db, "retention_state")) recordRunCutoff(db, runCutoff, now);
   })();
 
   const total =
-    result.checkpoints + result.writes + result.storeItems + result.runs + result.runEvents;
+    result.checkpoints +
+    result.writes +
+    result.storeItems +
+    result.runs +
+    result.runEvents +
+    result.llmUsage;
   if (total > 0) {
     log.info(
       `Pruned ${result.threads} threads (${result.checkpoints} checkpoints, ` +
         `${result.writes} writes), ${result.storeItems} store items, ${result.runs} runs ` +
-        `(${result.runEvents} events)`,
+        `(${result.runEvents} events), ${result.llmUsage} model usage rows`,
     );
   }
   return result;

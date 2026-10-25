@@ -183,6 +183,35 @@ docker-compose up --build
 | Backend API    | http://localhost/api (direct: http://127.0.0.1:3001)    |
 | Audio Analysis | internal to the API (direct: http://127.0.0.1:3002)     |
 
+`GET /api/health` is the liveness probe the containers' health checks use. `GET /api/ready`
+answers 200 when the API can serve what it is set up to serve and 503 otherwise, listing each
+check (database and migrations, audio service and its models, model provider, budget state).
+While live analysis is not served (`REPLAY_MODE=only`, or `fallback` with live analysis off or
+the budget spent) the audio service and the provider are not needed; with `REPLAY_MODE=off` a
+spent budget answers 503. The answer is public and limited per address like search; it shows
+check names and states (and the schema version), never a key, host, amount, provider name or
+variable name: what the provider lacks is written to the API's log. See `apps/api/.env.example`.
+
+The run report prints, per UTC day: runs by live, replay (a recording served again, or model
+answers replayed from stored answers) and cached result and by outcome; p50/p95 duration of
+completed live runs, with the time spent waiting at the track picker left out; the fallback rate;
+and, by the day of the call, model calls sent to the provider, their tokens and estimated USD
+from the database's usage rows. Days before the cutoff retention last applied (recorded in the
+database) are shown as pruned; on a database migrated from before cutoffs were recorded, the
+days an earlier prune may have emptied are marked unknown. It never prints what anyone typed or
+a run id; the spend log (`LLM_SPEND_LOG`) stays the authoritative record of spend.
+
+```bash
+npm run report -w apps/api -- --days 14            # a checkout's database (SQLITE_DB_PATH)
+docker compose exec sonic-server node dist/report.js --days 14 --json   # the deployment's
+```
+
+It writes nothing when the database has both its `-wal` and `-shm` files (the API has it open: it
+is opened read-only) or no `-wal` (the API is stopped: a file of up to 1 GiB is read into memory,
+about 2.3 times its size at peak, and kept only if it did not change meanwhile). Otherwise it is
+opened read-only and SQLite creates the missing `-wal` or `-shm`, so run it as the API's user
+(`docker compose exec` runs it as that user, against the `sonic-data` volume).
+
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with
 `TRUST_PROXY=1`, so its per-IP rate limits use the client address nginx puts in

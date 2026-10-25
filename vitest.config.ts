@@ -10,12 +10,14 @@ export default defineConfig({
           root: "apps/api",
           environment: "node",
           // Tests never load a settings file (see test/setup/noDotenv.ts), replay model calls
-          // from cassettes by default (test/setup/llmReplay.ts) and write no log lines unless
-          // they capture them (test/setup/logging.ts).
+          // from cassettes by default (test/setup/llmReplay.ts), write no log lines unless
+          // they capture them (test/setup/logging.ts) and do not pace source requests unless
+          // they test the pacing (test/setup/sourcePacing.ts).
           setupFiles: [
             "test/setup/noDotenv.ts",
             "test/setup/llmReplay.ts",
             "test/setup/logging.ts",
+            "test/setup/sourcePacing.ts",
           ],
           include: ["src/**/*.test.ts", "test/**/*.test.ts"],
         },

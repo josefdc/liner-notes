@@ -4,6 +4,11 @@
  * Separate tables for each data type (audio, research, artwork), each with a TTL. Stored JSON
  * is validated when read; a row that does not match is treated as a miss.
  *
+ * The research cache holds a run's research with its evidence (`CachedEvidence`, inside the
+ * row's JSON): the evidence pack's items, the recording the ISRC identified and the primary
+ * sources' errors that did not block caching. Research cached by older code has no evidence;
+ * its key version is no longer read (agent/cacheKeys.ts).
+ *
  * The audio cache holds measurements only. A row is served only when its stored data carries
  * the `measured` marker the engineer sets on audio service measurements; a measured row with
  * low confidence is served too, with its confidence. Writes of unmarked features are refused.
@@ -13,9 +18,11 @@
  */
 
 import type Database from "better-sqlite3";
-import { SourceError } from "@liner-notes/contract";
+import { Evidence, SourceError, SourceId } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
+import { logger } from "../logger.js";
+import type { IdentifiedRecording } from "../sources/identity.js";
 import {
   isMatchedMeasurement,
   isMeasuredAudio,
@@ -25,9 +32,26 @@ import {
 
 export { isMatchedMeasurement, isMeasuredAudio } from "./measuredAudio.js";
 
+const log = logger("Cache");
+
 // =============================================================================
 // Types
 // =============================================================================
+
+/**
+ * What a node's preview is decided on, of the track a search found (agent/enricher.ts): none of
+ * it is a link. Kept as a JSON object in the artwork cache's `track_details` (migration 13).
+ */
+export interface CachedTrackDetails {
+  /** The track's ISRC, canonical; null when Spotify gave none. */
+  isrc: string | null;
+  /** The track's duration in milliseconds; null when unknown. */
+  durationMs: number | null;
+  /** The name of the release the track is on; null when unknown. */
+  album: string | null;
+  /** The release's date as Spotify gives it (YYYY, YYYY-MM or YYYY-MM-DD); null when unknown. */
+  releaseDate: string | null;
+}
 
 /**
  * What the artwork cache keeps of a Spotify search: the cover and the track it belongs to. No
@@ -43,7 +67,58 @@ export interface SpotifySearchResult {
   trackArtist: string | null;
   /** Every credited artist, lead first; null when unknown (rows written before migration 9). */
   trackArtists?: string[] | null;
+  /**
+   * The found track's details; absent or null when the row keeps none (rows written before
+   * migration 13, or a row kept without the track's identity).
+   */
+  trackDetails?: CachedTrackDetails | null;
 }
+
+/**
+ * The evidence of a cached research, as the run that made it collected it: a research-cache hit
+ * gives the same evidence as that run without asking the primary sources again. Written and read
+ * back by agent/research/runEvidence.ts; its items become evidence again only through
+ * `restoredEvidence` (agent/research/evidencePack.ts), which checks each one.
+ */
+export interface CachedEvidence {
+  /** The version of this shape (agent/research/runEvidence.ts); a row of another is a miss. */
+  format: number;
+  /**
+   * When the research was made (ISO 8601): a refresh of the evidence keeps it, and the row
+   * expires RESEARCH_TTL_MS (agent/research/runEvidence.ts) after it.
+   */
+  researchedAt: string;
+  /** When the run read the evidence (ISO 8601); a refresh reads it again. */
+  readAt: string;
+  /** The ISRC the primary sources were read from; null when the track had none (not asked). */
+  isrc: string | null;
+  /** The evidence pack's items, best tier first. */
+  items: Evidence[];
+  /** How many items the pack's size cap left out. */
+  omitted: number;
+  /** The recording's MusicBrainz sample relations, as the research entry the run added. */
+  samples: string[];
+  /** The recording the ISRC identified, for the composer; null when none was. */
+  recording: IdentifiedRecording | null;
+  /** Whether the recording is its song's original recording (its covers are then about it). */
+  trackIsOriginal: boolean;
+  /**
+   * The primary sources' errors, none of which blocked caching: a source not configured, or one
+   * that answered in a shape its reader does not know (also in `lasting`).
+   */
+  errors: SourceError[];
+  lasting: SourceError[];
+  /**
+   * What the run left for a later run, none of which blocked caching: a source whose request
+   * was not sent ("not_asked": our own pacing left no slot in time, or the run's time for the
+   * primary sources ran out first), the MusicBrainz work's recordings not dated ("dates"; its
+   * covers are then about the song). A hit reads the primary sources again for such a row.
+   */
+  incomplete: Array<{ source: SourceId; part: "not_asked" | "dates" }>;
+}
+
+/** Research as the research cache holds it. */
+export type CachedResearch = ResearchData & { evidence?: CachedEvidence };
 
 // =============================================================================
 // TTL Defaults (ms)
@@ -53,7 +128,8 @@ export interface SpotifySearchResult {
 const TTL_AUDIO_HIGH = 30 * 24 * 60 * 60 * 1000;
 /** A partial (low-confidence) measurement is kept for a day; see measuredAudio.ts. */
 const TTL_AUDIO_LOW = LOW_CONFIDENCE_AUDIO_TTL_MS;
-const TTL_RESEARCH = 48 * 60 * 60 * 1000; // 48 hours
+/** The default; the historian passes its own (RESEARCH_TTL_MS, agent/research/runEvidence.ts). */
+const TTL_RESEARCH = 48 * 60 * 60 * 1000;
 const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // =============================================================================
@@ -61,6 +137,59 @@ const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 // =============================================================================
 
 const stringList = z.array(z.string());
+
+/** Text that holds a link; a track's details never do. */
+const LINK = /https?:\/\//i;
+const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
+const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
+
+/**
+ * Track details, field by field: a field that is not valid (an album name that holds a link, a
+ * malformed ISRC or date, a duration that is not a positive whole number) is dropped (null) and
+ * the others are kept; any other field is left out. Null when `value` is not an object.
+ */
+function validDetails(value: unknown): CachedTrackDetails | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const fields = value as Record<string, unknown>;
+  const text = (field: unknown) => (typeof field === "string" && field ? field : null);
+  const isrc = text(fields.isrc);
+  const album = text(fields.album);
+  const releaseDate = text(fields.releaseDate);
+  const durationMs = fields.durationMs;
+  return {
+    isrc: isrc && ISRC.test(isrc) ? isrc : null,
+    durationMs:
+      typeof durationMs === "number" && Number.isInteger(durationMs) && durationMs > 0
+        ? durationMs
+        : null,
+    album: album && !LINK.test(album) ? album : null,
+    releaseDate: releaseDate && RELEASE_DATE.test(releaseDate) ? releaseDate : null,
+  };
+}
+
+const RecordingSchema = z.object({
+  mbid: z.string(),
+  title: z.string(),
+  artist: z.string(),
+  lengthMs: z.number().nullable(),
+  firstReleaseDate: z.string().nullable(),
+  artists: z.array(z.object({ mbid: z.string(), name: z.string(), credited: z.string() })),
+});
+
+const CachedEvidenceSchema = z.object({
+  format: z.number().int(),
+  researchedAt: z.string(),
+  readAt: z.string(),
+  isrc: z.string().nullable(),
+  items: z.array(Evidence),
+  omitted: z.number().int().nonnegative(),
+  samples: stringList,
+  recording: RecordingSchema.nullable(),
+  trackIsOriginal: z.boolean(),
+  errors: z.array(SourceError),
+  lasting: z.array(SourceError),
+  incomplete: z.array(z.object({ source: SourceId, part: z.enum(["not_asked", "dates"]) })),
+});
 
 const ResearchSchema = z
   .object({
@@ -77,6 +206,7 @@ const ResearchSchema = z
     notAsked: stringList.optional(),
     collaboratorsOf: z.string().optional(),
     notConfigured: z.array(SourceError).optional(),
+    evidence: CachedEvidenceSchema.optional(),
   })
   // Fields the reader does not know (from older code) are dropped, never passed on.
   .strip();
@@ -90,6 +220,11 @@ function parseJson(text: string): unknown {
 }
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+/** Stored track details (validDetails), or null when there are none or they are not an object. */
+function trackDetails(text: string | null): CachedTrackDetails | null {
+  return text ? validDetails(parseJson(text)) : null;
+}
 
 /** A stored JSON list of artist names, or null when there is none or it cannot be read. */
 function artistList(text: string | null): string[] | null {
@@ -140,14 +275,15 @@ function prepareStatements(db: Database.Database) {
         track_title: string | null;
         track_artist: string | null;
         track_artists: string | null;
+        track_details: string | null;
         expires_at: number;
       }
     >(
-      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at FROM artwork_cache WHERE search_key = ?",
+      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, track_details, expires_at FROM artwork_cache WHERE search_key = ?",
     ),
     putArtwork: db.prepare(
-      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, track_details, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(search_key) DO UPDATE SET
          cover_url = excluded.cover_url,
          spotify_url = excluded.spotify_url,
@@ -156,6 +292,7 @@ function prepareStatements(db: Database.Database) {
          track_title = excluded.track_title,
          track_artist = excluded.track_artist,
          track_artists = excluded.track_artists,
+         track_details = excluded.track_details,
          expires_at = excluded.expires_at`,
     ),
     purgeAudio: db.prepare("DELETE FROM audio_cache WHERE expires_at <= ?"),
@@ -183,11 +320,11 @@ export class SonicCache {
 
       const features = parseMeasuredAudio(row.full_data);
       if (!features) {
-        console.warn(`[SonicCache] Ignoring audio row for ${spotifyId}: not a marked measurement`);
+        log.warn(`Ignoring audio row for ${spotifyId}: not a marked measurement`);
       }
       return features;
     } catch (err) {
-      console.error("[SonicCache] getAudio error:", err);
+      log.error("Could not read an audio row", { err });
       return null;
     }
   }
@@ -210,7 +347,7 @@ export class SonicCache {
       const stored = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
       const existing = isMatchedMeasurement(stored) ? stored : null;
       if (existing?.confidence === "high" && features.confidence === "low") {
-        console.log(`[SonicCache] Keeping the complete audio row for ${spotifyId}`);
+        log.info(`Keeping the complete audio row for ${spotifyId}`);
         return;
       }
 
@@ -225,7 +362,7 @@ export class SonicCache {
         now + Math.floor(ttl / 1000),
       );
     } catch (err) {
-      console.error("[SonicCache] putAudio error:", err);
+      log.error("Could not write an audio row", { err });
       throw err;
     }
   }
@@ -234,24 +371,24 @@ export class SonicCache {
   // Research Cache
   // ---------------------------------------------------------------------------
 
-  getResearch(spotifyId: string): ResearchData | null {
+  getResearch(spotifyId: string): CachedResearch | null {
     try {
       const row = this.stmt.getResearch.get(spotifyId);
       if (!row || nowSec() >= row.expires_at) return null;
 
       const parsed = ResearchSchema.safeParse(parseJson(row.full_data));
       if (!parsed.success) {
-        console.warn(`[SonicCache] Ignoring research row for ${spotifyId}: unexpected shape`);
+        log.warn(`Ignoring research row for ${spotifyId}: unexpected shape`);
         return null;
       }
-      return parsed.data as ResearchData;
+      return parsed.data as CachedResearch;
     } catch (err) {
-      console.error("[SonicCache] getResearch error:", err);
+      log.error("Could not read a research row", { err });
       return null;
     }
   }
 
-  putResearch(spotifyId: string, data: ResearchData, ttlMs: number = TTL_RESEARCH): void {
+  putResearch(spotifyId: string, data: CachedResearch, ttlMs: number = TTL_RESEARCH): void {
     try {
       this.stmt.putResearch.run(
         spotifyId,
@@ -261,7 +398,7 @@ export class SonicCache {
         nowSec() + Math.floor(ttlMs / 1000),
       );
     } catch (err) {
-      console.error("[SonicCache] putResearch error:", err);
+      log.error("Could not write a research row", { err });
       throw err;
     }
   }
@@ -270,11 +407,18 @@ export class SonicCache {
   // Artwork Cache
   // ---------------------------------------------------------------------------
 
+  /**
+   * A cached search, or null (missing or expired). Its track details are left out when the row
+   * has none or they are not an object (a row of older code); the enricher then searches again
+   * for a row that carries a Spotify id (agent/enricher.ts `servable`). A field of the details
+   * that is not valid is dropped (validDetails).
+   */
   getArtwork(searchKey: string): SpotifySearchResult | null {
     try {
       const row = this.stmt.getArtwork.get(searchKey);
       if (!row || nowSec() >= row.expires_at) return null;
 
+      const details = trackDetails(row.track_details);
       return {
         coverUrl: row.cover_url,
         spotifyUrl: row.spotify_url,
@@ -282,15 +426,22 @@ export class SonicCache {
         trackTitle: row.track_title,
         trackArtist: row.track_artist,
         ...(artistList(row.track_artists) ? { trackArtists: artistList(row.track_artists) } : {}),
+        ...(details ? { trackDetails: details } : {}),
       };
     } catch (err) {
-      console.error("[SonicCache] getArtwork error:", err);
+      log.error("Could not read an artwork row", { err });
       return null;
     }
   }
 
+  /**
+   * Caches a search. Only the fields named here are written (a preview URL never is); a field of
+   * the track details that is not valid (an album name that holds a link, a malformed ISRC or
+   * date) is written as null, the others as given (validDetails).
+   */
   putArtwork(searchKey: string, result: SpotifySearchResult, ttlMs: number = TTL_ARTWORK): void {
     try {
+      const details = result.trackDetails ? validDetails(result.trackDetails) : null;
       this.stmt.putArtwork.run(
         searchKey,
         result.coverUrl,
@@ -299,10 +450,11 @@ export class SonicCache {
         result.trackTitle,
         result.trackArtist,
         result.trackArtists?.length ? JSON.stringify(result.trackArtists) : null,
+        details ? JSON.stringify(details) : null,
         nowSec() + Math.floor(ttlMs / 1000),
       );
     } catch (err) {
-      console.error("[SonicCache] putArtwork error:", err);
+      log.error("Could not write an artwork row", { err });
       throw err;
     }
   }
@@ -320,14 +472,12 @@ export class SonicCache {
       const artwork = this.stmt.purgeArtwork.run(now).changes;
 
       if (audio + research + artwork > 0) {
-        console.log(
-          `[SonicCache] Purged expired: ${audio} audio, ${research} research, ${artwork} artwork`,
-        );
+        log.info(`Purged expired: ${audio} audio, ${research} research, ${artwork} artwork`);
       }
 
       return { audio, research, artwork };
     } catch (err) {
-      console.error("[SonicCache] purgeExpired error:", err);
+      log.error("Could not purge expired rows", { err });
       return { audio: 0, research: 0, artwork: 0 };
     }
   }

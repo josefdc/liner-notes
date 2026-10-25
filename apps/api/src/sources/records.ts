@@ -16,6 +16,7 @@ import {
   type SourceId,
 } from "@liner-notes/contract";
 import { type SourceName, SourceError } from "./http.js";
+import { PaceRefused } from "./pacing.js";
 import { normalizeName, withoutFeatured } from "./musicbrainz.js";
 import { failureMessage, sourceErrorCode } from "./toolResult.js";
 
@@ -268,6 +269,13 @@ export type SourceResult<T> =
        * does not keep a result from being stored (it is stored and reported with it).
        */
       lasting?: true;
+      /**
+       * Set when a request was not sent, so the source was not asked, which is no source error:
+       * "pace", our own pacing of its requests (sources/pacing.ts) left no slot in time;
+       * "deadline", the run's time for the primary sources ran out before it could start. The
+       * run's evidence says so, and a cached research is read again for it.
+       */
+      notAsked?: "pace" | "deadline";
     });
 
 /**
@@ -357,7 +365,8 @@ export function errorRecord(source: SourceId, error: unknown): SourceErrorRecord
 
 /**
  * Any failure while reading a source, as "missing" with a typed error; never a throw. Only an
- * `unexpectedShape` failure is marked lasting.
+ * `unexpectedShape` failure is marked lasting. A request that was not sent (PaceRefused) is
+ * "missing" without an error, marked `notAsked`: the source was not asked.
  */
 export function failed<T>(
   source: SourceId,
@@ -365,6 +374,14 @@ export function failed<T>(
   omitted: Omission[] = [],
   matched = 0,
 ): SourceResult<T> {
+  if (error instanceof PaceRefused) {
+    const reason =
+      error.why === "pace"
+        ? `not asked: our own pacing of its requests left no slot in time (${error.message})`
+        : "not asked: the run's time for the primary sources ran out before its request";
+    const result = missing<T>(source, reason, { omitted, matched });
+    return result.status === "missing" ? { ...result, notAsked: error.why } : result;
+  }
   const record = errorRecord(source, error);
   return missing<T>(source, record.message ?? "", {
     omitted,
@@ -377,11 +394,49 @@ export function failed<T>(
 /** The errors `unexpectedShape` made; no other error is a shape failure. */
 const shapeFailures = new WeakSet<object>();
 
+const LIMIT_WORDING = /\b(?:rate|limit(?:ed)?|too many|slow down|throttl\w*|quota)\b/i;
+const ERROR_WORDING =
+  /\b(?:error|fail(?:ed|ure)?|unavailable|maintenance|forbidden|denied|invalid|not found|status|limit(?:ed)?|too many)\b/i;
+
 /**
- * A JSON payload that is not the shape the source documents, found by a primary-record reader;
- * reported as an invalid response, and the one failure marked lasting (see `failed`).
+ * How a JSON answer reads as an error envelope rather than a payload of another shape: an
+ * `error` or `errors` field, a numeric status of 400 or more in the body, or a `message` worded
+ * as an error or a limit. Null when it reads as neither.
  */
-export function unexpectedShape(source: SourceName, what: string): SourceError {
+function errorEnvelope(answer: unknown): "rate_limited" | "error" | null {
+  if (typeof answer !== "object" || answer === null || Array.isArray(answer)) return null;
+  const body = answer as Record<string, unknown>;
+  const texts = [body.error, body.errors, body.message, body.detail, body.title]
+    .map((v) => (typeof v === "string" ? v : v !== undefined ? JSON.stringify(v) : ""))
+    .join(" ");
+  const status = [body.status, body.statusCode, body.code].find(
+    (v) => typeof v === "number" || (typeof v === "string" && /^\d{3}$/.test(v)),
+  );
+  const failing =
+    body.error !== undefined ||
+    body.errors !== undefined ||
+    (status !== undefined && Number(status) >= 400) ||
+    (typeof body.message === "string" && ERROR_WORDING.test(body.message));
+  if (!failing) return null;
+  return LIMIT_WORDING.test(texts) || Number(status) === 429 ? "rate_limited" : "error";
+}
+
+/**
+ * A JSON payload that is not the shape the source documents, found by a primary-record reader
+ * (`answer`: what it answered). An answer that reads as an error envelope ("too many requests",
+ * a maintenance notice, a CDN's JSON error) is the source failing for now: `rate_limited` when it
+ * says so, else unavailable; it blocks caching as any passing failure does. Any other JSON
+ * object is an invalid response, the one failure marked lasting (see `failed`): a retry gets the
+ * same answer until the reader changes.
+ */
+export function unexpectedShape(source: SourceName, what: string, answer?: unknown): SourceError {
+  const envelope = errorEnvelope(answer);
+  if (envelope === "rate_limited") {
+    return new SourceError(source, "rate_limited", `answered an error instead of ${what}`);
+  }
+  if (envelope === "error") {
+    return new SourceError(source, "http", `answered an error instead of ${what}`);
+  }
   const error = new SourceError(source, "parse", `unexpected answer: ${what}`);
   shapeFailures.add(error);
   return error;

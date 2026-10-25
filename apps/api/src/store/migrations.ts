@@ -337,6 +337,72 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 11,
+    name: "run_pauses",
+    up(db) {
+      // A run keeps how long it waited for the user's choice (the track picker), so its duration
+      // can leave that time out: `paused_since` is when its current wait began (null while it is
+      // not waiting), `paused_seconds` the waits that have ended. A run stored before this
+      // migration may have waited for any time, which nothing recorded: its paused_seconds is
+      // null (unknown), and stays null.
+      db.exec(`
+        ALTER TABLE runs ADD COLUMN paused_since INTEGER;
+        ALTER TABLE runs ADD COLUMN paused_seconds INTEGER;
+      `);
+    },
+  },
+  {
+    version: 12,
+    name: "retention_record_sent_calls",
+    up(db) {
+      // `retention_state` keeps, in its one row, what the run report needs to mark pruned days:
+      // `run_cutoff`, the latest run cutoff retention has applied (unix seconds: runs and usage
+      // rows at or before it may have been deleted; null until the first prune after this
+      // migration), and `recorded_since`, when cutoffs began to be recorded. The prunes before
+      // that were not recorded, so on a database that may have been pruned (below) it is this
+      // migration's time; on a new one it is null: no record can have been deleted unseen.
+      // `llm_usage.sent` is 1 when the attempt's request was sent to the provider, 0 when it was
+      // not (stopped before sending, no connection made, or answered from stored answers), and
+      // null for rows written before this migration (llm/usage.ts).
+      db.exec(`
+        CREATE TABLE retention_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          run_cutoff INTEGER,
+          recorded_since INTEGER,
+          updated_at INTEGER NOT NULL
+        );
+        ALTER TABLE llm_usage ADD COLUMN sent INTEGER;
+      `);
+      // A database may have had records pruned unseen if it holds runs or usage rows, or if it
+      // was first migrated more than a day ago (the shortest run retention: a younger one can
+      // have had nothing old enough), since it may have been pruned to empty.
+      const now = Math.floor(Date.now() / 1000);
+      const held = db
+        .prepare(
+          `SELECT EXISTS (SELECT 1 FROM runs) OR EXISTS (SELECT 1 FROM llm_usage)
+             OR (SELECT MIN(applied_at) FROM schema_migrations) <= ?`,
+        )
+        .pluck()
+        .get(now - 24 * 60 * 60);
+      db.prepare(
+        "INSERT INTO retention_state (id, run_cutoff, recorded_since, updated_at) VALUES (1, NULL, ?, ?)",
+      ).run(held ? now : null, now);
+    },
+  },
+  {
+    version: 13,
+    name: "artwork_track_details",
+    up(db) {
+      // The artwork cache keeps, for the track it found, what a node's preview is decided on: its
+      // ISRC, duration, album name and release date (a JSON object; never a link). A row served
+      // from the cache is then judged on its album and date as a fresh search is, and gets its
+      // Deezer preview by ISRC. Rows written before have none (null): one with a Spotify id is then
+      // a miss for the enricher (searched again and written with the details), one without is
+      // still served (the cover only).
+      db.exec("ALTER TABLE artwork_cache ADD COLUMN track_details TEXT");
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

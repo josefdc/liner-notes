@@ -23,6 +23,7 @@ const row = (over: Partial<LlmUsageRow> = {}): LlmUsageRow => ({
   priceMultiplier: 1,
   estimated: false,
   latencyMs: 812,
+  sent: true,
   ...over,
 });
 
@@ -60,9 +61,13 @@ describe("llm_usage", () => {
         reasoningTokens: null,
         estimated: true,
         priceMultiplier: 1.5,
+        sent: false,
       }),
     );
-    recordLlmUsage(db, row({ id: "call-3", runId: "run-2", mode: "replay", usdEst: 0 }));
+    recordLlmUsage(
+      db,
+      row({ id: "call-3", runId: "run-2", mode: "replay", usdEst: 0, sent: false }),
+    );
     expect(listLlmUsage(db, "run-1")).toEqual([
       row(),
       row({
@@ -73,9 +78,28 @@ describe("llm_usage", () => {
         reasoningTokens: null,
         estimated: true,
         priceMultiplier: 1.5,
+        sent: false,
       }),
     ]);
     expect(listLlmUsage(db)).toHaveLength(3);
+    db.close();
+  });
+
+  it("keeps whether each attempt was sent from migration 12; earlier rows say neither", () => {
+    expect(MIGRATIONS[11]).toMatchObject({ version: 12, name: "retention_record_sent_calls" });
+    const db = new Database(":memory:");
+    runMigrations(db, MIGRATIONS.slice(0, 11));
+    db.prepare(
+      `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
+         usd_est, price_multiplier, estimated, latency_ms)
+       VALUES ('old', 'run-1', 'composer', 'main', 'd', 'dev', 'live', 'ok', 0, 1, 0, 5)`,
+    ).run();
+    expect(runMigrations(db, MIGRATIONS.slice(0, 12))).toEqual([12]);
+    recordLlmUsage(db, row({ id: "new" }));
+    expect(listLlmUsage(db, "run-1").map((r) => [r.id, r.sent])).toEqual([
+      ["old", null],
+      ["new", true],
+    ]);
     db.close();
   });
 

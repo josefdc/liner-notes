@@ -3,11 +3,12 @@ import { captureLogsForTests } from "../logger.js";
 import Database from "better-sqlite3";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
-import { runMigrations } from "./migrations.js";
+import { MIGRATIONS, runMigrations } from "./migrations.js";
 import {
   DEFAULT_RETENTION,
   pruneDatabase,
   RETENTION_INTERVAL_MS,
+  retentionRecord,
   retentionFromEnv,
   startRetention,
 } from "./retention.js";
@@ -200,8 +201,128 @@ describe("pruneDatabase", () => {
       storeItems: 0,
       runs: 0,
       runEvents: 0,
+      llmUsage: 0,
     });
     fresh.close();
+  });
+
+  it("deletes model usage rows with their run, and rows of no run past the run retention", () => {
+    runAt("old", "t1", NOW - 40 * DAY, NOW - 31 * DAY);
+    // Waited at the track picker for most of a month: its early calls go only with it.
+    runAt("long-wait", "t2", NOW - 40 * DAY, NOW - 2 * DAY);
+    runAt("recent", "t3", NOW - DAY, NOW - DAY);
+    const usage = db.prepare(
+      `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
+         usd_est, price_multiplier, estimated, latency_ms, created_at)
+       VALUES (?, ?, 'composer', 'main', 'd', 'dev', 'live', 'ok', 0.01, 1, 0, 100, ?)`,
+    );
+    const sec = (ms: number) => Math.floor(ms / 1000);
+    usage.run("u-old", "old", sec(NOW - 31 * DAY));
+    usage.run("u-long-wait", "long-wait", sec(NOW - 40 * DAY));
+    usage.run("u-recent", "recent", sec(NOW - DAY));
+    usage.run("u-eval-old", "eval-run", sec(NOW - 31 * DAY));
+    usage.run("u-eval-new", "eval-run-2", sec(NOW - 29 * DAY));
+
+    const result = pruneDatabase(db, DEFAULT_RETENTION, NOW);
+
+    expect(result).toMatchObject({ runs: 1, llmUsage: 2 });
+    expect(db.prepare("SELECT id FROM llm_usage ORDER BY id").pluck().all()).toEqual([
+      "u-eval-new",
+      "u-long-wait",
+      "u-recent",
+    ]);
+  });
+
+  it("records the latest run cutoff it applied, also when nothing was old enough", () => {
+    const sec = (ms: number) => Math.floor(ms / 1000);
+    const cutoffOf = (d: Database.Database) => retentionRecord(d)?.runCutoff ?? null;
+    expect(cutoffOf(db)).toBeNull();
+    pruneDatabase(db, { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY }, NOW);
+    expect(cutoffOf(db)).toBe(sec(NOW - 7 * DAY));
+    // Raised to 30 days: the days already deleted stay recorded as such.
+    pruneDatabase(db, DEFAULT_RETENTION, NOW + HOUR);
+    expect(cutoffOf(db)).toBe(sec(NOW - 7 * DAY));
+    pruneDatabase(db, DEFAULT_RETENTION, NOW + 24 * DAY);
+    expect(cutoffOf(db)).toBe(sec(NOW - 6 * DAY));
+    // Lowered to a day.
+    pruneDatabase(db, { ...DEFAULT_RETENTION, runRetentionMs: DAY }, NOW + 24 * DAY);
+    expect(cutoffOf(db)).toBe(sec(NOW + 23 * DAY));
+    expect(db.prepare("SELECT COUNT(*) FROM retention_state").pluck().get()).toBe(1);
+  });
+
+  it("records the cutoff with the deletions or not at all: a failed record rolls the prune back", () => {
+    runAt("old", "t1", NOW - 40 * DAY, NOW - 31 * DAY);
+    db.exec(`
+      CREATE TRIGGER fail_record BEFORE UPDATE ON retention_state
+      BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END;
+    `);
+    expect(() => pruneDatabase(db, DEFAULT_RETENTION, NOW)).toThrow("disk I/O error");
+    // Deleted with no cutoff recorded would show the deleted days as kept.
+    expect(db.prepare("SELECT run_id FROM runs").pluck().all()).toEqual(["old"]);
+    expect(retentionRecord(db)?.runCutoff).toBeNull();
+  });
+
+  it("records when cutoffs began to be recorded on a database that held runs or usage rows", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    // A new database: nothing can have been deleted unrecorded.
+    expect(retentionRecord(db)).toEqual({ runCutoff: null, recordedSince: null });
+    for (const held of ["runs", "llm_usage", "migrated two days before"] as const) {
+      const old = new Database(":memory:");
+      try {
+        runMigrations(old, MIGRATIONS.slice(0, 11));
+        if (held === "runs") {
+          old
+            .prepare(
+              "INSERT INTO runs (run_id, thread_id, query, status) VALUES ('r', 't', 'q', 'completed')",
+            )
+            .run();
+        } else if (held === "migrated two days before") {
+          // Empty, but old enough to have been pruned to empty.
+          old
+            .prepare("UPDATE schema_migrations SET applied_at = ?")
+            .run(NOW / 1000 - (2 * DAY) / 1000);
+        } else {
+          old
+            .prepare(
+              `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
+               usd_est, price_multiplier, estimated, latency_ms)
+             VALUES ('u', 'r', 'composer', 'main', 'd', 'eval', 'live', 'ok', 0, 1, 0, 5)`,
+            )
+            .run();
+        }
+        runMigrations(old);
+        expect(retentionRecord(old)).toEqual({ runCutoff: null, recordedSince: NOW / 1000 });
+        pruneDatabase(old, DEFAULT_RETENTION, NOW + HOUR);
+        expect(retentionRecord(old)).toEqual({
+          runCutoff: (NOW + HOUR - 30 * DAY) / 1000,
+          recordedSince: NOW / 1000,
+        });
+      } finally {
+        old.close();
+      }
+    }
+    // Empty and first migrated an hour before: nothing can have been old enough to prune.
+    const young = new Database(":memory:");
+    try {
+      runMigrations(young, MIGRATIONS.slice(0, 11));
+      young.prepare("UPDATE schema_migrations SET applied_at = ?").run(NOW / 1000 - HOUR / 1000);
+      runMigrations(young);
+      expect(retentionRecord(young)).toEqual({ runCutoff: null, recordedSince: null });
+    } finally {
+      young.close();
+    }
+  });
+
+  it("prunes a database migrated before cutoffs were kept, recording none", () => {
+    const old = new Database(":memory:");
+    try {
+      runMigrations(old, MIGRATIONS.slice(0, 11));
+      expect(pruneDatabase(old, DEFAULT_RETENTION, NOW)).toMatchObject({ runs: 0 });
+      expect(retentionRecord(old)).toBeNull();
+    } finally {
+      old.close();
+    }
   });
 });
 

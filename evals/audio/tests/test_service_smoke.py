@@ -1,8 +1,8 @@
 """
 The real service, in-process, on a synthesized clip (no downloads): what it returns, and that
 each rule the harness lifts for calibration really is lifted. The harness reaches into the
-service (an estimator's min_tempo_confidence, estimators.MIN_TEMPO_PERIODICITY and
-KEY_MIN_STRENGTH, Signals.key_withheld); a refactor there that keeps the service's own
+service (an estimator's min_tempo_confidence and min_key_strength,
+estimators.MIN_TEMPO_PERIODICITY, Signals.key_withheld); a refactor there that keeps the service's own
 answers can still break the calibration, and these tests catch it.
 """
 
@@ -96,23 +96,59 @@ def test_the_periodicity_minimum_is_lifted(clip, name, monkeypatch):
 
 @pytest.mark.parametrize("name", ESTIMATORS)
 def test_the_key_strength_minimum_is_lifted(clip, name, monkeypatch):
-    _, estimators = service.load()
-    monkeypatch.setattr(estimators, "KEY_MIN_STRENGTH", 0.99)
+    est_class = type(runner._estimators((name,))[name])
+    monkeypatch.setattr(est_class, "min_key_strength", 0.99)
     result = analyse(clip, name)
     assert result["key"] is None
     assert result["keyWithheld"] == runner.KEY_WEAK
     assert result["keyRules"] == [runner.KEY_WEAK]
     unreturned = result["keyUnreturned"]
     assert (unreturned["tonic"], unreturned["mode"]) == ("C", "major")
-    assert estimators.KEY_MIN_STRENGTH == 0.99
+    assert est_class.min_key_strength == 0.99  # restored after the lifted call
 
 
 @pytest.mark.parametrize("name", ESTIMATORS)
 def test_the_key_evidence_rule_is_lifted(clip, name, monkeypatch):
     _, estimators = service.load()
-    monkeypatch.setattr(estimators.Signals, "key_withheld", lambda self: "a rule for the test")
+    monkeypatch.setattr(
+        estimators.Signals, "key_withheld", lambda self, *args: "a rule for the test"
+    )
     result = analyse(clip, name)
     assert result["key"] is None
     assert result["keyRules"] == ["a rule for the test"]
     unreturned = result["keyUnreturned"]
     assert (unreturned["tonic"], unreturned["mode"]) == ("C", "major")
+
+
+@pytest.mark.parametrize("name", ESTIMATORS)
+def test_the_calibration_record_derives_what_the_service_served(clip, name, monkeypatch):
+    """
+    calibration.derive_* on the recorded measurements, at the service's own values, give the
+    served tempo and key; with a minimum raised in the service, the derivation follows it.
+    """
+    from evals_audio import calibration
+    from evals_audio.cli import clip_estimators
+
+    def derived_and_served():
+        task = ("synthetic", "clip", clip, 1, (name,), {"calibration": "controls"})
+        record = runner.analyze_track(task)
+        assert "error" not in record["calibration"]
+        item = {
+            "trackId": "clip",
+            "gate": record["calibration"]["gate"],
+            "evidence": record["calibration"]["evidence"],
+            "estimators": clip_estimators(record, [name], ("tempo", "key")),
+        }
+        rules = calibration.service_rules()
+        out = {}
+        for kind in ("tempo", "key"):
+            assert calibration.mismatches([item], [name], kind, rules) == {name: []}
+            out[kind] = item["estimators"][name][kind]["served"]
+        return out
+
+    served = derived_and_served()
+    assert served["tempo"] is not None and served["key"] == ["C", "major"]
+    est_class = type(runner._estimators((name,))[name])
+    monkeypatch.setattr(est_class, "min_key_strength", 0.99)
+    monkeypatch.setattr(est_class, "min_tempo_confidence", 0.99)
+    assert derived_and_served() == {"tempo": None, "key": None}

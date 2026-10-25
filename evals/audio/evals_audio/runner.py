@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from functools import cache
 from itertools import combinations
 
-from . import clips, service
+from . import calibration, clips, service
 from .metrics import Item, acc1, acc2, compare, estimate, mirex_key_score, parse_key
 
 MAX_JOBS = 4  # the box is shared
@@ -75,6 +75,8 @@ def analyze_track(task: tuple) -> dict:
         window["decodeWarnings"] = warnings
     results = {}
     record: dict = {"trackId": track_id, "window": window, "results": results}
+    if options.get("calibration"):
+        record["calibration"] = calibration_record(signals, names, options["calibration"])
     for name, est in _estimators(tuple(names)).items():
         try:
             v2 = service.analyze(signals, est)
@@ -111,6 +113,18 @@ def analyze_track(task: tuple) -> dict:
                     calibrationError=f"{type(e).__name__}: {e}",
                 )
     return record
+
+
+def calibration_record(signals, names, suite: str) -> dict:
+    """
+    What the withholding rules compare on this clip (calibration.record): the gate's
+    measurements, the key evidence (key and controls suites) and each estimator's estimate with
+    every rule lifted. Calibration only; a failure is recorded, never fatal.
+    """
+    try:
+        return calibration.record(signals, _estimators(tuple(names)), suite)
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 def styles_of(fingerprint: dict | None) -> list[dict] | None:
@@ -161,13 +175,13 @@ def tempo_withheld(signals, est) -> dict:
 def key_withheld(signals, est) -> dict:
     """
     Why the service returned no key, and the key the estimator gives with both rules lifted
-    (the evidence rule, cached on the signals, and KEY_MIN_STRENGTH), kept apart for
-    calibration only. `keyRules` lists every rule that withholds it.
+    (the evidence rule and the estimator's minimum strength), kept apart for calibration
+    only. `keyRules` lists every rule that withholds it.
     """
-    withheld = signals.key_withheld()
+    withheld = service.key_evidence(signals, est)
     raw = service.key_without_withholding(signals, est)
     rules = [] if withheld is None else [str(withheld)]
-    if raw is not None and (raw.strength or 0.0) < service.key_min_strength():
+    if raw is not None and (raw.strength or 0.0) < service.key_min_strength(est):
         rules.append(KEY_WEAK)
     unreturned = None
     if raw is not None:

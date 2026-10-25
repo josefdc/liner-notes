@@ -187,10 +187,17 @@ ONE_PITCH_SPAN_CENTS = 350.0
 ONE_PITCH_MIN_EXPLAINED = 0.98
 STILL_MAX_MOVEMENT = 0.06
 MOVEMENT_WINDOW_S = 0.5  # the chromagram is averaged over this before it is compared
-# Below this strength (0..1) the key is withheld. Tonal fixtures and probes score 0.80-0.97 with
-# Essentia (bgate profile, on the harmonic part) and 0.73-0.97 with librosa (Krumhansl-Kessler
-# correlation); digital silence and dither score 0 with Essentia.
-KEY_MIN_STRENGTH = 0.3
+# Below these strengths (0..1) the key is withheld. Set by the calibration in evals/audio (see
+# its section of the report) as the least strict value that removes a key given to a control
+# with no key, at no cost on the annotated clips: 0.4 for both (before: 0.3). On the 250
+# GiantSteps+ clips it withheld no key with either estimator; it removes 7 control keys with
+# Essentia (two of random chromatic notes, five of one pitched source: tabla, toms, a cowbell)
+# and 22 with librosa (random notes over drums, a chromatic cluster, one-note basses, a tabla,
+# toms, cowbells). Neither strength separates atonal from tonal material, or one pitched source from
+# a chord: most of those controls keep a key, and the spectral-line rules, not these minimums,
+# keep keys off pitchless sound.
+ESSENTIA_MIN_KEY_STRENGTH = 0.4
+LIBROSA_MIN_KEY_STRENGTH = 0.4
 
 # The harmonic part is separated below this frequency (see Signals.harmonic).
 HARMONIC_MAX_HZ = 5000.0
@@ -219,6 +226,8 @@ class TempoEstimate:
     # The tracker follows tempo changes (its beats stay valid when the tempo is not steady).
     # librosa's beat tracker keeps one period, so its beats are dropped with an unsteady tempo.
     beats_follow_changes: bool = False
+    # What the steadiness check measured (see Steadiness); `steady` is its verdict.
+    steadiness: Steadiness | None = None
 
 
 @dataclass(frozen=True)
@@ -504,12 +513,15 @@ class Signals:
         explain the harmonic part's lines (a drone or one bass note under drums) still has no
         key. Over a beat the tolerance does not widen with the span: a band's bass line can
         look like one held pitch to the tracker, but its chords are off that pitch's harmonics.
+        (The pitch track is only run when the lines leave the question open.)
         """
         if self.has_beat:
             withheld = self.tonality.key_withheld()
-            voice = self.voice
-            if withheld is not None or voice is None:
+            if withheld is not None:
                 return withheld
+            voice = self.voice
+            if voice is None:
+                return None
             if voice.without_notes:
                 return Withheld(SPEECH_LIKE, one_source=True)
             explained = self.harmonic_tonality.explained_by(voice.f0_hz, *voice.held_tolerance)
@@ -769,6 +781,105 @@ def refine_bpm(beats: np.ndarray, bpm: float) -> float:
     return refined if abs(refined - bpm) <= 0.04 * bpm else bpm
 
 
+@dataclass(frozen=True)
+class SteadyPart:
+    """One part of the window (a third) as the steadiness check measures it."""
+
+    rhythm: float  # onset periodicity of the part; it counts at MIN_TEMPO_PERIODICITY
+    beat_bpm: float | None  # the median interval of its beats as a tempo (None under 3 beats)
+    # librosa's tempo estimate on the part's onset envelope, as a period in onset frames (nan
+    # when the part has no onsets at all)
+    onset_period: float = float("nan")
+
+
+@dataclass(frozen=True)
+class Steadiness:
+    """
+    What the steadiness check measures for one tempo (see steady_tempo); `holds` applies the
+    tolerances, so the same measurements can be judged at other values (calibration).
+    """
+
+    bpm: float
+    enough_beats: bool  # at least 2 * STEADY_TEMPO_PARTS beat intervals
+    parts: tuple[SteadyPart, ...] = ()
+    period: float = 0.0  # the tempo's period in onset frames (0 when split by beat count)
+    by_count: bool = False  # no signals: the beat intervals split into thirds by count
+
+    def holds(
+        self,
+        tolerance: float | None = None,
+        lag_frames: float | None = None,
+        min_rhythm: float | None = None,
+        onset_check: bool = True,
+    ) -> bool:
+        tolerance = STEADY_TEMPO_TOLERANCE if tolerance is None else tolerance
+        lag_frames = STEADY_LAG_FRAMES if lag_frames is None else lag_frames
+        min_rhythm = MIN_TEMPO_PERIODICITY if min_rhythm is None else min_rhythm
+        if not self.enough_beats or not self.bpm > 0:
+            return False
+
+        def matches(local: float | None) -> bool:
+            return local is not None and abs(local - self.bpm) <= tolerance * self.bpm
+
+        if self.by_count:
+            return all(matches(part.beat_bpm) for part in self.parts)
+        counted = 0
+        for part in self.parts:
+            if part.rhythm < min_rhythm:
+                continue
+            counted += 1
+            if part.beat_bpm is not None and not matches(part.beat_bpm):
+                return False
+            if onset_check and not any(
+                abs(part.onset_period - octave * self.period)
+                <= max(tolerance * octave * self.period, lag_frames)
+                for octave in (0.5, 1, 2)
+            ):
+                return False
+        return counted > 0
+
+
+def steadiness(beats: np.ndarray, bpm: float, signals: Signals | None = None) -> Steadiness:
+    """The measurements behind steady_tempo, for each third of the window."""
+    beats = np.asarray(beats, dtype=float)
+    intervals = np.diff(beats)
+    enough = intervals.size >= 2 * STEADY_TEMPO_PARTS and bpm > 0
+    if not enough:
+        return Steadiness(bpm=float(bpm), enough_beats=False)
+    if signals is None:
+        parts = tuple(
+            SteadyPart(rhythm=1.0, beat_bpm=60.0 / float(np.median(part)))
+            for part in np.array_split(intervals, STEADY_TEMPO_PARTS)
+        )
+        return Steadiness(bpm=float(bpm), enough_beats=True, parts=parts, by_count=True)
+    frames_per_minute = 60.0 * signals.sr / signals.hop
+    envelope, smoothed = signals.onset_envelope, signals.smoothed_onset_envelope
+    edges = np.linspace(0, envelope.size, STEADY_TEMPO_PARTS + 1).astype(int)
+    parts = []
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        part = envelope[lo:hi]
+        rhythm = max(
+            tempogram_contrast(part, signals.sr, signals.hop),
+            tempogram_contrast(smoothed[lo:hi], signals.sr, signals.hop),
+        )
+        start, end = lo * signals.hop / signals.sr, hi * signals.hop / signals.sr
+        inside = beats[(beats >= start) & (beats < end)]
+        beat_bpm = 60.0 / float(np.median(np.diff(inside))) if inside.size >= 3 else None
+        onset_period = float("nan")
+        if np.any(part):
+            local = librosa.feature.tempo(
+                onset_envelope=part, sr=signals.sr, hop_length=signals.hop, max_tempo=MAX_BPM
+            )
+            onset_period = frames_per_minute / float(np.atleast_1d(local)[0])
+        parts.append(SteadyPart(rhythm, beat_bpm, onset_period))
+    return Steadiness(
+        bpm=float(bpm),
+        enough_beats=True,
+        parts=tuple(parts),
+        period=frames_per_minute / bpm,
+    )
+
+
 def steady_tempo(beats: np.ndarray, bpm: float, signals: Signals | None = None) -> bool:
     """
     True when the tempo holds in each third of the window that has a beat. Given `signals`, a
@@ -778,48 +889,7 @@ def steady_tempo(beats: np.ndarray, bpm: float, signals: Signals | None = None) 
     match `bpm`. Without `signals`, the beats are split into thirds by count. Either way it
     takes at least 2 * STEADY_TEMPO_PARTS beat intervals.
     """
-    beats = np.asarray(beats, dtype=float)
-    intervals = np.diff(beats)
-    if intervals.size < 2 * STEADY_TEMPO_PARTS or not bpm > 0:
-        return False
-
-    def matches(local: float, octaves=(1,)) -> bool:
-        return any(abs(local * o - bpm) <= STEADY_TEMPO_TOLERANCE * bpm for o in octaves)
-
-    if signals is None:
-        return all(
-            matches(60.0 / float(np.median(part)))
-            for part in np.array_split(intervals, STEADY_TEMPO_PARTS)
-        )
-    frames_per_minute = 60.0 * signals.sr / signals.hop
-    period = frames_per_minute / bpm  # in onset frames
-    envelope, smoothed = signals.onset_envelope, signals.smoothed_onset_envelope
-    edges = np.linspace(0, envelope.size, STEADY_TEMPO_PARTS + 1).astype(int)
-    counted = 0
-    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
-        part = envelope[lo:hi]
-        rhythm = max(
-            tempogram_contrast(part, signals.sr, signals.hop),
-            tempogram_contrast(smoothed[lo:hi], signals.sr, signals.hop),
-        )
-        if rhythm < MIN_TEMPO_PERIODICITY:
-            continue
-        counted += 1
-        start, end = lo * signals.hop / signals.sr, hi * signals.hop / signals.sr
-        inside = beats[(beats >= start) & (beats < end)]
-        if inside.size >= 3 and not matches(60.0 / float(np.median(np.diff(inside)))):
-            return False
-        local = librosa.feature.tempo(
-            onset_envelope=part, sr=signals.sr, hop_length=signals.hop, max_tempo=MAX_BPM
-        )
-        local_period = frames_per_minute / float(np.atleast_1d(local)[0])
-        if not any(
-            abs(local_period - octave * period)
-            <= max(STEADY_TEMPO_TOLERANCE * octave * period, STEADY_LAG_FRAMES)
-            for octave in (0.5, 1, 2)
-        ):
-            return False
-    return counted > 0
+    return steadiness(beats, bpm, signals).holds()
 
 
 def periodicity_at_lag(onset_envelope: np.ndarray, lag_frames: float) -> float:
@@ -852,11 +922,13 @@ def krumhansl_key(chroma_mean: np.ndarray) -> tuple[str, str, float] | None:
     return best
 
 
-def _key_estimate(tonic: str, mode: str, strength: float, profile: str, method: str):
+def _key_estimate(
+    tonic: str, mode: str, strength: float, profile: str, method: str, minimum: float
+):
     strength = float(np.clip(strength, 0.0, 1.0)) if np.isfinite(strength) else 0.0
     if tonic not in PITCH_CLASSES or mode not in ("major", "minor"):
         return None
-    if strength < KEY_MIN_STRENGTH:
+    if strength < minimum:
         return None
     return KeyEstimate(tonic=tonic, mode=mode, strength=strength, profile=profile, method=method)
 
@@ -864,6 +936,10 @@ def _key_estimate(tonic: str, mode: str, strength: float, profile: str, method: 
 class LibrosaEstimator:
     name = "librosa"
     min_tempo_confidence = LIBROSA_MIN_TEMPO_CONFIDENCE
+    min_key_strength = LIBROSA_MIN_KEY_STRENGTH
+    # Its beat tracker keeps one period, so only librosa's tempo on each third's onsets shows a
+    # tempo change: the steadiness check needs that part.
+    steady_onset_check = True
 
     def tempo(self, signals: Signals) -> TempoEstimate | None:
         oenv = signals.onset_envelope
@@ -887,13 +963,15 @@ class LibrosaEstimator:
         confidence = periodicity_at_lag(signals.smoothed_onset_envelope, lag)
         if confidence < self.min_tempo_confidence:
             return None
+        measured = steadiness(beats, bpm, signals)
         return TempoEstimate(
             bpm=bpm,
             confidence=confidence,
             raw_confidence=None,
             beats=beats,
             method="librosa.beat.beat_track+beat-regression",
-            steady=steady_tempo(beats, bpm, signals),
+            steady=measured.holds(onset_check=self.steady_onset_check),
+            steadiness=measured,
         )
 
     def key(self, signals: Signals) -> KeyEstimate | None:
@@ -904,7 +982,12 @@ class LibrosaEstimator:
             return None
         tonic, mode, corr = found
         return _key_estimate(
-            tonic, mode, corr, "krumhansl", "librosa.feature.chroma_cqt+krumhansl-kessler"
+            tonic,
+            mode,
+            corr,
+            "krumhansl",
+            "librosa.feature.chroma_cqt+krumhansl-kessler",
+            self.min_key_strength,
         )
 
 
@@ -929,6 +1012,8 @@ def _essentia_algorithm(name: str, factory):
 class EssentiaEstimator:
     name = "essentia"
     min_tempo_confidence = ESSENTIA_MIN_TEMPO_CONFIDENCE
+    min_key_strength = ESSENTIA_MIN_KEY_STRENGTH
+    steady_onset_check = True
     key_profile = "bgate"
 
     def tempo(self, signals: Signals) -> TempoEstimate | None:
@@ -949,14 +1034,16 @@ class EssentiaEstimator:
         if confidence < self.min_tempo_confidence:
             return None
         bpm = refine_bpm(onset_beats(ticks, signals), float(bpm))
+        measured = steadiness(ticks, bpm, signals)
         return TempoEstimate(
             bpm=bpm,
             confidence=confidence,
             raw_confidence=(float(raw), ESSENTIA_CONFIDENCE_SCALE),
             beats=ticks,
             method="essentia.RhythmExtractor2013+beat-regression",
-            steady=steady_tempo(ticks, bpm, signals),
+            steady=measured.holds(onset_check=self.steady_onset_check),
             beats_follow_changes=True,
+            steadiness=measured,
         )
 
     def key(self, signals: Signals) -> KeyEstimate | None:
@@ -973,6 +1060,7 @@ class EssentiaEstimator:
             strength,
             self.key_profile,
             "essentia.KeyExtractor",
+            self.min_key_strength,
         )
 
 

@@ -16,6 +16,8 @@ uv run python -m evals_audio --suite tempo --dataset giantsteps-tempo --limit 50
 uv run python -m evals_audio --suite key --dataset giantsteps-key --limit 50
 uv run python -m evals_audio --suite golden
 uv run python -m evals_audio --suite cost --dataset giantsteps-tempo --limit 20
+uv run python -m evals_audio --suite controls
+uv run python -m evals_audio --suite calibration --dataset ballroom --limit 200
 uv run pytest                   # unit tests, no network
 uv run ruff check . && uv run ruff format --check .
 ```
@@ -24,7 +26,8 @@ Options: `--estimator librosa|essentia|beat-this|all` (default `all`: every esti
 runs, which needs `--extra models`, and `--extra beat-this` for the tempo, golden and cost
 suites),
 `--seed S` (default 1), `--jobs J` (worker processes, at most 4), `--data-dir`, `--report-dir`,
-`--no-report`, `--render <audio-date>.json` (renders the Markdown again from a results file
+`--no-report`, `--split calibration|evaluation|all` (tempo and key suites: only one half of
+the selection, see Calibration; default `all`), `--render <audio-date>.json` (renders the Markdown again from a results file
 alone) and `--lookup ID --dataset NAME` (the dataset's own track id for an id in the results;
 see below). `--data-dir` and `--report-dir` are left out of the command a report records.
 `--seed` sets three seeds at once; `--selection-seed` (which tracks are drawn),
@@ -46,6 +49,8 @@ by hand.
 | `key` | GiantSteps+ Key (30 s windows) | MIREX score and exact key (librosa, Essentia) |
 | `golden` | `evals/golden.jsonl`, each row's Deezer preview | tempo agreement with Deezer's `bpm` and with the set's sheet-music tempo; key agreement with its sheet-music key; style hit@1/5/10 against Discogs, next to a constant baseline and the best constant found with the labels |
 | `cost` | clips of a tempo dataset | per tempo estimator: resident memory, seconds per analysed clip, and what it adds to the service image |
+| `calibration` | Ballroom, GiantSteps Tempo or GiantSteps+ Key (30 s windows) | per clip and estimator: what the service served, the estimate with every withholding rule lifted and what each rule compares |
+| `controls` | generated signals (`evals_audio/controls.py`) | the same, on controls whose truth is known by construction |
 
 The report opens with a bake-off table that puts every tempo estimator's figures side by side
 (correct / n per dataset, agreement with Deezer's `bpm`, peak memory, time, what it adds to
@@ -54,9 +59,48 @@ the service image), with the same runs' figures when the withholding rules are l
 criterion for changing it, each candidate against the default on data it was not trained on
 (as served and with the rules lifted, exact McNemar), the tempos each shows that are wrong
 (strict 4 % and forgiving octave and meter, exact McNemar on the same clips), the cost per
-candidate, and the decision those numbers support. Everything in it is derived from the
-results file at render time. Pair tables of an estimator on its own training data are not printed. The bake-off
-evidence is the GiantSteps Tempo run, which the committed report draws with `--limit 200`.
+candidate, and the decision those numbers support. With the calibration runs in the report, a
+candidate ahead on all their clips leaves the decision open only when both halves agree; when
+the halves disagree, the report keeps the current default and says why, with the numbers.
+Everything in it is derived from the results file at render time. Pair tables of an estimator
+on its own training data are not printed. The bake-off evidence is the GiantSteps Tempo run
+(`--limit 400`: 400 of the usable tracks, both halves), and, when the report holds the
+calibration runs, the same comparison on each half of their clips and on all of them.
+
+### Calibration
+
+The service withholds a tempo or a key when its rules find the evidence too weak. The
+`calibration` and `controls` suites record, per clip and estimator, what each rule compares
+(`evals_audio/calibration.py`), so that the report's calibration section can apply any value
+of a rule to the recorded clips without analysing the audio again. Every clip of a selection
+is either a calibration clip or an evaluation clip (`datasets.split_of`: a SHA-256 of the
+dataset name and the dataset's own track id, about half each, independent of the selection's
+size and order). The rules' values are chosen on the calibration clips and the controls only,
+under acceptance criteria written before the calibration runs (the module docstring and the
+report state them, and how the procedure was applied); the evaluation clips judge each change
+once more, and only changes that withhold more are shipped. The report also says how often the
+evaluation clips were scored. The
+section makes the choice again from the recorded clips and says whether the service holds the
+values chosen. A derivation check re-derives every served decision from the recorded
+measurements at the service's own values and reports any difference.
+
+The controls (`evals_audio/controls.py`) come from the issue's lists of defects found with
+generated probes (random chromatic notes, twelve-tone rows, a slow tempo swing, 12/8 at 60
+BPM, a bass-heavy band, noise carrying a siren, several talkers at once, and so on) and from the
+probe sets of the service's own tests, whose generators they reuse
+(`services/audio/tests/signals.py` and `music.py`, loaded by path). They include pitchless material drawn at 30
+seeds each (two drum kits, noise with a beat, a siren over drums, clicks), on which no value was
+set beforehand: none of it may get a key. One-pitch-class material (a one-note bass, octave
+riffs, bells, tabla, toms, a cowbell, a held synth note) is drawn the same way; the service
+still keys some of it, as before this calibration.
+
+To compare estimators on held-out clips only, run the tempo and key suites with
+`--split evaluation` and a larger `--limit` (the selection at a limit includes every smaller
+one at the same seed):
+
+```sh
+uv run python -m evals_audio --suite tempo --dataset giantsteps-tempo --limit 400 --split evaluation
+```
 
 ### beat-this
 
@@ -156,6 +200,10 @@ the audio. The full audio archives would not fit under the cap together (Ballroo
 | `ballroom` | tempo | streamed from the MTG tar.gz; only the selected members are kept. The archive is read until the last selected member arrives, so a 50-track draw reads most of the 1.45 GB over the network, and a run missing any Ballroom track reads it again |
 | `giantsteps-tempo` | tempo | mirdata cannot fetch it; the JKU Linz copy first, then the Beatport preview URL, the order of the dataset's current `audio_dl.sh` |
 | `giantsteps-key` | key | read member by member from the Zenodo zip with HTTP range requests |
+
+The selections the calibration section rests on (seed 1: Ballroom 200, GiantSteps Tempo 400,
+GiantSteps+ 250) take about 1.45 GB of audio; with the model files the data directory holds
+about 1.6 GB, under the cap.
 
 Every file is checked against the MD5 in mirdata's index and discarded on a mismatch.
 `.audio-sources.json` in each dataset directory records the URL each file was fetched from,

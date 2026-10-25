@@ -18,15 +18,18 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from . import calibration_report
 from .metrics import MIN_CURVE_ANSWERED, mcnemar_exact
 from .runner import METRIC_LABELS, METRICS, SEVERAL_RULES
 from .storage import human
 
-SCHEMA_VERSION = 6
+# Schema 7 adds the calibration and controls suites and the tempo and key runs' split; a
+# schema 6 report (without them) renders as it was written.
+SCHEMA_VERSION = 7
 # The last schema before the bake-off, the golden suite and the cost suite; its reports keep
 # their original wording. (Schema 5 was a draft of 6 and was never merged.)
 LEGACY_SCHEMA = 4
-SUITE_ORDER = {"tempo": 0, "key": 1, "golden": 2, "cost": 3}
+SUITE_ORDER = {"tempo": 0, "key": 1, "golden": 2, "cost": 3, "calibration": 4, "controls": 5}
 
 
 class OlderResults(RuntimeError):
@@ -61,6 +64,7 @@ def run_key(run: dict) -> tuple:
         seeds["bootstrap"],
         run["limit"],
         tuple(sorted(run.get("estimators") or run["summaries"])),
+        run.get("split", "all"),
     )
 
 
@@ -85,7 +89,8 @@ def write(report_dir: Path, date: str, run: dict) -> tuple[Path, Path]:
     md_path = report_dir / f"audio-{date}.md"
     doc = add_run(load(json_path), run)
     doc["date"] = date
-    json_path.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
+    # Compact: the per-clip records are large; the Markdown is the readable form.
+    json_path.write_text(json.dumps(doc, separators=(",", ":"), ensure_ascii=False) + "\n")
     md_path.write_text(render(doc))
     return md_path, json_path
 
@@ -510,7 +515,7 @@ def count_p_values(doc: dict) -> int:
         for curve in (run.get("coverage") or {}).values():
             count += sum(1 for r in (curve.get("ranking") or {}).values() if r["p"] is not None)
         count += len((run.get("styles") or {}).get("versusBaseline") or {})
-    return count + default_test_count(doc)
+    return count + default_test_count(doc) + calibration_report.count_p_values(doc)
 
 
 def default_test_count(doc: dict) -> int:
@@ -523,7 +528,8 @@ def default_test_count(doc: dict) -> int:
     evidence = default_evidence(doc)
     if evidence is None:
         return 0
-    return sum(
+    halves = calibration_report.default_halves(doc, evidence["default"], evidence["candidates"])
+    return len(halves) + sum(
         sum(1 for key in ("wrong1", "wrong2", "steady", "every") if row.get(key) is not None)
         for row in evidence["rows"]
     )
@@ -671,7 +677,11 @@ def scope(doc: dict) -> str:
             "key": f"key on {run['dataset']['title']}",
             "golden": "the golden set's Deezer previews",
             "cost": f"costs on {run['dataset']['title']} clips",
+            "calibration": f"what the {run.get('kind')} rules compare on {run['dataset']['title']}",
+            "controls": "the generated controls",
         }[run["suite"]]
+        if run.get("split", "all") != "all":
+            what += f", {run['split']} clips only"
         parts.append(f"{what} ({names})")
     return (
         "Runs in this report: " + "; ".join(parts) + ". beat-this is measured here only: the "
@@ -992,10 +1002,57 @@ def default_section(doc: dict) -> list[str]:
         *table(head, rows),
         "",
     ]
+    halves = calibration_report.default_halves(doc, default, candidates)
+    if halves:
+        unchanged = calibration_report.tempo_rules_unchanged(doc, [default, *candidates])
+        out += halves_lines(halves, default, unchanged)
     if cost:
         out += cost_lines(cost, default, candidates) + [""]
-    out += decision_lines(evidence)
+    out += decision_lines(
+        evidence, calibrated=bool(calibration_report.runs_of(doc)[0]), halves=halves
+    )
     return out
+
+
+def halves_lines(halves: list[dict], default: str, rules_unchanged: bool) -> list[str]:
+    rows = [
+        [
+            f"`{h['name']}`",
+            h["data"],
+            h["clips"],
+            f"{h['candidate']} vs {h['default']} of {h['n']}",
+            f"{h['onlyCandidate']} / {h['onlyDefault']}",
+            f"McNemar exact p {pval(h['p'])}",
+        ]
+        for h in halves
+    ]
+    return [
+        f"The same comparison against `{default}` on both halves of the calibration runs' "
+        "clips and on all of them, as served ("
+        + (
+            "the tempo rules these estimators use are the ones before this calibration, so both "
+            "halves serve this comparison equally"
+            if rules_unchanged
+            else "this calibration changed tempo rules these estimators use, on the calibration "
+            "clips: the evaluation clips are the fairer half"
+        )
+        + "). The clips come in groups "
+        "(artists, labels, tracks cut from the same release), so they are not independent and "
+        "each p-value overstates the evidence.",
+        "",
+        *table(
+            [
+                "candidate",
+                "data",
+                "clips",
+                "Acc1 correct",
+                f"right only for the candidate / only for `{default}`",
+                "test",
+            ],
+            rows,
+        ),
+        "",
+    ]
 
 
 def cost_figures(cost: dict, name: str, default: str) -> dict | None:
@@ -1032,10 +1089,73 @@ def cost_lines(cost: dict, default: str, candidates: list[str]) -> list[str]:
     return out
 
 
-def decision_lines(evidence: dict) -> list[str]:
+def halves_verdict(halves: list[dict]) -> tuple[list[str], list[str], set[str]]:
+    """
+    Candidates ahead on all clips (McNemar p < 0.05), sentences on halves that disagree, and
+    the candidates whose halves disagree on a dataset where they are ahead (not stable).
+    """
+    wins, notes, unstable = [], [], set()
+    for name in dict.fromkeys(h["name"] for h in halves):
+        for data in dict.fromkeys(h["data"] for h in halves if h["name"] == name):
+            rows = {h["clips"]: h for h in halves if h["name"] == name and h["data"] == data}
+            pooled = rows.get("all")
+            ahead = bool(pooled and pooled["p"] < 0.05 and pooled["candidate"] > pooled["default"])
+            if ahead:
+                wins.append(name)
+            parts = [rows.get(k) for k in ("calibration", "evaluation")]
+            if all(parts):
+                signs = {
+                    (r["candidate"] > r["default"]) - (r["candidate"] < r["default"]) for r in parts
+                }
+                significance = {r["p"] < 0.05 for r in parts}
+                # A disagreement: one half significant and the other not, or opposite
+                # directions with a significant half (two noisy halves are not one).
+                if len(significance) > 1 or (len(signs) > 1 and True in significance):
+                    if ahead:
+                        unstable.add(name)
+                    c, e = parts
+                    notes.append(
+                        f"On {data} the halves disagree: `{name}` {c['candidate']} vs "
+                        f"{c['default']} of {c['n']} on the calibration clips (p {pval(c['p'])}), "
+                        f"{e['candidate']} vs {e['default']} of {e['n']} on the evaluation clips "
+                        f"(p {pval(e['p'])}); the pooled result is not stable."
+                    )
+    return list(dict.fromkeys(wins)), notes, unstable
+
+
+def decision_lines(
+    evidence: dict, calibrated: bool = False, halves: list[dict] | None = None
+) -> list[str]:
     default, cost = evidence["default"], evidence["cost"]
     annotated = [r for r in evidence["rows"] if not r.get("golden")]
-    served_wins = [r for r in annotated if significant(r["served1"], more=True)]
+    notes: list[str] = []
+    first = (
+        f"Decision: the service keeps `{default}` under the current withholding rules. As "
+        "served, no candidate gives significantly more correct tempos (Acc1 over n) on data it "
+        "was not trained on."
+    )
+    if halves:
+        wins, notes, unstable = halves_verdict(halves)
+        stable = [n for n in wins if n not in unstable]
+        if stable:
+            names = ", ".join(f"`{n}`" for n in stable)
+            return [
+                f"On all the clips of the calibration runs, as served, {names} meets the "
+                "accuracy part of the criterion on data it was not trained on, and both halves "
+                "agree. " + " ".join(notes) + " Whether that and its cost are worth a change is "
+                "the open decision.",
+                "",
+            ]
+        if wins:
+            names = ", ".join(f"`{n}`" for n in wins)
+            first = (
+                f"Decision: the service keeps `{default}`. On all the clips of the calibration "
+                f"runs, as served, {names} meets the accuracy part of the criterion on data it "
+                "was not trained on, but the comparison is not stable across the halves, so it "
+                "is no ground for a change."
+            )
+    # With the calibration runs, the pooled clips decide (above), not one half's run.
+    served_wins = [] if halves else [r for r in annotated if significant(r["served1"], more=True)]
     if served_wins:
         names = ", ".join(sorted({f"`{r['name']}`" for r in served_wins}))
         return [
@@ -1043,11 +1163,7 @@ def decision_lines(evidence: dict) -> list[str]:
             "trained on; whether its cost is worth it is the open decision.",
             "",
         ]
-    parts = [
-        f"Decision: the service keeps `{default}` under the current withholding rules. As "
-        "served, no candidate gives significantly more correct tempos (Acc1 over n) on data it "
-        "was not trained on."
-    ]
+    parts = [first, *notes]
     for r in annotated:
         w1, w2 = r.get("wrong1"), r.get("wrong2")
         figures = (
@@ -1103,10 +1219,16 @@ def decision_lines(evidence: dict) -> list[str]:
                     f"with every rule lifted, {e['candidate']} vs {e['default']} of {e['n']}, "
                     f"p {pval(e['p'])}"
                 )
+            then = (
+                "; the calibration section sets those rules from measured results and says "
+                "which ones changed."
+                if calibrated
+                else ", so the default is to be revisited once those rules, the steadiness "
+                "check first, are recalibrated."
+            )
             parts.append(
                 f"With the withholding rules lifted, `{r['name']}` is ahead on {r['data']} "
-                f"(Acc1 correct / n {'; '.join(views)}), so the default is to be revisited once "
-                "those rules, the steadiness check first, are recalibrated."
+                f"(Acc1 correct / n {'; '.join(views)}){then}"
             )
             break
     return [" ".join(parts), ""]
@@ -1465,13 +1587,13 @@ def render(doc: dict) -> str:
     legacy = is_legacy(doc)
     out = [f"# Audio accuracy, {doc['date']}", "", *intro(doc), *guide(doc)]
     if not legacy:
-        out += bakeoff_section(doc) + default_section(doc)
+        out += bakeoff_section(doc) + default_section(doc) + calibration_report.section(doc)
     for run in doc["runs"]:
         if run["suite"] == "golden":
             out += golden_sections(run)
         elif run["suite"] == "cost":
             out += cost_section(run)
-        else:
+        elif run["suite"] in ("tempo", "key"):
             out += tempo_key_sections(run, legacy)
     out += [
         "## Reproducing",

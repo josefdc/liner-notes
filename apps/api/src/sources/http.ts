@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
 import { logger } from "../logger.js";
+import { PaceRefused, type RequestPacer } from "./pacing.js";
 
 const log = logger("sources");
 
@@ -813,4 +814,78 @@ export async function fetchJson<T>(req: SourceRequest): Promise<T> {
   }
 
   return interpret<T>(req, answer);
+}
+
+// =============================================================================
+// Paced requests
+// =============================================================================
+
+/** The longest wait honoured from a source's Retry-After before the one retry. */
+export const MAX_RETRY_WAIT_MS = 5000;
+/** The wait before the one retry when the source said "slow down" without a Retry-After. */
+const DEFAULT_RETRY_WAIT_MS = 2000;
+
+/** Waits `ms`, or rejects with the signal's reason as soon as it aborts. */
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * `fetchJson` through the source's pacer (sources/pacing.ts). A request the pacer refuses (its
+ * slot is too far away) is a `rate_limited` SourceError and nothing is requested. When the source
+ * answers "slow down" (429), the source's requests are held for its Retry-After (2 s when it
+ * sends none) and the request is retried once after it, when that is at most MAX_RETRY_WAIT_MS;
+ * a longer wait, or a second "slow down", is the `rate_limited` error. A replayed request is not
+ * paced: nothing reaches the source.
+ */
+export async function pacedFetchJson<T>(pacer: RequestPacer, req: SourceRequest): Promise<T> {
+  if (req.cassette !== false && cassetteMode() === "replay") return fetchJson<T>(req);
+  const { signal } = req;
+  const stopped = (error: unknown) =>
+    signal?.aborted && !isSourceError(error) ? abortError(req.source, signal, error) : error;
+  const attempt = async () => {
+    try {
+      await pacer.slot(signal);
+    } catch (error) {
+      if (error instanceof PaceRefused) {
+        throw new SourceError(req.source, "rate_limited", error.message, {
+          retryAfterMs: error.waitMs,
+        });
+      }
+      throw stopped(error);
+    }
+    return fetchJson<T>(req);
+  };
+  try {
+    return await attempt();
+  } catch (error) {
+    // Only the source's own "slow down" answer is retried; a refusal of the pacer is not.
+    if (signal?.aborted || !isSourceError(error, "rate_limited") || error.status === undefined) {
+      throw stopped(error);
+    }
+    const after = error.retryAfterMs ?? DEFAULT_RETRY_WAIT_MS;
+    pacer.holdFor(after);
+    if (after > MAX_RETRY_WAIT_MS) throw error;
+    log.info(`${req.source} asked to slow down; retrying once in ${Math.ceil(after / 1000)} s`);
+    try {
+      await wait(after, signal);
+    } catch (stop) {
+      throw stopped(stop);
+    }
+    return await attempt();
+  }
 }

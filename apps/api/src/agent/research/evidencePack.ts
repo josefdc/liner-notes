@@ -10,6 +10,11 @@
  * model wrote, an object shaped like Evidence (one parsed from a model's answer, or a copy of an
  * item), or an item that breaks the contract's evidence checks.
  *
+ * A research-cache hit gives the evidence of the run that made the research: `restoredEvidence`
+ * takes those items back from the cache (what this module built and the cache stored), checking
+ * each one as the constructors would have made it; one that is not is refused, and with it the
+ * cached evidence.
+ *
  * The constructors are called only from the code that reads the sources (agent/research/,
  * sources/; a test pins it). The web tier rests on that: its results reach the researcher as the
  * search tool's JSON text, which carries no object brand, and the researcher's Tavily reader is
@@ -195,6 +200,49 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
     );
   }
   return items;
+}
+
+/**
+ * Why a stored item is not one this module's constructors would have made, or null: a primary
+ * record of a primary source with a scoped recordRef and the id the source module gives it, or a
+ * web page of the web search with its id, a web URL and none of the pages the web tier leaves
+ * out; and the contract's evidence checks.
+ */
+function storedItemIssue(item: Evidence): string | null {
+  if (item.sourceTier === "primary-record") {
+    if (!(PRIMARY_KEYS as readonly string[]).includes(item.source)) return "not a primary source";
+    if (evidenceScope(item) === null) return "no scope";
+    if (item.id !== `${item.source}:${item.recordRef}`) return "not the source's id";
+    return null;
+  }
+  if (item.sourceTier === "web") {
+    if (item.source !== "tavily" || item.recordRef !== null) return "not a web search result";
+    const url = item.url ? webPage(item.url) : null;
+    if (!url || url !== item.url || item.id !== `tavily:${url}`) return "not a web page's id";
+    if (isLyricPage(url) || isPreviewUrl(url)) return "a page the web tier leaves out";
+    if (isPlaceholder(item.excerpt)) return "a placeholder";
+    return null;
+  }
+  return "a tier no source module builds";
+}
+
+/**
+ * The evidence of a cached research, as items of a pack again: each stored item checked as above
+ * and sealed. Null when any item fails a check: the cached evidence is then not used at all,
+ * never in part.
+ */
+export function restoredEvidence(items: readonly Evidence[]): SourcedEvidence[] | null {
+  const restored: SourcedEvidence[] = [];
+  for (const item of items) {
+    if (storedItemIssue(item) !== null) return null;
+    try {
+      restored.push(seal({ ...item }));
+    } catch (error) {
+      if (error instanceof EvidenceOriginError) return null;
+      throw error;
+    }
+  }
+  return restored;
 }
 
 const SCOPE_RANK: Record<EvidenceScope, number> = { track: 0, release: 1, work: 2 };

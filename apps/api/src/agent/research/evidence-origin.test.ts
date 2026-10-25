@@ -4,7 +4,12 @@
  * of a real item cannot be added; the pack keeps an id once, orders by tier and caps its size.
  */
 
-import { Evidence as EvidenceSchema, evidenceIssues, SourceId } from "@liner-notes/contract";
+import {
+  type Evidence,
+  Evidence as EvidenceSchema,
+  evidenceIssues,
+  SourceId,
+} from "@liner-notes/contract";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { collectPrimarySources, type PrimarySources } from "../../sources/identity.js";
 import { evidenceForPrompt, shownEvidence } from "../prompts.js";
@@ -26,6 +31,7 @@ import {
   lostRecords,
   primaryRecordEvidence,
   primarySourceErrors,
+  restoredEvidence,
   type SourcedEvidence,
   webSearchEvidence,
 } from "./evidencePack.js";
@@ -135,6 +141,54 @@ describe("EvidencePack.add refuses anything not built from a source's answer", (
       secondhandsongs: { status: "missing", error: null },
     } as unknown as PrimarySources;
     expect(() => primaryRecordEvidence(misfiled)).toThrow(/not a musicbrainz primary record/);
+  });
+});
+
+describe("evidence given back by the research cache", () => {
+  /** A real pack's items as the research cache stores and reads them (JSON, parsed). */
+  async function storedPack(): Promise<Evidence[]> {
+    const pack = new EvidencePack();
+    pack.addAll(primaryRecordEvidence(await iceIceBaby()));
+    pack.addAll(webSearchEvidence([web("https://example.test/ice-ice-baby")]));
+    return JSON.parse(JSON.stringify(pack.items())).map((item: unknown) =>
+      EvidenceSchema.parse(item),
+    );
+  }
+
+  it("restores what a pack held, as items a pack takes again", async () => {
+    const stored = await storedPack();
+    const restored = restoredEvidence(stored);
+    expect(restored).toEqual(stored);
+    const pack = new EvidencePack();
+    expect(pack.addAll(restored ?? [])).toBe(stored.length);
+    // A stored item itself is still refused by the pack: only the restored copy is taken.
+    expect(() => pack.add(stored[0] as SourcedEvidence)).toThrow(EvidenceOriginError);
+  });
+
+  it("refuses the whole cached evidence when one item is not what a source module builds", async () => {
+    const stored = await storedPack();
+    const [primary] = stored;
+    const page = stored.find((e) => e.sourceTier === "web") as Evidence;
+    const forged: Array<[string, Evidence]> = [
+      ["a summary filed as web search's primary record", { ...primary, source: "tavily" }],
+      ["an editorial item", { ...primary, sourceTier: "editorial" }],
+      ["an id that is not the source's", { ...primary, id: `${primary.id}/edited` }],
+      [
+        "a record without a scope",
+        { ...primary, recordRef: "recording/x", id: "musicbrainz:recording/x" },
+      ],
+      ["a web page with a recordRef", { ...page, recordRef: "track/x" }],
+      ["a web page whose id is not its URL", { ...page, id: "tavily:https://example.test/other" }],
+      [
+        "a lyric page",
+        { ...page, url: "https://genius.com/x-lyrics", id: "tavily:https://genius.com/x-lyrics" },
+      ],
+      ["a placeholder text", { ...page, excerpt: "No results found." }],
+      ["an item that breaks the contract", { ...primary, url: null, recordRef: null }],
+    ];
+    for (const [what, item] of forged) {
+      expect(restoredEvidence([...stored, item]), what).toBeNull();
+    }
   });
 });
 
@@ -364,10 +418,15 @@ describe("who builds evidence", () => {
   const IMPORT = /import\s+(?:type\s+)?(?:\{([^}]*)\}|\*\s+as\s+\w+)\s+from\s+["']([^"']+)["']/g;
 
   it("only the source readers and agent/research import the evidence constructors", () => {
-    const importers: Record<string, string[]> = { primaryEvidence: [], webSearchEvidence: [] };
+    const importers: Record<string, string[]> = {
+      primaryEvidence: [],
+      webSearchEvidence: [],
+      restoredEvidence: [],
+    };
     const modules: Record<string, RegExp> = {
       primaryEvidence: /records\.js$/,
       webSearchEvidence: /evidencePack\.js$/,
+      restoredEvidence: /evidencePack\.js$/,
     };
     for (const path of files(SRC)) {
       const text = readFileSync(path, "utf8");
@@ -383,6 +442,7 @@ describe("who builds evidence", () => {
     const allowed = (path: string) => /^(?:sources|agent\/research)\//.test(path);
     expect(importers.primaryEvidence.length).toBeGreaterThan(0);
     expect(importers.webSearchEvidence.length).toBeGreaterThan(0);
+    expect(importers.restoredEvidence.length).toBeGreaterThan(0);
     expect(
       Object.values(importers)
         .flat()

@@ -12,7 +12,8 @@
  *   recordings it samples and those that sample it are read.
  *
  * The API key is optional: SHS_API_KEY is sent as `X-API-Key` when set, and without it requests
- * are anonymous, with a lower rate limit.
+ * are anonymous, with a lower rate limit. Requests are paced on the client (`shsPace`); the
+ * API's limits could not be read from its documentation, so the pace is a conservative one.
  *
  * The parser follows the payload of the published Python wrapper (arthurtofani/secondhandsongs:
  * `uri`, `title`, `performer`, `isOriginal`, `versions`, `originals`, `covers`, `sampledBy`,
@@ -23,7 +24,8 @@
  */
 
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { credential, fetchJson, type Shape } from "./http.js";
+import { credential, pacedFetchJson, type Shape } from "./http.js";
+import { type Pace, RequestPacer } from "./pacing.js";
 import {
   type Clock,
   checkIdentity,
@@ -122,11 +124,32 @@ export function shsLink(url: string, from: ShsLink["from"] = "work"): ShsLink | 
   return match ? { kind: match[1] as ShsLink["kind"], id: Number(match[2]), from } : null;
 }
 
+/**
+ * Anonymous requests: one every 6 s and at most 100 an hour (about 10 a minute and 100 an hour
+ * are the anonymous limits reported for the API; its own page could not be read to confirm
+ * them). With an API key: one a second. A request is not kept waiting more than 15 s, inside the
+ * primary sources' 20 s deadline; past that it is reported as rate limited. A run makes one
+ * request.
+ */
+export const SHS_ANONYMOUS_PACE: Pace = {
+  intervalMs: 6000,
+  budget: { max: 100, windowMs: 60 * 60 * 1000 },
+  maxWaitMs: 15_000,
+};
+export const SHS_KEYED_PACE: Pace = { intervalMs: 1000, maxWaitMs: 15_000 };
+
+/** The pace for the configuration now. */
+export function shsPace(): Pace {
+  return credential(SHS_API_KEY) ? SHS_KEYED_PACE : SHS_ANONYMOUS_PACE;
+}
+
+const pacer = new RequestPacer("SecondHandSongs", shsPace);
+
 const pageOf = (link: ShsLink) => `${SITE}/${link.kind}/${link.id}`;
 
 async function shsGet<T>(link: ShsLink, scrub: Shape, signal?: AbortSignal): Promise<T> {
   const key = credential(SHS_API_KEY);
-  const answer = await fetchJson<T>({
+  const answer = await pacedFetchJson<T>(pacer, {
     source: "secondhandsongs",
     url: pageOf(link),
     headers: { Accept: "application/json", ...(key ? { "X-API-Key": key } : {}) },

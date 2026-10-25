@@ -11,11 +11,16 @@
  * Needs DISCOGS_TOKEN, a personal access token sent as `Authorization: Discogs token=…`.
  * Without it the source is "missing" and nothing is requested.
  *
- * @see https://www.discogs.com/developers
+ * Requests are paced on the client (`DISCOGS_PACE`): Discogs allows 60 authenticated requests
+ * per minute per IP address, counted over a moving 60-second window, and answers 429 past it. A
+ * run reads at most three releases, one after the other.
+ *
+ * @see https://www.discogs.com/developers (Rate Limiting)
  */
 
 import { SOURCE_CREDENTIALS } from "../config/settings.js";
-import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
+import { credential, isSourceError, pacedFetchJson, type Shape } from "./http.js";
+import { type Pace, RequestPacer } from "./pacing.js";
 import {
   type Clock,
   checkIdentity,
@@ -99,6 +104,15 @@ const RELEASE_SHAPE: Shape = {
   ],
 };
 
+/**
+ * One request a little over every second: under the 60 a minute Discogs allows, also when its
+ * window and our clock disagree. A request is not kept waiting more than 15 s, inside the
+ * primary sources' 20 s deadline; past that it is reported as rate limited.
+ */
+export const DISCOGS_PACE: Pace = { intervalMs: 1050, maxWaitMs: 15_000 };
+
+const pacer = new RequestPacer("Discogs", () => DISCOGS_PACE);
+
 export function discogsConfigured(): boolean {
   return Boolean(credential(DISCOGS_TOKEN));
 }
@@ -118,7 +132,7 @@ export function discogsReleaseId(url: string): number | null {
 }
 
 export async function getDiscogsRelease(id: number, signal?: AbortSignal): Promise<DiscogsRelease> {
-  const release = await fetchJson<DiscogsRelease>({
+  const release = await pacedFetchJson<DiscogsRelease>(pacer, {
     source: "discogs",
     url: `${API}/releases/${id}`,
     headers: {

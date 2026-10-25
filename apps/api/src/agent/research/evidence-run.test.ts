@@ -221,10 +221,14 @@ describe("the historian's evidence pack", () => {
         evidence.filter((e) => e.source === "musicbrainz").length
       }, SecondHandSongs ${evidence.filter((e) => e.source === "secondhandsongs").length})`,
     );
-    // The cached research holds no evidence and no primary-source error.
+    // The research is cached with the pack and the primary sources' errors that do not block it.
     expect(cache.putResearch).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(cache.putResearch.mock.calls[0][1])).not.toMatch(
-      /discogs|genius|secondhandsongs/i,
+    const cached = cache.putResearch.mock.calls[0][1] as {
+      evidence?: { items: Evidence[]; errors: unknown[] };
+    };
+    expect(cached.evidence?.items.map((e) => e.id)).toEqual(evidence.map((e) => e.id));
+    expect(cached.evidence?.errors).toEqual(
+      out.sourceErrors?.filter((e) => e.source === "discogs" || e.source === "genius"),
     );
     expect(net.calls.some((c) => c.url === "https://secondhandsongs.com/work/4196")).toBe(true);
   });
@@ -470,7 +474,7 @@ describe("a run whose primary sources fail", () => {
     expect(stored).toBe(0);
   });
 
-  it("does not keep the result when a primary source could not be read, but caches the research", async () => {
+  it("keeps neither the result nor the research when a primary source could not be read", async () => {
     net = stubFetch((call) =>
       call.url === SHS_WORK ? new Response("busy", { status: 503 }) : runRoute(call),
     );
@@ -482,8 +486,8 @@ describe("a run whose primary sources fail", () => {
       ]),
     );
     expect(stored).toBe(0);
-    // The research cache holds no primary record: an unread source does not block it.
-    expect(cache.putResearch).toHaveBeenCalledTimes(1);
+    // The research is cached with its evidence: a source that could not be read blocks it.
+    expect(cache.putResearch).not.toHaveBeenCalled();
   });
 });
 

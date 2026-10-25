@@ -469,9 +469,18 @@ export function originalPerformance(
  */
 export async function resolveIdentity(
   track: TrackRef,
-  options: { signal?: AbortSignal; onRecording?: (recording: IdentifiedRecording) => void } = {},
+  options: {
+    signal?: AbortSignal;
+    /**
+     * Stops the dating of the work's recordings (default `signal`): the chain's last reads,
+     * and the only ones whose loss loses no record, cut early enough for the other sources.
+     */
+    datingSignal?: AbortSignal;
+    onRecording?: (recording: IdentifiedRecording) => void;
+  } = {},
 ): Promise<IdentityResolution> {
   const { signal } = options;
+  const datingSignal = options.datingSignal ?? signal;
   const none = (result: SourceResult<never>): IdentityResolution => ({
     identity: null,
     details: null,
@@ -559,7 +568,7 @@ export async function resolveIdentity(
           original = originalPerformance(
             details,
             links.works,
-            await browseWorkRecordings(only.mbid, 2, signal),
+            await browseWorkRecordings(only.mbid, 2, datingSignal),
             coverIds,
           );
         } catch (error) {
@@ -721,6 +730,12 @@ export interface PrimarySources {
 /** The longest a whole run may take, all sources together, and the longest it may be set to. */
 export const PRIMARY_SOURCES_DEADLINE_MS = 20_000;
 const MAX_DEADLINE_MS = 120_000;
+/**
+ * The time the dating of the work's recordings leaves before the deadline (at most a quarter of
+ * it) for Discogs, Genius and SecondHandSongs, which are asked after it: a dating cut by the
+ * deadline would otherwise take their requests down with it.
+ */
+export const OTHER_SOURCES_RESERVE_MS = 5000;
 
 /** A deadline in ms: the default when not a positive number, and at most two minutes. */
 function deadlineOf(ms: number | undefined): number {
@@ -766,8 +781,15 @@ async function collectInOrder(
   track: TrackRef,
   options: PrimarySourcesOptions,
 ): Promise<PrimarySources> {
-  const deadline = AbortSignal.timeout(deadlineOf(options.deadlineMs));
+  const deadlineMs = deadlineOf(options.deadlineMs);
+  const deadline = AbortSignal.timeout(deadlineMs);
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  const datingSignal = AbortSignal.any([
+    signal,
+    AbortSignal.timeout(
+      deadlineMs - Math.min(OTHER_SOURCES_RESERVE_MS, Math.floor(deadlineMs / 4)),
+    ),
+  ]);
   const run = { now: options.now, signal };
   let told = false;
   const tell = (recording: IdentifiedRecording | null) => {
@@ -778,7 +800,7 @@ async function collectInOrder(
 
   let resolved: IdentityResolution | undefined;
   const resolution = await settle<never>("musicbrainz", async () => {
-    resolved = await resolveIdentity(track, { signal, onRecording: tell });
+    resolved = await resolveIdentity(track, { signal, datingSignal, onRecording: tell });
     return resolved.result;
   });
   tell(null);

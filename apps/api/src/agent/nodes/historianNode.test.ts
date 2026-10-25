@@ -143,8 +143,11 @@ describe("historianNode", () => {
 
       await historianNode(state, { writer: () => {} } as never);
 
-      expect(cache.getResearch).toHaveBeenCalledWith("v3:x:lastfm=1:tavily=1");
-      expect(cache.putResearch).toHaveBeenCalledWith("v3:x:lastfm=1:tavily=1", expect.anything());
+      expect(cache.getResearch).toHaveBeenCalledWith("v4:x:lastfm=1:tavily=1:discogs=0:genius=0");
+      expect(cache.putResearch).toHaveBeenCalledWith(
+        "v4:x:lastfm=1:tavily=1:discogs=0:genius=0",
+        expect.anything(),
+      );
     });
 
     it("does not store research when a planner call failed", async () => {

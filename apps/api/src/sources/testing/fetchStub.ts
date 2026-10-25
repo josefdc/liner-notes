@@ -1,6 +1,8 @@
 /**
  * Test helper: replaces global fetch with a router, so source tests never reach the network.
- * A request the router does not answer fails the test with "unexpected request".
+ * A request the router does not answer fails the test with "unexpected request". As the real
+ * fetch does, a request whose signal has already aborted rejects with its reason (it is still
+ * listed in `calls`): a stub never answers a request the source would not have got.
  *
  *   const net = stubFetch((call) => call.url.startsWith(SEARCH) ? json({ ... }) : undefined);
  *   ...
@@ -37,6 +39,7 @@ export function stubFetch(route: FetchRoute) {
       signal: init?.signal ?? undefined,
     };
     calls.push(call);
+    call.signal?.throwIfAborted();
     const response = await route(call);
     if (!response) throw new Error(`unexpected request: ${call.method} ${url}`);
     return response;

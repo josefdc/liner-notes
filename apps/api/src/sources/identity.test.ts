@@ -205,8 +205,35 @@ describe("discogsCandidates on the recording's releases", () => {
 
 describe("resolveIdentity", () => {
   it("reaches the recording and the Genius, SecondHandSongs and Discogs links", async () => {
+    process.env.DISCOGS_TOKEN = "discogs-test-token";
     const net = stubFetch(musicBrainz);
-    const { identity, result } = await resolveIdentity(ICE_TRACK);
+    const told: unknown[] = [];
+    // The requests made when the recording is told: only the ISRC lookup and the recording's.
+    let madeWhenTold: string[] = [];
+    const { identity, result } = await resolveIdentity(ICE_TRACK, {
+      onRecording: (recording) => {
+        told.push(recording);
+        madeWhenTold = net.calls.map((c) => new URL(c.url).pathname);
+      },
+    });
+    expect(madeWhenTold).toEqual(["/ws/2/isrc/USCA29001716", `/ws/2/recording/${ICE}`]);
+    // The recording is told once, as soon as its lookup passed the checks.
+    expect(told).toEqual([
+      {
+        mbid: ICE,
+        title: "Ice Ice Baby",
+        artist: "Vanilla Ice",
+        lengthMs: 271_000,
+        firstReleaseDate: "1990-09-04",
+        artists: [
+          {
+            mbid: "2d5583be-aafd-41ec-addd-df85913855ef",
+            name: "Vanilla Ice",
+            credited: "Vanilla Ice",
+          },
+        ],
+      },
+    ]);
     expect(identity).toMatchObject({
       isrc: "USCA29001716",
       recording: { mbid: ICE, title: "Ice Ice Baby", artist: "Vanilla Ice", lengthMs: 271_000 },
@@ -231,6 +258,19 @@ describe("resolveIdentity", () => {
       "/ws/2/release",
       `/ws/2/work/${ICE_WORK}`,
       // The work's 117 recordings, in two pages, to date them.
+      "/ws/2/recording",
+      "/ws/2/recording",
+    ]);
+  });
+
+  it("reads no release without a Discogs token: only Discogs reads their links", async () => {
+    const net = stubFetch(musicBrainz);
+    const { identity } = await resolveIdentity(ICE_TRACK);
+    expect(identity).toMatchObject({ discogsReleaseIds: [], releasesError: null });
+    expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
+      "/ws/2/isrc/USCA29001716",
+      `/ws/2/recording/${ICE}`,
+      `/ws/2/work/${ICE_WORK}`,
       "/ws/2/recording",
       "/ws/2/recording",
     ]);
@@ -367,6 +407,48 @@ describe("collectPrimarySources", () => {
       genius: { matched: 0, rejected: 0, missing: 0, unavailable: 1 },
       secondhandsongs: { matched: 1, rejected: 0, missing: 0, unavailable: 0 },
     });
+  });
+
+  it("tells the identified recording once, and null when MusicBrainz identifies none", async () => {
+    stubFetch(withShs);
+    const told: Array<{ mbid: string } | null> = [];
+    await collectPrimarySources(ICE_TRACK, { now, onRecording: (r) => told.push(r) });
+    expect(told.map((r) => r?.mbid)).toEqual([ICE]);
+
+    stubFetch(() => new Response("bad gateway", { status: 502 }));
+    const none: unknown[] = [];
+    await collectPrimarySources(ICE_TRACK, { now, onRecording: (r) => none.push(r) });
+    expect(none).toEqual([null]);
+  });
+
+  it("is served ahead of MusicBrainz requests made outside it, queued first", async () => {
+    const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(30);
+    try {
+      const OTHER = ["GBUM71106916", "USUM72401994"];
+      const net = stubFetch((call) =>
+        OTHER.some((isrc) => call.url.includes(`/isrc/${isrc}`))
+          ? json({ recordings: [] })
+          : withShs(call),
+      );
+      // A request just made: the next ones wait their turn.
+      await lookupIsrc(OTHER[0]);
+      net.calls.length = 0;
+      // A researcher's two requests are queued first; then the chain starts.
+      const research = Promise.all(OTHER.map((isrc) => lookupIsrc(isrc)));
+      const chain = collectPrimarySources(ICE_TRACK, { now });
+      await Promise.all([research, chain]);
+
+      const mb = net.calls.filter((c) => c.url.startsWith(MB)).map((c) => c.url);
+      const firstOther = mb.findIndex((url) => OTHER.some((isrc) => url.includes(isrc)));
+      // Every MusicBrainz request of the chain (lookup, recording, work, dating) came first.
+      expect(firstOther).toBe(mb.length - 2);
+      expect(mb.slice(0, firstOther).every((url) => !OTHER.some((i) => url.includes(i)))).toBe(
+        true,
+      );
+      expect(firstOther).toBeGreaterThanOrEqual(4);
+    } finally {
+      restore();
+    }
   });
 
   it("checks the Discogs release the chain reaches and omits one without the track", async () => {

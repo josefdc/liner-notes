@@ -18,6 +18,8 @@ import type { z } from "zod";
 import type { LlmTier } from "../config/settings.js";
 import type { LlmErrorKind } from "../llm/errors.js";
 import type { PreviewSourceMatch } from "../sources/audio.js";
+import type { IdentifiedRecording } from "../sources/identity.js";
+import { isPlaceholder, lastfmBio } from "./research/plan.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import type { QueryMatch } from "./trackMatch.js";
 
@@ -235,25 +237,75 @@ export function emptyResearch(): ResearchData {
   };
 }
 
-const appended = (a: string[] | undefined, b: string[] | undefined) => [...(a ?? []), ...(b ?? [])];
+/** How two entries of a list are the same: by their text, or by the name they rank. */
+type Key = (entry: string) => string;
+const byText: Key = (entry) => entry.replace(/\s+/g, " ").trim();
+/** "funk (12)" → "funk": a tag once, whatever its count. */
+const byTag: Key = (entry) =>
+  byText(entry)
+    .replace(/\s*\(\d+\)$/, "")
+    .toLowerCase();
+const MBID_IN_LINE =
+  /\bMusicBrainz ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;
+/**
+ * A similar track or artist by its MusicBrainz id when the line names one (two artists of one
+ * name stay apart), else by its name: "2. Under Pressure by Queen (Last.fm match 0.91, …)" →
+ * "under pressure by queen".
+ */
+const byName: Key = (entry) => {
+  const mbid = byText(entry).match(MBID_IN_LINE)?.[1];
+  if (mbid) return `mbid:${mbid.toLowerCase()}`;
+  return byText(entry)
+    .replace(/^\d+\.\s+/, "")
+    .replace(/\s*\([^()]*\)$/, "")
+    .toLowerCase();
+};
 
-/** `next` appended to `prev`, list by list (the reducer of research in the graph and the subgraph). */
+/**
+ * `b` appended to `a`: each entry once (`key`), and never a placeholder (a step's "no result",
+ * an empty text: research/plan.ts).
+ */
+function appended(a: string[] | undefined, b: string[] | undefined, key: Key = byText): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of [...(a ?? []), ...(b ?? [])]) {
+    if (isPlaceholder(entry)) continue;
+    const k = key(entry);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(entry);
+  }
+  return out;
+}
+
+/** Labels written by code (`noneFound`, `notAsked`): each once. */
+function labels(a: string[] | undefined, b: string[] | undefined): string[] {
+  return [...new Set([...(a ?? []), ...(b ?? [])])];
+}
+
+/**
+ * `next` appended to `prev`, list by list (the reducer of research in the graph and the
+ * subgraph). An entry already held is not added again (a tag or a similar track or artist by its
+ * name, anything else by its text), so merging the same research twice changes nothing.
+ */
 export function mergeResearch(prev: ResearchData, next: Partial<ResearchData>): ResearchData {
   return {
     samples: appended(prev.samples, next.samples),
     productionTrivia: appended(prev.productionTrivia, next.productionTrivia),
     collaborators: appended(prev.collaborators, next.collaborators),
-    lastfmTags: appended(prev.lastfmTags, next.lastfmTags),
-    lastfmArtistTags: appended(prev.lastfmArtistTags, next.lastfmArtistTags),
-    lastfmSimilarTracks: appended(prev.lastfmSimilarTracks, next.lastfmSimilarTracks),
-    lastfmSimilarArtists: appended(prev.lastfmSimilarArtists, next.lastfmSimilarArtists),
-    lastfmArtistBio: next.lastfmArtistBio || prev.lastfmArtistBio,
+    lastfmTags: appended(prev.lastfmTags, next.lastfmTags, byTag),
+    lastfmArtistTags: appended(prev.lastfmArtistTags, next.lastfmArtistTags, byTag),
+    lastfmSimilarTracks: appended(prev.lastfmSimilarTracks, next.lastfmSimilarTracks, byName),
+    lastfmSimilarArtists: appended(prev.lastfmSimilarArtists, next.lastfmSimilarArtists, byName),
+    lastfmArtistBio:
+      lastfmBio(next.lastfmArtistBio) ?? lastfmBio(prev.lastfmArtistBio) ?? undefined,
     listenbrainzSimilarArtists: appended(
       prev.listenbrainzSimilarArtists,
       next.listenbrainzSimilarArtists,
+      byName,
     ),
-    noneFound: appended(prev.noneFound, next.noneFound),
-    notAsked: appended(prev.notAsked, next.notAsked),
+    noneFound: labels(prev.noneFound, next.noneFound),
+    notAsked: labels(prev.notAsked, next.notAsked),
     collaboratorsOf: next.collaboratorsOf || prev.collaboratorsOf,
   };
 }
@@ -463,6 +515,13 @@ export const SonicAgentState = Annotation.Root({
 
   // The track's ISRC, when the scout found one; null when unknown.
   isrc: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // The MusicBrainz recording the ISRC identified, from the historian's identity chain (the
+  // run's one ISRC lookup), for the composer; null without an ISRC or a match.
+  isrcRecording: Annotation<IdentifiedRecording | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),

@@ -68,7 +68,6 @@ vi.mock("../../sources/musicbrainz.js", async (importOriginal) => ({
   lookupIsrc: mb.lookupIsrc,
 }));
 
-import { SourceError } from "../../sources/http.js";
 import type { AudioFeatures, SonicAgentStateType } from "../state.js";
 import { createComposerNode, modelErrorCategory } from "./composerNode.js";
 import { scoutNode } from "./scoutNode.js";
@@ -598,67 +597,50 @@ describe("composerNode", () => {
   });
 
   describe("MusicBrainz metadata by ISRC", () => {
-    const withIsrc = () => ({ ...stateWith(null), isrc: "USSM19000001" }) as SonicAgentStateType;
-
-    it("adds the matched recording to the prompt", async () => {
-      mb.lookupIsrc.mockResolvedValue([
+    const recording = {
+      mbid: "0f1e2d3c-0000-4000-8000-000000000001",
+      title: "Ice Ice Baby",
+      artist: "Vanilla Ice",
+      lengthMs: 270_500,
+      firstReleaseDate: "1990-09-10",
+      artists: [
         {
-          id: "0f1e2d3c-0000-4000-8000-000000000001",
-          title: "Ice Ice Baby",
-          length: 270_500,
-          "first-release-date": "1990-09-10",
-          "artist-credit": [{ name: "Vanilla Ice" }],
+          mbid: "0f1e2d3c-0000-4000-8000-0000000000a1",
+          name: "Vanilla Ice",
+          credited: "Vanilla Ice",
         },
-      ]);
-      const llm = succeeding();
-      const out = await createComposerNode(testRuntime(llm))(withIsrc(), config());
+      ],
+    };
+    const withIsrc = (isrcRecording: typeof recording | null) =>
+      ({ ...stateWith(null), isrc: "USSM19000001", isrcRecording }) as SonicAgentStateType;
 
-      expect(mb.lookupIsrc).toHaveBeenCalledWith("USSM19000001", undefined);
+    it("adds the recording the historian identified to the prompt, without looking it up again", async () => {
+      const llm = succeeding();
+      const out = await createComposerNode(testRuntime(llm))(withIsrc(recording), config());
+
+      expect(mb.lookupIsrc).not.toHaveBeenCalled();
       expect(messagesOf(llm.calls[0]).user).toContain(
-        '"mbid":"0f1e2d3c-0000-4000-8000-000000000001","title":"Ice Ice Baby","artistCredit":"Vanilla Ice"',
+        '"mbid":"0f1e2d3c-0000-4000-8000-000000000001","title":"Ice Ice Baby","artistCredit":"Vanilla Ice","firstReleaseDate":"1990-09-10","lengthSeconds":271',
       );
       expect(out.trackData?.isrc).toBe("USSM19000001");
     });
 
-    it("matches a recording credited to two artists against each of them", async () => {
-      mb.lookupIsrc.mockResolvedValue([
-        {
-          id: "0f1e2d3c-0000-4000-8000-000000000002",
-          title: "Gangsta's Paradise",
-          length: 240_000,
-          "artist-credit": [
-            { name: "Coolio", joinphrase: " feat. ", artist: { id: "a1", name: "Coolio" } },
-            { name: "L.V.", artist: { id: "a2", name: "L.V." } },
-          ],
-        },
-      ]);
+    it("composes without it when none was identified, and adds no source error of its own", async () => {
+      // The identity chain's failure is already the run's error (the historian's).
+      const failed = {
+        source: "musicbrainz" as const,
+        code: "timeout" as const,
+        message: "timed out",
+      };
       const llm = succeeding();
-      const state = {
-        ...stateWith(null, {
-          title: "Gangsta's Paradise",
-          artist: "Coolio, L.V.",
-          artistNames: ["Coolio", "L.V."],
-          durationMs: 240_000,
-        }),
-        isrc: "USTO10500102",
-      } as SonicAgentStateType;
-
-      await createComposerNode(testRuntime(llm))(state, config());
-
-      expect(messagesOf(llm.calls[0]).user).toContain(
-        '"mbid":"0f1e2d3c-0000-4000-8000-000000000002"',
+      const out = await createComposerNode(testRuntime(llm))(
+        { ...withIsrc(null), sourceErrors: [failed] } as SonicAgentStateType,
+        config(),
       );
-    });
 
-    it("records a failed lookup as a source error and composes without it", async () => {
-      mb.lookupIsrc.mockRejectedValue(new SourceError("musicbrainz", "timeout", "timed out"));
-      const llm = succeeding();
-      const out = await createComposerNode(testRuntime(llm))(withIsrc(), config());
-
-      expect(out.sourceErrors).toEqual([
-        expect.objectContaining({ source: "musicbrainz", code: "timeout" }),
-      ]);
-      expect(out.trackData?.run?.sourceErrors).toEqual(out.sourceErrors);
+      expect(mb.lookupIsrc).not.toHaveBeenCalled();
+      expect(out.sourceErrors).toEqual([]);
+      expect(out.trackData?.run?.sourceErrors).toEqual([failed]);
       expect(messagesOf(llm.calls[0]).user).toContain(
         "MusicBrainz recording matched by ISRC:\n(not available)",
       );

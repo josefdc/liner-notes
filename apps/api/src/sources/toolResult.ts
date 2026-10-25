@@ -104,6 +104,11 @@ export const NOT_ASKED_REASONS = [
   "other_artist",
   /** Last.fm keeps one page for several artists of this name. */
   "shared_page",
+  /**
+   * Last.fm knows no artist with the identified artist's MusicBrainz id, and MusicBrainz does not
+   * have exactly one artist of the name: an answer by name may be another artist's.
+   */
+  "lastfm_unknown_mbid",
 ] as const;
 export type NotAskedReason = (typeof NOT_ASKED_REASONS)[number];
 /** The source answered with nothing for the request. */

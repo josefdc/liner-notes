@@ -48,6 +48,7 @@ import {
   NOT_ORIGINAL_RELEASE_TYPES,
   normalizeIsrc,
   recordingRelationships,
+  withMusicBrainzPriority,
   workCovers,
 } from "./musicbrainz.js";
 import {
@@ -100,6 +101,45 @@ export interface PrimaryIdentity {
   /** Every Genius page linked from the recording's works. */
   geniusPages: string[];
   shsLinks: ShsLink[];
+}
+
+/**
+ * The recording the track's ISRC identified, once the lookup of the recording itself passed the
+ * identity checks: what the rest of the run reads from MusicBrainz about it (the composer's
+ * recording, the researcher's artist), so no other step looks the ISRC up again.
+ */
+export interface IdentifiedRecording {
+  mbid: string;
+  title: string;
+  /** The artist credit as MusicBrainz writes it ("Coolio feat. L.V."). */
+  artist: string;
+  lengthMs: number | null;
+  firstReleaseDate: string | null;
+  /** The credited artists one by one: their MusicBrainz id and name, and the name as credited. */
+  artists: Array<{ mbid: string; name: string; credited: string }>;
+}
+
+/** The identified recording as the rest of the run reads it. */
+export function identifiedRecording(details: MbRecordingDetails): IdentifiedRecording {
+  const credits = Array.isArray(details["artist-credit"]) ? details["artist-credit"] : [];
+  return {
+    mbid: details.id,
+    title: details.title,
+    artist: creditString(details["artist-credit"]),
+    lengthMs: lengthOf(details),
+    firstReleaseDate: details["first-release-date"]?.trim() || null,
+    artists: credits.flatMap((c) =>
+      c?.artist && isMbid(c.artist.id) && typeof c.artist.name === "string"
+        ? [
+            {
+              mbid: c.artist.id,
+              name: c.artist.name,
+              credited: typeof c.name === "string" ? c.name : c.artist.name,
+            },
+          ]
+        : [],
+    ),
+  };
 }
 
 export type IdentityResolution =
@@ -423,11 +463,13 @@ export function originalPerformance(
 
 /**
  * ISRC → the MusicBrainz recording that is the track, with the links the other sources start
- * from and whether it is the song's original recording. Never throws.
+ * from and whether it is the song's original recording. Never throws. `onRecording` is told the
+ * recording as soon as its lookup passed the checks, before the releases and the work are read.
+ * The recording's releases are read only for Discogs, so only when Discogs is configured.
  */
 export async function resolveIdentity(
   track: TrackRef,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; onRecording?: (recording: IdentifiedRecording) => void } = {},
 ): Promise<IdentityResolution> {
   const { signal } = options;
   const none = (result: SourceResult<never>): IdentityResolution => ({
@@ -466,21 +508,25 @@ export async function resolveIdentity(
       ];
       return none(missing("musicbrainz", check.reason, { omitted }));
     }
+    options.onRecording?.(identifiedRecording(details));
 
     let discogsReleaseIds: number[] = [];
     let releasesError: string | null = null;
     let releasesFailure: SourceErrorRecord | null = null;
     let releasesNote: string | null = null;
-    try {
-      const { releases, total } = await browseRecordingReleases(details.id, 2, signal);
-      // Sorted before the Discogs source takes the first few.
-      discogsReleaseIds = discogsCandidates(releases);
-      if (total > releases.length) {
-        releasesNote = `only ${releases.length} of the recording's ${total} releases were read for Discogs links`;
+    // Without a Discogs token nothing reads the releases' Discogs links: no request is made.
+    if (discogsConfigured()) {
+      try {
+        const { releases, total } = await browseRecordingReleases(details.id, 2, signal);
+        // Sorted before the Discogs source takes the first few.
+        discogsReleaseIds = discogsCandidates(releases);
+        if (total > releases.length) {
+          releasesNote = `only ${releases.length} of the recording's ${total} releases were read for Discogs links`;
+        }
+      } catch (error) {
+        releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
+        releasesFailure = errorRecord("discogs", error);
       }
-    } catch (error) {
-      releasesError = `MusicBrainz releases could not be read: ${describeError(error)}`;
-      releasesFailure = errorRecord("discogs", error);
     }
 
     const links = linksOf(details);
@@ -698,21 +744,44 @@ async function settle<T>(source: SourceId, run: () => Promise<SourceResult<T>>) 
  * `deadlineMs` (default 20 s, at most 2 min) or until `signal` aborts; whatever has not
  * answered by the deadline is "missing" (timeout), and what the caller cancelled is "missing"
  * (unavailable). Never throws; each source answers on its own, "missing" with the reason when it
- * has nothing.
+ * has nothing. `onRecording` is called once: with the identified recording as soon as it is
+ * known, or with null when the chain identified none. Its MusicBrainz requests go ahead of any
+ * other in the shared queue (`withMusicBrainzPriority`).
  */
-export async function collectPrimarySources(
+export function collectPrimarySources(
   track: TrackRef,
-  options: { now?: Clock; signal?: AbortSignal; deadlineMs?: number } = {},
+  options: PrimarySourcesOptions = {},
+): Promise<PrimarySources> {
+  return withMusicBrainzPriority(() => collectInOrder(track, options));
+}
+
+export interface PrimarySourcesOptions {
+  now?: Clock;
+  signal?: AbortSignal;
+  deadlineMs?: number;
+  onRecording?: (recording: IdentifiedRecording | null) => void;
+}
+
+async function collectInOrder(
+  track: TrackRef,
+  options: PrimarySourcesOptions,
 ): Promise<PrimarySources> {
   const deadline = AbortSignal.timeout(deadlineOf(options.deadlineMs));
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const run = { now: options.now, signal };
+  let told = false;
+  const tell = (recording: IdentifiedRecording | null) => {
+    if (told) return;
+    told = true;
+    options.onRecording?.(recording);
+  };
 
   let resolved: IdentityResolution | undefined;
   const resolution = await settle<never>("musicbrainz", async () => {
-    resolved = await resolveIdentity(track, run);
+    resolved = await resolveIdentity(track, { signal, onRecording: tell });
     return resolved.result;
   });
+  tell(null);
   const base: IdentityResolution = resolved ?? {
     identity: null,
     details: null,

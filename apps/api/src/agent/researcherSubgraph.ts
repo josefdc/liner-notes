@@ -1,9 +1,17 @@
 /**
  * Deep Dive Researcher Subgraph
  *
- * Iterative research: a fixed first step (sample history), then up to MAX_PLANNED_STEPS steps
- * chosen by the research planner, a model call on the `fast` tier through the provider layer
- * (schema `ResearchPlanOutput`). Each step runs one search; the planner sees what was found.
+ * The researcher's part of the run's research plan (research/plan.ts): its fixed steps
+ * (`plannedSteps`: the sample history, and with an identified recording the production history,
+ * ListenBrainz and the artist's collaborators), run together without a model, then up to
+ * MAX_PLANNED_STEPS follow-ups chosen by the research planner, a model call on the `fast` tier
+ * through the provider layer (schema `ResearchPlanOutput`). Each step runs one search; the
+ * planner sees what was found. Every step runs at most once per run:
+ * the steps the historian already read (`ranSteps`: Last.fm, the recording's MusicBrainz
+ * relationships when the ISRC identified it) and the ones that ran here are not offered again,
+ * and one the planner picks anyway is not run. The artist the identified recording credits
+ * (`artistResolution`, set by the historian) is the artist of every artist-level step, by its
+ * MusicBrainz id: no name search.
  *
  * A failed planner call ends the research (the run continues with what was found) and is
  * recorded in `usage` with its error kind. A cancelled run stops the research: the run's abort
@@ -24,6 +32,18 @@ import { ResearchPlanOutput } from "@liner-notes/contract";
 
 import { answeredCall, failedCall } from "./callRecords.js";
 import type { WebFinding } from "./research/evidencePack.js";
+import {
+  FIRST_STEP,
+  FOLLOW_UP_TIER,
+  isErrorPage,
+  isPlaceholder,
+  lastfmBio,
+  MAX_FOLLOW_UPS,
+  RAN_IN_RESEARCH,
+  type RanStep,
+  UNREAD_IN_RESEARCH,
+  uniqueSteps,
+} from "./research/plan.js";
 import { isAbortError, withRetry } from "./errors.js";
 import { plannerMessages, SOURCE_NAMES } from "./prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdOf, timestampOf } from "./runtime.js";
@@ -68,8 +88,8 @@ import {
 export const PLANNER_CALL_SITE = "research_planner";
 /** Output budget of a planner call, reasoning included (fast tier: low effort). */
 export const PLANNER_MAX_OUTPUT_TOKENS = 1500;
-/** Research steps chosen by the planner, after the fixed first step. */
-export const MAX_PLANNED_STEPS = 2;
+/** Research steps chosen by the planner, after the fixed steps (`plannedSteps`). */
+export const MAX_PLANNED_STEPS = MAX_FOLLOW_UPS;
 /** Wait before a search's one retry after a transient failure. */
 export const SEARCH_RETRY_MS = 500;
 
@@ -107,6 +127,33 @@ export const ResearcherState = Annotation.Root({
   lastfmArtistUncertain: Annotation<string | null>({
     reducer: (prev, next) => next ?? prev,
     default: () => null,
+  }),
+
+  // The steps that already ran this run, each with why: the historian's (Last.fm, the
+  // recording's MusicBrainz relationships when the ISRC identified it) and this research's. A
+  // step runs at most once per run.
+  ranSteps: Annotation<RanStep[]>({
+    reducer: (prev, next) => uniqueSteps([...prev, ...next]),
+    default: () => [],
+  }),
+
+  // The research's fixed steps, run together before any follow-up, without a model call (the
+  // historian sets them from the run's plan; alone, the sample history).
+  plannedSteps: Annotation<Array<RanStep["action"]>>({
+    reducer: (_, next) => next,
+    default: () => [FIRST_STEP],
+  }),
+
+  // The fixed steps the tool node runs next, together; empty once they ran.
+  pendingPlans: Annotation<ResearchPlan[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
+  // How many steps were asked of a source (a step not asked again is not counted).
+  stepsRun: Annotation<number>({
+    reducer: (prev, next) => prev + next,
+    default: () => 0,
   }),
 
   // Subgraph-specific: iteration counter
@@ -180,15 +227,22 @@ function createResearchManagerNode(runtime: AgentRuntime) {
         timestamp: timestampOf(runtime),
       });
 
-    // First step: sample history, without a model call
+    // The fixed steps, together, without a model call
     if (iteration === 0) {
       status("🔬 Starting deep dive research...");
-      return {
-        researchPlan: {
-          nextAction: "search_samples",
+      const taken = new Set(state.ranSteps.map((step) => step.action));
+      const plans: ResearchPlan[] = state.plannedSteps
+        .filter((action) => !taken.has(action))
+        .map((action) => ({
+          nextAction: action,
           query: null,
-          reasoning: "Starting research with sample history to discover musical DNA",
-        },
+          reasoning:
+            action === FIRST_STEP
+              ? "Starting research with sample history to discover musical DNA"
+              : "Part of the research plan for this track",
+        }));
+      return {
+        ...(plans.length > 0 ? { researchPlan: plans[0], pendingPlans: plans } : {}),
         researchIteration: 1,
         statusMessages: ["🔬 Starting deep dive research..."],
       };
@@ -207,13 +261,14 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       sourceErrors: state.sourceErrors,
       step: iteration,
       maxSteps: MAX_PLANNED_STEPS,
+      ran: state.ranSteps,
     });
     let plan: ResearchPlan;
     let call: LlmCallRecord;
     try {
       const result = await runtime.llm.invoke(
         PLANNER_CALL_SITE,
-        "fast",
+        FOLLOW_UP_TIER,
         messages,
         ResearchPlanOutput,
         {
@@ -228,7 +283,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
     } catch (error) {
       if (config.signal?.aborted || isAbortError(error)) throw error;
       // Only a provider-layer failure ends the research; anything else is a bug and is thrown.
-      const failed = failedCall(PLANNER_CALL_SITE, "fast", error);
+      const failed = failedCall(PLANNER_CALL_SITE, FOLLOW_UP_TIER, error);
       if (failed.status === "unexpected") throw error;
       console.warn(`⚠️ [Research Manager] Planner unavailable (${failed.status})`);
       return {
@@ -342,7 +397,9 @@ export function mergeTags(existing: string[], tags: unknown): string[] {
   const seen = new Set(existing.map((t) => t.replace(/\s*\(\d+\)$/, "").toLowerCase()));
   const merged = [...existing];
   for (const tag of Array.isArray(tags) ? tags : []) {
-    if (typeof tag?.name !== "string" || seen.has(tag.name.toLowerCase())) continue;
+    if (typeof tag?.name !== "string" || !tag.name.trim() || seen.has(tag.name.toLowerCase())) {
+      continue;
+    }
     seen.add(tag.name.toLowerCase());
     merged.push(`${tag.name} (${Number(tag.count) || 0})`);
   }
@@ -365,13 +422,16 @@ export function similarTrackLines(tracks: unknown): string[] {
     );
 }
 
+/** ", MusicBrainz <id>" when the source gave the artist's MBID (artists of one name stay apart). */
+const mbidNote = (mbid: unknown) => (isMbid(mbid) ? `, MusicBrainz ${mbid}` : "");
+
 /** Last.fm similar artists by rank, with Last.fm's match value relative to its closest match. */
 export function similarArtistLines(artists: unknown): string[] {
   return (Array.isArray(artists) ? artists : [])
     .filter((a) => typeof a?.name === "string")
     .map(
       (a, i) =>
-        `${i + 1}. ${a.name} (Last.fm match ${score(a.match)}, relative to its closest match = 1)`,
+        `${i + 1}. ${a.name} (Last.fm match ${score(a.match)}, relative to its closest match = 1${mbidNote(a.mbid)})`,
     );
 }
 
@@ -385,7 +445,7 @@ export function listenBrainzLines(artists: unknown, of: string): string[] {
     .map(
       (a, i) =>
         `${i + 1}. ${a.name} (similar to ${of}; ListenBrainz co-listening score ` +
-        `${Number(a.score) || 0}, higher is more similar, no fixed maximum)`,
+        `${Number(a.score) || 0}, higher is more similar, no fixed maximum${mbidNote(a.mbid)})`,
     );
 }
 
@@ -420,6 +480,8 @@ const NOT_ASKED: Record<NotAskedReason, string> = {
   invalid_request: "not answered: Last.fm refused the request",
   other_artist: "dropped: Last.fm answered for another artist",
   shared_page: "dropped: Last.fm keeps one page for several artists of this name",
+  lastfm_unknown_mbid:
+    "not asked: Last.fm does not know this artist's MusicBrainz id, and the name alone may be another artist's",
 };
 
 const isNotAsked = (reason: string | null): reason is NotAskedReason =>
@@ -525,6 +587,59 @@ function createResearchToolNode(runtime: AgentRuntime) {
     researchToolNode(state, config, runtime);
 }
 
+/**
+ * Runs the pending fixed steps together, or the planner's step; their updates as one. A step's
+ * own failure is its source error, so one step never takes the others down.
+ */
+async function researchToolNode(
+  state: ResearcherStateType,
+  config: LangGraphRunnableConfig,
+  runtime: AgentRuntime,
+): Promise<Partial<ResearcherStateType>> {
+  const plans = state.pendingPlans.length > 0 ? state.pendingPlans : [state.researchPlan];
+  // The warnings already sent by a step of this batch ("Web search could not be read").
+  const warned = new Set<string>();
+  const updates = await Promise.all(
+    plans.map((plan) => researchStep(state, plan, config, runtime, warned)),
+  );
+  return { ...combineSteps(updates), pendingPlans: [] };
+}
+
+/** The updates of steps run together, as one update (the channels' own merge rules). */
+export function combineSteps(
+  updates: Array<Partial<ResearcherStateType>>,
+): Partial<ResearcherStateType> {
+  if (updates.length === 1) return updates[0];
+  const out: Partial<ResearcherStateType> & {
+    researchData: ResearchData;
+    ranSteps: RanStep[];
+    sourceErrors: SourceError[];
+    webFindings: WebFinding[];
+    statusMessages: string[];
+    stepsRun: number;
+  } = {
+    researchData: emptyResearch(),
+    ranSteps: [],
+    sourceErrors: [],
+    webFindings: [],
+    statusMessages: [],
+    stepsRun: 0,
+  };
+  for (const update of updates) {
+    if (update.researchData)
+      out.researchData = mergeResearch(out.researchData, update.researchData);
+    out.ranSteps.push(...(update.ranSteps ?? []));
+    out.sourceErrors.push(...(update.sourceErrors ?? []));
+    out.webFindings.push(...(update.webFindings ?? []));
+    out.statusMessages.push(...(update.statusMessages ?? []));
+    out.stepsRun += update.stepsRun ?? 0;
+    if (update.artistResolution) out.artistResolution = update.artistResolution;
+    if (update.lastfmArtistUncertain) out.lastfmArtistUncertain = update.lastfmArtistUncertain;
+    if (update.researchComplete) out.researchComplete = true;
+  }
+  return out;
+}
+
 /** True when a step added anything to the research. */
 function holdsData(data: ResearchData): boolean {
   return (
@@ -546,13 +661,14 @@ interface WebResults {
   results?: WebResult[];
 }
 
-async function researchToolNode(
+async function researchStep(
   state: ResearcherStateType,
+  plan: ResearchPlan | null,
   config: LangGraphRunnableConfig,
   runtime: AgentRuntime,
+  warned: Set<string> = new Set(),
 ): Promise<Partial<ResearcherStateType>> {
   const writer = config.writer;
-  const plan = state.researchPlan;
 
   if (!plan || plan.nextAction === "done" || !state.spotifyData) {
     return { researchComplete: true };
@@ -564,10 +680,29 @@ async function researchToolNode(
   // note: the joined Spotify string is no artist, and a quoted search for it finds nothing.
   const query = trackQuery(state.spotifyData);
   const { primary, names: artistNames, spotifyArtistId, title } = query;
+  // A web result naming the track or its artist is about it, whatever its title looks like.
+  const searched = { title, artist: primary };
   const resolution = state.artistResolution;
   const known = resolution?.status === "identified" ? resolution : null;
   const uncertain = state.lastfmArtistUncertain;
+  const research = state.researchData;
   const label = actionLabel(plan.nextAction);
+
+  // A step runs at most once per run: one that already ran (here or in the historian) is not
+  // asked again, and costs the planner its step.
+  const ran = state.ranSteps.find((step) => step.action === plan.nextAction);
+  if (ran) {
+    const message = `⏭️ Not asked again: ${label} (${ran.why})`;
+    writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
+    return { statusMessages: [message] };
+  }
+  const action = plan.nextAction;
+  /** This step, as it ran: it is not offered again, and its reason says how it went. */
+  const ranAs = (unread: boolean): RanStep[] => [
+    { action, why: unread ? UNREAD_IN_RESEARCH : RAN_IN_RESEARCH },
+  ];
+  // Last.fm's artist-level data is asked by the artist's MusicBrainz id when the run verified it.
+  const artistMbid = known?.verified ? { mbid: known.mbid } : {};
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
 
@@ -585,6 +720,9 @@ async function researchToolNode(
     reader: StepReader;
     /** The web search's results, for the run's web-tier evidence. */
     web: WebFinding[];
+    /** How many web results were kept, and left out (an error page, no text). */
+    webKept: number;
+    webLeftOut: number;
     resolution?: ArtistResolution;
     lastfmUncertain?: string;
   }
@@ -593,13 +731,23 @@ async function researchToolNode(
   const search = async (): Promise<Step> => {
     const newData = emptyResearch();
     const reader = new StepReader();
-    const step: Step = { data: newData, reader, web: [] };
+    const step: Step = { data: newData, reader, web: [], webKept: 0, webLeftOut: 0 };
     const webText = (raw: unknown, none: NoneLabel): string | null => {
       const found = reader.read<WebResults>("tavily", raw, none);
-      const results = Array.isArray(found?.results) ? found.results : [];
-      if (found && results.length === 0) reader.nothing(none);
+      // Each result is judged on its own: one without text or that is an error page ("404 Not
+      // Found") is no answer, and the others are kept.
+      const all = Array.isArray(found?.results) ? found.results : [];
+      const results = all.filter((r) => !isPlaceholder(r?.content) && !isErrorPage(r, searched));
+      step.webKept += results.length;
+      step.webLeftOut += all.length - results.length;
+      if (found && results.length === 0) {
+        reader.nothing(
+          none,
+          all.length > 0 ? "every result was an error page or had no text" : undefined,
+        );
+      }
       const retrievedAt = timestampOf(runtime);
-      for (const result of results) step.web.push({ result, retrievedAt });
+      for (const result of results) step.web.push({ result, retrievedAt, track: searched });
       return results.length > 0 ? formatResults(results) : null;
     };
     /** The artist did not resolve: the run asks no artist-level question about it again. */
@@ -750,7 +898,9 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const [trackTags, artistTags] = await Promise.all([
           getLastfmTrackTags.invoke({ title, artist: primary }, options),
-          uncertain ? null : getLastfmArtistTags.invoke({ artist: primary }, options),
+          uncertain
+            ? null
+            : getLastfmArtistTags.invoke({ artist: primary, ...artistMbid }, options),
         ]);
         const track = reader.read<{ tags?: unknown }>("lastfm", trackTags, "trackTags");
         newData.lastfmTags = mergeTags([], track?.tags);
@@ -776,7 +926,7 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const data = reader.read<{ artists?: unknown }>(
           "lastfm",
-          await getLastfmSimilarArtists.invoke({ artist: primary }, options),
+          await getLastfmSimilarArtists.invoke({ artist: primary, ...artistMbid }, options),
           "similarArtists",
         );
         newData.lastfmSimilarArtists = similarArtistLines(data?.artists);
@@ -788,19 +938,33 @@ async function researchToolNode(
         config.signal?.throwIfAborted();
         const data = reader.read<{ bio?: unknown; tags?: unknown; similarArtists?: unknown }>(
           "lastfm",
-          await getLastfmArtistInfo.invoke({ artist: primary }, options),
+          await getLastfmArtistInfo.invoke({ artist: primary, ...artistMbid }, options),
           "artistInfo",
         );
         if (reader.reasons.includes("shared_page")) step.lastfmUncertain = UNCERTAIN.shared;
         if (!data) break;
-        if (typeof data.bio === "string" && data.bio) newData.lastfmArtistBio = data.bio;
-        newData.lastfmArtistTags = mergeTags([], data.tags);
-        // Artist info lists similar artists without a match value: names in Last.fm's order.
-        newData.lastfmSimilarArtists = (
-          Array.isArray(data.similarArtists) ? data.similarArtists : []
-        )
-          .filter((a) => typeof a?.name === "string")
-          .map((a, i) => `${i + 1}. ${a.name} (Last.fm artist info; no match value)`);
+        // A bio that is only Last.fm's "Read more" link is no bio.
+        const bio = lastfmBio(data.bio);
+        if (bio) newData.lastfmArtistBio = bio;
+        // Tags already read for the track or the artist are not added again.
+        const held = [...(research.lastfmTags ?? []), ...(research.lastfmArtistTags ?? [])];
+        newData.lastfmArtistTags = mergeTags(held, data.tags).slice(held.length);
+        // Artist info lists similar artists without a match value: names in Last.fm's order,
+        // only when the ranked list with match values was not read.
+        if ((research.lastfmSimilarArtists?.length ?? 0) === 0) {
+          newData.lastfmSimilarArtists = (
+            Array.isArray(data.similarArtists) ? data.similarArtists : []
+          )
+            .filter((a) => typeof a?.name === "string")
+            .map(
+              (a, i) =>
+                `${i + 1}. ${a.name} (Last.fm artist info; no match value${mbidNote(a.mbid)})`,
+            );
+        }
+        const similar = newData.lastfmSimilarArtists?.length ?? 0;
+        if (!bio && newData.lastfmArtistTags.length + similar === 0) {
+          reader.nothing("artistInfo", "nothing that was not already read");
+        }
         break;
       }
 
@@ -854,27 +1018,39 @@ async function researchToolNode(
     });
     const errors = uniqueErrors(step.reader.errors);
     console.log(`✅ [Research Tool] Read ${plan.nextAction} (${errors.length} source errors)`);
-    // The status says what happened: a source that could not be read is never "found".
-    const warnings = unreadableStatus(errors, step.reader.rejected);
+    // The status says what happened: a source that could not be read is never "found". Steps
+    // run together say a source's warning once.
+    const warnings = unreadableStatus(errors, step.reader.rejected).filter(
+      (message) => !warned.has(message) && Boolean(warned.add(message)),
+    );
     for (const message of warnings) {
       writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
     }
     // A step whose source was not asked, or could not identify the track, did not find
-    // "nothing": it has its own status.
-    const empty =
-      step.reader.none.length === 0 && step.reader.notAsked.length > 0
+    // "nothing": it has its own status, which says why when Last.fm was not asked by name.
+    const unknownMbid = step.reader.reasons.includes("lastfm_unknown_mbid");
+    const empty = unknownMbid
+      ? `Not asked: ${label} (${NOT_ASKED.lastfm_unknown_mbid.replace(/^not asked: /, "")})`
+      : step.reader.none.length === 0 && step.reader.notAsked.length > 0
         ? `Not asked or not identified: ${label}`
         : `Nothing found: ${label}`;
+    // A web step says how many results it kept when it left some out.
+    const kept =
+      step.webLeftOut > 0
+        ? ` (${step.webKept} web results kept, ${step.webLeftOut} left out: error pages or no text)`
+        : "";
     const status = [
       ...warnings,
       ...(holdsData(step.data)
-        ? [`Found ${label} information`]
+        ? [`Found ${label} information${kept}`]
         : errors.length === 0
           ? [empty]
           : []),
     ];
     return {
       researchData: step.data,
+      ranSteps: ranAs(errors.length > 0 && !holdsData(step.data)),
+      stepsRun: 1,
       sourceErrors: errors,
       ...(step.web.length > 0 ? { webFindings: step.web } : {}),
       ...(step.resolution ? { artistResolution: step.resolution } : {}),
@@ -888,6 +1064,8 @@ async function researchToolNode(
     const record = errorRecord(ACTION_SOURCE[plan.nextAction], error);
     console.error(`❌ [Research Tool] Error in ${plan.nextAction}:`, record.message);
     return {
+      ranSteps: ranAs(true),
+      stepsRun: 1,
       sourceErrors: [record],
       // A bug in our own reader says so: the source is not to blame.
       statusMessages: [

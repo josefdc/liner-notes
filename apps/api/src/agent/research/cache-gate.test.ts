@@ -23,7 +23,8 @@ import {
   never,
   stubFetch,
 } from "../../sources/testing/fetchStub.js";
-import { runRoute } from "../../sources/testing/iceIceBaby.js";
+import { shsRelationships } from "../../sources/shs.js";
+import { ICE_TRACK, runRoute } from "../../sources/testing/iceIceBaby.js";
 import {
   type CachedEvidence,
   type CachedResearch,
@@ -33,6 +34,7 @@ import {
 import { runMigrations } from "../../store/migrations.js";
 import { configuredSources, researchCacheKey } from "../cacheKeys.js";
 import { historianNode } from "../nodes/historianNode.js";
+import { CACHED_EVIDENCE_FORMAT } from "./runEvidence.js";
 import type { SonicAgentStateType, SpotifyData } from "../state.js";
 import { type StubCall, stubLlm, testRuntime } from "../testing/stubLlm.js";
 
@@ -331,7 +333,7 @@ describe("the research key and what a hit trusts", () => {
   });
 
   const crafted: Array<[string, (row: CachedResearch) => CachedResearch]> = [
-    ["of another format", (row) => withEvidence(row, { format: 2 })],
+    ["of another format", (row) => withEvidence(row, { format: CACHED_EVIDENCE_FORMAT + 1 })],
     [
       "holding a timeout as lasting",
       (row) =>
@@ -442,6 +444,194 @@ describe("what is not cached, or cached for a later run to complete", () => {
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([]);
     // Then a hit asks nothing.
     expect((await historian(LATER)).requests).toEqual([]);
+  });
+});
+
+/** Runs `run` on timers the test drives, `ms` of them. */
+async function onFakeTimers<T>(run: () => Promise<T>, ms = 25_000): Promise<T> {
+  vi.useFakeTimers({ toFake: [...FAKE] });
+  try {
+    const result = run();
+    await vi.advanceTimersByTimeAsync(ms);
+    return await result;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+/** The work's recordings never answer: the dating is cut, and the row is left incomplete. */
+const undated = (call: FetchCall) =>
+  call.url.startsWith(`${MB}/recording?work=`) ? never(call) : route(call);
+
+/**
+ * SecondHandSongs held by our own pacing: one 429 asking for 120 s, longer than a request may
+ * wait, so the next request is refused by the pacer and not sent.
+ */
+async function holdSecondHandSongs() {
+  setUnpacedForTests(false);
+  stubFetch((call) =>
+    call.url === SHS_WORK
+      ? new Response("slow down", { status: 429, headers: { "retry-after": "120" } })
+      : undefined,
+  );
+  await shsRelationships(ICE_TRACK, [{ kind: "work", id: 4196, from: "work" }]);
+  net = stubFetch(route);
+}
+
+describe("a row left for a later run", () => {
+  afterEach(() => setUnpacedForTests(true));
+
+  it("is never served past the research's own time, however often a hit reads it again", async () => {
+    net = stubFetch(undated);
+    await onFakeTimers(() => historian(AT));
+    expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
+      { source: "musicbrainz", part: "dates" },
+    ]);
+    // At +47 h a hit reads the primary sources again (the dating still fails) and asks no model.
+    const late = await onFakeTimers(() => historian("2026-10-22T11:00:00.000Z"));
+    expect(late.llm.calls).toEqual([]);
+    const row = cache.getResearch(key());
+    expect(row?.evidence?.researchedAt).toBe(AT);
+    // The row keeps its own expiry: about an hour is left, not another 48 h.
+    const { expires_at } = db.prepare("SELECT expires_at FROM research_cache").get() as {
+      expires_at: number;
+    };
+    expect(expires_at - Date.now() / 1000).toBeLessThanOrEqual(3600 + 60);
+    // At +48 h the research is made again.
+    const expired = await onFakeTimers(() => historian("2026-10-22T12:00:00.000Z"));
+    expect(expired.llm.calls.length).toBeGreaterThan(0);
+    expect(cache.getResearch(key())?.evidence?.researchedAt).toBe("2026-10-22T12:00:00.000Z");
+  });
+
+  it("is not written again when the re-read fails", async () => {
+    net = stubFetch(undated);
+    await onFakeTimers(() => historian(AT));
+    const before = JSON.stringify(cache.getResearch(key()));
+    net = stubFetch((call) =>
+      call.url === SHS_WORK ? new Response("busy", { status: 503 }) : route(call),
+    );
+    const hit = await historian(LATER);
+    expect(hit.llm.calls).toEqual([]);
+    expect(hit.out.sourceErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "secondhandsongs", code: "unavailable" }),
+      ]),
+    );
+    expect(JSON.stringify(cache.getResearch(key()))).toBe(before);
+  });
+
+  it("keeps the cached records of a source the re-read does not ask again, and says so", async () => {
+    net = stubFetch(undated);
+    const first = await onFakeTimers(() => historian(AT));
+    const shsIds = ids(first.out.evidence).filter((id) => id.startsWith("secondhandsongs:"));
+    expect(shsIds.length).toBeGreaterThan(0);
+
+    await holdSecondHandSongs();
+    const hit = await historian(LATER);
+    expect(ids(hit.out.evidence)).toEqual(expect.arrayContaining(shsIds));
+    expect(hit.out.primaryNotAsked ?? []).toEqual([]);
+    expect(statusOf(hit.events)).toContain(
+      `📇 SecondHandSongs not asked again: its ${shsIds.length} records come from the research cache (read 2026-10-20)`,
+    );
+    const row = cache.getResearch(key());
+    expect(row?.evidence?.items.map((e) => e.id)).toEqual(expect.arrayContaining(shsIds));
+    expect(row?.evidence?.incomplete).toEqual([]);
+  });
+
+  it("says what it misses to a run that could not read the track's details", async () => {
+    await historian();
+    const row = cache.getResearch(key()) as CachedResearch;
+    const evidence = row.evidence as CachedEvidence;
+    cache.putResearch(key(), {
+      ...row,
+      evidence: {
+        ...evidence,
+        items: evidence.items.filter((e) => e.source !== "secondhandsongs"),
+        incomplete: [
+          { source: "musicbrainz", part: "dates" },
+          { source: "secondhandsongs", part: "not_asked" },
+        ],
+      },
+    });
+    const degraded = {
+      spotifyData: { ...spotifyData, isrc: null, durationMs: 0, duration: "" },
+      isrc: null,
+      sourceErrors: [{ source: "spotify", code: "unavailable", message: "spotify: HTTP 503" }],
+    } as unknown as SonicAgentStateType;
+    const events: Array<{ type: string; message?: string }> = [];
+    const before = net.calls.length;
+    const out = await historianNode(
+      degraded,
+      { writer: (event: never) => events.push(event) } as never,
+      testRuntime(stubLlm(planner), LATER),
+    );
+    expect(net.calls.length).toBe(before);
+    expect(out.primaryNotAsked).toEqual(["secondhandsongs"]);
+    expect(statusOf(events)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^📇 MusicBrainz: dates incomplete/),
+        "📇 SecondHandSongs not asked: the research cached on 2026-10-20 did not ask it; a later run asks it",
+      ]),
+    );
+  });
+
+  it("judges web pages against the title the researcher searched, without the featured artist", async () => {
+    const featured = {
+      ...spotifyData,
+      id: "4uLU6hMCjMI75M1A2tKUQC",
+      title: "404 (feat. Quinn)",
+      artist: "The Testers",
+      isrc: null,
+    } as unknown as SpotifyData;
+    const page = "https://example.test/404-review";
+    net = stubFetch((call) =>
+      call.url === "https://api.tavily.com/search"
+        ? json({
+            results: [
+              { title: "404 | Pitchfork", url: page, content: "A careful review of the single." },
+            ],
+          })
+        : route(call),
+    );
+    const run = (at: string) => {
+      const llm = stubLlm(planner);
+      return historianNode(
+        { spotifyData: featured, isrc: null } as SonicAgentStateType,
+        { writer: () => {} } as never,
+        testRuntime(llm, at),
+      ).then((out) => ({ out, llm }));
+    };
+    const fresh = await run(AT);
+    expect(ids(fresh.out.evidence)).toContain(`tavily:${page}`);
+    const hit = await run(LATER);
+    expect(hit.llm.calls).toEqual([]);
+    expect(ids(hit.out.evidence)).toContain(`tavily:${page}`);
+  });
+});
+
+describe("a source our pacing did not ask", () => {
+  afterEach(() => setUnpacedForTests(true));
+
+  it("is reported as not asked by a fresh run, and the research is cached incomplete", async () => {
+    await holdSecondHandSongs();
+    const { out, events } = await historian();
+    expect(out.primaryNotAsked).toEqual(["secondhandsongs"]);
+    expect(out.sourceErrors?.some((e) => e.source === "secondhandsongs")).toBe(false);
+    expect(statusOf(events)).toContain(
+      "📇 SecondHandSongs not asked: our own pacing of its requests left no time in this run; a later run asks it",
+    );
+    expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
+      { source: "secondhandsongs", part: "not_asked" },
+    ]);
+  });
+
+  it("is reported as not asked by a refresh hit that cannot ask it either", async () => {
+    await holdSecondHandSongs();
+    await historian();
+    // Still held: the refresh hit does not ask it, and holds no records of it to keep.
+    const hit = await historian(LATER);
+    expect(hit.llm.calls).toEqual([]);
+    expect(hit.out.primaryNotAsked).toEqual(["secondhandsongs"]);
   });
 });
 

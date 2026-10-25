@@ -54,6 +54,9 @@ vi.mock("../../sources/search.js", async (importOriginal) => ({
 }));
 
 import { SourceError } from "../../sources/http.js";
+import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
+import { stubFetch } from "../../sources/testing/fetchStub.js";
+import { ICE_TRACK, primaryRoute } from "../../sources/testing/iceIceBaby.js";
 import { historianNode } from "./historianNode.js";
 import type { SonicAgentStateType } from "../state.js";
 
@@ -73,8 +76,9 @@ describe("historianNode", () => {
       notConfigured: [{ source: "lastfm", code: "not_configured" }],
       // The evidence of a track without an ISRC: no primary source was asked.
       evidence: {
-        format: 1,
-        readAt: "2026-10-20T12:00:00.000Z",
+        format: 2,
+        researchedAt: new Date().toISOString(),
+        readAt: new Date().toISOString(),
         isrc: null,
         items: [],
         omitted: 0,
@@ -126,6 +130,39 @@ describe("historianNode", () => {
       expect(cache.putResearch).not.toHaveBeenCalled();
     });
 
+    it("keeps the primary sources' records of a track with an ISRC, and caches nothing", async () => {
+      const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(0);
+      try {
+        stubFetch(primaryRoute);
+        subgraph.fails = () => new SourceError("tavily", "timeout", "timed out");
+        const out = await historianNode(
+          {
+            spotifyData: {
+              id: "3Fcfwhm8oRrBvBZ8KGhtea",
+              title: "Ice Ice Baby",
+              artist: "Vanilla Ice",
+              durationMs: 271_733,
+              isrc: ICE_TRACK.isrc,
+            },
+            isrc: ICE_TRACK.isrc,
+          } as unknown as SonicAgentStateType,
+          { writer: () => {} } as never,
+        );
+        const sources = new Set(out.evidence?.map((e) => e.source));
+        expect(sources).toEqual(new Set(["musicbrainz", "secondhandsongs"]));
+        expect(out.isrcRecording?.mbid).toBe("875c24bc-fe9e-4ac6-80d3-beaacb70ee43");
+        // The recording's MusicBrainz sample relations reach the result built without the model.
+        expect(out.researchData?.samples).toEqual(
+          expect.arrayContaining([expect.stringMatching(/^\[MusicBrainz Samples\] /)]),
+        );
+        expect(out.statusMessages?.at(-1)).toMatch(/stopped early/);
+        expect(cache.putResearch).not.toHaveBeenCalled();
+      } finally {
+        restore();
+        vi.unstubAllGlobals();
+      }
+    });
+
     it("rethrows a bug", async () => {
       subgraph.fails = () => new TypeError("x is not a function");
 
@@ -161,6 +198,7 @@ describe("historianNode", () => {
       expect(cache.putResearch).toHaveBeenCalledWith(
         "v4:x:lastfm=1:tavily=1:discogs=0:genius=0",
         expect.anything(),
+        48 * 60 * 60 * 1000,
       );
     });
 

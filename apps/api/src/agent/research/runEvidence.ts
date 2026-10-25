@@ -171,6 +171,10 @@ const notAskedNote = (source: SourceId, why: "pace" | "deadline") =>
     ? `📇 ${SOURCE_NAMES[source]} not asked: our own pacing of its requests left no time in this run; a later run asks it`
     : `📇 ${SOURCE_NAMES[source]} not asked: the run's time for the primary sources ran out first; a later run asks it`;
 
+/** The status line of a source the cached run did not ask. */
+const cachedNotAskedNote = (source: SourceId, readAt: string) =>
+  `📇 ${SOURCE_NAMES[source]} not asked: the research cached on ${readAt.slice(0, 10)} did not ask it; a later run asks it`;
+
 const DATES_NOTE =
   "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
 
@@ -289,8 +293,54 @@ export async function runEvidence(
   return packOf(readOutcome(read), [...webSearchEvidence(web), ...cached], config, runtime);
 }
 
+/**
+ * How long research is kept from when it was made (`CachedEvidence.researchedAt`), a refresh
+ * of its evidence included: research older than this is never served.
+ */
+export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
+
 /** The version of `CachedEvidence` this code writes; a row of another is a miss. */
-export const CACHED_EVIDENCE_FORMAT = 1;
+export const CACHED_EVIDENCE_FORMAT = 2;
+
+/**
+ * The run's evidence on a refresh hit (a cached row that left a part for a later run): the
+ * primary sources read again, with the cached web-tier items. A source this read did not ask
+ * again (its request not sent) keeps its records of the cached run, when that run read them:
+ * they are merged in, with their own read dates, and the status says so.
+ */
+export async function refreshedRunEvidence(
+  primary: PrimaryRun,
+  cached: CachedEvidence,
+  items: readonly SourcedEvidence[],
+  config: LangGraphRunnableConfig,
+  runtime: AgentRuntime,
+): Promise<RunEvidence> {
+  const read = await primary;
+  config.signal?.throwIfAborted();
+  if (read.status === "threw") throw read.error;
+  const outcome = readOutcome(read);
+  if (read.status === "read") {
+    const leftThen = new Set(
+      cached.incomplete.filter((part) => part.part === "not_asked").map((part) => part.source),
+    );
+    let merged = false;
+    for (const { source, why } of notAskedSources(read.sources)) {
+      const kept = items.filter((i) => i.sourceTier === "primary-record" && i.source === source);
+      if (leftThen.has(source) || kept.length === 0) continue;
+      merged = true;
+      outcome.records.push(...kept);
+      outcome.incomplete = outcome.incomplete.filter(
+        (part) => !(part.part === "not_asked" && part.source === source),
+      );
+      outcome.warnings = [
+        ...outcome.warnings.filter((line) => line !== notAskedNote(source, why)),
+        `📇 ${SOURCE_NAMES[source]} not asked again: its ${kept.length} records come from the research cache (read ${cached.readAt.slice(0, 10)})`,
+      ];
+    }
+    if (merged) outcome.found = [recordsLine(outcome.records)];
+  }
+  return packOf(outcome, cachedWebEvidence(items), config, runtime);
+}
 
 /**
  * The run's evidence as the research cache holds it, with the recording the ISRC identified.
@@ -302,9 +352,11 @@ export function cachedEvidenceOf(
   isrc: string | null,
   recording: IdentifiedRecording | null,
   readAt: string,
+  researchedAt: string = readAt,
 ): CachedEvidence {
   return {
     format: CACHED_EVIDENCE_FORMAT,
+    researchedAt,
     readAt,
     isrc,
     items: run.evidence.map((item) => ({ ...item })),
@@ -331,6 +383,9 @@ function cachedEvidenceIssue(
   configured: { discogs: boolean; genius: boolean },
 ): string | null {
   const keyOf = (e: SourceError) => `${e.source}:${e.code}`;
+  if (!(Date.parse(cached.researchedAt) <= Date.parse(cached.readAt))) {
+    return "evidence read before its research was made";
+  }
   const lasting = new Set(cached.lasting.map(keyOf));
   for (const e of cached.errors) {
     if (!PRIMARY.includes(e.source)) return "an error of a source that is not primary";
@@ -428,10 +483,16 @@ export function cachedRunEvidence(
     lost: [],
     lasting: [...cached.lasting],
     samples: [...cached.samples],
-    incomplete: [],
+    // What the cached run left for a later one is still missing: said again, never dropped.
+    incomplete: cached.incomplete.map((part) => ({ ...part })),
     trackIsOriginal: cached.trackIsOriginal,
     found,
-    warnings: unreadableStatus(cached.errors),
+    warnings: [
+      ...unreadableStatus(cached.errors),
+      ...cached.incomplete.map((part) =>
+        part.part === "dates" ? DATES_NOTE : cachedNotAskedNote(part.source, cached.readAt),
+      ),
+    ],
   };
   return packOf(outcome, cachedWebEvidence(items), config, runtime, cached.omitted);
 }

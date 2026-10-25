@@ -293,8 +293,34 @@ describe("a paced request", () => {
     );
     await vi.advanceTimersByTimeAsync(100);
     deadline.abort(new DOMException("deadline reached", "TimeoutError"));
-    expect(await waiting).toBeInstanceOf(PaceRefused);
+    expect(await waiting).toMatchObject({ name: "PaceRefused", why: "deadline" });
     expect(calls).toHaveLength(1);
+  });
+
+  it("is not sent, and takes no slot, when the deadline has passed before it is made", async () => {
+    const calls = timedStub(() => json({ ok: true }));
+    const paced = pacer();
+    const deadline = new AbortController();
+    deadline.abort(new DOMException("deadline reached", "TimeoutError"));
+    const error = await pacedFetchJson(paced, { ...request, signal: deadline.signal }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toMatchObject({ name: "PaceRefused", why: "deadline" });
+    expect(calls).toHaveLength(0);
+    // The next request starts at once: the refused one reserved nothing.
+    await pacedFetchJson(paced, request);
+    expect(startsOf(calls)).toEqual([0]);
+  });
+
+  it("is stopped, not refused, when the caller cancels it", async () => {
+    timedStub(() => json({ ok: true }));
+    const cancel = new AbortController();
+    cancel.abort(new Error("cancelled"));
+    const error = await pacedFetchJson(pacer(), { ...request, signal: cancel.signal }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).not.toBeInstanceOf(PaceRefused);
+    expect(isSourceError(error, "aborted")).toBe(true);
   });
 
   it("is not paced when it is replayed from a cassette", async () => {

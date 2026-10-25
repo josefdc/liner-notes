@@ -40,7 +40,7 @@ export const MAX_HOLD_MS = 10 * 60 * 1000;
 
 /**
  * Thrown when a request is not sent: its slot is further away than it may wait, or after the
- * caller's deadline ("pace"), or the caller's deadline had passed before it was made
+ * caller's deadline ("pace"), or the caller's deadline passed before it could start
  * ("deadline", by `pacedFetchJson`).
  */
 export class PaceRefused extends Error {

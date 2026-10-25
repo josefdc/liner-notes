@@ -101,7 +101,9 @@ import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { evidenceScope } from "../../sources/records.js";
 import { json, stubFetch } from "../../sources/testing/fetchStub.js";
 import shsWork from "../../sources/fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
-import { runRoute } from "../../sources/testing/iceIceBaby.js";
+import { setUnpacedForTests } from "../../sources/pacing.js";
+import { shsRelationships } from "../../sources/shs.js";
+import { ICE_TRACK, runRoute } from "../../sources/testing/iceIceBaby.js";
 import { TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { runMigrations } from "../../store/migrations.js";
 import { startRun, storeRunResult } from "../../store/runs.js";
@@ -513,6 +515,47 @@ describe("a run whose primary sources fail", () => {
     expect(stored).toBe(0);
     // The research is cached with its evidence: a source that could not be read blocks it.
     expect(cache.putResearch).not.toHaveBeenCalled();
+  });
+});
+
+describe("a run whose primary source our own pacing did not ask", () => {
+  /** SecondHandSongs held for 120 s by one 429: the pacer refuses its next request. */
+  async function holdSecondHandSongs() {
+    setUnpacedForTests(false);
+    stubFetch((call) =>
+      call.url === SHS_WORK
+        ? new Response("slow down", { status: 429, headers: { "retry-after": "120" } })
+        : undefined,
+    );
+    await shsRelationships(ICE_TRACK, [{ kind: "work", id: 4196, from: "work" }]);
+    net = stubFetch(runRoute);
+  }
+  afterEach(() => setUnpacedForTests(true));
+
+  it("stores no result from a fresh run, and says the source was not asked", async () => {
+    await holdSecondHandSongs();
+    const { stored, events, sourceErrors } = await runGraph("run-paced");
+    expect(stored).toBe(0);
+    expect(sourceErrors.some((e) => e.source === "secondhandsongs")).toBe(false);
+    expect(statusLines(events)).toContain(
+      "📇 SecondHandSongs not asked: our own pacing of its requests left no time in this run; a later run asks it",
+    );
+  });
+
+  it("stores no result from a refresh hit that cannot ask it either", async () => {
+    const row = await storedRow([{ source: "secondhandsongs", part: "not_asked" }]);
+    const evidence = row.evidence as { items: Array<{ source: string }> };
+    cache.getResearch.mockReturnValue({
+      ...row,
+      evidence: {
+        ...evidence,
+        items: evidence.items.filter((e) => e.source !== "secondhandsongs"),
+      },
+    });
+    await holdSecondHandSongs();
+    const { stored, llm } = await runGraph("run-paced-hit");
+    expect(llm.calls.filter((c) => c.callSite === "research_planner")).toEqual([]);
+    expect(stored).toBe(0);
   });
 });
 

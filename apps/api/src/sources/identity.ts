@@ -14,9 +14,7 @@
  * configured, failed, timed out: "unavailable") (`accuracy`).
  */
 
-import { tool } from "@langchain/core/tools";
 import type { Evidence, SourceError as SourceErrorRecord, SourceId } from "@liner-notes/contract";
-import { z } from "zod";
 import {
   DISCOGS_TOKEN,
   type DiscogsCredit,
@@ -905,36 +903,3 @@ async function collectWithin(
     accuracy: identityAccuracy(results),
   };
 }
-
-/**
- * The identity chain and primary sources as an agent tool; the result is JSON. The run stops
- * when the agent's call is cancelled (`config.signal`).
- */
-export const primarySourcesTool = tool(
-  async ({ isrc, title, artists, durationMs }, config): Promise<string> =>
-    JSON.stringify(
-      await collectPrimarySources(
-        { isrc, title, artists, durationMs: durationMs ?? null },
-        { signal: config?.signal },
-      ),
-    ),
-  {
-    name: "primary_sources",
-    description:
-      "Structured records for a track from MusicBrainz, Discogs, SecondHandSongs and Genius, " +
-      "reached from its ISRC: samples, covers, remixes and credits, each with evidence. A " +
-      "record marked about the work is a fact about the song, not about this recording. A " +
-      "source without a verified record is reported as missing, with the reason.",
-    schema: z.object({
-      isrc: z.string().describe("The track's ISRC"),
-      title: z.string().describe("The track title"),
-      artists: z.array(z.string()).min(1).describe("The track's credited artists, one by one"),
-      durationMs: z
-        .number()
-        .positive()
-        .nullable()
-        .optional()
-        .describe("The track's duration in ms"),
-    }),
-  },
-);

@@ -58,8 +58,9 @@ import {
   cachedEvidenceOf,
   cachedEvidenceUse,
   cachedRunEvidence,
-  cachedWebEvidence,
   lastingAmong,
+  RESEARCH_TTL_MS,
+  refreshedRunEvidence,
   restoredItems,
   type RunEvidence,
   runEvidence,
@@ -316,11 +317,15 @@ export async function historianNode(
     (finalState.usage ?? []).every((call) => call.status === "ok");
   if (complete) {
     try {
-      getCache().putResearch(cacheKey, {
-        ...mergedResearch,
-        ...(notConfigured.length > 0 ? { notConfigured } : {}),
-        evidence: cachedEvidenceOf(pack, isrc, recording, timestampOf(runtime)),
-      });
+      getCache().putResearch(
+        cacheKey,
+        {
+          ...mergedResearch,
+          ...(notConfigured.length > 0 ? { notConfigured } : {}),
+          evidence: cachedEvidenceOf(pack, isrc, recording, timestampOf(runtime)),
+        },
+        RESEARCH_TTL_MS,
+      );
     } catch {
       // Non-critical
     }
@@ -402,15 +407,24 @@ async function cacheHit(
   // The sources that were not configured when it was made are reported again: a cached answer
   // without them would read as "read, nothing there".
   const { notConfigured = [], evidence: stored, ...cachedResearch } = cached;
-  const restored = restoredItems(stored, {
-    title: spotify.title,
-    artist: trackQuery(spotify).primary,
-  });
-  const use = stored && restored ? cachedEvidenceUse(stored, isrc) : "miss";
+  // The web pages are judged against the track as the researcher searched it (the title
+  // without a featured-artist note, the first credited artist).
+  const query = trackQuery(spotify);
+  const restored = restoredItems(stored, { title: query.title, artist: query.primary });
+  // Research is never served past its time, however often its evidence was read again.
+  const age = stored ? runtime.now().getTime() - Date.parse(stored.researchedAt) : 0;
+  const expired = !(age < RESEARCH_TTL_MS);
+  const use = stored && restored && !expired ? cachedEvidenceUse(stored, isrc) : "miss";
   if (!stored || !restored || use === "miss") {
     log.info("Cached research not used; reading again", {
       spotifyId: spotify.id,
-      reason: !stored ? "no evidence" : !restored ? "evidence fails its checks" : "another ISRC",
+      reason: !stored
+        ? "no evidence"
+        : !restored
+          ? "evidence fails its checks"
+          : expired
+            ? "research too old"
+            : "another ISRC",
     });
     return null;
   }
@@ -432,16 +446,28 @@ async function cacheHit(
     const primary = startPrimarySources(spotify, isrc, config.signal, runtime);
     reading = readingPrimary();
     sendStatus(config, runtime, "RESEARCH-FOUND", reading);
-    pack = await runEvidence(primary.run, [], config, runtime, cachedWebEvidence(restored));
+    pack = await refreshedRunEvidence(primary.run, stored, restored, config, runtime);
     recording = await primary.recording;
     config.signal?.throwIfAborted();
+    // The row is written again with the evidence read now; it keeps the research's own time,
+    // so it expires when the research would have.
     if (primaryErrorsAllowCaching(pack)) {
       try {
-        getCache().putResearch(cacheKey, {
-          ...cachedResearch,
-          ...(notConfigured.length > 0 ? { notConfigured } : {}),
-          evidence: cachedEvidenceOf(pack, isrc, recording, timestampOf(runtime)),
-        });
+        getCache().putResearch(
+          cacheKey,
+          {
+            ...cachedResearch,
+            ...(notConfigured.length > 0 ? { notConfigured } : {}),
+            evidence: cachedEvidenceOf(
+              pack,
+              isrc,
+              recording,
+              timestampOf(runtime),
+              stored.researchedAt,
+            ),
+          },
+          RESEARCH_TTL_MS - age,
+        );
       } catch {
         // Non-critical
       }

@@ -854,8 +854,8 @@ export interface PacedOptions {
 /**
  * `fetchJson` through the source's pacer (sources/pacing.ts). A request the pacer refuses (its
  * slot is too far away, or later than `notAfter`) rejects with the pacer's PaceRefused and is
- * never sent; so does one whose deadline (a TimeoutError abort of `req.signal`) came while it
- * waited for its slot. The caller reports such a source as not asked, never as a timeout.
+ * never sent ("pace"); so does one whose deadline (a TimeoutError abort of `req.signal`) had
+ * passed before it was made or came while it waited for its slot ("deadline"). The caller reports such a source as not asked, never as a timeout.
  *
  * When the source answers "slow down" (429), its requests are held for its Retry-After (2 s when
  * it sends none or a date in the past; at most MAX_HOLD_MS) and the request is retried once
@@ -876,19 +876,18 @@ export async function pacedFetchJson<T>(
   const deadlinePassed = () =>
     signal?.aborted === true && (signal.reason as { name?: string })?.name === "TimeoutError";
   const slot = async () => {
-    // The caller's deadline passed before the request was made (other requests took the time).
-    if (deadlinePassed()) {
-      throw new PaceRefused(0, "the deadline passed before the request could start", "deadline");
-    }
     try {
       await pacer.slot({ signal, notAfter });
     } catch (error) {
       if (error instanceof PaceRefused) throw error;
-      // The deadline came while it waited for its slot: our pacing kept it from being sent.
+      // The caller's deadline had passed before the request was made, or came while it waited
+      // for its slot (the pacer refuses a slot past `notAfter`, so the time went elsewhere):
+      // the run's time ran out, and the request is not sent.
       if (deadlinePassed()) {
         throw new PaceRefused(
           0,
-          `paced: the deadline came before the ${pacer.name} request's slot`,
+          `the deadline came before the ${pacer.name} request could start`,
+          "deadline",
         );
       }
       throw stopped(error);

@@ -44,7 +44,6 @@ import {
   musicBrainzRelationships,
   originalPerformance,
   pickRecording,
-  primarySourcesTool,
   resolveIdentity,
 } from "./identity.js";
 import {
@@ -482,16 +481,9 @@ describe("collectPrimarySources", () => {
     ]);
   });
 
-  it("is callable as an agent tool that answers JSON", async () => {
+  it("answers in JSON-safe values", async () => {
     stubFetch(withShs);
-    const answer = JSON.parse(
-      await primarySourcesTool.invoke({
-        isrc: ICE_TRACK.isrc,
-        title: ICE_TRACK.title,
-        artists: ICE_TRACK.artists,
-        durationMs: ICE_TRACK.durationMs,
-      }),
-    );
+    const answer = JSON.parse(JSON.stringify(await collectPrimarySources(ICE_TRACK)));
     expect(answer.identity.recording.mbid).toBe(ICE);
     expect(answer.discogs).toMatchObject({ status: "missing", reason: "DISCOGS_TOKEN is not set" });
     expectValidEvidence(
@@ -934,29 +926,22 @@ describe("deadlines, cancellation and inputs", () => {
     });
   });
 
-  it("stops its requests when the agent's call is cancelled", async () => {
+  it("stops its requests when the caller cancels", async () => {
     const net = stubFetch(never);
     const controller = new AbortController();
-    const call = primarySourcesTool.invoke(
-      { isrc: ICE_TRACK.isrc, title: ICE_TRACK.title, artists: ICE_TRACK.artists },
-      { signal: controller.signal },
-    );
+    const call = collectPrimarySources(ICE_TRACK, { signal: controller.signal });
     await vi.waitFor(() => expect(net.calls).toHaveLength(1));
     controller.abort();
-    await expect(call).rejects.toThrow();
-    // The cancellation reached the request itself, not only the tool call.
+    // Never throws: the cancelled source is missing, unavailable.
+    expect((await call).musicbrainz).toMatchObject({
+      status: "missing",
+      error: { source: "musicbrainz", code: "unavailable" },
+    });
+    // The cancellation reached the request itself.
     await vi.waitFor(() => expect(net.calls[0].signal?.aborted).toBe(true));
   });
 
-  it("refuses a duration that is not positive, and survives bad inputs", async () => {
-    await expect(
-      primarySourcesTool.invoke({
-        isrc: "USCA29001716",
-        title: "x",
-        artists: ["y"],
-        durationMs: 0,
-      }),
-    ).rejects.toThrow();
+  it("survives bad inputs", async () => {
     const net = stubFetch(() => undefined);
     const noIsrc = await collectPrimarySources({ ...ICE_TRACK, isrc: undefined as never }, { now });
     expect(noIsrc.musicbrainz).toMatchObject({ reason: "the track has no valid ISRC" });
@@ -1059,7 +1044,7 @@ describe("links MusicBrainz files more than once", () => {
   });
 });
 
-describe("what the tool output carries", () => {
+describe("what the primary sources answer carries", () => {
   it("keeps a failed release browse as a short error record, never the raw answer", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token-0123456789";
     const page = `<html><body>${"502 Bad Gateway upstream nginx ".repeat(300)}</body></html>`;
@@ -1068,12 +1053,7 @@ describe("what the tool output carries", () => {
         ? new Response(page, { status: 502, headers: { "content-type": "text/html" } })
         : musicBrainz(call),
     );
-    const out = await primarySourcesTool.invoke({
-      isrc: ICE_TRACK.isrc,
-      title: ICE_TRACK.title,
-      artists: ICE_TRACK.artists,
-      durationMs: ICE_TRACK.durationMs,
-    });
+    const out = JSON.stringify(await collectPrimarySources(ICE_TRACK));
     const parsed = JSON.parse(out);
     expect(Object.keys(parsed.identity.releasesFailure).sort()).toEqual([
       "code",

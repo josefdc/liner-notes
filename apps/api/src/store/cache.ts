@@ -63,7 +63,12 @@ export interface SpotifySearchResult {
 export interface CachedEvidence {
   /** The version of this shape (agent/research/runEvidence.ts); a row of another is a miss. */
   format: number;
-  /** When the run read it (ISO 8601). */
+  /**
+   * When the research was made (ISO 8601): a refresh of the evidence keeps it, and the row
+   * expires RESEARCH_TTL_MS (agent/research/runEvidence.ts) after it.
+   */
+  researchedAt: string;
+  /** When the run read the evidence (ISO 8601); a refresh reads it again. */
   readAt: string;
   /** The ISRC the primary sources were read from; null when the track had none (not asked). */
   isrc: string | null;
@@ -103,7 +108,8 @@ export type CachedResearch = ResearchData & { evidence?: CachedEvidence };
 const TTL_AUDIO_HIGH = 30 * 24 * 60 * 60 * 1000;
 /** A partial (low-confidence) measurement is kept for a day; see measuredAudio.ts. */
 const TTL_AUDIO_LOW = LOW_CONFIDENCE_AUDIO_TTL_MS;
-const TTL_RESEARCH = 48 * 60 * 60 * 1000; // 48 hours
+/** The default; the historian passes its own (RESEARCH_TTL_MS, agent/research/runEvidence.ts). */
+const TTL_RESEARCH = 48 * 60 * 60 * 1000;
 const TTL_ARTWORK = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // =============================================================================
@@ -123,6 +129,7 @@ const RecordingSchema = z.object({
 
 const CachedEvidenceSchema = z.object({
   format: z.number().int(),
+  researchedAt: z.string(),
   readAt: z.string(),
   isrc: z.string().nullable(),
   items: z.array(Evidence),

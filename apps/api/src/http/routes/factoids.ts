@@ -10,7 +10,8 @@
  *
  * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) no model is called:
  * a recorded track's "more facts" are the recorded factoids the client does not have yet (often
- * none), and any other track gets live_disabled.
+ * none), and any other track gets live_disabled, or budget_exhausted when fallback paused live
+ * calls because the budget is spent.
  */
 
 import { randomUUID } from "node:crypto";
@@ -18,14 +19,17 @@ import {
   type ComposerFactoid,
   FactoidsOutput,
   type ReplayRecord,
+  RunMode,
   SPOTIFY_ID_PATTERN,
 } from "@liner-notes/contract";
 import { type Response, Router } from "express";
 import { z } from "zod";
+import { defaultAgentRuntime } from "../../agent/runtime.js";
 import { isLlmError } from "../../llm/errors.js";
 import type { LlmPurpose } from "../../config/settings.js";
 import { type Llm, type LlmMessage, llm } from "../../llm/invoke.js";
-import { chooseReplay } from "../../replay/mode.js";
+import { chooseReplay, type ReplayChoice, recordingFor } from "../../replay/mode.js";
+import type { ReplaySet } from "../../replay/records.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
@@ -53,6 +57,8 @@ const StreamQuerySchema = z.object({
     .optional()
     .transform((value) => (value ? value.split(",").filter(Boolean) : []))
     .pipe(z.array(factoidId)),
+  // How the result these facts add to was produced (its run.mode), when the client says so.
+  mode: RunMode.optional(),
 });
 
 const DECRYPT_EXAMPLE = {
@@ -170,6 +176,7 @@ const STREAM_ERRORS = {
   rate_limited: "The model is busy. Please try again later.",
   budget_exhausted: "Live model calls are paused for now.",
   live_disabled: "Live facts are not available here. Only recorded tracks have facts.",
+  not_found: "The recording this result came from is no longer served, so it has no more facts.",
   failed: "This fact could not be generated.",
 } as const;
 
@@ -207,7 +214,7 @@ export interface FactoidsRouterOptions {
  * at most MAX_LLM_CALLS_PER_RUN calls, and the run is ended when the request is.
  */
 export function createFactoidsRouter({
-  purpose = "dev",
+  purpose = defaultAgentRuntime.purpose,
   llm: layer = llm,
 }: FactoidsRouterOptions = {}): Router {
   const router = Router();
@@ -240,7 +247,8 @@ export function createFactoidsRouter({
    * knows fewer), numbered after the existing ids
    * A malformed body is a 400 `invalid_input`; the model's rate limit a 429 `rate_limited`; the
    * budget or the call cap a 503 `budget_exhausted`; any other failed generation a 500 `failed`;
-   * a track with no recording while live calls may not be made (REPLAY_MODE) a 503 `live_disabled`.
+   * a track with no recording while live calls may not be made (REPLAY_MODE) a 503 `live_disabled`
+   * (or `budget_exhausted` when fallback paused them because the budget is spent).
    * An empty list is a valid answer (nothing documented the model is sure of).
    */
   router.post(
@@ -258,13 +266,15 @@ export function createFactoidsRouter({
       const track = describeTrack(trackTitle, trackArtist);
 
       // A Spotify track id names the track: title and artist are used only without one.
-      const replay = chooseReplay((records) =>
-        SPOTIFY_ID_PATTERN.test(parsed.data.trackId)
-          ? records.forTrack(parsed.data.trackId)
-          : records.forTitle(trackTitle, trackArtist),
+      const replay = await chooseReplay(
+        (records) =>
+          SPOTIFY_ID_PATTERN.test(parsed.data.trackId)
+            ? records.forTrack(parsed.data.trackId)
+            : records.forTitle(trackTitle, trackArtist),
+        { purpose },
       );
       if (replay.kind === "refused") {
-        sendError(res, "live_disabled");
+        sendError(res, replay.code);
         return;
       }
       if (replay.kind === "replay") {
@@ -328,7 +338,7 @@ export function createFactoidsRouter({
   /**
    * Stream factoids one-by-one via SSE for faster perceived speed
    *
-   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2
+   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live
    * Messages (all on the default `message` event), each one FactoidStreamEvent of
    * @liner-notes/contract with `runId` (null: the analysis run is not known here) and `seq`:
    * - { type: "connected" }
@@ -339,7 +349,11 @@ export function createFactoidsRouter({
    * - { type: "heartbeat" }: every 15 s while the stream is open
    * - { type: "done" }: always last
    *
-   * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled.
+   * Under REPLAY_MODE the recorded factoids are sent instead, or one error live_disabled (or
+   * budget_exhausted, see above). `mode` (optional: the run.mode of the result the facts add to)
+   * keeps them on the result's side whatever live services allow now: a replayed result only
+   * gets facts from its recording (none left, or not_found when it is no longer served), and
+   * a live result never gets recorded facts (the refusal instead).
    *
    * Invalid input is reported in the stream (an EventSource cannot read an error status). When
    * the client disconnects, no further factoid is requested and nothing more is written.
@@ -356,12 +370,25 @@ export function createFactoidsRouter({
         stream.done();
         return;
       }
-      const { trackTitle, trackArtist, existingIds } = parsed.data;
+      const { trackTitle, trackArtist, existingIds, mode } = parsed.data;
       const track = describeTrack(trackTitle, trackArtist);
 
-      const replay = chooseReplay((records) => records.forTitle(trackTitle, trackArtist));
+      const find = (records: ReplaySet) => records.forTitle(trackTitle, trackArtist);
+      let replay: ReplayChoice;
+      if (mode === "replay") {
+        // A replayed result: its recording, or nothing (never live facts).
+        const record = recordingFor(find);
+        if (!record) {
+          error("not_found");
+          stream.done();
+          return;
+        }
+        replay = { kind: "replay", record };
+      } else {
+        replay = await chooseReplay(find, { purpose, resultMode: mode });
+      }
       if (replay.kind === "refused") {
-        error("live_disabled");
+        error(replay.code);
         stream.done();
         return;
       }

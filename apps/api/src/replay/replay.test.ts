@@ -7,11 +7,11 @@
  *
  * The stub scout picks its path from the query: "ambiguous …" offers two candidates (the run
  * pauses), anything else matches TRACK_ID; for "echo …" its status repeats the typed query. The
- * stub composer's result carries a preview URL (under `previewUrl` and as a genealogy image), a
- * cover URL and the typed query in a field the contract does not name.
+ * stub composer's result carries a preview URL (under `previewUrl`, as a genealogy image and as a
+ * genealogy node's clip), a cover URL and the typed query in a field the contract does not name.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -19,7 +19,8 @@ import { join } from "node:path";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
   AnalyzeStreamEvent,
-  type ReplayRecord,
+  ReplayRecord,
+  ReplaysResponse,
   RunResponse,
   runIssues,
   TrackAnalysis,
@@ -28,11 +29,16 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SonicAgentStateType } from "../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
+import { runningCommit } from "../config/checkoutCommit.js";
+import { main as recordMain } from "./record.js";
 import { createApp } from "../http/app.js";
+import { resolveSpendLogPath } from "../llm/budget.js";
+import { resetBudgetStateForTests } from "../llm/budgetState.js";
+import { acquireLock } from "../llm/fileLock.js";
 import { closeDatabase, getDb, initializeDatabase } from "../store/database.js";
 import { getRun, listRunEvents } from "../store/runs.js";
 import { chooseReplay, currentReplayMode, liveRefused } from "./mode.js";
-import { playRecord, setReplayPacingForTests } from "./player.js";
+import { playRecord, replayedAnalysis, setReplayPacingForTests } from "./player.js";
 import {
   buildRecord,
   leaks,
@@ -55,29 +61,24 @@ const SECRET = "configured-secret-value-123456";
 const live = vi.hoisted(() => ({ scout: 0, search: 0, model: 0 }));
 
 vi.mock("../sources/spotify.js", () => ({
-  getTrackDetails: {
-    invoke: async ({ trackId }: { trackId: string }) =>
-      JSON.stringify({
-        id: trackId,
-        title: `Title ${trackId}`,
-        artist: "Artist",
-        artistIds: [],
-        album: "Album",
-        releaseDate: "1994",
-        coverUrl: "",
-        popularity: 50,
-        duration: "3:38",
-        durationMs: 218000,
-        explicit: false,
-        spotifyUrl: `https://open.spotify.com/track/${trackId}`,
-        previewUrl: null,
-      }),
-  },
-  searchMultipleTracks: {
-    invoke: async () => {
-      live.search += 1;
-      return JSON.stringify([]);
-    },
+  fetchTrack: async (trackId: string) => ({
+    id: trackId,
+    title: `Title ${trackId}`,
+    artist: "Artist",
+    artistIds: [],
+    album: "Album",
+    releaseDate: "1994",
+    coverUrl: "",
+    popularity: 50,
+    duration: "3:38",
+    durationMs: 218000,
+    explicit: false,
+    spotifyUrl: `https://open.spotify.com/track/${trackId}`,
+    previewUrl: null,
+  }),
+  searchTracks: async () => {
+    live.search += 1;
+    return [];
   },
 }));
 
@@ -157,7 +158,18 @@ vi.mock("../agent/nodes/index.js", async () => {
           { id: "fb", title: "B fact", content: "Recorded fact two.", type: "trivia" },
         ],
         genealogy: {
-          nodes: [{ id: "self", group: 1, label: "Recorded Song", size: 10, img: preview }],
+          nodes: [
+            { id: "self", group: 1, label: "Recorded Song", size: 10, img: preview },
+            // A genealogy node's own clip (Spotify's, or Deezer's by ISRC).
+            {
+              id: "influence",
+              group: 4,
+              label: "An Influence",
+              size: 8,
+              spotifyId: "0ReplayInfluence000001",
+              previewUrl: preview,
+            },
+          ],
           links: [],
         },
         run: {
@@ -322,11 +334,70 @@ function fixtureAsLiveRun(fixture: ReplayRecord, typed: string) {
     spotifyId: fixture.analysis.id,
     mode: "live" as const,
     analysis,
+    commit: "abc1234",
   };
   return { run, events };
 }
 
 describe("the recorder", () => {
+  it("replay:record names the commit stored with the run, never the checkout's", async () => {
+    const runId = await liveRun("source run");
+    vi.stubEnv("SQLITE_DB_PATH", join(dir, "test.db"));
+    const out = join(dir, "recorded");
+    const warn = vi.mocked(console.warn);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = { settingsFileValues: () => ({}), checkout: () => "bbbbbbbbbbbb" };
+    const args = (slug: string, ...extra: string[]) => [
+      "--run",
+      runId,
+      "--slug",
+      slug,
+      "--out",
+      out,
+      ...extra,
+    ];
+
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", runId);
+    expect(recordMain(args("stored"), deps)).toBe(0);
+    const written = JSON.parse(readFileSync(join(out, "stored.json"), "utf8"));
+    expect(written.commit).toBe("aaaaaaaaaaaa");
+    expect(written.analysis.run.commit).toBe("aaaaaaaaaaaa");
+    expect(warn.mock.calls.map(([m]) => String(m)).join("\n")).toMatch(
+      /checkout is at bbbbbbbbbbbb; the record names aaaaaaaaaaaa/,
+    );
+
+    // A contradicting --commit is refused; so is a run with none and no --commit.
+    expect(recordMain(args("contradicted", "--commit", "bbbbbbbbbbbb"), deps)).toBe(1);
+    getDb().prepare("UPDATE runs SET code_commit = NULL WHERE run_id = ?").run(runId);
+    expect(recordMain(args("unknown"), deps)).toBe(1);
+    expect(errors.mock.calls.map(([m]) => String(m)).join("\n")).toMatch(
+      /differs from the commit the run ran at[\s\S]*has no stored commit/,
+    );
+    expect(recordMain(args("vouched", "--commit", "ccccccc"), deps)).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, "vouched.json"), "utf8")).commit).toBe("ccccccc");
+  });
+
+  it("a run resumed by a server at another commit keeps no commit; on the same server it keeps it", async () => {
+    const pausedRun = async () => {
+      const events = await sse(streamPath("ambiguous one"));
+      expect(events.some((event) => event.type === "interrupt")).toBe(true);
+      return events[0].runId as string;
+    };
+    const resume = (runId: string) =>
+      sse(`/api/analyze/stream/resume?threadId=${runId}&selectedTrackId=${CHOICE_A}`);
+
+    const same = await pausedRun();
+    expect(stored(same).run.commit).toBe(runningCommit());
+    await resume(same);
+    expect(stored(same).run).toMatchObject({ status: "completed", commit: runningCommit() });
+
+    // Paused by a server running other code (as after a restart on an edit).
+    const other = await pausedRun();
+    getDb().prepare("UPDATE runs SET code_commit = ? WHERE run_id = ?").run("aaaaaaaaaaaa", other);
+    await resume(other);
+    expect(stored(other).run).toMatchObject({ status: "completed", commit: null });
+  });
+
   it("records a live run as it was sent: only previews, images and the run id are changed", async () => {
     const typed = "zebra typed words";
     const runId = await liveRun(typed);
@@ -336,15 +407,37 @@ describe("the recorder", () => {
     expect(built.analysis.run).toMatchObject({
       id: recordedRunId("recorded-song"),
       mode: "replay",
+      replayed: "run",
       recordedAt: built.recordedAt,
       commit: "abc1234",
       analyzerVersion: null,
     });
     expect(runIssues(built.analysis.run!, built.analysis.audio)).toEqual([]);
+    const complete = built.events.find((e) => (e.event as Event).type === "complete");
+    expect((complete?.event as { data?: TrackAnalysis } | undefined)?.data?.run?.replayed).toBe(
+      "run",
+    );
+    // The server stored the commit it runs with on the run, which a recording names.
+    expect(stored(runId).run.commit).toBe(runningCommit());
+
+    // A record is a whole run: one that says only its model answers were replayed is refused.
+    const modelOnly = structuredClone(built);
+    modelOnly.analysis.run = { ...modelOnly.analysis.run!, replayed: "model_answers" };
+    expect(
+      ReplayRecord.safeParse(modelOnly).error?.issues.map((issue) => issue.path.join(".")),
+    ).toEqual(["analysis.run.replayed"]);
+    for (const item of modelOnly.events) {
+      if (item.event.type === "complete") item.event.data = modelOnly.analysis;
+    }
+    expect(
+      ReplayRecord.safeParse(modelOnly).error?.issues.map((issue) => issue.path.join(".")),
+    ).toEqual(["analysis.run.replayed", "events.3.event.data.run.replayed"]);
     expect(built.analysis.coverUrl).toBe("");
     expect(built.analysis).not.toHaveProperty("previewUrl");
     expect(built.analysis.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
     expect(built.analysis.genealogy.nodes[0].img).toBe("");
+    expect(built.analysis.genealogy.nodes[1].spotifyId).toBe("0ReplayInfluence000001");
+    expect(built.analysis.genealogy.nodes[1]).not.toHaveProperty("previewUrl");
     expect(content(built.analysis)).toEqual(content(stored(runId).run.analysis));
     expect(types(built.events.map((e) => e.event as Event))).toEqual([
       "connected",
@@ -391,6 +484,22 @@ describe("the recorder", () => {
         fixture.events.map((e) => comparable(e.event as Event)),
       );
     }
+  });
+
+  it("does not record how the recorded run's search text matched the track", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const matched = {
+      ...fixture,
+      analysis: { ...fixture.analysis, queryMatch: "partial" as const },
+    };
+    const { run, events } = fixtureAsLiveRun(matched, "daft punk one more");
+    const { record: built } = buildRecord(run, events, {
+      slug: fixture.slug,
+      commit: fixture.commit,
+      secrets: [],
+    });
+    expect(built.analysis).not.toHaveProperty("queryMatch");
+    expect(JSON.stringify(built.events)).not.toContain("queryMatch");
   });
 
   it("records source evidence as it is: MusicBrainz ids and long source URLs are content", () => {
@@ -571,6 +680,17 @@ describe("the recorder", () => {
   });
 });
 
+describe("the player", () => {
+  it("serves no search match from a record: it belonged to the recorded run", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    // A record written before the recorder left the match out.
+    const older = { ...fixture, analysis: { ...fixture.analysis, queryMatch: "none" as const } };
+    const served = replayedAnalysis(older, "0f0e0d0c-aaaa-4bbb-8ccc-000000000002");
+    expect(served).not.toHaveProperty("queryMatch");
+    expect(served.run).toMatchObject({ mode: "replay" });
+  });
+});
+
 describe("the dev fixture", () => {
   it("loads, says it is a replay, and is found by its title and artist", () => {
     const set = loadReplays(DEFAULT_REPLAY_DIR);
@@ -600,18 +720,21 @@ describe("REPLAY_MODE", () => {
     live.model = 0;
   });
 
-  it("reads the mode: off, fallback without keys, only; anything else as only", () => {
+  it("reads the mode: off, fallback without keys, only; anything else as only", async () => {
     vi.stubEnv("REPLAY_MODE", "off");
-    expect(liveRefused()).toBe(false);
+    expect(await liveRefused()).toBeNull();
     vi.stubEnv("REPLAY_MODE", "fallback");
-    expect(liveRefused()).toBe(false);
+    expect(await liveRefused()).toBeNull();
     vi.stubEnv("SPOTIFY_CLIENT_SECRET", "");
-    expect(liveRefused()).toBe(true);
+    expect(await liveRefused()).toBe("live_disabled");
     vi.stubEnv("REPLAY_MODE", "only");
-    expect(liveRefused()).toBe(true);
+    expect(await liveRefused()).toBe("live_disabled");
     vi.stubEnv("REPLAY_MODE", "sometimes");
     expect(currentReplayMode()).toBe("only");
-    expect(chooseReplay((set) => set.forQuery("nothing recorded"))).toEqual({ kind: "refused" });
+    expect(await chooseReplay((set) => set.forQuery("nothing recorded"))).toEqual({
+      kind: "refused",
+      code: "live_disabled",
+    });
   });
 
   it("only: replays a recorded track as a new run, stored as a replay, with no live call", async () => {
@@ -635,6 +758,7 @@ describe("REPLAY_MODE", () => {
     expect(result.run).toMatchObject({
       id: runId,
       mode: "replay",
+      replayed: "run",
       recordedAt: fixture.recordedAt,
       commit: "abc1234",
     });
@@ -708,6 +832,21 @@ describe("REPLAY_MODE", () => {
     const post = await request(app).post("/api/analyze").send({ query: "Another Song" });
     expect(post.status).toBe(503);
     expect(post.body.code).toBe("live_disabled");
+    noLiveCalls();
+  });
+
+  it("only: a request by track id replays that track's recording, never another track's", async () => {
+    vi.stubEnv("REPLAY_MODE", "only");
+    // The query need not name it: the id does.
+    const byId = await sse(`${streamPath("anything at all")}&trackId=${TRACK_ID}`);
+    expect(byId.find((e) => e.type === "complete")?.data).toMatchObject({ id: TRACK_ID });
+
+    // The text names the recording, but the id asks for another track.
+    const other = await request(app)
+      .post("/api/analyze")
+      .send({ query: "Recorded Song The Recorders", trackId: CHOICE_A });
+    expect(other.status).toBe(503);
+    expect(other.body.code).toBe("live_disabled");
     noLiveCalls();
   });
 
@@ -945,6 +1084,254 @@ describe("REPLAY_MODE", () => {
     const refused = await sse(streamPath("Something else"));
     expect(refused.map((e) => e.code ?? e.type)).toEqual(["live_disabled", "done"]);
     expect(live.scout).toBe(1);
+  });
+});
+
+describe("REPLAY_MODE=fallback once the model budget is spent", () => {
+  let fixture: ReplayRecord;
+  let spendLog: string;
+
+  /** A spend log holding one settled call of `usd`, made at `ts`. */
+  const spent = (usd: number, ts = new Date().toISOString()) =>
+    writeFileSync(
+      spendLog,
+      `${JSON.stringify({ ts, deployment: "gpt", in: 0, out: 0, usd_est: usd, unit: "dev" })}\n`,
+    );
+
+  beforeEach(async () => {
+    const runId = await liveRun("source run");
+    fixture = record(runId).record;
+    writeFileSync(join(replayDir, `${fixture.slug}.json`), JSON.stringify(fixture));
+    resetReplaysForTests();
+    getDb().exec("DELETE FROM runs; DELETE FROM run_events;");
+    live.scout = 0;
+    live.search = 0;
+    live.model = 0;
+
+    // A paid provider configured (dummy key, never called: the model layer is a stub here),
+    // with its spend log in the scratch directory and the default caps (USD 25 in total).
+    spendLog = join(dir, "spend.jsonl");
+    spent(0);
+    vi.stubEnv("REPLAY_MODE", "fallback");
+    vi.stubEnv("LLM_CASSETTE", "off");
+    vi.stubEnv("AZURE_OPENAI_API_KEY", "dummy-key");
+    vi.stubEnv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/");
+    vi.stubEnv("LLM_SPEND_LOG", spendLog);
+    vi.stubEnv("BUDGET_TOTAL_USD", "");
+    vi.stubEnv("BUDGET_DAILY_USD", "");
+    vi.stubEnv("BUDGET_EVAL_FLOOR_USD", "");
+    resetBudgetStateForTests();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => resetBudgetStateForTests());
+
+  it("replays a recorded track and answers any other query budget_exhausted, never a result", async () => {
+    spent(30);
+    const replayed = await sse(streamPath("Recorded Song The Recorders"));
+    const complete = replayed.find((event) => event.type === "complete") as Event;
+    expect(TrackAnalysis.parse(complete.data).run).toMatchObject({
+      mode: "replay",
+      recordedAt: fixture.recordedAt,
+      commit: "abc1234",
+    });
+    expect(replayed[1]).toMatchObject({ type: "status", node: "replay" });
+
+    const refused = await sse(streamPath("Something else"));
+    expect(refused.map((e) => [e.type, e.code])).toEqual([
+      ["error", "budget_exhausted"],
+      ["done", undefined],
+    ]);
+    expect(String(refused[0].error)).toMatch(/paused/i);
+    expect(refused.some((e) => e.type === "complete")).toBe(false);
+
+    const post = await request(app).post("/api/analyze").send({ query: "Something else" });
+    expect(post.status).toBe(503);
+    expect(post.body).toMatchObject({ success: false, code: "budget_exhausted" });
+    const postReplay = await request(app)
+      .post("/api/analyze")
+      .send({ query: "Recorded Song The Recorders" });
+    expect(postReplay.status).toBe(200);
+    expect(postReplay.body.data.run).toMatchObject({ mode: "replay" });
+
+    // A paused run cannot go on either.
+    const resume = await request(app)
+      .post("/api/analyze/resume")
+      .send({ threadId: "some-thread", selectedTrackId: CHOICE_A });
+    expect(resume.body.code).toBe("budget_exhausted");
+    const resumed = await sse(
+      `/api/analyze/stream/resume?threadId=some-thread&selectedTrackId=${CHOICE_A}`,
+    );
+    expect(resumed.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
+
+    // Suggestions are the recordings; "more facts" the recorded ones, or budget_exhausted.
+    const suggest = await request(app).get("/api/search/suggest?query=recorded");
+    expect(suggest.body.suggestions.map((c: { id: string }) => c.id)).toEqual([TRACK_ID]);
+    const facts = await request(app)
+      .post("/api/factoids/decrypt")
+      .send({ trackId: TRACK_ID, trackTitle: "Recorded Song", existingFactoidIds: [] });
+    expect(facts.status).toBe(200);
+    expect(facts.body.meta).toMatchObject({ mode: "replay" });
+    const otherFacts = await request(app)
+      .post("/api/factoids/decrypt")
+      .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
+    expect(otherFacts.status).toBe(503);
+    expect(otherFacts.body.code).toBe("budget_exhausted");
+    const streamedFacts = await sse("/api/factoids/decrypt/stream?trackTitle=Other");
+    expect(streamedFacts.map((e) => e.code ?? e.type)).toEqual(["budget_exhausted", "done"]);
+    noLiveCalls();
+
+    // REPLAY_MODE=off never switches to recordings: the run is live (and its model calls meet
+    // the budget guard one by one).
+    vi.stubEnv("REPLAY_MODE", "off");
+    const offEvents = await sse(streamPath("Recorded Song The Recorders"));
+    expect(live.scout).toBe(1);
+    const offComplete = offEvents.find((event) => event.type === "complete") as Event;
+    expect((offComplete.data as TrackAnalysis).run?.mode).toBe("live");
+  });
+
+  it("pauses at the daily cap and once a full run no longer fits; runs live with budget left", async () => {
+    // Spent yesterday only: today's cap is untouched.
+    vi.stubEnv("BUDGET_DAILY_USD", "2");
+    spent(2, new Date(Date.now() - 36 * 3600_000).toISOString());
+    const liveEvents = await sse(streamPath("Something else"));
+    expect(live.scout).toBe(1);
+    expect(liveEvents.some((event) => event.type === "complete")).toBe(true);
+
+    // The same spending today reaches the daily cap.
+    spent(2);
+    resetBudgetStateForTests();
+    expect((await sse(streamPath("Something else"))).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+
+    // Below the cap, but a run of the design-target size (USD 0.54) would pass it.
+    spent(1.6);
+    resetBudgetStateForTests();
+    expect((await sse(streamPath("Something else"))).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+    spent(1.4);
+    resetBudgetStateForTests();
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(2);
+  });
+
+  it("pauses at the floor kept for evaluations, with the analysis runtime's purpose", async () => {
+    // Default caps: USD 25 in total, 20 kept for evaluations, so dev work stops at 5. A run of
+    // USD 0.54 still fits on 4.4 spent, not on 4.6.
+    spent(4.4);
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(1);
+    spent(4.6);
+    resetBudgetStateForTests();
+    expect((await sse(streamPath("Something else"))).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+    const facts = await request(app)
+      .post("/api/factoids/decrypt")
+      .send({ trackId: CHOICE_B, trackTitle: "Other", existingFactoidIds: [] });
+    expect(facts.body.code).toBe("budget_exhausted");
+    expect(live.scout).toBe(1);
+  });
+
+  it("says live analysis is off, not that the budget is spent, when the spend log cannot be used", async () => {
+    const refusal = async () =>
+      (await sse(streamPath("Something else"))).map((e) => e.code ?? e.type);
+
+    // Unset, missing, malformed.
+    vi.stubEnv("LLM_SPEND_LOG", "");
+    expect(await refusal()).toEqual(["live_disabled", "done"]);
+    vi.stubEnv("LLM_SPEND_LOG", join(dir, "no-such-spend-log.jsonl"));
+    expect(await refusal()).toEqual(["live_disabled", "done"]);
+    vi.stubEnv("LLM_SPEND_LOG", spendLog);
+    writeFileSync(spendLog, "not a spend record\n");
+    expect(await refusal()).toEqual(["live_disabled", "done"]);
+    // A recorded track still replays.
+    const replayed = await sse(streamPath("Recorded Song The Recorders"));
+    expect(replayed.some((e) => e.type === "complete")).toBe(true);
+
+    // Its lock held past the wait: refused, and the answer is not kept once the lock is free.
+    spent(0);
+    const release = await acquireLock(await resolveSpendLogPath(spendLog));
+    try {
+      expect(await refusal()).toEqual(["live_disabled", "done"]);
+    } finally {
+      await release();
+    }
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(1);
+
+    // Without a paid provider (cassettes) nothing can be spent: the budget stops nothing.
+    vi.stubEnv("LLM_SPEND_LOG", join(dir, "no-such-spend-log.jsonl"));
+    vi.stubEnv("LLM_CASSETTE", "replay");
+    await sse(streamPath("Something else"));
+    expect(live.scout).toBe(2);
+  }, 15_000);
+
+  it("keeps more facts on the side of the result: recorded for a replay, never for a live one", async () => {
+    const stream = (mode: string) =>
+      sse(
+        `/api/factoids/decrypt/stream?trackTitle=Recorded%20Song&trackArtist=The%20Recorders&existingIds=fa&mode=${mode}`,
+      );
+    // Budget spent: a live result of a recorded track gets the refusal, not recorded facts.
+    spent(30);
+    expect((await stream("live")).map((e) => e.code ?? e.type)).toEqual([
+      "budget_exhausted",
+      "done",
+    ]);
+    // Budget available: a replayed result still gets only its recorded facts, no model call.
+    spent(0);
+    resetBudgetStateForTests();
+    const recorded = await stream("replay");
+    expect(recorded.map((e) => e.type)).toEqual(["connected", "factoid", "done"]);
+    expect((recorded[1].data as { id: string }).id).toBe("fb");
+    // Its recording no longer served: said so (not_found), never live facts.
+    rmSync(join(replayDir, `${fixture.slug}.json`));
+    resetReplaysForTests();
+    const gone = await stream("replay");
+    expect(gone.map((e) => e.code ?? e.type)).toEqual(["not_found", "done"]);
+    expect(String(gone[0].error)).toMatch(/no longer served/);
+    // Even with REPLAY_MODE=off.
+    vi.stubEnv("REPLAY_MODE", "off");
+    expect((await stream("replay")).map((e) => e.code ?? e.type)).toEqual(["not_found", "done"]);
+    noLiveCalls();
+  });
+});
+
+describe("GET /api/replays", () => {
+  it("lists the recorded tracks with when they were recorded, or none", async () => {
+    rmSync(replayDir, { recursive: true, force: true });
+    mkdirSync(replayDir);
+    resetReplaysForTests();
+    const empty = await request(app).get("/api/replays");
+    expect(empty.status).toBe(200);
+    expect(empty.body).toEqual({ success: true, replays: [] });
+
+    const runId = await liveRun("source run");
+    const fixture = record(runId).record;
+    writeFileSync(join(replayDir, `${fixture.slug}.json`), JSON.stringify(fixture));
+    resetReplaysForTests();
+    const res = await request(app).get("/api/replays");
+    expect(res.status).toBe(200);
+    expect(ReplaysResponse.parse(res.body)).toEqual({
+      success: true,
+      replays: [
+        {
+          id: TRACK_ID,
+          title: "Recorded Song",
+          artist: "The Recorders",
+          album: "Tapes",
+          recordedAt: fixture.recordedAt,
+        },
+      ],
+    });
+    // Nothing of the recorded request (the curated query) or the result beyond the track.
+    expect(Object.keys(res.body.replays[0]).sort()).toEqual(
+      ["album", "artist", "id", "recordedAt", "title"].sort(),
+    );
   });
 });
 

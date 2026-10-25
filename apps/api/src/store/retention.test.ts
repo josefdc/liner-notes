@@ -108,17 +108,15 @@ describe("pruneDatabase", () => {
     expect(threads()).toEqual([]);
   });
 
-  it('never age-prunes the user\'s track choices under ["disambiguation"]', () => {
+  it("age-prunes every store namespace, track choices of earlier versions included", () => {
     const put = db.prepare("INSERT INTO store_items VALUES (?, ?, '{}', ?, ?)");
     const old = new Date(NOW - 90 * DAY).toISOString();
     put.run('["disambiguation"]', "midnight city", old, old);
-    put.run('["tracks"]', "midnight city", old, old);
+    put.run('["tracks","v4"]', "x|lastfm=0:tavily=0", old, old);
 
     pruneDatabase(db, DEFAULT_RETENTION, NOW);
 
-    expect(db.prepare("SELECT namespace FROM store_items").pluck().all()).toEqual([
-      '["disambiguation"]',
-    ]);
+    expect(db.prepare("SELECT namespace FROM store_items").pluck().all()).toEqual([]);
   });
 
   it("deletes store items not updated within the store retention", () => {

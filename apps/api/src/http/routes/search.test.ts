@@ -1,18 +1,17 @@
 /**
- * Route tests for /api/search/suggest: validation limits and generic errors. The Spotify search
- * tool is a stub; Spotify is never called.
+ * Route tests for /api/search/suggest: validation limits and generic errors. The Spotify client's
+ * search is a stub; Spotify is never called.
  */
 
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SourceError } from "../../sources/http.js";
 import { createTestApp } from "../testApp.js";
 import searchRouter from "./search.js";
 
 const spotify = vi.hoisted(() => ({ invoke: vi.fn() }));
 
-vi.mock("../../sources/spotify.js", () => ({
-  searchMultipleTracks: { invoke: spotify.invoke },
-}));
+vi.mock("../../sources/spotify.js", () => ({ searchTracks: spotify.invoke }));
 
 const app = () => createTestApp(searchRouter);
 
@@ -52,7 +51,7 @@ describe("GET /api/search/suggest", () => {
   });
 
   it("passes a query of 200 code points and the limit to Spotify", async () => {
-    spotify.invoke.mockResolvedValue(JSON.stringify([{ id: "t1" }]));
+    spotify.invoke.mockResolvedValue([{ id: "t1" }]);
     const query = "\u{1F3B5}".repeat(200);
 
     const res = await request(app()).get(
@@ -61,15 +60,13 @@ describe("GET /api/search/suggest", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.suggestions).toEqual([{ id: "t1" }]);
-    expect(spotify.invoke).toHaveBeenCalledWith({ query, limit: 3 });
+    expect(spotify.invoke).toHaveBeenCalledWith(query, 3);
   });
 
   it("sends no preview link with the suggestions", async () => {
-    spotify.invoke.mockResolvedValue(
-      JSON.stringify([
-        { id: "t1", isrc: "USAT29900609", previewUrl: "https://p.scdn.co/mp3-preview/abc" },
-      ]),
-    );
+    spotify.invoke.mockResolvedValue([
+      { id: "t1", isrc: "USAT29900609", previewUrl: "https://p.scdn.co/mp3-preview/abc" },
+    ]);
 
     const res = await request(app()).get("/api/search/suggest?query=ice%20ice%20baby");
 
@@ -78,8 +75,8 @@ describe("GET /api/search/suggest", () => {
   });
 
   it("answers a Spotify failure with a generic message, not the upstream one", async () => {
-    spotify.invoke.mockResolvedValue(
-      "Error searching for tracks: Spotify API error: 401 token xyz",
+    spotify.invoke.mockRejectedValue(
+      new SourceError("spotify", "http", "Spotify API error: 401 token xyz", { status: 401 }),
     );
 
     const res = await request(app()).get("/api/search/suggest?query=midnight");

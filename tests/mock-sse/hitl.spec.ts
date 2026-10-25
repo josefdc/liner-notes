@@ -62,7 +62,7 @@ test("choosing a candidate resumes the analysis with that track", async ({ page 
   await expect
     .poll(() => requests(page))
     .toContain(
-      `stream /api/analyze/stream/resume?threadId=thread-hitl&selectedTrackId=${second.id}`,
+      `stream /api/analyze/stream/resume?threadId=thread-hitl&selectedTrackId=${second.id}&pickedBy=click`,
     );
   // The resume stream ends with "done": no fallback request and no error screen.
   await page.waitForTimeout(500);

@@ -116,9 +116,32 @@ export type AudioUnavailableReason =
 /** Why the model was unavailable (a category: the API never sends the provider's text). */
 /**
  * Why the "more facts" stream could not write a fact, when the user should know: the model's
- * rate limit, or live model calls paused by the budget.
+ * rate limit, live model calls paused by the budget, live calls switched off on this server
+ * (it replays recorded runs only), or, for a replayed result, a recording no longer served.
  */
-export type FactoidUnavailableCode = 'rate_limited' | 'budget_exhausted';
+export type FactoidUnavailableCode =
+  | 'rate_limited'
+  | 'budget_exhausted'
+  | 'live_disabled'
+  | 'not_found';
+
+/**
+ * The run that produced a result, as the API sends it with the result. A replay ("replay")
+ * is a recorded run served again: it says when it was recorded and from which commit.
+ * Results from older servers have no run.
+ */
+export interface ResultRun {
+  id?: string;
+  mode?: string;
+  recordedAt?: string | null;
+  commit?: string | null;
+  /**
+   * What a replay replayed: "run", the whole recorded run, or "model_answers", only the model's
+   * answers (stored answers, in development and evaluation; the rest ran live). Older results
+   * do not say.
+   */
+  replayed?: string;
+}
 
 export type ModelUnavailableReason =
   | 'no_output'
@@ -127,6 +150,12 @@ export type ModelUnavailableReason =
   | 'auth'
   | 'error'
   | 'budget_exhausted';
+
+/**
+ * How the search text matched the analysed track by title and artist: anything but "exact"
+ * means the track may not be the song searched for.
+ */
+export type QueryMatch = 'exact' | 'partial' | 'artist' | 'none';
 
 export interface TrackData {
   id: string;
@@ -173,6 +202,10 @@ export interface TrackData {
   // Model provenance: true when the result was built from source data without the model
   modelUnavailable?: boolean;
   modelUnavailableReason?: ModelUnavailableReason;
+  // How the result was produced: live, or a recorded run replayed
+  run?: ResultRun;
+  // How this run's search text matched the track; absent in older results
+  queryMatch?: QueryMatch | null;
 }
 
 export interface AgentLog {

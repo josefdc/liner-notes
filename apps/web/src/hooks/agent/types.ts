@@ -36,12 +36,34 @@ export interface AgentState {
   errorCode: string | null;
   isLoading: boolean;
   isComplete: boolean;
+  /**
+   * The run is a recorded run played again, not a live analysis: the API said so (its replay
+   * notice, or a result whose run.mode is "replay"). The progress screens say so too.
+   */
+  isReplay: boolean;
+}
+
+/** How a result was produced: computed live, or a recorded run replayed. */
+export type ResultMode = 'live' | 'replay';
+
+/**
+ * How a row of the track picker was chosen: a click (or Enter) on it, or the picker's
+ * countdown. A deliberate click is not warned about a loose search match.
+ */
+export type PickedBy = 'click' | 'countdown';
+
+/** How an analysis is asked for, besides its text. */
+export interface AnalyzeOptions {
+  /** The Spotify track the user chose (a suggestion, a node): that very track is analysed. */
+  trackId?: string;
+  /** With `trackId`, for a picker row asked for by id: how the row was picked. */
+  pickedBy?: PickedBy;
 }
 
 export interface UseAgentReturn extends AgentState {
-  analyze: (query: string) => Promise<void>;
+  analyze: (query: string, options?: AnalyzeOptions) => Promise<void>;
   /** Answers the open track picker; later calls for the same picker are ignored. */
-  selectCandidate: (candidateId: string) => Promise<void>;
+  selectCandidate: (candidateId: string, pickedBy?: PickedBy) => Promise<void>;
   /** Runs the last analysis again from the start (after an error). */
   retry: () => void;
   /**
@@ -55,6 +77,8 @@ export interface UseAgentReturn extends AgentState {
     onFactoid: (factoid: Factoid) => void,
     signal?: AbortSignal,
     onUnavailable?: (code: FactoidUnavailableCode) => void,
+    /** How the result was produced (its run.mode): more facts stay on that side. */
+    resultMode?: ResultMode,
   ) => Promise<void>;
   /** Rejects when the request fails. */
   searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;

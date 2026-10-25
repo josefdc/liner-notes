@@ -13,11 +13,14 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { InMemoryStore, MemorySaver } from "@langchain/langgraph";
+import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
+import { runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tools = vi.hoisted(() => {
-  const tool = (answer: () => string) => ({ invoke: vi.fn(async () => answer()) });
+  const tool = (answer: () => string) => ({
+    invoke: vi.fn(async (..._args: unknown[]) => answer()),
+  });
   const track = {
     id: "3Fcfwhm8oRrBvBZ8KGhtea",
     title: "Ice Ice Baby",
@@ -40,7 +43,7 @@ const tools = vi.hoisted(() => {
       results: [{ title: "Page", url: "https://example.test/", content }],
     });
   return {
-    searchMultipleTracks: tool(() => JSON.stringify([track])),
+    spotifySearch: tool(() => JSON.stringify([track])),
     analyzeAudioPreview: tool(() =>
       JSON.stringify({ source: "unavailable", reason: "no_preview" }),
     ),
@@ -61,9 +64,11 @@ const tools = vi.hoisted(() => {
     getListenBrainzSimilarArtists: tool(none),
   };
 });
+// The scout's search: the stub answers as the tool would, and the client gives its tracks.
 vi.mock("../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/spotify.js")>()),
-  searchMultipleTracks: tools.searchMultipleTracks,
+  searchTracks: async (query: string, limit: number, signal?: AbortSignal) =>
+    JSON.parse(await tools.spotifySearch.invoke({ query, limit }, { signal })),
 }));
 vi.mock("../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/audio.js")>()),
@@ -123,6 +128,7 @@ import {
   responseBody,
   testSettings,
 } from "../llm/testing/providerStub.js";
+import { TRACKS_NAMESPACE } from "./cacheKeys.js";
 import { buildSonicAgentGraph } from "./graph.js";
 import { engineerNode } from "./nodes/engineerNode.js";
 import type { SonicAgentStateType } from "./state.js";
@@ -268,7 +274,11 @@ describe("the analysis graph", () => {
     const provider = providerFetch(answering);
     const recorder = llmWith(
       { LLM_CASSETTE: "record", LLM_CASSETTE_DIR: join(dir, "cassettes") },
-      { fetch: provider.fetch },
+      {
+        fetch: provider.fetch,
+        now: () => new Date("2026-03-01T10:00:00.000Z"),
+        commit: () => "abc123def456",
+      },
     );
     const recorded = await run(recorder, { threadId: "thread-a", at: "2026-03-01T10:00:00.000Z" });
 
@@ -309,6 +319,37 @@ describe("the analysis graph", () => {
     // Answers from cassettes make a replayed run; the recording run called the provider.
     expect(replayedRun).toMatchObject({ id: "thread-b", fallback: false, mode: "replay" });
     expect(recordedRun).toMatchObject({ id: "thread-a", fallback: false, mode: "live" });
+    // The replay says when and from which commit its answers were recorded, and that only the
+    // model's answers were replayed: it passes the contract's run rules, as the live run does.
+    expect(replayedRun).toMatchObject({
+      replayed: "model_answers",
+      recordedAt: "2026-03-01T10:00:00.000Z",
+      commit: "abc123def456",
+    });
+    expect(runIssues(replayedRun!, undefined)).toEqual([]);
+    expect(recordedRun).toMatchObject({ recordedAt: null, commit: null });
+    expect(recordedRun).not.toHaveProperty("replayed");
+    expect(runIssues(recordedRun!, undefined)).toEqual([]);
+    expect(TrackAnalysis.safeParse(replayed.trackData).success).toBe(true);
+
+    // Cassettes written before they kept when and where: the run cannot say either, and says
+    // nothing in their place.
+    for (const file of readdirSync(join(dir, "cassettes"))) {
+      const path = join(dir, "cassettes", file);
+      const { recordedAt: _at, commit: _commit, ...older } = JSON.parse(readFileSync(path, "utf8"));
+      writeFileSync(path, JSON.stringify(older));
+    }
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unknown = await run(replayer, { threadId: "thread-c", at: "2026-09-09T22:22:22.000Z" });
+    expect(unknown.trackData?.run).toMatchObject({
+      mode: "replay",
+      replayed: "model_answers",
+      recordedAt: null,
+      commit: null,
+    });
+    expect(warn.mock.calls.map(([message]) => String(message)).join("\n")).toMatch(
+      /run information breaks the contract's run rules/,
+    );
     expect(replayedData.factoids[0]).toMatchObject({ title: "Borrowed bass" });
     // The research the planner chose ran: Last.fm tags reached the composer.
     expect(tools.getLastfmTrackTags.invoke).toHaveBeenCalled();
@@ -459,11 +500,21 @@ interface Driven {
 /** Runs the graph with `streamMode` updates and custom events; never throws. */
 async function drive(
   llm: ReturnType<typeof stubLlm>,
-  options: { threadId?: string; signal?: AbortSignal; store?: InMemoryStore; at?: string } = {},
+  options: {
+    threadId?: string;
+    signal?: AbortSignal;
+    store?: InMemoryStore;
+    at?: string;
+    query?: string;
+    /** Run on this checkpointer; with `resume`, resume its paused thread with that track id. */
+    checkpointer?: MemorySaver;
+    resume?: string;
+  } = {},
 ): Promise<Driven> {
+  const checkpointer = options.checkpointer ?? (options.threadId ? new MemorySaver() : undefined);
   const graph = buildSonicAgentGraph({
     runtime: testRuntime(llm, options.at),
-    ...(options.threadId ? { checkpointer: new MemorySaver() } : {}),
+    ...(checkpointer ? { checkpointer } : {}),
     store: options.store ?? new InMemoryStore(),
   });
   const events: Array<Record<string, unknown>> = [];
@@ -471,7 +522,9 @@ async function drive(
   let state: Driven["state"] = {};
   try {
     const stream = await graph.stream(
-      { songQuery: QUERY },
+      options.resume
+        ? new Command({ resume: options.resume })
+        : { songQuery: options.query ?? QUERY },
       {
         ...(options.threadId ? { configurable: { thread_id: options.threadId } } : {}),
         streamMode: ["values", "custom"],
@@ -591,7 +644,7 @@ describe("the analysis graph under failure", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(threw).not.toBeNull();
-    expect(await store.get(["tracks"], QUERY)).toBeNull();
+    expect(await store.search(["tracks"])).toEqual([]);
     expect(events.filter((event) => event.type === "complete")).toEqual([]);
   });
 
@@ -613,7 +666,7 @@ describe("the analysis graph under failure", () => {
     expect(audioSignal?.aborted).toBe(true);
     expect(hooks.putAudio).not.toHaveBeenCalled();
     expect(hooks.putResearch).not.toHaveBeenCalled();
-    const scoutOptions = tools.searchMultipleTracks.invoke.mock.calls[0] as unknown[];
+    const scoutOptions = tools.spotifySearch.invoke.mock.calls[0] as unknown[];
     expect((scoutOptions[1] as { signal?: AbortSignal }).signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -659,5 +712,126 @@ describe("the analysis graph under failure", () => {
     expect(llm.calls).toHaveLength(3);
     expect(runIds.size).toBe(1);
     expect(state.trackData?.run).toMatchObject({ id: [...runIds][0], usage: { llmCalls: 3 } });
+  });
+
+  it("sends the engineer's clip of the chosen recording to the player with how it was matched", async () => {
+    const clip = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/c.mp3?hdnea=exp=1~hmac=x";
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async () =>
+      JSON.stringify({
+        source: "analyzed",
+        bpm: 116,
+        key: "D",
+        mode: "Minor",
+        previewUrl: clip,
+        previewMatch: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
+      }),
+    );
+
+    const { events } = await drive(stubModel(["done"]), { threadId: "t-preview" });
+
+    const request = tools.analyzeAudioPreview.invoke.mock.calls[0] as unknown[];
+    expect(request[0]).toMatchObject({ title: "Ice Ice Baby", durationMs: 271_000 });
+    const complete = events.find((event) => event.type === "complete") as
+      | { data: { previewUrl?: string; preview?: unknown } }
+      | undefined;
+    expect(complete?.data.previewUrl).toBe(clip);
+    expect(complete?.data.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+  });
+});
+
+describe("the analysis graph's stored results", () => {
+  const TRACK_ID = "3Fcfwhm8oRrBvBZ8KGhtea";
+  const complete = (events: Driven["events"]) =>
+    events.find((event) => event.type === "complete") as { data: TrackData } | undefined;
+
+  it("serves the result stored for a track to a run whose text finds that track", async () => {
+    const store = new InMemoryStore();
+    const first = await drive(stubModel(["done"]), { store });
+    expect(complete(first.events)?.data.id).toBe(TRACK_ID);
+    expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(1);
+
+    // Other words for the same song: the search finds the same track.
+    const llm = stubModel(["done"]);
+    const second = await drive(llm, { store, query: "vanilla ice - ice ice baby" });
+
+    expect(second.threw).toBeNull();
+    expect(llm.calls).toEqual([]);
+    expect(tools.analyzeAudioPreview.invoke).toHaveBeenCalledTimes(1);
+    expect(tools.spotifySearch.invoke).toHaveBeenCalledTimes(2);
+    const served = complete(second.events)?.data;
+    expect(served).toMatchObject({ id: TRACK_ID, queryMatch: "exact" });
+    expect(served).not.toHaveProperty("run");
+  });
+
+  it("serves the result stored for the track the user picks, and analyses nothing", async () => {
+    const store = new InMemoryStore();
+    await drive(stubModel(["done"]), { store });
+    tools.analyzeAudioPreview.invoke.mockClear();
+
+    // A title alone: the user is asked which recording is meant, and picks the stored one.
+    const checkpointer = new MemorySaver();
+    const threadId = "t-pick";
+    const asked = await drive(stubModel(["done"]), {
+      store,
+      checkpointer,
+      threadId,
+      query: "Ice Ice Baby",
+    });
+    expect(asked.events.some((event) => event.type === "candidates")).toBe(true);
+    expect(complete(asked.events)).toBeUndefined();
+
+    const llm = stubModel(["done"]);
+    const picked = await drive(llm, { store, checkpointer, threadId, resume: TRACK_ID });
+
+    expect(picked.threw).toBeNull();
+    expect(complete(picked.events)?.data).toMatchObject({ id: TRACK_ID, queryMatch: "exact" });
+    expect(tools.analyzeAudioPreview.invoke).not.toHaveBeenCalled();
+    expect(llm.calls).toEqual([]);
+  });
+
+  it("does not store a picked track's result built without its details, and composes it again later", async () => {
+    const store = new InMemoryStore();
+    const checkpointer = new MemorySaver();
+    const threadId = "t-degraded";
+    await drive(stubModel(["done"]), { store, checkpointer, threadId, query: "Ice Ice Baby" });
+
+    // The details lookup fails (the network is denied): the run goes on with the candidate.
+    const picked = await drive(stubModel(["done"]), {
+      store,
+      checkpointer,
+      threadId,
+      resume: TRACK_ID,
+    });
+
+    const result = complete(picked.events)?.data;
+    expect(result).toMatchObject({ id: TRACK_ID });
+    expect(result?.run?.sourceErrors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "spotify" })]),
+    );
+    expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);
+
+    // A later run that finds the track with its full details composes it, and stores that.
+    const llm = stubModel(["done"]);
+    const later = await drive(llm, { store });
+    expect(llm.calls.map((call) => call.callSite)).toContain("composer");
+    expect(complete(later.events)?.data.run?.sourceErrors ?? []).toEqual([]);
+    expect(await store.search(TRACKS_NAMESPACE)).toHaveLength(1);
+  });
+
+  it("does not serve a result stored for another track", async () => {
+    const store = new InMemoryStore();
+    await drive(stubModel(["done"]), { store });
+    // The same text now finds another track: its result is composed, not the stored one.
+    const answer = tools.spotifySearch.invoke.getMockImplementation();
+    const [track] = JSON.parse(String(await answer?.()));
+    tools.spotifySearch.invoke.mockImplementationOnce(async () =>
+      JSON.stringify([{ ...track, id: "4Fcfwhm8oRrBvBZ8KGhteb" }]),
+    );
+
+    const llm = stubModel(["done"]);
+    const again = await drive(llm, { store });
+
+    expect(complete(again.events)?.data.id).toBe("4Fcfwhm8oRrBvBZ8KGhteb");
+    expect(llm.calls.map((call) => call.callSite)).toContain("composer");
   });
 });

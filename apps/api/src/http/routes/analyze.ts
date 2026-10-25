@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { type ReplayRecord, TrackAnalysis } from "@liner-notes/contract";
+import { type ReplayRecord, SPOTIFY_ID_PATTERN, TrackAnalysis } from "@liner-notes/contract";
 import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
+import type { PickResume } from "../../agent/nodes/clarificationNode.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
+import type { PickedBy, ScoutFailure } from "../../agent/state.js";
+import { runningCommit } from "../../config/checkoutCommit.js";
 import { llm } from "../../llm/invoke.js";
 import { chooseReplay, liveRefused } from "../../replay/mode.js";
 import { playRecord, replayedAnalysis } from "../../replay/player.js";
@@ -13,6 +16,7 @@ import {
   appendRunEvent,
   deleteRunEvents,
   getRun,
+  clearRunCommitUnless,
   nextEventStream,
   type RunStatus,
   runExists,
@@ -26,6 +30,12 @@ import { asyncRoute, eventStreamHead, HTTP_ERRORS, markFailed } from "../middlew
 import { nodeEvent, openAnalysisStream } from "../sse.js";
 
 const router = Router();
+
+/**
+ * The commit of the code this server runs, read when the routes are loaded and stored with each
+ * run, so a recording of a run names the code it ran with (null when it cannot be read).
+ */
+const SERVER_COMMIT = runningCommit();
 
 // =============================================================================
 // Limits and errors
@@ -72,6 +82,11 @@ const ERRORS = {
   timeout: { status: 504, message: "The analysis took too long. Please try again." },
   failed: HTTP_ERRORS.failed,
   live_disabled: HTTP_ERRORS.live_disabled,
+  budget_exhausted: {
+    status: 503,
+    message:
+      "Live analysis is paused for now: its budget is spent. Only the recorded showcase tracks can be shown.",
+  },
 } as const;
 
 type ErrorCode = keyof typeof ERRORS;
@@ -104,7 +119,23 @@ function parseId(value: unknown): string | null {
   return typeof value === "string" && ID_PATTERN.test(value) ? value : null;
 }
 
-const QUERY_ERROR = `'query' is required: a song name of at most ${MAX_QUERY_LENGTH} characters`;
+/**
+ * The optional Spotify track id of an analysis request (a suggestion or a node): absent is
+ * `undefined`; anything that is not a Spotify id (22 base-62 characters) is `null`, refused.
+ */
+function parseTrackId(value: unknown): string | null | undefined {
+  if (value === undefined || value === "") return undefined;
+  return typeof value === "string" && SPOTIFY_ID_PATTERN.test(value) ? value : null;
+}
+
+/** How a resume says the track was picked; absent or unknown values are `null` (not said). */
+function parsePickedBy(value: unknown): PickedBy | null {
+  return value === "click" || value === "countdown" ? value : null;
+}
+
+const QUERY_ERROR =
+  `'query' is required: a song name of at most ${MAX_QUERY_LENGTH} characters; ` +
+  "'trackId', when given, is a Spotify track id (22 letters and digits)";
 const RESUME_ERROR =
   "'threadId' and 'selectedTrackId' are required: 1-100 letters, digits, '-' or '_'";
 
@@ -134,15 +165,23 @@ function recordRun(action: string, write: (db: ReturnType<typeof getDb>) => void
 function startAnalysis(query: string): string {
   const threadId = randomUUID();
   activeThreads.add(threadId);
-  recordRun("record a run", (db) => startRun(db, { runId: threadId, threadId, query }));
+  recordRun("record a run", (db) =>
+    startRun(db, { runId: threadId, threadId, query, commit: SERVER_COMMIT }),
+  );
   return threadId;
 }
 
-/** Reopens the thread's run (or records one, for a thread paused before runs were recorded). */
+/**
+ * Reopens the thread's run (or records one, for a thread paused before runs were recorded). The
+ * rest of the run goes on with this server's code: a commit stored by a server at another commit
+ * is cleared, and a run recorded here only now has none (its start ran on code unknown here).
+ */
 function reopenRun(threadId: string, query: string): void {
   recordRun("reopen a run", (db) => {
-    if (!updateRun(db, threadId, { status: "running" })) {
-      startRun(db, { runId: threadId, threadId, query });
+    if (updateRun(db, threadId, { status: "running" })) {
+      clearRunCommitUnless(db, threadId, SERVER_COMMIT);
+    } else {
+      startRun(db, { runId: threadId, threadId, query, commit: null });
     }
   });
 }
@@ -222,7 +261,8 @@ type RunOutcome =
   /** `fromAnotherRun`: the result was composed by an earlier run (a cached one). */
   | { kind: "complete"; trackData: TrackData; fromAnotherRun?: boolean }
   | { kind: "interrupted"; candidates: SearchCandidate[] }
-  | { kind: "failed"; code: FailureCode }
+  /** `rateLimit`: Spotify kept rate limiting the run; how long it asked to wait, when it said. */
+  | { kind: "failed"; code: FailureCode; rateLimit?: { retryAfterMs: number | null } }
   | { kind: "cancelled" };
 
 const OUTCOME_STATUS: Record<RunOutcome["kind"], RunStatus> = {
@@ -237,17 +277,29 @@ interface DisambiguationPayload {
 }
 
 /**
- * Reads why the scout ended a run from the error it put in the state. The scout reports three:
- * "No tracks found" when the Spotify search answered `[]`; the Spotify client's text, which
- * always starts "Error: ", when Spotify could not answer; and "Scout error: …" when something
- * threw. Anything else is a plain failure. The state carries text, not a code, so this matches
- * those exact forms; it goes when the scout reports a typed outcome.
+ * Why a node's update ends the run, as a failure code. Only the scout says why, as a type
+ * (`scoutFailure`): nothing matched is "no_match"; Spotify rate limiting or failing is
+ * "upstream_unavailable". Any other error of any node is a plain failure. No text is read.
  */
-export function classifyNodeError(node: string, error: string): FailureCode {
-  if (node !== "scout") return "failed";
-  if (error === "No tracks found") return "no_match"; // guard-allow: string-sentinel-tool-results — scout state is text until it reports a typed outcome
-  if (/^Error: |^Scout error: /.test(error)) return "upstream_unavailable"; // guard-allow: string-sentinel-tool-results — scout state is text until it reports a typed outcome
-  return "failed";
+export function failureOf(
+  node: string,
+  update: { scoutFailure?: ScoutFailure | null },
+): FailureCode {
+  if (node !== "scout" || !update.scoutFailure) return "failed";
+  return update.scoutFailure.kind === "no_match" ? "no_match" : "upstream_unavailable";
+}
+
+/**
+ * What the user is told when Spotify kept rate limiting the run: the service and, when it said,
+ * how long to wait (the code stays upstream_unavailable).
+ */
+export function rateLimitMessage(retryAfterMs: number | null): string {
+  if (retryAfterMs === null || retryAfterMs <= 0) {
+    return "Spotify is limiting requests right now. Please try again in a moment.";
+  }
+  const seconds = Math.ceil(retryAfterMs / 1000);
+  const wait = seconds < 120 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`;
+  return `Spotify is limiting requests right now. Please try again in about ${wait}.`;
 }
 
 /**
@@ -268,7 +320,8 @@ async function runGraph(
     refused: boolean;
     interrupt: DisambiguationPayload | null;
     failure: FailureCode | null;
-  } = { trackData: null, refused: false, interrupt: null, failure: null };
+    rateLimit: { retryAfterMs: number | null } | null;
+  } = { trackData: null, refused: false, interrupt: null, failure: null, rateLimit: null };
 
   const completeWith = (data: TrackData) => {
     if (seen.trackData) return;
@@ -306,11 +359,18 @@ async function runGraph(
           continue;
         }
         console.log(`[Run ${threadId}] ${node} finished`);
-        const state = update as { trackData?: TrackData; error?: string } | null;
+        const state = update as {
+          trackData?: TrackData;
+          error?: string;
+          scoutFailure?: ScoutFailure | null;
+        } | null;
         if (state?.trackData) completeWith(state.trackData);
         if (state?.error) {
           console.error(`[Run ${threadId}] ${node} reported an error:`, state.error);
-          seen.failure ??= classifyNodeError(node, state.error);
+          if (!seen.failure && node === "scout" && state.scoutFailure?.kind === "rate_limited") {
+            seen.rateLimit = { retryAfterMs: state.scoutFailure.retryAfterMs };
+          }
+          seen.failure ??= failureOf(node, state);
         }
       }
     }
@@ -327,7 +387,11 @@ async function runGraph(
   if (signal.aborted) return { kind: "cancelled" };
   if (threw) console.error(`[Run ${threadId}] Graph error:`, threw);
   else if (!seen.failure) console.error(`[Run ${threadId}] Graph ended without a result`);
-  return { kind: "failed", code: seen.failure ?? "failed" };
+  return {
+    kind: "failed",
+    code: seen.failure ?? "failed",
+    ...(seen.rateLimit ? { rateLimit: seen.rateLimit } : {}),
+  };
 }
 
 /** The clarification interrupt the thread is paused at, or null. */
@@ -489,6 +553,7 @@ async function resumeThread(
   res: Response,
   threadId: string,
   selectedTrackId: string,
+  pickedBy: PickedBy | null,
   reply: ResumeReply,
 ): Promise<void> {
   console.log(`[Run ${threadId}] Resuming with track ${selectedTrackId}`);
@@ -510,7 +575,12 @@ async function resumeThread(
     reopenRun(threadId, check.query);
     reply.started();
     const outcome = await executeRun(
-      new Command({ resume: selectedTrackId }),
+      new Command({
+        resume: {
+          trackId: selectedTrackId,
+          ...(pickedBy ? { pickedBy } : {}),
+        } satisfies PickResume,
+      }),
       threadId,
       control,
       reply.emit,
@@ -594,7 +664,7 @@ function openEventStream(res: Response, runId?: string) {
       if (event) stream.send(event);
       return true;
     },
-    error: (code: ErrorCode) => stream.error(code, ERRORS[code].message),
+    error: (code: ErrorCode, message: string = ERRORS[code].message) => stream.error(code, message),
     done: () => stream.done(),
   };
 }
@@ -621,7 +691,8 @@ function sendStreamOutcome(
       message: DISAMBIGUATION_MESSAGE,
     });
   } else if (outcome.kind === "failed") {
-    error(outcome.code);
+    if (outcome.rateLimit) error(outcome.code, rateLimitMessage(outcome.rateLimit.retryAfterMs));
+    else error(outcome.code);
   }
   done();
 }
@@ -640,10 +711,14 @@ async function guardStream(stream: AnalysisStream, body: () => Promise<void>): P
   }
 }
 
-function sendJsonError(res: Response, code: ErrorCode, detail?: Record<string, unknown>): void {
+function sendJsonError(
+  res: Response,
+  code: ErrorCode,
+  detail?: Record<string, unknown>,
+  message: string = ERRORS[code].message,
+): void {
   if (res.writableEnded || res.destroyed) return;
-  const { status, message } = ERRORS[code];
-  res.status(status).json({ success: false, code, error: message, ...detail });
+  res.status(ERRORS[code].status).json({ success: false, code, error: message, ...detail });
 }
 
 function sendJsonOutcome(
@@ -676,6 +751,15 @@ function sendJsonOutcome(
       });
       return;
     case "failed":
+      if (outcome.rateLimit) {
+        // Retry-After, in seconds, when Spotify said how long to wait.
+        const { retryAfterMs } = outcome.rateLimit;
+        if (retryAfterMs !== null && retryAfterMs > 0) {
+          res.setHeader("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+        }
+        sendJsonError(res, outcome.code, { retryAfterMs }, rateLimitMessage(retryAfterMs));
+        return;
+      }
       sendJsonError(res, outcome.code);
       return;
     case "cancelled":
@@ -703,7 +787,7 @@ function startReplay(query: string, record: ReplayRecord): string {
   activeThreads.add(runId);
   recordRun("record a replay", (db) =>
     db.transaction(() => {
-      startRun(db, { runId, threadId: runId, query });
+      startRun(db, { runId, threadId: runId, query, commit: SERVER_COMMIT });
       storeReplayOf(db, runId, replayOf(record));
     })(),
   );
@@ -772,6 +856,35 @@ function replayJsonRun(res: Response, query: string, record: ReplayRecord): void
   }
 }
 
+/**
+ * A new run's input: the query, and the Spotify track it asks for when one was chosen (a
+ * suggestion, a genealogy node, a picker row without a thread): the scout then reads that track
+ * instead of searching the text. `pickedBy` says how a picker row was picked, as on a resume.
+ */
+function runInput(query: string, trackId: string | undefined, pickedBy: PickedBy | null) {
+  return {
+    songQuery: query,
+    ...(trackId ? { requestedTrackId: trackId } : {}),
+    ...(trackId && pickedBy ? { pickedBy } : {}),
+  };
+}
+
+/**
+ * The recording a request is answered with under REPLAY_MODE: for a request by track id the
+ * recording of that very track (never another track that shares its title and artist), else
+ * the recording the query names.
+ */
+function recordFor(
+  records: {
+    forQuery(query: string): ReplayRecord | null;
+    forTrack(id: string): ReplayRecord | null;
+  },
+  query: string,
+  trackId: string | undefined,
+): ReplayRecord | null {
+  return trackId ? records.forTrack(trackId) : records.forQuery(query);
+}
+
 // =============================================================================
 // Routes
 // =============================================================================
@@ -783,19 +896,23 @@ router.head(["/api/analyze/stream", "/api/analyze/stream/resume"], eventStreamHe
  * Analyze a song (non-streaming)
  *
  * POST /api/analyze
- * Body: { "query": "Song name Artist" }
+ * Body: { "query": "Song name Artist", "trackId"?: "<Spotify track id>", "pickedBy"?: "click" |
+ * "countdown" }. With `trackId` that track is analysed, without searching the query; the result
+ * still says how the query matches it. A Spotify rate limit is answered 502 upstream_unavailable
+ * with a message naming it, `retryAfterMs` and a Retry-After header when Spotify said how long.
  * Returns { status: "complete", threadId, data } or, when the song is ambiguous,
  * { status: "interrupted", threadId, interrupt: { candidates } }; resume with
  * POST /api/analyze/resume. Errors: { code, error } with the status listed in ERRORS. Under
  * REPLAY_MODE (as for the stream below) a recorded track is answered with its recorded result
- * as a new run, and any other query with 503 live_disabled.
+ * as a new run, and any other query with 503 live_disabled (or budget_exhausted).
  */
 router.post(
   "/api/analyze",
   asyncRoute(async (req: Request, res: Response) => {
     const startTime = Date.now();
     const query = parseQuery(req.body?.query);
-    if (!query) {
+    const trackId = parseTrackId(req.body?.trackId);
+    if (!query || trackId === null) {
       sendJsonError(res, "invalid_input", {
         detail: QUERY_ERROR,
         example: { query: "Midnight City M83" },
@@ -803,9 +920,9 @@ router.post(
       return;
     }
 
-    const replay = chooseReplay((records) => records.forQuery(query));
+    const replay = await chooseReplay((records) => recordFor(records, query, trackId));
     if (replay.kind === "refused") {
-      sendJsonError(res, "live_disabled");
+      sendJsonError(res, replay.code);
       return;
     }
     if (replay.kind === "replay") {
@@ -817,7 +934,11 @@ router.post(
     console.log(`[Run ${threadId}] Analysis: "${query}"`);
     const control = new RunControl(req, res, threadId);
     try {
-      const outcome = await executeRun({ songQuery: query }, threadId, control);
+      const outcome = await executeRun(
+        runInput(query, trackId, parsePickedBy(req.body?.pickedBy)),
+        threadId,
+        control,
+      );
       sendJsonOutcome(res, outcome, threadId, { query, durationMs: Date.now() - startTime });
     } finally {
       control.dispose();
@@ -829,7 +950,7 @@ router.post(
 /**
  * Stream analysis with Server-Sent Events
  *
- * GET /api/analyze/stream?query=Song+Name
+ * GET /api/analyze/stream?query=Song+Name[&trackId=<Spotify track id>] (as POST /api/analyze)
  *
  * Always answers 200. Messages: each a `data:` line holding one AnalyzeStreamEvent of
  * @liner-notes/contract, with the run id (the thread id) and `seq` (0, 1, 2…; heartbeats have none):
@@ -848,13 +969,15 @@ router.post(
  * Under REPLAY_MODE=only (or fallback while live analysis is unavailable) a query that names a
  * recorded track replays its recording as a new run (the same messages; the result says
  * `mode: "replay"` with when and from which commit it was recorded), and any other query gets
- * one `error` with code live_disabled, then done.
+ * one `error`, then done: live_disabled, or budget_exhausted when fallback paused live analysis
+ * because the model budget is spent (replay/mode.ts). Never a result made up in its place.
  */
 router.get(
   "/api/analyze/stream",
   asyncRoute(async (req: Request, res: Response) => {
     const query = parseQuery(req.query.query);
-    if (!query) {
+    const trackId = parseTrackId(req.query.trackId);
+    if (!query || trackId === null) {
       const stream = openEventStream(res);
       markFailed(res);
       stream.error("invalid_input");
@@ -863,10 +986,10 @@ router.get(
     }
 
     // Decided before anything live is built: under REPLAY_MODE=only nothing live ever runs.
-    const replay = chooseReplay((records) => records.forQuery(query));
+    const replay = await chooseReplay((records) => recordFor(records, query, trackId));
     if (replay.kind === "refused") {
       const stream = openEventStream(res);
-      stream.error("live_disabled");
+      stream.error(replay.code);
       stream.done();
       return;
     }
@@ -884,7 +1007,12 @@ router.get(
     await guardStream(stream, async () => {
       try {
         stream.stream.send({ type: "connected", threadId, timestamp: timestamp() });
-        const outcome = await executeRun({ songQuery: query }, threadId, control, stream.emit);
+        const outcome = await executeRun(
+          runInput(query, trackId, parsePickedBy(req.query.pickedBy)),
+          threadId,
+          control,
+          stream.emit,
+        );
         sendStreamOutcome(stream, outcome, threadId);
       } finally {
         control.dispose();
@@ -898,10 +1026,11 @@ router.get(
  * Resume after Human-in-the-loop selection
  *
  * POST /api/analyze/resume
- * Body: { "threadId": "...", "selectedTrackId": "spotify_track_id" }
+ * Body: { "threadId": "...", "selectedTrackId": "spotify_track_id", "pickedBy"?: "click" | "countdown" }
+ * (`pickedBy`: how the track was picked; a deliberate click is not warned about a loose match)
  * Refusals: 409 resume_in_progress; 404 choice_expired, not_waiting or run_interrupted;
- * 400 invalid_selection or invalid_input; 503 live_disabled when live services may not be used
- * (REPLAY_MODE).
+ * 400 invalid_selection or invalid_input; 503 live_disabled or budget_exhausted when live services
+ * may not be used (REPLAY_MODE).
  */
 router.post(
   "/api/analyze/resume",
@@ -916,12 +1045,13 @@ router.post(
       return;
     }
     // A recorded run never pauses; a paused live run cannot go on without live services.
-    if (liveRefused()) {
-      sendJsonError(res, "live_disabled");
+    const refused = await liveRefused();
+    if (refused) {
+      sendJsonError(res, refused);
       return;
     }
 
-    await resumeThread(req, res, threadId, selectedTrackId, {
+    await resumeThread(req, res, threadId, selectedTrackId, parsePickedBy(req.body?.pickedBy), {
       refuse: (code) => sendJsonError(res, code),
       started: () => {},
       finish: (outcome) => sendJsonOutcome(res, outcome, threadId, { selectedTrackId }),
@@ -932,7 +1062,7 @@ router.post(
 /**
  * Resume streaming after selection
  *
- * GET /api/analyze/stream/resume?threadId=...&selectedTrackId=...
+ * GET /api/analyze/stream/resume?threadId=...&selectedTrackId=...[&pickedBy=click|countdown]
  *
  * The messages of /api/analyze/stream, starting with `resuming`. A resume that cannot run gets
  * one error message (codes as on POST /api/analyze/resume), then done.
@@ -950,14 +1080,15 @@ router.get(
       stream.done();
       return;
     }
-    if (liveRefused()) {
-      stream.error("live_disabled");
+    const refused = await liveRefused();
+    if (refused) {
+      stream.error(refused);
       stream.done();
       return;
     }
 
     await guardStream(stream, () =>
-      resumeThread(req, res, threadId, selectedTrackId, {
+      resumeThread(req, res, threadId, selectedTrackId, parsePickedBy(req.query.pickedBy), {
         refuse: (code) => {
           stream.error(code);
           stream.done();

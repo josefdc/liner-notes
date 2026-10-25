@@ -38,15 +38,30 @@ export type ApiError = z.infer<typeof ApiError>;
 // Analysis
 // =============================================================================
 
-/** POST /api/analyze; GET /api/analyze/stream takes the same `query` as a query parameter. */
+/**
+ * How the user picked a track in the track picker: a click (or Enter) on a row, or the
+ * picker's countdown, which takes the highlighted row.
+ */
+export const PickedBy = z.enum(["click", "countdown"]);
+export type PickedBy = z.infer<typeof PickedBy>;
+
+/**
+ * POST /api/analyze; GET /api/analyze/stream takes the same fields as query parameters.
+ * `trackId`, a Spotify track id, asks for that very track (a suggestion, a genealogy node): it
+ * is analysed without searching the query, and the result says how the query matches it.
+ * `pickedBy`, with `trackId`, says how a picker row was picked when it is asked for this way.
+ */
 export const AnalyzeRequest = z.object({
   query: z.string().min(1).max(MAX_QUERY_LENGTH),
+  trackId: z.string().regex(SPOTIFY_ID_PATTERN).optional(),
+  pickedBy: PickedBy.optional(),
 });
 
 /** POST /api/analyze/resume; the stream route takes the same fields as query parameters. */
 export const ResumeRequest = z.object({
   threadId: ResourceId,
   selectedTrackId: ResourceId,
+  pickedBy: PickedBy.optional(),
 });
 
 export const Interrupt = z.object({
@@ -109,9 +124,11 @@ export const FactoidsResponse = z.object({
  *
  * `mode` says how the result the run sent was produced: `live`, computed by this run, or
  * `replay`, a recorded result served again (a replayed run, or a cached result an earlier run
- * composed; such a run has no `analysis` of its own). A run that sent no result (open, failed,
- * cancelled) or was stored before modes were kept reads `live`, which then says nothing about
- * how a result was produced: show a mode only alongside a result.
+ * composed; such a run has no `analysis` of its own). A run whose model answers were replayed
+ * from stored answers (development and evaluation) also reads `replay`, though the rest of it
+ * ran live: its analysis's `run.replayed` says `model_answers`. A run that sent no result
+ * (open, failed, cancelled) or was stored before modes were kept reads `live`, which then says
+ * nothing about how a result was produced: show a mode only alongside a result.
  */
 export const StoredRun = z.object({
   id: z.string().min(1),
@@ -136,6 +153,26 @@ export const RunResponse = z.object({
   analysis: TrackAnalysis.nullable(),
 });
 export type RunResponse = z.infer<typeof RunResponse>;
+
+/**
+ * A recorded run the API can replay (a showcase track): the track, and when its run was
+ * recorded. Analysing `"<title> <artist>"` replays it whenever live analysis is unavailable.
+ */
+export const ReplayTrack = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  artist: z.string(),
+  album: z.string(),
+  recordedAt: Timestamp,
+});
+export type ReplayTrack = z.infer<typeof ReplayTrack>;
+
+/** 200 answer of GET /api/replays: every recorded run the API serves (possibly none). */
+export const ReplaysResponse = z.object({
+  success: z.literal(true),
+  replays: z.array(ReplayTrack),
+});
+export type ReplaysResponse = z.infer<typeof ReplaysResponse>;
 
 /** POST /api/runs: a Turnstile-verified request for a run token. */
 export const RunTokenRequest = z.object({
@@ -196,8 +233,8 @@ type ReplayRecordShape = z.infer<typeof ReplayRecordShape>;
 /**
  * A recorded run, replayed with the same events at accelerated timing. The record is checked
  * strictly when it is loaded:
- * - `analysis.run` exists, says `mode: "replay"`, and its `recordedAt`, `commit` and
- *   `analyzerVersion` are the record's own;
+ * - `analysis.run` exists, says `mode: "replay"` (of the whole run, never `replayed:
+ *   "model_answers"`), and its `recordedAt`, `commit` and `analyzerVersion` are the record's own;
  * - every `complete` event's result says `mode: "replay"` too, with the same recording date,
  *   commit and analyzer version, so a replay is never shown as live or misdated;
  * - events hold no heartbeats (the replayer sends its own) and are numbered 0, 1, 2, ... in
@@ -214,6 +251,13 @@ export const ReplayRecord = refineNamed(
       }
       if (run.mode !== "replay") {
         ctx.addIssue({ code: "custom", path: ["analysis", "run", "mode"], message: "not replay" });
+      }
+      if (run.replayed === "model_answers") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["analysis", "run", "replayed"],
+          message: "a record replays the whole run, not only its model answers",
+        });
       }
       for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {
         if (run[field] !== record[field]) {
@@ -236,6 +280,13 @@ export const ReplayRecord = refineNamed(
             code: "custom",
             path: [...path, "mode"],
             message: "a recorded result must say it is a replay",
+          });
+        }
+        if (run?.replayed === "model_answers") {
+          ctx.addIssue({
+            code: "custom",
+            path: [...path, "replayed"],
+            message: "a record replays the whole run, not only its model answers",
           });
         }
         for (const field of ["recordedAt", "commit", "analyzerVersion"] as const) {

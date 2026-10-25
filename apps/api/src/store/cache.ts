@@ -17,24 +17,32 @@ import { SourceError } from "@liner-notes/contract";
 import { z } from "zod";
 import type { AudioFeatures, ResearchData } from "../agent/state.js";
 import {
+  isMatchedMeasurement,
   isMeasuredAudio,
   LOW_CONFIDENCE_AUDIO_TTL_MS,
   parseMeasuredAudio,
 } from "./measuredAudio.js";
 
-export { isMeasuredAudio } from "./measuredAudio.js";
+export { isMatchedMeasurement, isMeasuredAudio } from "./measuredAudio.js";
 
 // =============================================================================
 // Types
 // =============================================================================
 
+/**
+ * What the artwork cache keeps of a Spotify search: the cover and the track it belongs to. No
+ * preview URL: previews are looked up afresh for each run and never stored (the table's
+ * `preview_url` column is left null; migration 6 cleared the values older code wrote).
+ */
 export interface SpotifySearchResult {
   coverUrl: string | null;
   spotifyUrl: string | null;
-  previewUrl: string | null;
   spotifyId: string | null;
   trackTitle: string | null;
+  /** The lead artist. */
   trackArtist: string | null;
+  /** Every credited artist, lead first; null when unknown (rows written before migration 9). */
+  trackArtists?: string[] | null;
 }
 
 // =============================================================================
@@ -83,6 +91,13 @@ function parseJson(text: string): unknown {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
+/** A stored JSON list of artist names, or null when there is none or it cannot be read. */
+function artistList(text: string | null): string[] | null {
+  if (!text) return null;
+  const parsed = stringList.safeParse(parseJson(text));
+  return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+}
+
 // =============================================================================
 // SonicCache
 // =============================================================================
@@ -121,25 +136,26 @@ function prepareStatements(db: Database.Database) {
       {
         cover_url: string | null;
         spotify_url: string | null;
-        preview_url: string | null;
         spotify_id: string | null;
         track_title: string | null;
         track_artist: string | null;
+        track_artists: string | null;
         expires_at: number;
       }
     >(
-      "SELECT cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at FROM artwork_cache WHERE search_key = ?",
+      "SELECT cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at FROM artwork_cache WHERE search_key = ?",
     ),
     putArtwork: db.prepare(
-      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at)
+      `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, spotify_id, track_title, track_artist, track_artists, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(search_key) DO UPDATE SET
          cover_url = excluded.cover_url,
          spotify_url = excluded.spotify_url,
-         preview_url = excluded.preview_url,
+         preview_url = NULL,
          spotify_id = excluded.spotify_id,
          track_title = excluded.track_title,
          track_artist = excluded.track_artist,
+         track_artists = excluded.track_artists,
          expires_at = excluded.expires_at`,
     ),
     purgeAudio: db.prepare("DELETE FROM audio_cache WHERE expires_at <= ?"),
@@ -179,7 +195,8 @@ export class SonicCache {
   /**
    * Caches a measurement. Throws on unmarked features and on database errors. A complete
    * (high-confidence) measurement that has not expired is not replaced by a partial one; a
-   * stored row that is not a valid measurement counts as absent and is overwritten.
+   * stored row that is not a valid measurement, or does not say how its clip was matched (see
+   * isMatchedMeasurement), counts as absent and is overwritten.
    */
   putAudio(spotifyId: string, features: AudioFeatures, ttlMs?: number): void {
     if (!isMeasuredAudio(features)) {
@@ -190,8 +207,10 @@ export class SonicCache {
     try {
       const now = nowSec();
       const row = this.stmt.getAudio.get(spotifyId);
-      const existing = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
+      const stored = row && now < row.expires_at ? parseMeasuredAudio(row.full_data) : null;
+      const existing = isMatchedMeasurement(stored) ? stored : null;
       if (existing?.confidence === "high" && features.confidence === "low") {
+        console.log(`[SonicCache] Keeping the complete audio row for ${spotifyId}`);
         return;
       }
 
@@ -259,10 +278,10 @@ export class SonicCache {
       return {
         coverUrl: row.cover_url,
         spotifyUrl: row.spotify_url,
-        previewUrl: row.preview_url,
         spotifyId: row.spotify_id,
         trackTitle: row.track_title,
         trackArtist: row.track_artist,
+        ...(artistList(row.track_artists) ? { trackArtists: artistList(row.track_artists) } : {}),
       };
     } catch (err) {
       console.error("[SonicCache] getArtwork error:", err);
@@ -276,10 +295,10 @@ export class SonicCache {
         searchKey,
         result.coverUrl,
         result.spotifyUrl,
-        result.previewUrl,
         result.spotifyId,
         result.trackTitle,
         result.trackArtist,
+        result.trackArtists?.length ? JSON.stringify(result.trackArtists) : null,
         nowSec() + Math.floor(ttlMs / 1000),
       );
     } catch (err) {

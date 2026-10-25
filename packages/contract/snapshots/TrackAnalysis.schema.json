@@ -227,14 +227,22 @@
             "type": "object",
             "properties": {
               "provider": { "type": "string", "enum": ["deezer", "spotify"] },
-              "method": { "type": "string", "enum": ["isrc", "search"] },
+              "method": { "type": "string", "enum": ["isrc", "id", "search"] },
               "score": {
                 "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
-                "description": "Match score of a search match; null for ISRC"
+                "description": "Match score of an id or search match; null for ISRC and for a provider's own clip"
               }
             },
             "required": ["provider", "method", "score"]
           },
+          { "type": "null" }
+        ]
+      },
+      "queryMatch": {
+        "default": null,
+        "description": "How this run's search text matched the track; null or absent when unknown, or when the user chose the track with a click",
+        "anyOf": [
+          { "type": "string", "enum": ["exact", "partial", "artist", "none"] },
           { "type": "null" }
         ]
       },
@@ -257,12 +265,17 @@
             "description": "When the run was recorded; null for live runs"
           },
           "commit": {
-            "description": "Commit of the code that recorded the run",
+            "description": "Commit of the code that recorded the run. A replay of model answers recorded at several commits lists each one, in recording order, separated by \", \"",
             "type": ["string", "null"]
           },
           "analyzerVersion": {
             "description": "AudioFeatures analyzerVersion; null if none",
             "type": ["string", "null"]
+          },
+          "replayed": {
+            "description": "What a replay replayed: the whole recorded run, or only the model's answers (stored answers, used in development and evaluation; the rest of the run was live). Absent on live runs and on results from before it was sent",
+            "type": "string",
+            "enum": ["run", "model_answers"]
           },
           "startedAt": {
             "type": "string",
@@ -602,15 +615,23 @@
             "type": "object",
             "properties": {
               "provider": { "type": "string", "enum": ["deezer", "spotify"] },
-              "method": { "type": "string", "enum": ["isrc", "search"] },
+              "method": { "type": "string", "enum": ["isrc", "id", "search"] },
               "score": {
                 "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
-                "description": "Match score of a search match; null for ISRC"
+                "description": "Match score of an id or search match; null for ISRC and for a provider's own clip"
               }
             },
             "required": ["provider", "method", "score"],
             "additionalProperties": false
           },
+          { "type": "null" }
+        ]
+      },
+      "queryMatch": {
+        "default": null,
+        "description": "How this run's search text matched the track; null or absent when unknown, or when the user chose the track with a click",
+        "anyOf": [
+          { "type": "string", "enum": ["exact", "partial", "artist", "none"] },
           { "type": "null" }
         ]
       },
@@ -633,12 +654,17 @@
             "description": "When the run was recorded; null for live runs"
           },
           "commit": {
-            "description": "Commit of the code that recorded the run",
+            "description": "Commit of the code that recorded the run. A replay of model answers recorded at several commits lists each one, in recording order, separated by \", \"",
             "type": ["string", "null"]
           },
           "analyzerVersion": {
             "description": "AudioFeatures analyzerVersion; null if none",
             "type": ["string", "null"]
+          },
+          "replayed": {
+            "description": "What a replay replayed: the whole recorded run, or only the model's answers (stored answers, used in development and evaluation; the rest of the run was live). Absent on live runs and on results from before it was sent",
+            "type": "string",
+            "enum": ["run", "model_answers"]
           },
           "startedAt": {
             "type": "string",
@@ -789,6 +815,7 @@
     "$.keyMoments: drops unreadable items",
     "$.modelUnavailableReason: absent when unreadable",
     "$.preview: absent when unreadable",
+    "$.queryMatch: absent when unreadable",
     "$.run.sourceErrors: drops unreadable items",
     "$.run.usage: absent when unreadable",
     "$.run.verifier: absent when unreadable",

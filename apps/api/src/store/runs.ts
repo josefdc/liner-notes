@@ -1,6 +1,6 @@
 /**
- * Run records: one row per analysis run in the `runs` table (migration 2, extended by 5), and
- * the events each run's streams sent in `run_events` (migration 5).
+ * Run records: one row per analysis run in the `runs` table (migration 2, extended by 5 and 7),
+ * and the events each run's streams sent in `run_events` (migration 5).
  *
  * Columns of `runs`:
  *   run_id          unique id of the run
@@ -26,6 +26,10 @@
  *                   column's default, which then says nothing about how a result was produced
  *   analysis        JSON of the run's own result (a TrackAnalysis, as the contract reads it,
  *                   without preview URLs); null when it has none
+ *   code_commit     the commit of the code that ran the run (the checkout's, "-dirty" when it had
+ *                   uncommitted changes), read when the server started; null when it could not
+ *                   be read, the run was stored before commits were kept (migration 7), or it
+ *                   was resumed by a server at another commit (clearRunCommitUnless)
  *
  * Columns of `run_events`:
  *   run_id          the run that sent the event
@@ -73,6 +77,8 @@ export interface RunRecord {
    * completed before results were stored.
    */
   analysis: unknown;
+  /** The commit of the code that ran it; null when unknown (see code_commit). */
+  commit: string | null;
 }
 
 interface RunRow {
@@ -88,6 +94,7 @@ interface RunRow {
   spotify_id: string | null;
   mode: RunMode;
   analysis: string | null;
+  code_commit: string | null;
 }
 
 const toFlag = (value: boolean | null | undefined): number | null =>
@@ -96,7 +103,7 @@ const fromFlag = (value: number | null): boolean | null => (value == null ? null
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 const RUN_COLUMNS = `run_id, thread_id, query, status, created_at, finished_at, model_available,
-  audio_available, payload, spotify_id, mode, analysis`;
+  audio_available, payload, spotify_id, mode, analysis, code_commit`;
 
 function toRecord(row: RunRow): RunRecord {
   return {
@@ -112,16 +119,41 @@ function toRecord(row: RunRow): RunRecord {
     spotifyId: row.spotify_id,
     mode: row.mode,
     analysis: row.analysis == null ? null : JSON.parse(row.analysis),
+    commit: row.code_commit ?? null,
   };
 }
 
+/** Starts a run; `commit` is the commit of the code running it, when known. */
 export function startRun(
   db: Database.Database,
-  run: { runId: string; threadId: string; query: string; status?: RunStatus },
+  run: {
+    runId: string;
+    threadId: string;
+    query: string;
+    status?: RunStatus;
+    commit?: string | null;
+  },
 ): void {
   db.prepare(
-    "INSERT INTO runs (run_id, thread_id, query, status, created_at) VALUES (?, ?, ?, ?, ?)",
-  ).run(run.runId, run.threadId, run.query, run.status ?? "running", nowSec());
+    `INSERT INTO runs (run_id, thread_id, query, status, created_at, code_commit)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(run.runId, run.threadId, run.query, run.status ?? "running", nowSec(), run.commit ?? null);
+}
+
+/**
+ * A resumed run went on with the code of the server that resumed it: when that server's commit
+ * differs from the one stored (or is unknown), the run no longer has a single commit to name, and
+ * the stored one is cleared. Unchanged when they are the same.
+ */
+export function clearRunCommitUnless(
+  db: Database.Database,
+  runId: string,
+  commit: string | null,
+): void {
+  db.prepare("UPDATE runs SET code_commit = NULL WHERE run_id = ? AND code_commit IS NOT ?").run(
+    runId,
+    commit,
+  );
 }
 
 /**
@@ -163,11 +195,31 @@ export function updateRun(
   return result.changes > 0;
 }
 
-export function getRun(db: Database.Database, runId: string): RunRecord | null {
-  const row = db.prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE run_id = ?`).get(runId) as
+/**
+ * A run by id. `withoutCommit` reads a database migrated before commits were kept (no
+ * code_commit column, schema below 7), whose runs have none: the replay recorder opens databases
+ * read-only and never migrates them.
+ */
+export function getRun(
+  db: Database.Database,
+  runId: string,
+  { withoutCommit = false }: { withoutCommit?: boolean } = {},
+): RunRecord | null {
+  const columns = withoutCommit
+    ? RUN_COLUMNS.replace("code_commit", "NULL AS code_commit")
+    : RUN_COLUMNS;
+  const row = db.prepare(`SELECT ${columns} FROM runs WHERE run_id = ?`).get(runId) as
     | RunRow
     | undefined;
   return row ? toRecord(row) : null;
+}
+
+/** True when the database keeps each run's commit (migration 7 applied). */
+export function keepsRunCommits(db: Database.Database): boolean {
+  return (
+    db.prepare("SELECT 1 FROM pragma_table_info('runs') WHERE name = 'code_commit'").get() !==
+    undefined
+  );
 }
 
 /**
@@ -242,7 +294,8 @@ export function withoutPreviewUrls(value: unknown): unknown {
 export type StoreResultOutcome = "stored" | "another_run" | "invalid" | "no_run";
 
 /**
- * Stores a completed run's result, as the contract reads it and without preview URLs, with the
+ * Stores a completed run's result, as the contract reads it, without preview URLs and without
+ * how the run's search text matched the track (`queryMatch`, which belongs to that run), with the
  * Spotify id of its track (null when the result does not carry a valid one) and the run's mode:
  * replay when the caller or the result says so, else live. When the caller says replay, the
  * stored result's own run information says replay too, so the two never disagree. The result's
@@ -270,7 +323,10 @@ export function storeRunResult(
       .run(runId);
     return marked.changes > 0 ? "another_run" : "no_run";
   }
-  const stored = TrackAnalysis.safeParse(withoutPreviewUrls(parsed.data));
+  // How the run's search text matched the track is not kept: the stored result is served by
+  // track to people who typed nothing, or something else.
+  const { queryMatch: _match, ...kept } = parsed.data;
+  const stored = TrackAnalysis.safeParse(withoutPreviewUrls(kept));
   if (!stored.success) return "invalid";
   const spotifyId = SPOTIFY_ID_PATTERN.test(stored.data.id) ? stored.data.id : null;
   const replay = mode === "replay" || stored.data.run?.mode === "replay";

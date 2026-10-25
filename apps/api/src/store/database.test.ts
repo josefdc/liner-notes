@@ -33,7 +33,7 @@ import {
   getDefaultDbPath,
 } from "./database.js";
 import { LATEST_SCHEMA_VERSION, MIGRATIONS, runMigrations, type Migration } from "./migrations.js";
-import { appendRunEvent, getRun, listRunEvents, storeRunResult } from "./runs.js";
+import { appendRunEvent, getRun, listRunEvents, startRun, storeRunResult } from "./runs.js";
 import { SqliteStore } from "./store.js";
 import { SonicCache } from "./cache.js";
 
@@ -234,6 +234,12 @@ async function testSonicCacheAudio(): Promise<void> {
       keyMoments: [],
       measured: true as const,
       analyzer: "audio-service" as const,
+      previewMatch: {
+        provider: "deezer" as const,
+        method: "isrc" as const,
+        deezerId: 1,
+        score: null,
+      },
     };
 
     // Put and get
@@ -295,7 +301,6 @@ async function testSonicCacheResearchArtwork(): Promise<void> {
     const artwork = {
       coverUrl: "https://i.scdn.co/image/test",
       spotifyUrl: "https://open.spotify.com/track/abc",
-      previewUrl: null,
       spotifyId: "abc",
       trackTitle: "Test Song",
       trackArtist: "Test Artist",
@@ -895,7 +900,8 @@ describe("migrations", () => {
     expect(notNull).toMatchObject({ bpm: 0, key_signature: 0, energy: 0 });
 
     const namespaces = db.prepare("SELECT namespace FROM store_items").pluck().all();
-    expect(namespaces).toEqual(['["disambiguation"]']);
+    // Track choices of earlier versions are deleted too (migration 8).
+    expect(namespaces).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM research_cache").pluck().get()).toBe(1);
     expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
   });
@@ -1124,6 +1130,137 @@ describe("migrations", () => {
     expect(listRunEvents(db, "old").map((e) => [e.stream, e.seq])).toEqual([
       [0, 0],
       [1, 0],
+    ]);
+  });
+
+  it("clears stored preview URLs and drops results stored under the search text", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "no_stored_previews");
+    expect(migration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    // What the code before this migration wrote: Spotify's preview in the artwork cache, and
+    // results keyed by the search text, one of them from before stored results lost their
+    // preview URLs.
+    raw
+      .prepare(
+        `INSERT INTO artwork_cache (search_key, cover_url, spotify_url, preview_url, spotify_id, track_title, track_artist, expires_at)
+         VALUES ('under pressure - queen', 'https://i.scdn.co/image/c', 'https://open.spotify.com/track/u', 'https://p.scdn.co/mp3-preview/u', 'u', 'Under Pressure', 'Queen', unixepoch() + 86400)`,
+      )
+      .run();
+    const now = new Date().toISOString();
+    const putItem = raw.prepare("INSERT INTO store_items VALUES (?, ?, ?, ?, ?)");
+    const oldResult = JSON.stringify({ trackData: { id: "x", previewUrl: "https://p.scdn.co/x" } });
+    putItem.run('["tracks","v3"]', "midnight city|lastfm=0:tavily=0", oldResult, now, now);
+    putItem.run('["tracks","v2"]', "midnight city", oldResult, now, now);
+    // Written under the plain namespace after migration 3 ran, until results were versioned.
+    putItem.run('["tracks"]', "midnight city", oldResult, now, now);
+    // A result keyed by track (this code's namespace) is kept.
+    const byTrack = JSON.stringify({ trackData: { id: "x" }, timestamp: 1 });
+    putItem.run('["tracks","v4"]', "x|lastfm=0:tavily=0", byTrack, now, now);
+    putItem.run('["disambiguation"]', "midnight city", '{"selectedTrackId":"abc"}', now, now);
+    const storedPreviews = (db: Database.Database) => [
+      db
+        .prepare("select count(*) n from artwork_cache where preview_url is not null")
+        .pluck()
+        .get(),
+      db
+        .prepare(
+          "select count(*) n from store_items where namespace like '%tracks%' and value like '%previewUrl%'",
+        )
+        .pluck()
+        .get(),
+    ];
+    expect(storedPreviews(raw)).toEqual([1, 3]);
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(storedPreviews(db)).toEqual([0, 0]);
+    // The artwork itself is kept; only the preview is gone.
+    expect(new SonicCache(db).getArtwork("under pressure - queen")).toEqual({
+      coverUrl: "https://i.scdn.co/image/c",
+      spotifyUrl: "https://open.spotify.com/track/u",
+      spotifyId: "u",
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen",
+    });
+    expect(
+      db.prepare("SELECT namespace FROM store_items ORDER BY namespace").pluck().all(),
+    ).toEqual(['["tracks","v4"]']);
+  });
+
+  it("keeps the commit a run ran at; runs stored before say none", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "run_commit");
+    expect(MIGRATIONS[migration].version).toBe(7);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        "INSERT INTO runs (run_id, thread_id, query, status, created_at) VALUES ('old', 'old', 'q', 'completed', 1)",
+      )
+      .run();
+    raw.close();
+    const db = initializeDatabase(dbPath);
+    expect(getRun(db, "old")).toMatchObject({ commit: null });
+    startRun(db, { runId: "new", threadId: "new", query: "q", commit: "abc123def456-dirty" });
+    expect(getRun(db, "new")).toMatchObject({ commit: "abc123def456-dirty" });
+    startRun(db, { runId: "unknown", threadId: "unknown", query: "q" });
+    expect(getRun(db, "unknown")).toMatchObject({ commit: null });
+  });
+
+  it("deletes the track choices earlier versions remembered for every user", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "no_remembered_choices");
+    expect(migration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    const now = new Date().toISOString();
+    const putItem = raw.prepare("INSERT INTO store_items VALUES (?, ?, ?, ?, ?)");
+    putItem.run('["disambiguation"]', "hurt", '{"selectedTrackId":"abc"}', now, now);
+    putItem.run('["tracks","v4"]', "x|lastfm=0:tavily=0", '{"trackData":{}}', now, now);
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(db.prepare("SELECT namespace FROM store_items").pluck().all()).toEqual([
+      '["tracks","v4"]',
+    ]);
+  });
+
+  it("adds the credited artists to the artwork cache, keeping the rows it has", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "artwork_credits");
+    expect(migration).toBeGreaterThan(0);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        `INSERT INTO artwork_cache (search_key, cover_url, spotify_id, track_title, track_artist, expires_at)
+         VALUES ('under pressure - queen', 'https://i.scdn.co/image/c', 'u', 'Under Pressure', 'Queen', unixepoch() + 86400)`,
+      )
+      .run();
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    const cache = new SonicCache(db);
+
+    expect(cache.getArtwork("under pressure - queen")).toMatchObject({ trackArtist: "Queen" });
+    expect(cache.getArtwork("under pressure - queen")).not.toHaveProperty("trackArtists");
+    cache.putArtwork("under pressure - queen", {
+      coverUrl: "https://i.scdn.co/image/c",
+      spotifyUrl: null,
+      spotifyId: "u",
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen",
+      trackArtists: ["Queen", "David Bowie"],
+    });
+    expect(cache.getArtwork("under pressure - queen")?.trackArtists).toEqual([
+      "Queen",
+      "David Bowie",
     ]);
   });
 

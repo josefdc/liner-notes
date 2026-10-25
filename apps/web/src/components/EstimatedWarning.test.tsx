@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AUDIO_UNAVAILABLE_TEXT } from '../constants';
 import type { AudioUnavailableReason, TrackData } from '../types';
-import { AudioStats, ResultNotices } from './EstimatedWarning';
+import { AudioStats, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 
 afterEach(cleanup);
 
@@ -241,5 +241,180 @@ describe('model unavailable reason', () => {
     const { container } = render(<ResultNotices track={unavailable(providerText)} />);
     expect(container.textContent).not.toContain('Upstream provider said');
     expect(container.textContent).toContain('(the model did not respond)');
+  });
+});
+
+describe('RecordedRunNotice', () => {
+  const run = { id: 'r1', recordedAt: '2026-10-22T14:03:00.000Z', commit: 'abc1234' };
+
+  it('labels a replayed result as a recording, with its date and commit', () => {
+    render(<RecordedRunNotice track={{ ...base, run: { ...run, mode: 'replay' } }} />);
+    const notice = screen.getByRole('region', { name: 'Recorded run' });
+    expect(notice.textContent).toContain('Recorded run · 22 Oct 2026 · replayed');
+    expect(notice.textContent).toContain('recorded on 22 Oct 2026 (commit abc1234)');
+    expect(notice.textContent).toContain('Nothing was analysed live for it.');
+  });
+
+  it('says the date is missing rather than inventing one', () => {
+    render(
+      <RecordedRunNotice
+        track={{ ...base, run: { mode: 'replay', recordedAt: null, commit: 'abc1234' } }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Recorded run' });
+    expect(notice.textContent).toContain('Recorded run · date not recorded · replayed');
+    expect(notice.textContent).toContain('recorded earlier (commit abc1234)');
+  });
+
+  it('labels replayed model answers as that, not as a whole recording', () => {
+    render(
+      <RecordedRunNotice
+        track={{ ...base, run: { mode: 'replay', recordedAt: null, commit: null } }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Replayed model answers' });
+    expect(notice.textContent).toContain('Model answers replayed · recording date not stored');
+    expect(notice.textContent).toContain('at a time that was not stored');
+    expect(notice.textContent).toContain('The rest of it may have run live');
+    expect(notice.textContent).not.toContain('Nothing was analysed live');
+  });
+
+  it('shows when and from which commit replayed model answers were recorded', () => {
+    render(
+      <RecordedRunNotice
+        track={{
+          ...base,
+          run: {
+            mode: 'replay',
+            replayed: 'model_answers',
+            recordedAt: '2026-03-01T10:00:00.000Z',
+            commit: 'abc123def456',
+          },
+        }}
+      />,
+    );
+    const notice = screen.getByRole('region', { name: 'Replayed model answers' });
+    expect(notice.textContent).toContain('Model answers replayed · recorded 1 Mar 2026');
+    expect(notice.textContent).toContain(
+      'replayed from answers recorded on 1 Mar 2026 (commit abc123def456)',
+    );
+    expect(notice.textContent).not.toContain('Recorded run ·');
+    expect(notice.textContent).not.toContain('Nothing was analysed live');
+  });
+
+  it('says a run that replayed only its model answers measured its audio live', () => {
+    render(
+      <AudioStats
+        track={{
+          ...base,
+          run: { ...run, mode: 'replay', replayed: 'model_answers' },
+        }}
+      />,
+    );
+    expect(screen.getByText('BPM').closest('[title]')?.getAttribute('title')).toBe(
+      'Measured from the audio preview',
+    );
+    expect(screen.queryByRole('region', { name: 'Recorded run' })).toBeNull();
+  });
+
+  it('says on a replay that its measured values were measured when it was recorded', () => {
+    render(<AudioStats track={{ ...base, run: { ...run, mode: 'replay' } }} />);
+    expect(screen.getByText('BPM').closest('[title]')?.getAttribute('title')).toBe(
+      'Measured from the audio preview when this run was recorded',
+    );
+  });
+
+  it('renders nothing for a live result or one that does not say', () => {
+    const live = render(<RecordedRunNotice track={{ ...base, run: { ...run, mode: 'live' } }} />);
+    expect(live.container.textContent).toBe('');
+    live.unmount();
+    const older = render(<RecordedRunNotice track={base} />);
+    expect(older.container.textContent).toBe('');
+  });
+});
+
+describe('ResultNotices search match', () => {
+  it.each([
+    ['partial', 'Its title matches your search only in part.'],
+    ['artist', 'Only the artist matches your search, not the title.'],
+    ['none', 'Neither its title nor its artist matches your search.'],
+  ] as const)(
+    'says the track may not be the song searched for when the match is %s',
+    (match, reason) => {
+      render(<ResultNotices track={{ ...base, queryMatch: match }} />);
+      const notice = screen.getByRole('region', { name: 'Search match' }).textContent;
+      expect(notice).toContain('This may not be the song you searched for');
+      expect(notice).toContain(reason);
+      expect(notice).toContain('“Song” by Artist');
+      expect(screen.queryByRole('region', { name: 'Missing data' })).toBeNull();
+    },
+  );
+
+  it.each([
+    ['exact', 'exact'],
+    ['absent (older results)', undefined],
+    ['null', null],
+    ['a value this page does not know', 'close'],
+  ])('shows no search-match note when the match is %s', (_label, match) => {
+    const { container } = render(
+      <ResultNotices track={{ ...base, queryMatch: match as TrackData['queryMatch'] }} />,
+    );
+    expect(container.textContent).toBe('');
+  });
+
+  it('shows the note on a live, loosely matched result, next to no recording label', () => {
+    const live = { ...base, queryMatch: 'partial' as const, run: { id: 'r1', mode: 'live' } };
+    render(
+      <>
+        <RecordedRunNotice track={live} />
+        <ResultNotices track={live} />
+      </>,
+    );
+    expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Recorded run' })).toBeNull();
+  });
+
+  it('never shows the note on a replayed recording, even one that carries a match', () => {
+    const replay = {
+      ...base,
+      queryMatch: 'none' as const,
+      run: { id: 'r1', mode: 'replay', recordedAt: '2026-10-22T14:03:00.000Z', commit: 'abc1234' },
+    };
+    const { container } = render(
+      <>
+        <RecordedRunNotice track={replay} />
+        <ResultNotices track={replay} />
+      </>,
+    );
+    expect(screen.getByRole('region', { name: 'Recorded run' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Search match' })).toBeNull();
+    expect(container.textContent).not.toContain('This may not be the song you searched for');
+  });
+
+  it('shows the note when only the model answers were replayed (the search ran live)', () => {
+    const modelOnly = {
+      ...base,
+      queryMatch: 'artist' as const,
+      run: { id: 'r1', mode: 'replay', recordedAt: null, commit: null },
+    };
+    render(<ResultNotices track={modelOnly} />);
+    expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
+  });
+
+  it('shows the search-match note with the missing-data notices', () => {
+    render(
+      <ResultNotices
+        track={{
+          ...base,
+          queryMatch: 'none',
+          modelUnavailable: true,
+          modelUnavailableReason: 'timeout',
+        }}
+      />,
+    );
+    expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Missing data' }).textContent).toContain(
+      'Model unavailable',
+    );
   });
 });

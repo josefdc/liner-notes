@@ -181,12 +181,30 @@ export const ModelUnavailableReason = z.enum([
 ]);
 export type ModelUnavailableReason = z.infer<typeof ModelUnavailableReason>;
 
-/** Where the analysed preview came from and how the track was matched to it. */
+/**
+ * Where the analysed preview came from and how the track was matched to it:
+ * - `isrc`: the provider's entry for the track's ISRC;
+ * - `id`: an entry read by its id: the provider's own clip of the chosen track (Spotify), or an
+ *   entry the provider offers in place of the ISRC entry (Deezer), checked like a search match;
+ * - `search`: a search result that strictly matches the track.
+ */
 export const PreviewMatch = z.object({
   provider: z.enum(["deezer", "spotify"]),
-  method: z.enum(["isrc", "search"]),
-  score: UnitInterval.nullable().describe("Match score of a search match; null for ISRC"),
+  method: z.enum(["isrc", "id", "search"]),
+  score: UnitInterval.nullable().describe(
+    "Match score of an id or search match; null for ISRC and for a provider's own clip",
+  ),
 });
+
+/**
+ * How the search text matched the analysed track, judged on its title and artists:
+ * - `exact`: the text is the track's title, with or without its credited artists;
+ * - `partial`: the title and the text share their words only in part;
+ * - `artist`: only a credited artist is named; the title does not match;
+ * - `none`: neither the title nor an artist matches: the track may not be the song searched for.
+ */
+export const QueryMatch = z.enum(["exact", "partial", "artist", "none"]);
+export type QueryMatch = z.infer<typeof QueryMatch>;
 
 // =============================================================================
 // Run information
@@ -225,8 +243,22 @@ export const RunInfo = z.object({
   id: z.string().min(1),
   mode: RunMode,
   recordedAt: Timestamp.nullable().describe("When the run was recorded; null for live runs"),
-  commit: z.string().nullable().describe("Commit of the code that recorded the run"),
+  commit: z
+    .string()
+    .nullable()
+    .describe(
+      "Commit of the code that recorded the run. A replay of model answers recorded at " +
+        'several commits lists each one, in recording order, separated by ", "',
+    ),
   analyzerVersion: z.string().nullable().describe("AudioFeatures analyzerVersion; null if none"),
+  replayed: z
+    .enum(["run", "model_answers"])
+    .optional()
+    .describe(
+      "What a replay replayed: the whole recorded run, or only the model's answers (stored " +
+        "answers, used in development and evaluation; the rest of the run was live). Absent on " +
+        "live runs and on results from before it was sent",
+    ),
   startedAt: Timestamp.optional(),
   durationMs: z.int().min(0).nullable().optional(),
   fallback: z
@@ -298,6 +330,12 @@ export const TrackAnalysis = z.object({
     .catch(null)
     .describe("null when not measured, or when this reader cannot read the measurement"),
   preview: PreviewMatch.nullable().optional().catch(null),
+  queryMatch: QueryMatch.nullable()
+    .optional()
+    .catch(null)
+    .describe(
+      "How this run's search text matched the track; null or absent when unknown, or when the user chose the track with a click",
+    ),
   evidence: tolerantList(Evidence).optional(),
   claims: tolerantList(Claim).optional(),
   run: RunInfo.optional(),

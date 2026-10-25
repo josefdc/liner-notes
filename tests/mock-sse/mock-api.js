@@ -5,6 +5,7 @@
 //   suggestionsByQuery: { "<query>": [candidate, ...] } overrides `suggestions` per query
 //   suggestWaits: { "<query>": "<name>" } holds the suggestions for that query until the test
 //                calls `window.__mockApi.release("<name>")`
+//   replays:     recorded tracks returned by /api/replays (default none)
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
 //                stream ends like a server response does (onerror unless the app closed it).
@@ -80,6 +81,11 @@
       if (wait) await new Promise((resolve) => whenReleased(wait, resolve));
       const suggestions = config.suggestionsByQuery?.[query] ?? config.suggestions ?? [];
       return new Response(JSON.stringify({ success: true, suggestions }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (pathOf(url) === "/api/replays") {
+      return new Response(JSON.stringify({ success: true, replays: config.replays ?? [] }), {
         headers: { "Content-Type": "application/json" },
       });
     }

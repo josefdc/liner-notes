@@ -1,4 +1,11 @@
-import type { AudioUnavailableReason, Factoid, ModelUnavailableReason, TrackData } from './types';
+import type {
+  AudioUnavailableReason,
+  Factoid,
+  FactoidUnavailableCode,
+  ModelUnavailableReason,
+  QueryMatch,
+  TrackData,
+} from './types';
 
 // How the result screens describe values that are missing. Nothing here stands in for a
 // value: when a value is not known, the screens say so with this text.
@@ -45,6 +52,54 @@ export function modelUnavailableText(reason: string | undefined): string {
   return reason && Object.hasOwn(MODEL_UNAVAILABLE_TEXT, reason)
     ? MODEL_UNAVAILABLE_TEXT[reason as ModelUnavailableReason]
     : 'the model did not respond';
+}
+
+/** Why "more facts" added nothing, in words, for each code the API sends. */
+export const FACTOID_UNAVAILABLE_TEXT: Record<FactoidUnavailableCode, string> = {
+  rate_limited: MODEL_UNAVAILABLE_TEXT.rate_limited,
+  budget_exhausted: MODEL_UNAVAILABLE_TEXT.budget_exhausted,
+  live_disabled: 'live model calls are off on this server, it replays recorded runs only',
+  not_found: 'the recording this result came from is no longer served here',
+};
+
+/** How a replayed result was recorded. */
+export interface Recording {
+  /** When the run was recorded (ISO time), or null when the result does not say. */
+  recordedAt: string | null;
+  commit: string | null;
+}
+
+/**
+ * The recording a result was replayed from, or null when the result is not a replay. A replay
+ * is never shown as a live analysis: the result screens label it with this.
+ */
+export function recordingOf(track: TrackData): Recording | null {
+  const run = typeof track.run === 'object' && track.run !== null ? track.run : null;
+  if (run?.mode !== 'replay') return null;
+  const recordedAt = measuredText(run.recordedAt);
+  return {
+    recordedAt: recordedAt && !Number.isNaN(Date.parse(recordedAt)) ? recordedAt : null,
+    commit: measuredText(run.commit),
+  };
+}
+
+/** Title of the note shown when the search text did not match the analysed track exactly. */
+export const QUERY_MATCH_TITLE = 'This may not be the song you searched for';
+
+/** How the search text matched the track, in words, for each match that is not exact. */
+export const QUERY_MATCH_TEXT: Record<Exclude<QueryMatch, 'exact'>, string> = {
+  partial: 'Its title matches your search only in part.',
+  artist: 'Only the artist matches your search, not the title.',
+  none: 'Neither its title nor its artist matches your search.',
+};
+
+/**
+ * Why the analysed track may not be the song searched for, or null: the match was exact, is
+ * unknown (older results do not say), or is a value this page does not know.
+ */
+export function queryMatchText(match: string | null | undefined): string | null {
+  if (!match || match === 'exact' || !Object.hasOwn(QUERY_MATCH_TEXT, match)) return null;
+  return QUERY_MATCH_TEXT[match as Exclude<QueryMatch, 'exact'>];
 }
 
 /** The value when it was measured (a finite number), otherwise null. */

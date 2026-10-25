@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TriangleAlert, Disc, Heart, Sparkles, Zap } from 'lucide-react';
+import { TriangleAlert, Disc, Heart, History, Sparkles, Zap } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import type { TrackData } from '../types';
 import {
@@ -13,7 +13,11 @@ import {
   missingModelOutput,
   modelUnavailableText,
   moodLabel,
+  QUERY_MATCH_TITLE,
+  queryMatchText,
+  recordingOf,
 } from '../constants';
+import { isWholeRecording, recordedDate } from '../utils/recording';
 
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
@@ -65,7 +69,11 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   // Estimated (not measured) values come back null here: shown as not measured.
   const { bpm, key, energy, valence, danceability, acousticness } = audioValues(track);
   const hasModelScores = valence !== null || danceability !== null || acousticness !== null;
-  const measuredTitle = 'Measured from the audio preview';
+  // A whole recording's values were measured when it was recorded. A run whose model answers
+  // alone were replayed measured its audio live, in this run.
+  const measuredTitle = isWholeRecording(track.run)
+    ? 'Measured from the audio preview when this run was recorded'
+    : 'Measured from the audio preview';
   const iconSize = size === 'md' ? 12 : 10;
 
   return (
@@ -189,34 +197,101 @@ const Notice: React.FC<{ title: string; children: React.ReactNode }> = ({ title,
 );
 
 /**
- * Notices naming what a result is missing: the model's output when the model was unavailable,
- * and the audio values that were not measured (with the reason). Renders nothing otherwise.
+ * Notices about a result: that the track may not be the song searched for (the search text did
+ * not match it exactly), the model's output when the model was unavailable, and the audio
+ * values that were not measured (with the reason). Renders nothing otherwise.
+ *
+ * A whole recorded run played again never shows the search-match note: how a text matched the
+ * track belonged to the recorded run (the API sends none with a replay).
  */
 export const ResultNotices: React.FC<{ track: TrackData; className?: string }> = ({
   track,
   className = '',
 }) => {
+  const match = isWholeRecording(track.run) ? null : queryMatchText(track.queryMatch);
   const audio = audioNotice(track);
   const modelMissing = track.modelUnavailable ? missingModelOutput(track) : [];
-  if (!track.modelUnavailable && !audio) return null;
+  const missing = Boolean(track.modelUnavailable || audio);
+  if (!match && !missing) return null;
 
   return (
-    <section aria-label="Missing data" className={`flex flex-col gap-2 ${className}`}>
-      {track.modelUnavailable && (
-        <Notice title="Model unavailable">
-          <p>
-            This result was built from source data only
-            {` (${modelUnavailableText(track.modelUnavailableReason)})`}.
-          </p>
-          {modelMissing.length > 0 && <p>Missing: {modelMissing.join(', ')}.</p>}
-        </Notice>
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {match && (
+        <section aria-label="Search match">
+          <Notice title={QUERY_MATCH_TITLE}>
+            <p>
+              {match} The analysis below is of “{track.title}” by {track.artist}.
+            </p>
+          </Notice>
+        </section>
       )}
-      {audio && (
-        <Notice title={audio.title}>
-          <p>{audio.reason}</p>
-          {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
-        </Notice>
+      {missing && (
+        <section aria-label="Missing data" className="flex flex-col gap-2">
+          {track.modelUnavailable && (
+            <Notice title="Model unavailable">
+              <p>
+                This result was built from source data only
+                {` (${modelUnavailableText(track.modelUnavailableReason)})`}.
+              </p>
+              {modelMissing.length > 0 && <p>Missing: {modelMissing.join(', ')}.</p>}
+            </Notice>
+          )}
+          {audio && (
+            <Notice title={audio.title}>
+              <p>{audio.reason}</p>
+              {audio.missing.length > 0 && <p>Not measured: {audio.missing.join(', ')}.</p>}
+            </Notice>
+          )}
+        </section>
       )}
+    </div>
+  );
+};
+
+/**
+ * Says that a result is a recorded run served again, with when (and from which commit) it was
+ * recorded, so a replay never reads as a live analysis. Renders nothing for a live result.
+ *
+ * A run whose model answers alone were replayed from stored answers (development and
+ * evaluation; `run.replayed` is "model_answers", or, from servers that do not say, a "replay"
+ * that names neither when nor where it was recorded) is labelled as that, with when and from
+ * which commit the answers were recorded where it says: the rest of it ran live.
+ */
+export const RecordedRunNotice: React.FC<{
+  track: TrackData;
+  /** One line, for narrow screens; the full text is its tooltip. */
+  compact?: boolean;
+  className?: string;
+}> = ({ track, compact = false, className = '' }) => {
+  const recording = recordingOf(track);
+  if (!recording) return null;
+  const date = recordedDate(recording.recordedAt);
+  const modelOnly = !isWholeRecording(track.run);
+  const known = date ? `on ${date}` : null;
+  const commit = recording.commit ? ` (commit ${recording.commit})` : '';
+  const title = modelOnly
+    ? `Model answers replayed · ${date ? `recorded ${date}` : 'recording date not stored'}`
+    : `Recorded run · ${date ?? 'date not recorded'} · replayed`;
+  const text = modelOnly
+    ? `The model's answers in this result were replayed from answers recorded ${known ?? 'at a time that was not stored'}${commit}. ` +
+      'The rest of it may have run live; it is not a live model call.'
+    : `This result was recorded ${known ?? 'earlier'}${commit} and is shown again as it was ` +
+      'then. Nothing was analysed live for it.';
+  return (
+    <section
+      aria-label={modelOnly ? 'Replayed model answers' : 'Recorded run'}
+      title={compact ? text : undefined}
+      className={`flex gap-3 items-start border border-cyber/30 bg-cyber/5 rounded-md ${compact ? 'px-3 py-1.5' : 'px-4 py-3'} ${className}`}
+    >
+      <History
+        size={compact ? 12 : 16}
+        className="text-cyber flex-shrink-0 mt-0.5"
+        aria-hidden="true"
+      />
+      <div className="text-xs font-mono text-text-secondary space-y-1">
+        <p className="text-cyber uppercase tracking-widest">{title}</p>
+        {compact ? <p className="sr-only">{text}</p> : <p>{text}</p>}
+      </div>
     </section>
   );
 };

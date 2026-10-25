@@ -38,7 +38,7 @@ import {
   MusicBrainzRateLimiter,
 } from "./musicbrainz.js";
 import { searchSamples } from "./search.js";
-import { SpotifyAuthManager, searchMultipleTracks } from "./spotify.js";
+import { SpotifyAuthManager, searchTracks } from "./spotify.js";
 
 const DAFT_PUNK = "056e4f3e-d505-4dad-8ec1-d04f521cbb56";
 const ICE_ICE_BABY = "875c24bc-fe9e-4ac6-80d3-beaacb70ee43";
@@ -239,7 +239,7 @@ describe("replay reproduces the recorded run", () => {
         }
         return undefined;
       },
-      () => searchMultipleTracks.invoke({ query: "1-800-273-8255" }),
+      async () => JSON.stringify(await searchTracks("1-800-273-8255")),
     );
 
     expect(JSON.parse(live)[0]).toMatchObject({

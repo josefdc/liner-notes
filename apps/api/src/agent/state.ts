@@ -17,6 +17,7 @@ import type {
 import type { z } from "zod";
 import type { LlmTier } from "../config/settings.js";
 import type { LlmErrorKind } from "../llm/errors.js";
+import type { PreviewSourceMatch } from "../sources/audio.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import type { QueryMatch } from "./trackMatch.js";
 
@@ -123,7 +124,8 @@ export interface KeyMoment {
 
 /**
  * Why measured audio values are missing:
- * - no_preview: neither Deezer nor Spotify returned a preview clip
+ * - no_preview: no preview clip of the chosen recording was found (by its ISRC on Deezer, as
+ *   Spotify's own clip, or as a Deezer search result that is strictly the same recording)
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed
@@ -173,6 +175,11 @@ export interface AudioFeatures {
   measured?: true;
   /** What produced the measurement (the audio analysis service) */
   analyzer?: "audio-service";
+  /**
+   * How the measured clip was matched to the track (never its URL). Cached rows without it were
+   * measured before previews were matched strictly and are not trusted.
+   */
+  previewMatch?: PreviewSourceMatch;
 }
 
 export interface ResearchData {
@@ -256,6 +263,25 @@ export function mergeResearch(prev: ResearchData, next: Partial<ResearchData>): 
 // =============================================================================
 
 /**
+ * Why the scout ended a run without a track, as a type the analyze route reads (never text):
+ * - `no_match`: Spotify found nothing for the query, or no track with the requested id;
+ * - `rate_limited`: Spotify kept refusing for its rate limit; `retryAfterMs` is how long it
+ *   asked to wait, when it said;
+ * - `upstream_unavailable`: Spotify could not answer (an outage, a timeout, no credentials).
+ */
+export type ScoutFailure =
+  | { kind: "no_match" }
+  | { kind: "rate_limited"; retryAfterMs: number | null }
+  | { kind: "upstream_unavailable" };
+
+/**
+ * How the user chose a track themselves: a click (or Enter) on a row of the track picker or on
+ * a search suggestion, or the picker's countdown, which takes the highlighted row when the user
+ * did not choose.
+ */
+export type PickedBy = "click" | "countdown";
+
+/**
  * Configuration for Human-in-the-Loop disambiguation behavior. When a choice is needed is
  * decided by how the results match the query (trackMatch.ts), not by a threshold.
  */
@@ -306,6 +332,11 @@ export interface LlmCallRecord {
    * (otherwise 0: what it may have cost is settled in the spend log).
    */
   usdEst: number;
+  /**
+   * For an answer replayed from a cassette: when and from which commit it was recorded (null
+   * where the cassette does not say). Absent for other calls.
+   */
+  recording?: { recordedAt: string | null; commit: string | null };
 }
 
 type PreviewMatchValue = z.infer<typeof PreviewMatch>;
@@ -344,6 +375,13 @@ export const SonicAgentState = Annotation.Root({
     default: () => "",
   }),
 
+  // The Spotify track the request asked for by id (a suggestion or a node), or null for a search
+  // by text. With an id the scout reads that track instead of searching.
+  requestedTrackId: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
   // Search candidates (for human disambiguation)
   candidates: Annotation<SearchCandidate[] | null>({
     reducer: (_, next) => next,
@@ -357,9 +395,23 @@ export const SonicAgentState = Annotation.Root({
   }),
 
   // Who chose the track: "match" when the scout selected it as the query's clear match, "user"
-  // when it came from the track picker (a click or the picker's countdown). Only a clear match
-  // may be served to the next search of the same text.
+  // when it came from the track picker (a click or the picker's countdown). Either way the
+  // result is stored under the track, never under the search text.
   selectedBy: Annotation<"match" | "user" | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // For a track the user chose ("user" above): a click, or the picker's countdown; null when
+  // the scout selected it, or when the client did not say. A deliberate click is the user's own
+  // choice, so the result does not warn that the search text matched it loosely.
+  pickedBy: Annotation<PickedBy | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // Why the scout found no track (typed); null otherwise.
+  scoutFailure: Annotation<ScoutFailure | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),
@@ -417,14 +469,26 @@ export const SonicAgentState = Annotation.Root({
 
   // How the query matched the chosen track by title and artist (trackMatch.ts); while the user
   // is choosing, how it matched the best result. "none" is a low match: nothing Spotify
-  // returned carries the query's title or artist. null before the scout has searched.
+  // returned carries the query's title or artist. null before the scout has searched. The
+  // result carries it (TrackAnalysis.queryMatch), so the web can say when it is not exact.
   queryMatch: Annotation<QueryMatch | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),
 
-  // Where the analysed preview came from and how it was matched; null when unknown.
+  // Where the clip the audio values were measured on came from and how it was matched to the
+  // track; null when nothing was measured. On an audio-cache hit it describes the cached
+  // measurement's clip, which may be another entry of the recording than the player's clip.
   preview: Annotation<PreviewMatchValue | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // The run's preview clip of the chosen recording, for the player; null when there is none.
+  // Spotify's own clip is used here only when the engineer chose it.
+  // The URL is signed and expires within minutes: the checkpointer never saves it
+  // (store/checkpointer.ts) and stored results drop it.
+  previewUrl: Annotation<string | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),

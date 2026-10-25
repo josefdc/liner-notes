@@ -31,6 +31,7 @@ function measured(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
     keyMoments: [],
     measured: true,
     analyzer: "audio-service",
+    previewMatch: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
     ...overrides,
   };
 }
@@ -120,6 +121,17 @@ describe("SonicCache audio", () => {
     expect(cache.getAudio("expired")).toMatchObject({ bpm: 90, confidence: "low" });
   });
 
+  it("lets a matched partial measurement replace a complete row that does not say how its clip was matched", () => {
+    const { previewMatch: _matched, ...unmatched } = measured({ bpm: 120 });
+    cache.putAudio("old", unmatched as AudioFeatures);
+    cache.putAudio("old", measured({ bpm: 95, ...PARTIAL }));
+    expect(cache.getAudio("old")).toMatchObject({
+      bpm: 95,
+      confidence: "low",
+      previewMatch: { provider: "deezer", method: "isrc" },
+    });
+  });
+
   it("lets a real measurement replace a stored row that is not a valid measurement", () => {
     // Marked as measured and high confidence, but bpm 0 is not a measurement.
     insertRaw("broken", JSON.stringify(measured({ bpm: 0 })), "high");
@@ -163,12 +175,62 @@ describe("SonicCache write errors", () => {
       cache.putArtwork("k", {
         coverUrl: null,
         spotifyUrl: null,
-        previewUrl: null,
         spotifyId: null,
         trackTitle: null,
         trackArtist: null,
       }),
     ).toThrow("write failed");
+  });
+});
+
+describe("SonicCache artwork", () => {
+  let db: Database.Database;
+  let cache: SonicCache;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    runMigrations(db);
+    cache = new SonicCache(db);
+  });
+  afterEach(() => db.close());
+
+  const storedPreview = (key: string) =>
+    db.prepare("SELECT preview_url FROM artwork_cache WHERE search_key = ?").pluck().get(key);
+
+  const artwork = {
+    coverUrl: "https://i.scdn.co/image/c",
+    spotifyUrl: "https://open.spotify.com/track/u",
+    spotifyId: "u",
+    trackTitle: "Under Pressure",
+    trackArtist: "Queen",
+  };
+
+  it("stores no preview URL, even when the caller passes one", () => {
+    cache.putArtwork("k", { ...artwork, previewUrl: "https://p.scdn.co/mp3-preview/u" } as never);
+
+    expect(storedPreview("k")).toBeNull();
+    expect(cache.getArtwork("k")).toEqual(artwork);
+  });
+
+  it("keeps every credited artist of the track, and none for a row without them", () => {
+    cache.putArtwork("k", { ...artwork, trackArtists: ["Queen", "David Bowie"] });
+    expect(cache.getArtwork("k")).toEqual({ ...artwork, trackArtists: ["Queen", "David Bowie"] });
+
+    db.prepare(
+      "INSERT INTO artwork_cache (search_key, track_artist, track_artists, expires_at) VALUES ('old', 'Queen', 'not json', unixepoch() + 60)",
+    ).run();
+    expect(cache.getArtwork("old")).not.toHaveProperty("trackArtists");
+  });
+
+  it("clears a preview URL stored for the key by older code when it writes the row again", () => {
+    db.prepare(
+      "INSERT INTO artwork_cache (search_key, preview_url, expires_at) VALUES ('k', 'https://p.scdn.co/mp3-preview/old', unixepoch() + 60)",
+    ).run();
+
+    cache.putArtwork("k", artwork);
+
+    expect(storedPreview("k")).toBeNull();
+    expect(cache.getArtwork("k")).not.toHaveProperty("previewUrl");
   });
 });
 

@@ -270,6 +270,58 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: "no_stored_previews",
+    up(db) {
+      // Preview URLs are looked up for each run and never stored: they are signed links that
+      // expire, handed out for preview use only. The artwork cache kept Spotify's for 7 days;
+      // the column stays (always null) and the values are cleared.
+      db.exec("UPDATE artwork_cache SET preview_url = NULL WHERE preview_url IS NOT NULL");
+
+      // Results stored by the scout under the search text (["tracks"], ["tracks", "v2"] and
+      // ["tracks", "v3"]) are never served again: results are now keyed by track, under
+      // ["tracks", "v4"]. Many were written before results were stored without preview URLs.
+      // Every tracks namespace but that one is dropped.
+      db.prepare(
+        `DELETE FROM store_items
+         WHERE (namespace = ? OR namespace LIKE ?) AND namespace <> ?`,
+      ).run(JSON.stringify(["tracks"]), '["tracks",%', JSON.stringify(["tracks", "v4"]));
+    },
+  },
+  {
+    version: 7,
+    name: "run_commit",
+    up(db) {
+      // A run keeps the commit of the code that ran it, read by the server when it started, so a
+      // recording of the run names that commit rather than whatever is checked out when it is
+      // recorded. Runs stored before this migration, and runs of a server that could not read
+      // its commit (no repository), have none.
+      db.exec("ALTER TABLE runs ADD COLUMN code_commit TEXT");
+    },
+  },
+  {
+    version: 8,
+    name: "no_remembered_choices",
+    up(db) {
+      // Track choices that earlier versions remembered under the typed text, for every user who
+      // typed it. Nothing reads them since a pick became one user's choice, and choices are not
+      // remembered across users; they are deleted, and retention no longer keeps them.
+      db.prepare("DELETE FROM store_items WHERE namespace = ?").run(
+        JSON.stringify(["disambiguation"]),
+      );
+    },
+  },
+  {
+    version: 9,
+    name: "artwork_credits",
+    up(db) {
+      // The artwork cache keeps every credited artist of the track it found (a JSON list), not
+      // only the lead, so a cached answer is judged against the node's credit as a fresh search
+      // is. Rows written before have none and are judged on the lead artist.
+      db.exec("ALTER TABLE artwork_cache ADD COLUMN track_artists TEXT");
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

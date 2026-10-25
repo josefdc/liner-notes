@@ -61,3 +61,24 @@ test("a late answer for an earlier query does not replace the current suggestion
   await expect(page.getByRole("option")).toHaveCount(1);
   await expect(page.getByRole("option")).toContainText(nin.artist);
 });
+
+test("a suggestion chosen with the keyboard is analysed by its Spotify track id", async ({
+  page,
+}) => {
+  const suggestion = { ...candidates[0], id: "28cnXtME493VX9NOw9cIUh" };
+  await useMockApi(page, { suggestions: [suggestion], streams: {} });
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await expect(page.getByRole("option")).toHaveCount(1);
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+
+  const query = encodeURIComponent(`${suggestion.title} ${suggestion.artist}`);
+  await expect
+    .poll(async () =>
+      (await apiRequests(page)).filter((entry) => entry.startsWith("stream /api/analyze/stream")),
+    )
+    // A deliberate click on that track: no note that its text matched it loosely.
+    .toEqual([`stream /api/analyze/stream?query=${query}&trackId=${suggestion.id}&pickedBy=click`]);
+});

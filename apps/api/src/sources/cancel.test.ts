@@ -19,7 +19,7 @@ import { getLastfmTrackTags } from "./lastfm.js";
 import { getListenBrainzSimilarArtists } from "./listenbrainz.js";
 import { getMusicBrainzRelations, MusicBrainzRateLimiter } from "./musicbrainz.js";
 import { searchProductionHistory, searchSamples } from "./search.js";
-import { getTrackDetails, SpotifyAuthManager, searchMultipleTracks } from "./spotify.js";
+import { fetchTrack, SpotifyAuthManager, searchTracks } from "./spotify.js";
 
 const SERVICE = "http://audio.test:3002";
 const PREVIEW_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/clip.mp3?hdnea=exp=1";
@@ -39,6 +39,17 @@ const deezerHit = () =>
       },
     ],
   });
+
+const deezerNoData = () =>
+  json({ error: { type: "DataException", message: "no data", code: 800 } });
+
+const ICE_ICE_BABY = {
+  title: "Ice Ice Baby",
+  artist: "Vanilla Ice",
+  album: "To the Extreme",
+  isrc: "USSB29000129",
+  durationMs: 270_000,
+};
 
 /**
  * Starts `run` with a fresh signal; the request matching `target` hangs, and the signal is
@@ -102,9 +113,9 @@ describe("tools stop their requests when the run is cancelled", () => {
   it("analyzeAudioPreview: the audio service's analysis request", async () => {
     const { sent, outcome } = await cancelDuring(
       (url) => url === `${SERVICE}/analyze`,
-      (signal) =>
-        analyzeAudioPreview.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }, { signal }),
+      (signal) => analyzeAudioPreview.invoke(ICE_ICE_BABY, { signal }),
       (call) => {
+        if (call.url.startsWith("https://api.deezer.com/track/isrc:")) return deezerNoData();
         if (call.url.startsWith("https://api.deezer.com/search/track?")) return deezerHit();
         if (call.url === `${SERVICE}/health`) return json({ status: "ok" });
         return undefined;
@@ -118,36 +129,51 @@ describe("tools stop their requests when the run is cancelled", () => {
     expect(logged.some((line) => line.includes("Analysis failed"))).toBe(false);
   });
 
-  it("analyzeAudioPreview: the Deezer preview search", async () => {
+  it.each([
+    ["the lookup by ISRC", "https://api.deezer.com/track/isrc:"],
+    ["the search", "https://api.deezer.com/search/track?"],
+  ])("analyzeAudioPreview: the Deezer preview, %s", async (_label, target) => {
     const { sent, outcome } = await cancelDuring(
-      (url) => url.startsWith("https://api.deezer.com/search/track?"),
-      (signal) =>
-        analyzeAudioPreview.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }, { signal }),
-    );
-    expect(sent?.signal?.aborted).toBe(true);
-    expect(outcome).toHaveProperty("rejected");
-  });
-
-  it("searchDeezerPreview: the Deezer search", async () => {
-    const { sent, outcome } = await cancelDuring(
-      (url) => url.startsWith("https://api.deezer.com/search/track?"),
-      (signal) => searchDeezerPreview.invoke({ title: "Ice", artist: "Vanilla Ice" }, { signal }),
+      (url) => url.startsWith(target),
+      (signal) => analyzeAudioPreview.invoke(ICE_ICE_BABY, { signal }),
+      (call) =>
+        call.url.startsWith("https://api.deezer.com/track/isrc:") ? deezerNoData() : undefined,
     );
     expect(sent?.signal?.aborted).toBe(true);
     expect(outcome).toHaveProperty("rejected");
   });
 
   it.each([
-    [
-      "searchMultipleTracks",
-      (signal: AbortSignal) =>
-        searchMultipleTracks.invoke({ query: "ice ice baby", limit: 5 }, { signal }),
-    ],
-    [
-      "getTrackDetails",
-      (signal: AbortSignal) =>
-        getTrackDetails.invoke({ trackId: "3Fcfwhm8oRrBvBZ8KGhtea" }, { signal }),
-    ],
+    ["the lookup by ISRC", "https://api.deezer.com/track/isrc:"],
+    ["the lookup by id", "https://api.deezer.com/track/2"],
+    ["the search", "https://api.deezer.com/search/track?"],
+  ])("searchDeezerPreview: %s", async (_label, target) => {
+    const { sent, outcome } = await cancelDuring(
+      (url) => url.startsWith(target),
+      (signal) => searchDeezerPreview.invoke(ICE_ICE_BABY, { signal }),
+      (call) =>
+        call.url.startsWith("https://api.deezer.com/track/isrc:")
+          ? json({
+              id: 1,
+              title: "Ice Ice Baby",
+              isrc: "USSB29000129",
+              duration: 270,
+              artist: { id: 1, name: "Vanilla Ice" },
+              readable: false,
+              alternative: { id: 2 },
+            })
+          : call.url === "https://api.deezer.com/track/2"
+            ? deezerNoData()
+            : undefined,
+    );
+    expect(sent?.url.startsWith(target)).toBe(true);
+    expect(sent?.signal?.aborted).toBe(true);
+    expect(outcome).toHaveProperty("rejected");
+  });
+
+  it.each([
+    ["searchTracks", (signal: AbortSignal) => searchTracks("ice ice baby", 5, signal)],
+    ["fetchTrack", (signal: AbortSignal) => fetchTrack("3Fcfwhm8oRrBvBZ8KGhtea", signal)],
   ])("%s: the Spotify Web API request", async (_name, run) => {
     const { sent, outcome } = await cancelDuring(
       (url) => url.startsWith("https://api.spotify.com/v1/"),

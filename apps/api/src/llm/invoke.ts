@@ -18,7 +18,9 @@
  *      - classifies the answer: completed, incomplete, refused, failed, malformed;
  *      - settles the cost in the spend log (table below) and writes an `llm_usage` row;
  *      - retries only transient failures, after a bounded wait;
- *   4. in record mode writes the answer to a cassette.
+ *   4. in record mode writes the answer to a cassette, with when and from which commit it was
+ *      recorded; a replayed answer reports both (`recording`), or null where the cassette does
+ *      not say.
  *
  * The caller's signal is honoured while waiting for a slot, for the spend log, for the answer
  * and between attempts. An attempt stopped before its request was sent releases its reservation
@@ -51,6 +53,7 @@ import { assertAzureStrict, LLM_SCHEMAS, toJsonSchema } from "@liner-notes/contr
 import type { BaseMessage } from "@langchain/core/messages";
 import type OpenAI from "openai";
 import type { z } from "zod";
+import { runningCommit } from "../config/checkoutCommit.js";
 import {
   LLM_PURPOSES,
   type LlmPurpose,
@@ -60,8 +63,10 @@ import {
 } from "../config/settings.js";
 import { type Reservation, SpendGuard } from "./budget.js";
 import {
+  type CassetteRecording,
   type CassetteUsage,
   cassetteDirFor,
+  cassetteRecording,
   cassetteKey,
   knownSecrets,
   type LlmMessage,
@@ -143,6 +148,8 @@ export interface InvokeResult<T> {
   tier: LlmTier;
   deployment: string;
   usage: InvokeUsage;
+  /** For an answer replayed from a cassette: when and from which commit it was recorded. */
+  recording?: CassetteRecording;
 }
 
 export interface LlmDependencies {
@@ -155,6 +162,11 @@ export interface LlmDependencies {
   now?: () => Date;
   /** Where credential values are looked up for scrubbing (default process.env). */
   env?: NodeJS.ProcessEnv;
+  /**
+   * The commit recorded with each cassette (LLM_CASSETTE=record); default: the process's
+   * (runningCommit). Null when it cannot be read.
+   */
+  commit?: () => string | null;
 }
 
 // =============================================================================
@@ -677,6 +689,11 @@ export function createLlm(deps: LlmDependencies): Llm {
     now,
   });
   const semaphore = new Semaphore(settings.concurrency);
+  // The process's commit (runningCommit: read once per process, at server start when the
+  // analysis routes are loaded), the same one stored with each run; recordings, cassettes
+  // included, are not counted as changes to the code.
+  const recordedCommit = settings.cassette === "record" ? (deps.commit ?? runningCommit)() : null;
+  const recordingCommit = () => recordedCommit;
   const runCalls = new Map<string, number>();
   const secrets = knownSecrets(deps.env ?? process.env, [
     settings.azureApiKey,
@@ -784,6 +801,7 @@ export function createLlm(deps: LlmDependencies): Llm {
         tier,
         deployment,
         usage: { ...entry.usage, usdEst: 0, multiplier, latencyMs, attempts: 1 },
+        recording: cassetteRecording(entry),
       };
     }
 
@@ -833,6 +851,8 @@ export function createLlm(deps: LlmDependencies): Llm {
               messages: normaliseMessages(messages, [options.runId]),
               output: outcome.output,
               usage: outcome.usage,
+              recordedAt: now().toISOString(),
+              commit: recordingCommit(),
             },
             secrets,
             settings.azureApiKey,

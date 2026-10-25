@@ -21,9 +21,16 @@
  * A recorded cassette holds the normalised messages, the parsed answer and the token usage,
  * with every known credential value and token-shaped secret removed; request headers are never
  * recorded, and a cassette that would still contain the API key is not written.
+ *
+ * It also says when it was recorded and from which commit (the checkout's, with "-dirty" for
+ * uncommitted changes; null when it could not be read), so a run replayed from cassettes can say
+ * when and where its answers were recorded. Entries written before these were kept have
+ * neither: they replay as answers whose recording time and commit are unknown, never with a
+ * date filled in.
  */
 
 import { createHash } from "node:crypto";
+import { Timestamp } from "@liner-notes/contract";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { API_ROOT } from "../config/apiPackage.js";
@@ -51,6 +58,32 @@ export interface CassetteEntry {
   messages: LlmMessage[];
   output: unknown;
   usage: CassetteUsage;
+  /** When the answer was recorded (ISO time). Missing in entries written before it was kept. */
+  recordedAt?: string;
+  /**
+   * The commit of the code that recorded it, or null when it could not be read. Missing in
+   * entries written before it was kept.
+   */
+  commit?: string | null;
+}
+
+/** When and from which commit a replayed answer was recorded; null where the entry does not say. */
+export interface CassetteRecording {
+  recordedAt: string | null;
+  commit: string | null;
+}
+
+/**
+ * The recording an entry says it comes from. Only a full UTC date-time, as the recorder writes
+ * it (the contract's Timestamp), is a recording time: anything else ("March 1", a bare date,
+ * which a lenient parser would complete with a time nobody recorded) reads as unknown.
+ */
+export function cassetteRecording(entry: CassetteEntry): CassetteRecording {
+  const { recordedAt, commit } = entry;
+  return {
+    recordedAt: Timestamp.safeParse(recordedAt).success ? (recordedAt as string) : null,
+    commit: typeof commit === "string" && commit.trim() !== "" ? commit.trim() : null,
+  };
 }
 
 export interface CassetteKeyInput {

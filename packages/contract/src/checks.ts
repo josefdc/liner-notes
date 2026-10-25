@@ -346,6 +346,7 @@ export function runIssues(
   } else {
     if (run.recordedAt !== null) issues.push(at(`${path}.recordedAt`, "set on a live run"));
     if (run.commit !== null) issues.push(at(`${path}.commit`, "set on a live run"));
+    if (run.replayed !== undefined) issues.push(at(`${path}.replayed`, "set on a live run"));
   }
   if (run.mode === "replay" && run.analyzerVersion === null && measuredAudio(audio)) {
     issues.push(at(`${path}.analyzerVersion`, "null although audio was measured"));

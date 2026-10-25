@@ -1,7 +1,7 @@
 /**
  * Spotify client with a stubbed Web API: ids are checked before any request, an empty search
- * is `[]`, a 429 is reported as a rate limit, concurrent callers share one token refresh, and a
- * request that never answers times out.
+ * is `[]`, a 429 is a typed rate limit with the wait Spotify asked for, concurrent callers share
+ * one token refresh, and a request that never answers times out.
  */
 
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -15,12 +15,7 @@ vi.hoisted(() => {
   process.env.SPOTIFY_CLIENT_SECRET = "test-secret";
 });
 
-import {
-  getArtistTopTracks,
-  getTrackDetails,
-  searchMultipleTracks,
-  SpotifyAuthManager,
-} from "./spotify.js";
+import { fetchTrack, SpotifyAuthManager, searchTracks } from "./spotify.js";
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const API = "https://api.spotify.com/v1";
@@ -67,13 +62,12 @@ describe("Spotify client", () => {
       `${TRACK_ID}/../../artists/x`,
       `${TRACK_ID}?market=US`,
       "",
-    ])("getTrackDetails(%j) is rejected", async (trackId) => {
+    ])("fetchTrack(%j) is rejected", async (trackId) => {
       const net = stubFetch(() => undefined);
 
-      const result = await getTrackDetails.invoke({ trackId });
+      await expect(fetchTrack(trackId)).rejects.toMatchObject({ kind: "invalid_input" });
 
       expect(net.calls, "no request, not even for a token").toHaveLength(0);
-      expect(result).toMatch(/^Error: /);
     });
 
     it("a valid id reaches exactly /v1/tracks/{id}", async () => {
@@ -81,7 +75,7 @@ describe("Spotify client", () => {
         call.url === `${API}/tracks/${TRACK_ID}` ? json(track()) : undefined,
       );
 
-      const data = JSON.parse(await getTrackDetails.invoke({ trackId: TRACK_ID }));
+      const data = await fetchTrack(TRACK_ID);
 
       expect(apiCalls(net.calls).map((c) => c.url)).toEqual([`${API}/tracks/${TRACK_ID}`]);
       expect(data).toMatchObject({ id: TRACK_ID, title: "Ice Ice Baby", artist: "Vanilla Ice" });
@@ -101,7 +95,7 @@ describe("Spotify client", () => {
         : undefined,
     );
 
-    const data = JSON.parse(await getTrackDetails.invoke({ trackId: TRACK_ID }));
+    const data = await fetchTrack(TRACK_ID);
 
     expect(data).toMatchObject({
       artist: "Ramsey Lewis, Earth, Wind & Fire",
@@ -122,7 +116,7 @@ describe("Spotify client", () => {
         call.url.startsWith(`${API}/search?`) ? json(searchAnswer([withIdentity()])) : undefined,
       );
 
-      const [result] = JSON.parse(await searchMultipleTracks.invoke({ query: "ice ice baby" }));
+      const [result] = await searchTracks("ice ice baby");
 
       expect(result).toMatchObject({
         id: TRACK_ID,
@@ -136,7 +130,7 @@ describe("Spotify client", () => {
         call.url === `${API}/tracks/${TRACK_ID}` ? json(withIdentity()) : undefined,
       );
 
-      const data = JSON.parse(await getTrackDetails.invoke({ trackId: TRACK_ID }));
+      const data = await fetchTrack(TRACK_ID);
 
       expect(data).toMatchObject({ id: TRACK_ID, isrc: "USAT29900609" });
     });
@@ -154,7 +148,7 @@ describe("Spotify client", () => {
           : undefined,
       );
 
-      const results = JSON.parse(await searchMultipleTracks.invoke({ query: "ice ice baby" }));
+      const results = await searchTracks("ice ice baby");
 
       expect(results.map((r: { isrc: unknown }) => r.isrc)).toEqual([null, null, "USAT29900609"]);
     });
@@ -178,9 +172,7 @@ describe("Spotify client", () => {
             : undefined,
         );
 
-        const result = await searchMultipleTracks.invoke({ query: "ice ice baby" });
-
-        const tracks = JSON.parse(result);
+        const tracks = await searchTracks("ice ice baby");
         expect(tracks).toHaveLength(2);
         for (const t of tracks) expect(t).not.toHaveProperty("popularity");
       },
@@ -195,7 +187,7 @@ describe("Spotify client", () => {
         call.url.startsWith(`${API}/search?`) ? json(searchAnswer([withIdentity()])) : undefined,
       );
       try {
-        await searchMultipleTracks.invoke({ query: "ice ice baby" });
+        await searchTracks("ice ice baby");
 
         const recorded = readdirSync(dir)
           .map((f) => readFileSync(join(dir, f), "utf8"))
@@ -211,27 +203,25 @@ describe("Spotify client", () => {
     });
   });
 
-  it("an empty search returns [] as JSON", async () => {
+  it("an empty search is []", async () => {
     spotify((call) => (call.url.startsWith(`${API}/search?`) ? json(searchAnswer([])) : undefined));
 
-    const result = await searchMultipleTracks.invoke({ query: "zzzz no such song", limit: 5 });
-
-    expect(result).toBe("[]");
+    expect(await searchTracks("zzzz no such song", 5)).toEqual([]);
   });
 
-  it("a search returns the candidates as a JSON list", async () => {
+  it("a search returns the candidates as a list", async () => {
     spotify((call) =>
       call.url.startsWith(`${API}/search?`) ? json(searchAnswer([track()])) : undefined,
     );
 
-    const result = JSON.parse(await searchMultipleTracks.invoke({ query: "ice ice baby" }));
+    const result = await searchTracks("ice ice baby");
 
     expect(result).toEqual([
       expect.objectContaining({ id: TRACK_ID, title: "Ice Ice Baby", previewUrl: null }),
     ]);
   });
 
-  it("a 429 is reported as a rate limit with the wait Spotify asked for", async () => {
+  it("a 429 is a typed rate limit with the wait Spotify asked for", async () => {
     spotify((call) =>
       call.url.startsWith(`${API}/search?`)
         ? json(
@@ -244,13 +234,12 @@ describe("Spotify client", () => {
         : undefined,
     );
 
-    const result = await searchMultipleTracks.invoke({ query: "ice ice baby" });
-
-    expect(result).toMatch(/^Error: /);
-    expect(result).toContain("429");
-    expect(result).toContain("retry after 3 s");
-    // The scout retries on this text (scoutNode: "Rate limit" or "429").
-    expect(result.includes("Rate limit") || result.includes("429")).toBe(true);
+    // A typed rate limit with the wait: the scout waits it out (scoutNode, Retry-After).
+    await expect(searchTracks("ice ice baby")).rejects.toMatchObject({
+      source: "spotify",
+      kind: "rate_limited",
+      retryAfterMs: 3000,
+    });
   });
 
   it("concurrent callers share one token refresh", async () => {
@@ -266,25 +255,23 @@ describe("Spotify client", () => {
       return call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined;
     });
 
-    const both = Promise.all([
-      getTrackDetails.invoke({ trackId: TRACK_ID }),
-      getTrackDetails.invoke({ trackId: TRACK_ID }),
-    ]);
+    const both = Promise.all([fetchTrack(TRACK_ID), fetchTrack(TRACK_ID)]);
     await vi.waitFor(() => expect(net.calls.length).toBeGreaterThan(0));
     releaseToken();
     const results = await both;
 
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(1);
-    for (const r of results) expect(JSON.parse(r).id).toBe(TRACK_ID);
+    for (const r of results) expect(r.id).toBe(TRACK_ID);
   });
 
   it("a request that never answers times out", { timeout: 3000 }, async () => {
     process.env.SOURCE_TIMEOUT_MS = "50";
     spotify((call) => (call.url.startsWith(`${API}/search?`) ? never(call) : undefined));
 
-    const result = await searchMultipleTracks.invoke({ query: "ice ice baby" });
-
-    expect(result).toMatch(/^Error: .*no answer within 50 ms/);
+    await expect(searchTracks("ice ice baby")).rejects.toMatchObject({
+      kind: "timeout",
+      message: expect.stringContaining("no answer within 50 ms"),
+    });
   });
 
   it("a 401 refreshes the token once and retries", async () => {
@@ -297,21 +284,10 @@ describe("Spotify client", () => {
         : json(searchAnswer([track()]));
     });
 
-    const result = JSON.parse(await searchMultipleTracks.invoke({ query: "ice ice baby" }));
+    const result = await searchTracks("ice ice baby");
 
     expect(result).toHaveLength(1);
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
-  });
-
-  it("artist top tracks (removed by Spotify) makes no request and reports unavailable", async () => {
-    const net = stubFetch(() => undefined);
-
-    const data = JSON.parse(
-      await getArtistTopTracks.invoke({ artistId: "7GaxyUddsPok8BuhxN6OUW" }),
-    );
-
-    expect(net.calls).toHaveLength(0);
-    expect(data).toMatchObject({ topTracks: [], found: false, unavailable: true });
   });
 
   it("caches the token while it is valid", async () => {
@@ -319,8 +295,8 @@ describe("Spotify client", () => {
       call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined,
     );
 
-    await getTrackDetails.invoke({ trackId: TRACK_ID });
-    await getTrackDetails.invoke({ trackId: TRACK_ID });
+    await fetchTrack(TRACK_ID);
+    await fetchTrack(TRACK_ID);
 
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(1);
   });
@@ -333,8 +309,8 @@ describe("Spotify client", () => {
       return call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined;
     });
 
-    await getTrackDetails.invoke({ trackId: TRACK_ID });
-    await getTrackDetails.invoke({ trackId: TRACK_ID });
+    await fetchTrack(TRACK_ID);
+    await fetchTrack(TRACK_ID);
 
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
   });
@@ -349,7 +325,7 @@ describe("Spotify client", () => {
       call.url.startsWith(`${API}/search?`) ? json(searchAnswer([])) : undefined,
     );
 
-    await searchMultipleTracks.invoke({ query: "ice ice baby", limit });
+    await searchTracks("ice ice baby", limit);
 
     const search = apiCalls(net.calls)[0];
     expect(new URL(search.url).searchParams.get("limit")).toBe(sent);
@@ -377,8 +353,8 @@ describe("Spotify client", () => {
       return json(track());
     });
 
-    const first = getTrackDetails.invoke({ trackId: TRACK_ID });
-    const second = getTrackDetails.invoke({ trackId: TRACK_ID });
+    const first = fetchTrack(TRACK_ID);
+    const second = fetchTrack(TRACK_ID);
     await first;
     releaseLate();
     await second;
@@ -402,7 +378,7 @@ describe("Spotify client", () => {
       return call.url.startsWith(`${API}/search?`) ? json(searchAnswer([track()])) : undefined;
     });
     try {
-      await searchMultipleTracks.invoke({ query: "ice ice baby" });
+      await searchTracks("ice ice baby");
 
       const recorded = readdirSync(dir)
         .map((f) => readFileSync(join(dir, f), "utf8"))

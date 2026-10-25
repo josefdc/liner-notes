@@ -5,6 +5,9 @@
  *                  ↑
  *            (interrupt if ambiguous)
  *
+ * The scout (for a track it selects) and the clarification (for a picked one) end the run with
+ * the result stored for that track, when there is one.
+ *
  * The engineer and the historian run in parallel and meet at the composer through one
  * list-form edge, so the composer runs once, after both, however many steps either branch
  * takes. No node has a retry policy: every node handles its own failures (the scout and the
@@ -20,7 +23,7 @@
 
 import type { BaseCheckpointSaver, BaseStore, LangGraphRunnableConfig } from "@langchain/langgraph";
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { PreviewFreeSqliteSaver } from "../store/checkpointer.js";
 import { getDb } from "../store/database.js";
 import { SqliteStore } from "../store/store.js";
 import {
@@ -48,6 +51,7 @@ function routeAfterScout(state: SonicAgentStateType): string[] | string {
 }
 
 function routeAfterClarification(state: SonicAgentStateType): string[] | string {
+  if (state.trackData) return END; // A stored result for the picked track
   if (state.error) return END;
   return ["engineer", "historian"];
 }
@@ -106,11 +110,12 @@ export function buildSonicAgentGraph({
   return workflow.compile({ checkpointer, store });
 }
 
-// Persistent checkpointer — survives server restarts for HITL resume
-let globalCheckpointer: SqliteSaver | null = null;
-function getCheckpointer(): SqliteSaver {
+// Persistent checkpointer — survives server restarts for HITL resume. It never saves preview
+// URLs (store/checkpointer.ts).
+let globalCheckpointer: PreviewFreeSqliteSaver | null = null;
+function getCheckpointer(): PreviewFreeSqliteSaver {
   if (!globalCheckpointer) {
-    globalCheckpointer = new SqliteSaver(getDb());
+    globalCheckpointer = new PreviewFreeSqliteSaver(getDb());
   }
   return globalCheckpointer;
 }

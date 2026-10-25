@@ -139,6 +139,31 @@ describe('useAgent stream errors', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('asks for a clicked suggestion by its track id, and a typed search by text only', () => {
+    const hook = renderHook(() => useAgent());
+    act(() => {
+      hook.result.current.analyze('Hurt Johnny Cash', { trackId: '28cnXtME493VX9NOw9cIUh' });
+    });
+    expect(lastStream().url).toContain(
+      '/api/analyze/stream?query=Hurt%20Johnny%20Cash&trackId=28cnXtME493VX9NOw9cIUh',
+    );
+
+    // A retry asks for the same track again.
+    lastStream().fail();
+    act(() => hook.result.current.retry());
+    expect(lastStream().url).toContain('&trackId=28cnXtME493VX9NOw9cIUh');
+
+    act(() => {
+      hook.result.current.analyze('Hurt');
+    });
+    expect(lastStream().url).not.toContain('trackId');
+    // An id that is not a Spotify track id is not sent.
+    act(() => {
+      hook.result.current.analyze('Hurt', { trackId: 'c1' });
+    });
+    expect(lastStream().url).not.toContain('trackId');
+  });
+
   it('retries by opening a new stream for the same query', () => {
     const { result } = startAnalysis('Hurt');
     lastStream().fail();
@@ -228,6 +253,56 @@ describe('useAgent track picker', () => {
     expect(hook.result.current.candidates?.map((c) => c.id)).toEqual(['c1', 'c2']);
   });
 
+  it.each([
+    ['click', '&pickedBy=click'],
+    ['countdown', '&pickedBy=countdown'],
+  ] as const)('says the row was picked by %s when it resumes', async (pickedBy, param) => {
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', pickedBy);
+    });
+
+    const [resume] = streams().filter((s) => s.url.includes('/resume'));
+    expect(resume.url).toContain(`selectedTrackId=c2${param}`);
+  });
+
+  it('without a thread, asks for the picked row by id with the searched text and how it was picked', async () => {
+    const hook = startAnalysis('Hurt');
+    const analysis = lastStream();
+    const rows = candidates.map((c, i) => ({ ...c, id: `28cnXtME493VX9NOw9cIU${i}` }));
+    analysis.send({ type: 'connected', threadId: '' });
+    analysis.send({ ...interrupt(rows), threadId: '' });
+
+    await act(async () => {
+      await hook.result.current.selectCandidate(rows[1].id, 'countdown');
+    });
+
+    expect(lastStream().url).toContain(
+      `/api/analyze/stream?query=Hurt&trackId=${rows[1].id}&pickedBy=countdown`,
+    );
+    // A retry asks the same way.
+    lastStream().fail();
+    act(() => hook.result.current.retry());
+    expect(lastStream().url).toContain(`&trackId=${rows[1].id}&pickedBy=countdown`);
+  });
+
+  it('without a thread, ends with an error for a row that has no Spotify id', async () => {
+    const hook = startAnalysis('Hurt');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: '' });
+    analysis.send({ ...interrupt(), threadId: '' });
+    const opened = streams().length;
+
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+
+    // The ambiguous text is not searched again.
+    expect(streams()).toHaveLength(opened);
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.error).toContain('could not be found again');
+  });
+
   it('opens one resume per picker and closes the analysis stream', async () => {
     const { hook, analysis } = openPicker();
     await act(async () => {
@@ -240,6 +315,149 @@ describe('useAgent track picker', () => {
     expect(resumes).toHaveLength(1);
     expect(resumes[0].url).toContain('threadId=t1&selectedTrackId=c2');
     expect(analysis.closed).toBe(true);
+  });
+
+  /** GET /api/replays answers with these recordings. */
+  const recordings = (...replays: Array<{ id: string; title: string; artist: string }>) =>
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            replays: replays.map((r) => ({ ...r, album: 'A', recordedAt: '2026-10-22T14:03:00Z' })),
+          }),
+          { status: 200 },
+        ),
+    );
+  const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  it('replays the recording of the very track picked when its resume is refused', async () => {
+    // Recorded under its own title, which the query names alone.
+    recordings({ id: 'c2', title: 'Hurt (Recorded)', artist: 'Nine Inch Nails' });
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    const resume = lastStream();
+    resume.send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    await settle();
+
+    const search = lastStream();
+    expect(search).not.toBe(resume);
+    expect(search.url).toContain('/analyze/stream?query=Hurt%20(Recorded)%20Nine%20Inch%20Nails');
+    expect(hook.result.current.status).not.toBe('error');
+    // The reason stays in the log of the new run.
+    expect(hook.result.current.logs.map((log) => log.message)).toContain(
+      'Live analysis is unavailable: replaying the recording of the track you picked.',
+    );
+    search.send({ type: 'complete', data: track });
+    expect(hook.result.current.status).toBe('complete');
+  });
+
+  it('never shows another take than the one picked', async () => {
+    // c1 shares the picked track's title, but only c1 is recorded.
+    recordings({ id: 'c1', title: 'Hurt', artist: 'Nine Inch Nails' });
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    lastStream().send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    await settle();
+    expect(streams()).toHaveLength(2);
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.errorCode).toBe('budget_exhausted');
+
+    // And when the recordings cannot be listed: the refusal as well.
+    fetchSpy.mockImplementation(async () => new Response('{}', { status: 503 }));
+    const second = openPicker();
+    await act(async () => {
+      await second.hook.result.current.selectCandidate('c2');
+    });
+    lastStream().send({ type: 'error', code: 'live_disabled', error: 'off' });
+    await settle();
+    expect(second.hook.result.current.errorCode).toBe('live_disabled');
+  });
+
+  it('does not show a replayed result of another track than the one asked for', async () => {
+    recordings({ id: 'c2', title: 'Hurt', artist: 'Nine Inch Nails' });
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2');
+    });
+    lastStream().send({ type: 'error', code: 'budget_exhausted', error: 'paused' });
+    await settle();
+    lastStream().send({ type: 'complete', data: { ...track, id: 'someone-else' } });
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.trackData).toBeNull();
+  });
+
+  it('says a run is a replay from the replay notice on, and ends it as a replay', () => {
+    const { result } = startAnalysis('Hurt Nine Inch Nails');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    expect(result.current.isReplay).toBe(false);
+    analysis.send({ type: 'status', node: 'replay', code: 'SYS-INIT', message: 'Replaying' });
+    expect(result.current.isReplay).toBe(true);
+    analysis.send({
+      type: 'complete',
+      data: {
+        ...track,
+        run: {
+          id: 't1',
+          mode: 'replay',
+          recordedAt: '2026-10-22T14:03:00.000Z',
+          commit: 'abc1234',
+          analyzerVersion: null,
+        },
+      },
+    });
+    expect(result.current.isReplay).toBe(true);
+    expect(result.current.logs.at(-1)?.message).toBe(
+      'Recorded analysis replayed. Nothing was analysed live.',
+    );
+    expect(completeLogs(result.current.logs)).toBe(0);
+    act(() => {
+      result.current.analyze('Another');
+    });
+    expect(result.current.isReplay).toBe(false);
+  });
+
+  it('does not take a run whose model answers came from stored answers for a recording', () => {
+    const { result } = startAnalysis('Hurt Nine Inch Nails');
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    // A live run in development with model cassettes: "replay", but no recording time or commit.
+    analysis.send({
+      type: 'complete',
+      data: {
+        ...track,
+        run: { id: 't1', mode: 'replay', recordedAt: null, commit: null, analyzerVersion: null },
+      },
+    });
+    expect(result.current.isReplay).toBe(false);
+    expect(completeLogs(result.current.logs)).toBe(1);
+
+    // Stored answers that say when and where they were recorded: still not a recording.
+    act(() => {
+      result.current.analyze('Hurt Nine Inch Nails');
+    });
+    const again = lastStream();
+    again.send({ type: 'connected', threadId: 't1' });
+    again.send({
+      type: 'complete',
+      data: {
+        ...track,
+        run: {
+          id: 't1',
+          mode: 'replay',
+          replayed: 'model_answers',
+          recordedAt: '2026-03-01T10:00:00.000Z',
+          commit: 'abc123def456',
+          analyzerVersion: null,
+        },
+      },
+    });
+    expect(result.current.isReplay).toBe(false);
   });
 
   it("does not let the analysis stream's late done close the resume stream", async () => {
@@ -388,6 +606,64 @@ describe('useAgent factoid stream', () => {
     await pending;
     expect(onUnavailable.mock.calls).toEqual([['rate_limited'], ['budget_exhausted']]);
     expect(onFactoid).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a replayed result whose recording is no longer served', async () => {
+    const { result } = renderHook(() => useAgent());
+    const onUnavailable = vi.fn();
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      [],
+      () => {},
+      undefined,
+      onUnavailable,
+      'replay',
+    );
+    lastStream().send({ type: 'error', code: 'not_found', error: 'gone' });
+    lastStream().send({ type: 'done' });
+    await pending;
+    expect(onUnavailable.mock.calls).toEqual([['not_found']]);
+  });
+
+  it("sends the result's run mode, so more facts stay on its side", async () => {
+    const { result } = renderHook(() => useAgent());
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      ['f1'],
+      () => {},
+      undefined,
+      undefined,
+      'replay',
+    );
+    const decrypt = lastStream();
+    expect(new URL(decrypt.url, 'http://x').searchParams.get('mode')).toBe('replay');
+    decrypt.send({ type: 'done' });
+    await pending;
+    const older = result.current.decryptMoreFactoidsStream('Hurt', 'NIN', [], () => {});
+    expect(new URL(lastStream().url, 'http://x').searchParams.has('mode')).toBe(false);
+    lastStream().send({ type: 'done' });
+    await older;
+  });
+
+  it('reports live calls switched off (a server that replays recordings only)', async () => {
+    const { result } = renderHook(() => useAgent());
+    const onUnavailable = vi.fn();
+    const pending = result.current.decryptMoreFactoidsStream(
+      'Hurt',
+      'NIN',
+      [],
+      () => {},
+      undefined,
+      onUnavailable,
+    );
+    const decrypt = lastStream();
+    decrypt.send({ type: 'error', code: 'live_disabled', error: 'off' });
+    decrypt.send({ type: 'done' });
+
+    await pending;
+    expect(onUnavailable.mock.calls).toEqual([['live_disabled']]);
   });
 
   it('resolves on done', async () => {

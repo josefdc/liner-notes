@@ -87,4 +87,4 @@ playwright-report/
 test-results/
 
 # Web app build the browser tests serve
-apps/web/dist-e2e/
+apps/web/dist-e2e*/

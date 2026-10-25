@@ -16,7 +16,7 @@
 # Never send these, even inside allowed directories
 **/node_modules
 **/dist
-**/dist-e2e
+**/dist-e2e*
 **/.env*
 **/*.md
 **/*.test.ts

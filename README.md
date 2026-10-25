@@ -159,7 +159,7 @@ npm run typecheck      # TypeScript in every workspace
 npm run guard:honest   # ratcheted counts (see below); lower the baselines with -- --update
 npm test               # Vitest: API, web and script tests
 npm run build && npm run check:css   # the built CSS is Tailwind output with no invalid values
-npm run test:e2e       # Playwright against a production build of the web app (vite preview) with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
+npm run test:e2e       # Playwright against a development build of the web app served by vite preview with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
 cd services/audio && uv run ruff check . && uv run ruff format --check .
 cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
 ```

@@ -240,7 +240,7 @@
       },
       "queryMatch": {
         "default": null,
-        "description": "How this run's search text matched the track; null or absent when unknown",
+        "description": "How this run's search text matched the track; null or absent when unknown, or when the user chose the track with a click",
         "anyOf": [
           { "type": "string", "enum": ["exact", "partial", "artist", "none"] },
           { "type": "null" }
@@ -629,7 +629,7 @@
       },
       "queryMatch": {
         "default": null,
-        "description": "How this run's search text matched the track; null or absent when unknown",
+        "description": "How this run's search text matched the track; null or absent when unknown, or when the user chose the track with a click",
         "anyOf": [
           { "type": "string", "enum": ["exact", "partial", "artist", "none"] },
           { "type": "null" }

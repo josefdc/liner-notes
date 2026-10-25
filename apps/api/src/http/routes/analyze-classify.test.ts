@@ -1,32 +1,30 @@
 /**
- * How the analyze route reads the scout's error: only the scout's exact outcomes count. The
- * scout reports "No tracks found" when Spotify answered `[]`, text starting "Error: " when the
- * Spotify client could not answer, and "Scout error: …" when something threw.
+ * How the analyze route reads why a run failed: from the scout's typed outcome
+ * (`scoutFailure`), never from the error text.
  */
 
 import { describe, expect, it } from "vitest";
-import { classifyNodeError } from "./analyze.js";
+import { failureOf } from "./analyze.js";
 
-describe("classifyNodeError", () => {
+describe("failureOf", () => {
   it.each([
-    ["No tracks found", "no_match"],
-    ["Error: searching for tracks failed: spotify: HTTP 503", "upstream_unavailable"],
-    ["Error: Rate limited by Spotify (429) while searching for tracks", "upstream_unavailable"],
-    ["Scout error: fetch failed", "upstream_unavailable"],
-    // Text the old patterns accepted but the scout never sends now.
-    ['No tracks found for "x".', "failed"],
-    ["No track data available", "failed"],
-    ["Error searching for tracks: 503", "failed"],
-    // The prefix is anchored at the start.
-    ["Unexpected Error: something", "failed"],
-    [" Error: something", "failed"],
-    ["secret-odd-detail", "failed"],
-  ])("scout error %j is %s", (error, code) => {
-    expect(classifyNodeError("scout", error)).toBe(code);
+    [{ kind: "no_match" }, "no_match"],
+    [{ kind: "upstream_unavailable" }, "upstream_unavailable"],
+    [{ kind: "rate_limited", retryAfterMs: 30_000 }, "upstream_unavailable"],
+    [{ kind: "rate_limited", retryAfterMs: null }, "upstream_unavailable"],
+  ] as const)("the scout's outcome %j is %s", (scoutFailure, code) => {
+    expect(failureOf("scout", { scoutFailure })).toBe(code);
+  });
+
+  it("reads no text: a scout error without a typed outcome is a plain failure", () => {
+    // The texts the route used to match.
+    for (const error of ["No tracks found", "Error: spotify: HTTP 503", "Scout error: x"]) {
+      expect(failureOf("scout", { error } as never)).toBe("failed");
+    }
   });
 
   it("an error from another node is a plain failure", () => {
-    expect(classifyNodeError("historian", "No tracks found")).toBe("failed");
-    expect(classifyNodeError("composer", "Error: model unavailable")).toBe("failed");
+    expect(failureOf("historian", { scoutFailure: { kind: "no_match" } })).toBe("failed");
+    expect(failureOf("composer", {})).toBe("failed");
   });
 });

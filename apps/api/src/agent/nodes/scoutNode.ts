@@ -1,20 +1,125 @@
 /**
  * Scout Node — Searches Spotify, picks the result that matches the query, and returns the
- * candidates instead when the user has to choose (see trackMatch.ts). A result stored for the
- * picked track is served without composing it again (storedResults.ts): the search always runs
- * first, so what is served is about the track this query finds now.
+ * candidates instead when the user has to choose (see trackMatch.ts). A request for a track by
+ * its Spotify id (a clicked suggestion) reads that track instead of searching. A result stored
+ * for the chosen track is served without composing it again (storedResults.ts): the search
+ * always runs first, so what is served is about the track this query finds now.
+ *
+ * When no track is found the scout says why as a type (`scoutFailure`): nothing matched, Spotify
+ * kept rate limiting, or Spotify could not answer. Spotify's errors are typed (sources/http.ts);
+ * a transient one is tried again, after the wait a rate limit asks for (Retry-After) when it
+ * says one, up to MAX_RETRY_WAIT_MS, else after a short backoff.
  */
 
 import { getStore } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { SearchCandidate as SearchCandidateSchema } from "@liner-notes/contract";
-import { searchMultipleTracks } from "../../sources/spotify.js";
-import { isAbortError, withRetry, TransientError } from "../errors.js";
+import { isSourceError } from "../../sources/http.js";
+import { fetchTrack, searchTracks } from "../../sources/spotify.js";
+import { isAbortError, retryAfterWait, withRetry } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
-import type { SonicAgentStateType, SpotifyData } from "../state.js";
+import type { ScoutFailure, SonicAgentStateType, SpotifyData } from "../state.js";
 import type { SearchCandidate } from "../schema.js";
 import { readStoredResult, servedResult } from "../storedResults.js";
 import { needsChoice, rankTracks } from "../trackMatch.js";
+
+/** The longest Retry-After the scout waits out before trying Spotify again. */
+export const MAX_RETRY_WAIT_MS = 10_000;
+
+type Update = Partial<SonicAgentStateType>;
+
+/** A Spotify call with the scout's retries: transient errors, Retry-After honoured. */
+function withSpotifyRetry<T>(fn: () => Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  return withRetry(fn, {
+    signal,
+    retryDelay: (error) => retryAfterWait(error, MAX_RETRY_WAIT_MS),
+  });
+}
+
+/** Why a Spotify call failed, as the scout reports it. */
+function failureOf(error: unknown): ScoutFailure {
+  if (isSourceError(error, "rate_limited")) {
+    return { kind: "rate_limited", retryAfterMs: error.retryAfterMs ?? null };
+  }
+  return { kind: "upstream_unavailable" };
+}
+
+/** The scout's update for a run that found no track. */
+function failed(failure: ScoutFailure, error: string, status: string): Update {
+  console.warn(`⚠️ [Scout] ${error}`);
+  return { error, scoutFailure: failure, statusMessages: [status] };
+}
+
+/** A selected track, served from the store when a result is stored for it. */
+async function selectedTrack(
+  selected: Update & { spotifyData: SpotifyData },
+  config: LangGraphRunnableConfig,
+  runtime: AgentRuntime,
+): Promise<Update> {
+  const track = selected.spotifyData;
+  const stored = await readStoredResult(getStore(), track.id, runtime.now());
+  config.signal?.throwIfAborted();
+  if (stored) {
+    console.log("📦 [Scout] Stored result for:", track.id);
+    const trackData = servedResult(stored, selected.queryMatch ?? null);
+    config.writer?.({
+      type: "status",
+      code: "NET-200",
+      message: "Cache hit — returning stored analysis",
+      node: "scout",
+      timestamp: timestampOf(runtime),
+    });
+    config.writer?.({ type: "complete", data: trackData });
+    return { ...selected, trackData };
+  }
+
+  config.writer?.({
+    type: "status",
+    code: "SPOTIFY-FOUND",
+    message: `Target acquired: "${track.title}" // ${track.artist}`,
+    node: "scout",
+    timestamp: timestampOf(runtime),
+  });
+  console.log("✅ [Scout] Selected:", track.title, "by", track.artist);
+  return { ...selected, statusMessages: [`✅ Found: "${track.title}" by ${track.artist}`] };
+}
+
+/**
+ * The track the request asked for by id. The user chose it themselves (a click on a
+ * suggestion), so no search text decided it: it carries no search match. A track Spotify does
+ * not have (404) is "no match".
+ */
+async function requestedTrack(
+  trackId: string,
+  config: LangGraphRunnableConfig,
+  runtime: AgentRuntime,
+): Promise<Update> {
+  console.log("🔍 [Scout] Reading the requested track:", trackId);
+  let track: SpotifyData;
+  try {
+    track = await withSpotifyRetry(() => fetchTrack(trackId, config.signal), config.signal);
+  } catch (error) {
+    if (config.signal?.aborted || isAbortError(error)) throw error;
+    const missing =
+      isSourceError(error, "invalid_input") ||
+      (isSourceError(error, "http") && error.status === 404);
+    return missing
+      ? failed({ kind: "no_match" }, `No Spotify track ${trackId}`, "❌ Track not found")
+      : failed(failureOf(error), `Spotify track ${trackId} not read`, "❌ Error reading Spotify");
+  }
+  return selectedTrack(
+    {
+      spotifyData: track,
+      selectedTrackId: track.id,
+      isrc: track.isrc ?? null,
+      queryMatch: null,
+      selectedBy: "user",
+      pickedBy: "click",
+    },
+    config,
+    runtime,
+  );
+}
 
 export async function scoutNode(
   state: SonicAgentStateType,
@@ -31,44 +136,31 @@ export async function scoutNode(
     timestamp: timestampOf(runtime),
   });
 
+  if (state.requestedTrackId) return requestedTrack(state.requestedTrackId, config, runtime);
+
   console.log("🔍 [Scout] Searching for:", state.songQuery);
 
   try {
-    // Search for multiple tracks to detect ambiguity (with retry on transient failures)
-    const searchResult = await withRetry(
-      async () => {
-        const result = await searchMultipleTracks.invoke(
-          // As many results as Spotify gives (10): a version or a cover ranked high by Spotify
-          // must not push the original recording out of the choice.
-          { query: state.songQuery, limit: 10 },
-          { signal: config.signal },
-        );
-        // Spotify tools return error strings, not thrown exceptions
-        if (
-          result.startsWith("Error") &&
-          (result.includes("Rate limit") || result.includes("429"))
-        ) {
-          throw new TransientError(result);
-        }
-        return result;
-      },
-      { signal: config.signal },
-    );
-
-    if (searchResult.startsWith("Error") || searchResult.startsWith("No track")) {
-      return {
-        error: searchResult,
-        statusMessages: ["❌ Could not find song on Spotify"],
-      };
+    let tracks: SpotifyData[];
+    try {
+      // As many results as Spotify gives (10): a version or a cover ranked high by Spotify must
+      // not push the original recording out of the choice.
+      tracks = await withSpotifyRetry(
+        () => searchTracks(state.songQuery, 10, config.signal),
+        config.signal,
+      );
+    } catch (error) {
+      if (config.signal?.aborted || isAbortError(error)) throw error;
+      const why = error instanceof Error ? error.message : String(error);
+      return failed(
+        failureOf(error),
+        `Spotify search failed: ${why}`,
+        "❌ Error searching Spotify",
+      );
     }
 
-    const tracks = JSON.parse(searchResult) as SpotifyData[];
-
     if (tracks.length === 0) {
-      return {
-        error: "No tracks found",
-        statusMessages: ["❌ No matching songs found"],
-      };
+      return failed({ kind: "no_match" }, "No tracks found", "❌ No matching songs found");
     }
 
     // Spotify gives this app no popularity, so the results are judged on how their title and
@@ -142,45 +234,21 @@ export async function scoutNode(
     }
 
     // Unambiguous: auto-select top result
-    const selected = {
-      spotifyData: topTrack,
-      selectedTrackId: topTrack.id,
-      isrc: topTrack.isrc ?? null,
-      queryMatch,
-      selectedBy: "match" as const,
-    };
-    const stored = await readStoredResult(getStore(), topTrack.id, runtime.now());
-    config.signal?.throwIfAborted();
-    if (stored) {
-      console.log("📦 [Scout] Stored result for:", topTrack.id);
-      const trackData = servedResult(stored, queryMatch);
-      writer?.({
-        type: "status",
-        code: "NET-200",
-        message: "Cache hit — returning stored analysis",
-        node: "scout",
-        timestamp: timestampOf(runtime),
-      });
-      writer?.({ type: "complete", data: trackData });
-      return { ...selected, trackData };
-    }
-
-    writer?.({
-      type: "status",
-      code: "SPOTIFY-FOUND",
-      message: `Target acquired: "${topTrack.title}" // ${topTrack.artist}`,
-      node: "scout",
-      timestamp: timestampOf(runtime),
-    });
-    console.log("✅ [Scout] Auto-selected:", topTrack.title, "by", topTrack.artist);
-
-    return {
-      ...selected,
-      statusMessages: [`✅ Found: "${topTrack.title}" by ${topTrack.artist}`],
-    };
+    return await selectedTrack(
+      {
+        spotifyData: topTrack,
+        selectedTrackId: topTrack.id,
+        isrc: topTrack.isrc ?? null,
+        queryMatch,
+        selectedBy: "match",
+      },
+      config,
+      runtime,
+    );
   } catch (error) {
     // A cancelled run stops here instead of reporting a search error.
     if (config.signal?.aborted || isAbortError(error)) throw error;
+    // A bug, not a Spotify answer: the run fails as a plain failure.
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("❌ [Scout] Error:", message);
     return {

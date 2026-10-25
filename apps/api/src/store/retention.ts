@@ -9,8 +9,7 @@
  *   whose activity time cannot be read (a checkpoint not stored as JSON and no run record) is
  *   kept.
  * - Store items (LangGraph BaseStore) are deleted when not updated within the store retention,
- *   except the ["disambiguation"] namespace: track choices saved by earlier versions. Nothing reads
- *   or writes them any more; they are kept until choices are remembered per user again.
+ *   whatever their namespace.
  * - Run records are deleted when they finished (or, if never finished, started) longer ago than
  *   the run retention, and the events their streams sent with them.
  * - Stored stream events are deleted once they were sent longer ago than the event retention,
@@ -42,9 +41,6 @@ export const DEFAULT_RETENTION: RetentionPolicy = {
   runRetentionMs: 30 * DAY_MS,
   runEventRetentionMs: 7 * DAY_MS,
 };
-
-/** Store namespaces that age pruning never touches (see the comment at the top). */
-const KEPT_NAMESPACES = [JSON.stringify(["disambiguation"])];
 
 function setting(name: string, raw: string | undefined, fallback: number, minimum: number): number {
   if (raw == null || raw.trim() === "") return fallback;
@@ -177,10 +173,9 @@ export function pruneDatabase(
 
     // store_items timestamps are ISO-8601 strings in UTC, which compare correctly as text.
     const storeCutoff = new Date(now - policy.storeRetentionMs).toISOString();
-    const kept = KEPT_NAMESPACES.map(() => "?").join(", ");
     result.storeItems = db
-      .prepare(`DELETE FROM store_items WHERE updated_at < ? AND namespace NOT IN (${kept})`)
-      .run(storeCutoff, ...KEPT_NAMESPACES).changes;
+      .prepare("DELETE FROM store_items WHERE updated_at < ?")
+      .run(storeCutoff).changes;
 
     // A run's events go with it; events older than the event retention go whatever their run
     // (this also removes the events of a run whose record could not be written).

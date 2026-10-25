@@ -5,7 +5,8 @@
     "type": "object",
     "properties": {
       "threadId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" },
-      "selectedTrackId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" }
+      "selectedTrackId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" },
+      "pickedBy": { "type": "string", "enum": ["click", "countdown"] }
     },
     "required": ["threadId", "selectedTrackId"]
   },
@@ -15,7 +16,8 @@
     "type": "object",
     "properties": {
       "threadId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" },
-      "selectedTrackId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" }
+      "selectedTrackId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,100}$" },
+      "pickedBy": { "type": "string", "enum": ["click", "countdown"] }
     },
     "required": ["threadId", "selectedTrackId"],
     "additionalProperties": false

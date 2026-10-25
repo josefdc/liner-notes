@@ -18,7 +18,9 @@ import { runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tools = vi.hoisted(() => {
-  const tool = (answer: () => string) => ({ invoke: vi.fn(async () => answer()) });
+  const tool = (answer: () => string) => ({
+    invoke: vi.fn(async (..._args: unknown[]) => answer()),
+  });
   const track = {
     id: "3Fcfwhm8oRrBvBZ8KGhtea",
     title: "Ice Ice Baby",
@@ -62,9 +64,11 @@ const tools = vi.hoisted(() => {
     getListenBrainzSimilarArtists: tool(none),
   };
 });
+// The scout's search: the stub answers as the tool would, and the client gives its tracks.
 vi.mock("../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/spotify.js")>()),
-  searchMultipleTracks: tools.searchMultipleTracks,
+  searchTracks: async (query: string, limit: number, signal?: AbortSignal) =>
+    JSON.parse(await tools.searchMultipleTracks.invoke({ query, limit }, { signal })),
 }));
 vi.mock("../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/audio.js")>()),

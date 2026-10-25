@@ -89,9 +89,22 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
+ * How long to wait before trying a failed call again, when the source said: a rate limit's
+ * `retryAfterMs` (Retry-After) up to `maxWaitMs`. A longer wait than that is not waited out:
+ * null, give up now. undefined when the source said nothing (the caller's backoff applies).
+ */
+export function retryAfterWait(error: unknown, maxWaitMs: number): number | null | undefined {
+  if (!isSourceError(error, "rate_limited") || error.retryAfterMs === undefined) return undefined;
+  return error.retryAfterMs <= maxWaitMs ? Math.max(0, error.retryAfterMs) : null;
+}
+
+/**
  * Retries `fn` on transient errors, with exponential backoff; any other error is thrown at
  * once. After maxAttempts the last error is thrown, for the caller to handle. A cancelled run
  * (`signal` aborted) starts no attempt and cuts the wait short.
+ *
+ * `retryDelay` may choose the wait for an error instead of the backoff (a source's
+ * Retry-After): a number of milliseconds, null to give up at once, or undefined for the backoff.
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -100,6 +113,7 @@ export async function withRetry<T>(
     initialInterval?: number;
     backoffFactor?: number;
     signal?: AbortSignal;
+    retryDelay?: (error: unknown) => number | null | undefined;
   } = {},
 ): Promise<T> {
   const { maxAttempts = 3, initialInterval = 1000, backoffFactor = 2, signal } = opts;
@@ -109,6 +123,12 @@ export async function withRetry<T>(
       return await fn();
     } catch (error) {
       if (signal?.aborted || !isTransient(error) || attempt >= maxAttempts) throw error;
+      const chosen = opts.retryDelay?.(error);
+      if (chosen === null) throw error;
+      if (chosen !== undefined) {
+        await sleep(chosen, signal);
+        continue;
+      }
       const delay = initialInterval * backoffFactor ** (attempt - 1);
       await sleep(delay + Math.random() * delay * 0.1, signal); // guard-allow: random-values-api — retry backoff jitter
     }

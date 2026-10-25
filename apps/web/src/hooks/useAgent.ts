@@ -20,9 +20,17 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
-import type { AgentState, ResultMode, UseAgentReturn, SearchCandidate } from './agent/types';
+import type {
+  AgentState,
+  AnalyzeOptions as RequestOptions,
+  PickedBy,
+  ResultMode,
+  UseAgentReturn,
+  SearchCandidate,
+} from './agent/types';
 import { isLiveUnavailable } from '../liveUnavailable';
 import { isWholeRecording } from '../utils/recording';
+import { isSpotifyTrackId } from '../utils/spotify';
 import { API_BASE_URL } from './agent/types';
 import { fetchReplays, fetchSuggestions } from './agent/apiClient';
 import {
@@ -92,10 +100,12 @@ interface Run {
   replay: boolean;
   /** A result for any other track is not shown (a recording asked for by the track's id). */
   expectedTrackId: string | null;
+  /** The Spotify track the run asked for by id (a clicked suggestion), for a retry. */
+  trackId: string | null;
 }
 
-/** How `analyze` was asked for, when not by the user's own search. */
-interface AnalyzeOptions {
+/** How `analyze` was asked for: the request's own options, and the hook's own ones. */
+interface AnalyzeOptions extends RequestOptions {
   /** A log line saying why this search started. */
   note?: string;
   /** Only a result for this track is shown. */
@@ -113,6 +123,7 @@ function newRun(query: string): Run {
     picked: null,
     replay: false,
     expectedTrackId: null,
+    trackId: null,
   };
 }
 
@@ -341,6 +352,7 @@ export function useAgent(): UseAgentReturn {
                 // them); the result is still checked against the picked id.
                 void analyzeRef.current?.(`${recording.title} ${recording.artist}`, {
                   note: 'Live analysis is unavailable: replaying the recording of the track you picked.',
+                  trackId: picked.id,
                   expectedTrackId: picked.id,
                 });
               });
@@ -429,6 +441,7 @@ export function useAgent(): UseAgentReturn {
       runRef.current.controller.abort();
       const run = newRun(query);
       run.expectedTrackId = options.expectedTrackId ?? null;
+      run.trackId = isSpotifyTrackId(options.trackId) ? options.trackId : null;
       runRef.current = run;
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
@@ -451,7 +464,12 @@ export function useAgent(): UseAgentReturn {
       }
 
       try {
-        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}`;
+        // With a track id (a clicked suggestion) the API analyses that very track.
+        // An id that is not a Spotify track id (a placeholder) is not sent: the text is searched.
+        const trackId = isSpotifyTrackId(options.trackId)
+          ? `&trackId=${encodeURIComponent(options.trackId)}`
+          : '';
+        const url = `${API_BASE_URL}/analyze/stream?query=${encodeURIComponent(query)}${trackId}`;
         openRunStream(url, run, () =>
           setState((prev) =>
             prev.status === 'connecting' ? { ...prev, status: 'searching' } : prev,
@@ -472,7 +490,7 @@ export function useAgent(): UseAgentReturn {
    * Select a candidate after disambiguation. Only the first selection for a picker counts.
    */
   const selectCandidate = useCallback(
-    async (candidateId: string) => {
+    async (candidateId: string, pickedBy?: PickedBy) => {
       const run = runRef.current;
       if (run.phase !== 'awaiting-selection') return;
       const candidate = run.candidates?.find((c) => c.id === candidateId);
@@ -483,8 +501,8 @@ export function useAgent(): UseAgentReturn {
       streamRef.current?.close();
 
       if (!run.threadId) {
-        // Without a thread there is nothing to resume: search for the chosen track instead.
-        await analyze(`${candidate.title} ${candidate.artist}`);
+        // Without a thread there is nothing to resume: analyse the chosen track by its id.
+        await analyze(`${candidate.title} ${candidate.artist}`, { trackId: candidate.id });
         return;
       }
 
@@ -498,7 +516,8 @@ export function useAgent(): UseAgentReturn {
       }));
 
       try {
-        const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}`;
+        const how = pickedBy ? `&pickedBy=${pickedBy}` : '';
+        const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`;
         openRunStream(url, run);
       } catch (error) {
         fail(run, error instanceof Error ? error.message : 'Selection failed');
@@ -511,8 +530,8 @@ export function useAgent(): UseAgentReturn {
    * Run the last analysis again (the error screen's retry).
    */
   const retry = useCallback(() => {
-    const { query } = runRef.current;
-    if (query) analyze(query);
+    const { query, trackId } = runRef.current;
+    if (query) analyze(query, trackId ? { trackId } : {});
   }, [analyze]);
 
   /**

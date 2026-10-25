@@ -54,12 +54,13 @@ const graph = vi.hoisted(() => ({
 vi.mock("../../agent/graph.js", () => ({
   createSonicAgentGraph: () => ({
     async *stream(
-      input: { songQuery?: string; resume?: string },
+      input: { songQuery?: string; resume?: { trackId: string } },
       config: { configurable: { thread_id: string }; signal: AbortSignal },
     ) {
       const threadId = config.configurable.thread_id;
       if (input.resume !== undefined) {
-        yield* graph.scripts.resume(config.signal, threadId, input.resume);
+        // The route resumes with the picked track and how it was picked.
+        yield* graph.scripts.resume(config.signal, threadId, input.resume.trackId);
         return;
       }
       const query = input.songQuery ?? "";
@@ -162,10 +163,18 @@ graph.scripts = {
     yield* result("composer", COMPOSED);
   },
   async *nomatch() {
-    yield ["updates", { scout: { error: "No tracks found" } }];
+    yield ["updates", { scout: { error: "No tracks found", scoutFailure: { kind: "no_match" } } }];
   },
   async *outage() {
-    yield ["updates", { scout: { error: "Error: spotify: HTTP 503 — secret-upstream-detail" } }];
+    yield [
+      "updates",
+      {
+        scout: {
+          error: "Spotify search failed: spotify: HTTP 503 — secret-upstream-detail",
+          scoutFailure: { kind: "upstream_unavailable" },
+        },
+      },
+    ];
   },
   async *odd() {
     yield ["updates", { scout: { error: "secret-odd-detail" } }];

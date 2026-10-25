@@ -44,44 +44,38 @@ const hooks = vi.hoisted(() => ({ dropTable: null as null | (() => void) }));
 vi.mock("../../sources/spotify.js", () => ({
   // The real scout's search ("cachehit …" queries): it finds TRACK_ID, by the artist and title
   // the query names, so the scout selects it and serves the result stored for it.
-  searchMultipleTracks: {
-    invoke: async () =>
-      JSON.stringify([
-        {
-          id: "0RunsRouteTestTrack001",
-          title: "Someone Else Typed",
-          artist: "Cachehit",
-          artistIds: [],
-          album: "Album",
-          releaseDate: "1994",
-          coverUrl: "",
-          isrc: null,
-          duration: "3:38",
-          durationMs: 218000,
-          explicit: false,
-          spotifyUrl: "https://open.spotify.com/track/0RunsRouteTestTrack001",
-          previewUrl: null,
-        },
-      ]),
-  },
-  getTrackDetails: {
-    invoke: async ({ trackId }: { trackId: string }) =>
-      JSON.stringify({
-        id: trackId,
-        title: `Title ${trackId}`,
-        artist: "Artist",
-        artistIds: [],
-        album: "Album",
-        releaseDate: "1994",
-        coverUrl: "",
-        popularity: 50,
-        duration: "3:38",
-        durationMs: 218000,
-        explicit: false,
-        spotifyUrl: `https://open.spotify.com/track/${trackId}`,
-        previewUrl: null,
-      }),
-  },
+  searchTracks: async () => [
+    {
+      id: "0RunsRouteTestTrack001",
+      title: "Someone Else Typed",
+      artist: "Cachehit",
+      artistIds: [],
+      album: "Album",
+      releaseDate: "1994",
+      coverUrl: "",
+      isrc: null,
+      duration: "3:38",
+      durationMs: 218000,
+      explicit: false,
+      spotifyUrl: "https://open.spotify.com/track/0RunsRouteTestTrack001",
+      previewUrl: null,
+    },
+  ],
+  fetchTrack: async (trackId: string) => ({
+    id: trackId,
+    title: `Title ${trackId}`,
+    artist: "Artist",
+    artistIds: [],
+    album: "Album",
+    releaseDate: "1994",
+    coverUrl: "",
+    popularity: 50,
+    duration: "3:38",
+    durationMs: 218000,
+    explicit: false,
+    spotifyUrl: `https://open.spotify.com/track/${trackId}`,
+    previewUrl: null,
+  }),
 }));
 
 vi.mock("../../agent/nodes/index.js", async () => {

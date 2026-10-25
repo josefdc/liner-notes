@@ -130,6 +130,38 @@ describe("MusicBrainz client", () => {
     ]);
   });
 
+  it.each([
+    "Ice Ice Baby - Radio Edit",
+    "Ice Ice Baby - Remastered 2011",
+    "Ice Ice Baby - 2009 Remaster",
+    "Ice Ice Baby (Remastered)",
+    "Ice Ice Baby - Single Version",
+    "Ice Ice Baby - Mono",
+  ])("searches and matches %j as the recording without its release label", async (title) => {
+    let query: string | null = null;
+    musicbrainz([recording("Ice Ice Baby", "Vanilla Ice")], (call) => {
+      query = searchQuery(call);
+    });
+
+    const data = JSON.parse(await getMusicBrainzRelations.invoke({ title, artist: "Vanilla Ice" }));
+
+    expect(query).toContain('recording:"Ice Ice Baby"');
+    expect(data).toMatchObject({ found: true, mbid: RECORDING_ID });
+  });
+
+  it.each(["Ice Ice Baby - Live", "Ice Ice Baby - Remix", "Ice Ice Baby (Extended Mix)"])(
+    "keeps %j, another recording, from matching the original",
+    async (title) => {
+      musicbrainz([recording("Ice Ice Baby", "Vanilla Ice")]);
+
+      const data = JSON.parse(
+        await getMusicBrainzRelations.invoke({ title, artist: "Vanilla Ice" }),
+      );
+
+      expect(data.found).toBe(false);
+    },
+  );
+
   it("escapes Lucene syntax in titles and names", async () => {
     const title = 'Don\'t Stop (Live): "A/B"';
     let query: string | null = null;

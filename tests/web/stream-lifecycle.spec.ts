@@ -70,7 +70,7 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
     .click();
   await expect
     .poll(() => apiRequests(page))
-    .toContain(`stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${second.id}`);
+    .toContain(`stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${second.id}&pickedBy=click`);
 
   // The analysis stream now sends its "done" and ends, while the resume is still running.
   await releaseStream(page, "analysis-done");
@@ -176,7 +176,9 @@ test("a duplicate complete for the thread is ignored when the picker times out",
   const log = await apiRequests(page);
   expect
     .soft(resumes(log))
-    .toEqual([`stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${candidates[0].id}`]);
+    .toEqual([
+      `stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${candidates[0].id}&pickedBy=countdown`,
+    ]);
   expect.soft(posts(log)).toEqual([]);
   expect((await streamLog(page)).filter((entry) => entry === `${RESUME} complete`)).toHaveLength(2);
   await expect.soft(page.getByText(COMPLETE_LOG)).toHaveCount(1);

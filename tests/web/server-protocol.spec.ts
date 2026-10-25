@@ -72,7 +72,7 @@ test("an interrupt-only picker with data heartbeats resumes to one result", asyn
   await page.waitForTimeout(400);
   const log = await apiRequests(page);
   expect(log.filter((entry) => entry.startsWith(`stream ${RESUME}`))).toEqual([
-    `stream ${RESUME}?threadId=${THREAD}&selectedTrackId=${candidates[1].id}`,
+    `stream ${RESUME}?threadId=${THREAD}&selectedTrackId=${candidates[1].id}&pickedBy=click`,
   ]);
   expect(log.filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual([]);
   expect((await streamLog(page)).filter((entry) => entry.endsWith("reconnect"))).toEqual([]);

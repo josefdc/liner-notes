@@ -329,6 +329,29 @@ export function withoutFeatured(title: string, artists: readonly string[] = []):
     .trim();
 }
 
+/**
+ * Labels Spotify adds to a track title for a release of the same recording, which MusicBrainz
+ * does not put in the title: "Remastered 2011", "2009 Remaster", "Radio Edit", "Single Version",
+ * "Album Version", "Mono", "Stereo". A version that is another recording ("Live", "Remix",
+ * "Acoustic", "Extended Mix", "Demo") is not one of them and stays in the title.
+ */
+const RELEASE_LABEL = String.raw`(?:(?:\d{4}\s+)?(?:digital(?:ly)?\s+)?remaster(?:ed)?(?:\s+(?:version|edition))?(?:\s+\d{4})?|radio\s+edit|single\s+(?:version|edit)|album\s+version|(?:mono|stereo)(?:\s+version)?)`;
+const RELEASE_LABEL_DASHED = new RegExp(String.raw`\s+-\s+${RELEASE_LABEL}\s*$`, "i");
+const RELEASE_LABEL_BRACKETED = new RegExp(String.raw`\s*[([]\s*${RELEASE_LABEL}\s*[)\]]`, "gi");
+
+/**
+ * A track title as MusicBrainz files it: without a featured-artist note (see withoutFeatured)
+ * and without a release label of the same recording ("Song - Radio Edit", "Song - Remastered
+ * 2011", "Song (2009 Remaster)"). A title that would be left empty is kept as it was.
+ */
+export function recordingTitle(title: string, artists: readonly string[] = []): string {
+  const bare = withoutFeatured(title, artists)
+    .replace(RELEASE_LABEL_DASHED, "")
+    .replace(RELEASE_LABEL_BRACKETED, "")
+    .trim();
+  return bare || withoutFeatured(title, artists);
+}
+
 /** Waits `ms`, or rejects as soon as `signal` aborts. */
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -469,8 +492,8 @@ function compareCandidates(a: MBRecording, b: MBRecording): number {
 /**
  * The original recording of a song, or why there is none.
  *
- * A candidate's title (without a featured-artist suffix) and credited artists must match
- * exactly; a near title or a partial credit never matches. Popular songs have many exact
+ * A candidate's title (without a featured-artist note or a release label, see recordingTitle)
+ * and credited artists must match exactly; a near title or a partial credit never matches. Popular songs have many exact
  * matches (compilations, live and DJ-mix recordings), so the pick is the candidate with no
  * disambiguation comment that is on an original release (not a compilation, live, DJ-mix or
  * remix release), with the most releases and then the earliest release date. With `album` the
@@ -488,7 +511,7 @@ async function searchRecording(
   const parts = (artistNames?.length ? artistNames : artist.split(","))
     .map((p) => p.trim())
     .filter((p) => normalizeName(p));
-  const bareTitle = withoutFeatured(title, parts);
+  const bareTitle = recordingTitle(title, parts);
   const wantedTitle = normalizeName(bareTitle);
   if (!wantedTitle || !normalizeName(artist) || parts.length === 0) {
     return { recording: null, reason: "no_input", detail: "nothing to search for" };
@@ -510,7 +533,7 @@ async function searchRecording(
     (r) =>
       isMbid(r?.id) &&
       typeof r.title === "string" &&
-      normalizeName(withoutFeatured(r.title, parts)) === wantedTitle &&
+      normalizeName(recordingTitle(r.title, parts)) === wantedTitle &&
       creditedTo(r, artist, artistNames),
   );
   if (exact.length === 0) {

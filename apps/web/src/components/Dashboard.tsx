@@ -62,6 +62,8 @@ function generateGradientColors(label: string, group: number): { from: string; t
 // Tracks connected to this one in its genealogy (empty when there are none: no stand-ins)
 function getRelatedTracks(trackData: TrackData | null): Array<{
   id: string;
+  /** The Spotify track the node was strictly matched to, when there is one. */
+  spotifyId?: string;
   title: string;
   artist: string;
   reason: string;
@@ -81,6 +83,7 @@ function getRelatedTracks(trackData: TrackData | null): Array<{
 
   return relatedNodes.map((node) => ({
     id: node.id,
+    ...(node.spotifyId ? { spotifyId: node.spotifyId } : {}),
     title: node.label,
     artist: '', // Genealogy nodes don't have separate artist field
     reason: groupLabels[node.group] || 'Related',
@@ -189,9 +192,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [handleUndo]);
 
   const handleCardClick = useCallback(
-    (rec: { id: string; title: string; artist: string }) => {
+    (rec: { id: string; spotifyId?: string; title: string; artist: string }) => {
       if (onAnalyzeTrack) {
-        onAnalyzeTrack(rec.id, rec.title, rec.artist);
+        // The node's own id is the graph's, not Spotify's: the track is searched by its text
+        // unless the node was matched to a Spotify track.
+        onAnalyzeTrack(rec.spotifyId ?? 'search', rec.title, rec.artist);
         startUndoTimeout(rec.title);
       } else {
         onNavigate(AppPhase.PLAYER);

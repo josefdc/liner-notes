@@ -300,6 +300,18 @@ export const MIGRATIONS: readonly Migration[] = [
       db.exec("ALTER TABLE runs ADD COLUMN code_commit TEXT");
     },
   },
+  {
+    version: 8,
+    name: "no_remembered_choices",
+    up(db) {
+      // Track choices that earlier versions remembered under the typed text, for every user who
+      // typed it. Nothing reads them since a pick became one user's choice, and choices are not
+      // remembered across users; they are deleted, and retention no longer keeps them.
+      db.prepare("DELETE FROM store_items WHERE namespace = ?").run(
+        JSON.stringify(["disambiguation"]),
+      );
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

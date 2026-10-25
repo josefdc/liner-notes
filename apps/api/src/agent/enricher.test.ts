@@ -176,13 +176,37 @@ describe("enrichGenealogyWithArtwork's previews", () => {
   it.each([
     ["the model named no title or artist", { trackTitle: undefined, trackArtist: undefined }],
     ["another artist's track (a cover)", { trackArtist: "David Bowie" }],
-  ])("gives no preview when %s, but keeps the artwork", async (_label, named) => {
+  ])("gives no artwork, Spotify id or preview when %s", async (_label, named) => {
     spotifyAnswers(() => json(found("Under Pressure", ["My Chemical Romance"], PREVIEW)));
 
     const node = await enrichOne({ ...underPressure, ...named });
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
+    // The search's answer is still cached, so the next run does not search again.
+    expect(cache.putArtwork).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["a strict match", "Under Pressure", "Queen", true],
+    ["another artist's track", "Under Pressure", "My Chemical Romance", false],
+    ["another version", "Under Pressure (Rah Mix)", "Queen", false],
+  ])("takes cached artwork only for %s", async (_label, title, artist, strict) => {
+    const net = spotifyAnswers(() => json(hit));
+    cache.getArtwork.mockReturnValue({
+      coverUrl: COVER,
+      spotifyUrl: "https://open.spotify.com/track/x",
+      spotifyId: "x",
+      trackTitle: title,
+      trackArtist: artist,
+    });
+
+    const node = await enrichOne(underPressure);
+
+    expect(node.img).toBe(strict ? COVER : undefined);
+    expect(node.spotifyId).toBe(strict ? "x" : undefined);
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
   });
 
   it.each([

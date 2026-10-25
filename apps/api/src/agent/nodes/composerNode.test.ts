@@ -38,25 +38,22 @@ vi.mock("@langchain/langgraph", async (importOriginal) => ({
 // The scout's search, for the test that serves a stored result: it finds the composed track.
 vi.mock("../../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sources/spotify.js")>()),
-  searchMultipleTracks: {
-    invoke: async () =>
-      JSON.stringify([
-        {
-          id: "x",
-          title: "Ice Ice Baby",
-          artist: "Vanilla Ice",
-          artistIds: ["a1"],
-          album: "To the Extreme",
-          releaseDate: "1990-09-10",
-          coverUrl: "https://i.scdn.co/image/x",
-          duration: "4:30",
-          durationMs: 270000,
-          explicit: false,
-          spotifyUrl: "https://open.spotify.com/track/x",
-          previewUrl: null,
-        },
-      ]),
-  },
+  searchTracks: async () => [
+    {
+      id: "x",
+      title: "Ice Ice Baby",
+      artist: "Vanilla Ice",
+      artistIds: ["a1"],
+      album: "To the Extreme",
+      releaseDate: "1990-09-10",
+      coverUrl: "https://i.scdn.co/image/x",
+      duration: "4:30",
+      durationMs: 270000,
+      explicit: false,
+      spotifyUrl: "https://open.spotify.com/track/x",
+      previewUrl: null,
+    },
+  ],
 }));
 vi.mock("../../sources/musicbrainz.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sources/musicbrainz.js")>()),
@@ -707,6 +704,41 @@ describe("composerNode", () => {
       expect(store.put).toHaveBeenCalledTimes(1);
       expect(store.put.mock.calls[0][2].trackData).not.toHaveProperty("queryMatch");
     });
+
+    it.each([
+      ["clicked", "click", undefined],
+      ["picked by the countdown", "countdown", "partial"],
+      ["picked by a client that does not say", null, "partial"],
+    ])("for a track %s, the result's search match is %s", async (_label, pickedBy, shown) => {
+      const writer = vi.fn();
+      await createComposerNode(testRuntime(succeeding()))(
+        {
+          ...stateWith(measured),
+          selectedBy: "user",
+          pickedBy,
+          queryMatch: "partial",
+        } as SonicAgentStateType,
+        { writer, configurable: { thread_id: "run-1" } } as never,
+      );
+
+      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+      expect(complete.data.queryMatch).toBe(shown);
+    });
+
+    it.each(["unavailable", "not_configured"] as const)(
+      "does not store a result built without the track's Spotify details (%s)",
+      async (code) => {
+        await createComposerNode(testRuntime(succeeding()))(
+          {
+            ...stateWith(measured),
+            selectedBy: "user",
+            sourceErrors: [{ source: "spotify", code }],
+          } as SonicAgentStateType,
+          config(),
+        );
+        expect(store.put).not.toHaveBeenCalled();
+      },
+    );
 
     it("sends how the query matched the track with the fallback result too", async () => {
       const writer = vi.fn();

@@ -61,6 +61,19 @@ export async function readStoredResult(
   }
 }
 
+/**
+ * The search match a result shows: how the run's search text matched the track, unless the user
+ * chose the track themselves with a click (in the picker or on a suggestion). Then the text no
+ * longer decided which song is analysed, and the result does not warn about it. A pick by the
+ * picker's countdown, or by a client that does not say how it picked, keeps the match.
+ */
+export function shownQueryMatch(state: {
+  queryMatch?: QueryMatch | null;
+  pickedBy?: "click" | "countdown" | null;
+}): QueryMatch | null {
+  return state.pickedBy === "click" ? null : (state.queryMatch ?? null);
+}
+
 /** A stored result as this run serves it: with how this run's search text matched the track. */
 export function servedResult(stored: TrackData, queryMatch: QueryMatch | null): TrackData {
   const { queryMatch: _stored, ...result } = stored;

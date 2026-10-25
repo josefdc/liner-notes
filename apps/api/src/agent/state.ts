@@ -263,6 +263,25 @@ export function mergeResearch(prev: ResearchData, next: Partial<ResearchData>): 
 // =============================================================================
 
 /**
+ * Why the scout ended a run without a track, as a type the analyze route reads (never text):
+ * - `no_match`: Spotify found nothing for the query, or no track with the requested id;
+ * - `rate_limited`: Spotify kept refusing for its rate limit; `retryAfterMs` is how long it
+ *   asked to wait, when it said;
+ * - `upstream_unavailable`: Spotify could not answer (an outage, a timeout, no credentials).
+ */
+export type ScoutFailure =
+  | { kind: "no_match" }
+  | { kind: "rate_limited"; retryAfterMs: number | null }
+  | { kind: "upstream_unavailable" };
+
+/**
+ * How the user chose a track themselves: a click (or Enter) on a row of the track picker or on
+ * a search suggestion, or the picker's countdown, which takes the highlighted row when the user
+ * did not choose.
+ */
+export type PickedBy = "click" | "countdown";
+
+/**
  * Configuration for Human-in-the-Loop disambiguation behavior. When a choice is needed is
  * decided by how the results match the query (trackMatch.ts), not by a threshold.
  */
@@ -356,6 +375,13 @@ export const SonicAgentState = Annotation.Root({
     default: () => "",
   }),
 
+  // The Spotify track the request asked for by id (a clicked suggestion), or null for a search
+  // by text. With an id the scout reads that track instead of searching.
+  requestedTrackId: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
   // Search candidates (for human disambiguation)
   candidates: Annotation<SearchCandidate[] | null>({
     reducer: (_, next) => next,
@@ -372,6 +398,20 @@ export const SonicAgentState = Annotation.Root({
   // when it came from the track picker (a click or the picker's countdown). Either way the
   // result is stored under the track, never under the search text.
   selectedBy: Annotation<"match" | "user" | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // For a track the user chose ("user" above): a click, or the picker's countdown; null when
+  // the scout selected it, or when the client did not say. A deliberate click is the user's own
+  // choice, so the result does not warn that the search text matched it loosely.
+  pickedBy: Annotation<PickedBy | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // Why the scout found no track (typed); null otherwise.
+  scoutFailure: Annotation<ScoutFailure | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),

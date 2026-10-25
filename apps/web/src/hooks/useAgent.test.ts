@@ -139,6 +139,31 @@ describe('useAgent stream errors', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('asks for a clicked suggestion by its track id, and a typed search by text only', () => {
+    const hook = renderHook(() => useAgent());
+    act(() => {
+      hook.result.current.analyze('Hurt Johnny Cash', { trackId: '28cnXtME493VX9NOw9cIUh' });
+    });
+    expect(lastStream().url).toContain(
+      '/api/analyze/stream?query=Hurt%20Johnny%20Cash&trackId=28cnXtME493VX9NOw9cIUh',
+    );
+
+    // A retry asks for the same track again.
+    lastStream().fail();
+    act(() => hook.result.current.retry());
+    expect(lastStream().url).toContain('&trackId=28cnXtME493VX9NOw9cIUh');
+
+    act(() => {
+      hook.result.current.analyze('Hurt');
+    });
+    expect(lastStream().url).not.toContain('trackId');
+    // An id that is not a Spotify track id is not sent.
+    act(() => {
+      hook.result.current.analyze('Hurt', { trackId: 'c1' });
+    });
+    expect(lastStream().url).not.toContain('trackId');
+  });
+
   it('retries by opening a new stream for the same query', () => {
     const { result } = startAnalysis('Hurt');
     lastStream().fail();
@@ -226,6 +251,19 @@ describe('useAgent track picker', () => {
     analysis.send(interrupt([...candidates]));
     expect(hook.result.current.status).toBe('disambiguation');
     expect(hook.result.current.candidates?.map((c) => c.id)).toEqual(['c1', 'c2']);
+  });
+
+  it.each([
+    ['click', '&pickedBy=click'],
+    ['countdown', '&pickedBy=countdown'],
+  ] as const)('says the row was picked by %s when it resumes', async (pickedBy, param) => {
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', pickedBy);
+    });
+
+    const [resume] = streams().filter((s) => s.url.includes('/resume'));
+    expect(resume.url).toContain(`selectedTrackId=c2${param}`);
   });
 
   it('opens one resume per picker and closes the analysis stream', async () => {

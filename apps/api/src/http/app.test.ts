@@ -35,11 +35,9 @@ vi.mock("../llm/invoke.js", async (importOriginal) => {
 
 vi.mock("../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/spotify.js")>()),
-  searchMultipleTracks: {
-    invoke: vi.fn(async () => {
-      throw new Error("Spotify must not be called in these tests");
-    }),
-  },
+  searchTracks: vi.fn(async () => {
+    throw new Error("Spotify must not be called in these tests");
+  }),
 }));
 
 const LISTED = "http://localhost:3110";

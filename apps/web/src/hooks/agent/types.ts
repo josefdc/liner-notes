@@ -46,10 +46,22 @@ export interface AgentState {
 /** How a result was produced: computed live, or a recorded run replayed. */
 export type ResultMode = 'live' | 'replay';
 
+/** How an analysis is asked for, besides its text. */
+export interface AnalyzeOptions {
+  /** The Spotify track the user chose (a suggestion): that very track is analysed. */
+  trackId?: string;
+}
+
+/**
+ * How a row of the track picker was chosen: a click (or Enter) on it, or the picker's
+ * countdown. A deliberate click is not warned about a loose search match.
+ */
+export type PickedBy = 'click' | 'countdown';
+
 export interface UseAgentReturn extends AgentState {
-  analyze: (query: string) => Promise<void>;
+  analyze: (query: string, options?: AnalyzeOptions) => Promise<void>;
   /** Answers the open track picker; later calls for the same picker are ignored. */
-  selectCandidate: (candidateId: string) => Promise<void>;
+  selectCandidate: (candidateId: string, pickedBy?: PickedBy) => Promise<void>;
   /** Runs the last analysis again from the start (after an error). */
   retry: () => void;
   /**

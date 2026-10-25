@@ -46,6 +46,8 @@ const stub = vi.hoisted(() => ({
   composerAfterComplete: null as Hook,
   detailsStep: null as null | (() => Promise<void>),
   detailsFail: false,
+  /** The requested track id each run's scout saw, and how the composer's track was picked. */
+  seen: { requestedTrackId: [] as unknown[], pickedBy: [] as unknown[] },
   /**
    * A result the stream can send (a TrackAnalysis: the stream checks every event against the
    * contract), with the title the test looks for and any extra fields.
@@ -63,26 +65,24 @@ const stub = vi.hoisted(() => ({
 }));
 
 vi.mock("../../sources/spotify.js", () => ({
-  getTrackDetails: {
-    invoke: async ({ trackId }: { trackId: string }) => {
-      stub.calls.details++;
-      await stub.detailsStep?.();
-      if (stub.detailsFail) throw new Error("Spotify unavailable");
-      return JSON.stringify({
-        id: trackId,
-        title: `Title ${trackId}`,
-        artist: "Artist",
-        artistIds: [],
-        album: "Album",
-        releaseDate: "1994",
-        coverUrl: "",
-        duration: "3:38",
-        durationMs: 218000,
-        explicit: false,
-        spotifyUrl: `https://open.spotify.com/track/${trackId}`,
-        previewUrl: null,
-      });
-    },
+  fetchTrack: async (trackId: string) => {
+    stub.calls.details++;
+    await stub.detailsStep?.();
+    if (stub.detailsFail) throw new Error("Spotify unavailable");
+    return {
+      id: trackId,
+      title: `Title ${trackId}`,
+      artist: "Artist",
+      artistIds: [],
+      album: "Album",
+      releaseDate: "1994",
+      coverUrl: "",
+      duration: "3:38",
+      durationMs: 218000,
+      explicit: false,
+      spotifyUrl: `https://open.spotify.com/track/${trackId}`,
+      previewUrl: null,
+    };
   },
 }));
 
@@ -100,6 +100,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
     clarificationNode,
     scoutNode: async (state: State, config: Config) => {
       stub.calls.scout++;
+      stub.seen.requestedTrackId.push(state.requestedTrackId);
       status(config, "scout", "searching");
       const query = state.songQuery;
       if (query.startsWith("cached")) {
@@ -107,10 +108,13 @@ vi.mock("../../agent/nodes/index.js", async () => {
         config.writer?.({ type: "complete", data: trackData });
         return { trackData };
       }
-      if (query.startsWith("nomatch")) return { error: "No tracks found" };
+      if (query.startsWith("nomatch")) {
+        return { error: "No tracks found", scoutFailure: { kind: "no_match" as const } };
+      }
       if (query.startsWith("outage")) {
         return {
-          error: "Error: searching for tracks failed: spotify: HTTP 503 — secret-upstream-detail",
+          error: "Spotify search failed: spotify: HTTP 503 — secret-upstream-detail",
+          scoutFailure: { kind: "upstream_unavailable" as const },
         };
       }
       if (query.startsWith("odd")) return { error: "secret-odd-detail" };
@@ -140,6 +144,7 @@ vi.mock("../../agent/nodes/index.js", async () => {
     },
     composerNode: async (state: State, config: Config) => {
       stub.calls.composer++;
+      stub.seen.pickedBy.push(state.pickedBy);
       const trackData = stub.track(state.songQuery.includes("fallback") ? "fallback" : "composed", {
         spotify: state.spotifyData,
       });
@@ -292,6 +297,7 @@ describe("analyze routes", () => {
     stub.composerAfterComplete = null;
     stub.detailsStep = null;
     stub.detailsFail = false;
+    stub.seen = { requestedTrackId: [], pickedBy: [] };
   });
   let restoreDeadline: (() => void) | null = null;
   afterEach(() => {
@@ -438,6 +444,69 @@ describe("analyze routes", () => {
       gate.resolve();
 
       await vi.waitFor(() => expect(runStatus(threadId)).toBe("completed"));
+    });
+  });
+
+  describe("a request for a track by id", () => {
+    const ID = "6GyFP1nfCDB8lbD2bG0Hq9";
+
+    it("hands the stream's track id to the scout", async () => {
+      const { events } = await sse(`${streamPath("midnight city m83")}&trackId=${ID}`);
+
+      expect(types(events)).toContain("complete");
+      expect(stub.seen.requestedTrackId).toEqual([ID]);
+    });
+
+    it("hands POST's track id to the scout, and none for a search by text", async () => {
+      const res = await request(app)
+        .post("/api/analyze")
+        .send({ query: "midnight city m83", trackId: ID });
+      expect(res.status).toBe(200);
+      await request(app).post("/api/analyze").send({ query: "midnight city m83" });
+
+      expect(stub.seen.requestedTrackId).toEqual([ID, null]);
+    });
+
+    it.each(["short", "6GyFP1nfCDB8lbD2bG0Hq9x", "6GyFP1nfCDB8lbD2bG0H/9"])(
+      "refuses %j as a track id, without starting a run",
+      async (trackId) => {
+        const { events } = await sse(
+          `${streamPath("midnight city")}&trackId=${encodeURIComponent(trackId)}`,
+        );
+        const res = await request(app).post("/api/analyze").send({ query: "midnight", trackId });
+
+        expect(events[0]).toMatchObject({ type: "error", code: "invalid_input" });
+        expect(res.status).toBe(400);
+        expect(stub.calls.scout).toBe(0);
+      },
+    );
+  });
+
+  describe("how a pick was made", () => {
+    it.each([
+      ["click", "click"],
+      ["countdown", "countdown"],
+      [undefined, null],
+      ["magic", null],
+    ])("a stream resume with pickedBy=%s reaches the run as %s", async (pickedBy, seen) => {
+      const threadId = await pausedThread();
+      const path = resumePath(threadId, "track-a") + (pickedBy ? `&pickedBy=${pickedBy}` : "");
+
+      const { events } = await sse(path);
+
+      expect(types(events)).toContain("complete");
+      expect(stub.seen.pickedBy).toEqual([seen]);
+    });
+
+    it("a POST resume passes pickedBy too", async () => {
+      const threadId = await pausedThread();
+
+      const res = await request(app)
+        .post("/api/analyze/resume")
+        .send({ threadId, selectedTrackId: "track-a", pickedBy: "click" });
+
+      expect(res.status).toBe(200);
+      expect(stub.seen.pickedBy).toEqual(["click"]);
     });
   });
 

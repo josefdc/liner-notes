@@ -8,11 +8,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const spotify = vi.hoisted(() => ({
-  details: vi.fn(async (_input: unknown, _options?: { signal?: AbortSignal }) => "{}"),
+  details: vi.fn(async (_trackId: string, _signal?: AbortSignal): Promise<unknown> => ({})),
 }));
 vi.mock("../../sources/spotify.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sources/spotify.js")>()),
-  getTrackDetails: { invoke: spotify.details },
+  fetchTrack: spotify.details,
 }));
 
 import {
@@ -26,9 +26,13 @@ import {
 } from "@langchain/langgraph";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { SourceError } from "../../sources/http.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { SonicAgentState, type SonicAgentStateType } from "../state.js";
 import { clarificationNode } from "./clarificationNode.js";
+
+/** Spotify failing to answer the details request. */
+const UNAVAILABLE = new SourceError("spotify", "http", "HTTP 503", { status: 503 });
 
 const candidates = ["a", "b"].map((id) => ({
   id: `track-${id}`,
@@ -95,10 +99,10 @@ describe("clarificationNode when the run is cancelled", () => {
   it("rejects instead of falling back to the candidate when the track lookup is cancelled", async () => {
     const controller = new AbortController();
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockImplementation(async (_input, options) => {
+    spotify.details.mockImplementation(async (_trackId, signal) => {
       controller.abort();
-      options?.signal?.throwIfAborted();
-      return "{}";
+      signal?.throwIfAborted();
+      return {};
     });
 
     await expect(
@@ -106,10 +110,7 @@ describe("clarificationNode when the run is cancelled", () => {
     ).rejects.toThrow();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(spotify.details).toHaveBeenCalledWith(
-      { trackId: "track-b" },
-      { signal: expect.any(AbortSignal) },
-    );
+    expect(spotify.details).toHaveBeenCalledWith("track-b", expect.any(AbortSignal));
     expect(node.settled).toBe("rejected");
   });
 });
@@ -117,7 +118,7 @@ describe("clarificationNode when the run is cancelled", () => {
 describe("clarificationNode's candidate fallback", () => {
   it("keeps the candidate's separate artists and Spotify ids", async () => {
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue("not a track");
+    spotify.details.mockRejectedValue(UNAVAILABLE);
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -133,24 +134,22 @@ describe("clarificationNode's candidate fallback", () => {
 describe("clarificationNode's chosen track", () => {
   it("records the ISRC of the chosen track and how it matches the query", async () => {
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue(
-      JSON.stringify({
-        id: "track-b",
-        title: "Song",
-        artist: "Ramsey Lewis, Earth, Wind & Fire",
-        artistNames: ["Ramsey Lewis", "Earth, Wind & Fire"],
-        artistIds: [],
-        album: "Album",
-        releaseDate: "1974",
-        coverUrl: "",
-        isrc: "USSM17400001",
-        duration: "3:00",
-        durationMs: 180_000,
-        explicit: false,
-        spotifyUrl: "https://open.spotify.com/track/track-b",
-        previewUrl: null,
-      }),
-    );
+    spotify.details.mockResolvedValue({
+      id: "track-b",
+      title: "Song",
+      artist: "Ramsey Lewis, Earth, Wind & Fire",
+      artistNames: ["Ramsey Lewis", "Earth, Wind & Fire"],
+      artistIds: [],
+      album: "Album",
+      releaseDate: "1974",
+      coverUrl: "",
+      isrc: "USSM17400001",
+      duration: "3:00",
+      durationMs: 180_000,
+      explicit: false,
+      spotifyUrl: "https://open.spotify.com/track/track-b",
+      previewUrl: null,
+    });
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -161,24 +160,22 @@ describe("clarificationNode's chosen track", () => {
 
   it("records how a picked track that only partly matches the query matches it", async () => {
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue(
-      JSON.stringify({
-        id: "track-b",
-        title: "Another Song",
-        artist: "Ramsey Lewis",
-        artistNames: ["Ramsey Lewis"],
-        artistIds: [],
-        album: "Album",
-        releaseDate: "1974",
-        coverUrl: "",
-        isrc: null,
-        duration: "3:00",
-        durationMs: 180_000,
-        explicit: false,
-        spotifyUrl: "https://open.spotify.com/track/track-b",
-        previewUrl: null,
-      }),
-    );
+    spotify.details.mockResolvedValue({
+      id: "track-b",
+      title: "Another Song",
+      artist: "Ramsey Lewis",
+      artistNames: ["Ramsey Lewis"],
+      artistIds: [],
+      album: "Album",
+      releaseDate: "1974",
+      coverUrl: "",
+      isrc: null,
+      duration: "3:00",
+      durationMs: 180_000,
+      explicit: false,
+      spotifyUrl: "https://open.spotify.com/track/track-b",
+      previewUrl: null,
+    });
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -189,7 +186,7 @@ describe("clarificationNode's chosen track", () => {
 
   it("remembers no pick for the query's text", async () => {
     const { graph, store, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue("not a track");
+    spotify.details.mockRejectedValue(UNAVAILABLE);
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -198,7 +195,7 @@ describe("clarificationNode's chosen track", () => {
 
   it("invents no ISRC or popularity when it falls back to the candidate", async () => {
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue("not a track");
+    spotify.details.mockRejectedValue(UNAVAILABLE);
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -211,31 +208,33 @@ describe("clarificationNode's chosen track", () => {
 
 describe("clarificationNode when the track details cannot be read", () => {
   it.each([
-    "Error: Rate limited by Spotify (429) while getting track details",
-    "Error: getting track details failed: spotify: deadline reached",
-    "not a track",
-  ])("records a Spotify source error for %j, so the result is not stored", async (answer) => {
+    [
+      new SourceError("spotify", "rate_limited", "HTTP 429", { retryAfterMs: 5000 }),
+      "rate_limited",
+    ],
+    [new SourceError("spotify", "timeout", "deadline reached"), "timeout"],
+    [new SourceError("spotify", "parse", "track response has no id"), "invalid_response"],
+    [new SourceError("spotify", "http", "HTTP 503", { status: 503 }), "unavailable"],
+  ])("records Spotify's typed error (%s), so the result is not stored", async (error, code) => {
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue(answer);
+    spotify.details.mockRejectedValue(error);
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
     const update = node.update as Partial<SonicAgentStateType>;
     expect(update.spotifyData).toMatchObject({ id: "track-b", durationMs: 0, isrc: null });
-    expect(update.sourceErrors).toEqual([
-      {
-        source: "spotify",
-        code: "unavailable",
-        message: "the picked track's details could not be read",
-      },
-    ]);
+    expect(update.sourceErrors).toEqual([expect.objectContaining({ source: "spotify", code })]);
   });
 
   it("records no source error when the details were read", async () => {
     const { graph, node, thread } = await pausedAtChoice(() => {});
-    spotify.details.mockResolvedValue(
-      JSON.stringify({ id: "track-b", title: "Song", artist: "A", artistIds: [], durationMs: 1 }),
-    );
+    spotify.details.mockResolvedValue({
+      id: "track-b",
+      title: "Song",
+      artist: "A",
+      artistIds: [],
+      durationMs: 1,
+    });
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -264,7 +263,7 @@ describe("clarificationNode's stored results", () => {
     await store.put(TRACKS_NAMESPACE, keyOf("track-b"), storedFor("track-b"));
     const events: unknown[] = [];
     const { graph, node, thread } = await pausedAtChoice((event) => events.push(event), store);
-    spotify.details.mockResolvedValue("not a track");
+    spotify.details.mockRejectedValue(UNAVAILABLE);
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
@@ -278,12 +277,58 @@ describe("clarificationNode's stored results", () => {
     const store = new InMemoryStore();
     await store.put(TRACKS_NAMESPACE, keyOf("track-a"), storedFor("track-a"));
     const { graph, node, thread } = await pausedAtChoice(() => {}, store);
-    spotify.details.mockResolvedValue("not a track");
+    spotify.details.mockRejectedValue(UNAVAILABLE);
 
     await graph.invoke(new Command({ resume: "track-b" }), thread);
 
     const update = node.update as Partial<SonicAgentStateType>;
     expect(update.trackData ?? null).toBeNull();
     expect(update.selectedTrackId).toBe("track-b");
+  });
+});
+
+describe("clarificationNode's record of how the track was picked", () => {
+  it.each([
+    [{ trackId: "track-b", pickedBy: "click" }, "click"],
+    [{ trackId: "track-b", pickedBy: "countdown" }, "countdown"],
+    [{ trackId: "track-b", pickedBy: "magic" }, null],
+    ["track-b", null],
+  ])("records %j as picked by %s", async (resume, pickedBy) => {
+    const { graph, node, thread } = await pausedAtChoice(() => {});
+    spotify.details.mockRejectedValue(UNAVAILABLE);
+
+    await graph.invoke(new Command({ resume }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.selectedTrackId).toBe("track-b");
+    expect(update.pickedBy).toBe(pickedBy);
+  });
+
+  it.each([
+    ["click", undefined],
+    ["countdown", "none"],
+  ])("serves a stored result picked by %s with search match %s", async (pickedBy, shown) => {
+    const store = new InMemoryStore();
+    const { run: _run, ...analysis } = JSON.parse(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "../../../../../packages/contract/fixtures/api-payloads/composed-measured.json",
+        ),
+        "utf8",
+      ),
+    );
+    await store.put(TRACKS_NAMESPACE, resultCacheKey("track-b", configuredSources()), {
+      trackData: { ...analysis, id: "track-b", title: "Title b", artist: "Ramsey Lewis" },
+      timestamp: Date.now(),
+    });
+    const { graph, node, thread } = await pausedAtChoice(() => {}, store);
+    spotify.details.mockRejectedValue(UNAVAILABLE);
+
+    await graph.invoke(new Command({ resume: { trackId: "track-b", pickedBy } }), thread);
+
+    const update = node.update as Partial<SonicAgentStateType>;
+    expect(update.trackData).toMatchObject({ id: "track-b" });
+    expect(update.trackData?.queryMatch).toBe(shown);
   });
 });

@@ -45,7 +45,7 @@ import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
 import { composerMessages, type PromptRecording, type PromptTrack } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
-import { storeResult } from "../storedResults.js";
+import { shownQueryMatch, storeResult } from "../storedResults.js";
 import {
   type Factoid,
   type Genealogy,
@@ -381,8 +381,9 @@ function baseFields(state: SonicAgentStateType, spotify: SpotifyData) {
     // evidence yet (#27): it is empty today.
     ...(state.isrc ? { isrc: state.isrc } : {}),
     ...(state.preview ? { preview: state.preview } : {}),
-    // How this run's search text matched the track; the web says so when it is not exact.
-    ...(state.queryMatch ? { queryMatch: state.queryMatch } : {}),
+    // How this run's search text matched the track; the web says so when it is not exact. None
+    // for a track the user clicked (shownQueryMatch).
+    ...(shownQueryMatch(state) ? { queryMatch: shownQueryMatch(state) } : {}),
     evidence: state.evidence,
   };
 }
@@ -551,10 +552,21 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       (e) => e.code !== "not_configured",
     );
     const plannerFailed = state.usage.some((u) => u.status !== "ok");
+    // Built without the track's Spotify details (the picked candidate's fields only, see the
+    // clarification node), whatever the reason, even a key that is not configured: a run that
+    // reads them does better.
+    const spotifyUnread = state.sourceErrors.some((e) => e.source === "spotify");
     // The result is about the track the run chose, by the scout's match or the user's pick: it
     // is stored under that track, never under the text, so it is served only for that track.
     const chosen = state.selectedBy === "match" || state.selectedBy === "user";
-    if (store && chosen && !transientAudio && !transientSources && !plannerFailed) {
+    if (
+      store &&
+      chosen &&
+      !transientAudio &&
+      !transientSources &&
+      !plannerFailed &&
+      !spotifyUnread
+    ) {
       try {
         signal?.throwIfAborted();
         await storeResult(store, trackData, runtime.now());

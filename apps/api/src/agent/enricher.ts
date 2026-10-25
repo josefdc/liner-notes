@@ -10,9 +10,11 @@
  *           for each referenced song and fetch the actual album artwork.
  *
  * The search goes through the Spotify source (sources/spotify.ts): every request has a timeout
- * and fails with a typed error, and a failed search leaves the node without artwork. Artwork is
- * cached for a week by the node's label; a preview is never cached, and a node gets one only
- * when the track found is strictly the one the model named (see `strictlyMatches`).
+ * and fails with a typed error, and a failed search leaves the node without artwork. A node gets
+ * the track found (its artwork, its Spotify id and its preview) only when that track is strictly
+ * the one the model named (see `strictlyMatches`); a cover, a remix or another song found for
+ * the label gives the node nothing. The search's answer is cached for a week by the node's
+ * label; a preview is never cached.
  *
  * Features:
  * - Parallel batch search for performance
@@ -69,7 +71,7 @@ const NO_ARTWORK: SpotifySearchResult = {
   trackArtist: null,
 };
 
-/** What a node gets from Spotify: artwork, and a preview of a strictly matched track or none. */
+/** What a node gets from Spotify: the strictly matched track's artwork and preview, or none. */
 interface NodeLookup {
   artwork: SpotifySearchResult;
   previewUrl: string | null;
@@ -93,14 +95,24 @@ export function strictlyMatches(
   return sameArtist && recordingTitleDifference({ title }, { title: found.title }) === null;
 }
 
+/** The cached track's identity, for strictlyMatches (the cache keeps the lead artist only). */
+function cachedTrack(cached: SpotifySearchResult) {
+  const artist = cached.trackArtist ?? "";
+  return { title: cached.trackTitle ?? "", artist, artistNames: artist ? [artist] : [] };
+}
+
 /**
- * Artwork for a node, from the cache or a Spotify search, and the preview of the track found
- * when it strictly matches the node. A cached entry gives no preview (none is stored). A failed
- * search gives nothing and caches nothing, so a later run tries again; a cancelled run rejects.
+ * Artwork for a node, from the cache or a Spotify search, and the preview of the track found:
+ * both only when that track strictly matches the node. A cached entry gives no preview (none is
+ * stored). A failed search gives nothing and caches nothing, so a later run tries again; a
+ * cancelled run rejects.
  */
 async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<NodeLookup> {
   const cached = getCachedArtwork(node.label);
-  if (cached) return { artwork: cached, previewUrl: null };
+  if (cached) {
+    const strict = strictlyMatches(node, cachedTrack(cached));
+    return { artwork: strict ? cached : NO_ARTWORK, previewUrl: null };
+  }
 
   let found: SpotifyTrackSummary | undefined;
   try {
@@ -122,8 +134,8 @@ async function lookUpNode(node: GenealogyNode, signal?: AbortSignal): Promise<No
     : NO_ARTWORK;
   signal?.throwIfAborted();
   setCachedArtwork(node.label, artwork);
-  const previewUrl = found?.previewUrl && strictlyMatches(node, found) ? found.previewUrl : null;
-  return { artwork, previewUrl };
+  if (!found || !strictlyMatches(node, found)) return { artwork: NO_ARTWORK, previewUrl: null };
+  return { artwork, previewUrl: found.previewUrl || null };
 }
 
 // =============================================================================

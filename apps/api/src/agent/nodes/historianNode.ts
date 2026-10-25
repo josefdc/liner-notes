@@ -5,12 +5,21 @@
  * would repeat the planner's model calls. When the research stops early on a provider or
  * source failure, what it found, its model calls and its source errors are kept and the status
  * says so; a bug fails the run.
+ *
+ * It writes the run's evidence pack (research/runEvidence.ts): the primary sources' records,
+ * read from the track's ISRC (MusicBrainz, Discogs, SecondHandSongs, Genius), and the web
+ * search's results. Each item is sent as an `evidence` event. The primary sources are read on
+ * every run with an ISRC, also when the research comes from the cache, and their errors are the
+ * run's source errors; they are not part of the cached research, and do not block caching it
+ * unless a source lost records to a failed request.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { SourceId } from "@liner-notes/contract";
 import { isLlmError } from "../../llm/errors.js";
 import { isSourceError, type SourceName } from "../../sources/http.js";
+import { discogsConfigured } from "../../sources/discogs.js";
+import { geniusConfigured } from "../../sources/genius.js";
 import { errorRecord } from "../../sources/records.js";
 import {
   getLastfmTrackTags,
@@ -33,11 +42,31 @@ import { isAbortError, isTransient } from "../errors.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { getCache } from "../../store/cache.js";
 import {
+  lastingAmong,
+  runEvidence,
+  sendStatus,
+  startPrimarySources,
+} from "../research/runEvidence.js";
+import {
   emptyResearch,
   mergeResearch,
   type ResearchData,
   type SonicAgentStateType,
 } from "../state.js";
+
+/**
+ * The status line of a research-cache hit while the primary sources are read: the ones that
+ * will be asked (a source without its credential is reported as not configured instead).
+ */
+function readingPrimary(): string {
+  const asked = [
+    "MusicBrainz",
+    ...(discogsConfigured() ? ["Discogs"] : []),
+    "SecondHandSongs",
+    ...(geniusConfigured() ? ["Genius"] : []),
+  ];
+  return `📇 Reading primary sources (${asked.join(", ")})...`;
+}
 
 export async function historianNode(
   state: SonicAgentStateType,
@@ -49,36 +78,49 @@ export async function historianNode(
   }
 
   const writer = config.writer;
+  // The primary sources are read from the track's ISRC while the research runs.
+  const isrc = state.isrc ?? null;
+  const primary = startPrimarySources(state.spotifyData, isrc, config.signal, runtime);
   // Research depends on which optional sources have a key: adding one later runs it again.
   const cacheKey = researchCacheKey(state.spotifyData.id, configuredSources());
 
   // Check persistent research cache first
+  let cached: ReturnType<ReturnType<typeof getCache>["getResearch"]> = null;
   try {
-    const cache = getCache();
-    const cached = cache.getResearch(cacheKey);
-    if (cached) {
-      // The sources that were not configured when it was made are reported again: a cached
-      // answer without them would read as "read, nothing there".
-      const { notConfigured = [], ...cachedResearch } = cached;
-      console.log("📚 [Historian] Cache hit for:", state.spotifyData.title);
-      writer?.({
-        type: "status",
-        code: "RESEARCH-FOUND",
-        message: "Research cache hit — intelligence already extracted",
-        node: "historian",
-        timestamp: timestampOf(runtime),
-      });
-      return {
-        researchData: cachedResearch,
-        ...(notConfigured.length > 0 ? { sourceErrors: notConfigured } : {}),
-        statusMessages: [
-          "📚 Research (cached): loaded from persistent cache",
-          ...unreadableStatus(notConfigured),
-        ],
-      };
-    }
+    cached = getCache().getResearch(cacheKey);
   } catch {
     // Cache not available — proceed with fresh research
+  }
+  if (cached) {
+    // The sources that were not configured when it was made are reported again: a cached
+    // answer without them would read as "read, nothing there".
+    const { notConfigured = [], ...cachedResearch } = cached;
+    console.log("📚 [Historian] Cache hit for:", state.spotifyData.title);
+    writer?.({
+      type: "status",
+      code: "RESEARCH-FOUND",
+      message: "Research cache hit — intelligence already extracted",
+      node: "historian",
+      timestamp: timestampOf(runtime),
+    });
+    // The cached research holds no evidence: the primary sources are read for this run.
+    const reading = isrc ? readingPrimary() : null;
+    if (reading) sendStatus(config, runtime, "RESEARCH-FOUND", reading);
+    const pack = await runEvidence(primary, [], config, runtime);
+    const sourceErrors = uniqueErrors([...notConfigured, ...pack.errors]);
+    const lasting = lastingAmong(pack.lasting, notConfigured);
+    return {
+      researchData: cachedResearch,
+      evidence: pack.evidence,
+      ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
+      ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),
+      statusMessages: [
+        "📚 Research (cached): loaded from persistent cache",
+        ...unreadableStatus(notConfigured),
+        ...(reading ? [reading] : []),
+        ...pack.status,
+      ],
+    };
   }
 
   writer?.({
@@ -209,16 +251,22 @@ export async function historianNode(
     ...(isSourceError(failure) ? [errorRecord(sourceIdOf(failure.source), failure)] : []),
   ]);
 
+  // The run's evidence: the primary sources' records, then the web search's results.
+  const pack = await runEvidence(primary, finalState.webFindings ?? [], config, runtime);
+
   // Nothing is written for a cancelled run. Research is cached only when it is complete: not
   // when it stopped early, a source could not be read for a passing reason (an outage, a
   // timeout, a rate limit, a bad answer), or a planner call failed (the next run may find more,
   // as with audio that failed transiently). A source that is not configured is a lasting state:
   // it does not block the cache, its errors are stored with the research and reported on a hit,
   // and the cache key names the configured sources, so adding a key runs the research again.
+  // The primary sources are not part of the cached research and their errors do not block it,
+  // except a source that lost records to a failed request: the run is incomplete.
   config.signal?.throwIfAborted();
   const notConfigured = sourceErrors.filter((e) => e.code === "not_configured");
   const complete =
     !failure &&
+    pack.lost.length === 0 &&
     sourceErrors.length === notConfigured.length &&
     (finalState.usage ?? []).every((call) => call.status === "ok");
   if (complete) {
@@ -245,11 +293,16 @@ export async function historianNode(
 
   return {
     researchData: mergedResearch,
+    evidence: pack.evidence,
     usage: finalState.usage ?? [],
-    sourceErrors,
+    // The primary sources' errors are the run's too; they do not block the research cache,
+    // which does not hold their records.
+    sourceErrors: uniqueErrors([...sourceErrors, ...pack.errors]),
+    lastingSourceErrors: lastingAmong(pack.lasting, sourceErrors),
     statusMessages: [
       ...prefetchStatus,
       ...(finalState.statusMessages ?? []),
+      ...pack.status,
       ...(failure ? [summary] : []),
     ],
   };

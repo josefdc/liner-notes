@@ -171,6 +171,63 @@ function allowedUrl(url: string): boolean {
   }
 }
 
+/**
+ * The pages a record's web-tier evidence links to (web search results cited by the run): any
+ * site, but only a plain http(s) page that is not a preview, media or signed link, has no
+ * credentials and whose path and query carry nothing shaped like a secret. These URLs, and their ids
+ * (`tavily:<url>`), are content of the record; any other URL still has to be on an allow-listed
+ * site.
+ */
+function webEvidencePages(value: unknown, pages = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) webEvidencePages(item, pages);
+  } else if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    if (item.sourceTier === "web" && typeof item.url === "string" && plainWebPage(item.url)) {
+      pages.add(item.url);
+    }
+    for (const inner of Object.values(item)) webEvidencePages(inner, pages);
+  }
+  return pages;
+}
+
+/**
+ * A path segment shaped like a credential: a JSON web token, an "sk-"/"pk-" style key, 32 or
+ * more hex characters, or 32 or more base64 characters without word structure (no separator
+ * such as "-", "_" or ".", and letters and digits alternating throughout, as in random text). A
+ * slug of words, Title-Case or not ("Why-was-Ice-Ice-Baby-so-popular-in-1990",
+ * "IceIceBabyVanillaIce1990SingleRelease"), is a page name, not a token.
+ */
+function tokenSegment(segment: string): boolean {
+  if (/^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./.test(segment)) return true;
+  if (/^(?:sk|pk)[-_][A-Za-z0-9_-]{16,}$/.test(segment)) return true;
+  if (/^[A-Fa-f0-9]{32,}$/.test(segment)) return true;
+  if (!/^[A-Za-z0-9+/=]{32,}$/.test(segment)) return false;
+  const alternations = segment.match(/[A-Za-z](?=\d)|\d(?=[A-Za-z])/g) ?? [];
+  return alternations.length >= 4;
+}
+
+/** The secret shapes a page's path is scanned for; long runs are judged by `tokenSegment`. */
+const PATH_SECRET_SHAPES = SECRET_SHAPES.filter(([what]) => what !== "a long token");
+
+function plainWebPage(url: string): boolean {
+  if (SIGNED_URL.test(url) || isPreviewUrl(url) || isMediaUrl(url)) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  if (parsed.username || parsed.password) return false;
+  const scan = (text: string, shapes: Array<[string, RegExp]>) =>
+    shapes.some(([, pattern]) => pattern.test(text) || pattern.test(decoded(text)));
+  if (scan(`${parsed.search}${parsed.hash}`, SECRET_SHAPES)) return false;
+  // The path is scanned too: a page link may carry a capability token or an address there.
+  if (scan(parsed.pathname, PATH_SECRET_SHAPES)) return false;
+  return !decoded(parsed.pathname).split("/").some(tokenSegment);
+}
+
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
 /** Keys of id fields: a source's ids (record refs, slugs) may be long and token-like. */
@@ -234,6 +291,10 @@ export function leaks(
   const typed = normalizeQuery(typedQuery);
   const typedIsPublic = typed === "" || publicTexts.some((text) => containsWords(text, typed));
   const others = new Set(otherRunIds.map((id) => id.toLowerCase()));
+  // A URL found in text may stop short of the page's own (at a parenthesis, a quote).
+  const pages = [...webEvidencePages(record)];
+  const allowed = (url: string) =>
+    allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
     if (
@@ -245,7 +306,7 @@ export function leaks(
     }
     // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
     // those are their own); an id field's value may be a long source id.
-    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedUrl(url) ? " " : url));
+    const scanned = text.replace(URL_IN_TEXT, (url) => (allowed(url) ? " " : url));
     for (const [what, pattern] of SECRET_SHAPES) {
       if (isId && what === "a long token") continue;
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
@@ -253,7 +314,7 @@ export function leaks(
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
-      else if (allowedUrl(url)) continue;
+      else if (allowed(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
       else found.push(`${path}: a URL outside the allow-listed sites`);
     }

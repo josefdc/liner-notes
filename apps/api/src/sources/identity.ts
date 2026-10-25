@@ -53,7 +53,6 @@ import {
 import {
   type Clock,
   checkIdentity,
-  errorRecord,
   failed,
   found,
   type IdentityCounts,
@@ -65,6 +64,7 @@ import {
   primaryEvidence,
   quoted,
   RELATION_PHRASE,
+  errorRecord,
   scopedRef,
   type SourceResult,
   systemClock,
@@ -108,7 +108,10 @@ export type IdentityResolution =
       details: MbRecordingDetails;
       /** The work with its recordings, when the recording performs exactly one. */
       work: MbWork | null;
+      /** A note on the work: it could not be read, or its recordings could not be dated. */
       workError: string | null;
+      /** The work read's failure, for the run's source errors (its covers are missing). */
+      workFailure: SourceErrorRecord | null;
       result: SourceResult<never>;
     }
   | {
@@ -116,6 +119,7 @@ export type IdentityResolution =
       details: null;
       work: null;
       workError: null;
+      workFailure: null;
       result: SourceResult<never>;
     };
 
@@ -431,6 +435,7 @@ export async function resolveIdentity(
     details: null,
     work: null,
     workError: null,
+    workFailure: null,
     result,
   });
   try {
@@ -481,6 +486,7 @@ export async function resolveIdentity(
     const links = linksOf(details);
     let work: MbWork | null = null;
     let workError: string | null = null;
+    let workFailure: SourceErrorRecord | null = null;
     let original =
       ruledOut(details, links.works) ?? originalPerformance(details, links.works, null);
     const needsDates = ruledOut(details, links.works) === null;
@@ -489,22 +495,30 @@ export async function resolveIdentity(
       const [only] = links.works;
       try {
         work = await getWorkRecordings(only.mbid, signal);
+      } catch (error) {
+        // The work's covers are lost: the run's error, so it is not kept as complete.
+        workError = `the work "${only.title}" could not be read: ${describeError(error)}`;
+        workFailure = errorRecord("musicbrainz", error);
+      }
+      // Dating the work's recordings costs requests; only when nothing else rules it out. When
+      // they cannot be dated, nothing is lost: the recording is not shown to be the original, so
+      // the work's covers stay about the work, and a note says so.
+      if (work && needsDates) {
         const coverIds = new Set(
-          (Array.isArray(work?.relations) ? work.relations : [])
+          (Array.isArray(work.relations) ? work.relations : [])
             .filter((r) => (r?.attributes ?? []).includes("cover") && r.recording)
             .map((r) => r.recording?.id as string),
         );
-        // Dating the work's recordings costs requests; only when nothing else rules it out.
-        if (needsDates) {
+        try {
           original = originalPerformance(
             details,
             links.works,
             await browseWorkRecordings(only.mbid, 2, signal),
             coverIds,
           );
+        } catch (error) {
+          workError = `${DATES_INCOMPLETE}the recordings of the work "${only.title}" could not be dated (${describeError(error)}), so its covers are not claimed for this recording`;
         }
-      } catch (error) {
-        workError = `the work "${only.title}" could not be read: ${describeError(error)}`;
       }
     }
 
@@ -528,6 +542,7 @@ export async function resolveIdentity(
       details,
       work,
       workError,
+      workFailure,
       result: found("musicbrainz", [], [], { omitted: pick.omitted }),
     };
   } catch (error) {
@@ -634,8 +649,12 @@ export async function musicBrainzRelationships(
   return found("musicbrainz", kept, evidence, {
     omitted: result.omitted,
     incomplete: notes.length > 0 ? notes.join("; ") : null,
+    error: resolution.workFailure,
   });
 }
+
+/** How the MusicBrainz note starts when the work's recordings could not be dated. */
+export const DATES_INCOMPLETE = "dates incomplete: ";
 
 export interface PrimarySources {
   identity: PrimaryIdentity | null;
@@ -699,6 +718,7 @@ export async function collectPrimarySources(
     details: null,
     work: null,
     workError: null,
+    workFailure: null,
     result: resolution,
   };
   const { identity } = base;

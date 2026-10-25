@@ -316,7 +316,17 @@ describe("the analysis graph", () => {
     expect(replayed.composerRuns).toBe(1);
     const { run: recordedRun, ...recordedData } = recorded.trackData!;
     const { run: replayedRun, ...replayedData } = replayed.trackData!;
-    expect(replayedData).toEqual(recordedData);
+    // Only the model's answers are replayed: the sources were read again, so each run's
+    // evidence says it was retrieved at that run's time.
+    const retrieved = (data: typeof recordedData) => data.evidence?.map((e) => e.retrievedAt);
+    expect(recordedData.evidence?.length).toBeGreaterThan(0);
+    expect(new Set(retrieved(recordedData))).toEqual(new Set(["2026-03-01T10:00:00.000Z"]));
+    expect(new Set(retrieved(replayedData))).toEqual(new Set(["2026-09-09T22:22:22.000Z"]));
+    const undated = (data: typeof recordedData) => ({
+      ...data,
+      evidence: data.evidence?.map(({ retrievedAt: _at, ...item }) => item),
+    });
+    expect(undated(replayedData)).toEqual(undated(recordedData));
     // Answers from cassettes make a replayed run; the recording run called the provider.
     expect(replayedRun).toMatchObject({ id: "thread-b", fallback: false, mode: "replay" });
     expect(recordedRun).toMatchObject({ id: "thread-a", fallback: false, mode: "live" });

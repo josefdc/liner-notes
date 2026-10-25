@@ -188,9 +188,17 @@ describe("researcher subgraph", () => {
       testRuntime(planner(plan("search_musicbrainz"), plan("search_lastfm_artist_info"))),
     ).invoke({ spotifyData });
 
+    // A TypeError is a bug of the reader: an internal error, never the source's answer.
     expect(final.sourceErrors).toEqual([
-      expect.objectContaining({ source: "musicbrainz", code: "invalid_response" }),
+      expect.objectContaining({
+        source: "musicbrainz",
+        code: "unavailable",
+        message: "internal error: bad payload",
+      }),
     ]);
+    expect(final.statusMessages).toContain(
+      "⚠️ Search failed: musicbrainz (internal error in our reader)",
+    );
     expect(tools.getLastfmArtistInfo.invoke).toHaveBeenCalledTimes(1);
   });
 

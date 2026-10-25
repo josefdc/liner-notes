@@ -15,6 +15,10 @@
  * - Stored stream events are deleted once they were sent longer ago than the event retention,
  *   whatever their run. They are kept only to record a run as a replay soon after it ran; the
  *   run's result stays with the run. The event retention is never longer than the run retention.
+ * - Model usage rows (`llm_usage`, the per-database copy of the spend log kept for reports) go
+ *   with their run; a row whose run has no record (an evaluation or smoke call, or a run already
+ *   deleted) goes once it was written longer ago than the run retention. The spend log itself
+ *   (LLM_SPEND_LOG) is never pruned here: it is the authoritative record of spend.
  *
  * Defaults: checkpoints 24 hours, store items 30 days, runs 30 days, run events 7 days.
  * Override with CHECKPOINT_RETENTION_HOURS (at least 1), STORE_RETENTION_DAYS,
@@ -45,22 +49,32 @@ export const DEFAULT_RETENTION: RetentionPolicy = {
   runEventRetentionMs: 7 * DAY_MS,
 };
 
-function setting(name: string, raw: string | undefined, fallback: number, minimum: number): number {
-  if (raw == null || raw.trim() === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    log.warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
-    return fallback;
-  }
-  if (value < minimum) {
-    log.warn(`${name}=${value} is below the minimum; using ${minimum}.`);
-    return minimum;
-  }
-  return value;
-}
-
-/** Reads the retention periods from the environment, falling back to the defaults. */
-export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): RetentionPolicy {
+/**
+ * Reads the retention periods from the environment, falling back to the defaults. A setting it
+ * cannot use is reported to `warn` (the log by default).
+ */
+export function retentionFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = (message) => log.warn(message),
+): RetentionPolicy {
+  const setting = (
+    name: string,
+    raw: string | undefined,
+    fallback: number,
+    minimum: number,
+  ): number => {
+    if (raw == null || raw.trim() === "") return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
+      return fallback;
+    }
+    if (value < minimum) {
+      warn(`${name}=${value} is below the minimum; using ${minimum}.`);
+      return minimum;
+    }
+    return value;
+  };
   return {
     checkpointRetentionMs:
       setting(
@@ -100,6 +114,7 @@ export interface PruneResult {
   storeItems: number;
   runs: number;
   runEvents: number;
+  llmUsage: number;
 }
 
 function tableExists(db: Database.Database, name: string): boolean {
@@ -150,6 +165,7 @@ export function pruneDatabase(
     storeItems: 0,
     runs: 0,
     runEvents: 0,
+    llmUsage: 0,
   };
 
   const runCutoff = Math.floor((now - policy.runRetentionMs) / 1000);
@@ -185,18 +201,29 @@ export function pruneDatabase(
     result.runEvents = db
       .prepare(`DELETE FROM run_events WHERE sent_at <= ? OR run_id IN (${expired})`)
       .run(eventCutoffMs, runCutoff).changes;
+    result.llmUsage = db
+      .prepare(
+        `DELETE FROM llm_usage WHERE run_id IN (${expired})
+           OR (created_at <= ? AND run_id NOT IN (SELECT run_id FROM runs))`,
+      )
+      .run(runCutoff, runCutoff).changes;
     result.runs = db
       .prepare("DELETE FROM runs WHERE COALESCE(finished_at, created_at) <= ?")
       .run(runCutoff).changes;
   })();
 
   const total =
-    result.checkpoints + result.writes + result.storeItems + result.runs + result.runEvents;
+    result.checkpoints +
+    result.writes +
+    result.storeItems +
+    result.runs +
+    result.runEvents +
+    result.llmUsage;
   if (total > 0) {
     log.info(
       `Pruned ${result.threads} threads (${result.checkpoints} checkpoints, ` +
         `${result.writes} writes), ${result.storeItems} store items, ${result.runs} runs ` +
-        `(${result.runEvents} events)`,
+        `(${result.runEvents} events), ${result.llmUsage} model usage rows`,
     );
   }
   return result;

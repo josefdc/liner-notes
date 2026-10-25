@@ -6,12 +6,13 @@ import { emptyCheckpoint } from "@langchain/langgraph-checkpoint";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runMigrations } from "./migrations.js";
+import { MIGRATIONS, runMigrations } from "./migrations.js";
 import {
   appendRunEvent,
   EVENT_BUSY_TIMEOUT_MS,
   getRun,
   latestRunsForTrack,
+  runDurationSql,
   settleOpenRuns,
   startRun,
   storeReplayOf,
@@ -134,6 +135,189 @@ describe("settleOpenRuns", () => {
 
     expect(settled).toEqual({ interrupted: 0, cancelled: 0 });
     expect(getRun(db, "r")?.status).toBe("completed");
+  });
+});
+
+describe("time waiting for the user's choice", () => {
+  const T0 = Date.UTC(2026, 9, 25, 12, 0, 0);
+  /** Sets the clock to `seconds` after T0. */
+  const at = (seconds: number) => vi.setSystemTime(T0 + seconds * 1000);
+  const pauseOf = (runId: string) =>
+    db
+      .prepare(
+        `SELECT paused_since AS since, paused_seconds AS seconds,
+           ${runDurationSql()} AS duration FROM runs WHERE run_id = ?`,
+      )
+      .get(runId) as { since: number | null; seconds: number | null; duration: number | null };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    at(0);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("leaves the wait at the track picker out of the run's duration", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous" });
+    at(4);
+    updateRun(db, "r", { status: "interrupted" });
+    expect(pauseOf("r")).toEqual({ since: T0 / 1000 + 4, seconds: 0, duration: null });
+
+    at(4 + 600);
+    updateRun(db, "r", { status: "running" });
+    expect(pauseOf("r")).toMatchObject({ since: null, seconds: 600 });
+    at(4 + 600 + 30);
+    updateRun(db, "r", { status: "completed" });
+
+    expect(getRun(db, "r")).toMatchObject({ createdAt: T0 / 1000, finishedAt: T0 / 1000 + 634 });
+    expect(pauseOf("r")).toEqual({ since: null, seconds: 600, duration: 34 });
+  });
+
+  it("adds up every wait: a resume that stopped before the choice was applied waits again", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous" });
+    at(2);
+    updateRun(db, "r", { status: "interrupted" });
+    at(102);
+    updateRun(db, "r", { status: "running" });
+    at(103);
+    updateRun(db, "r", { status: "interrupted" });
+    // Recorded again as waiting (e.g. by a second outcome): the wait keeps its start.
+    at(150);
+    updateRun(db, "r", { status: "interrupted" });
+    at(303);
+    updateRun(db, "r", { status: "running" });
+    at(313);
+    updateRun(db, "r", { status: "completed" });
+
+    expect(pauseOf("r")).toEqual({ since: null, seconds: 300, duration: 13 });
+  });
+
+  it("ends the wait when a waiting run is given a final status", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous" });
+    at(5);
+    updateRun(db, "r", { status: "interrupted" });
+    at(65);
+    updateRun(db, "r", { status: "cancelled" });
+
+    expect(pauseOf("r")).toEqual({ since: null, seconds: 60, duration: 5 });
+  });
+
+  // Recovery paths: 10 s of work before the pick and 20 s after, so the run's own time is 30 s,
+  // but when the wait began is not known, so the duration must read as unknown, never as more.
+  it("knows no duration for a run found waiting at a restart (down an hour after the interrupt)", async () => {
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous" });
+    // The thread paused at 10 s, and the server stopped before the run was recorded as waiting.
+    at(3610);
+    await settleOpenRuns(db, async () => true);
+    expect(getRun(db, "r")?.status).toBe("interrupted");
+    at(3670);
+    updateRun(db, "r", { status: "running" });
+    at(3690);
+    updateRun(db, "r", { status: "completed" });
+
+    // Wall time 3690 s less the 60 s seen waiting would read 3630 s.
+    expect(pauseOf("r")).toEqual({ since: null, seconds: null, duration: null });
+  });
+
+  it("knows no duration for a run whose thread could not be read at a restart, then resumed", async () => {
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous" });
+    at(10);
+    await settleOpenRuns(db, async () => {
+      throw new Error("unreadable");
+    });
+    expect(getRun(db, "r")?.status).toBe("cancelled");
+    // The thread was in fact waiting: the choice is still pending, and it is resumed.
+    at(310);
+    updateRun(db, "r", { status: "running" });
+    at(330);
+    updateRun(db, "r", { status: "completed" });
+
+    expect(pauseOf("r")).toEqual({ since: null, seconds: null, duration: null });
+  });
+
+  it("knows no duration for a run opened again after a final status", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous" });
+    at(10);
+    updateRun(db, "r", { status: "interrupted" });
+    at(610);
+    updateRun(db, "r", { status: "running" });
+    // The resume stopped before the choice was applied and could not tell: recorded cancelled.
+    at(615);
+    updateRun(db, "r", { status: "cancelled" });
+    expect(pauseOf("r")).toEqual({ since: null, seconds: 600, duration: 15 });
+    at(1515);
+    updateRun(db, "r", { status: "running" });
+    at(1535);
+    updateRun(db, "r", { status: "completed" });
+
+    // Wall time 1535 s less the 600 s wait would read 935 s.
+    expect(pauseOf("r")).toEqual({ since: null, seconds: null, duration: null });
+  });
+
+  it("knows no duration when the clock went back, during a wait or over the run", () => {
+    startRun(db, { runId: "wait", threadId: "wait", query: "ambiguous" });
+    at(10);
+    updateRun(db, "wait", { status: "interrupted" });
+    at(5);
+    updateRun(db, "wait", { status: "running" });
+    at(20);
+    updateRun(db, "wait", { status: "completed" });
+    expect(pauseOf("wait")).toEqual({ since: null, seconds: null, duration: null });
+
+    at(100);
+    startRun(db, { runId: "run", threadId: "run", query: "q" });
+    at(50);
+    updateRun(db, "run", { status: "completed" });
+    expect(pauseOf("run")).toEqual({ since: null, seconds: 0, duration: null });
+  });
+
+  it("records when a run started as waiting began to wait", () => {
+    at(3);
+    startRun(db, { runId: "r", threadId: "r", query: "ambiguous", status: "interrupted" });
+    expect(pauseOf("r")).toMatchObject({ since: T0 / 1000 + 3, seconds: 0 });
+    at(63);
+    updateRun(db, "r", { status: "running" });
+    at(66);
+    updateRun(db, "r", { status: "completed" });
+    expect(pauseOf("r")).toEqual({ since: null, seconds: 60, duration: 3 });
+  });
+
+  it("knows no duration for a run first recorded at its resume, nor for one stored before waits were kept", () => {
+    startRun(db, { runId: "late", threadId: "late", query: "q", pausesKnown: false });
+    at(20);
+    updateRun(db, "late", { status: "completed" });
+    expect(pauseOf("late")).toEqual({ since: null, seconds: null, duration: null });
+
+    const old = new Database(":memory:");
+    try {
+      runMigrations(old, MIGRATIONS.slice(0, 10));
+      old
+        .prepare(
+          `INSERT INTO runs (run_id, thread_id, query, status, created_at, finished_at)
+           VALUES ('done', 't1', 'q', 'completed', 100, 160), ('waiting', 't2', 'q', 'interrupted', 100, NULL)`,
+        )
+        .run();
+      runMigrations(old);
+      updateRun(old, "waiting", { status: "running" });
+      updateRun(old, "waiting", { status: "completed" });
+      const rows = old
+        .prepare(`SELECT run_id, paused_seconds, ${runDurationSql()} AS duration FROM runs`)
+        .all();
+      expect(rows).toEqual([
+        { run_id: "done", paused_seconds: null, duration: null },
+        { run_id: "waiting", paused_seconds: null, duration: null },
+      ]);
+    } finally {
+      old.close();
+    }
+  });
+
+  it("counts no wait for a run that never waited", () => {
+    startRun(db, { runId: "r", threadId: "r", query: "q" });
+    at(42);
+    updateRun(db, "r", { status: "completed" });
+    expect(pauseOf("r")).toEqual({ since: null, seconds: 0, duration: 42 });
   });
 });
 

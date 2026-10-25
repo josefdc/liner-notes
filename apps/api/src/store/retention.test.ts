@@ -200,8 +200,36 @@ describe("pruneDatabase", () => {
       storeItems: 0,
       runs: 0,
       runEvents: 0,
+      llmUsage: 0,
     });
     fresh.close();
+  });
+
+  it("deletes model usage rows with their run, and rows of no run past the run retention", () => {
+    runAt("old", "t1", NOW - 40 * DAY, NOW - 31 * DAY);
+    // Waited at the track picker for most of a month: its early calls go only with it.
+    runAt("long-wait", "t2", NOW - 40 * DAY, NOW - 2 * DAY);
+    runAt("recent", "t3", NOW - DAY, NOW - DAY);
+    const usage = db.prepare(
+      `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
+         usd_est, price_multiplier, estimated, latency_ms, created_at)
+       VALUES (?, ?, 'composer', 'main', 'd', 'dev', 'live', 'ok', 0.01, 1, 0, 100, ?)`,
+    );
+    const sec = (ms: number) => Math.floor(ms / 1000);
+    usage.run("u-old", "old", sec(NOW - 31 * DAY));
+    usage.run("u-long-wait", "long-wait", sec(NOW - 40 * DAY));
+    usage.run("u-recent", "recent", sec(NOW - DAY));
+    usage.run("u-eval-old", "eval-run", sec(NOW - 31 * DAY));
+    usage.run("u-eval-new", "eval-run-2", sec(NOW - 29 * DAY));
+
+    const result = pruneDatabase(db, DEFAULT_RETENTION, NOW);
+
+    expect(result).toMatchObject({ runs: 1, llmUsage: 2 });
+    expect(db.prepare("SELECT id FROM llm_usage ORDER BY id").pluck().all()).toEqual([
+      "u-eval-new",
+      "u-long-wait",
+      "u-recent",
+    ]);
   });
 });
 

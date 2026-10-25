@@ -38,9 +38,10 @@
  *                   "interrupted"); null while it is not waiting
  *   paused_seconds  seconds the run spent waiting for the user's choice in waits that have
  *                   ended (a resume, or a final status, ends one); null when unknown: a run
- *                   stored before pauses were kept (migration 11), or one first recorded at its
- *                   resume. The run's own time is finished_at − created_at − paused_seconds
- *                   (runDurationSql)
+ *                   stored before pauses were kept (migration 11), one first recorded at its
+ *                   resume, one found waiting or unreadable at a restart, one opened again
+ *                   after a final status, or one during whose wait the clock went back. The
+ *                   run's own time is finished_at − created_at − paused_seconds (runDurationSql)
  *
  * Columns of `run_events`:
  *   run_id          the run that sent the event
@@ -173,29 +174,47 @@ export function startRun(
 
 /**
  * The run's own time in seconds, as SQL over a `runs` row: from its start to its finish, less
- * the time it waited for the user's choice. Null for an open run, and for one whose waits are
- * unknown (paused_seconds null). Times are whole seconds, so it is exact to about a second.
+ * the time it waited for the user's choice. Null for an open run, for one whose waits are
+ * unknown (paused_seconds null), and for one whose times went backwards (the clock was set
+ * back). Times are whole seconds, so it is exact to about a second.
+ *
+ * A server that stops while a run is in flight leaves it `running` until the next start settles
+ * it (settleOpenRuns), so a run that is later resumed and completes counts that downtime as run
+ * time when it was not waiting at the time; this is rare, and not told apart.
  */
 export const runDurationSql = (table = "runs") =>
-  `CASE WHEN ${table}.finished_at IS NULL OR ${table}.paused_seconds IS NULL THEN NULL
-     ELSE MAX(0, ${table}.finished_at - ${table}.created_at - ${table}.paused_seconds) END`;
+  `CASE WHEN ${table}.finished_at IS NULL OR ${table}.paused_seconds IS NULL
+          OR ${table}.finished_at - ${table}.created_at - ${table}.paused_seconds < 0 THEN NULL
+     ELSE ${table}.finished_at - ${table}.created_at - ${table}.paused_seconds END`;
+
+const FINAL_SQL = FINAL_RUN_STATUSES.map((status) => `'${status}'`).join(", ");
 
 /**
- * SQL that sets a run's pause columns as its status becomes `newStatus` (a parameter written
- * as `?`, used three times, then `now` twice; the SET clause reads the row's previous values):
- * a run that starts waiting for a choice records when; one that stops waiting (resumed, or
- * given a final status) adds the wait to its paused time.
+ * SQL that sets a run's pause columns as its status becomes @pauseStatus at @pauseNow (unix
+ * seconds); the SET clause reads the row's previous values. A run that starts waiting for a
+ * choice records when; one that stops waiting (resumed, or given a final status) adds the wait
+ * to its paused time. The paused time becomes unknown (null), and stays so, when @pauseUnknown
+ * is 1 (the caller cannot tell when a wait began), when a run with a final status is opened
+ * again (the time since it was recorded as finished is not known to be waiting or work), and
+ * when the clock went back during a wait.
  */
 const PAUSE_SET = `
-  paused_seconds = CASE WHEN status = 'interrupted' AND ? <> 'interrupted'
-                        THEN paused_seconds + MAX(0, ? - paused_since)
-                        ELSE paused_seconds END,
-  paused_since = CASE WHEN ? <> 'interrupted' THEN NULL
+  paused_seconds = CASE
+    WHEN @pauseUnknown THEN NULL
+    WHEN status IN (${FINAL_SQL}) AND @pauseStatus NOT IN (${FINAL_SQL}) THEN NULL
+    WHEN status = 'interrupted' AND @pauseStatus <> 'interrupted' THEN
+      CASE WHEN @pauseNow >= paused_since THEN paused_seconds + (@pauseNow - paused_since) END
+    ELSE paused_seconds END,
+  paused_since = CASE WHEN @pauseStatus <> 'interrupted' THEN NULL
                       WHEN status = 'interrupted' THEN paused_since
-                      ELSE ? END`;
+                      ELSE @pauseNow END`;
 
-/** The parameters of PAUSE_SET, in order. */
-const pauseParams = (newStatus: RunStatus, now: number) => [newStatus, now, newStatus, now];
+/** The named parameters of PAUSE_SET. */
+const pauseParams = (pauseStatus: RunStatus, pauseNow: number, pauseUnknown = false) => ({
+  pauseStatus,
+  pauseNow,
+  pauseUnknown: pauseUnknown ? 1 : 0,
+});
 
 /**
  * A resumed run went on with the code of the server that resumed it: when that server's commit
@@ -243,7 +262,6 @@ export function updateRun(
        WHERE run_id = ?`,
     )
     .run(
-      ...pauseParams(update.status, now),
       update.status,
       finished,
       update.modelAvailable !== undefined ? 1 : 0,
@@ -253,6 +271,7 @@ export function updateRun(
       update.payload !== undefined ? 1 : 0,
       update.payload === undefined ? null : JSON.stringify(update.payload),
       runId,
+      pauseParams(update.status, now),
     );
   return result.changes > 0;
 }
@@ -545,7 +564,8 @@ export interface SettledRuns {
  * startup the ones a stopped process left behind. A run whose thread is paused at an interrupt
  * (waiting for the user's choice) becomes `interrupted`, so retention keeps the choice open;
  * any other becomes `cancelled`, also when its thread cannot be read. A row whose status changed
- * meanwhile (the run recorded its own outcome) is left as it is.
+ * meanwhile (the run recorded its own outcome) is left as it is. A run found waiting, or whose
+ * thread cannot be read, gets an unknown paused time: when its wait began was not recorded.
  */
 export async function settleOpenRuns(
   db: Database.Database,
@@ -562,18 +582,20 @@ export async function settleOpenRuns(
   const settled: SettledRuns = { interrupted: 0, cancelled: 0 };
   for (const run of open) {
     let waiting = false;
+    let unread = false;
     try {
       waiting = await isWaiting(run.thread_id);
     } catch (err) {
+      unread = true;
       log.error("Could not read the thread of an open run", { runId: run.run_id, err });
     }
     const status: RunStatus = waiting ? "interrupted" : "cancelled";
     const now = nowSec();
     const changes = settle.run(
-      ...pauseParams(status, now),
       status,
       waiting ? null : now,
       run.run_id,
+      pauseParams(status, now, waiting || unread),
     ).changes;
     if (changes > 0) settled[status]++;
   }

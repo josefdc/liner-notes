@@ -428,6 +428,24 @@ describe("analyze routes", () => {
       },
     );
 
+    it("knows no duration nor commit for a run first recorded at its resume", async () => {
+      const threadId = await pausedThread();
+      // A thread paused before runs were recorded: it has no run record.
+      getDb().prepare("DELETE FROM runs WHERE run_id = ?").run(threadId);
+
+      await sse(resumePath(threadId, "track-a"));
+
+      expect(runStatus(threadId)).toBe("completed");
+      expect(
+        getDb()
+          .prepare(
+            `SELECT paused_seconds AS paused, ${runDurationSql()} AS duration,
+               code_commit AS commit_ FROM runs WHERE run_id = ?`,
+          )
+          .get(threadId),
+      ).toEqual({ paused: null, duration: null, commit_: null });
+    });
+
     it("uses the candidate's own data, with no invented duration or explicit flag, when the track lookup fails", async () => {
       stub.detailsFail = true;
       const threadId = await pausedThread();

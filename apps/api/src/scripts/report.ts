@@ -1,26 +1,39 @@
 /**
- * `npm run report -w apps/api`: what the API's runs looked like, day by day, from its own
- * database (SQLITE_DB_PATH, from the environment or apps/api/.env; else data/sonic-agent.db).
- * The database is opened read-only; nothing is called and nothing is written.
+ * The run report: what the API's runs looked like, day by day, from its own database.
  *
- * Per UTC day of the run's start, and in total:
+ *   npm run report -w apps/api -- [--days N] [--json]     in a checkout (tsx)
+ *   node dist/report.js [--days N] [--json]                in the API image, e.g.
+ *     docker compose exec sonic-server node dist/report.js
+ *
+ * The database is SQLITE_DB_PATH, and the retention RUN_RETENTION_DAYS, read as the API reads
+ * them: from the environment when set there (a blank value means the default, as for the API),
+ * else from apps/api/.env (those two values only); else data/sonic-agent.db and 30 days.
+ * Nothing is called and nothing is written: when the database has no -wal file (the API is not
+ * running) the file is read into memory, so no -wal or -shm file is created next to it; while
+ * the API runs (its -wal exists) the file is opened read-only and reads the API's -wal and -shm.
+ * Run it as the API's user (in the image, `docker compose exec` does).
+ *
+ * Runs are counted by the UTC day each started; model use by the UTC day of each call:
  *   runs        every run recorded: live (computed for the request), replay (a recording served
- *               again) and cached (a result an earlier run composed); and by status: completed,
- *               failed, cancelled, open (running, or waiting for the user's choice)
+ *               again, or a run whose model answers were replayed from stored answers) and
+ *               cached (a result an earlier run composed); and by status: completed, failed,
+ *               cancelled, open (running, or waiting for the user's choice)
  *   p50 / p95   duration of the completed live runs, in seconds: from start to finish less the
  *               time the run waited at the track picker (runs.ts). Times are whole seconds. A
- *               run whose wait is unknown (stored before waits were kept) is left out and
- *               counted apart
+ *               run whose wait is unknown is left out and counted apart
  *   fallback    completed live runs whose result was built from source data only (the composer
- *               failed), of the completed live runs with a stored result
- *   model       model call attempts by the day they were made, their tokens and their cost
- *               estimated at the price table, from the database's usage rows (llm_usage): the
- *               app's own accounting. The spend log (LLM_SPEND_LOG) stays the authoritative
- *               record; rows past the run retention are no longer here (retention.ts)
+ *               failed), of the completed live runs whose stored result says either way; one
+ *               that says neither is counted apart
+ *   model       model call attempts sent to the provider, their tokens and their cost estimated
+ *               at the price table, from the database's usage rows (llm_usage): the app's own
+ *               accounting. Calls answered from stored answers are counted apart and cost
+ *               nothing. Token columns leave out the attempts marked estimated (tokens unknown
+ *               or partial); USD counts those at their estimate. The spend log (LLM_SPEND_LOG)
+ *               stays the authoritative record
  *
- * Options:
- *   -- --days N   the last N days, today included (default 7, at most 366)
- *   -- --json     the report as JSON instead of a table
+ * Days older than the run retention are shown as pruned: their runs and usage rows have been
+ * deleted (retention.ts), so they are not counted, and the total leaves them out. The day the
+ * retention ends in is marked as partly pruned.
  *
  * Never prints what anyone typed, a run id, a key or an endpoint. Exits 1 when the database
  * cannot be read, 2 for a bad option.
@@ -34,11 +47,20 @@ import Database from "better-sqlite3";
 import dotenv from "dotenv";
 import { API_ROOT } from "../config/apiPackage.js";
 import { getDefaultDbPath } from "../store/database.js";
+import { DEFAULT_RETENTION, retentionFromEnv } from "../store/retention.js";
 import { runDurationSql } from "../store/runs.js";
 
 const DAY_SECONDS = 24 * 60 * 60;
 export const DEFAULT_DAYS = 7;
 export const MAX_DAYS = 366;
+const DEFAULT_RETENTION_DAYS = DEFAULT_RETENTION.runRetentionMs / 1000 / DAY_SECONDS;
+
+const USAGE = [
+  "Usage: npm run report -w apps/api -- [--days N] [--json]",
+  "       node dist/report.js [--days N] [--json]   (in the API image)",
+  `  --days N   the last N days, today included (default ${DEFAULT_DAYS}, at most ${MAX_DAYS})`,
+  "  --json     the report as JSON instead of a table",
+].join("\n");
 
 export interface Durations {
   /** Completed live runs whose duration is known. */
@@ -51,32 +73,48 @@ export interface Durations {
 }
 
 export interface Fallbacks {
-  /** Completed live runs with a stored result. */
+  /** Completed live runs whose stored result says whether it is a fallback. */
   runs: number;
   /** Of those, the results built from source data only. */
   fallback: number;
-  /** fallback / runs; null without a stored result. */
+  /** Completed live runs with a stored result that does not say (stored before it was kept). */
+  unknown: number;
+  /** fallback / runs; null when none says. */
   rate: number | null;
 }
 
 export interface ModelUse {
+  /** Call attempts sent to the provider. */
   calls: number;
-  /** Attempts that ended in an error. */
+  /** Of those, the attempts that ended in an error. */
   errors: number;
+  /** Tokens of the attempts not marked estimated. */
   inputTokens: number;
   outputTokens: number;
-  /** Estimated at the price table. */
-  usd: number;
-  /** Attempts the provider reported no usage for, counted at the worst case. */
+  /** Estimated cost at the price table, the estimated attempts included. */
+  usdEstimate: number;
+  /**
+   * Attempts marked estimated: the provider reported no usage or only part of it (counted at
+   * the worst case), or the answer was filtered (counted at its input only).
+   */
   estimatedCalls: number;
+  /** Calls answered from stored answers: never sent, no cost, not in the counts above. */
+  replayedCalls: number;
 }
+
+/** How much of a day's records the retention has kept. */
+export type DayRetention = "kept" | "partly_pruned" | "pruned";
 
 export interface ReportRow {
   /** YYYY-MM-DD (UTC), or "total". */
   day: string;
+  retention: DayRetention;
   runs: number;
   live: number;
+  /** Recordings served again plus runs whose model answers were replayed. */
   replay: number;
+  /** Of `replay`, the runs whose model answers were replayed from stored answers. */
+  replayedAnswers: number;
   cached: number;
   completed: number;
   failed: number;
@@ -88,19 +126,32 @@ export interface ReportRow {
   model: ModelUse | null;
 }
 
+/** A day whose records the retention has deleted: nothing about it is known any more. */
+export interface PrunedDay {
+  day: string;
+  retention: "pruned";
+}
+
 export interface RunReport {
   from: string;
   to: string;
   days: number;
+  /** The run retention the report assumes, in days (RUN_RETENTION_DAYS). */
+  retentionDays: number;
+  /** The first day whose records are all kept. */
+  keptFrom: string;
   /** The database's schema version (PRAGMA user_version). */
   schemaVersion: number;
   /** False for a database not migrated to keep waits (schema before 11): no duration known. */
   pausesKept: boolean;
-  perDay: ReportRow[];
+  perDay: Array<ReportRow | PrunedDay>;
+  /** The days not pruned. */
   total: ReportRow;
-  /** Model spend of the window by purpose (dev, eval, showcase, ...). */
+  /** Model use of the days not pruned, by purpose (dev, eval, showcase, ...). */
   modelByPurpose: Record<string, ModelUse> | null;
 }
+
+export const isPrunedDay = (row: ReportRow | PrunedDay): row is PrunedDay => !("runs" in row);
 
 /** The value at percentile `p` of ascending `sorted`, by nearest rank; null when empty. */
 export function percentile(sorted: readonly number[], p: number): number | null {
@@ -128,12 +179,14 @@ function hasTable(db: Database.Database, name: string): boolean {
 const jsonField = (column: string, path: string) =>
   `CASE WHEN json_valid(${column}) THEN json_extract(${column}, '${path}') END`;
 
+type RunKind = "live" | "replay" | "replayed_answers" | "cached";
+
 interface RunFacts {
   day: string;
-  kind: "live" | "replay" | "cached";
+  kind: RunKind;
   status: string;
   duration: number | null;
-  /** 1/0 for a completed run with a stored result; null otherwise. */
+  /** For a completed run with a stored result: 1/0 when it says, -1 when it does not; else null. */
   fallback: number | null;
 }
 
@@ -142,8 +195,9 @@ const emptyModelUse = (): ModelUse => ({
   errors: 0,
   inputTokens: 0,
   outputTokens: 0,
-  usd: 0,
+  usdEstimate: 0,
   estimatedCalls: 0,
+  replayedCalls: 0,
 });
 
 function addModelUse(into: ModelUse, row: ModelUse): void {
@@ -151,24 +205,32 @@ function addModelUse(into: ModelUse, row: ModelUse): void {
   into.errors += row.errors;
   into.inputTokens += row.inputTokens;
   into.outputTokens += row.outputTokens;
-  into.usd += row.usd;
+  into.usdEstimate += row.usdEstimate;
   into.estimatedCalls += row.estimatedCalls;
+  into.replayedCalls += row.replayedCalls;
 }
 
-function summarise(day: string, runs: RunFacts[], model: ModelUse | null): ReportRow {
+function summarise(
+  day: string,
+  retention: DayRetention,
+  runs: RunFacts[],
+  model: ModelUse | null,
+): ReportRow {
   const count = (test: (run: RunFacts) => boolean) => runs.filter(test).length;
   const completedLive = runs.filter((run) => run.kind === "live" && run.status === "completed");
   const known = completedLive
     .map((run) => run.duration)
     .filter((duration): duration is number => duration !== null)
     .sort((a, b) => a - b);
-  const withResult = completedLive.filter((run) => run.fallback !== null);
-  const fallback = withResult.filter((run) => run.fallback === 1).length;
+  const says = completedLive.filter((run) => run.fallback === 0 || run.fallback === 1);
+  const fallback = says.filter((run) => run.fallback === 1).length;
   return {
     day,
+    retention,
     runs: runs.length,
     live: count((run) => run.kind === "live"),
-    replay: count((run) => run.kind === "replay"),
+    replay: count((run) => run.kind === "replay" || run.kind === "replayed_answers"),
+    replayedAnswers: count((run) => run.kind === "replayed_answers"),
     cached: count((run) => run.kind === "cached"),
     completed: count((run) => run.status === "completed"),
     failed: count((run) => run.status === "failed"),
@@ -181,9 +243,10 @@ function summarise(day: string, runs: RunFacts[], model: ModelUse | null): Repor
       p95: percentile(known, 95),
     },
     fallback: {
-      runs: withResult.length,
+      runs: says.length,
       fallback,
-      rate: withResult.length > 0 ? fallback / withResult.length : null,
+      unknown: count((run) => run.kind === "live" && run.fallback === -1),
+      rate: says.length > 0 ? fallback / says.length : null,
     },
     model,
   };
@@ -191,38 +254,50 @@ function summarise(day: string, runs: RunFacts[], model: ModelUse | null): Repor
 
 /**
  * The report of the `days` days up to `now` (unix ms), today included, from an API database at
- * schema 2 or later. Reads only.
+ * schema 2 or later, with runs kept for `retentionDays`. Reads only.
  */
 export function buildReport(
   db: Database.Database,
-  { days = DEFAULT_DAYS, now = Date.now() }: { days?: number; now?: number } = {},
+  {
+    days = DEFAULT_DAYS,
+    now = Date.now(),
+    retentionDays = DEFAULT_RETENTION_DAYS,
+  }: { days?: number; now?: number; retentionDays?: number } = {},
 ): RunReport {
   if (!hasTable(db, "runs")) throw new Error("the database has no runs table");
   const today = Math.floor(now / 1000 / DAY_SECONDS) * DAY_SECONDS;
   const fromSec = today - (days - 1) * DAY_SECONDS;
-  const dayList = Array.from({ length: days }, (_, i) => utcDay(fromSec + i * DAY_SECONDS));
+  // Runs and usage rows at or before the cutoff may have been deleted (retention.ts).
+  const cutoffSec = Math.floor(now / 1000 - retentionDays * DAY_SECONDS);
+  const dayStarts = Array.from({ length: days }, (_, i) => fromSec + i * DAY_SECONDS);
+  const retentionOf = (start: number): DayRetention =>
+    start + DAY_SECONDS <= cutoffSec + 1 ? "pruned" : start <= cutoffSec ? "partly_pruned" : "kept";
+  const firstKept = dayStarts.find((start) => retentionOf(start) !== "pruned") ?? today;
+  const keptFrom = utcDay(Math.floor(cutoffSec / DAY_SECONDS) * DAY_SECONDS + DAY_SECONDS);
 
   const pausesKept = hasColumn(db, "runs", "paused_seconds");
   const replayOf = jsonField("payload", "$.replayOf");
   const resultFrom = jsonField("payload", "$.resultFrom");
-  const hasAnalysis = hasColumn(db, "runs", "analysis");
-  const fallbackSql = hasAnalysis
-    ? `CASE WHEN json_valid(analysis) THEN COALESCE(json_extract(analysis, '$.run.fallback'), 0) END`
+  const replayMode = hasColumn(db, "runs", "mode") ? "mode = 'replay'" : "0";
+  const fallbackSql = hasColumn(db, "runs", "analysis")
+    ? `CASE WHEN json_valid(analysis) THEN
+         COALESCE(json_extract(analysis, '$.run.fallback'), -1) END`
     : "NULL";
   const rows = db
     .prepare(
       `SELECT created_at, status,
          CASE WHEN ${replayOf} IS NOT NULL THEN 'replay'
               WHEN ${resultFrom} = 'another_run' THEN 'cached'
+              WHEN ${replayMode} THEN 'replayed_answers'
               ELSE 'live' END AS kind,
          ${pausesKept ? runDurationSql() : "NULL"} AS duration,
          CASE WHEN status = 'completed' THEN ${fallbackSql} END AS fallback
        FROM runs WHERE created_at >= ? ORDER BY created_at`,
     )
-    .all(fromSec) as Array<{
+    .all(firstKept) as Array<{
     created_at: number;
     status: string;
-    kind: RunFacts["kind"];
+    kind: RunKind;
     duration: number | null;
     fallback: number | null;
   }>;
@@ -231,24 +306,27 @@ export function buildReport(
     kind: row.kind,
     status: row.status,
     duration: row.duration,
-    fallback: row.fallback === null ? null : row.fallback ? 1 : 0,
+    fallback: row.fallback,
   }));
 
   let modelByDay: Map<string, ModelUse> | null = null;
   let modelByPurpose: Record<string, ModelUse> | null = null;
   if (hasTable(db, "llm_usage")) {
+    const sent = "mode <> 'replay'";
+    const counted = `${sent} AND estimated = 0`;
     const usage = db
       .prepare(
         `SELECT date(created_at, 'unixepoch') AS day, purpose,
-           COUNT(*) AS calls,
-           SUM(status <> 'ok') AS errors,
-           COALESCE(SUM(input_tokens), 0) AS inputTokens,
-           COALESCE(SUM(output_tokens), 0) AS outputTokens,
-           COALESCE(SUM(usd_est), 0) AS usd,
-           SUM(estimated) AS estimatedCalls
+           COALESCE(SUM(${sent}), 0) AS calls,
+           COALESCE(SUM(${sent} AND status <> 'ok'), 0) AS errors,
+           COALESCE(SUM(CASE WHEN ${counted} THEN input_tokens END), 0) AS inputTokens,
+           COALESCE(SUM(CASE WHEN ${counted} THEN output_tokens END), 0) AS outputTokens,
+           COALESCE(SUM(CASE WHEN ${sent} THEN usd_est END), 0) AS usdEstimate,
+           COALESCE(SUM(${sent} AND estimated <> 0), 0) AS estimatedCalls,
+           COALESCE(SUM(mode = 'replay'), 0) AS replayedCalls
          FROM llm_usage WHERE created_at >= ? GROUP BY day, purpose ORDER BY day, purpose`,
       )
-      .all(fromSec) as Array<ModelUse & { day: string; purpose: string }>;
+      .all(firstKept) as Array<ModelUse & { day: string; purpose: string }>;
     modelByDay = new Map();
     modelByPurpose = {};
     for (const { day, purpose, ...use } of usage) {
@@ -260,26 +338,37 @@ export function buildReport(
     }
   }
 
-  const perDay = dayList.map((day) =>
-    summarise(
+  const perDay = dayStarts.map((start): ReportRow | PrunedDay => {
+    const day = utcDay(start);
+    const retention = retentionOf(start);
+    if (retention === "pruned") return { day, retention };
+    return summarise(
       day,
+      retention,
       facts.filter((run) => run.day === day),
       modelByDay ? (modelByDay.get(day) ?? emptyModelUse()) : null,
-    ),
-  );
+    );
+  });
   let totalModel: ModelUse | null = null;
   if (modelByDay) {
     totalModel = emptyModelUse();
     for (const use of modelByDay.values()) addModelUse(totalModel, use);
   }
   return {
-    from: dayList[0],
-    to: dayList[dayList.length - 1],
+    from: utcDay(fromSec),
+    to: utcDay(today),
     days,
+    retentionDays,
+    keptFrom,
     schemaVersion: db.pragma("user_version", { simple: true }) as number,
     pausesKept,
     perDay,
-    total: summarise("total", facts, totalModel),
+    total: summarise(
+      "total",
+      perDay.some((row) => row.retention !== "kept") ? "partly_pruned" : "kept",
+      facts,
+      totalModel,
+    ),
     modelByPurpose,
   };
 }
@@ -311,10 +400,10 @@ export function formatReport(report: RunReport): string {
     "calls",
     "tokens in",
     "tokens out",
-    "USD",
+    "USD (est.)",
   ];
-  const line = (row: ReportRow) => [
-    row.day,
+  const line = (row: ReportRow): string[] => [
+    row.retention === "partly_pruned" && row.day !== "total" ? `${row.day}*` : row.day,
     String(row.runs),
     String(row.live),
     String(row.replay),
@@ -331,51 +420,79 @@ export function formatReport(report: RunReport): string {
           String(row.model.calls),
           String(row.model.inputTokens),
           String(row.model.outputTokens),
-          usd(row.model.usd),
+          usd(row.model.usdEstimate),
         ]
       : ["-", "-", "-", "-"]),
   ];
-  const table = [header, ...report.perDay.map(line), line(report.total)];
+  const lines = report.perDay.map((row) => (isPrunedDay(row) ? null : line(row)));
+  const table = [header, ...lines.filter((cells) => cells !== null), line(report.total)];
   const widths = header.map((_, i) => Math.max(...table.map((cells) => cells[i].length)));
   const render = (cells: string[]) =>
     cells
       .map((cell, i) => (i === 0 ? cell.padEnd(widths[i]) : cell.padStart(widths[i])))
       .join("  ")
       .trimEnd();
+  const rendered = report.perDay.map((row, i) => {
+    const cells = lines[i];
+    return cells ? render(cells) : `${row.day.padEnd(widths[0])}  pruned`;
+  });
 
   const { total } = report;
+  const pruned = report.perDay.filter(isPrunedDay).length;
+  const partly = report.perDay.some((row) => row.retention === "partly_pruned");
   const notes = [
     `Durations: ${total.durations.runs} completed live runs, start to finish less the time ` +
       "spent waiting at the track picker, whole seconds (p50/p95 by nearest rank)." +
       (report.pausesKept
         ? total.durations.unknown > 0
-          ? ` ${total.durations.unknown} left out: stored before waits were kept.`
+          ? ` ${total.durations.unknown} left out: their wait is unknown (stored before ` +
+            "waits were kept, first recorded at a resume, recovered after a restart, or " +
+            "timed by a clock that went back)."
           : ""
         : " None known: the database is at schema " +
           `v${report.schemaVersion}, before waits were kept (start the API once to migrate it).`),
-    `Fallback: completed live runs whose result was built from source data only, of the ` +
-      `${total.fallback.runs} with a stored result.`,
+    "Replay: recordings served again, and runs whose model answers were replayed from stored " +
+      `answers (${total.replayedAnswers}); neither is counted as live.`,
+    "Fallback: completed live runs whose result was built from source data only, of the " +
+      `${total.fallback.runs} whose stored result says either way` +
+      (total.fallback.unknown > 0 ? `; ${total.fallback.unknown} say neither.` : "."),
     total.model
-      ? `Model: ${total.model.calls} call attempts (${total.model.errors} failed), cost ` +
-        "estimated at the price table from the database's usage rows" +
+      ? `Model, by the day of the call: ${total.model.calls} call attempts sent to the ` +
+        `provider (${total.model.errors} failed), cost estimated at the price table from the ` +
+        "database's usage rows." +
         (total.model.estimatedCalls > 0
-          ? `; ${total.model.estimatedCalls} reported no usage and count at the worst case`
+          ? ` ${total.model.estimatedCalls} are marked estimated (no usage or part of it ` +
+            "reported, counted at the worst case; or a filtered answer, counted at its input " +
+            "only): the token columns leave them out, USD (est.) counts their estimate."
           : "") +
-        ". The spend log (LLM_SPEND_LOG) is the authoritative record."
+        (total.model.replayedCalls > 0
+          ? ` ${total.model.replayedCalls} calls answered from stored answers are not counted ` +
+            "(never sent, no cost)."
+          : "") +
+        " The spend log (LLM_SPEND_LOG) is the authoritative record."
       : "Model: the database keeps no usage rows.",
   ];
   if (report.modelByPurpose && Object.keys(report.modelByPurpose).length > 0) {
     notes.push(
       `Model by purpose: ${Object.entries(report.modelByPurpose)
-        .map(([purpose, use]) => `${purpose} ${use.calls} calls ${usd(use.usd)}`)
+        .map(([purpose, use]) => `${purpose} ${use.calls} calls ${usd(use.usdEstimate)}`)
         .join(", ")}.`,
     );
   }
+  if (pruned > 0 || partly) {
+    notes.push(
+      `Retention: runs and usage rows are deleted after RUN_RETENTION_DAYS=` +
+        `${report.retentionDays}; records are complete from ${report.keptFrom}.` +
+        (pruned > 0 ? ` ${pruned} pruned days are not counted, in the total either.` : "") +
+        (partly ? " * partly pruned." : ""),
+    );
+  }
   return [
-    `Runs ${report.from} to ${report.to} (UTC, ${report.days} days), by the day each started`,
+    `Runs ${report.from} to ${report.to} (UTC, ${report.days} days): runs by the day each ` +
+      "started, model use by the day of the call",
     "",
     render(header),
-    ...report.perDay.map((row) => render(line(row))),
+    ...rendered,
     render(line(report.total)),
     "",
     ...notes,
@@ -386,23 +503,54 @@ export function formatReport(report: RunReport): string {
 // Command line
 // =============================================================================
 
-/** SQLITE_DB_PATH from the environment, else from apps/api/.env (that one value only). */
-function dbPathFromSettings(env: NodeJS.ProcessEnv): string {
-  if (env.SQLITE_DB_PATH?.trim()) return getDefaultDbPath(env);
-  const file = join(API_ROOT, ".env");
-  let fromFile: string | undefined;
-  if (existsSync(file)) {
-    try {
-      fromFile = dotenv.parse(readFileSync(file)).SQLITE_DB_PATH;
-    } catch {
-      // An unreadable settings file names no database; the default is used.
-    }
+/** apps/api/.env's values; empty when there is none or it cannot be read. */
+function settingsFileValues(): Record<string, string> {
+  const path = join(API_ROOT, ".env");
+  if (!existsSync(path)) return {};
+  try {
+    return dotenv.parse(readFileSync(path));
+  } catch {
+    // An unreadable settings file sets nothing; the defaults are used.
+    return {};
   }
-  return getDefaultDbPath({ SQLITE_DB_PATH: fromFile });
+}
+
+/**
+ * The settings the report needs, as the API reads them: a variable set in the environment wins
+ * (even blank, which then means the default, as dotenv leaves it so for the API), else the
+ * settings file's value. Only these two are taken from the file.
+ */
+export function reportSettings(
+  env: NodeJS.ProcessEnv,
+  file: Record<string, string> = settingsFileValues(),
+): { SQLITE_DB_PATH?: string; RUN_RETENTION_DAYS?: string } {
+  const pick = (name: "SQLITE_DB_PATH" | "RUN_RETENTION_DAYS") =>
+    env[name] !== undefined ? env[name] : file[name];
+  return { SQLITE_DB_PATH: pick("SQLITE_DB_PATH"), RUN_RETENTION_DAYS: pick("RUN_RETENTION_DAYS") };
+}
+
+/** SQLite's header bytes 18 and 19: 2 for a database in WAL mode, 1 for rollback journal. */
+const WAL_VERSION_OFFSETS = [18, 19];
+
+/**
+ * Opens the database without writing anything next to it. With no -wal file, the file is read
+ * into memory (a copy set to rollback-journal mode, since an in-memory database cannot use WAL;
+ * the file is not changed). With one, the API is running (or stopped without checkpointing) and
+ * the file is opened read-only, reading the API's -wal and -shm.
+ */
+export function openForReading(dbPath: string): Database.Database {
+  if (existsSync(`${dbPath}-wal`)) {
+    return new Database(dbPath, { readonly: true, fileMustExist: true });
+  }
+  const image = readFileSync(dbPath);
+  for (const offset of WAL_VERSION_OFFSETS) if (image[offset] === 2) image[offset] = 1;
+  return new Database(image);
 }
 
 export interface ReportDependencies {
   env?: NodeJS.ProcessEnv;
+  /** The settings file's values (default: apps/api/.env's). */
+  settingsFile?: Record<string, string>;
   now?: number;
   out?: (text: string) => void;
   err?: (text: string) => void;
@@ -411,16 +559,24 @@ export interface ReportDependencies {
 export function main(argv: string[], deps: ReportDependencies = {}): number {
   const out = deps.out ?? ((text: string) => console.log(text));
   const err = deps.err ?? ((text: string) => console.error(text));
-  let values: { days?: string; json?: boolean };
+  let values: { days?: string; json?: boolean; help?: boolean };
   try {
     ({ values } = parseArgs({
       args: argv,
-      options: { days: { type: "string" }, json: { type: "boolean", default: false } },
+      options: {
+        days: { type: "string" },
+        json: { type: "boolean", default: false },
+        help: { type: "boolean", short: "h", default: false },
+      },
     }));
   } catch (error) {
     err(`report: ${(error as Error).message}`);
-    err("Usage: npm run report -w apps/api -- [--days N] [--json]");
+    err(USAGE);
     return 2;
+  }
+  if (values.help) {
+    out(USAGE);
+    return 0;
   }
   const days = values.days === undefined ? DEFAULT_DAYS : Number(values.days);
   if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) {
@@ -428,15 +584,20 @@ export function main(argv: string[], deps: ReportDependencies = {}): number {
     return 2;
   }
 
-  const dbPath = dbPathFromSettings(deps.env ?? process.env);
+  const settings = reportSettings(deps.env ?? process.env, deps.settingsFile);
+  const retentionDays =
+    retentionFromEnv(settings, (message) => err(`report: ${message}`)).runRetentionMs /
+    1000 /
+    DAY_SECONDS;
+  const dbPath = getDefaultDbPath(settings);
   if (!existsSync(dbPath)) {
     err(`report: no database at ${dbPath} (set SQLITE_DB_PATH)`);
     return 1;
   }
   let db: Database.Database | null = null;
   try {
-    db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const report = buildReport(db, { days, now: deps.now });
+    db = openForReading(dbPath);
+    const report = buildReport(db, { days, now: deps.now, retentionDays });
     out(values.json ? JSON.stringify(report, null, 2) : formatReport(report));
     return 0;
   } catch (error) {

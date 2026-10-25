@@ -49,22 +49,32 @@ export const DEFAULT_RETENTION: RetentionPolicy = {
   runEventRetentionMs: 7 * DAY_MS,
 };
 
-function setting(name: string, raw: string | undefined, fallback: number, minimum: number): number {
-  if (raw == null || raw.trim() === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    log.warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
-    return fallback;
-  }
-  if (value < minimum) {
-    log.warn(`${name}=${value} is below the minimum; using ${minimum}.`);
-    return minimum;
-  }
-  return value;
-}
-
-/** Reads the retention periods from the environment, falling back to the defaults. */
-export function retentionFromEnv(env: NodeJS.ProcessEnv = process.env): RetentionPolicy {
+/**
+ * Reads the retention periods from the environment, falling back to the defaults. A setting it
+ * cannot use is reported to `warn` (the log by default).
+ */
+export function retentionFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = (message) => log.warn(message),
+): RetentionPolicy {
+  const setting = (
+    name: string,
+    raw: string | undefined,
+    fallback: number,
+    minimum: number,
+  ): number => {
+    if (raw == null || raw.trim() === "") return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      warn(`Ignoring ${name}=${JSON.stringify(raw)}: expected a positive number.`);
+      return fallback;
+    }
+    if (value < minimum) {
+      warn(`${name}=${value} is below the minimum; using ${minimum}.`);
+      return minimum;
+    }
+    return value;
+  };
   return {
     checkpointRetentionMs:
       setting(

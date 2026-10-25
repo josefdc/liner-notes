@@ -94,6 +94,7 @@ const env = {
   LOG_LEVEL: "info",
   LOG_FILE: logFile,
   LOG_IP_SALT: "",
+  RUN_RETENTION_DAYS: "",
 };
 
 const failures = [];
@@ -410,25 +411,36 @@ const reportRun = spawnSync(
     timeout: START_TIMEOUT_MS,
   },
 );
+const reportOut = reportRun.stdout ?? "";
 let runReport = null;
 try {
-  runReport = JSON.parse(reportRun.stdout.slice(reportRun.stdout.indexOf("{")));
+  runReport = JSON.parse(reportOut.slice(reportOut.indexOf("{")));
 } catch {
   // checked below
 }
+const reportTotal = runReport?.total;
 console.log(
-  `report: exit ${reportRun.status}, ${runReport?.total.runs ?? "?"} runs, ` +
-    `${runReport?.total.replay ?? "?"} replays`,
+  `report: exit ${reportRun.status}, ${reportTotal?.runs ?? "?"} runs, ` +
+    `${reportTotal?.replay ?? "?"} replays, ${reportTotal?.live ?? "?"} live, ` +
+    `${reportTotal?.model?.calls ?? "?"} model calls`,
 );
 check(
-  reportRun.status === 0 && runReport !== null && runReport.total.replay >= 2,
-  "report: counts the replays the API served",
-  reportRun.status === 0 ? "" : reportRun.stderr.slice(-300),
+  reportRun.status === 0 &&
+    reportTotal?.replay >= 2 &&
+    reportTotal.live === 0 &&
+    reportTotal.model?.calls === 0,
+  "report: counts the replays the API served, and no live run or model call",
+  reportRun.status === 0
+    ? ""
+    : String(reportRun.error ?? reportRun.stderr ?? "")
+        .slice(-300)
+        .trim(),
 );
 check(
-  !reportRun.stdout.toLowerCase().includes(TYPED_QUERY.toLowerCase()) &&
-    !reportRun.stdout.toLowerCase().includes(SHOWCASE_QUERY.toLowerCase()) &&
-    (replayRunId === undefined || !reportRun.stdout.includes(replayRunId)),
+  reportOut !== "" &&
+    !reportOut.toLowerCase().includes(TYPED_QUERY.toLowerCase()) &&
+    !reportOut.toLowerCase().includes(SHOWCASE_QUERY.toLowerCase()) &&
+    (replayRunId === undefined || !reportOut.includes(replayRunId)),
   "report: no typed query and no run id",
 );
 

@@ -192,12 +192,21 @@ spent budget answers 503. The answer is public and limited per address like sear
 check names and states (and the schema version), never a key, host, amount, provider name or
 variable name: what the provider lacks is written to the API's log. See `apps/api/.env.example`.
 
-`npm run report -w apps/api` (`-- --days N`, default 7; `-- --json`) reads the API's database
-(`SQLITE_DB_PATH`) read-only and prints, per day: runs by live, replay and cached result and by
-outcome, p50/p95 duration of completed live runs (time spent waiting at the track picker left
-out), the fallback rate, and model calls, tokens and estimated USD from the database's usage rows,
-which follow `RUN_RETENTION_DAYS`. It never prints what anyone typed or a run id; the spend log
-(`LLM_SPEND_LOG`) stays the authoritative record of spend.
+The run report prints, per UTC day: runs by live, replay (a recording served again, or model
+answers replayed from stored answers) and cached result and by outcome; p50/p95 duration of
+completed live runs, with the time spent waiting at the track picker left out; the fallback rate;
+and, by the day of the call, model calls sent, their tokens and estimated USD from the database's
+usage rows. Days older than `RUN_RETENTION_DAYS` are shown as pruned. It never prints what anyone
+typed or a run id; the spend log (`LLM_SPEND_LOG`) stays the authoritative record of spend.
+
+```bash
+npm run report -w apps/api -- --days 14            # a checkout's database (SQLITE_DB_PATH)
+docker compose exec sonic-server node dist/report.js --days 14 --json   # the deployment's
+```
+
+It writes nothing: a database without a `-wal` file (the API is stopped) is read into memory, and
+one the API has open is opened read-only, as the API's user (`docker compose exec` runs it as
+that user, against the `sonic-data` volume).
 
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with

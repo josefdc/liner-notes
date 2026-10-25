@@ -102,6 +102,62 @@ describe("Last.fm tools with a key", () => {
 
   const method = (url: string) => new URL(url).searchParams.get("method");
 
+  describe("an artist the run identified by its MusicBrainz id", () => {
+    const MBID = "0383dadf-2a4e-4d10-a46a-e9e041da8eb3";
+
+    it("asks Last.fm for that artist, whatever name it answers with", async () => {
+      const net = stubFetch((call) =>
+        call.url.startsWith(API)
+          ? json({ toptags: { tag: [{ name: "rock", count: 100 }], "@attr": { artist: "QUEEN" } } })
+          : undefined,
+      );
+
+      const data = JSON.parse(await getLastfmArtistTags.invoke({ artist: "Queen", mbid: MBID }));
+
+      expect(data).toEqual({ found: true, tags: [{ name: "rock", count: 100 }] });
+      const asked = new URL(net.calls[0].url).searchParams;
+      expect(asked.get("mbid")).toBe(MBID);
+      expect(asked.has("artist")).toBe(false);
+      expect(net.calls).toHaveLength(1);
+    });
+
+    it("asks by name when Last.fm knows no artist with that id", async () => {
+      const net = stubFetch((call) => {
+        if (!call.url.startsWith(API)) return undefined;
+        return new URL(call.url).searchParams.has("mbid")
+          ? json({ error: 6, message: "The artist you supplied could not be found" })
+          : json({
+              similarartists: {
+                artist: [{ name: "Other", match: "1" }],
+                "@attr": { artist: "Queen" },
+              },
+            });
+      });
+
+      const data = JSON.parse(
+        await getLastfmSimilarArtists.invoke({ artist: "Queen", mbid: MBID }),
+      );
+
+      expect(data).toEqual({ found: true, artists: [{ name: "Other", match: 1 }] });
+      expect(net.calls.map((c) => new URL(c.url).searchParams.get("artist"))).toEqual([
+        null,
+        "Queen",
+      ]);
+    });
+
+    it("does not ask again by name when Last.fm could not be read", async () => {
+      const net = stubFetch((call) =>
+        call.url.startsWith(API) ? new Response("busy", { status: 503 }) : undefined,
+      );
+
+      const data = JSON.parse(await getLastfmArtistInfo.invoke({ artist: "Queen", mbid: MBID }));
+
+      expect(data).toMatchObject({ found: false, code: "unavailable" });
+      expect(net.calls.length).toBeGreaterThan(0);
+      for (const call of net.calls) expect(new URL(call.url).searchParams.has("mbid")).toBe(true);
+    });
+  });
+
   it("reads a single tag sent as an object", async () => {
     stubFetch((call) =>
       call.url.startsWith(API) && method(call.url) === "track.getTopTags"

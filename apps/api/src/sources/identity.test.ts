@@ -208,9 +208,15 @@ describe("resolveIdentity", () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token";
     const net = stubFetch(musicBrainz);
     const told: unknown[] = [];
+    // The requests made when the recording is told: only the ISRC lookup and the recording's.
+    let madeWhenTold: string[] = [];
     const { identity, result } = await resolveIdentity(ICE_TRACK, {
-      onRecording: (recording) => told.push(recording),
+      onRecording: (recording) => {
+        told.push(recording);
+        madeWhenTold = net.calls.map((c) => new URL(c.url).pathname);
+      },
     });
+    expect(madeWhenTold).toEqual(["/ws/2/isrc/USCA29001716", `/ws/2/recording/${ICE}`]);
     // The recording is told once, as soon as its lookup passed the checks.
     expect(told).toEqual([
       {

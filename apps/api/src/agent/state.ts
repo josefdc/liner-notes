@@ -245,12 +245,21 @@ const byTag: Key = (entry) =>
   byText(entry)
     .replace(/\s*\(\d+\)$/, "")
     .toLowerCase();
-/** "2. Under Pressure by Queen (Last.fm match 0.91, …)" → "under pressure by queen". */
-const byName: Key = (entry) =>
-  byText(entry)
+const MBID_IN_LINE =
+  /\bMusicBrainz ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;
+/**
+ * A similar track or artist by its MusicBrainz id when the line names one (two artists of one
+ * name stay apart), else by its name: "2. Under Pressure by Queen (Last.fm match 0.91, …)" →
+ * "under pressure by queen".
+ */
+const byName: Key = (entry) => {
+  const mbid = byText(entry).match(MBID_IN_LINE)?.[1];
+  if (mbid) return `mbid:${mbid.toLowerCase()}`;
+  return byText(entry)
     .replace(/^\d+\.\s+/, "")
     .replace(/\s*\([^()]*\)$/, "")
     .toLowerCase();
+};
 
 /**
  * `b` appended to `a`: each entry once (`key`), and never a placeholder (a step's "no result",

@@ -48,6 +48,7 @@ import {
   NOT_ORIGINAL_RELEASE_TYPES,
   normalizeIsrc,
   recordingRelationships,
+  withMusicBrainzPriority,
   workCovers,
 } from "./musicbrainz.js";
 import {
@@ -744,16 +745,26 @@ async function settle<T>(source: SourceId, run: () => Promise<SourceResult<T>>) 
  * answered by the deadline is "missing" (timeout), and what the caller cancelled is "missing"
  * (unavailable). Never throws; each source answers on its own, "missing" with the reason when it
  * has nothing. `onRecording` is called once: with the identified recording as soon as it is
- * known, or with null when the chain identified none.
+ * known, or with null when the chain identified none. Its MusicBrainz requests go ahead of any
+ * other in the shared queue (`withMusicBrainzPriority`).
  */
-export async function collectPrimarySources(
+export function collectPrimarySources(
   track: TrackRef,
-  options: {
-    now?: Clock;
-    signal?: AbortSignal;
-    deadlineMs?: number;
-    onRecording?: (recording: IdentifiedRecording | null) => void;
-  } = {},
+  options: PrimarySourcesOptions = {},
+): Promise<PrimarySources> {
+  return withMusicBrainzPriority(() => collectInOrder(track, options));
+}
+
+export interface PrimarySourcesOptions {
+  now?: Clock;
+  signal?: AbortSignal;
+  deadlineMs?: number;
+  onRecording?: (recording: IdentifiedRecording | null) => void;
+}
+
+async function collectInOrder(
+  track: TrackRef,
+  options: PrimarySourcesOptions,
 ): Promise<PrimarySources> {
   const deadline = AbortSignal.timeout(deadlineOf(options.deadlineMs));
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;

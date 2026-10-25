@@ -20,7 +20,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
-import { normalizeName } from "./musicbrainz.js";
+import { isMbid, normalizeName } from "./musicbrainz.js";
 import {
   failureWith,
   keyRejected,
@@ -207,6 +207,12 @@ interface LastfmRequest<T> {
   params: Record<string, string>;
   /** The artist asked for. */
   artist: string;
+  /**
+   * The artist's MusicBrainz id, when the run identified it: Last.fm is asked for that artist,
+   * not for a name several artists may share. When Last.fm knows no artist with that id, the
+   * name is asked instead (with its checks).
+   */
+  mbid?: string;
   /** The artist Last.fm answered for (its "@attr" or the artist object's name). */
   answeredFor?: (data: T) => unknown;
 }
@@ -224,6 +230,12 @@ async function askLastfm<T extends object>(
   );
   if (empty) {
     return { ok: false, answer: notAnswered("no_input", `no ${empty[0]} name to ask for`) };
+  }
+  if (request.mbid && isMbid(request.mbid)) {
+    // By id: the answer is that artist's, whatever name Last.fm gives it.
+    const { artist: _name, ...rest } = request.params;
+    const byId = await callLastfm<T>({ ...rest, mbid: request.mbid }, signal);
+    if (byId.ok || !("reason" in byId.answer) || byId.answer.reason !== "not_found") return byId;
   }
   const result = await callLastfm<T>(request.params, signal);
   if (!result.ok) return result;
@@ -379,12 +391,13 @@ export const getLastfmTrackTags = tool(
  * Get top tags for an artist from Last.fm
  */
 export const getLastfmArtistTags = tool(
-  async ({ artist }, config): Promise<string> => {
+  async ({ artist, mbid }, config): Promise<string> => {
     log.info(`Getting artist tags: "${artist}"`);
     const result = await askLastfm<{ toptags?: TagsAnswer }>(
       {
         params: { method: "artist.getTopTags", artist },
         artist,
+        mbid,
         answeredFor: (data) => data.toptags?.["@attr"]?.artist,
       },
       config?.signal,
@@ -405,6 +418,10 @@ export const getLastfmArtistTags = tool(
       "Supplementary genre data when track tags are sparse.",
     schema: z.object({
       artist: z.string().describe("The artist name"),
+      mbid: z
+        .string()
+        .optional()
+        .describe("The artist's MusicBrainz id, when known: Last.fm is asked for that artist"),
     }),
   },
 );
@@ -458,7 +475,7 @@ export const getLastfmSimilarTracks = tool(
  * Get similar artists from Last.fm
  */
 export const getLastfmSimilarArtists = tool(
-  async ({ artist }, config): Promise<string> => {
+  async ({ artist, mbid }, config): Promise<string> => {
     log.info(`Getting similar artists: "${artist}"`);
     const result = await askLastfm<{
       similarartists?: { artist?: LastfmSimilarArtist | LastfmSimilarArtist[] } & AnsweredFor;
@@ -466,6 +483,7 @@ export const getLastfmSimilarArtists = tool(
       {
         params: { method: "artist.getSimilar", artist, limit: "5" },
         artist,
+        mbid,
         answeredFor: (data) => data.similarartists?.["@attr"]?.artist,
       },
       config?.signal,
@@ -494,6 +512,10 @@ export const getLastfmSimilarArtists = tool(
       "Use for genealogy edges.",
     schema: z.object({
       artist: z.string().describe("The artist name"),
+      mbid: z
+        .string()
+        .optional()
+        .describe("The artist's MusicBrainz id, when known: Last.fm is asked for that artist"),
     }),
   },
 );
@@ -502,12 +524,13 @@ export const getLastfmSimilarArtists = tool(
  * Get artist info from Last.fm (bio, stats, tags, similar)
  */
 export const getLastfmArtistInfo = tool(
-  async ({ artist }, config): Promise<string> => {
+  async ({ artist, mbid }, config): Promise<string> => {
     log.info(`Getting artist info: "${artist}"`);
     const result = await askLastfm<{ artist?: LastfmArtistInfo }>(
       {
         params: { method: "artist.getInfo", artist },
         artist,
+        mbid,
         answeredFor: (data) => data.artist?.name,
       },
       config?.signal,
@@ -563,6 +586,10 @@ export const getLastfmArtistInfo = tool(
       "Use for factoid content and supplementary data.",
     schema: z.object({
       artist: z.string().describe("The artist name"),
+      mbid: z
+        .string()
+        .optional()
+        .describe("The artist's MusicBrainz id, when known: Last.fm is asked for that artist"),
     }),
   },
 );

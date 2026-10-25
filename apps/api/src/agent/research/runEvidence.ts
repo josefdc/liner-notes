@@ -98,7 +98,37 @@ export interface RunEvidence {
   lost: SourceError[];
   /** Those of `errors` that are lasting (an answer of a shape the reader does not know). */
   lasting: SourceError[];
+  /**
+   * The recording's MusicBrainz sample relations as a research entry ("[MusicBrainz Samples]
+   * […]"), for the result built without the model (its Sample DNA cards); empty when none.
+   */
+  samples: string[];
   status: string[];
+}
+
+/**
+ * The matched recording's sample relations (both directions, about the recording itself) as the
+ * research entry the result built without the model reads: "source" for a recording this one
+ * samples, "derived" for one that samples it.
+ */
+export function musicBrainzSampleEntries(sources: PrimarySources): string[] {
+  const { musicbrainz } = sources;
+  if (musicbrainz.status !== "found") return [];
+  const relations = musicbrainz.records.flatMap((r) =>
+    r.about === "track" && r.recording && (r.kind === "samples" || r.kind === "sampled-by")
+      ? [
+          {
+            type: "sample",
+            direction: r.kind === "samples" ? "source" : "derived",
+            title: r.recording.title,
+            artist: r.recording.artist,
+            mbid: r.recording.mbid,
+            relationshipType: "samples material",
+          },
+        ]
+      : [],
+  );
+  return relations.length > 0 ? [`[MusicBrainz Samples] ${JSON.stringify(relations)}`] : [];
 }
 
 type StatusCode = "RESEARCH-FOUND" | "SYS-WARN";
@@ -122,7 +152,9 @@ export async function runEvidence(
   let errors: SourceError[] = [];
   let lost: SourceError[] = [];
   let lasting: SourceError[] = [];
+  let samples: string[] = [];
   if (read.status === "read") {
+    samples = musicBrainzSampleEntries(read.sources);
     const records = primaryRecordEvidence(read.sources);
     pack.addAll(records);
     const { musicbrainz } = read.sources;
@@ -165,7 +197,7 @@ export async function runEvidence(
   for (const item of evidence) config.writer?.({ type: "evidence", evidence: item });
   for (const message of found) sendStatus(config, runtime, "RESEARCH-FOUND", message);
   for (const message of warnings) sendStatus(config, runtime, "SYS-WARN", message);
-  return { evidence, errors, lost, lasting, status: [...found, ...warnings] };
+  return { evidence, errors, lost, lasting, samples, status: [...found, ...warnings] };
 }
 
 /**

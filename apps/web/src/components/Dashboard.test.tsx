@@ -94,6 +94,52 @@ describe('Dashboard', () => {
   });
 });
 
+describe('the Dashboard album cover', () => {
+  const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
+  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-250`;
+  const withCover = (coverUrl: string) => ({ ...missingTrack, coverUrl }) as TrackData;
+  const credit = () => screen.queryByRole('link', { name: 'Cover: Cover Art Archive' });
+
+  it('says the cover is not available when the result has none, with no image or background', () => {
+    const { container } = renderDashboard(missingTrack);
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelector('[data-cover="not-available"]')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(credit()).toBeNull();
+  });
+
+  it('shows a Cover Art Archive cover, credited with a link to the release', () => {
+    const { container } = renderDashboard(withCover(ARCHIVE));
+    const cover = screen.getByRole('img', { name: 'Quiet Signal' });
+    expect(cover.getAttribute('src')).toBe(ARCHIVE);
+    // The cover and the blurred background behind the hero.
+    expect([...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
+      ARCHIVE,
+      ARCHIVE,
+    ]);
+    expect(credit()?.getAttribute('href')).toBe(`https://coverartarchive.org/release/${MBID}`);
+    expect(credit()?.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByText('Cover not available')).toBeNull();
+  });
+
+  it('says the cover is not available when it fails to load, and hides the background', () => {
+    const { container } = renderDashboard(withCover(ARCHIVE));
+    act(() => {
+      fireEvent.error(screen.getByRole('img', { name: 'Quiet Signal' }));
+    });
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(credit()).toBeNull();
+  });
+
+  it('credits no archive for a cover from elsewhere', () => {
+    renderDashboard(withCover('https://i.scdn.co/image/ab67616d0000b273'));
+    expect(screen.getByRole('img', { name: 'Quiet Signal' })).toBeTruthy();
+    expect(credit()).toBeNull();
+    expect(screen.queryByText('Cover not available')).toBeNull();
+  });
+});
+
 describe('Dashboard connected tracks', () => {
   // Group 2 is "it samples" in the node's own terms; only a sourced link may say so.
   const connected = (

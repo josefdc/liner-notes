@@ -183,6 +183,11 @@ describe("evidence given back by the research cache", () => {
       (e) => e.source === "musicbrainz" && e.recordRef?.startsWith("work/"),
     ) as Evidence;
     const coverOfTrack = cover.recordRef?.replace(/^work\/[^/]+/, `track/recording/${RECORDING}`);
+    // The release that stands for the recording (sources/identity.ts) is restored with the rest.
+    const release = stored.find(
+      (e) => e.source === "musicbrainz" && e.recordRef?.startsWith("release/"),
+    ) as Evidence;
+    expect(release.url).toBe(`https://musicbrainz.org/${release.recordRef}`);
     const discogs = {
       ...primary,
       id: "discogs:release/123/credit/0",
@@ -245,6 +250,21 @@ describe("evidence given back by the research cache", () => {
         },
       ],
       ["a record on another site's page", { ...primary, url: "https://example.test/recording" }],
+      [
+        "a MusicBrainz release on another release's page",
+        {
+          ...release,
+          url: "https://musicbrainz.org/release/00000000-0000-4000-8000-000000000000",
+        },
+      ],
+      [
+        "a MusicBrainz release with a path after its MBID",
+        {
+          ...release,
+          id: `${release.id}/front`,
+          recordRef: `${release.recordRef}/front`,
+        },
+      ],
     ];
     for (const [what, item] of forged) {
       expect(restoredEvidence([...stored, item], context), what).toBeNull();

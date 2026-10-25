@@ -235,14 +235,19 @@ const STORED_SHAPES: Record<
       new RegExp(`^track/recording/(${MBID})$`),
       new RegExp(`^track/recording/(${MBID})/${KIND}/(?:recording|work)/${MBID}$`),
       new RegExp(`^work/(${MBID})/(covered-by)/recording/${MBID}$`),
+      // The release that stands for the recording (sources/identity.ts, pickCoverRelease).
+      new RegExp(`^release/(${MBID})$`),
     ],
-    // A cover of the work is stated on the work's page; any other item on the recording's.
+    // A cover of the work is stated on the work's page, a release on the release's; any other
+    // item on the recording's.
     page: (m) =>
-      m[0].startsWith("work/")
-        ? new RegExp(`^https://musicbrainz\\.org/work/${m[1]}$`)
-        : m[2] === "covered-by"
-          ? new RegExp(`^https://musicbrainz\\.org/(?:recording/${m[1]}|work/${MBID})$`)
-          : new RegExp(`^https://musicbrainz\\.org/recording/${m[1]}$`),
+      m[0].startsWith("release/")
+        ? new RegExp(`^https://musicbrainz\\.org/release/${m[1]}$`)
+        : m[0].startsWith("work/")
+          ? new RegExp(`^https://musicbrainz\\.org/work/${m[1]}$`)
+          : m[2] === "covered-by"
+            ? new RegExp(`^https://musicbrainz\\.org/(?:recording/${m[1]}|work/${MBID})$`)
+            : new RegExp(`^https://musicbrainz\\.org/recording/${m[1]}$`),
     excerpt: "MusicBrainz",
   },
   discogs: {

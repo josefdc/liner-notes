@@ -90,7 +90,10 @@ export interface ReplaySet {
   suggestions(query: string, limit: number): SearchCandidate[];
 }
 
-/** A record as a search suggestion (no image: recordings keep no image URLs). */
+/**
+ * A record as a search suggestion, with the one image a recording keeps: its Cover Art Archive
+ * cover, or "" (replay/recorder.ts, archiveCoverOf).
+ */
 function suggestion(record: ReplayRecord): SearchCandidate {
   const { id, title, artist, album, coverUrl, releaseYear, isrc } = record.analysis;
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidImageUrl } from './image';
+import { archiveReleaseOf, archiveReleasePage, isValidImageUrl } from './image';
 
 describe('isValidImageUrl', () => {
   it('accepts Spotify album art', () => {
@@ -21,5 +21,36 @@ describe('isValidImageUrl', () => {
     ['undefined', undefined],
   ])('rejects %s', (_case, url) => {
     expect(isValidImageUrl(url)).toBe(false);
+  });
+});
+
+describe('archiveReleaseOf (cover)', () => {
+  const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
+
+  it('reads the release MBID of a Cover Art Archive cover link', () => {
+    expect(archiveReleaseOf(`https://coverartarchive.org/release/${MBID}/front-250`)).toBe(MBID);
+    expect(archiveReleaseOf(`https://coverartarchive.org/release/${MBID}/front`)).toBe(MBID);
+    expect(archiveReleaseOf(`https://coverartarchive.org/release/${MBID}`)).toBe(MBID);
+    expect(archiveReleasePage(MBID)).toBe(`https://coverartarchive.org/release/${MBID}`);
+  });
+
+  it.each([
+    ['Spotify album art', 'https://i.scdn.co/image/ab67616d0000b273'],
+    ['a host that ends with the archive name', `https://evil-coverartarchive.org/release/${MBID}`],
+    [
+      'a host that contains the archive name',
+      `https://coverartarchive.org.evil.com/release/${MBID}`,
+    ],
+    ['credentials before the archive host', `https://coverartarchive.org@evil.com/release/${MBID}`],
+    ['plain http', `http://coverartarchive.org/release/${MBID}/front-250`],
+    ['a non-default port', `https://coverartarchive.org:8443/release/${MBID}/front-250`],
+    ['a release group, not a release', `https://coverartarchive.org/release-group/${MBID}/front`],
+    ['a path that is not an MBID', 'https://coverartarchive.org/release/not-an-mbid/front-250'],
+    ['an MBID with more after it', `https://coverartarchive.org/release/${MBID}0/front-250`],
+    ['an upper-case MBID', `https://coverartarchive.org/release/${MBID.toUpperCase()}/front`],
+    ['an empty string', ''],
+    ['undefined', undefined],
+  ])('reads no release from %s', (_case, url) => {
+    expect(archiveReleaseOf(url)).toBeNull();
   });
 });

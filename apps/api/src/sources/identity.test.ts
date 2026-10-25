@@ -43,6 +43,7 @@ import {
   discogsCandidates,
   musicBrainzRelationships,
   originalPerformance,
+  pickCoverRelease,
   pickRecording,
   resolveIdentity,
 } from "./identity.js";
@@ -50,6 +51,7 @@ import {
   lookupIsrc,
   type MbRecordingDetails,
   type MbRecordingSummary,
+  type MbReleaseSummary,
   MusicBrainzRateLimiter,
 } from "./musicbrainz.js";
 import { never } from "./testing/fetchStub.js";
@@ -202,6 +204,140 @@ describe("discogsCandidates on the recording's releases", () => {
   });
 });
 
+describe("the cover release", () => {
+  const TO_THE_EXTREME = "ae103b0a-b932-4009-acb6-388db1cf890b";
+  let made = 0;
+  /** A synthetic release; its MBID counts up unless given. */
+  const release = (
+    type: string,
+    date: string | undefined,
+    { id, secondary = [] }: { id?: string; secondary?: string[] } = {},
+  ): MbReleaseSummary => ({
+    id: id ?? `00000000-0000-4000-8000-${String(++made).padStart(12, "0")}`,
+    title: `${type} ${date ?? "undated"}`,
+    ...(date !== undefined && { date }),
+    status: "Official",
+    "release-group": { "primary-type": type, "secondary-types": secondary },
+  });
+  const picked = (releases: MbReleaseSummary[]) => {
+    const forward = pickCoverRelease(releases);
+    // The same list in any order gives the same release.
+    expect(pickCoverRelease([...releases].reverse())).toEqual(forward);
+    return forward;
+  };
+
+  it("picks the earliest dated original album of the ice-ice-baby releases", () => {
+    // 13 releases: a 2004 soundtrack and compilation, eight "To the Extreme" and "Hooked"
+    // albums (1990-09-04, 1990-12-03, the rest dated only "1990"), three singles.
+    expect(picked(iceReleases.releases as MbReleaseSummary[])).toEqual({
+      mbid: TO_THE_EXTREME,
+      title: "To the Extreme",
+      type: "album",
+      date: "1990-09-04",
+    });
+  });
+
+  it("ranks an album before an EP before a single, whatever their dates", () => {
+    const single = release("Single", "1989-01-01");
+    const ep = release("EP", "1990-01-01");
+    const album = release("Album", "1995-01-01");
+    expect(picked([single, ep, album])?.mbid).toBe(album.id);
+    expect(picked([single, ep])?.mbid).toBe(ep.id);
+    expect(picked([single])).toMatchObject({ mbid: single.id, type: "single" });
+  });
+
+  it("drops compilation, live, remix, DJ-mix and street releases, even the earliest", () => {
+    const dropped = ["Compilation", "Live", "Remix", "DJ-mix", "Mixtape/Street"].map((type) =>
+      release("Album", "1980-01-01", { secondary: [type] }),
+    );
+    const soundtrack = release("Album", "1999-05-05", { secondary: ["Soundtrack"] });
+    expect(picked([...dropped, soundtrack])?.mbid).toBe(soundtrack.id);
+    expect(picked(dropped)).toBeNull();
+  });
+
+  it("takes the earliest date, a bare year after the days in it, undated last, then the lowest MBID", () => {
+    const year = release("Album", "1990");
+    const day = release("Album", "1990-09-04");
+    const undated = release("Album", undefined);
+    expect(picked([undated, year, day])?.mbid).toBe(day.id);
+    expect(picked([undated, year])?.mbid).toBe(year.id);
+    const low = release("Album", "1991-01-01", { id: "10000000-0000-4000-8000-000000000000" });
+    const high = release("Album", "1991-01-01", { id: "f0000000-0000-4000-8000-000000000000" });
+    expect(picked([high, low])?.mbid).toBe(low.id);
+    expect(picked([undated])).toMatchObject({ mbid: undated.id, date: null });
+  });
+
+  it("is null for no release, or none that is an album, EP or single with an MBID and a title", () => {
+    expect(pickCoverRelease([])).toBeNull();
+    expect(
+      pickCoverRelease([
+        release("Broadcast", "1990-01-01"),
+        { ...release("Album", "1990-01-01"), id: "not-an-mbid" },
+        { ...release("Album", "1990-01-01"), title: " " },
+      ]),
+    ).toBeNull();
+  });
+
+  it("is one MusicBrainz release item, after the recording's own, with the release's page", async () => {
+    stubFetch(musicBrainz);
+    const resolution = await resolveIdentity(ICE_TRACK);
+    const result = await musicBrainzRelationships(resolution, { now });
+    if (result.status !== "found") throw new Error(result.reason);
+    const releases = result.evidence.filter((e) => e.recordRef?.startsWith("release/"));
+    expect(releases).toEqual([
+      {
+        id: `musicbrainz:release/${TO_THE_EXTREME}`,
+        source: "musicbrainz",
+        sourceTier: "primary-record",
+        url: `https://musicbrainz.org/release/${TO_THE_EXTREME}`,
+        title: "To the Extreme — MusicBrainz release",
+        retrievedAt: "2026-10-20T12:00:00.000Z",
+        excerpt:
+          'MusicBrainz: "Ice Ice Baby" by Vanilla Ice appears on the official album "To the Extreme" (1990-09-04).',
+        recordRef: `release/${TO_THE_EXTREME}`,
+      },
+    ]);
+    expect(result.evidence.at(-1)).toBe(releases[0]);
+    expect(evidenceScope(releases[0])).toBe("release");
+    // No record points at it: it states the release, not a relationship.
+    expect(result.records.some((r) => r.evidenceId === releases[0].id)).toBe(false);
+    expectValidEvidence(result.evidence);
+  });
+
+  it("is left out, with no error, when the releases cannot be read or there are none", async () => {
+    for (const answer of [
+      () => json({ error: "boom" }, { status: 500 }),
+      () => json({ "release-count": 0, releases: [] }),
+    ]) {
+      const net = stubFetch((call) =>
+        call.url.startsWith(`${MB}/release?`) ? answer() : musicBrainz(call),
+      );
+      const sources = await collectPrimarySources(ICE_TRACK, { now });
+      expect(net.calls.filter((c) => c.url.startsWith(`${MB}/release?`))).toHaveLength(1);
+      expect(sources.identity).toMatchObject({
+        coverRelease: null,
+        releasesError: null,
+        releasesFailure: null,
+      });
+      expect(sources.musicbrainz.status).toBe("found");
+      expect(sources.musicbrainz.error ?? null).toBeNull();
+      expect(sources.discogs).toMatchObject({
+        status: "missing",
+        reason: "DISCOGS_TOKEN is not set",
+      });
+      // Discogs says only that it is not configured, as when the releases were read.
+      expect(sources.discogs.error).toEqual({
+        source: "discogs",
+        code: "not_configured",
+        message: "DISCOGS_TOKEN is not set",
+      });
+      expect(sources.evidence.some((e) => e.recordRef?.startsWith("release/"))).toBe(false);
+      // The recording's own items are all there.
+      expect(sources.evidence[0].recordRef).toBe(`track/recording/${ICE}`);
+    }
+  });
+});
+
 describe("resolveIdentity", () => {
   it("reaches the recording and the Genius, SecondHandSongs and Discogs links", async () => {
     process.env.DISCOGS_TOKEN = "discogs-test-token";
@@ -250,6 +386,8 @@ describe("resolveIdentity", () => {
       },
     });
     expect(identity?.discogsReleaseIds[0]).toBe(599648);
+    // The one release read serves both: the Discogs links and the cover release.
+    expect(identity?.coverRelease?.mbid).toBe("ae103b0a-b932-4009-acb6-388db1cf890b");
     expect(result.identity).toEqual({ matched: 1, rejected: 4, missing: 0, unavailable: 0 });
     expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
       "/ws/2/isrc/USCA29001716",
@@ -262,13 +400,20 @@ describe("resolveIdentity", () => {
     ]);
   });
 
-  it("reads no release without a Discogs token: only Discogs reads their links", async () => {
+  it("reads the releases once without a Discogs token, for the release that stands for the recording", async () => {
     const net = stubFetch(musicBrainz);
     const { identity } = await resolveIdentity(ICE_TRACK);
-    expect(identity).toMatchObject({ discogsReleaseIds: [], releasesError: null });
+    expect(identity).toMatchObject({
+      discogsReleaseIds: [],
+      releasesError: null,
+      releasesFailure: null,
+      releasesNote: null,
+      coverRelease: { mbid: "ae103b0a-b932-4009-acb6-388db1cf890b" },
+    });
     expect(net.calls.map((c) => new URL(c.url).pathname)).toEqual([
       "/ws/2/isrc/USCA29001716",
       `/ws/2/recording/${ICE}`,
+      "/ws/2/release",
       `/ws/2/work/${ICE_WORK}`,
       "/ws/2/recording",
       "/ws/2/recording",

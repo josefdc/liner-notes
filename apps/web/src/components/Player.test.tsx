@@ -27,6 +27,32 @@ const missingTrack = {
   audioUnavailableReason: 'not_detected',
 } as unknown as TrackData;
 
+describe('the Player album cover', () => {
+  const ARCHIVE =
+    'https://coverartarchive.org/release/ae103b0a-b932-4009-acb6-388db1cf890b/front-250';
+
+  it('shows a Cover Art Archive cover with its credit, and says when it fails to load', () => {
+    const { container } = render(
+      <Player trackData={{ ...missingTrack, coverUrl: ARCHIVE }} onBack={() => {}} />,
+    );
+    const cover = screen.getByRole('img', { name: 'Album Art' });
+    expect(container.querySelectorAll(`img[src="${ARCHIVE}"]`)).toHaveLength(2);
+    expect(
+      screen.getByRole('link', { name: 'Cover: Cover Art Archive' }).getAttribute('href'),
+    ).toBe('https://coverartarchive.org/release/ae103b0a-b932-4009-acb6-388db1cf890b');
+    fireEvent.error(cover);
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(screen.queryByRole('link', { name: 'Cover: Cover Art Archive' })).toBeNull();
+  });
+
+  it('says the cover is not available when the result has none', () => {
+    const { container } = render(<Player trackData={missingTrack} onBack={() => {}} />);
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+});
+
 describe('Player', () => {
   it('shows an empty state, not a demo track, when there is no analysis', () => {
     const { container } = render(<Player trackData={null} onBack={() => {}} />);

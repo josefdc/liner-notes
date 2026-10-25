@@ -8,7 +8,11 @@
  * - fields that hold a preview clip or an image: `previewUrl` is removed, and an image field
  *   (`coverUrl`, `img`, `image…`, …) or any field whose whole value is a preview clip or a URL
  *   on an image host is blanked (`coverUrl` becomes "", which the contract reads as unknown).
- *   Preview URLs are signed and expire; images are not ours to redistribute;
+ *   Preview URLs are signed and expire; Spotify, Deezer and Last.fm images are not ours to
+ *   redistribute. The one image a record keeps is the result's cover from the Cover Art Archive
+ *   (`archiveCoverOf`): its public link for the release the run's MusicBrainz evidence names,
+ *   written into the result's `coverUrl` (in the record's result and its complete event) in
+ *   place of whatever cover the run showed;
  * - the run's id in the envelope (`runId`, `threadId`, `run.id`) becomes `recorded-<slug>` (each
  *   replay stamps its own id);
  * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
@@ -21,7 +25,8 @@
  * "connected … interrupt, done" then "resuming … complete, done" (a paused run's streams are
  * joined into one stream, numbered again from 0, without the pause); and a record that holds a
  * configured credential (also URL-encoded), a secret-shaped string, an e-mail address, a URL
- * outside the allow-listed source sites, a preview or media URL inside text, the typed query
+ * outside the allow-listed source sites, a preview or media URL inside text (the Cover Art
+ * Archive link `archiveCoverOf` derives is allowed as a `coverUrl` value only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
  * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
@@ -33,6 +38,7 @@
 import {
   type AnalyzeStreamEvent,
   analysisIssues,
+  type Evidence,
   ReplayRecord,
   runIssues,
   TrackAnalysis,
@@ -106,6 +112,37 @@ export function withoutMediaFields(value: unknown): unknown {
         return [key, withoutMediaFields(inner)];
       }),
   );
+}
+
+const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+/** A MusicBrainz release as sources/identity.ts names it in an Evidence item's recordRef. */
+const RELEASE_REF = new RegExp(`^release/(${UUID_PATTERN})$`);
+/** The Cover Art Archive's front image of a release, at a size it serves. */
+const ARCHIVE_FRONT = new RegExp(
+  `^https://coverartarchive\\.org/release/${UUID_PATTERN}/front-(?:250|500)$`,
+);
+
+/**
+ * The Cover Art Archive link a record keeps as the result's cover: the front image (250 px) of
+ * the release named by the result's one MusicBrainz release item (a primary record whose
+ * recordRef is `release/<mbid>`, with that release's page), or "" when there is no such item or
+ * more than one. The link is public and stable, meant for embedding; whether the archive holds a
+ * cover for the release is not known here, and the page says so when the image does not load.
+ */
+export function archiveCoverOf(analysis: { evidence?: readonly Evidence[] | null }): string {
+  const releases = (Array.isArray(analysis.evidence) ? analysis.evidence : []).filter(
+    (item) =>
+      item?.source === "musicbrainz" &&
+      item.sourceTier === "primary-record" &&
+      RELEASE_REF.test(item.recordRef ?? ""),
+  );
+  if (releases.length !== 1) return "";
+  const [item] = releases;
+  const mbid = RELEASE_REF.exec(item.recordRef ?? "")?.[1];
+  if (!mbid) return "";
+  if (item.id !== `musicbrainz:release/${mbid}`) return "";
+  if (item.url !== `https://musicbrainz.org/release/${mbid}`) return "";
+  return `https://coverartarchive.org/release/${mbid}/front-250`;
 }
 
 /** A status message about the user's own action in the recorded run. */
@@ -276,6 +313,11 @@ export interface LeakCheck {
   ownRunIds?: readonly string[];
   /** The ids of the other runs the database knows (runs and threads). */
   otherRunIds?: readonly string[];
+  /**
+   * The Cover Art Archive link the record keeps (`archiveCoverOf`): allowed as the whole value
+   * of a `coverUrl` field, and nowhere else.
+   */
+  allowedCover?: string;
 }
 
 /**
@@ -285,7 +327,14 @@ export interface LeakCheck {
  */
 export function leaks(
   record: unknown,
-  { secrets, typedQuery, publicTexts, ownRunIds = [], otherRunIds = [] }: LeakCheck,
+  {
+    secrets,
+    typedQuery,
+    publicTexts,
+    ownRunIds = [],
+    otherRunIds = [],
+    allowedCover = "",
+  }: LeakCheck,
 ): string[] {
   const found: string[] = [];
   const typed = normalizeQuery(typedQuery);
@@ -295,8 +344,12 @@ export function leaks(
   const pages = [...webEvidencePages(record)];
   const allowed = (url: string) =>
     allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
+  const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
+    // The kept cover, as the whole value of a cover field: an allowed link there only.
+    const isCover = cover !== null && text === cover && /(?:^|\.)coverUrl$/.test(path);
+    const allowedHere = (url: string) => allowed(url) || (isCover && url === cover);
     if (
       secrets.some(
         (secret) => secret && (plain.includes(secret) || text.includes(encodeURIComponent(secret))),
@@ -306,7 +359,7 @@ export function leaks(
     }
     // Secret shapes in the text around the URLs of allow-listed pages (long slugs and ids in
     // those are their own); an id field's value may be a long source id.
-    const scanned = text.replace(URL_IN_TEXT, (url) => (allowed(url) ? " " : url));
+    const scanned = text.replace(URL_IN_TEXT, (url) => (allowedHere(url) ? " " : url));
     for (const [what, pattern] of SECRET_SHAPES) {
       if (isId && what === "a long token") continue;
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
@@ -314,7 +367,7 @@ export function leaks(
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
-      else if (allowed(url)) continue;
+      else if (allowedHere(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
       else found.push(`${path}: a URL outside the allow-listed sites`);
     }
@@ -472,7 +525,9 @@ export function buildRecord(
   // How the recorded run's search text matched the track is left out: the record is replayed
   // for other texts, and the typed text is not kept.
   const { queryMatch: _match, ...recorded } = analysis;
-  const recordedAnalysis = withoutMediaFields({
+  // Every image blanked, then the one cover a record keeps: the Cover Art Archive's.
+  const cover = archiveCoverOf(analysis);
+  const blanked = withoutMediaFields({
     ...recorded,
     run: {
       ...runInfo,
@@ -484,6 +539,7 @@ export function buildRecord(
       analyzerVersion,
     },
   }) as TrackAnalysis;
+  const recordedAnalysis: TrackAnalysis = { ...blanked, coverUrl: cover };
 
   const recordEvents = joined
     .filter(({ event }) => !isUserAction(event))
@@ -532,6 +588,7 @@ export function buildRecord(
     publicTexts: publicTextsOf(analysis),
     ownRunIds: [run.runId, run.threadId],
     otherRunIds,
+    allowedCover: cover,
   };
   for (const leak of leaks(record, check)) refuse(leak);
   stop();

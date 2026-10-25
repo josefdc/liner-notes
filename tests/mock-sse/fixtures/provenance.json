@@ -1,0 +1,619 @@
+{
+  "suggestions": [],
+  "streams": {
+    "/api/analyze/stream": [
+      {
+        "type": "connected",
+        "runId": "thread-provenance",
+        "seq": 0,
+        "threadId": "thread-provenance"
+      },
+      {
+        "type": "heartbeat",
+        "runId": "thread-provenance"
+      },
+      {
+        "type": "status",
+        "runId": "thread-provenance",
+        "seq": 1,
+        "node": "scout",
+        "message": "Searching for the track",
+        "code": "SPOTIFY-SEARCH"
+      },
+      {
+        "type": "status",
+        "runId": "thread-provenance",
+        "seq": 2,
+        "node": "composer",
+        "message": "Composing the result",
+        "code": "GEMINI-CONNECT"
+      },
+      {
+        "type": "complete",
+        "runId": "thread-provenance",
+        "seq": 3,
+        "data": {
+          "id": "t-provenance",
+          "title": "Paper Lanterns",
+          "artist": "Test Artist",
+          "album": "Test Album",
+          "coverUrl": "",
+          "spotifyUrl": "https://open.spotify.com/track/t-provenance",
+          "releaseYear": "2011",
+          "bpm": 123,
+          "key": null,
+          "energy": null,
+          "valence": null,
+          "danceability": null,
+          "acousticness": null,
+          "durationSeconds": 240,
+          "segments": [
+            {
+              "label": "Intro",
+              "start": 0,
+              "end": 10,
+              "color": "#374151"
+            },
+            {
+              "label": "Chorus",
+              "start": 10,
+              "end": 30,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Verse",
+              "start": 30,
+              "end": 50,
+              "color": "#1F2937"
+            },
+            {
+              "label": "Chorus",
+              "start": 50,
+              "end": 80,
+              "color": "#00F0FF"
+            },
+            {
+              "label": "Outro",
+              "start": 80,
+              "end": 100,
+              "color": "#374151"
+            }
+          ],
+          "segmentsSource": "inferred",
+          "samples": [
+            {
+              "time": 60,
+              "description": "Vocal chop from an older record",
+              "claimId": "c-sample-kept"
+            },
+            {
+              "time": 120,
+              "description": "Horn stab from a 1975 record",
+              "claimId": "c-sample-rejected"
+            }
+          ],
+          "keyMoments": [
+            {
+              "time": 3.1,
+              "type": "onset",
+              "intensity": 0.7,
+              "description": "Beat transition"
+            },
+            {
+              "time": 20.5,
+              "type": "energy_drop",
+              "intensity": 0.6,
+              "description": "Energy drop"
+            }
+          ],
+          "factoids": [
+            {
+              "id": "f1",
+              "title": "Studio Intel",
+              "content": "Recorded in two days.",
+              "type": "production"
+            },
+            {
+              "id": "f2",
+              "title": "Two days",
+              "content": "The album was recorded in two days.",
+              "type": "trivia",
+              "claimId": "c-two-days"
+            },
+            {
+              "id": "f3",
+              "title": "A 1998 release",
+              "content": "Paper Lanterns was first released in 1998.",
+              "type": "trivia",
+              "claimId": "c-1998"
+            },
+            {
+              "id": "f4",
+              "title": "A lighthouse",
+              "content": "The lyrics mention a lighthouse.",
+              "type": "trivia",
+              "claimId": "c-future-rejected"
+            },
+            {
+              "id": "f6",
+              "title": "The vocal",
+              "content": "Vocals by Ivy Example.",
+              "type": "credits",
+              "claimId": "c-vocal"
+            },
+            {
+              "id": "f5",
+              "title": "Leaving home",
+              "content": "The lyrics are about leaving home.",
+              "type": "trivia",
+              "claimId": "c-future"
+            }
+          ],
+          "genealogy": {
+            "nodes": [
+              {
+                "id": "current",
+                "group": 1,
+                "label": "Paper Lanterns - Test Artist (2011)",
+                "size": 40
+              },
+              {
+                "id": "n-rejected",
+                "group": 2,
+                "label": "Rejected Source - Someone (1998)",
+                "size": 30
+              },
+              {
+                "id": "n-kept",
+                "group": 4,
+                "label": "Kept Influence - Other (2005)",
+                "size": 25
+              },
+              {
+                "id": "n-free",
+                "group": 4,
+                "label": "Unclaimed Influence - Third (1990)",
+                "size": 25
+              }
+            ],
+            "links": [
+              {
+                "source": "n-rejected",
+                "target": "current",
+                "value": 3,
+                "type": "sample",
+                "kind": "inferred",
+                "claimId": "c-1998",
+                "evidenceIds": []
+              },
+              {
+                "source": "n-kept",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "inferred",
+                "claimId": "c-club",
+                "evidenceIds": []
+              },
+              {
+                "source": "n-free",
+                "target": "current",
+                "value": 1,
+                "type": "influence",
+                "kind": "inferred",
+                "evidenceIds": []
+              }
+            ]
+          },
+          "audioSource": "unavailable",
+          "audioConfidence": "low",
+          "audio": {
+            "version": 2,
+            "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f",
+            "window": {
+              "kind": "preview-30s",
+              "durationSeconds": 22.4
+            },
+            "gate": {
+              "passed": true,
+              "reason": null
+            },
+            "tempo": {
+              "bpm": 123.04,
+              "confidence": null,
+              "rawConfidence": null,
+              "method": "essentia.RhythmExtractor2013",
+              "basis": "signal"
+            },
+            "key": null,
+            "loudness": {
+              "rmsMean": 0.21,
+              "method": "essentia.RMS",
+              "basis": "signal"
+            },
+            "beats": null,
+            "energyContour": null,
+            "sections": null,
+            "keyMoments": [
+              {
+                "time": 3.1,
+                "type": "onset",
+                "intensity": 0.7,
+                "description": "Beat transition"
+              },
+              {
+                "time": 20.5,
+                "type": "energy_drop",
+                "intensity": 0.6,
+                "description": "Energy drop"
+              }
+            ],
+            "fingerprint": null
+          },
+          "run": {
+            "id": "thread-provenance",
+            "mode": "live",
+            "recordedAt": null,
+            "commit": null,
+            "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f"
+          },
+          "audioUnavailableReason": "not_detected",
+          "evidence": [
+            {
+              "id": "ev-mb-work",
+              "source": "musicbrainz",
+              "sourceTier": "primary-record",
+              "url": "https://musicbrainz.org/work/6c5d2a64-0f6e-4c1b-9a43-1f2e3d4c5b6a",
+              "title": "Paper Lanterns (work)",
+              "retrievedAt": "2026-10-20T12:00:00.000Z",
+              "excerpt": "writer: Ada Example; writer: Ben Example",
+              "recordRef": "work/6c5d2a64-0f6e-4c1b-9a43-1f2e3d4c5b6a"
+            },
+            {
+              "id": "ev-discogs-release",
+              "source": "discogs",
+              "sourceTier": "primary-record",
+              "url": "https://www.discogs.com/release/1234567",
+              "title": "Test Artist \u2013 Test Album (2011)",
+              "retrievedAt": "2026-10-20T12:00:00.000Z",
+              "excerpt": "Producer \u2013 Cleo Example; Mixed By \u2013 Fay Example; released 2011; tempo noted on the sleeve: 246 BPM",
+              "recordRef": "release/1234567"
+            },
+            {
+              "id": "ev-review",
+              "source": "tavily",
+              "sourceTier": "editorial",
+              "url": "https://reviews.example.org/test-album",
+              "title": "Test Album review",
+              "retrievedAt": "2026-10-20T12:00:00.000Z",
+              "excerpt": "The band recorded the whole album in two days in a borrowed studio.",
+              "recordRef": null
+            },
+            {
+              "id": "ev-genius-unsafe",
+              "source": "genius",
+              "sourceTier": "primary-record",
+              "url": "javascript:alert(1)",
+              "title": "Paper Lanterns lyrics page",
+              "retrievedAt": "2026-10-20T12:00:00.000Z",
+              "excerpt": "Paper Lanterns appears on the soundtrack of a 2012 short film.",
+              "recordRef": "track/song/998877"
+            },
+            {
+              "id": "ev-blog",
+              "source": "tavily",
+              "sourceTier": "primary-record",
+              "url": "https://blog.example.net/paper-lanterns",
+              "title": "Paper Lanterns, a breakthrough",
+              "retrievedAt": "2026-10-20T12:00:00.000Z",
+              "excerpt": "Paper Lanterns was the band breakthrough.",
+              "recordRef": null
+            }
+          ],
+          "claims": [
+            {
+              "id": "c-tempo",
+              "text": "The preview was measured at 123 BPM.",
+              "about": "sound",
+              "kind": "measured",
+              "origin": "code",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "field": "tempo"
+            },
+            {
+              "id": "c-key",
+              "text": "The preview's key, as measured.",
+              "about": "sound",
+              "kind": "measured",
+              "origin": "code",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "field": "key"
+            },
+            {
+              "id": "c-writers",
+              "text": "Written by Ada Example and Ben Example.",
+              "about": "credit",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-mb-work"],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-producer",
+              "text": "Produced by Cleo Example and engineered by Dev Example.",
+              "about": "credit",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": "partial",
+              "verdictReason": "The release credits name the producer; no engineer is listed.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-two-days",
+              "text": "The album was recorded in two days.",
+              "about": "history",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-review"],
+              "verdict": "supported",
+              "verdictReason": "The review says the album was recorded in two days.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-club",
+              "text": "The song was a club favourite in 2011.",
+              "about": "trivia",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-gone",
+              "text": "The single reached the top 40.",
+              "about": "history",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-gone"],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-unsupported",
+              "text": "The song was recorded at Abbey Road.",
+              "about": "production",
+              "kind": "sourced",
+              "origin": "model",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": "unsupported",
+              "verdictReason": "The release record does not name a studio.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-roughly",
+              "text": "It runs at roughly 123 BPM.",
+              "about": "sound",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "consistent",
+              "field": "tempo"
+            },
+            {
+              "id": "c-sleeve-tempo",
+              "text": "The sleeve gives the tempo as 246 BPM.",
+              "about": "track",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "conflict",
+              "field": "tempo",
+              "numericReason": "246 BPM is twice the measured tempo, a known estimator error",
+              "numericComparison": {
+                "claimed": 246,
+                "measured": 123.04,
+                "method": "essentia.RhythmExtractor2013"
+              }
+            },
+            {
+              "id": "c-half-time",
+              "text": "It feels like 61 BPM.",
+              "about": "sound",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "conflict",
+              "field": "tempo"
+            },
+            {
+              "id": "c-film",
+              "text": "It was used in a 2012 short film.",
+              "about": "connection",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-genius-unsafe"],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-1998",
+              "text": "Paper Lanterns was first released in 1998.",
+              "about": "history",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": "contradicted",
+              "verdictReason": "The release record dates it to 2011.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-mixed",
+              "text": "Mixed by Eve Example.",
+              "about": "credit",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": "contradicted",
+              "verdictReason": "The release credits name Fay Example as the mixer.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-mastered",
+              "text": "Mastered by Gil Example.",
+              "about": "credit",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-discogs-release"],
+              "verdict": "unsupported",
+              "verdictReason": "The release credits list no mastering engineer.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-blog",
+              "text": "A blog calls it the band's breakthrough.",
+              "about": "history",
+              "kind": "sourced",
+              "origin": "code",
+              "evidenceIds": ["ev-blog"],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-sample-kept",
+              "text": "A vocal chop from an older record opens the song.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-sample-rejected",
+              "text": "A horn stab from a 1975 record plays at the bridge.",
+              "about": "sample",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "No record lists a horn sample.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-dup",
+              "text": "The band toured Japan in 2012.",
+              "about": "history",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-dup",
+              "text": "The band toured Japan in 2009.",
+              "about": "history",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "The tour dates list 2012 only.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-future-rejected",
+              "text": "The lyrics mention a lighthouse.",
+              "about": "lyrics",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": "contradicted",
+              "verdictReason": "The lyrics page does not mention a lighthouse.",
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-future",
+              "text": "The lyrics are about leaving home.",
+              "about": "lyrics",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            },
+            {
+              "id": "c-90",
+              "text": "The song runs at 90 BPM.",
+              "about": "sound",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "contradicted",
+              "field": "tempo",
+              "numericReason": "90 BPM is not a known estimator error away from the measured tempo",
+              "numericComparison": {
+                "claimed": 90,
+                "measured": 123.04,
+                "method": "essentia.RhythmExtractor2013"
+              }
+            },
+            {
+              "id": "c-128",
+              "text": "The preview analysis measured the track at 128 BPM.",
+              "about": "sound",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a",
+              "field": "tempo"
+            },
+            {
+              "id": "c-vocal",
+              "text": "Vocals by Ivy Example.",
+              "about": "credit",
+              "kind": "inferred",
+              "origin": "model",
+              "evidenceIds": [],
+              "verdict": null,
+              "verdictReason": null,
+              "numericCheck": "n/a"
+            }
+          ]
+        }
+      },
+      {
+        "type": "done",
+        "runId": "thread-provenance",
+        "seq": 4,
+        "timestamp": "2026-10-16T00:00:00.000Z"
+      }
+    ]
+  }
+}

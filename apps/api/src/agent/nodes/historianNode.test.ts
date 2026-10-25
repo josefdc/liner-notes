@@ -57,6 +57,7 @@ import { SourceError } from "../../sources/http.js";
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { stubFetch } from "../../sources/testing/fetchStub.js";
 import { ICE_TRACK, primaryRoute } from "../../sources/testing/iceIceBaby.js";
+import { CACHED_EVIDENCE_FORMAT } from "../research/runEvidence.js";
 import { historianNode } from "./historianNode.js";
 import type { SonicAgentStateType } from "../state.js";
 
@@ -76,7 +77,7 @@ describe("historianNode", () => {
       notConfigured: [{ source: "lastfm", code: "not_configured" }],
       // The evidence of a track without an ISRC: no primary source was asked.
       evidence: {
-        format: 2,
+        format: CACHED_EVIDENCE_FORMAT,
         researchedAt: new Date().toISOString(),
         readAt: new Date().toISOString(),
         isrc: null,

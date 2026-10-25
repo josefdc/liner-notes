@@ -94,6 +94,78 @@ describe('Dashboard', () => {
   });
 });
 
+describe('the Dashboard album cover', () => {
+  const MBID = 'ae103b0a-b932-4009-acb6-388db1cf890b';
+  const ARCHIVE = `https://coverartarchive.org/release/${MBID}/front-500`;
+  /** The MusicBrainz release item the API writes for the cover's release. */
+  const releaseItem = (title: string) => ({
+    id: `musicbrainz:release/${MBID}`,
+    source: 'musicbrainz',
+    sourceTier: 'primary-record',
+    url: `https://musicbrainz.org/release/${MBID}`,
+    title: `${title} — MusicBrainz release`,
+    retrievedAt: '2026-10-22T14:02:00.000Z',
+    excerpt: `MusicBrainz: "Quiet Signal" by Test Artist appears on the official album "${title}".`,
+    recordRef: `release/${MBID}`,
+  });
+  const withCover = (coverUrl: string, evidence?: unknown[]) =>
+    ({ ...missingTrack, coverUrl, ...(evidence && { evidence }) }) as TrackData;
+  const credit = () => screen.queryByRole('link', { name: /^Cover: / });
+
+  it('says the cover is not available when the result has none, with no image or background', () => {
+    const { container } = renderDashboard(missingTrack);
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelector('[data-cover="not-available"]')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(credit()).toBeNull();
+  });
+
+  it('shows a Cover Art Archive cover of the shown album, credited with a link to the release', () => {
+    const { container } = renderDashboard(withCover(ARCHIVE, [releaseItem('test album!')]));
+    const cover = screen.getByRole('img', { name: 'Cover of Test Album' });
+    expect(cover.getAttribute('src')).toBe(ARCHIVE);
+    // The cover and the blurred background behind the hero.
+    expect([...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
+      ARCHIVE,
+      ARCHIVE,
+    ]);
+    expect(credit()?.textContent).toBe('Cover: Cover Art Archive (opens in a new tab)');
+    expect(credit()?.getAttribute('href')).toBe(`https://coverartarchive.org/release/${MBID}`);
+    expect(credit()?.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByText('Cover not available')).toBeNull();
+  });
+
+  it("names the cover's release when it is not the album shown", () => {
+    renderDashboard(withCover(ARCHIVE, [releaseItem('To the Extreme')]));
+    expect(screen.getByRole('img', { name: 'Cover of To the Extreme' })).toBeTruthy();
+    expect(credit()?.textContent).toBe(
+      'Cover: To the Extreme · Cover Art Archive (opens in a new tab)',
+    );
+    // Without the release item the cover is not taken for the shown album's either.
+    cleanup();
+    renderDashboard(withCover(ARCHIVE));
+    expect(screen.getByRole('img', { name: 'Cover from the Cover Art Archive' })).toBeTruthy();
+    expect(credit()?.textContent).toBe('Cover: Cover Art Archive (opens in a new tab)');
+  });
+
+  it('says the cover is not available when it fails to load, and hides the background', () => {
+    const { container } = renderDashboard(withCover(ARCHIVE, [releaseItem('Test Album')]));
+    act(() => {
+      fireEvent.error(screen.getByRole('img', { name: 'Cover of Test Album' }));
+    });
+    expect(screen.getByText('Cover not available')).toBeTruthy();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(credit()).toBeNull();
+  });
+
+  it('credits no archive for a cover from elsewhere', () => {
+    renderDashboard(withCover('https://i.scdn.co/image/ab67616d0000b273'));
+    expect(screen.getByRole('img', { name: 'Cover of Test Album' })).toBeTruthy();
+    expect(credit()).toBeNull();
+    expect(screen.queryByText('Cover not available')).toBeNull();
+  });
+});
+
 describe('Dashboard connected tracks', () => {
   // Group 2 is "it samples" in the node's own terms; only a sourced link may say so.
   const connected = (

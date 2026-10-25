@@ -7,6 +7,7 @@ import TargetScanOverlay from './TargetScanOverlay';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
@@ -175,6 +176,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   // The link reader (and the contract's schemas it validates with) loads only when there are
   // connected tracks to read.
   const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
+  const cover = useAlbumCover(trackData?.coverUrl);
   const relatedCount = relatedNodes(shown).length;
   const { reader, failed: readerFailed, retry: retryReader } = useLinkReader(relatedCount > 0);
   const relatedTracks = useMemo(
@@ -304,10 +306,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Now Playing Hero Section (P2:17 — stagger animation) */}
       {trackData && (
         <section className="shrink-0 bg-surface border border-border rounded-lg p-(--space-xl) md:p-(--space-2xl) relative overflow-hidden group transition-all duration-(--duration-slow) animate-stagger-in stagger-2">
-          {/* Background blur effect */}
-          {trackData.coverUrl && (
+          {/* Background blur effect: only behind a cover that is shown */}
+          {cover.src && (
             <img
-              src={trackData.coverUrl}
+              src={cover.src}
+              onError={cover.onError}
+              referrerPolicy="no-referrer"
               className="absolute inset-0 w-full h-full object-cover opacity-[0.07] blur-2xl scale-110 pointer-events-none"
               alt=""
             />
@@ -315,20 +319,17 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           <div className="relative z-10 flex flex-col md:flex-row gap-6 items-center md:items-start">
             {/* Album Cover */}
-            <div className="relative w-32 h-32 md:w-40 md:h-40 flex-shrink-0 group/cover">
+            <AlbumCover
+              cover={cover}
+              album={trackData.album}
+              evidence={trackData.evidence}
+              className="flex-shrink-0 w-32 md:w-40"
+              frameClassName="group/cover"
+              surfaceClassName="rounded-md shadow-2xl"
+              iconSize={40}
+            >
               <div className="absolute inset-0 bg-cyber/15 blur-2xl rounded opacity-0 group-hover/cover:opacity-40 transition-opacity duration-(--duration-slow)"></div>
-              {trackData.coverUrl ? (
-                <img
-                  src={trackData.coverUrl}
-                  alt={trackData.title}
-                  className="w-full h-full object-cover rounded-md border border-white/10 shadow-2xl relative z-10"
-                />
-              ) : (
-                <div className="w-full h-full rounded-md border border-white/10 bg-gray-900 flex items-center justify-center">
-                  <Music size={48} className="text-text-muted" />
-                </div>
-              )}
-            </div>
+            </AlbumCover>
 
             {/* Track Info */}
             <div className="flex-1 text-center md:text-left">

@@ -21,8 +21,9 @@
  * their one caller.
  *
  * The pack keeps an id once (the first item wins), lists items by tier (primary records, then
- * editorial, then web; within primary records the recording's own items, then a release's,
- * then the song's) and keeps at most EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
+ * editorial, then web; within primary records the recording's own items and the release
+ * MusicBrainz names for it, then a release's, then the song's) and keeps at most
+ * EVIDENCE_PACK_MAX_ITEMS; how many it left out is counted.
  */
 
 import {
@@ -235,14 +236,19 @@ const STORED_SHAPES: Record<
       new RegExp(`^track/recording/(${MBID})$`),
       new RegExp(`^track/recording/(${MBID})/${KIND}/(?:recording|work)/${MBID}$`),
       new RegExp(`^work/(${MBID})/(covered-by)/recording/${MBID}$`),
+      // The release that stands for the recording (sources/identity.ts, pickCoverRelease).
+      new RegExp(`^release/(${MBID})$`),
     ],
-    // A cover of the work is stated on the work's page; any other item on the recording's.
+    // A cover of the work is stated on the work's page, a release on the release's; any other
+    // item on the recording's.
     page: (m) =>
-      m[0].startsWith("work/")
-        ? new RegExp(`^https://musicbrainz\\.org/work/${m[1]}$`)
-        : m[2] === "covered-by"
-          ? new RegExp(`^https://musicbrainz\\.org/(?:recording/${m[1]}|work/${MBID})$`)
-          : new RegExp(`^https://musicbrainz\\.org/recording/${m[1]}$`),
+      m[0].startsWith("release/")
+        ? new RegExp(`^https://musicbrainz\\.org/release/${m[1]}$`)
+        : m[0].startsWith("work/")
+          ? new RegExp(`^https://musicbrainz\\.org/work/${m[1]}$`)
+          : m[2] === "covered-by"
+            ? new RegExp(`^https://musicbrainz\\.org/(?:recording/${m[1]}|work/${MBID})$`)
+            : new RegExp(`^https://musicbrainz\\.org/recording/${m[1]}$`),
     excerpt: "MusicBrainz",
   },
   discogs: {
@@ -323,14 +329,20 @@ function storedItemIssue(item: Evidence, context: StoredContext): string | null 
 /**
  * The evidence of a cached research, as items of a pack again: each stored item checked against
  * what the cached run read (`context`), as above, and sealed. Null when any item fails a check:
- * the cached evidence is then not used at all, never in part. What it cannot check is that the
- * text is what the source answered: the research cache, which only the historian writes from a
- * sealed pack, is trusted for that.
+ * the cached evidence is then not used at all, never in part; so is evidence that names more
+ * than one MusicBrainz release. What it cannot check is that the text is what the source
+ * answered: the research cache, which only the historian writes from a sealed pack, is trusted
+ * for that.
  */
 export function restoredEvidence(
   items: readonly Evidence[],
   context: StoredContext,
 ): SourcedEvidence[] | null {
+  // The MusicBrainz module names at most one release for the recording.
+  const releases = items.filter(
+    (item) => item.source === "musicbrainz" && evidenceScope(item) === "release",
+  );
+  if (releases.length > 1) return null;
   const restored: SourcedEvidence[] = [];
   for (const item of items) {
     if (storedItemIssue(item, context) !== null) return null;
@@ -358,10 +370,16 @@ export function notAskedSources(
 
 const SCOPE_RANK: Record<EvidenceScope, number> = { track: 0, release: 1, work: 2 };
 
-/** Primary records first (the recording's, a release's, the song's), then editorial, then web. */
+/**
+ * Primary records first (the recording's, a release's, the song's), then editorial, then web.
+ * The release MusicBrainz names for the recording (sources/identity.ts, at most one) ranks with
+ * the recording's own items: a recorded run's cover is derived from it (replay/cover.ts), so the
+ * size cap never leaves it out while it keeps any of the recording's items.
+ */
 function rank(item: Evidence): number {
   if (item.sourceTier === "primary-record") {
     const scope = evidenceScope(item);
+    if (scope === "release" && item.source === "musicbrainz") return SCOPE_RANK.track;
     return scope ? SCOPE_RANK[scope] : 3;
   }
   return item.sourceTier === "editorial" ? 4 : 5;

@@ -581,3 +581,39 @@ for (const cover of ["no cover", "a white cover"]) {
     }
   });
 }
+
+// The album cover's words: "Cover not available" in its frame, or the Cover Art Archive credit
+// under a cover from the archive (a white one, the worst case behind the translucent layers).
+for (const cover of ["no cover", "a white archive cover"]) {
+  test(`album cover text meets 4.5:1 on the Dashboard and the Player (${cover})`, async ({
+    page,
+  }) => {
+    await page.route("https://coverartarchive.org/**", (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
+    );
+    const data = loadFixture("recorded-cover");
+    if (cover === "no cover") {
+      const complete = data.streams["/api/analyze/stream"].find(
+        (event: { type: string }) => event.type === "complete",
+      );
+      complete.data.coverUrl = "";
+    }
+    await useMockApi(page, data);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    const dashboard = await neutralBadgeContrast(page, "[data-cover-text]");
+    await openPlayer(page);
+    await page.waitForTimeout(500);
+    const player = await neutralBadgeContrast(page, "[data-cover-text]");
+    const expected = cover === "no cover" ? "Cover not available" : "Cover: Cover Art Archive";
+    for (const measured of [dashboard, player]) {
+      // The credit's "(opens in a new tab)" is for screen readers only.
+      expect(measured.map(({ text }) => text).filter((text) => !text.startsWith("("))).toEqual([
+        expected,
+      ]);
+    }
+    for (const { text, ratio } of [...dashboard, ...player]) {
+      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}

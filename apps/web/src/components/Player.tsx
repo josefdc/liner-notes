@@ -12,6 +12,7 @@ import {
   LockOpen,
 } from 'lucide-react';
 import {
+  audioReadings,
   audioValues,
   displayableFactoids,
   formatBpm,
@@ -29,6 +30,10 @@ import GenealogyGraph from './GenealogyGraph';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
+import { resultClaims, type ShownClaim } from './provenance/claims';
+import { ClaimList } from './provenance/ClaimList';
+import { CreditsList } from './provenance/CreditsList';
+import { RejectedClaims } from './provenance/RejectedClaims';
 import type { ResultMode } from '../hooks/agent/types';
 import type {
   TrackData,
@@ -124,6 +129,42 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const keyMoments = useMemo(() => measuredKeyMoments(track), [track]);
   // Written by the model, or taken from source data when the model was unavailable.
   const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
+  // The result's claims, each with how it is shown; the ones the verifier rejected are listed
+  // apart and leave the main view (their factoid cards and samples included).
+  const claims = useMemo(() => resultClaims(track), [track]);
+  const readings = useMemo(() => audioReadings(track).signal, [track]);
+  const windowSeconds = measurement?.windowSeconds;
+  const claimOf = useCallback(
+    (factoid: Factoid): ShownClaim | undefined =>
+      factoid.claimId ? claims.byId.get(factoid.claimId) : undefined,
+    [claims],
+  );
+  const resultFactoids = useMemo(
+    () => track.factoids.filter((factoid) => !claimOf(factoid)?.rejected),
+    [track.factoids, claimOf],
+  );
+  // Cards without a claim of their own are labelled by their section, or each on its own when
+  // the cards beside it carry claims.
+  const unclaimedFactoids = resultFactoids.some((factoid) => !claimOf(factoid));
+  const claimedFactoids = resultFactoids.some((factoid) => claimOf(factoid));
+  const samples = useMemo(
+    () =>
+      track.samples.filter(
+        (sample) => !(sample.claimId && claims.byId.get(sample.claimId)?.rejected),
+      ),
+    [track.samples, claims],
+  );
+  const creditClaims = useMemo(
+    () => claims.shown.filter((shown) => shown.claim.about === 'credit'),
+    [claims],
+  );
+  // Claims no card or credit shows.
+  const otherClaims = useMemo(() => {
+    const onCards = new Set(track.factoids.map((factoid) => factoid.claimId));
+    return claims.shown.filter(
+      (shown) => shown.claim.about !== 'credit' && !onCards.has(shown.claim.id),
+    );
+  }, [claims, track.factoids]);
   // How the result was produced: more facts stay on that side (recorded, or live).
   const resultMode: ResultMode | undefined = resultModeOf(track.run);
   const recorded = recordingOf(track) !== null;
@@ -131,16 +172,16 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const [noMoreRecorded, setNoMoreRecorded] = useState(false);
   // The result's factoids first, then the ones added by DECRYPT MORE (always from the model).
   const allFactoids = useMemo(
-    () => [...track.factoids, ...additionalFactoids],
-    [track.factoids, additionalFactoids],
+    () => [...resultFactoids, ...additionalFactoids],
+    [resultFactoids, additionalFactoids],
   );
 
   // P2:24 — Visible factoids, split by where they come from so each part carries its label
   const visibleFactoids = showAllFactoids
     ? allFactoids
     : allFactoids.slice(0, INITIAL_VISIBLE_FACTOIDS);
-  const visibleResultFactoids = visibleFactoids.slice(0, track.factoids.length);
-  const visibleDecryptedFactoids = visibleFactoids.slice(track.factoids.length);
+  const visibleResultFactoids = visibleFactoids.slice(0, resultFactoids.length);
+  const visibleDecryptedFactoids = visibleFactoids.slice(resultFactoids.length);
   const hiddenCount = allFactoids.length - INITIAL_VISIBLE_FACTOIDS;
 
   // Refs for transient values in handleDecryptMore
@@ -345,8 +386,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Agent Analysis
             </h3>
-            {track.factoids.length > 0 && <InferenceLabel>{provenance}</InferenceLabel>}
+            {unclaimedFactoids && !claimedFactoids && <InferenceLabel>{provenance}</InferenceLabel>}
           </div>
+          {/* Facts built without the model name no record they were taken from */}
+          {unclaimedFactoids && track.modelUnavailable && (
+            <p className="text-chrome font-mono text-text-chip mb-2">
+              No citations: these facts come from source records but do not link to them.
+            </p>
+          )}
           {allFactoids.length > 0 && (
             <p className="text-xs text-text-tertiary font-mono mb-8">
               {allFactoids.length} insights decoded
@@ -362,7 +409,14 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <div className="space-y-6">
               {visibleResultFactoids.map((fact, idx) => (
                 <div key={fact.id} className={`stagger-${Math.min(idx + 1, 8)}`}>
-                  <InteractiveFactoid factoid={fact} onEntityClick={handleEntityClick} />
+                  <InteractiveFactoid
+                    factoid={fact}
+                    onEntityClick={handleEntityClick}
+                    claim={claimOf(fact)}
+                    label={claimedFactoids ? provenance : undefined}
+                    readings={readings}
+                    windowSeconds={windowSeconds}
+                  />
                 </div>
               ))}
 
@@ -450,6 +504,23 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               )}
             </div>
           )}
+
+          {/* Credits, the claims no card shows, and the claims the verifier rejected */}
+          <div className="mt-10 space-y-8">
+            <CreditsList
+              credits={creditClaims}
+              uncited={track.credits}
+              readings={readings}
+              windowSeconds={windowSeconds}
+            />
+            <ClaimList
+              title="More claims"
+              claims={otherClaims}
+              readings={readings}
+              windowSeconds={windowSeconds}
+            />
+            <RejectedClaims rejected={claims.rejected} windowSeconds={windowSeconds} />
+          </div>
 
           {/* P3:25 — Decrypt complete toast */}
           {showDecryptToast && (
@@ -559,7 +630,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               segments={track.segments}
               segmentsSource={track.segmentsSource}
               durationSeconds={track.durationSeconds}
-              samples={track.samples}
+              samples={samples}
               keyMoments={keyMoments}
               audioAnalyzed={noMomentsReason === null}
               noMomentsReason={noMomentsReason}

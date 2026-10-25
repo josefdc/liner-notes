@@ -1,10 +1,28 @@
 import React, { useMemo } from 'react';
 import { Info, ChevronRight, MicVocal, Music, Users, Sparkles, Link2 } from 'lucide-react';
+import type { Reading } from '../constants';
 import type { Factoid, FactoidEntity } from '../types';
+import type { ShownClaim } from './provenance/claims';
+import { InferenceLabel } from './EstimatedWarning';
+import { ClaimChip } from './provenance/ClaimChip';
 
 interface InteractiveFactoidProps {
   factoid: Factoid;
   onEntityClick?: (entity: FactoidEntity) => void;
+  /**
+   * The claim this card states (its `claimId`), shown with its kind, sources and verifier
+   * status. A card without one is labelled by its section instead.
+   */
+  claim?: ShownClaim;
+  /**
+   * Where a card without a claim comes from ("Model inference", "From source data"), when the
+   * cards beside it carry claims of their own.
+   */
+  label?: string;
+  /** The result's signal readings, for a claim about a measured value. */
+  readings?: readonly Reading[];
+  /** Length of the measured preview window, for a conflict with the measurement. */
+  windowSeconds?: number;
 }
 
 // Color mapping for entity types
@@ -76,7 +94,14 @@ function getFactoidStyle(type: Factoid['type']): {
   }
 }
 
-const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEntityClick }) => {
+const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
+  factoid,
+  onEntityClick,
+  claim,
+  label,
+  readings,
+  windowSeconds,
+}) => {
   // Memoized content with clickable entities highlighted
   const renderedContent = useMemo(() => {
     if (!factoid.entities?.length) {
@@ -178,6 +203,18 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({ factoid, onEnti
       <p className="relative text-sm text-text-secondary leading-relaxed font-sans group-hover:text-text-primary transition-colors duration-(--duration-fast)">
         {renderedContent}
       </p>
+
+      {/* Where the statement comes from: its claim's kind, sources and verifier status */}
+      {claim ? (
+        <ClaimChip
+          shown={claim}
+          readings={readings}
+          windowSeconds={windowSeconds}
+          className="relative mt-3"
+        />
+      ) : (
+        label && <InferenceLabel className="relative mt-3">{label}</InferenceLabel>
+      )}
 
       {/* Entities count indicator */}
       {factoid.entities && factoid.entities.length > 0 && (

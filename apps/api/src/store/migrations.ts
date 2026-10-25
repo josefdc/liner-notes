@@ -390,6 +390,19 @@ export const MIGRATIONS: readonly Migration[] = [
       ).run(held ? now : null, now);
     },
   },
+  {
+    version: 13,
+    name: "artwork_track_details",
+    up(db) {
+      // The artwork cache keeps, for the track it found, what a node's preview is decided on: its
+      // ISRC, duration, album name and release date (a JSON object; never a link). A row served
+      // from the cache is then judged on its album and date as a fresh search is, and gets its
+      // Deezer preview by ISRC. Rows written before have none (null): one with a Spotify id is then
+      // a miss for the enricher (searched again and written with the details), one without is
+      // still served (the cover only).
+      db.exec("ALTER TABLE artwork_cache ADD COLUMN track_details TEXT");
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

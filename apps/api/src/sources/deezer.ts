@@ -24,10 +24,11 @@
  * turned down are reported.
  *
  * Deezer reports errors inside an HTTP 200 answer: code 800 ("no data") means nothing was
- * found, code 4 is its quota. Durations are in seconds. Preview URLs are signed and expire
- * within minutes: they are never logged, and never recorded in a cassette (no shape below keeps
- * them, so a replayed run finds no preview). Deezer's own `bpm` field is not read: it is not a
- * measurement.
+ * found, code 4 is its quota. Every Deezer request of the process is paced to stay under that
+ * quota (see DEEZER_PACE), and genealogy node previews may use only part of it. Durations are in
+ * seconds. Preview URLs are signed and expire within minutes: they are never logged, and never
+ * recorded in a cassette (no shape below keeps them, so a replayed run finds no preview).
+ * Deezer's own `bpm` field is not read: it is not a measurement.
  *
  * API docs: https://developers.deezer.com/api/track
  */
@@ -43,7 +44,8 @@ import {
   sameArtistName,
   words,
 } from "../agent/trackMatch.js";
-import { fetchJson, type Shape, SourceError } from "./http.js";
+import { abortError, cassetteMode, fetchJson, type Shape, SourceError } from "./http.js";
+import { LanePacer, type LanePace, PaceRefused } from "./pacing.js";
 import { type SourceErrorCode, sourceErrorCode } from "./toolResult.js";
 import { logger } from "../logger.js";
 
@@ -90,6 +92,43 @@ const DEEZER_API_BASE = "https://api.deezer.com";
 const NO_DATA = 800;
 /** Deezer's quota error. */
 const QUOTA = 4;
+
+/** The window of Deezer's quota: 50 requests per 5 s per address, as its API documents. */
+export const DEEZER_WINDOW_MS = 5_000;
+/** The requests this process starts in any window: under the quota, with a margin. */
+export const DEEZER_MAX_PER_WINDOW = 40;
+/**
+ * Of those, the requests genealogy node previews may start in any window: at least 10 stay free
+ * for the analysed tracks' previews (their measured tempo and key come from them).
+ */
+export const DEEZER_NODE_MAX_PER_WINDOW = 30;
+
+/**
+ * Every Deezer request of the process, in two lanes (sources/pacing.ts LanePacer): the analysed
+ * tracks' requests (priority: they never wait behind node requests) and the genealogy node
+ * previews' (background: at most DEEZER_NODE_MAX_PER_WINDOW of the window). A request waits at
+ * most a window for its slot; a later one is refused (PaceRefused) and not sent.
+ */
+export const DEEZER_PACE: LanePace = {
+  windowMs: DEEZER_WINDOW_MS,
+  max: DEEZER_MAX_PER_WINDOW,
+  backgroundMax: DEEZER_NODE_MAX_PER_WINDOW,
+  maxWaitMs: DEEZER_WINDOW_MS,
+};
+const pacer = new LanePacer("Deezer", () => DEEZER_PACE);
+
+/** How a lookup's requests are paced. */
+export interface DeezerPacing {
+  /** "nodes": a genealogy node's preview, in the background lane. Else the priority lane. */
+  lane?: "nodes";
+  /**
+   * On `pacingClock`, read for each request: the latest it may start; a later slot is refused
+   * (PaceRefused) and the request is not sent.
+   */
+  notAfter?: () => number;
+  /** Told when a request got its slot: it is sent then. */
+  onSlot?: () => void;
+}
 
 /** How far a matched entry's duration may be from the requested one. */
 const DURATION_TOLERANCE_S = 3;
@@ -176,6 +215,11 @@ export type DeezerPreviewResult =
       message: string;
       /** Set when Deezer could not be read (quota, network): nothing is known then. */
       error?: string;
+      /**
+       * Set when a request was not sent: Deezer's pace (DEEZER_PACE) had no slot in time. Not
+       * an error: Deezer was not asked, and nothing is known.
+       */
+      notAsked?: true;
       /** The kind of that failure, for the run's source errors. */
       errorCode?: SourceErrorCode;
     };
@@ -187,14 +231,33 @@ type Rejected = Extract<DeezerPreviewResult, { found: false }>["rejected"];
 // =============================================================================
 
 /**
- * One Deezer request. Returns null for Deezer's "no data" answer; throws a SourceError for its
- * quota (rate_limited) and for any other error it reports in a 200 answer.
+ * One Deezer request, once the pacer gives it a slot (none for a replayed answer: nothing
+ * reaches Deezer). Returns null for Deezer's "no data" answer; throws a SourceError for its
+ * quota (rate_limited) and for any other error it reports in a 200 answer, and PaceRefused for a
+ * request the pacer does not let start in time (not sent).
  */
 async function deezerGet<T extends { error?: DeezerError }>(
   url: URL,
   scrub: Shape,
   signal: AbortSignal | undefined,
+  pacing: DeezerPacing = {},
 ): Promise<T | null> {
+  if (cassetteMode() !== "replay") {
+    try {
+      await pacer.slot({
+        signal,
+        notAfter: pacing.notAfter?.(),
+        lane: pacing.lane === "nodes" ? "background" : "priority",
+      });
+    } catch (error) {
+      // Stopped while it waited: as a request stopped while it is under way.
+      if (signal?.aborted && !(error instanceof PaceRefused)) {
+        throw abortError("deezer", signal, error);
+      }
+      throw error;
+    }
+  }
+  pacing.onSlot?.();
   const data = await fetchJson<T>({
     source: "deezer",
     url,
@@ -356,11 +419,12 @@ function judgeEntry(
  * The preview of the entry Deezer gives for the request's ISRC, or of the readable alternative
  * it names for that entry, each checked as the file comment says. Not found when there is no
  * ISRC, Deezer has no entry for it, or neither entry can be used; the entries turned down are
- * listed, and a search never takes them.
+ * listed, and a search never takes them. `pacing` paces its requests (see DeezerPacing).
  */
 export async function deezerPreviewByIsrc(
   request: PreviewRequest,
   signal?: AbortSignal,
+  pacing: DeezerPacing = {},
 ): Promise<DeezerPreviewResult> {
   const rejected: Rejected = [];
   const isrc = request.isrc?.trim();
@@ -370,6 +434,7 @@ export async function deezerPreviewByIsrc(
     new URL(`${DEEZER_API_BASE}/track/isrc:${encodeURIComponent(isrc)}`),
     TRACK_SHAPE,
     signal,
+    pacing,
   );
   if (!entry || typeof entry.id !== "number") {
     return notFound(rejected, `No entry for ISRC ${isrc}`);
@@ -392,6 +457,7 @@ export async function deezerPreviewByIsrc(
       new URL(`${DEEZER_API_BASE}/track/${alternativeId}`),
       TRACK_SHAPE,
       signal,
+      pacing,
     );
     if (alternative && typeof alternative.id === "number") {
       const checked = judgeEntry(request, alternative, "id");
@@ -470,13 +536,24 @@ export async function deezerPreviewBySearch(
 
 /**
  * A Deezer failure as a result without a preview that carries the error; for a cancelled run
- * the error is thrown again.
+ * the error is thrown again. A request the pacer refused (PaceRefused) is no failure: the result
+ * says Deezer was not asked (`notAsked`), with no error.
  */
 export function deezerFailure(
   error: unknown,
   signal: AbortSignal | undefined,
 ): DeezerPreviewResult {
   if (signal?.aborted) throw error;
+  if (error instanceof PaceRefused) {
+    log.info(`Not asked: ${error.message}`);
+    return {
+      found: false,
+      previewUrl: null,
+      rejected: [],
+      message: "Deezer was not asked",
+      notAsked: true,
+    };
+  }
   const message = error instanceof Error ? error.message : "Unknown error";
   log.error(`Error: ${message}`);
   return notFound([], "Deezer could not be read", {

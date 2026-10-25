@@ -137,7 +137,8 @@ jobs:
           uv run --frozen --only-group dev ruff check .
           uv run --frozen --only-group dev ruff format --check .
       # Without the "models" extra: the suite covers the service as it runs without Essentia.
-      # The seeded control families (pytest marker "seeded") run in python-seeded, in parallel.
+      # The seeded control families (pytest marker "seeded") run in python-seeded and
+      # python-seeded-chords, in parallel.
       - run: uv sync --frozen
       - name: Pytest
         run: |
@@ -145,7 +146,7 @@ jobs:
           uv run --frozen pytest -rsxX -m "not seeded"
 
   python-seeded:
-    name: audio service, seeded control families (pytest)
+    name: audio service, seeded one-pitch-class, pitchless and softer-third families (pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -159,10 +160,36 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: services/audio/uv.lock
-      # Drums, one pitched source and chords that keep their key, 30 seeds each: what the key
-      # rules give or withhold, pinned seed by seed (librosa here; Essentia in audio-models).
+      # Drums and one pitched source at 30 seeds each, pinned seed by seed (librosa here; the
+      # Essentia half runs in audio-models), and triads with a softer third over a doubled root.
+      # The chord families run in python-seeded-chords: the two -k expressions cover every
+      # seeded test between them.
       - run: uv sync --frozen
       - name: Pytest
         run: |
           uv run --frozen python -VV
-          uv run --frozen pytest -rsxX -m seeded
+          uv run --frozen pytest -rsxX -m seeded -k "not chords_keep_the_key"
+
+  python-seeded-chords:
+    name: audio service, seeded chord families (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/audio
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/audio/uv.lock
+      # Chords that hold still and keep their key, 30 seeds each: the single-source rule must
+      # withhold none of them. The rule and the other key rules are the same with or without
+      # Essentia, so these run here only.
+      - run: uv sync --frozen
+      - name: Pytest
+        run: |
+          uv run --frozen python -VV
+          uv run --frozen pytest -rsxX -m seeded -k chords_keep_the_key

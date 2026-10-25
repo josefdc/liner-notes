@@ -48,5 +48,6 @@ select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 addopts = ["--strict-markers"]
 markers = [
-    "seeded: control families analysed at 30 seeds each (minutes); CI runs them in their own job",
+    "seeded: control families analysed at 30 seeds each (minutes); CI runs them in their own jobs",
+    "estimators: seeded tests that run the key estimators (their Essentia half needs the models)",
 ]

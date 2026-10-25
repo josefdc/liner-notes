@@ -785,6 +785,7 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
 
 
 @pytest.mark.seeded
+@pytest.mark.estimators
 @pytest.mark.parametrize("family", signals.PITCHLESS_SEEDED)
 def test_no_key_for_pitchless_material_at_control_seeds(family):
     """
@@ -829,6 +830,7 @@ ONE_PITCH_CLASS_KEYED = {
 
 
 @pytest.mark.seeded
+@pytest.mark.estimators
 @pytest.mark.parametrize("family", signals.ONE_PITCH_CLASS_SEEDED)
 def test_one_pitch_class_material_gets_exactly_the_pinned_keys(family):
     """Both estimators on the same signals (they share the representations)."""

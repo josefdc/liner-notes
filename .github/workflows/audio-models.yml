@@ -1,10 +1,12 @@
 name: audio models
 
 # The audio service as it runs in production: with essentia-tensorflow (the "models" extra)
-# and the Essentia models, so the Essentia estimators and the model tests run too, and every
-# test, the seeded control families included (their Essentia pins only run here). The ci
-# workflow's python job ("not seeded") and python-seeded job ("seeded") cover the service
-# without them.
+# and the Essentia models, so the Essentia estimators and the model tests run too. Of the
+# seeded control families, only those that run the key estimators (marker "estimators": the
+# one-pitch-class pins and the pitchless families) run here, for their Essentia half; the
+# others give the same result without Essentia and run in the ci workflow. The ci workflow's
+# python job ("not seeded"), python-seeded and python-seeded-chords jobs ("seeded") cover the
+# service without the models.
 on:
   pull_request:
     paths:
@@ -62,4 +64,4 @@ jobs:
           AUDIO_REQUIRE_MODELS: "1"
         run: |
           uv run --frozen python -VV
-          uv run --frozen pytest -rsxX
+          uv run --frozen pytest -rsxX -m "not seeded or estimators"

@@ -27,6 +27,9 @@ import type { ScoutFailure, SonicAgentStateType, SpotifyData } from "../state.js
 import type { SearchCandidate } from "../schema.js";
 import { readStoredResult, servedResult, shownQueryMatch } from "../storedResults.js";
 import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Scout");
 
 /** The longest Retry-After the scout waits out before trying Spotify again. */
 export const MAX_RETRY_WAIT_MS = 10_000;
@@ -67,7 +70,7 @@ function failureOf(error: unknown): ScoutFailure {
 
 /** The scout's update for a run that found no track. */
 function failed(failure: ScoutFailure, error: string, status: string): Update {
-  console.warn(`⚠️ [Scout] ${error}`);
+  log.warn(error);
   return { error, scoutFailure: failure, statusMessages: [status] };
 }
 
@@ -81,7 +84,7 @@ async function selectedTrack(
   const stored = await readStoredResult(getStore(), track.id, runtime.now());
   config.signal?.throwIfAborted();
   if (stored) {
-    console.log("📦 [Scout] Stored result for:", track.id);
+    log.info(`Stored result for: ${track.id}`);
     const trackData = servedResult(stored, shownQueryMatch(selected));
     config.writer?.({
       type: "status",
@@ -101,7 +104,7 @@ async function selectedTrack(
     node: "scout",
     timestamp: timestampOf(runtime),
   });
-  console.log("✅ [Scout] Selected:", track.title, "by", track.artist);
+  log.info(`Selected: ${track.title} by ${track.artist}`);
   return { ...selected, statusMessages: [`✅ Found: "${track.title}" by ${track.artist}`] };
 }
 
@@ -120,7 +123,7 @@ async function requestedTrack(
   config: LangGraphRunnableConfig,
   runtime: AgentRuntime,
 ): Promise<Update> {
-  console.log("🔍 [Scout] Reading the requested track:", trackId);
+  log.info(`Reading the requested track: ${trackId}`);
   let track: SpotifyData;
   try {
     track = await withSpotifyRetry(() => fetchTrack(trackId, config.signal), config, runtime);
@@ -166,7 +169,8 @@ export async function scoutNode(
     return requestedTrack(state, state.requestedTrackId, config, runtime);
   }
 
-  console.log("🔍 [Scout] Searching for:", state.songQuery);
+  // What the visitor typed is written at debug level only.
+  log.debug("Searching", { query: state.songQuery });
 
   try {
     let tracks: SpotifyData[];
@@ -201,7 +205,7 @@ export async function scoutNode(
     const { maxCandidates } = state.hitlConfig;
     const queryMatch = best.match;
     if (queryMatch === "none") {
-      console.warn("⚠️ [Scout] No result matches the query by title or artist:", state.songQuery);
+      log.warn("No result matches the query by title or artist", { query: state.songQuery });
     }
 
     if (needsChoice(ranked)) {
@@ -224,17 +228,15 @@ export async function scoutNode(
         .filter((candidate) => {
           const checked = SearchCandidateSchema.safeParse(candidate);
           if (!checked.success) {
-            console.warn(
-              "⚠️ [Scout] Candidate left out, it does not fit the contract:",
-              candidate.id,
-              checked.error.issues.map((issue) => issue.path.join(".")),
-            );
+            log.warn(`Candidate ${candidate.id} left out, it does not fit the contract`, {
+              fields: checked.error.issues.map((issue) => issue.path.join(".")),
+            });
           }
           return checked.success;
         });
       // A pick remembered for the same text is not reused: it was one user's choice (or the
       // picker's countdown), and a title alone must always ask.
-      console.log("⚠️ [Scout] Choice needed:", {
+      log.info("Choice needed", {
         query: state.songQuery,
         queryMatch,
         candidateCount: tracks.length,
@@ -253,7 +255,7 @@ export async function scoutNode(
         message: `Found ${candidates.length} matching songs. Please select one.`,
       });
 
-      console.log("⏸️ [Scout] Returning candidates for user disambiguation");
+      log.info("Returning candidates for user disambiguation");
 
       return {
         candidates,
@@ -279,7 +281,7 @@ export async function scoutNode(
     if (config.signal?.aborted || isAbortError(error)) throw error;
     // A bug, not a Spotify answer: the run fails as a plain failure.
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("❌ [Scout] Error:", message);
+    log.error(`Error: ${message}`);
     return {
       error: `Scout error: ${message}`,
       statusMessages: ["❌ Error searching Spotify"],

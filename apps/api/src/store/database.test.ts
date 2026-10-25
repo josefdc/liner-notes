@@ -776,14 +776,22 @@ describe("opening a database that cannot be used", () => {
             SPOTIFY_CLIENT_ID: "test-client-id",
             SPOTIFY_CLIENT_SECRET: "test-client-secret",
             PORT: "3122",
+            LOG_LEVEL: "info",
+            LOG_FILE: "",
           },
         });
       } finally {
         chmodSync(dbPath, 0o644);
       }
       expect(result.status).toBe(1);
-      expect(String(result.stderr)).toContain("[Database] Cannot open database");
-      expect(String(result.stderr)).toContain("left untouched");
+      // The log is JSON lines on stdout.
+      const failure = String(result.stdout)
+        .split("\n")
+        .filter((line) => line.startsWith("{"))
+        .map((line) => JSON.parse(line) as { component?: string; msg?: string })
+        .find((entry) => entry.component === "Database");
+      expect(failure?.msg).toContain("Cannot open database");
+      expect(failure?.msg).toContain("left untouched");
       expect(readFileSync(dbPath).equals(original)).toBe(true);
       expect(readdirSync(tmpDir)).toEqual(["test.db"]);
     },

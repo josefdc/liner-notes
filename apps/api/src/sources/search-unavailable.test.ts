@@ -7,6 +7,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import { stubFetch } from "./testing/fetchStub.js";
 
 vi.hoisted(() => {
@@ -19,21 +20,19 @@ import { readToolResult } from "./toolResult.js";
 
 describe("web search without an API key", () => {
   let net: ReturnType<typeof stubFetch>;
-  // A plain list, not mock.calls: mock history may be cleared between tests.
-  const warnings: string[] = [];
+  // Captured for the whole file: the warning is logged once per process.
+  let logs: CapturedLogs;
+  const warnings = () => logs.messages("warn");
 
   beforeAll(() => {
-    vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-      warnings.push(args.map(String).join(" "));
-    });
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    logs = captureLogsForTests();
     net = stubFetch(() => undefined);
   });
   afterEach(() => {
     expect(net.calls, "network calls").toHaveLength(0);
   });
   afterAll(() => {
+    logs.restore();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -85,6 +84,6 @@ describe("web search without an API key", () => {
     // Runs searches itself, so it holds in any test order.
     await searchSamples.invoke({ songTitle: "Ice Ice Baby", artistName: "Vanilla Ice" });
     await searchMusicInfo.invoke({ query: "Ice Ice Baby" });
-    expect(warnings.filter((line) => line.includes("TAVILY_API_KEY"))).toHaveLength(1);
+    expect(warnings().filter((line) => line.includes("TAVILY_API_KEY"))).toHaveLength(1);
   });
 });

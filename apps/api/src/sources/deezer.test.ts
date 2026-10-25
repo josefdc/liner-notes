@@ -10,6 +10,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import {
   type DeezerPreviewResult,
   findDeezerPreview,
@@ -118,6 +119,13 @@ const LET_IT_GO: PreviewRequest = {
   album: "Frozen",
   durationMs: 224_000,
 };
+
+// Every test's log lines, for the tests that check what is logged.
+let logs: CapturedLogs;
+beforeEach(() => {
+  logs = captureLogsForTests();
+});
+afterEach(() => logs.restore());
 
 describe("Deezer preview of one recording", () => {
   beforeEach(() => {
@@ -1167,13 +1175,11 @@ describe("Deezer preview of one recording", () => {
 
       matched(await findDeezerPreview(BLINDING_LIGHTS));
 
-      const logged = (["log", "warn", "error"] as const)
-        .flatMap((method) => vi.mocked(console[method]).mock.calls.flat())
-        .map((arg) => String(arg))
-        .join("\n");
+      const logged = logs.lines().join("\n");
       expect(logged).toContain("Blinding Lights");
       expect(logged).not.toContain("dzcdn.net");
       expect(logged).not.toContain("hdnea");
+      expect(logged).not.toContain("[preview link]");
     });
 
     it("records the lookups with the fields the match reads, without preview or bpm", async () => {

@@ -16,6 +16,7 @@ import { connect } from "node:net";
 import { brotliCompressSync, deflateSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import express from "express";
 import { llm } from "../llm/invoke.js";
+import { type CapturedLogs, captureLogsForTests } from "../logger.js";
 import { createApp } from "./app.js";
 import { asyncRoute } from "./middleware/errors.js";
 import { listedOriginsOnly } from "./middleware/origin.js";
@@ -55,16 +56,19 @@ function settings(overrides: Partial<HttpSettings> = {}): HttpSettings {
 
 const app = (overrides?: Partial<HttpSettings>) => createApp({ http: settings(overrides) });
 
+let logs: CapturedLogs;
 beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  logs = captureLogsForTests();
 });
 
 afterEach(() => {
+  logs.restore();
   vi.restoreAllMocks();
   vi.mocked(llm.invoke).mockReset();
 });
+
+/** The lines logged at `level` (component HTTP and others alike). */
+const logsAt = (level: string) => logs.entries().filter((entry) => entry.level === level);
 
 /** Makes the stubbed model answer, so paid requests succeed (200). */
 function modelAnswers() {
@@ -194,11 +198,11 @@ describe("error handling", () => {
     const server = createApp({ http: settings(), routers: [router] });
 
     for (const path of ["/api/wrapped", "/api/plain"]) {
-      vi.mocked(console.error).mockClear();
+      logs.clear();
       const res = await request(server).get(path).timeout(2000);
       expect(res.status).toBe(500);
       expect(res.body.code).toBe("internal_error");
-      expect(vi.mocked(console.error)).toHaveBeenCalledTimes(1);
+      expect(logsAt("error")).toHaveLength(1);
     }
   });
 
@@ -230,12 +234,12 @@ describe("error handling", () => {
       socket.destroy();
 
       const warned = () =>
-        vi
-          .mocked(console.warn)
-          .mock.calls.some(([line]) => String(line).includes("client aborted the request body"));
+        logsAt("warn").some((entry) =>
+          String(entry.msg).includes("client aborted the request body"),
+        );
       for (let i = 0; i < 100 && !warned(); i++) await new Promise((r) => setTimeout(r, 10));
       expect(warned()).toBe(true);
-      expect(vi.mocked(console.error)).not.toHaveBeenCalled();
+      expect(logsAt("error")).toEqual([]);
     } finally {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
@@ -708,7 +712,7 @@ describe("requests other sites make a browser send", () => {
     let clock = 0;
     const guarded = express();
     guarded.use(listedOriginsOnly([LISTED], () => clock));
-    const warnings = () => vi.mocked(console.warn).mock.calls.length;
+    const warnings = () => logsAt("warn").length;
 
     for (let i = 0; i < 5; i++) {
       await request(guarded).get("/api/search/suggest").set("Origin", "https://evil.example");
@@ -804,10 +808,10 @@ describe("OPTIONS and exposed headers", () => {
 });
 
 describe("logging", () => {
+  /** The message of the first warning that contains `marker`. */
   const logged = (marker: string) =>
-    vi
-      .mocked(console.warn)
-      .mock.calls.map((args) => args.join(" "))
+    logsAt("warn")
+      .map((entry) => String(entry.msg))
       .find((line) => line.includes(marker));
 
   it("keeps a client's text from breaking the log line", async () => {

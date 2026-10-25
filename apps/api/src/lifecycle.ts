@@ -4,6 +4,9 @@
  */
 
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
+import { logger, scrub } from "./logger.js";
+
+const log = logger("Server");
 
 export interface ShutdownOptions {
   server: Server;
@@ -56,20 +59,20 @@ export function createShutdown({
   return (signal) => {
     if (startedAt !== null) {
       if (now() - startedAt < repeatWindowMs) {
-        console.log(`[Server] ${signal} again while shutting down; ignored as a duplicate`);
+        log.info(`${signal} again while shutting down; ignored as a duplicate`);
         return;
       }
-      console.warn(`[Server] ${signal} again; exiting now`);
+      log.warn(`${signal} again; exiting now`);
       exit(1);
       return;
     }
     startedAt = now();
-    console.log(`[Server] ${signal} received; shutting down`);
+    log.info(`${signal} received; shutting down`);
 
     stopBackground();
 
     const forced = setTimeout(() => {
-      console.error("[Server] Connections still open after the shutdown timeout; exiting");
+      log.error("Connections still open after the shutdown timeout; exiting");
       void closeOnce().then(() => exit(1));
     }, timeoutMs);
     forced.unref();
@@ -84,7 +87,7 @@ export function createShutdown({
       clearTimeout(forced);
       clearTimeout(drain);
       void closeOnce().then(() => {
-        console.log("[Server] Stopped");
+        log.info("Stopped");
         exit(0);
       });
     });
@@ -144,11 +147,16 @@ export function installProcessHandlers(
     });
   }
   process.on("unhandledRejection", (reason) => {
-    console.error("[Process] Unhandled promise rejection:", reason);
+    logger("Process").error("Unhandled promise rejection", { err: reason });
   });
   process.on("uncaughtException", (error) => {
-    console.error("[Process] Uncaught exception; exiting:", error);
+    // Whatever happens to the log line, the store is still closed and the process exits 1.
     try {
+      try {
+        logger("Process").error("Uncaught exception; exiting", { err: error });
+      } catch {
+        process.stderr.write(`Uncaught exception; exiting: ${scrub(error)}\n`);
+      }
       onFatal();
     } finally {
       exit(1);

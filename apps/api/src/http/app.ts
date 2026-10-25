@@ -10,6 +10,7 @@ import { acceptedEncodingsOnly } from "./middleware/encoding.js";
 import { errorHandler, notFound } from "./middleware/errors.js";
 import { listedOriginsOnly } from "./middleware/origin.js";
 import { globalLimit, perIpLimit } from "./middleware/rateLimit.js";
+import { requestLog } from "./middleware/requestLog.js";
 import {
   analyzeRouter,
   factoidsRouter,
@@ -34,6 +35,8 @@ export function createApp({ http, routers }: AppDeps): express.Express {
   // through them.
   app.set("trust proxy", http.trustProxy > 0 ? http.trustProxy : false);
 
+  // First, so every request is logged, refused ones included.
+  app.use(requestLog);
   app.use(cors(http.corsOrigins));
 
   // Routes that cost money: the analysis (POST and both streams), factoids and search (Spotify).

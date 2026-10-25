@@ -25,6 +25,7 @@ import {
   strictlyMatches,
 } from "./enricher.js";
 import type { Genealogy } from "./schema.js";
+import { captureLogsForTests } from "../logger.js";
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const SEARCH_URL = "https://api.spotify.com/v1/search";
@@ -859,17 +860,19 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
 
   it("keeps the Deezer preview out of the artwork cache and the logs", async () => {
     stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    const lines = captureLogsForTests({ level: "debug" });
 
-    const node = await enrichOne(underPressure);
+    const node = await enrichOne(underPressure).finally(() => lines.restore());
 
     expect(node.previewUrl).toBe(deezerClip(7));
     expect(cache.putArtwork).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(cache.putArtwork.mock.calls)).not.toMatch(/dzcdn|hdnea|previewUrl/);
-    const logged = JSON.stringify(
-      (["log", "warn", "error", "info", "debug"] as const).flatMap((method) =>
+    const logged = JSON.stringify([
+      ...(["log", "warn", "error", "info", "debug"] as const).flatMap((method) =>
         vi.isMockFunction(console[method]) ? vi.mocked(console[method]).mock.calls : [],
       ),
-    );
+      ...lines.lines(),
+    ]);
     expect(logged).toContain("Deezer");
     expect(logged).not.toMatch(/dzcdn|hdnea/);
   });

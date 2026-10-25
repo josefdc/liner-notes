@@ -37,6 +37,7 @@
     "express": "5.2.1",
     "express-rate-limit": "8.7.0",
     "openai": "7.30.0",
+    "pino": "10.4.0",
     "zod": "4.6.5"
   },
   "devDependencies": {

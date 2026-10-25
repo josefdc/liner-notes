@@ -11,6 +11,9 @@ import { replays } from "../../replay/records.js";
 import { getDb } from "../../store/database.js";
 import { getRun, latestRunsForTrack, type RunRecord, replayOfRun } from "../../store/runs.js";
 import { sendError } from "../middleware/errors.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Runs");
 
 const router = Router();
 
@@ -49,10 +52,9 @@ function runResponse(record: RunRecord): RunResponse | null {
   };
   const checked = RunResponse.safeParse({ success: true, run, analysis: resultOf(record) });
   if (checked.success) return checked.data;
-  console.error(
-    `[Runs] Stored run ${record.runId} fails the contract:`,
-    checked.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
-  );
+  log.error(`Stored run ${record.runId} fails the contract`, {
+    issues: checked.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+  });
   return null;
 }
 

@@ -6,6 +6,7 @@
 import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureLogsForTests } from "../logger.js";
 import { openAnalysisStream, type SentEvent } from "./sse.js";
 
 /** An app whose one route sends `connected`, an invalid progress event, a status and `done`. */
@@ -45,13 +46,21 @@ describe("onSent", () => {
   });
 
   it("cannot break the stream by throwing", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await request(
-      appObservedBy(() => {
-        throw new Error("observer failed");
-      }),
-    ).get("/stream");
-    expect(types(res.text)).toEqual(["connected", "status", "done"]);
-    expect(errors.mock.calls.some(([line]) => String(line).includes("not observed"))).toBe(true);
+    const logs = captureLogsForTests();
+    try {
+      const res = await request(
+        appObservedBy(() => {
+          throw new Error("observer failed");
+        }),
+      ).get("/stream");
+      expect(types(res.text)).toEqual(["connected", "status", "done"]);
+      expect(
+        logs
+          .entries()
+          .some((entry) => entry.level === "error" && String(entry.msg).includes("not observed")),
+      ).toBe(true);
+    } finally {
+      logs.restore();
+    }
   });
 });

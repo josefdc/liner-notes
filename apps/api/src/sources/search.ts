@@ -22,6 +22,9 @@ import {
   SourceError,
 } from "./http.js";
 import { keyRejected, notAnswered, toolFailure } from "./toolResult.js";
+import { logger } from "../logger.js";
+
+const log = logger("Search");
 
 // =============================================================================
 // Configuration
@@ -138,7 +141,7 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<We
   if (!apiKey) {
     if (!warnedNoKey) {
       warnedNoKey = true;
-      console.warn("⚠️ [Search] TAVILY_API_KEY is not set; web search is unavailable.");
+      log.warn("TAVILY_API_KEY is not set; web search is unavailable.");
     }
     throw new SourceError("tavily", "unavailable", "TAVILY_API_KEY is not set");
   }
@@ -190,7 +193,8 @@ async function searchText(
   signal: AbortSignal | undefined,
 ): Promise<string> {
   signal?.throwIfAborted();
-  console.log(`🔍 [Search] ${label}: ${query}`);
+  log.info(label);
+  log.debug(label, { query });
   try {
     const results = await webSearch(query, signal);
     return JSON.stringify(
@@ -198,7 +202,7 @@ async function searchText(
     );
   } catch (error) {
     if (signal?.aborted) throw error;
-    console.error(`❌ [Search] ${label} unavailable:`, describeError(error));
+    log.error(`${label} unavailable: ${describeError(error)}`);
     // 401 and 403 mean Tavily refused the key: an operator error, reported as such.
     if (isSourceError(error, "http") && (error.status === 401 || error.status === 403)) {
       return JSON.stringify({

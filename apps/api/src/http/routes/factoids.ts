@@ -33,6 +33,17 @@ import type { ReplaySet } from "../../replay/records.js";
 import { asyncRoute, eventStreamHead, markFailed, sendError } from "../middleware/errors.js";
 import { type EventStream, openFactoidStream } from "../sse.js";
 import { boundedText, describeIssues, factoidId, trackId } from "../validation.js";
+import { logger } from "../../logger.js";
+
+const log = logger("Factoids");
+
+/**
+ * The track a factoids request names: the client sends its title and artist, so they are written
+ * at debug level only, like a typed query.
+ */
+function logTrack(what: string, track: string): void {
+  log.debug(`${what}: track`, { track });
+}
 
 // =============================================================================
 // Input
@@ -278,7 +289,8 @@ export function createFactoidsRouter({
         return;
       }
       if (replay.kind === "replay") {
-        console.log(`[Factoids] Recorded facts for ${track} (${replay.record.slug})`);
+        log.info(`Recorded facts (${replay.record.slug})`);
+        logTrack("Recorded facts", track);
         res.json({
           success: true,
           factoids: recordedFactoids(replay.record, existingFactoidIds, DECRYPT_COUNT),
@@ -292,7 +304,8 @@ export function createFactoidsRouter({
         return;
       }
 
-      console.log(`[Factoids] Decrypting more facts for ${track}`);
+      log.info("Decrypting more facts");
+      logTrack("Decrypting more facts", track);
 
       // Stops the model call when the client leaves before the answer.
       const disconnect = new AbortController();
@@ -307,7 +320,7 @@ export function createFactoidsRouter({
           factoidMessages({ title: trackTitle, artist: trackArtist }, STREAM_CATEGORIES),
         );
       } catch (error) {
-        console.error(`[Factoids] Decrypt failed (${failure(error)})`);
+        log.error(`Decrypt failed (${failure(error)})`);
         if (!disconnect.signal.aborted) sendError(res, failureCode(error));
         return;
       } finally {
@@ -393,7 +406,8 @@ export function createFactoidsRouter({
         return;
       }
 
-      console.log(`[Factoids] Streaming factoids for ${track}`);
+      log.info("Streaming factoids");
+      logTrack("Streaming factoids", track);
       stream.send({ type: "connected", timestamp: new Date().toISOString() });
 
       if (replay.kind === "replay") {
@@ -422,7 +436,7 @@ export function createFactoidsRouter({
             card = outcome.output.factoids[0];
           } catch (failed) {
             if (stream.closed) break;
-            console.error(`[Factoids] Factoid ${i + 1} failed (${failure(failed)})`);
+            log.error(`Factoid ${i + 1} failed (${failure(failed)})`);
             error(failureCode(failed), { index: i });
             continue;
           }
@@ -432,14 +446,14 @@ export function createFactoidsRouter({
           // index instead.
           if (card)
             stream.send({ type: "factoid", data: toFactoid(card, factoidId) }, { index: i });
-          else console.log(`[Factoids] Factoid ${i + 1}: nothing documented`);
+          else log.info(`Factoid ${i + 1}: nothing documented`);
         }
       } finally {
         run.end();
       }
 
       if (stream.closed) {
-        console.log(`[Factoids] Client left; stopped streaming factoids for ${track}`);
+        log.info("Client left; stopped streaming factoids");
         return;
       }
       stream.done();

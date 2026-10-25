@@ -1,5 +1,8 @@
 import type { RequestHandler } from "express";
 import { logText, refuse } from "./errors.js";
+import { logger } from "../../logger.js";
+
+const log = logger("HTTP");
 
 /** Sec-Fetch-Site values a request without an Origin may carry: the API's own origin, or none. */
 const SAME_ORIGIN_SITES = new Set(["same-origin", "none"]);
@@ -53,8 +56,8 @@ export function listedOriginsOnly(
     }
     const what = origin !== undefined ? `origin ${logText(origin)}` : `a ${logText(site)} request`;
     if (shouldLog(what)) {
-      console.warn(
-        `[HTTP] ${req.method} ${logText(req.originalUrl.split("?")[0])}: refused ${what}` +
+      log.warn(
+        `${req.method} ${logText(req.originalUrl.split("?")[0])}: refused ${what}` +
           ` (repeats muted for ${REFUSAL_LOG_INTERVAL_MS / 1000} s)`,
       );
     }

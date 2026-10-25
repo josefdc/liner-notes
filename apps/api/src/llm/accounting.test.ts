@@ -9,8 +9,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
+import { captureLogsForTests } from "../logger.js";
 import { resolveSpendLogPath } from "./budget.js";
 import { isLlmError } from "./errors.js";
 import { acquireLock } from "./fileLock.js";
@@ -85,6 +86,13 @@ function body(over: Record<string, unknown>, usage: { input: number; output: num
   return { ...(responseBody({ ok: true }, usage) as Record<string, unknown>), ...over };
 }
 
+/** The warnings logged from now until the test ends, as one text. */
+function captureWarnings(): () => string {
+  const logs = captureLogsForTests();
+  onTestFinished(() => logs.restore());
+  return () => logs.messages("warn").join(" ");
+}
+
 describe("usage the provider did not report", () => {
   it("keeps the worst case when an answer has no usage", async () => {
     const { llm, rows } = setup(() => Response.json(responseBody({ ok: true }, null)));
@@ -115,12 +123,12 @@ describe("usage the provider did not report", () => {
   });
 
   it("keeps the worst case for answer text reported with 0 output tokens", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnings = captureWarnings();
     const { llm } = setup(() => Response.json(responseBody({ ok: true }, { input: 0, output: 0 })));
     const result = await llm.invoke("x", "research", "hi", Schema, OPTIONS);
     expect(result.usage).toMatchObject({ inputTokens: null, outputTokens: null });
     expectWorstCaseKept();
-    expect(warn.mock.calls.flat().join(" ")).toContain("inconsistent");
+    expect(warnings()).toContain("inconsistent");
   });
 
   it("keeps the worst case when reasoning tokens exceed output tokens", async () => {
@@ -133,7 +141,7 @@ describe("usage the provider did not report", () => {
   });
 
   it("charges the fallback prices × 1.5 for an answer from a model outside the deployment's family", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnings = captureWarnings();
     const { llm, rows } = setup(() =>
       Response.json(responseBody({ ok: true }, { input: 1000, output: 1000 }, "gpt-6-sol")),
     );
@@ -143,7 +151,7 @@ describe("usage the provider did not report", () => {
     expect(result.usage.usdEst).toBe(0.075); // (1000 × 10 + 1000 × 40) / 1e6 × 1.5
     expect(settles()).toMatchObject([{ usd_est: 0.075, multiplier: 1.5 }]);
     expect(rows[0].priceMultiplier).toBe(1.5);
-    expect(warn.mock.calls.flat().join(" ")).toContain("outside the priced family");
+    expect(warnings()).toContain("outside the priced family");
   });
 
   it("accepts a dated model name of the deployment's family at its price", async () => {
@@ -482,13 +490,13 @@ describe("an abort while waiting for the spend log's lock", () => {
 
 describe("cost above the reservation", () => {
   it("is settled as reported and reported in a warning", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnings = captureWarnings();
     const { llm } = setup(() =>
       Response.json(responseBody({ ok: true }, { input: 10_000_000, output: 10 })),
     );
     await llm.invoke("x", "research", "hi", Schema, { ...OPTIONS, maxOutputTokens: 300 });
     expect(settles()[0].usd_est).toBeGreaterThan(reserves()[0].usd_est);
-    expect(warn.mock.calls.flat().join(" ")).toContain("above the reservation");
+    expect(warnings()).toContain("above the reservation");
   });
 });
 

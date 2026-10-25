@@ -9,7 +9,7 @@ import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
-import { normalizeTrack } from '../constants';
+import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -131,6 +131,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
   const relatedTracks = useMemo(() => getRelatedTracks(trackData), [trackData]);
   const hasGenreProfile = (trackData?.genreProfile?.length ?? 0) > 0;
+  // The audio models' style and tag scores; null for a result without an `audio` block.
+  const fingerprint = useMemo(
+    () => (trackData ? audioReadings(trackData).fingerprint : null),
+    [trackData],
+  );
+  // What the panel shows, in words: never that the audio models ran when they did not.
+  const fingerprintText = useMemo(
+    () => (trackData ? fingerprintSubtitle(trackData, hasGenreProfile) : 'Genre affinity'),
+    [trackData, hasGenreProfile],
+  );
+  const hasModelScores =
+    fingerprint?.styles.state === 'shown' || fingerprint?.tags.state === 'shown';
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
   // UX: Undo toast state (replaces confirm dialog)
@@ -337,13 +349,20 @@ const Dashboard: React.FC<DashboardProps> = ({
           className="lg:col-span-1 bg-surface border border-border rounded-md p-6 flex flex-col relative overflow-hidden group hover:border-cyber/30 transition-colors animate-stagger-in stagger-3"
         >
           <div className="flex items-start justify-between gap-2 mb-4 z-10">
-            <SectionLabel
-              subtitle={hasGenreProfile ? 'Genre affinity written by the model' : 'Genre affinity'}
-              className="flex-1"
-            >
+            <SectionLabel subtitle={fingerprintText} className="flex-1">
               Sonic Fingerprint
             </SectionLabel>
-            {hasGenreProfile && <InferenceLabel />}
+            <div className="flex flex-col items-end gap-1">
+              {hasModelScores && (
+                <Badge
+                  variant="analog"
+                  title="Scores from audio models run on the preview: estimates, not measurements and not probabilities"
+                >
+                  Model estimate
+                </Badge>
+              )}
+              {hasGenreProfile && <InferenceLabel />}
+            </div>
           </div>
           <div className="flex-1 min-h-[250px] md:min-h-[300px] z-10">
             <Suspense
@@ -356,6 +375,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <SonicFingerprint
                 genreProfile={trackData?.genreProfile}
                 modelUnavailable={trackData?.modelUnavailable}
+                fingerprint={fingerprint}
               />
             </Suspense>
           </div>

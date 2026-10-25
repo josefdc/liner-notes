@@ -6,6 +6,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { type FetchCall, json, never, stubFetch } from "./testing/fetchStub.js";
+import { queueOnFakeClock, settleOnFakeClock } from "./testing/fakeClock.js";
 
 vi.hoisted(() => {
   // So a local .env cannot set the User-Agent under test.
@@ -725,7 +726,9 @@ describe("MusicBrainz client", () => {
   });
 
   it("sends one request at a time, spaced by the queue", async () => {
-    const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(60);
+    // On a fake clock a start is the time the queue released the request, however late the
+    // machine got round to it: only the queue's and the stub's timers move the clock.
+    queueOnFakeClock(60);
     let inFlight = 0;
     let maxInFlight = 0;
     const starts: number[] = [];
@@ -734,27 +737,28 @@ describe("MusicBrainz client", () => {
       inFlight++;
       maxInFlight = Math.max(maxInFlight, inFlight);
       starts.push(Date.now());
-      await new Promise((r) => setTimeout(r, 5));
+      // The second answer outlasts the interval, so a queue that did not wait for it would
+      // overlap the third request. The others are quick: only the queue spaces requests 1→2
+      // and 3→4.
+      await new Promise((r) => setTimeout(r, starts.length === 2 ? 100 : 5));
       inFlight--;
       return call.url.startsWith(`${MB}/artist?`)
         ? json({ count: 0, artists: [] })
         : json({ count: 0, recordings: [] });
     });
-    try {
-      await Promise.all([
+    await settleOnFakeClock(
+      Promise.all([
         findArtist("Vanilla Ice"),
         findArtist("Queen"),
         getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
-      ]);
-    } finally {
-      restore();
-    }
+        findArtist("David Bowie"),
+      ]),
+    );
 
-    expect(starts).toHaveLength(3);
+    expect(starts).toHaveLength(4);
     expect(maxInFlight).toBe(1);
-    for (let i = 1; i < starts.length; i++) {
-      expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(55);
-    }
+    const gaps = starts.slice(1).map((start, i) => start - starts[i]);
+    for (const gap of gaps) expect(gap, `gaps ${gaps}`).toBeGreaterThanOrEqual(60);
   });
 
   describe("choosing among exact matches (real search answers)", () => {

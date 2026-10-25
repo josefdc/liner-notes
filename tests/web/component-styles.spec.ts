@@ -120,70 +120,232 @@ const over = (top: Rgba, bottom: Rgba): Rgba => ({
 });
 
 /**
+ * Waits until what is drawn behind the text is final: every image on the page decoded (the
+ * Player's blurred background cover shows only once its image is in), and so every SVG <image>
+ * and CSS url() background (loaded through the same cache), and the page's animations settled.
+ */
+async function backgroundSettled(page: Page) {
+  await page.evaluate(() => {
+    const urls = new Set<string>();
+    for (const image of document.querySelectorAll("svg image")) {
+      const href = image.getAttribute("href") ?? image.getAttribute("xlink:href");
+      if (href) urls.add(new URL(href, document.baseURI).href);
+    }
+    for (const element of document.querySelectorAll("*")) {
+      for (const pseudo of [null, "::before", "::after"]) {
+        const { backgroundImage } = getComputedStyle(element, pseudo);
+        for (const [, url] of backgroundImage.matchAll(/url\("([^"]*)"\)/g)) urls.add(url);
+      }
+    }
+    const loads = [...urls].map((url) => {
+      const image = new Image();
+      image.src = url;
+      return image;
+    });
+    return Promise.all(
+      [...document.images, ...loads].map((image) => image.decode().catch(() => {})),
+    );
+  });
+  await animationsSettled(page);
+}
+
+/** The widest spread between a colour's channels for it to count as grey (see below). */
+const NEUTRAL_SPREAD = 40;
+
+/** Batched elements keep at least this many pixels apart (see neutralBadgeContrast). */
+const MEASURE_GAP = 8;
+
+/**
  * WCAG contrast of the grey text in each neutral badge, against what the page actually draws
  * behind it: the badge's text and icons are hidden, the area inside its border is screenshotted
  * (cover image, blur and every translucent layer included), and its brightest pixel is the
- * background. Coloured values inside a badge (cyan, amber, pink) are not measured here.
+ * background. Coloured values inside a badge (cyan, amber, pink) are not measured here; a
+ * colour that cannot be read is an error.
+ *
+ * The pointer is first moved off the page's content and focus is dropped, so every badge is
+ * measured at rest: a test that hovers or focuses on purpose says so with `keepHover` or
+ * `keepFocus`, and a badge hovered or focused otherwise is an error. Then it waits once for the
+ * background to settle, and the badges in view together are measured from one screenshot: the
+ * first one not yet measured is scrolled into view, and every other one fully in view that keeps
+ * MEASURE_GAP px from the badges already picked is read (its text and colour, as drawn now),
+ * hidden and measured with it. So each badge's area shows what it would on its own (only its own
+ * text and icons hidden), with a few screenshots per page instead of one per badge. An area's
+ * pixels are those at least half inside it, and an area with none is an error. The results are
+ * in document order.
  */
-async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/15") {
+async function neutralBadgeContrast(
+  page: Page,
+  selector = "span.border-white\\/15",
+  { keepHover = false, keepFocus = false } = {},
+) {
+  if (!keepHover) await page.mouse.move(0, 0);
+  if (!keepFocus) {
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  }
+  await backgroundSettled(page);
   await page.addStyleTag({
     content:
       "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
   });
   const badges = page.locator(selector);
-  const result: Array<{ text: string; ratio: number }> = [];
-  for (let i = 0; i < (await badges.count()); i += 1) {
-    const badge = badges.nth(i);
-    await badge.scrollIntoViewIfNeeded();
-    const texts = await badge.evaluate((element) => {
-      const found: Array<{ text: string; color: string }> = [];
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        if (!text.textContent?.trim() || !text.parentElement) continue;
-        found.push({
-          text: text.textContent.trim(),
-          color: getComputedStyle(text.parentElement).color,
-        });
-      }
-      element.setAttribute("data-measuring", "");
-      return found;
-    });
-    const box = await badge.boundingBox();
-    if (!box) throw new Error("a neutral badge has no box");
-    const png = await page.screenshot({
-      clip: { x: box.x + 2, y: box.y + 2, width: box.width - 4, height: box.height - 4 },
-      animations: "disabled",
-    });
-    await badge.evaluate((element) => element.removeAttribute("data-measuring"));
-    const background: Rgba = await page.evaluate(async (base64) => {
-      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
-      const bitmap = await createImageBitmap(blob);
-      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("no 2d context");
-      context.drawImage(bitmap, 0, 0);
-      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
-      let best = { r: 0, g: 0, b: 0, a: 1 };
-      for (let j = 0; j < data.length; j += 4) {
-        if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
-          best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+  type Found = Array<{ text: string; color: string }>;
+  const texts: Array<Found | undefined> = Array(await badges.count()).fill(undefined);
+  const backgrounds: Array<Rgba | undefined> = texts.map(() => undefined);
+  for (
+    let first = backgrounds.indexOf(undefined);
+    first !== -1;
+    first = backgrounds.indexOf(undefined)
+  ) {
+    await badges.nth(first).scrollIntoViewIfNeeded();
+    const pending = backgrounds.flatMap((background, i) => (background ? [] : [i]));
+    // The first pending badge, and each other one fully in view (not clipped by the viewport
+    // or a scrolling box) and MEASURE_GAP px clear of those picked; their text and colour are
+    // read as drawn now, then they are hidden together.
+    const picked = await badges.evaluateAll(
+      (elements, { pending, gap, keepHover, keepFocus }) => {
+        // A computed colour as rgb()/rgba(): one the browser reports otherwise (oklab() for
+        // text-white/40) is drawn on a 1 px canvas and read back in sRGB.
+        const asRgb = (color: string) => {
+          if (/^rgba?\(/.test(color)) return color;
+          const context = new OffscreenCanvas(1, 1).getContext("2d");
+          if (!context) throw new Error("no 2d context");
+          context.fillStyle = "rgb(1, 2, 3)";
+          context.fillStyle = color;
+          if (context.fillStyle === "#010203") throw new Error(`cannot read the colour ${color}`);
+          context.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+          return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+        };
+        const inView = (element: Element, box: DOMRect) => {
+          if (box.top < 0 || box.left < 0) return false;
+          if (box.bottom > innerHeight || box.right > innerWidth) return false;
+          for (let up = element.parentElement; up; up = up.parentElement) {
+            const style = getComputedStyle(up);
+            if (`${style.overflowX} ${style.overflowY}` === "visible visible") continue;
+            const clip = up.getBoundingClientRect();
+            if (box.top < clip.top || box.left < clip.left) return false;
+            if (box.bottom > clip.bottom || box.right > clip.right) return false;
+          }
+          return true;
+        };
+        const apart = (a: DOMRect, b: DOMRect) =>
+          a.right + gap <= b.left ||
+          b.right + gap <= a.left ||
+          a.bottom + gap <= b.top ||
+          b.bottom + gap <= a.top;
+        const chosen: Array<{ index: number; box: DOMRect }> = [];
+        for (const index of pending) {
+          const element = elements[index];
+          if (element.getClientRects().length === 0) throw new Error("a neutral badge has no box");
+          const box = element.getBoundingClientRect();
+          if (chosen.length > 0 && !inView(element, box)) continue;
+          if (!chosen.every((other) => apart(other.box, box))) continue;
+          chosen.push({ index, box });
         }
-      }
-      return best;
-    }, png.toString("base64"));
-    for (const { text, color } of texts) {
-      const match = /rgba?\(([^)]+)\)/.exec(color);
-      if (!match) continue;
+        return chosen.map(({ index, box }) => {
+          const element = elements[index];
+          const label = element.textContent?.trim().slice(0, 60);
+          if (!keepHover && element.matches(":hover")) throw new Error(`"${label}" is hovered`);
+          if (!keepFocus && element.matches(":focus-within")) {
+            throw new Error(`"${label}" has the focus`);
+          }
+          const found: Array<{ text: string; color: string }> = [];
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+            if (!text.textContent?.trim() || !text.parentElement) continue;
+            found.push({
+              text: text.textContent.trim(),
+              color: asRgb(getComputedStyle(text.parentElement).color),
+            });
+          }
+          element.setAttribute("data-measuring", "");
+          return { index, found, x: box.x, y: box.y, width: box.width, height: box.height };
+        });
+      },
+      { pending, gap: MEASURE_GAP, keepHover, keepFocus },
+    );
+    // One screenshot of the smallest whole-pixel area around them, inside the viewport.
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("no viewport");
+    const left = Math.max(0, Math.floor(Math.min(...picked.map((box) => box.x))));
+    const top = Math.max(0, Math.floor(Math.min(...picked.map((box) => box.y))));
+    const right = Math.min(
+      viewport.width,
+      Math.ceil(Math.max(...picked.map((b) => b.x + b.width))),
+    );
+    const bottom = Math.min(
+      viewport.height,
+      Math.ceil(Math.max(...picked.map((b) => b.y + b.height))),
+    );
+    const clip = { x: left, y: top, width: right - left, height: bottom - top };
+    const label = (box: (typeof picked)[number]) =>
+      `"${box.found.map(({ text }) => text).join(" ")}"`;
+    if (clip.width <= 0 || clip.height <= 0) {
+      throw new Error(`${picked.map(label).join(", ")}: nothing of it in view to measure`);
+    }
+    const png = await page.screenshot({ clip, animations: "disabled" });
+    await badges.evaluateAll((elements) => {
+      for (const element of elements) element.removeAttribute("data-measuring");
+    });
+    // The brightest pixel inside each picked badge's border (2 px in from its box), or null
+    // when no whole pixel is inside it.
+    const brightest: Array<Rgba | null> = await page.evaluate(
+      async ({ base64, boxes, clip }) => {
+        const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("no 2d context");
+        context.drawImage(bitmap, 0, 0);
+        const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+        const scale = bitmap.width / clip.width;
+        return boxes.map((box) => {
+          const x = box.x - clip.x;
+          const y = box.y - clip.y;
+          const left = Math.max(0, Math.round((x + 2) * scale));
+          const top = Math.max(0, Math.round((y + 2) * scale));
+          const right = Math.min(bitmap.width, Math.round((x + box.width - 2) * scale));
+          const bottom = Math.min(bitmap.height, Math.round((y + box.height - 2) * scale));
+          if (right <= left || bottom <= top) return null;
+          let best = { r: 0, g: 0, b: 0, a: 1 };
+          for (let y = top; y < bottom; y += 1) {
+            for (let x = left; x < right; x += 1) {
+              const j = (y * bitmap.width + x) * 4;
+              if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
+                best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+              }
+            }
+          }
+          return best;
+        });
+      },
+      { base64: png.toString("base64"), boxes: picked, clip },
+    );
+    picked.forEach((box, i) => {
+      const background = brightest[i];
+      if (!background) throw new Error(`${label(box)}: no whole pixel inside its border`);
+      texts[box.index] = box.found;
+      backgrounds[box.index] = background;
+    });
+  }
+  const result: Array<{ text: string; ratio: number }> = [];
+  texts.forEach((found, i) => {
+    const background = backgrounds[i] as Rgba;
+    for (const { text, color } of found ?? []) {
+      const match = /^rgba?\(([^)]+)\)$/.exec(color);
+      if (!match) throw new Error(`"${text}": cannot read its colour ${color}`);
       const [r, g, b, a = 1] = match[1]
         .split(/[\s,/]+/)
         .filter(Boolean)
         .map(Number);
-      if (!(r === g && g === b)) continue;
+      // Coloured text (cyan, amber, green, pink) is not measured here; grey, even a slightly
+      // tinted one (Tailwind's gray-400 is rgb(156, 163, 175)), is.
+      if (Math.max(r, g, b) - Math.min(r, g, b) > NEUTRAL_SPREAD) continue;
       const foreground = over({ r, g, b, a }, background);
       const [light, dark] = [luminance(foreground), luminance(background)].sort((x, y) => y - x);
       result.push({ text, ratio: Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100 });
     }
-  }
+  });
   return result;
 }
 
@@ -201,8 +363,6 @@ for (const fixture of ["full-result", "missing-states"]) {
       await analyzeAndOpenDashboard(page, "Track");
       const dashboard = await neutralBadgeContrast(page);
       await openPlayer(page);
-      // The Player's background cover fades in.
-      await page.waitForTimeout(500);
       const player = await neutralBadgeContrast(page);
       expect(dashboard.length).toBeGreaterThan(0);
       expect(player.length).toBeGreaterThan(0);
@@ -275,7 +435,6 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
       await analyzeAndOpenDashboard(page, "Track");
       const dashboard = await neutralBadgeContrast(page, PROVENANCE_TEXT);
       await openPlayer(page);
-      await page.waitForTimeout(500);
       const player = await neutralBadgeContrast(page, PROVENANCE_TEXT);
       expect(dashboard.length).toBeGreaterThan(4);
       expect(player.length).toBeGreaterThan(2);
@@ -329,23 +488,38 @@ for (const cover of ["no cover", "a white cover"]) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Track");
     const dashboard = await neutralBadgeContrast(page, GENEALOGY_TEXT.dashboard);
-    // A hovered card lightens behind its badge.
-    const inferred = page
-      .getByRole("button")
-      .filter({ has: page.locator('[data-link-kind="inferred"]') });
-    await inferred.first().hover();
-    await animationsSettled(page);
-    dashboard.push(...(await neutralBadgeContrast(page, 'span[data-link-kind="inferred"]')));
+    // A hovered card lightens behind its badge, relation and provenance: each card, hovered.
+    const cards = page.getByRole("button").filter({ has: page.locator("[data-link-kind]") });
+    const hoveredText = `[data-hovered] :is(${GENEALOGY_TEXT.dashboard})`;
+    for (let i = 0; i < (await cards.count()); i += 1) {
+      const card = cards.nth(i);
+      await card.scrollIntoViewIfNeeded();
+      const box = await card.boundingBox();
+      if (!box) throw new Error("a connected card has no box");
+      const pointer = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await page.mouse.move(pointer.x, pointer.y);
+      await expect(card).toHaveAttribute("data-hovered", "true");
+      await animationsSettled(page);
+      const hovered = await neutralBadgeContrast(page, hoveredText, { keepHover: true });
+      expect(hovered.length, `card ${i + 1}, hovered`).toBeGreaterThan(0);
+      // Measured hovered: the card is still the one under the pointer.
+      const stillHovered = await card.evaluate(
+        (element, { x, y }) =>
+          element.matches(":hover") && element.contains(document.elementFromPoint(x, y)),
+        pointer,
+      );
+      expect(stillHovered, `card ${i + 1} stays under the pointer`).toBe(true);
+      dashboard.push(...hovered);
+    }
     await page.mouse.move(0, 0);
     await openPlayer(page);
-    await page.waitForTimeout(500);
     // The list opens over the graph; then, closed again, a focused link's detail.
     const summary = page.getByText(/^Links as a list/);
     await summary.click();
     const player = await neutralBadgeContrast(page, GENEALOGY_TEXT.player);
     await summary.click();
     await page.locator("#panel-genealogy g.link-targets line").first().focus();
-    player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail)));
+    player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail, { keepFocus: true })));
     // Inferred badges, every relation and provenance line (sourced badges are amber, not
     // measured here).
     expect(dashboard.length).toBeGreaterThanOrEqual(8);
@@ -373,7 +547,8 @@ const CLAIM_TEXT = [
 
 for (const cover of ["no cover", "a white cover"]) {
   test(`claim provenance and rejected-claim text meet 4.5:1 (${cover})`, async ({ page }) => {
-    // Some fifty lines, each screenshotted on its own.
+    // Reaching the Player's claims takes most of this test on a loaded machine; measuring their
+    // eighty-odd lines adds another 5–6 s.
     test.slow();
     await page.route("https://i.scdn.co/**", (route) =>
       route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
@@ -384,7 +559,6 @@ for (const cover of ["no cover", "a white cover"]) {
     await analyzeAndOpenDashboard(page, "Track");
     await openPlayer(page);
     await page.getByRole("button", { name: /Rejected by the verifier/ }).click();
-    await page.waitForTimeout(500);
     const measured = await neutralBadgeContrast(page, CLAIM_TEXT);
     const texts = measured.map(({ text }) => text);
     for (const line of [

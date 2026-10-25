@@ -201,6 +201,17 @@ class MusicBrainzRateLimiter {
   }
 
   /**
+   * Tests only: an idle, empty queue that has sent nothing, for after a test whose timers were
+   * dropped while the queue waited (its waiting requests never settle).
+   */
+  resetForTests(): void {
+    this.urgent.length = 0;
+    this.queue.length = 0;
+    this.processing = false;
+    this.lastRequestTime = 0;
+  }
+
+  /**
    * Execute a request with rate limiting. `fn` must settle on its own (every MusicBrainz request
    * has a timeout), so one request can never stall the queue. When `signal` aborts while the
    * request waits its turn, it leaves the queue at once, rejecting with the signal's reason,

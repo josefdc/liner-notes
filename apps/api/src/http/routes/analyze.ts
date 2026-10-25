@@ -376,7 +376,6 @@ async function runGraph(
           seen.interrupt = first?.value ?? {};
           continue;
         }
-        log.info(`${node} finished`, { runId: threadId, node });
         const state = update as {
           trackData?: TrackData;
           error?: string;

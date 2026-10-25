@@ -198,12 +198,32 @@ export const HealthResponse = z.looseObject({
   timestamp: Timestamp,
 });
 
-/** GET /api/ready: 200 when every check is ok, 503 otherwise. */
+/**
+ * One check of GET /api/ready: its name (database, migrations, audio, provider, budget), whether
+ * it passed, a status word and a short reason. A reason never holds a key, an endpoint, a host
+ * or an amount.
+ */
+export const ReadyCheck = z.looseObject({
+  name: z.string(),
+  ok: z.boolean(),
+  status: z.string(),
+  reason: z.string(),
+  /** The audio check: whether the service's perceptual models are loaded; null when unknown. */
+  models: z.boolean().nullable().optional(),
+});
+export type ReadyCheck = z.infer<typeof ReadyCheck>;
+
+/**
+ * GET /api/ready: 200 when every check is ok, 503 otherwise. `checks` maps each check's name to
+ * its status; `details` has each check in full.
+ */
 export const ReadyResponse = z.looseObject({
   status: z.enum(["ready", "unavailable"]),
   checks: z.record(z.string(), z.string()),
+  details: z.array(ReadyCheck).optional(),
   timestamp: Timestamp,
 });
+export type ReadyResponse = z.infer<typeof ReadyResponse>;
 
 // =============================================================================
 // Replay records (fixtures/replays/<slug>.json)

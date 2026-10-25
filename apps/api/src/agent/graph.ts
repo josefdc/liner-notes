@@ -17,12 +17,15 @@
  * The scout, the first node of every run, sets the run id once (the thread id, or a new id
  * from the runtime without a thread): every model call of the run counts under it.
  *
+ * Each time a node runs, one log line gives its duration and how it ended (`timed`), under the
+ * run's id.
+ *
  * `buildSonicAgentGraph` takes the runtime (model layer, clock, ids), the checkpointer and the
  * store, so tests and replays run the same graph on their own dependencies.
  */
 
 import type { BaseCheckpointSaver, BaseStore, LangGraphRunnableConfig } from "@langchain/langgraph";
-import { END, START, StateGraph } from "@langchain/langgraph";
+import { END, isGraphInterrupt, START, StateGraph } from "@langchain/langgraph";
 import { PreviewFreeSqliteSaver } from "../store/checkpointer.js";
 import { getDb } from "../store/database.js";
 import { SqliteStore } from "../store/store.js";
@@ -37,9 +40,68 @@ import {
 import { type AgentRuntime, defaultAgentRuntime, runIdFor } from "./runtime.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import { SonicAgentState, type SonicAgentStateType } from "./state.js";
-import { logger } from "../logger.js";
+import { currentRunId, logger } from "../logger.js";
+import { isAbortError } from "./errors.js";
 
 const log = logger("Graph");
+
+// =============================================================================
+// Node timings
+// =============================================================================
+
+export type NodeName = "scout" | "clarification" | "engineer" | "historian" | "composer";
+
+/**
+ * How a node ended: `ok`; `error` when it threw or returned an `error`; `interrupted` when it
+ * paused the run for the user's choice (the time waiting for the choice is not the node's: the
+ * node runs again on resume and logs a line of its own); `cancelled` when the run was cancelled.
+ */
+export type NodeOutcome = "ok" | "error" | "interrupted" | "cancelled";
+
+type GraphNode<U> = (state: SonicAgentStateType, config: LangGraphRunnableConfig) => Promise<U>;
+
+const elapsedMs = (started: bigint) => Number((process.hrtime.bigint() - started) / 1000n) / 1000;
+
+const reportedError = (update: unknown) =>
+  typeof update === "object" && update !== null && Boolean(Reflect.get(update, "error"));
+
+/**
+ * `node`, logging one line when it ends: `{component: "Graph", node, runId, durationMs,
+ * outcome}` at info level. Nothing of the node's input or output is logged. The run id is the
+ * one the run's lines carry (logger.ts), else the state's, else the thread's.
+ */
+function timed<U>(name: NodeName, node: GraphNode<U>): GraphNode<U> {
+  return async (state, config) => {
+    const started = process.hrtime.bigint();
+    let outcome: NodeOutcome = "error";
+    let update: U | undefined;
+    try {
+      update = await node(state, config);
+      outcome = reportedError(update) ? "error" : "ok";
+      return update;
+    } catch (error) {
+      if (isGraphInterrupt(error)) outcome = "interrupted";
+      else if (isAbortError(error) || config.signal?.aborted) outcome = "cancelled";
+      throw error;
+    } finally {
+      const threadId: unknown = config.configurable?.thread_id;
+      const updated: unknown =
+        typeof update === "object" && update !== null ? Reflect.get(update, "runId") : undefined;
+      const runId =
+        currentRunId() ??
+        (typeof updated === "string" ? updated : undefined) ??
+        state.runId ??
+        (typeof threadId === "string" && threadId !== "" ? threadId : undefined);
+      const durationMs = elapsedMs(started);
+      log.info(`Node ${name}: ${outcome} in ${durationMs} ms`, {
+        node: name,
+        ...(runId ? { runId } : {}),
+        durationMs,
+        outcome,
+      });
+    }
+  };
+}
 
 // =============================================================================
 // Routing
@@ -74,24 +136,29 @@ export function buildSonicAgentGraph({
   checkpointer,
   store,
 }: GraphDependencies = {}) {
+  const composer = runtime === defaultAgentRuntime ? composerNode : createComposerNode(runtime);
+  // Every node is timed (one log line per node run).
   const workflow = new StateGraph(SonicAgentState)
-    .addNode("scout", async (state: SonicAgentStateType, config: LangGraphRunnableConfig) => ({
-      ...(await scoutNode(state, config, runtime)),
-      runId: runIdFor(state, config, runtime),
-    }))
-    .addNode("clarification", (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
-      clarificationNode(state, config, runtime),
-    )
-    .addNode("engineer", (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
-      engineerNode(state, config, runtime),
-    )
-    .addNode("historian", (state: SonicAgentStateType, config: LangGraphRunnableConfig) =>
-      historianNode(state, config, runtime),
+    .addNode(
+      "scout",
+      timed("scout", async (state, config) => ({
+        ...(await scoutNode(state, config, runtime)),
+        runId: runIdFor(state, config, runtime),
+      })),
     )
     .addNode(
-      "composer",
-      runtime === defaultAgentRuntime ? composerNode : createComposerNode(runtime),
+      "clarification",
+      timed("clarification", (state, config) => clarificationNode(state, config, runtime)),
     )
+    .addNode(
+      "engineer",
+      timed("engineer", (state, config) => engineerNode(state, config, runtime)),
+    )
+    .addNode(
+      "historian",
+      timed("historian", (state, config) => historianNode(state, config, runtime)),
+    )
+    .addNode("composer", timed("composer", composer))
     .addEdge(START, "scout")
     .addConditionalEdges("scout", routeAfterScout, {
       clarification: "clarification",

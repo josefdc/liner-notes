@@ -183,6 +183,12 @@ docker-compose up --build
 | Backend API    | http://localhost/api (direct: http://127.0.0.1:3001)    |
 | Audio Analysis | internal to the API (direct: http://127.0.0.1:3002)     |
 
+`GET /api/health` is the liveness probe the containers' health checks use. `GET /api/ready`
+answers 200 when the API can serve an analysis and 503 otherwise, listing each check (database
+and migrations, audio service and its models, model provider, budget state); a spent budget is
+reported but still answers 200, since replays and stored results are served. See
+`apps/api/.env.example`.
+
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with
 `TRUST_PROXY=1`, so its per-IP rate limits use the client address nginx puts in

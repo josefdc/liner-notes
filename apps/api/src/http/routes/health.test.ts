@@ -1,20 +1,60 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ReadyResponse } from "@liner-notes/contract";
+import Database from "better-sqlite3";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
-import { closeDatabase, initializeDatabase } from "../../store/database.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetBudgetStateForTests } from "../../llm/budgetState.js";
+import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
+import { LATEST_SCHEMA_VERSION } from "../../store/migrations.js";
+import { readiness, resetReadinessForTests } from "../readiness.js";
 import { createTestApp } from "../testApp.js";
 import healthRouter from "./health.js";
 
 let dir: string | undefined;
+let dbPath: string;
 
 function openDatabase() {
   dir = mkdtempSync(join(tmpdir(), "health-"));
-  initializeDatabase(join(dir, "test.db"));
+  dbPath = join(dir, "test.db");
+  initializeDatabase(dbPath);
 }
 
+// What the readiness checks read, as each test sets it; restored after each test.
+const READY_ENV = [
+  "REPLAY_MODE",
+  "AUDIO_ANALYSIS_URL",
+  "LLM_PROVIDER",
+  "LLM_CASSETTE",
+  "AZURE_OPENAI_API_KEY",
+  "AZURE_OPENAI_ENDPOINT",
+  "AZURE_OPENAI_BASE_URL",
+  "LLM_SPEND_LOG",
+  "BUDGET_TOTAL_USD",
+];
+let savedEnv: Record<string, string | undefined> = {};
+const servers: Server[] = [];
+
+beforeEach(() => {
+  savedEnv = Object.fromEntries(READY_ENV.map((name) => [name, process.env[name]]));
+  resetReadinessForTests();
+  resetBudgetStateForTests();
+});
+
 afterEach(() => {
+  for (const [name, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections();
+    server.close();
+  }
+  resetReadinessForTests();
+  resetBudgetStateForTests();
   closeDatabase();
   if (dir) rmSync(dir, { recursive: true, force: true });
   dir = undefined;
@@ -48,29 +88,346 @@ describe("GET /api/health", () => {
   });
 });
 
-describe("GET /api/ready", () => {
-  it("answers 200 when the database answers a query", async () => {
-    openDatabase();
+// =============================================================================
+// GET /api/ready
+// =============================================================================
 
-    const res = await request(createTestApp(healthRouter)).get("/api/ready");
+interface Stub {
+  url: string;
+  port: number;
+  requests: () => number;
+}
+
+/** A stand-in audio service: `answer` handles GET /health. */
+async function audioStub(answer: (res: import("node:http").ServerResponse) => void): Promise<Stub> {
+  let count = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/health") {
+      count++;
+      answer(res);
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return { url: `http://127.0.0.1:${port}`, port, requests: () => count };
+}
+
+const json = (status: number, body: unknown) => (res: import("node:http").ServerResponse) =>
+  res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
+const healthy = json(200, { status: "ok", analyzer_version: "test-1", models: true });
+const degraded = json(200, { status: "degraded", analyzer_version: "test-1", models: false });
+
+/** A port nothing listens on: a server is started and closed. */
+async function closedPort(): Promise<string> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return `http://127.0.0.1:${port}`;
+}
+
+const KEY = "dummy-ready-key-0123456789abcdef";
+const ENDPOINT_HOST = "ready-resource.example.net";
+
+/** A live provider configuration (a dummy key: no model is called) and its spend log. */
+function liveProvider(spentUsd: number | null): string {
+  process.env.LLM_CASSETTE = "off";
+  process.env.AZURE_OPENAI_API_KEY = KEY;
+  process.env.AZURE_OPENAI_ENDPOINT = `https://${ENDPOINT_HOST}/`;
+  const spendLog = join(dir as string, "spend.jsonl");
+  if (spentUsd !== null) {
+    writeFileSync(
+      spendLog,
+      `${JSON.stringify({ ts: new Date().toISOString(), deployment: "gpt", in: 0, out: 0, usd_est: spentUsd, unit: "dev" })}\n`,
+    );
+  }
+  process.env.LLM_SPEND_LOG = spendLog;
+  return spendLog;
+}
+
+const ready = () => request(createTestApp(healthRouter)).get("/api/ready");
+const detail = (body: { details?: Array<{ name: string; reason?: string }> }, name: string) =>
+  body.details?.find((check) => check.name === name);
+
+describe("GET /api/ready", () => {
+  it("answers 200 with every check when the API can serve an analysis", async () => {
+    openDatabase();
+    const audio = await audioStub(healthy);
+    process.env.AUDIO_ANALYSIS_URL = audio.url;
+
+    const res = await ready();
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: "ready", checks: { database: "ok" } });
+    expect(ReadyResponse.safeParse(res.body).success).toBe(true);
+    expect(res.body).toMatchObject({
+      status: "ready",
+      checks: {
+        database: "ok",
+        migrations: "ok",
+        audio: "ok",
+        // Tests replay model calls from cassettes (test/setup/llmReplay.ts).
+        provider: "cassettes",
+        budget: "not_live",
+      },
+    });
+    expect(res.body.details.map((check: { name: string }) => check.name)).toEqual([
+      "database",
+      "migrations",
+      "audio",
+      "provider",
+      "budget",
+    ]);
+    for (const check of res.body.details) {
+      expect(Object.keys(check).sort()).toEqual(
+        check.name === "audio"
+          ? ["models", "name", "ok", "reason", "status"]
+          : ["name", "ok", "reason", "status"],
+      );
+      expect(check.ok).toBe(true);
+      expect(check.reason).toMatch(/\S/);
+    }
+    expect(detail(res.body, "audio")).toMatchObject({ status: "ok", models: true });
+    expect(detail(res.body, "migrations")?.reason).toContain(`v${LATEST_SCHEMA_VERSION}`);
+    // Never the audio service's address.
+    expect(JSON.stringify(res.body)).not.toContain(String(audio.port));
+    expect(JSON.stringify(res.body)).not.toContain("127.0.0.1");
+  });
+
+  it("answers 200 with a degraded audio service, saying its models are not loaded", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(degraded)).url;
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(detail(res.body, "audio")).toMatchObject({
+      ok: true,
+      status: "degraded",
+      models: false,
+    });
+  });
+
+  it("answers 503 when the audio service is unreachable, and lists every other check", async () => {
+    openDatabase();
+    const url = await closedPort();
+    process.env.AUDIO_ANALYSIS_URL = url;
+
+    const res = await ready();
+
+    expect(res.status).toBe(503);
+    expect(res.body.status).toBe("unavailable");
+    expect(detail(res.body, "audio")).toMatchObject({
+      ok: false,
+      status: "unreachable",
+      reason: "connection refused",
+      models: null,
+    });
+    expect(res.body.checks).toMatchObject({ database: "ok", migrations: "ok" });
+    expect(JSON.stringify(res.body)).not.toContain(new URL(url).port);
+  });
+
+  it("answers 503 when the audio service answers with an error or something else", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(json(500, { detail: "boom" }))).url;
+    expect(detail((await ready()).body, "audio")).toMatchObject({
+      ok: false,
+      status: "unreachable",
+      reason: "/health answered 500",
+    });
+
+    resetReadinessForTests();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(json(200, { hello: "world" }))).url;
+    const res = await ready();
+    expect(res.status).toBe(503);
+    expect(detail(res.body, "audio")).toMatchObject({ ok: false, status: "unreachable" });
+  });
+
+  it("cuts a check that does not answer in time, and reports it", async () => {
+    openDatabase();
+    // Answers only when the test is over.
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(() => {})).url;
+
+    const started = Date.now();
+    const result = await readiness(process.env, 100);
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(result.ready).toBe(false);
+    expect(result.checks.find((check) => check.name === "audio")).toMatchObject({
+      ok: false,
+      status: "timeout",
+      reason: "no answer within 100 ms",
+    });
+  });
+
+  it("asks the audio service once for the probes of a few seconds", async () => {
+    openDatabase();
+    const audio = await audioStub(healthy);
+    process.env.AUDIO_ANALYSIS_URL = audio.url;
+
+    await Promise.all([ready(), ready()]);
+    await ready();
+
+    expect(audio.requests()).toBe(1);
+  });
+
+  it("answers 503 when no model provider is configured, naming the variables only", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    process.env.LLM_CASSETTE = "off";
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_OPENAI_ENDPOINT;
+    delete process.env.AZURE_OPENAI_BASE_URL;
+
+    const res = await ready();
+
+    expect(res.status).toBe(503);
+    expect(detail(res.body, "provider")).toMatchObject({
+      ok: false,
+      status: "not_configured",
+      reason: expect.stringContaining("AZURE_OPENAI_API_KEY"),
+    });
+  });
+
+  it("answers 503 for invalid model settings, naming the variable and not its value", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    process.env.LLM_CASSETTE = "off";
+    process.env.AZURE_OPENAI_API_KEY = KEY;
+    process.env.AZURE_OPENAI_ENDPOINT = `http://${ENDPOINT_HOST}/`;
+
+    const res = await ready();
+
+    expect(res.status).toBe(503);
+    expect(detail(res.body, "provider")).toMatchObject({
+      status: "not_configured",
+      reason: "invalid model settings: AZURE_OPENAI_ENDPOINT",
+    });
+    expect(JSON.stringify(res.body)).not.toContain(ENDPOINT_HOST);
+    expect(JSON.stringify(res.body)).not.toContain(KEY);
+  });
+
+  it("reports a configured provider and an available budget, with no key, endpoint or amount", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    const spendLog = liveProvider(0.5);
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(res.body.checks).toMatchObject({ provider: "configured", budget: "available" });
+    const text = JSON.stringify(res.body);
+    for (const secret of [KEY, ENDPOINT_HOST, spendLog, "0.5", "usd", "USD", "$"]) {
+      expect(text).not.toContain(secret);
+    }
+  });
+
+  it("answers 200 with a spent budget: replays and stored results are still served", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    process.env.BUDGET_TOTAL_USD = "25";
+    liveProvider(30);
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ready");
+    expect(detail(res.body, "budget")).toMatchObject({ ok: true, status: "exhausted" });
+    // The checks, without the timestamp (whose date may hold the same digits).
+    const text = JSON.stringify({ checks: res.body.checks, details: res.body.details });
+    for (const amount of ["30", "25", "BUDGET_TOTAL_USD", "USD"])
+      expect(text).not.toContain(amount);
+  });
+
+  it("reports a budget that cannot be checked without failing", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    liveProvider(null); // the spend log does not exist
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(detail(res.body, "budget")).toMatchObject({ ok: true, status: "unverifiable" });
+  });
+
+  it("with REPLAY_MODE=only, needs neither the audio service nor a model provider", async () => {
+    openDatabase();
+    process.env.REPLAY_MODE = "only";
+    process.env.AUDIO_ANALYSIS_URL = await closedPort();
+    process.env.LLM_CASSETTE = "off";
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_OPENAI_ENDPOINT;
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('"status":"ready"');
+    expect(res.body.checks).toMatchObject({ audio: "skipped", provider: "replay_only" });
   });
 
   it("answers 503 when no database is open", async () => {
-    const res = await request(createTestApp(healthRouter)).get("/api/ready");
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+
+    const res = await ready();
 
     expect(res.status).toBe(503);
-    expect(res.body).toMatchObject({ status: "unavailable", checks: { database: "unavailable" } });
+    expect(res.body).toMatchObject({
+      status: "unavailable",
+      checks: { database: "unavailable", migrations: "unavailable" },
+    });
+    expect(ReadyResponse.safeParse(res.body).success).toBe(true);
   });
 
   it("answers 503 once the database has been closed", async () => {
     openDatabase();
     closeDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
 
-    const res = await request(createTestApp(healthRouter)).get("/api/ready");
+    const res = await ready();
 
     expect(res.status).toBe(503);
+  });
+
+  it("answers 503 when the recorded migrations are not this code's", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    getDb().prepare("DELETE FROM schema_migrations WHERE version = ?").run(LATEST_SCHEMA_VERSION);
+
+    const res = await ready();
+
+    expect(res.status).toBe(503);
+    expect(detail(res.body, "migrations")).toMatchObject({
+      ok: false,
+      status: "mismatch",
+      reason: `at schema v${LATEST_SCHEMA_VERSION - 1}, expected schema v${LATEST_SCHEMA_VERSION}`,
+    });
+  });
+
+  it("does not wait for another connection's write lock, and writes nothing", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+    const other = new Database(dbPath);
+    try {
+      other.exec("BEGIN IMMEDIATE");
+      const started = Date.now();
+      const res = await ready();
+      // The database's busy timeout is 5 s.
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(detail(res.body, "database")).toMatchObject({ ok: true, status: "ok" });
+      other.exec("ROLLBACK");
+    } finally {
+      other.close();
+    }
+    // The connection's busy timeout is as before.
+    expect(getDb().pragma("busy_timeout", { simple: true })).toBe(5000);
+
+    const res = await ready();
+    expect(detail(res.body, "database")).toMatchObject({
+      ok: true,
+      status: "ok",
+      reason: "open and writable",
+    });
   });
 });

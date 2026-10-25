@@ -74,13 +74,13 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.0.0+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.1.0+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `analyzer_version` and
 `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.0.0+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.1.0+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -105,7 +105,7 @@ the perceptual fields and `v2.fingerprint` are `null`.
   "energy": 0.778,
   "duration": 30.0,
   "source": "analyzed",
-  "analyzer_version": "2.0.0+essentia.models-5c5c0c7f",
+  "analyzer_version": "2.1.0+essentia.models-5c5c0c7f",
   "keyMoments": [{ "time": 1.88, "type": "onset", "intensity": 0.986, "description": "Onset" }],
   "valence": 0.389,
   "danceability": 1.0,
@@ -113,7 +113,7 @@ the perceptual fields and `v2.fingerprint` are `null`.
   "instrumentalness": 0.85,
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.0.0+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -187,8 +187,9 @@ times are seconds from the start of the preview. Every block is `null` when it w
 - **Tempo** is withheld when the onsets do not repeat at a beat rate (a steady chord, a pure
   tone, chords changing every 2 s, a rubato melody), when the estimator's confidence is low,
   or when the tempo does not hold in every part of the window that has a beat (90 BPM then
-  130, an accelerando). A beatless intro is no evidence either way: a band that starts 10 s in
-  gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
+  130, an accelerando; a band whose tempo swings +-10-12 % every 12 s can still pass, since
+  each part's median stays within 5 %). A beatless intro is no evidence either way: a band
+  that starts 10 s in gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
   whose beats follow the change, and dropped with librosa, whose tracker keeps one period.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
@@ -197,7 +198,13 @@ times are seconds from the start of the preview. Every block is `null` when it w
   lines (drums, click tracks, a metronome, noise with a beat); when the lines form a single
   harmonic series (a lone tone, or mains hum on 50 or 60 Hz, whose harmonics spell a G major
   triad); when the lines and the notes of a single voice spell fewer than three pitch classes;
-  or when its strength is low. Without a beat, a pitch track of the harmonic part also
+  or when its strength is under the estimator's minimum (0.4 for both). Neither
+  strength separates atonal material from tonal music: random chromatic notes or a twelve-tone
+  row can still get a key, and so can one pitched source whose overtones or partials spell
+  three classes (a bell, a tabla, a cowbell, some one-note basses). The spectral-line rules are
+  what keep keys off pitchless sound, and they also withhold many keys of electronic dance
+  music, whose synthesizers leave few narrow lines (the calibration section of
+  `evals/reports/audio-*.md` has the numbers). Without a beat, a pitch track of the harmonic part also
   decides: no key for one held pitch (a note with vibrato, whose sidebands hide the series, or
   a bend: its harmonics explain the lines and nothing else moves in the chromagram) or for a
   voice without stable notes (speech); a voice that moves between notes keeps the key even

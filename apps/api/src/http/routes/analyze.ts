@@ -376,7 +376,6 @@ async function runGraph(
           seen.interrupt = first?.value ?? {};
           continue;
         }
-        log.info(`${node} finished`, { runId: threadId, node });
         const state = update as {
           trackData?: TrackData;
           error?: string;
@@ -437,7 +436,11 @@ async function executeRun(
   emit: Emit = () => true,
 ): Promise<RunOutcome> {
   control.startDeadline();
-  let outcome = await runGraph(input, threadId, control.signal, emit);
+  // The run's own signal goes with the run's context, so a node stopped by it is told apart
+  // from one LangGraph stops because another node failed (agent/graph.ts).
+  let outcome = await withRun(threadId, () => runGraph(input, threadId, control.signal, emit), {
+    signal: control.signal,
+  });
   if (outcome.kind === "cancelled" && control.timedOut)
     outcome = { kind: "failed", code: "timeout" };
   if (outcome.kind === "complete" && !TrackAnalysis.safeParse(outcome.trackData).success) {

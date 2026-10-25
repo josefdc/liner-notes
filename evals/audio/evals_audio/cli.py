@@ -32,10 +32,22 @@ from pathlib import Path
 
 import httpx
 
-from . import beatthis, clips, costs, datasets, golden, report, runner, service
+from . import (
+    beatthis,
+    calibration,
+    clips,
+    controls,
+    costs,
+    datasets,
+    golden,
+    report,
+    runner,
+    service,
+)
 from .metrics import (
     BINARY_METRICS,
     acc1,
+    acc2,
     coverage_curve,
     ranking_auc,
     summarize,
@@ -66,9 +78,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="python -m evals_audio", description=__doc__.split("\n\n")[1], allow_abbrev=False
     )
     p.add_argument("--suite", choices=sorted(datasets.SUITE_DATASETS))
-    p.add_argument("--dataset", choices=sorted([*datasets.DATASETS, "golden"]))
+    p.add_argument("--dataset", choices=sorted([*datasets.DATASETS, "golden", "controls"]))
     p.add_argument("--limit", type=int, help="tracks to draw at the seed (default: all usable)")
     p.add_argument("--estimator", default="all", choices=[*service.ESTIMATOR_NAMES, "all"])
+    p.add_argument(
+        "--split",
+        default="all",
+        choices=[*datasets.SPLITS, "all"],
+        help="tempo and key suites: only the calibration or the evaluation clips of the "
+        "selection (datasets.split_of; default: all)",
+    )
     p.add_argument(
         "--seed",
         type=int,
@@ -117,6 +136,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         p.error("--limit must be positive")
     if args.estimator != "all" and args.estimator not in service.SUITE_ESTIMATORS[args.suite]:
         p.error(f"the {args.suite} suite does not run {args.estimator}")
+    if args.split != "all" and args.suite not in ("tempo", "key"):
+        p.error("--split applies to the tempo and key suites")
     for name in ("selection_seed", "clip_seed", "bootstrap_seed"):
         if getattr(args, name) is None:
             setattr(args, name, args.seed)
@@ -276,6 +297,8 @@ def main(argv: list[str] | None = None) -> int:
         names = list(service.SUITE_ESTIMATORS[args.suite])
     else:
         names = [args.estimator]
+    if args.suite == "calibration" and datasets.DATASET_KIND[args.dataset] == "key":
+        names = [n for n in names if n in service.SUITE_ESTIMATORS["key"]]
     try:
         for name in names:
             service.check_estimator(name)
@@ -289,6 +312,10 @@ def main(argv: list[str] | None = None) -> int:
                 return run_golden(args, argv, names, root, budget)
             if args.suite == "cost":
                 return run_cost(args, argv, names, root, budget)
+            if args.suite == "calibration":
+                return run_calibration(args, argv, names, root, budget)
+            if args.suite == "controls":
+                return run_controls(args, argv, names, root, budget)
             return run(args, argv, names, root, budget)
     except (
         service.EstimatorUnavailable,
@@ -365,6 +392,13 @@ def fetch(spec, home: Path, args, budget: DiskBudget):
     return refs, selected, present, fetched
 
 
+def of_split(spec, measured: list, fetched: dict, split: str) -> tuple[list, dict]:
+    """The measured tracks of one split (all of them for "all"), and where those were fetched."""
+    if split != "all":
+        measured = [r for r in measured if datasets.split_of(spec, r.track_id) == split]
+    return measured, {r.track_id: fetched[r.track_id] for r in measured}
+
+
 def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget) -> int:
     started = time.monotonic()
     started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
@@ -386,7 +420,9 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
     if unavailable:
         print(f"warning: audio unavailable for {len(unavailable)} tracks: {unavailable}")
 
-    measured = [r for r in selected if r.track_id in present]
+    measured, fetched = of_split(
+        spec, [r for r in selected if r.track_id in present], fetched, args.split
+    )
     # From here on tracks go by their public id (datasets.public_id); the clip window still
     # comes from the dataset's own id, so it is the same as before.
     by_id = {pid[r.track_id]: r for r in measured}
@@ -456,9 +492,11 @@ def run(args, argv: list[str], names: list[str], root: Path, budget: DiskBudget)
             "bootstrap": args.bootstrap_seed,
         },
         "limit": args.limit,
+        "split": args.split,
         "selection": (
             f"{len(selected)} of {usable} usable tracks drawn with numpy "
             f"default_rng({args.selection_seed})"
+            + ("" if args.split == "all" else f"; their {args.split} clips: {len(measured)}")
         ),
         "clipSeconds": clips.CLIP_SECONDS,
         "gitCommit": git_commit(),
@@ -684,6 +722,204 @@ def run_golden(args, argv: list[str], names: list[str], root: Path, budget: Disk
     md_path, json_path = report.write(args.report_dir, today, run_doc)
     print(f"report: {md_path}\nresults: {json_path}")
     return 0
+
+
+def raw_scores(kind: str, raw: dict | None, reference) -> dict | None:
+    """The unreturned estimate's scores against the reference (calibration only)."""
+    from .metrics import mirex_key_score, parse_key
+
+    if raw is None:
+        return None
+    if kind == "tempo":
+        return {
+            **raw,
+            "scores": {
+                "acc1": float(acc1(raw["bpm"], reference)),
+                "acc2": float(acc2(raw["bpm"], reference)),
+            },
+        }
+    s = mirex_key_score(parse_key(raw["tonic"], raw["mode"]), reference)
+    return {**raw, "scores": {"mirex": s, "exact": float(s == 1.0)}}
+
+
+def served_value(kind: str, block: dict | None):
+    if block is None:
+        return None
+    return block["bpm"] if kind == "tempo" else [block["tonic"], block["mode"]]
+
+
+def clip_estimators(record: dict, names, kinds, reference=None) -> dict:
+    """Per estimator: whether the gate passed, and per kind what was served and the raw record."""
+    out = {}
+    cal = record.get("calibration") or {}
+    for name in names:
+        result = record.get("results", {}).get(name)
+        error = record.get("error") or (result or {}).get("error") or cal.get("error")
+        if error:
+            out[name] = {"error": error}
+            continue
+        entry: dict = {"gatePassed": result["gate"]["passed"]}
+        stats = cal["estimators"][name]
+        for kind in kinds:
+            if kind not in stats:
+                continue
+            raw = stats[kind]
+            if reference is not None:
+                raw = raw_scores(kind, raw, reference)
+            entry[kind] = {"served": served_value(kind, result[kind]), "raw": raw}
+        out[name] = entry
+    return out
+
+
+def run_calibration(args, argv, names, root: Path, budget: DiskBudget) -> int:
+    """Every selected clip with what the withholding rules compare (evals_audio.calibration)."""
+    started = time.monotonic()
+    started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    if not args.no_report:
+        report.load(args.report_dir / f"audio-{started_at.date().isoformat()}.json")
+    spec = datasets.DATASETS[args.dataset]
+    kind = datasets.DATASET_KIND[spec.name]
+    home = root / spec.mirdata_name
+    refs, selected, present, fetched = fetch(spec, home, args, budget)
+    pid = datasets.public_ids(spec, refs)
+    measured = [r for r in selected if r.track_id in present]
+    if not measured:
+        print(f"error: no {spec.name} audio to measure", file=sys.stderr)
+        return 3
+    split = {pid[r.track_id]: datasets.split_of(spec, r.track_id) for r in measured}
+    by_id = {pid[r.track_id]: r for r in measured}
+    tasks = [
+        (
+            spec.name,
+            r.track_id,
+            str(home / r.audio_rel),
+            args.clip_seed,
+            tuple(names),
+            {"calibration": kind},
+        )
+        for r in measured
+    ]
+
+    def progress(k: int, total: int) -> None:
+        if k == total or k % 25 == 0:
+            print(f"  analysed {k}/{total}", file=sys.stderr)
+
+    analysed = [
+        {**a, "trackId": pid[a["trackId"]]} for a in runner.analyze_all(tasks, args.jobs, progress)
+    ]
+    clips_out = []
+    for a in analysed:
+        tid = a["trackId"]
+        cal = a.get("calibration") or {}
+        clip = {
+            "trackId": tid,
+            "split": split[tid],
+            "gate": cal.get("gate"),
+            "estimators": clip_estimators(a, names, (kind,), by_id[tid].value),
+        }
+        if kind == "key":
+            clip["evidence"] = cal.get("evidence")
+        clips_out.append(clip)
+    rules = calibration.service_rules()
+    bad = calibration.mismatches(clips_out, names, kind, rules)
+    for name, ids in bad.items():
+        print(f"{name}: derived decisions that differ from what was served: {len(ids)}")
+    usage = disk_usage(root)
+    if args.no_report:
+        return 0
+    usable = sum(1 for r in refs if r.excluded is None)
+    run_doc = {
+        **common_fields(args, argv, names, started, started_at, root, budget),
+        "jobs": max(1, min(args.jobs, runner.MAX_JOBS)),
+        "kind": kind,
+        "selection": (
+            f"{len(selected)} of {usable} usable tracks drawn with numpy "
+            f"default_rng({args.selection_seed})"
+        ),
+        "clipSeconds": clips.CLIP_SECONDS,
+        "analyzerVersions": service.analyzer_versions(names),
+        "dataUsageBytes": usage,
+        "dataset": {
+            "name": spec.name,
+            "title": spec.title,
+            "annotationLicence": spec.annotation_licence,
+            "selected": len(selected),
+            "audioPresent": len(measured),
+            "audioSources": source_counts({r.track_id: r for r in measured}, fetched),
+        },
+        "splits": dict(Counter(split.values())),
+        "rules": rules.as_dict(),
+        "baseline": calibration.BASELINE.as_dict(),
+        "mismatches": bad,
+        "trainedOn": trained_on_dataset(names, spec.name),
+        "clips": clips_out,
+    }
+    md_path, json_path = report.write(args.report_dir, started_at.date().isoformat(), run_doc)
+    print(f"report: {md_path}\nresults: {json_path}")
+    return 0
+
+
+def run_controls(args, argv, names, root: Path, budget: DiskBudget) -> int:
+    """The generated controls through the service, with what the rules compare on each."""
+    started = time.monotonic()
+    started_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    if not args.no_report:
+        report.load(args.report_dir / f"audio-{started_at.date().isoformat()}.json")
+    chosen = controls.controls()
+    with tempfile.TemporaryDirectory(prefix="evals-audio-controls-") as tmp:
+        paths = {c.name: controls.write(c, tmp) for c in chosen}
+        rates = {
+            c.name: round(controls.bit_rate(paths[c.name]), 1) for c in chosen if c.fmt == "MP3"
+        }
+        tasks = [
+            ("controls", c.name, paths[c.name], 0, tuple(names), CONTROL_OPTIONS) for c in chosen
+        ]
+        analysed = {a["trackId"]: a for a in runner.analyze_all(tasks, args.jobs)}
+    out = []
+    for c in chosen:
+        a = analysed[c.name]
+        cal = a.get("calibration") or {}
+        out.append(
+            {
+                "name": c.name,
+                "group": c.group,
+                "description": c.description,
+                "truth": {"tempo": c.tempo, "key": c.key, "gate": c.gate},
+                "format": c.fmt if c.fmt == "WAV" else f"{c.fmt} at {rates[c.name]} kbit/s",
+                "gate": cal.get("gate"),
+                "evidence": cal.get("evidence"),
+                "servedGate": {n: (a.get("results", {}).get(n) or {}).get("gate") for n in names},
+                "estimators": clip_estimators(a, names, ("tempo", "key")),
+            }
+        )
+    rules = calibration.service_rules()
+    bad = {
+        kind: calibration.mismatches([{**c, "trackId": c["name"]} for c in out], names, kind, rules)
+        for kind in ("tempo", "key")
+    }
+    for kind, per in bad.items():
+        for name, ids in per.items():
+            if ids:
+                print(f"{name} {kind}: derived decisions that differ from what was served: {ids}")
+    if args.no_report:
+        return 0
+    run_doc = {
+        **common_fields(args, argv, names, started, started_at, root, budget),
+        "jobs": max(1, min(args.jobs, runner.MAX_JOBS)),
+        "dataset": {"name": "controls", "title": "generated controls"},
+        "analyzerVersions": service.analyzer_versions(names),
+        "rules": rules.as_dict(),
+        "baseline": calibration.BASELINE.as_dict(),
+        "mismatches": bad,
+        "controls": out,
+    }
+    md_path, json_path = report.write(args.report_dir, started_at.date().isoformat(), run_doc)
+    print(f"report: {md_path}\nresults: {json_path}")
+    return 0
+
+
+# Controls are analysed whole, as the service gets a preview, with the calibration record.
+CONTROL_OPTIONS = {"whole": True, "calibration": "controls"}
 
 
 PREVIEW_DIR_PREFIX = "evals-audio-previews-"

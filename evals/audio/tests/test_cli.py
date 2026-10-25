@@ -96,3 +96,51 @@ def test_golden_songs_beat_this_was_trained_on_leave_the_unseen_comparison():
     seen = next(iter(beatthis.GOLDEN_IN_TRAINING))
     values = {seen: 115.8, "GBAAA0000001": 120.0, "GBAAA0000002": None}
     assert cli.without_training_songs(values) == {"GBAAA0000001": 120.0, "GBAAA0000002": None}
+
+
+def test_the_split_applies_to_the_tempo_and_key_suites_only(capsys):
+    args = cli.parse_args(["--suite", "tempo", "--split", "evaluation"])
+    assert args.split == "evaluation"
+    assert cli.parse_args(["--suite", "key"]).split == "all"
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--suite", "golden", "--split", "evaluation"])
+    assert "--split applies to the tempo and key suites" in capsys.readouterr().err
+
+
+def test_the_calibration_and_controls_suites_take_their_own_data():
+    assert cli.parse_args(["--suite", "controls"]).dataset == "controls"
+    args = cli.parse_args(["--suite", "calibration", "--dataset", "giantsteps-key"])
+    assert args.dataset == "giantsteps-key"
+
+
+def test_a_calibration_clip_records_what_was_served_and_the_scored_raw_estimate():
+    from evals_audio.metrics import Key
+
+    record = {
+        "trackId": "1",
+        "results": {"essentia": {"gate": {"passed": True}, "key": {"tonic": "A", "mode": "minor"}}},
+        "calibration": {
+            "gate": {},
+            "estimators": {"essentia": {"key": {"tonic": "C", "mode": "major", "strength": 0.9}}},
+        },
+    }
+    entry = cli.clip_estimators(record, ["essentia"], ("key",), Key(0, "major"))["essentia"]
+    assert entry["gatePassed"] is True
+    assert entry["key"]["served"] == ["A", "minor"]
+    assert entry["key"]["raw"]["scores"] == {"mirex": 1.0, "exact": 1.0}
+    failed = cli.clip_estimators({"trackId": "1", "error": "x"}, ["essentia"], ("key",))
+    assert failed == {"essentia": {"error": "x"}}
+
+
+def test_a_split_keeps_its_tracks_and_where_they_came_from():
+    from types import SimpleNamespace
+
+    spec = datasets.DATASETS["ballroom"]
+    tracks = [SimpleNamespace(track_id=str(i)) for i in range(40)]
+    fetched = {t.track_id: "https://example.org/a" for t in tracks}
+    every, sources = cli.of_split(spec, tracks, fetched, "all")
+    assert every == tracks and sources == fetched
+    half, sources = cli.of_split(spec, tracks, fetched, "evaluation")
+    assert 0 < len(half) < len(tracks)
+    assert all(datasets.split_of(spec, t.track_id) == "evaluation" for t in half)
+    assert set(sources) == {t.track_id for t in half}

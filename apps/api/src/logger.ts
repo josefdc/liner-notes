@@ -40,16 +40,31 @@ import pino, { type DestinationStream, type Level, type LevelWithSilent } from "
 // Run context
 // =============================================================================
 
-const runContext = new AsyncLocalStorage<string>();
+interface RunContext {
+  runId: string;
+  signal?: AbortSignal;
+}
 
-/** Runs `fn` as part of run `runId`: every line logged from it (sync or async) carries the id. */
-export function withRun<T>(runId: string, fn: () => T): T {
-  return runContext.run(runId, fn);
+const runContext = new AsyncLocalStorage<RunContext>();
+
+/**
+ * Runs `fn` as part of run `runId`: every line logged from it (sync or async) carries the id.
+ * `signal` is the run's own signal, the one a cancel of the run aborts (a client that left, the
+ * run's deadline); inside an outer `withRun` without one, the outer signal is kept.
+ */
+export function withRun<T>(runId: string, fn: () => T, options: { signal?: AbortSignal } = {}): T {
+  const signal = options.signal ?? runContext.getStore()?.signal;
+  return runContext.run(signal ? { runId, signal } : { runId }, fn);
 }
 
 /** The id of the run the current code belongs to, if any. */
 export function currentRunId(): string | undefined {
-  return runContext.getStore();
+  return runContext.getStore()?.runId;
+}
+
+/** The signal of the run the current code belongs to, when the run was given one. */
+export function currentRunSignal(): AbortSignal | undefined {
+  return runContext.getStore()?.signal;
 }
 
 // =============================================================================

@@ -211,6 +211,11 @@ def test_the_markdown_is_rendered_from_the_json_alone(tmp_path):
 COMMITTED = sorted((REPO_ROOT / "evals" / "reports").glob("audio-*.json"))
 
 
+def test_there_is_a_committed_report():
+    """The checks below run once per committed report; with none they would run on nothing."""
+    assert COMMITTED, "no evals/reports/audio-*.json"
+
+
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.name for p in COMMITTED])
 def test_each_committed_report_is_rendered_from_its_json_byte_for_byte(path):
     doc = json.loads(path.read_text())

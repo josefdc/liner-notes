@@ -2,7 +2,7 @@
 // baseline must stay one-way. Run with `npm test`.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { countInText, rules } from "./guard-honest.mjs";
 
 const rule = (id) => rules.find((candidate) => candidate.id === id);
-const count = (id, text) => countInText(rule(id), text).total;
+// `path` decides how comments and strings are read; snippets default to a TSX file.
+const count = (id, text, path = "apps/web/src/snippet.tsx") =>
+  countInText(rule(id), text, path).total;
 
 describe("random-values-api", () => {
   it.each([
@@ -54,10 +56,126 @@ describe("hex-colours-outside-tokens", () => {
   it.each([
     ["a line comment", "// see issue #100"],
     ["a trailing comment", "const a = 1; // fixed in #123"],
-    ["a JSDoc line", " * Matches #abc in the docs"],
+    ["a JSDoc block", "/**\n * Matches #abc in the docs\n */\nconst a = 1;"],
     ["an element id", 'href="#add-button"'],
   ])("ignores %s", (_name, line) => {
     expect(count("hex-colours-outside-tokens", line)).toBe(0);
+  });
+});
+
+describe("comment stripping", () => {
+  it("keeps `//` inside a string and in JSX text, and counts code after a block comment", () => {
+    expect(count("hex-colours-outside-tokens", "const url = 'a // #fff';")).toBe(1);
+    expect(count("prototype-copy", "<p>X9-ALPHA {'//'} STATUS: ONLINE</p>")).toBe(2);
+    expect(count("prototype-copy", "<p>AGENT_ID // STATUS: ONLINE</p>")).toBe(2);
+    expect(count("prototype-copy", "/* note */ const t = 'Command Center';")).toBe(1);
+  });
+
+  it("blanks comments that span lines in scripts, CSS and HTML", () => {
+    expect(
+      count("hex-colours-outside-tokens", "/*\n  old: #fff\n*/\na { color: red; }", "a.css"),
+    ).toBe(0);
+    expect(
+      count("prototype-copy", "<!--\n  <title>The Sonic Agent</title>\n-->", "apps/web/index.html"),
+    ).toBe(0);
+  });
+
+  it("reports matches on their own line numbers", () => {
+    const text = "/*\n * Command Center\n */\nconst a = 'Command Center';\n";
+    expect(countInText(rule("prototype-copy"), text, "apps/web/src/a.ts")).toEqual({
+      total: 1,
+      lines: [4],
+    });
+  });
+});
+
+describe("prototype-copy", () => {
+  it.each([
+    ["the old product name in JSX text", "<h1>The Sonic Agent</h1>"],
+    ["the old product name in the page title", "<title>The Sonic Agent</title>"],
+    ["a dashboard heading", "<h2>Command Center</h2>"],
+    ["an upper-case variant", "const done = 'INTEL READY';"],
+    ["a button label", "<button>ANALYZE_SONG</button>"],
+    ["the decrypt button", "<span>[ DECRYPT MORE ]</span>"],
+    [
+      "a progress message",
+      'status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");',
+    ],
+    ["a template literal", `const m = \`Target acquired: \${title}\`;`],
+    ["a word in any case", "return 'Uplink unstable. Check your connection.';"],
+  ])("counts %s", (_name, line) => {
+    expect(count("prototype-copy", line)).toBe(1);
+  });
+
+  it("counts each phrase on a line", () => {
+    expect(count("prototype-copy", "<p>AGENT_ID: X9-ALPHA {'//'} STATUS: ONLINE</p>")).toBe(3);
+  });
+
+  it.each([
+    ["plain copy", "<h1>Liner Notes</h1>"],
+    ["identifiers", "const graph = buildSonicAgentGraph(); type S = SonicAgentStateType;"],
+    ["handler and constant names", "onClick={handleDecryptMore} const n = DECRYPT_COUNT;"],
+    ["the route path", 'router.post("/api/factoids/decrypt", handler);'],
+    ["the database file name", 'join(root, "data", "sonic-agent.db")'],
+    ["a word that only contains a phrase", "const intelligent = 'INTELLIGENT';"],
+  ])("ignores %s", (_name, line) => {
+    expect(count("prototype-copy", line)).toBe(0);
+  });
+
+  it.each([
+    ["a line comment", "// The Sonic Agent dashboard"],
+    ["a trailing comment", "const a = 1; // was Command Center"],
+    ["a JSDoc block", "/**\n * Genealogy Enricher for The Sonic Agent\n */\nexport {};"],
+    ["a JSX comment", "<div>\n  {/* Factoids added by DECRYPT MORE */}\n</div>"],
+    ["a JSX comment over several lines", "<div>\n  {/*\n    BACK TO BASE\n  */}\n</div>"],
+  ])("ignores %s", (_name, text) => {
+    expect(count("prototype-copy", text)).toBe(0);
+  });
+
+  it("scans web and API source and the page, but not tests, test helpers or fixtures", () => {
+    const { files } = rule("prototype-copy");
+    expect(files("apps/web/src/components/Dashboard.tsx")).toBe(true);
+    expect(files("apps/api/src/agent/nodes/scoutNode.ts")).toBe(true);
+    expect(files("apps/web/index.html")).toBe(true);
+    expect(files("apps/web/src/components/Player.test.tsx")).toBe(false);
+    expect(files("apps/api/src/agent/testing/stubLlm.ts")).toBe(false);
+    expect(files("apps/api/test/fixtures/odd-exception.ts")).toBe(false);
+    expect(files("tests/web/mock.ts")).toBe(false);
+    expect(files("fixtures/replays/one-more-time-daft-punk.json")).toBe(false);
+  });
+});
+
+describe("emoji-in-progress", () => {
+  const api = "apps/api/src/agent/nodes/scoutNode.ts";
+
+  it.each([
+    ["a status message", 'statusMessages: ["❌ No usable matches"],'],
+    ["a template literal", `status(\`🔍 \${plan.reasoning}\`);`],
+    ["an emoji with a variation selector", 'const m = "⚠️ Skipping audio analysis";'],
+    ["a sequence of several code points", 'const m = "👩‍🔬 Researching";'],
+    ["a web log line", "addLog(`🎵 Resuming with selected track...`);"],
+  ])("counts %s", (_name, line) => {
+    expect(count("emoji-in-progress", line, api)).toBe(1);
+  });
+
+  it.each([
+    ["plain text", 'status("Searching samples...");'],
+    ["a symbol that is not an emoji", 'const m = "BPM — 120 • ▶ ©";'],
+    ["a line comment", "// 🔎 shown while searching"],
+    ["a block comment", "/*\n 🔬 deep research\n*/\nconst a = 1;"],
+    ["JSX text", "<span>⚡ Explore</span>"],
+  ])("ignores %s", (_name, line) => {
+    expect(count("emoji-in-progress", line, api.replace(/\.ts$/, ".tsx"))).toBe(0);
+  });
+
+  it("scans API source and the web's agent hooks, but not components or tests", () => {
+    const { files } = rule("emoji-in-progress");
+    expect(files("apps/api/src/agent/researcherSubgraph.ts")).toBe(true);
+    expect(files("apps/web/src/hooks/useAgent.ts")).toBe(true);
+    expect(files("apps/web/src/components/GenealogyGraph.tsx")).toBe(false);
+    expect(files("apps/api/src/agent/researcherSubgraph.test.ts")).toBe(false);
+    expect(files("apps/web/src/hooks/useAgent.test.ts")).toBe(false);
+    expect(files("apps/api/src/sources/testing/iceIceBaby.ts")).toBe(false);
   });
 });
 
@@ -110,7 +228,8 @@ describe("baselines", () => {
     Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
   );
   Object.assign(isolatedEnv, { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
-  const script = join(dirname(fileURLToPath(import.meta.url)), "guard-honest.mjs");
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const script = join(repoRoot, "scripts", "guard-honest.mjs");
   let dir;
 
   // A throwaway repository with the guard, a baseline and one API file.
@@ -126,10 +245,15 @@ describe("baselines", () => {
       "hex-colours-outside-tokens": 0,
       "dotenv-outside-config": 0,
       "string-sentinel-tool-results": 0,
+      "prototype-copy": 0,
+      "emoji-in-progress": 0,
       ...baseline,
     };
     writeFileSync(join(dir, "scripts/guard-baseline.json"), `${JSON.stringify(full)}\n`);
     writeFileSync(join(dir, "apps/api/src/a.ts"), source);
+    // The guard reads scripts with the TypeScript parser from the repository's node_modules.
+    symlinkSync(join(repoRoot, "node_modules"), join(dir, "node_modules"), "dir");
+    writeFileSync(join(dir, ".gitignore"), "node_modules\n");
     const git = (...args) =>
       execFileSync("git", args, { cwd: dir, stdio: "ignore", env: isolatedEnv });
     git("init", "-q");
@@ -176,11 +300,26 @@ describe("baselines", () => {
         "hex-colours-outside-tokens": 0,
         "dotenv-outside-config": 0,
         "string-sentinel-tool-results": 0,
+        "prototype-copy": 0,
+        "emoji-in-progress": 0,
       }),
     );
     const result = run("--base", "HEAD");
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/raised from 1 to 5/);
+  });
+
+  it("fails when prototype copy or an emoji progress message is added", () => {
+    repo({}, 'status("Searching samples...");\n');
+    expect(run().status).toBe(0);
+    writeFileSync(
+      join(dir, "apps/api/src/a.ts"),
+      'status("🔎 Searching samples..."); status("Target acquired");\n',
+    );
+    const result = run();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/prototype-copy\s+1 \/ 0\s+ABOVE BASELINE/);
+    expect(result.stdout).toMatch(/emoji-in-progress\s+1 \/ 0\s+ABOVE BASELINE/);
   });
 
   it("rejects a baseline that is not a non-negative integer", () => {

@@ -4,5 +4,7 @@
   "tailwind-v3-variable-classes": 0,
   "hex-colours-outside-tokens": 5,
   "dotenv-outside-config": 0,
-  "string-sentinel-tool-results": 0
+  "string-sentinel-tool-results": 0,
+  "prototype-copy": 62,
+  "emoji-in-progress": 58
 }

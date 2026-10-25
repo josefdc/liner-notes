@@ -14,27 +14,140 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const baselinePath = join(root, "scripts", "guard-baseline.json");
 
 const isTest = (path) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
 const isScript = (path) => /\.[cm]?[jt]sx?$/.test(path);
+// Test helpers and fixtures that live next to the source (e.g. apps/api/src/sources/testing/).
+const isTestSupport = (path) =>
+  isTest(path) || /(?:^|\/)(?:tests?|__tests__|__mocks__|testing|fixtures)\//.test(path);
 
 // An occurrence that is not user-facing data (e.g. retry jitter) is allowed only with a marker
 // on the same line naming the rule and a reason: `// guard-allow: <rule-id> — <reason>`.
 // Each marker allows exactly one match on its line.
 const allowMarker = (line, id) => new RegExp(`guard-allow:\\s*${id}\\s*[—-]\\s*\\S`).test(line);
 
-// Removes comments from a line: `/* … */` spans, JSDoc continuation lines (` * …`), `//` lines
-// and trailing ` // …` comments (URLs such as https:// are kept).
-const withoutComments = (line) => {
-  const code = line.replace(/\/\*.*?\*\//g, "");
-  const trimmed = code.trim();
-  if (trimmed.startsWith("//") || /^\*(\s|\/|$)/.test(trimmed)) return "";
-  return code.replace(/\s\/\/.*$/, "");
+const scriptKind = (path) => {
+  if (/\.tsx$/.test(path)) return ts.ScriptKind.TSX;
+  if (/\.[cm]?ts$/.test(path)) return ts.ScriptKind.TS;
+  if (/\.jsx$/.test(path)) return ts.ScriptKind.JSX;
+  return ts.ScriptKind.JS;
 };
 
+const STRING_TOKENS = new Set([
+  ts.SyntaxKind.StringLiteral,
+  ts.SyntaxKind.NoSubstitutionTemplateLiteral,
+  ts.SyntaxKind.TemplateHead,
+  ts.SyntaxKind.TemplateMiddle,
+  ts.SyntaxKind.TemplateTail,
+]);
+
+// The comment and string-literal spans of a script, read with the TypeScript parser, so that
+// `//` inside a string or in JSX text is not taken for a comment, and comments spanning several
+// lines (JSX `{/* … */}` included) are found. Every comment lies in the trivia before a token.
+function scriptSpans(text, path) {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, false, scriptKind(path));
+  const comments = [];
+  const strings = [];
+  const visit = (node) => {
+    if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) {
+      return; // JSDoc is a comment, found as the trivia of the token that follows it
+    }
+    const children = node.getChildren(source);
+    if (children.length > 0) {
+      for (const child of children) visit(child);
+      return;
+    }
+    if (STRING_TOKENS.has(node.kind)) strings.push([node.getStart(source), node.end]);
+    // A token's trivia (from its pos to its start) holds only whitespace and comments. JSX text
+    // has none: a `//` in it is text shown to the user.
+    if (node.kind !== ts.SyntaxKind.JsxText) comments.push([node.pos, node.getStart(source)]);
+  };
+  visit(source);
+  return { comments, strings };
+}
+
+// Blanks (keep: false) or keeps only (keep: true) the given spans; line breaks always stay, so
+// line numbers do not move.
+function mask(text, spans, keep) {
+  const inSpan = new Uint8Array(text.length);
+  for (const [start, end] of spans) inSpan.fill(1, start, end);
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    out += char === "\n" || char === "\r" || Boolean(inSpan[i]) === keep ? char : " ";
+  }
+  return out;
+}
+
+const blockComments = (text, pattern) =>
+  [...text.matchAll(pattern)].map((match) => [match.index, match.index + match[0].length]);
+
+// Text with its comments blanked: script comments (line, block and JSX `{/* … */}`), CSS
+// `/* … */` and HTML `<!-- … -->` comments. Other files are scanned as they are.
+function withoutComments(text, path) {
+  if (isScript(path)) return mask(text, scriptSpans(text, path).comments, false);
+  if (/\.css$/.test(path)) return mask(text, blockComments(text, /\/\*[\s\S]*?\*\//g), false);
+  if (/\.html?$/.test(path)) return mask(text, blockComments(text, /<!--[\s\S]*?-->/g), false);
+  return text;
+}
+
+// Only the contents of string and template literals (including their quotes); everything else,
+// comments and JSX text included, is blanked.
+const stringsOnly = (text, path) =>
+  isScript(path) ? mask(text, scriptSpans(text, path).strings, true) : "";
+
+// Phrases of the prototype's theatrical copy and its old product name. Counted wherever they
+// appear outside comments, prompts and log lines included. Identifiers (`SonicAgentState`,
+// `decryptMoreFactoidsStream`, `DECRYPT_COUNT`), the `sonic-agent.db` file name and the
+// lowercase route path `/api/factoids/decrypt` (renamed by #31) are not copy and do not match.
+const PROTOTYPE_PHRASES_EXACT_CASE = [
+  "AGENT_ID",
+  "X9-ALPHA",
+  "STATUS: ONLINE",
+  "ANALYZE_SONG",
+  "DEEP_DIVE_MODE",
+  "BACK TO BASE",
+  "D3\\.JS FORCE SIMULATION",
+  "INTERACTIVE: ENABLED",
+  "\\bINTEL\\b",
+  "RELATED ARTIFACTS",
+  "LOGIC:",
+  "NO CONNECTIONS MAPPED",
+  "CLICK TO (?:ANALYZE|EXPLORE)",
+  "Agent Analysis",
+  "Frequency analysis:",
+  "\\b(?:DECRYPT(?:ING|ED)?|Decrypt(?:ing|ed)?)\\b",
+];
+const PROTOTYPE_PHRASES_ANY_CASE = [
+  "Sonic Agent",
+  "sonic-agent://",
+  "Command Center",
+  "Cross-referencing visual artifacts",
+  "Intelligence extraction",
+  "intelligence already extracted",
+  "intelligence briefing",
+  "deep-web research protocols",
+  "\\bdeep dive\\b",
+  "Target acquired",
+  "Establishing connection to",
+  "waveform parser",
+  "insights decoded",
+  "\\buplink\\b",
+  "\\b(?:audio|musical|sample|its) DNA\\b",
+  "Signal lost",
+  "Unexpected interference",
+];
+const PROTOTYPE_COPY = new RegExp(
+  `${PROTOTYPE_PHRASES_EXACT_CASE.join("|")}|(?i:${PROTOTYPE_PHRASES_ANY_CASE.join("|")})`,
+  "g",
+);
+
+// Each rule counts `pattern` per line in the files `files` selects. With `stripComments` comments
+// are blanked first; with `stringsOnly` only string and template literals are scanned.
 export const rules = [
   {
     id: "random-values-api",
@@ -89,6 +202,30 @@ export const rules = [
     pattern:
       /\.(?:startsWith|includes)\(\s*["'`](?:Error|No )|===?\s*["'`](?:Error|No )|\/\^(?:Error|No )/g,
   },
+  {
+    id: "prototype-copy",
+    owner: "#32, #34, #35",
+    description:
+      'The prototype\'s theatrical copy and old product name ("The Sonic Agent", "Command Center", "[ DECRYPT MORE ]", "Target acquired"…)',
+    files: (p) =>
+      (((p.startsWith("apps/web/src/") || p.startsWith("apps/api/src/")) && isScript(p)) ||
+        p === "apps/web/index.html") &&
+      !isTestSupport(p),
+    pattern: PROTOTYPE_COPY,
+    stripComments: true,
+  },
+  {
+    id: "emoji-in-progress",
+    owner: "#34",
+    description:
+      "Emoji in progress and log messages: string literals in API source and in the web's agent hooks, which write the activity-log lines",
+    files: (p) =>
+      (p.startsWith("apps/api/src/") || p.startsWith("apps/web/src/hooks/")) &&
+      isScript(p) &&
+      !isTestSupport(p),
+    pattern: /\p{RGI_Emoji}/gv,
+    stringsOnly: true,
+  },
 ];
 
 function sourceFiles() {
@@ -101,11 +238,16 @@ function sourceFiles() {
 }
 
 // Counts the matches of one rule in a file's text; returns the total and the matching lines.
-export function countInText(rule, text) {
+// `path` decides how comments and strings are read (a script by its extension, CSS or HTML).
+export function countInText(rule, text, path) {
+  let scannedText = text;
+  if (rule.stringsOnly) scannedText = stringsOnly(text, path);
+  else if (rule.stripComments) scannedText = withoutComments(text, path);
+  const scannedLines = scannedText.split("\n");
   let total = 0;
   const lines = [];
   text.split("\n").forEach((line, index) => {
-    const scanned = rule.stripComments ? withoutComments(line) : line;
+    const scanned = scannedLines[index] ?? "";
     const matches = scanned.match(rule.pattern)?.length ?? 0;
     const allowed = matches > 0 && allowMarker(line, rule.id) ? 1 : 0;
     if (matches - allowed > 0) {
@@ -126,7 +268,7 @@ function count(rule, files) {
     } catch {
       continue; // deleted in the working tree
     }
-    const result = countInText(rule, text);
+    const result = countInText(rule, text, path);
     total += result.total;
     for (const line of result.lines) locations.push(`${path}:${line}`);
   }

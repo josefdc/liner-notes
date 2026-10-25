@@ -23,9 +23,11 @@
 // it to exit 0 with no SIGKILL. It checks the API's log (LOG_FILE): JSON lines, the A1 run's lines
 // carry its run id, and no line holds an IP address, a query string, the typed query or any of the
 // dummy keys. Then `npm run report -w apps/api` over the API's database counts the replays it
-// served, and prints nothing anyone typed. Every process that loaded tests/deny-network.mjs, the
-// API's and the report step's, must have written its exit report with 0 outbound attempts, and
-// every line of the report must be readable.
+// served, and prints nothing anyone typed. The deny-network report is read twice: once the API's
+// output has closed, and once the report step's has. Every process that loaded
+// tests/deny-network.mjs and wrote its start line by then must have written its exit report with
+// 0 outbound attempts, and every line must be readable. A guarded process that starts only after
+// the last read (say, node run later by a detached shell the API left behind) is never seen.
 //
 // Interrupted (SIGINT, SIGTERM), it stops the API the same way (and the report step, when that
 // runs) and removes its scratch directory before it exits with 130 or 143.
@@ -53,9 +55,17 @@ const STOP_TIMEOUT_MS = 20_000;
 // How long after the SIGTERM the output may stay open (held by a process outside the API's group,
 // which the SIGKILL at STOP_TIMEOUT_MS does not reach) before the stop gives up and fails.
 const GIVE_UP_MS = 30_000;
+// The report step's stop: SIGKILL to its group after REPORT_STOP_TIMEOUT_MS, and no more waiting
+// after REPORT_GIVE_UP_MS.
+const REPORT_STOP_TIMEOUT_MS = 5_000;
+const REPORT_GIVE_UP_MS = 10_000;
+// The longest an interrupt can take to stop both.
+const MAX_STOP_S = (GIVE_UP_MS + REPORT_GIVE_UP_MS) / 1000;
 // Each request, body included: a stream that never ends fails the check instead of hanging CI.
 const REQUEST_TIMEOUT_MS = 30_000;
 const timeout = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+// The API's line once it listens.
+const LISTENING = /"msg":"Liner Notes API listening on port (\d+)"/;
 
 const scratch = mkdtempSync(join(tmpdir(), "replay-e2e-"));
 const report = join(scratch, "deny-network.jsonl");
@@ -114,6 +124,8 @@ const env = {
 /** The stop of the API, once begun (see stop()), and the exit code an interrupt asked for. */
 let stopping;
 let interrupted;
+/** Whether the API's output was printed after an interrupt. */
+let outputShown = false;
 /** The report step, once started: its process and its close (see runReportStep()). */
 let reportStep;
 
@@ -153,13 +165,16 @@ const closed = new Promise((resolveClose) => {
   api.once("error", () => resolveClose(null));
 });
 // From here on an interrupt stops the API (and the report step) and removes the scratch directory.
-// A second signal changes nothing: each stop gives up waiting after a bounded time.
+// A second signal changes nothing but a line: each stop gives up waiting after a bounded time.
 for (const [name, code] of [
   ["SIGINT", 130],
   ["SIGTERM", 143],
 ]) {
   process.on(name, () => {
-    if (interrupted !== undefined) return;
+    if (interrupted !== undefined) {
+      console.error(`${name}: still stopping (it gives up within ${MAX_STOP_S} s)`);
+      return;
+    }
     interrupted = code;
     console.error(`\n${name}: stopping the API and removing ${scratch}`);
     stopAndExit(code);
@@ -169,7 +184,7 @@ for (const [name, code] of [
 const port = await new Promise((resolvePort, reject) => {
   const timer = setTimeout(() => reject(new Error("the API did not start")), START_TIMEOUT_MS);
   const poll = setInterval(() => {
-    const match = output.match(/"msg":"Liner Notes API listening on port (\d+)"/);
+    const match = output.match(LISTENING);
     if (match) {
       clearInterval(poll);
       clearTimeout(timer);
@@ -188,7 +203,7 @@ const port = await new Promise((resolvePort, reject) => {
     );
   });
 }).catch((error) => {
-  // Interrupted, the API was stopped on purpose: its output says nothing new.
+  // Interrupted, the API was stopped on purpose (stopAndExit prints its output).
   if (interrupted === undefined) {
     console.error(output);
     console.error(String(error));
@@ -389,7 +404,8 @@ try {
   );
   check(head.status === 200, "HEAD on the stream answers its headers only");
 } catch (error) {
-  check(false, `checks ran (${error})`);
+  // An interrupt stops the API under a running check: that check did not fail on its own.
+  if (interrupted === undefined) check(false, `checks ran (${error})`);
 }
 
 const stopped = await stop();
@@ -615,7 +631,9 @@ function stop() {
 
 /**
  * Runs `npm run report -w apps/api` in a process group of its own, so that an interrupt or its
- * timeout stops all of it. Resolves with { status, stdout, stderr, error } once its output closed.
+ * timeout stops all of it. Resolves with { status, stdout, stderr, error } once its output has
+ * closed; after START_TIMEOUT_MS, once stopReportStep() has stopped it or given up (status null,
+ * error says so).
  */
 async function runReportStep() {
   const child = spawn("npm", ["run", "report", "-w", "apps/api", "--", "--days", "2", "--json"], {
@@ -626,6 +644,9 @@ async function runReportStep() {
   });
   let stdout = "";
   let stderr = "";
+  // Decoded as a stream, so a character split across two chunks stays whole.
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
   child.stdout.on("data", (chunk) => {
     stdout += chunk;
   });
@@ -660,8 +681,10 @@ async function runReportStep() {
 }
 
 /**
- * Stops the report step's process group the way the API is stopped, when it still runs: once it
- * ended, its group id is never signalled.
+ * Stops the report step, when it still runs: SIGTERM to its whole process group (no server pid to
+ * single out here), SIGKILL to the group after REPORT_STOP_TIMEOUT_MS, and no more waiting after
+ * REPORT_GIVE_UP_MS (a process outside the group still holds its output: stop reading it). Once
+ * the step ended, its group id is never signalled.
  */
 function stopReportStep() {
   if (reportStep === undefined || (reportStep.ended && !reportStep.stopping)) {
@@ -670,8 +693,8 @@ function stopReportStep() {
   reportStep.stopping ??= stopServer({
     group: reportStep.child.pid,
     closed: reportStep.closed,
-    timeoutMs: 5_000,
-    giveUpMs: 10_000,
+    timeoutMs: REPORT_STOP_TIMEOUT_MS,
+    giveUpMs: REPORT_GIVE_UP_MS,
   }).then((stopped) => {
     if (stopped.held) {
       reportStep.child.stdout.destroy();
@@ -681,10 +704,22 @@ function stopReportStep() {
   return reportStep.stopping;
 }
 
-/** Stops the API, removes the scratch directory and exits: with `code`, or an interrupt's. */
+/**
+ * Stops the API, removes the scratch directory and exits: with `code`, or an interrupt's, even
+ * when part of that fails. Interrupted before the API listened, it prints the API's output, the
+ * only clue to why it had not started.
+ */
 async function stopAndExit(code) {
-  await stop();
-  await stopReportStep();
-  rmSync(scratch, { recursive: true, force: true });
+  try {
+    await stop();
+    await stopReportStep();
+    if (interrupted !== undefined && !LISTENING.test(output) && !outputShown) {
+      outputShown = true;
+      console.error(`The API's output (it had not started listening):\n${output}`);
+    }
+    rmSync(scratch, { recursive: true, force: true });
+  } catch (error) {
+    console.error(`Could not finish stopping and cleaning up: ${error}`);
+  }
   process.exit(interrupted ?? code);
 }

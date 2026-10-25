@@ -565,12 +565,23 @@ describe("aborts", () => {
   });
 
   it("keeps the worst case for an abort after the request was sent", async () => {
+    // Aborts once the provider stub has the request, however long the machine took to send it.
+    let received!: () => void;
+    const sent = new Promise<void>((resolve) => {
+      received = resolve;
+    });
+    const { llm, net, rows } = setup((call) => {
+      received();
+      return hang(call);
+    });
     const controller = new AbortController();
-    const { llm, net, rows } = setup(hang);
-    setTimeout(() => controller.abort(), 50);
-    await llm
+    const result = llm
       .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
-      .catch(() => {});
+      .catch((e) => e);
+    // A call that settles without sending anything fails on the expectations below.
+    await Promise.race([sent, result]);
+    controller.abort();
+    expect(isLlmError(await result, "aborted")).toBe(true);
     expect(net.calls).toHaveLength(1);
     expect(net.calls[0].signal?.aborted).toBe(true);
     expectWorstCaseKept();

@@ -725,6 +725,9 @@ describe("MusicBrainz client", () => {
   });
 
   it("sends one request at a time, spaced by the queue", async () => {
+    // On a fake clock a start is the time the queue released the request, however late the
+    // machine got round to it: only the queue's and the stub's timers move the clock.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const restore = MusicBrainzRateLimiter.getInstance().setIntervalForTests(60);
     let inFlight = 0;
     let maxInFlight = 0;
@@ -734,26 +737,31 @@ describe("MusicBrainz client", () => {
       inFlight++;
       maxInFlight = Math.max(maxInFlight, inFlight);
       starts.push(Date.now());
-      await new Promise((r) => setTimeout(r, 5));
+      // The first answer outlasts the interval, so a queue that did not wait for it would
+      // overlap the next request; the others are quick, so only the queue spaces them.
+      await new Promise((r) => setTimeout(r, starts.length === 1 ? 100 : 5));
       inFlight--;
       return call.url.startsWith(`${MB}/artist?`)
         ? json({ count: 0, artists: [] })
         : json({ count: 0, recordings: [] });
     });
     try {
-      await Promise.all([
+      const done = Promise.all([
         findArtist("Vanilla Ice"),
         findArtist("Queen"),
         getMusicBrainzRelations.invoke({ title: "Ice Ice Baby", artist: "Vanilla Ice" }),
       ]);
+      await vi.runAllTimersAsync();
+      await done;
     } finally {
       restore();
+      vi.useRealTimers();
     }
 
     expect(starts).toHaveLength(3);
     expect(maxInFlight).toBe(1);
     for (let i = 1; i < starts.length; i++) {
-      expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(55);
+      expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(60);
     }
   });
 

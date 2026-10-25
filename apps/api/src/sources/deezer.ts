@@ -316,7 +316,9 @@ function notFound(
   message: string,
   failure?: { error: string; errorCode: SourceErrorCode },
 ): DeezerPreviewResult {
-  log.info(message);
+  // Deezer failing is a warning; no matching entry is an ordinary outcome.
+  if (failure) log.warn(message, { errorCode: failure.errorCode });
+  else log.info(message);
   return { found: false, previewUrl: null, rejected, message, ...failure };
 }
 

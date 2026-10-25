@@ -22,6 +22,7 @@ import { getRun, startRun } from "./store/runs.js";
 
 const ENTRY = join(import.meta.dirname, "index.ts");
 const PROCESS_ERRORS_FIXTURE = join(import.meta.dirname, "../test/fixtures/process-errors.ts");
+const ODD_EXCEPTION_FIXTURE = join(import.meta.dirname, "../test/fixtures/odd-exception.ts");
 const CLOSED_LOG_READER_FIXTURE = join(
   import.meta.dirname,
   "../test/fixtures/closed-log-reader.mjs",
@@ -444,5 +445,27 @@ describe("process-level error handlers", () => {
     );
     expect(output).toContain("fatal hook ran");
     expect(output).not.toContain("still running after the exception");
+  }, 30_000);
+
+  it("log an exception the log cannot read whole, still run the fatal hook and exit 1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "api-errors-"));
+    dirs.push(dir);
+
+    const child = start(ODD_EXCEPTION_FIXTURE, dir, {});
+    expect(await child.exit).toBe(1);
+
+    const output = child.output();
+    expect(logEntries(output)).toContainEqual(
+      expect.objectContaining({
+        component: "Process",
+        msg: "Uncaught exception; exiting",
+        err: expect.objectContaining({
+          type: "Error",
+          stack: expect.stringContaining("odd-exception.ts"),
+        }),
+      }),
+    );
+    expect(output).toContain("fatal hook ran");
+    expect(output).not.toContain("getter exploded");
   }, 30_000);
 });

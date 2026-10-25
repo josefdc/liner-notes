@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
@@ -11,6 +12,7 @@ import {
   installConsoleBridge,
   ipHash,
   logger,
+  MAX_LOGGED_TEXT,
   scrub,
   serializeError,
   withRun,
@@ -55,7 +57,38 @@ describe("scrub", () => {
     ],
     ["Basic credentials", "Basic dXNlcjpwYXNzd29yZA==", "Basic [redacted]"],
     ["a Discogs token", "Discogs token=abcdef123", "Discogs token=[redacted]"],
-    ["an api-key header", '{"api-key":"k-123456"}', '{"api-key":"[redacted]"}'],
+    ["an api-key header", '{"api-key":"k-123456"}', '{"api-key":[redacted]}'],
+    [
+      "a quoted Bearer token",
+      'header was Authorization: Bearer "abc123def"',
+      "header was Authorization: [redacted]",
+    ],
+    ["a quoted Bearer token alone", 'sent Bearer "abc123def" on', "sent Bearer [redacted] on"],
+    [
+      "a quoted password",
+      'login failed with password="hunter2" for user',
+      "login failed with password=[redacted] for user",
+    ],
+    [
+      "a subscription key header",
+      "Ocp-Apim-Subscription-Key: rtSubKey123456",
+      "Ocp-Apim-Subscription-Key: [redacted]",
+    ],
+    [
+      "api_sig and sk in a URL",
+      "https://ws.example/2.0/?api_sig=abc123&sk=def456&x=1",
+      "https://ws.example/2.0/?api_sig=[redacted]&sk=[redacted]&x=1",
+    ],
+    [
+      "a Deezer preview link without a scheme",
+      "clip cdnt-preview.dzcdn.net/api/1/1/a.mp3?hdnea=exp=1~hmac=abc ok",
+      "clip [preview link] ok",
+    ],
+    [
+      "a Spotify preview link without a scheme",
+      "clip p.scdn.co/mp3-preview/abc?cid=1 ok",
+      "clip [preview link] ok",
+    ],
     [
       "a key in a URL",
       "https://ws.audioscrobbler.com/2.0/?method=track.getTopTags&api_key=abc123&format=json",
@@ -89,8 +122,101 @@ describe("scrub", () => {
       "Basic info about the track",
       "https://i.scdn.co/image/ab67616d0000b273",
       "https://musicbrainz.org/ws/2/recording/abc?inc=artist-rels&fmt=json",
+      "i.scdn.co/image/ab67 and scdn.co",
     ]) {
       expect(scrub(text)).toBe(text);
+    }
+  });
+
+  it("cuts text off past MAX_LOGGED_TEXT, and takes linear time on long host-like text", () => {
+    const long = scrub("x".repeat(MAX_LOGGED_TEXT + 100));
+    expect(long).toHaveLength(MAX_LOGGED_TEXT + "…[truncated]".length);
+    expect(long.endsWith("…[truncated]")).toBe(true);
+    const started = performance.now();
+    scrub("a-".repeat(8000));
+    scrub("a.".repeat(8000));
+    expect(performance.now() - started).toBeLessThan(200);
+  });
+
+  it("does not replace short or numeric configured values", () => {
+    configureLogger({ SOME_API_KEY: "200000", SHORT_TOKEN: "abc1234", LONG_KEY: KEY });
+    expect(scrub("count 200000, word abc1234")).toBe("count 200000, word abc1234");
+    logger("X").info("count", { n: 200000 });
+    expect(logs.entries()[0]).toMatchObject({ n: 200000 });
+  });
+});
+
+describe("a configured secret that cannot be replaced safely", () => {
+  it("withholds the line instead of writing the secret", () => {
+    // A value that also occurs as JSON structure in every line.
+    configureLogger({ ODD_SECRET: ',"time":' });
+    logs = captureLogsForTests();
+    logger("Probe").info("something happened", { runId: "run-1" });
+    const raw = logs.lines();
+    expect(raw).toHaveLength(1);
+    const line = JSON.parse(raw[0]) as Record<string, unknown>;
+    expect(line.msg).toBe("log line withheld: it contained a configured secret");
+    expect(line.component).toBe("Probe");
+    expect(raw[0]).not.toContain("something happened");
+  });
+});
+
+describe("every line", () => {
+  // The forms the scrubber rewrites, and characters JSON must escape, in random order.
+  const PIECES = [
+    '"',
+    "'",
+    "\\",
+    '\\"',
+    "\n",
+    "\u0000",
+    " ",
+    ":",
+    "=",
+    ",",
+    "}",
+    "]",
+    "Bearer ",
+    "Basic ",
+    "Discogs token=",
+    "password=",
+    "password: ",
+    "token=",
+    "api-key: ",
+    "Authorization: ",
+    "https://",
+    "p.scdn.co/x",
+    "cdnt-preview.dzcdn.net/a?hdnea=1",
+    "dummy-resource.example.net",
+    KEY,
+    "[redacted]",
+    "abc123",
+    "é",
+    "😀",
+  ];
+
+  it("is valid JSON and holds no configured secret, whatever text it is given (fuzz)", () => {
+    let seed = 42;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31;
+      return seed / 2 ** 31;
+    };
+    const text = () =>
+      Array.from(
+        { length: 1 + Math.floor(random() * 12) },
+        () => PIECES[Math.floor(random() * PIECES.length)],
+      ).join("");
+    const log = logger("Fuzz");
+    for (let i = 0; i < 10_000; i++) {
+      const t = text();
+      log.warn(t, { [text()]: t, note: t, err: new Error(t) });
+    }
+    const lines = logs.lines();
+    expect(lines).toHaveLength(10_000);
+    for (const line of lines) {
+      expect(() => JSON.parse(line), line).not.toThrow();
+      expect(line).not.toContain(KEY);
+      expect(line).not.toContain("dummy-resource");
     }
   });
 });
@@ -128,6 +254,37 @@ describe("serializeError", () => {
     for (const secret of [KEY, "dummy-resource", "secret-cause-token", "header-token"]) {
       expect(text).not.toContain(secret);
     }
+  });
+});
+
+describe("serializeError, the API's own errors", () => {
+  it("keeps the kind, how long to wait, why an answer was cut off and an AggregateError's errors", () => {
+    const sourceError = Object.assign(new Error("rate limited"), {
+      name: "SourceError",
+      kind: "rate_limited",
+      source: "spotify",
+      retryAfterMs: 30_000,
+      body: '{"error":"secret upstream body"}',
+    });
+    const llmError = Object.assign(new Error("cut off"), {
+      kind: "invalid_output",
+      incompleteReason: "max_output_tokens",
+    });
+    const aggregate = new AggregateError([sourceError, new Error(`with ${KEY}`)], "both failed");
+    const serialized = serializeError(aggregate) as Record<string, unknown>;
+    expect(serialized).toMatchObject({
+      type: "AggregateError",
+      message: "both failed",
+      errors: [
+        { type: "SourceError", kind: "rate_limited", source: "spotify", retryAfterMs: 30_000 },
+        { message: "with [redacted]" },
+      ],
+    });
+    expect(serializeError(llmError)).toMatchObject({
+      kind: "invalid_output",
+      incompleteReason: "max_output_tokens",
+    });
+    expect(JSON.stringify(serialized)).not.toContain("secret upstream body");
   });
 });
 
@@ -185,6 +342,86 @@ describe("a log line", () => {
     logger("Run").debug("hidden", { query: "x" });
     logger("Run").info("shown");
     expect(logs.messages()).toEqual(["shown"]);
+  });
+});
+
+describe("a log call", () => {
+  it("never throws on fields it cannot read, and says so", () => {
+    const odd = new Error("x");
+    (odd as unknown as { message: unknown }).message = { detail: "an object" };
+    Object.defineProperty(odd, "code", {
+      get() {
+        throw new Error("getter exploded");
+      },
+    });
+    const throwingFields = Object.defineProperty({}, "boom", {
+      enumerable: true,
+      get() {
+        throw new Error("field getter exploded");
+      },
+    });
+    const proxy = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("proxy boom");
+        },
+      },
+    );
+    const log = logger("Odd");
+    expect(() => log.error("odd error", { err: odd })).not.toThrow();
+    expect(() => log.error("odd fields", throwingFields)).not.toThrow();
+    expect(() => log.error("proxy field", { inner: proxy })).not.toThrow();
+    expect(() =>
+      log.error("undefined message", { err: Object.assign(new Error(), { message: undefined }) }),
+    ).not.toThrow();
+
+    const [oddError, fields, proxied] = logs.entries();
+    expect(oddError).toMatchObject({
+      msg: "odd error",
+      err: { type: "Error", message: "[object Object]", stack: expect.any(String) },
+    });
+    expect(oddError.err).not.toHaveProperty("code");
+    expect(fields).toMatchObject({ component: "Odd", msg: "log line could not be written" });
+    expect(proxied).toMatchObject({ msg: "proxy field", inner: "[unreadable]" });
+    expect(logs.lines()).toHaveLength(4);
+  });
+
+  it("replaces fields whose name says they are secret, compound names included", () => {
+    logger("X").info("fields", {
+      spotifyAccessToken: "BQD-1",
+      bearerToken: "t-2",
+      secretKey: "s-3",
+      azureOpenAIApiKey: "k-4",
+      subscriptionKey: "k-5",
+      clientPassword: "p-6",
+      key: "k-7",
+      spotifyPreviewUrl: "https://e.dzcdn.net/x",
+      inputTokens: 900,
+      tokenCount: 3,
+      cacheKey: "track:1",
+    });
+    const [entry] = logs.entries();
+    for (const name of [
+      "spotifyAccessToken",
+      "bearerToken",
+      "secretKey",
+      "azureOpenAIApiKey",
+      "subscriptionKey",
+      "clientPassword",
+      "key",
+      "spotifyPreviewUrl",
+    ]) {
+      expect(entry[name], name).toBe("[redacted]");
+    }
+    expect(entry).toMatchObject({ inputTokens: 900, tokenCount: 3, cacheKey: "track:1" });
+  });
+
+  it("writes a query that is not a string as its length too", () => {
+    logger("X").info("q", { query: ["typed a", "typed b"], q: { value: "typed obj" } });
+    const [entry] = logs.entries();
+    expect(entry).toMatchObject({ queryLength: 2, qLength: 21 });
+    expect(logs.lines()[0]).not.toContain("typed");
   });
 });
 
@@ -285,7 +522,14 @@ describe("the console bridge", () => {
       withRun("run-c", () => {
         target.log("🔍 [Cache] Hit for", "track-1");
         target.warn("[Store] Write failed:", new Error(`disk full near ${KEY}`));
-        target.error("no tag here", { previewUrl: "https://p.scdn.co/mp3-preview/a" });
+        target.error(
+          "no tag here",
+          { previewUrl: "https://p.scdn.co/mp3-preview/a", note: "https://p.scdn.co/b" },
+          Object.assign(new Error("second"), {
+            config: { headers: { "Ocp-Apim-Subscription-Key": "rtSubKey123456" } },
+          }),
+          { nested: { mySecretToken: "tok-1234567" } },
+        );
         target.debug("[Researcher] step 2");
       });
     } finally {
@@ -312,7 +556,9 @@ describe("the console bridge", () => {
       expect.objectContaining({ level: "debug", component: "Researcher", msg: "step 2" }),
     ]);
     expect(entries[2]).not.toHaveProperty("component");
-    expect(logs.lines().join("\n")).not.toMatch(/p\.scdn\.co|dummy-azure-key/);
+    expect(logs.lines().join("\n")).not.toMatch(
+      /p\.scdn\.co|dummy-azure-key|rtSubKey123456|tok-1234567/,
+    );
   });
 });
 
@@ -345,6 +591,54 @@ describe("configureLogger", () => {
       ]);
       // And to stdout (here, the capture) as well.
       expect(logs.messages()).toEqual(["to the file"]);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("creates LOG_FILE readable by its owner only, and takes a relative path from baseDir", () => {
+    const dir = mkdtempSync(join(tmpdir(), "log-file-"));
+    try {
+      expect(configureLogger({ LOG_FILE: "logs/api.jsonl" }, { baseDir: dir })).toEqual([]);
+      logger("Run").info("to the file");
+      const file = join(dir, "logs", "api.jsonl");
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+      expect(readFileSync(file, "utf8")).toContain("to the file");
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when an existing LOG_FILE can be read by other users", () => {
+    const dir = mkdtempSync(join(tmpdir(), "log-file-"));
+    try {
+      const file = join(dir, "api.jsonl");
+      writeFileSync(file, "");
+      chmodSync(file, 0o644);
+      expect(configureLogger({ LOG_FILE: file })).toEqual([
+        expect.stringContaining("can be read or written by other users (mode 644)"),
+      ]);
+    } finally {
+      configureLogger({ LOG_LEVEL: "silent" });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a LOG_FILE that is not a regular file, at once (a FIFO would hold startup)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "log-file-"));
+    try {
+      const fifo = join(dir, "fifo");
+      execFileSync("mkfifo", [fifo]);
+      const started = Date.now();
+      expect(configureLogger({ LOG_FILE: fifo })).toEqual([
+        expect.stringContaining("is not a regular file; logging to stdout only"),
+      ]);
+      expect(configureLogger({ LOG_FILE: dir })).toEqual([
+        expect.stringContaining("is not a regular file"),
+      ]);
+      expect(Date.now() - started).toBeLessThan(1000);
     } finally {
       configureLogger({ LOG_LEVEL: "silent" });
       rmSync(dir, { recursive: true, force: true });

@@ -266,7 +266,8 @@ export async function resolvePreview(
   const detail = failed.sourceError
     ? `Deezer could not be read and Spotify has no preview of this track: ${failed.sourceError.message}`
     : `No preview of this recording on Deezer or Spotify${rejectionSummary([byIsrc, bySearch])}`;
-  log.info(detail);
+  if (failed.sourceError) log.warn(detail);
+  else log.info(detail);
   return { previewUrl: null, match: null, detail, ...failed };
 }
 
@@ -387,7 +388,7 @@ export const analyzeAudioPreview = tool(
       const serviceAvailable = await isServiceAvailable(signal);
 
       if (!serviceAvailable) {
-        log.info("Analysis service unavailable; audio not measured");
+        log.warn("Analysis service unavailable; audio not measured");
         return withPreview(
           unavailable("service_unavailable", "Audio analysis service did not respond"),
         );

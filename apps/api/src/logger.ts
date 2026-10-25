@@ -4,27 +4,35 @@
  *
  * - Every line written while an analysis runs carries its run id (`runId`): the analyze routes
  *   run each analysis inside `withRun`, and the id follows the run's async chain (graph nodes,
- *   sources, timers) through an AsyncLocalStorage.
- * - Nothing secret reaches a line: fields with a secret's name (keys, tokens, Authorization and
- *   other headers, preview links, the provider endpoint) are replaced, errors are reduced to
- *   their name, message, code, status, stack and cause, and every line is scrubbed of API keys,
- *   Bearer tokens, signed query parameters, the provider endpoint and preview links (Spotify
- *   p.scdn.co, Deezer dzcdn.net), whatever field they are in.
+ *   sources, timers) through an AsyncLocalStorage. Work a queue shared by runs carries out must
+ *   be bound to its caller (`AsyncLocalStorage.bind`); work runs share (one token refresh for
+ *   all) is logged under the run that started it.
+ * - Nothing secret reaches a line. Before a line is serialized, fields whose name says they are
+ *   secret (keys, tokens, passwords, Authorization and other headers, preview links, the
+ *   provider endpoint, request and response objects) are replaced; errors are reduced to a few
+ *   known properties; and every string (the message, string fields, error messages and stacks)
+ *   is scrubbed of configured secret values, Authorization values and Bearer tokens, keys and
+ *   signatures in URLs, the provider endpoint and preview links (Spotify p.scdn.co, Deezer
+ *   dzcdn.net). The serialized line is then searched once more for the configured secret values
+ *   and endpoint hosts only, so a line is always valid JSON.
  * - The text a visitor typed (`query` fields) is written at debug level only; at info and above
  *   only its length is.
+ * - A log call never throws because of what it was given: fields that cannot be read give a line
+ *   that says so.
  * - `installConsoleBridge` sends console.log/info/warn/error/debug through the same logger, so
  *   modules that still call console write JSON lines with the run id too.
  *
  * LOG_LEVEL (fatal, error, warn, info, debug, trace or silent; default info) and LOG_FILE are
  * read by `configureLogger`, which config/env.ts calls once the settings file is loaded.
  * LOG_IP_SALT keys the hash of client addresses in request lines (`ipHash`); without it each
- * process picks a random key, so the same address hashes alike only within one process.
+ * process makes a key of its own, so the same address hashes alike only within one process.
+ * Every level goes to stdout (errors included), as one stream.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac, generateKeySync, type KeyObject } from "node:crypto";
-import { closeSync, mkdirSync, openSync, writeSync } from "node:fs";
-import { dirname } from "node:path";
+import { closeSync, constants, fstatSync, mkdirSync, openSync, statSync, writeSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { format } from "node:util";
 import pino, { type DestinationStream, type Level, type LevelWithSilent } from "pino";
 
@@ -51,31 +59,43 @@ export function currentRunId(): string | undefined {
 const REDACTED = "[redacted]";
 const PREVIEW_LINK = "[preview link]";
 const PROVIDER_ENDPOINT = "[provider endpoint]";
+/** What a log call writes when the fields it was given cannot be read. */
+const UNWRITABLE = "log line could not be written";
+
+/** Longest text scrubbed and written, in characters; the rest is cut off. */
+export const MAX_LOGGED_TEXT = 16 * 1024;
+const TRUNCATED = "…[truncated]";
 
 /** Hosts of the signed 30-second preview clips: Spotify's and Deezer's. */
 const PREVIEW_HOST = /(?:^|\.)(?:p\.scdn\.co|dzcdn\.net)$/i;
-/** Azure OpenAI resource hosts, configured or not. */
+/** A preview host written without a scheme, with whatever path and query follow it. */
+const BARE_PREVIEW =
+  /(?<![\w.-])(?:(?:[\w-]{1,63}\.){0,8}dzcdn\.net|p\.scdn\.co)(?![\w-])(?:[/?#][^\s"'<>`]*)?/gi;
+/** Azure OpenAI resource hosts, configured or not. Starts only at a host's first character. */
 const PROVIDER_HOST =
-  /\b[a-z0-9][a-z0-9-]*\.(?:openai\.azure\.com|cognitiveservices\.azure\.com|services\.ai\.azure\.com)\b/gi;
+  /(?<![a-z0-9.-])[a-z0-9][a-z0-9.-]{0,252}\.(?:openai|cognitiveservices|services\.ai)\.azure\.com(?![a-z0-9-])/gi;
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>\\`]+/gi;
 /** Credentials written into a URL (`https://user:password@host`). */
 const USERINFO = /^(https?:\/\/)[^/?#@\s]+@/i;
 /** Query parameters that carry a key, a token or a signature. */
 const SECRET_PARAM =
-  /([?&;~](?:api[-_]?key|apikey|key|token|access[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
-/** Authorization values: a Bearer token, Basic credentials, a Discogs token. */
+  /([?&;~](?:api[-_]?key|apikey|api[-_]?sig|sk|key|token|access[-_]?token|client[-_]?secret|secret|sig|signature|hdnea|hdnts|auth|password|subscription[-_]?key|x-amz-signature|x-amz-credential)=)[^&#\s"'<>\\]*/gi;
+/** Authorization values: a Bearer token, Basic credentials, a Discogs token; quoted or not. */
 const AUTH_SCHEME =
-  /\b(Bearer\s+|Discogs\s+token=)(?!\[redacted\])[^\s"',;}\]]+|\b(Basic\s+)[A-Za-z0-9+/=]{8,}/gi;
-/** `name: value` or `name=value` pairs whose name says the value is secret. */
+  /\b(Bearer\s+|Discogs\s+token=)(?!["']?\[redacted\])["']?[^\s"',;}\]]+["']?|\b(Basic\s+)["']?[A-Za-z0-9+/=]{8,}["']?/gi;
+/** `name: value` or `name=value` pairs whose name says the value is secret; quoted or not. */
 const SECRET_PAIR =
-  /\b((?:x-)?api[-_]?key|apikey|authorization|access[-_]?token|refresh[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*["']?)(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?[^\s"'&,;}\]]+/gi;
+  /\b((?:x-)?api[-_]?key|apikey|(?:ocp-apim-)?subscription[-_]?key|authorization|access[-_]?token|refresh[-_]?token|client[-_]?secret|password|secret|token)(["']?\s*[:=]\s*)(?!\s*(?:(?:Bearer|Basic|Discogs)\s+)?["']?\[redacted\])(?:(?:Bearer|Basic|Discogs)\s+)?["']?[^\s"'&,;}\]]+["']?/gi;
 
 /** Environment variables whose values are never written: keys, secrets, tokens, endpoints. */
 const SECRET_ENV_NAME = /(?:KEY|SECRET|TOKEN|PASSWORD|SALT|ENDPOINT|BASE_URL)$/;
-/** Values shorter than this are not scrubbed as text (they would match ordinary words). */
-const MIN_SECRET_LENGTH = 6;
+/** Values shorter than this, or only digits, are not scrubbed (they match ordinary text). */
+const MIN_SECRET_LENGTH = 8;
+const NUMERIC = /^[\d.]+$/;
 
 let secretValues: string[] = [];
+/** The same values as they appear inside a JSON string, where they differ. */
+let escapedSecretValues: string[] = [];
 let secretHosts: string[] = [];
 
 /** Reads the values to scrub from the environment: secrets, and the hosts of endpoint URLs. */
@@ -87,7 +107,7 @@ function collectSecrets(env: NodeJS.ProcessEnv): void {
     const trimmed = value.trim();
     // An endpoint is scrubbed by its host, so a line still says it was the provider endpoint.
     if (!/^https?:\/\//i.test(trimmed)) {
-      if (trimmed.length >= MIN_SECRET_LENGTH) values.add(trimmed);
+      if (trimmed.length >= MIN_SECRET_LENGTH && !NUMERIC.test(trimmed)) values.add(trimmed);
     } else {
       try {
         const { host, hostname } = new URL(trimmed);
@@ -102,6 +122,9 @@ function collectSecrets(env: NodeJS.ProcessEnv): void {
   }
   // Longest first, so a value that contains another is replaced whole.
   secretValues = [...values].sort((a, b) => b.length - a.length);
+  escapedSecretValues = secretValues
+    .map((value) => JSON.stringify(value).slice(1, -1))
+    .filter((escaped, i) => escaped !== secretValues[i]);
   secretHosts = [...hosts].sort((a, b) => b.length - a.length);
 }
 
@@ -113,101 +136,211 @@ function hostOf(url: string): string | null {
   }
 }
 
-/**
- * Text made safe for the log: known secret values, preview links, the provider endpoint, keys
- * and signatures in URLs, Authorization values and Bearer tokens are replaced.
- */
-export function scrub(text: string): string {
+function replaceAll(text: string, values: readonly string[], replacement: string): string {
   let out = text;
-  for (const value of secretValues) {
-    if (out.includes(value)) out = out.split(value).join(REDACTED);
+  for (const value of values) {
+    if (out.includes(value)) out = out.split(value).join(replacement);
   }
-  out = out.replace(URL_IN_TEXT, (url) => {
-    const host = hostOf(url);
-    if (host && PREVIEW_HOST.test(host)) return PREVIEW_LINK;
-    if (host && secretHosts.includes(host)) return PROVIDER_ENDPOINT;
-    return url.replace(USERINFO, `$1${REDACTED}@`).replace(SECRET_PARAM, `$1${REDACTED}`);
-  });
-  for (const host of secretHosts) {
-    if (out.includes(host)) out = out.split(host).join(PROVIDER_ENDPOINT);
-  }
-  return out
-    .replace(PROVIDER_HOST, PROVIDER_ENDPOINT)
-    .replace(SECRET_PAIR, `$1$2${REDACTED}`)
-    .replace(
-      AUTH_SCHEME,
-      (_match, scheme?: string, basic?: string) => `${scheme ?? basic}${REDACTED}`,
-    );
+  return out;
 }
 
-/** Fields whose value is never written, whatever it holds. */
+/** Any value as text, without throwing. */
+function asText(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return String(value);
+  } catch {
+    return "[unreadable]";
+  }
+}
+
+/**
+ * Text made safe for the log: configured secret values, preview links, the provider endpoint,
+ * keys and signatures in URLs, Authorization values and Bearer tokens are replaced, and text
+ * longer than MAX_LOGGED_TEXT is cut off. Never throws.
+ */
+export function scrub(input: unknown): string {
+  try {
+    let out = replaceAll(asText(input), secretValues, REDACTED);
+    if (out.length > MAX_LOGGED_TEXT) out = `${out.slice(0, MAX_LOGGED_TEXT)}${TRUNCATED}`;
+    out = out.replace(URL_IN_TEXT, (url) => {
+      const host = hostOf(url);
+      if (host && PREVIEW_HOST.test(host)) return PREVIEW_LINK;
+      if (host && secretHosts.includes(host)) return PROVIDER_ENDPOINT;
+      return url.replace(USERINFO, `$1${REDACTED}@`).replace(SECRET_PARAM, `$1${REDACTED}`);
+    });
+    out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT);
+    return out
+      .replace(BARE_PREVIEW, PREVIEW_LINK)
+      .replace(PROVIDER_HOST, PROVIDER_ENDPOINT)
+      .replace(SECRET_PAIR, `$1$2${REDACTED}`)
+      .replace(
+        AUTH_SCHEME,
+        (_match, scheme?: string, basic?: string) => `${scheme ?? basic}${REDACTED}`,
+      );
+  } catch {
+    return "[unreadable]";
+  }
+}
+
+/**
+ * The last pass, over the serialized line: only the configured secret values (as JSON writes
+ * them) and endpoint hosts, which no JSON syntax is part of. A line this pass would make
+ * unreadable is written as it was (its strings were scrubbed already).
+ */
+function scrubLine(line: string): string {
+  try {
+    let out = replaceAll(line, secretValues, REDACTED);
+    out = replaceAll(out, escapedSecretValues, REDACTED);
+    out = replaceAll(out, secretHosts, PROVIDER_ENDPOINT);
+    if (out === line) return line;
+    JSON.parse(out);
+    return out;
+  } catch {
+    return withheldLine(line);
+  }
+}
+
+/**
+ * A line in which a configured secret could not be replaced without breaking
+ * its JSON is not written; a short line saying so keeps its level, time,
+ * component and run id.
+ */
+function withheldLine(line: string): string {
+  const kept: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(line) as Record<string, unknown>;
+    for (const field of ["level", "time", "pid", "component", "runId"]) {
+      const value = parsed[field];
+      if (typeof value === "string" || typeof value === "number") kept[field] = value;
+    }
+  } catch {
+    kept.level = "warn";
+  }
+  kept.msg = "log line withheld: it contained a configured secret";
+  return `${JSON.stringify(kept)}\n`;
+}
+
+/** Fields whose value is never written, whatever it holds: these names exactly… */
 const SECRET_FIELD =
-  /^(?:api[-_]?key|apikey|authorization|proxy-authorization|cookie|set-cookie|headers|token|access[-_]?token|refresh[-_]?token|client[-_]?secret|secret|password|preview|preview[-_]?url|endpoint|base[-_]?url|baseurl|config|request|response)$/i;
+  /^(?:authorization|proxy-authorization|cookie|set-cookie|headers|key|sig|signature|preview|endpoint|base[-_]?url|baseurl|config|request|response|body)$/i;
+/** …and any name that contains one of these. */
+const SECRET_FIELD_PART =
+  /token|secret|api[-_]?key|password|passwd|subscription[-_]?key|credential|preview[-_]?url/i;
+/** Counts named after tokens (`inputTokens`, `tokenCount`): numbers, not secrets. */
+const TOKEN_COUNT_FIELD = /tokens$|token[-_]?count$/i;
 /** Fields that hold text a visitor typed: written at debug level only. */
 const QUERY_FIELD = /^(?:query|songQuery|q)$/;
 
 const MAX_DEPTH = 6;
 const MAX_ITEMS = 50;
-
-/**
- * An error as a log field: its type, scrubbed message, code, status, scrubbed stack and cause.
- * Nothing else an error carries (a client's request config, headers, a response body) is kept.
- */
-export function serializeError(err: unknown, depth = 0): unknown {
-  if (!(err instanceof Error)) {
-    return err !== null && typeof err === "object" ? sanitize(err, LEVEL_INFO, depth) : err;
-  }
-  const { code, status, statusCode } = err as {
-    code?: unknown;
-    status?: unknown;
-    statusCode?: unknown;
-  };
-  const out: Record<string, unknown> = { type: err.name, message: scrub(err.message) };
-  if (typeof code === "string" || typeof code === "number") out.code = code;
-  const httpStatus = typeof status === "number" ? status : statusCode;
-  if (typeof httpStatus === "number") out.status = httpStatus;
-  if (err.stack) out.stack = scrub(err.stack);
-  if (err.cause !== undefined && depth < 3) out.cause = serializeError(err.cause, depth + 1);
-  return out;
-}
-
+const MAX_ERRORS = 10;
 const LEVEL_DEBUG = 20;
 const LEVEL_INFO = 30;
 
+function isSecretField(name: string): boolean {
+  if (SECRET_FIELD.test(name)) return true;
+  return SECRET_FIELD_PART.test(name) && !TOKEN_COUNT_FIELD.test(name);
+}
+
+/** How long a typed query was: characters of a string, items of a list, text of anything else. */
+function queryLength(value: unknown): number {
+  if (typeof value === "string") return [...value].length;
+  if (Array.isArray(value)) return value.length;
+  try {
+    return (JSON.stringify(value) ?? "").length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Reads one property, or undefined when reading it throws. */
+function read(object: object, key: string): unknown {
+  try {
+    return (object as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * An error as a log field: its type, scrubbed message and stack, code, status, the kind of
+ * failure and how long to wait (the API's own errors), why an answer was cut off, its cause and
+ * the errors of an AggregateError. Nothing else an error carries (a client's request config,
+ * headers, a response body) is kept. Never throws.
+ */
+export function serializeError(err: unknown, depth = 0): unknown {
+  try {
+    if (!(err instanceof Error)) {
+      return err !== null && typeof err === "object" ? sanitize(err, LEVEL_INFO, depth) : err;
+    }
+    const out: Record<string, unknown> = {
+      type: scrub(read(err, "name") ?? "Error"),
+      message: scrub(read(err, "message") ?? ""),
+    };
+    const code = read(err, "code");
+    if (typeof code === "number") out.code = code;
+    else if (typeof code === "string") out.code = scrub(code).slice(0, 100);
+    const status = read(err, "status");
+    const statusCode = read(err, "statusCode");
+    if (typeof status === "number") out.status = status;
+    else if (typeof statusCode === "number") out.status = statusCode;
+    for (const key of ["kind", "source", "incompleteReason"]) {
+      const value = read(err, key);
+      if (typeof value === "string") out[key] = scrub(value).slice(0, 100);
+    }
+    const retryAfterMs = read(err, "retryAfterMs");
+    if (typeof retryAfterMs === "number" || retryAfterMs === null) out.retryAfterMs = retryAfterMs;
+    const stack = read(err, "stack");
+    if (stack !== undefined) out.stack = scrub(stack);
+    const cause = read(err, "cause");
+    if (cause !== undefined && depth < 3) out.cause = serializeError(cause, depth + 1);
+    const errors = read(err, "errors");
+    if (err instanceof AggregateError && Array.isArray(errors) && depth < 3) {
+      out.errors = errors.slice(0, MAX_ERRORS).map((each) => serializeError(each, depth + 1));
+    }
+    return out;
+  } catch {
+    return { type: "Error", message: "[unreadable error]" };
+  }
+}
+
 /**
  * A log field made safe: secret fields replaced, errors serialized, strings scrubbed, a typed
- * query replaced by its length unless the line is at debug level or below.
+ * query replaced by its length unless the line is at debug level or below. Never throws: what
+ * cannot be read is written as "[unreadable]".
  */
 function sanitize(value: unknown, level: number, depth = 0): unknown {
-  if (typeof value === "string") return scrub(value);
-  if (value === null || typeof value !== "object") return value;
-  if (value instanceof Error) return serializeError(value, depth);
-  if (depth >= MAX_DEPTH) return "[nested too deep]";
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) {
-    const items = value.slice(0, MAX_ITEMS).map((item) => sanitize(item, level, depth + 1));
-    if (value.length > MAX_ITEMS) items.push(`[${value.length - MAX_ITEMS} more]`);
-    return items;
+  try {
+    if (typeof value === "string") return scrub(value);
+    if (value === null || typeof value !== "object") return value;
+    if (value instanceof Error) return serializeError(value, depth);
+    if (depth >= MAX_DEPTH) return "[nested too deep]";
+    if (value instanceof Date) return value.toISOString();
+    if (ArrayBuffer.isView(value)) return `[${value.byteLength} bytes]`;
+    if (Array.isArray(value)) {
+      const items = value.slice(0, MAX_ITEMS).map((item) => sanitize(item, level, depth + 1));
+      if (value.length > MAX_ITEMS) items.push(`[${value.length - MAX_ITEMS} more]`);
+      return items;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(value)) {
+      if (isSecretField(key)) out[key] = REDACTED;
+      else if (QUERY_FIELD.test(key) && level > LEVEL_DEBUG) {
+        out[`${key}Length`] = queryLength(field);
+      } else out[key] = sanitize(field, level, depth + 1);
+    }
+    return out;
+  } catch {
+    return "[unreadable]";
   }
-  const out: Record<string, unknown> = {};
-  for (const [key, field] of Object.entries(value)) {
-    if (SECRET_FIELD.test(key)) out[key] = REDACTED;
-    else if (QUERY_FIELD.test(key) && typeof field === "string" && level > LEVEL_DEBUG) {
-      out[`${key}Length`] = [...field].length;
-    } else out[key] = sanitize(field, level, depth + 1);
-  }
-  return out;
 }
 
 // =============================================================================
 // Client addresses
 // =============================================================================
 
-/**
- * The key of the address hash: LOG_IP_SALT, or a random key made for this
- * process. It is a secret used only to hash client addresses in logs; it is
- * never shown, stored or used as data about a track.
- */
+/** The key of the address hash: LOG_IP_SALT, or a key made for this process. */
 const processKey = () => generateKeySync("hmac", { length: 256 });
 let ipSalt: KeyObject | string = processKey();
 
@@ -243,7 +376,7 @@ function writeFileLine(line: string): void {
   } catch (error) {
     // Reported once on stderr (not through the logger, which would try the file again).
     process.stderr.write(
-      `Could not write to LOG_FILE ${file.path}; logging to stdout only: ${String(error)}\n`,
+      `Could not write to LOG_FILE ${file.path}; logging to stdout only: ${scrub(error)}\n`,
     );
     file = null;
   }
@@ -255,6 +388,23 @@ const destination: DestinationStream = {
     writeFileLine(line);
   },
 };
+
+/** The arguments of a log call made safe (fields sanitized, strings scrubbed). Never throws. */
+function safeArgs(args: unknown[], level: number): unknown[] {
+  const [first, ...rest] = args;
+  try {
+    const strings = rest.map((arg) => (typeof arg === "string" ? scrub(arg) : arg));
+    if (first !== null && typeof first === "object") {
+      const fields = first instanceof Error ? { err: first } : first;
+      return [sanitize(fields, level), ...strings];
+    }
+    return [typeof first === "string" ? scrub(first) : first, ...strings];
+  } catch {
+    const component =
+      first !== null && typeof first === "object" ? read(first, "component") : undefined;
+    return [typeof component === "string" ? { component: scrub(component) } : {}, UNWRITABLE];
+  }
+}
 
 const root = pino(
   {
@@ -269,22 +419,9 @@ const root = pino(
     serializers: { err: (err: unknown) => serializeError(err) },
     hooks: {
       logMethod(args, method, level) {
-        const [first, ...rest] = args as unknown[];
-        if (first !== null && typeof first === "object") {
-          const fields = first instanceof Error ? { err: first } : first;
-          const strings = rest.map((arg) => (typeof arg === "string" ? scrub(arg) : arg));
-          method.apply(this, [sanitize(fields, level), ...strings] as Parameters<typeof method>);
-          return;
-        }
-        method.apply(
-          this,
-          args.map((arg) => (typeof arg === "string" ? scrub(arg) : arg)) as Parameters<
-            typeof method
-          >,
-        );
+        method.apply(this, safeArgs(args, level) as Parameters<typeof method>);
       },
-      // The last line of defence: anything that got past the fields is scrubbed as text.
-      streamWrite: (line) => scrub(line),
+      streamWrite: scrubLine,
     },
   },
   destination,
@@ -296,10 +433,44 @@ function initialLevel(env: NodeJS.ProcessEnv): LevelWithSilent {
 }
 
 /**
- * Reads LOG_LEVEL, LOG_FILE and LOG_IP_SALT, and the secret values to scrub, from `env`.
- * Returns warnings for settings it could not use (an unknown level, a file it cannot open).
+ * Opens LOG_FILE for appending, readable by its owner only when it is created. Anything that is
+ * not a regular file (a FIFO would hold startup until something reads it) is refused. Returns
+ * the descriptor, or why the file is not used; `warning` is a concern about a file that is used.
  */
-export function configureLogger(env: NodeJS.ProcessEnv = process.env): string[] {
+function openLogFile(path: string): { fd?: number; refused?: string; warning?: string } {
+  try {
+    const existing = statSync(path, { throwIfNoEntry: false });
+    if (existing && !existing.isFile()) return { refused: "is not a regular file" };
+    mkdirSync(dirname(path), { recursive: true });
+    const fd = openSync(
+      path,
+      constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NONBLOCK,
+      0o600,
+    );
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) {
+      closeSync(fd);
+      return { refused: "is not a regular file" };
+    }
+    const warning =
+      (opened.mode & 0o077) !== 0
+        ? `LOG_FILE ${path} can be read or written by other users (mode ${(opened.mode & 0o777).toString(8)}); chmod 600 it`
+        : undefined;
+    return { fd, warning };
+  } catch (error) {
+    return { refused: `cannot be opened (${scrub(error)})` };
+  }
+}
+
+/**
+ * Reads LOG_LEVEL, LOG_FILE (a relative path is taken from `baseDir`) and LOG_IP_SALT, and the
+ * secret values to scrub, from `env`. Returns warnings for settings it could not use (an unknown
+ * level, a file it cannot or will not open) or that are unsafe (a file others can read).
+ */
+export function configureLogger(
+  env: NodeJS.ProcessEnv = process.env,
+  { baseDir = process.cwd() }: { baseDir?: string } = {},
+): string[] {
   const warnings: string[] = [];
   collectSecrets(env);
 
@@ -317,14 +488,13 @@ export function configureLogger(env: NodeJS.ProcessEnv = process.env): string[] 
     closeSync(file.fd);
     file = null;
   }
-  const path = env.LOG_FILE?.trim();
-  if (path) {
-    try {
-      mkdirSync(dirname(path), { recursive: true });
-      file = { fd: openSync(path, "a"), path };
-    } catch (error) {
-      warnings.push(`LOG_FILE ${path} cannot be opened (${String(error)}); logging to stdout only`);
-    }
+  const given = env.LOG_FILE?.trim();
+  if (given) {
+    const path = isAbsolute(given) ? given : resolve(baseDir, given);
+    const opened = openLogFile(path);
+    if (opened.fd !== undefined) file = { fd: opened.fd, path };
+    else warnings.push(`LOG_FILE ${path} ${opened.refused}; logging to stdout only`);
+    if (opened.warning) warnings.push(opened.warning);
   }
   return warnings;
 }
@@ -340,11 +510,18 @@ export interface Log {
 
 /**
  * The log of one part of the API (`component`, e.g. "Scout" or "HTTP"). Fields go into the line
- * as they are (after the redaction above); pass an error as `err`.
+ * after the redaction above; pass an error as `err`. Never throws because of its fields.
  */
 export function logger(component: string): Log {
   const write = (level: Level) => (message: string, fields?: Fields) => {
-    root[level]({ component, ...fields }, message);
+    let merged: Fields;
+    try {
+      merged = { component, ...fields };
+    } catch {
+      root[level]({ component }, UNWRITABLE);
+      return;
+    }
+    root[level](merged, message);
   };
   return { debug: write("debug"), info: write("info"), warn: write("warn"), error: write("error") };
 }
@@ -367,16 +544,31 @@ const CONSOLE_LEVELS: Record<ConsoleMethod, Level> = {
 const LEADING_TAG =
   /^\s*(?:(?:\p{Extended_Pictographic}|\u{FE0F}|\u{200D})+\s*)?\[([^\]\n]{1,40})\]:?\s*/u;
 
-/** One console call as a log line: the text formatted as console would, the first error apart. */
+/**
+ * One console call as a log line: the text formatted as console would, every object and error
+ * sanitized first, the first error as the line's `err`.
+ */
 function bridgeLine(level: Level, args: unknown[]): void {
   if (!root.isLevelEnabled(level)) return;
-  const err = args.find((arg) => arg instanceof Error);
-  const text = format(...args.filter((arg) => arg !== err));
-  const tag = LEADING_TAG.exec(text);
-  const untagged = tag ? text.slice(tag[0].length) : text;
-  // "Could not read the file:" followed by the error: the error is a field of its own.
-  const message = err ? untagged.replace(/:\s*$/, "") : untagged;
-  root[level]({ ...(tag ? { component: tag[1] } : {}), ...(err ? { err } : {}) }, message);
+  let fields: Fields;
+  let message: string;
+  try {
+    const levelValue = root.levels.values[level];
+    const err = args.find((arg) => arg instanceof Error);
+    const shown = args
+      .filter((arg) => arg !== err)
+      .map((arg) => (arg !== null && typeof arg === "object" ? sanitize(arg, levelValue) : arg));
+    const text = format(...shown);
+    const tag = LEADING_TAG.exec(text);
+    const untagged = tag ? text.slice(tag[0].length) : text;
+    // "Could not read the file:" followed by the error: the error is a field of its own.
+    message = err ? untagged.replace(/:\s*$/, "") : untagged;
+    fields = { ...(tag ? { component: tag[1] } : {}), ...(err ? { err } : {}) };
+  } catch {
+    fields = {};
+    message = UNWRITABLE;
+  }
+  root[level](fields, message);
 }
 
 /**
@@ -414,8 +606,8 @@ export interface CapturedLogs {
 
 /**
  * For tests: collects the lines written from now on (at `level` and above, debug by default)
- * instead of writing them. `onLine` sees each line as it is written; what it throws, the log
- * call throws.
+ * instead of writing them. Each line is parsed as it is written, so a line that is not JSON
+ * fails the test. `onLine` sees each line as it is written; what it throws, the log call throws.
  */
 export function captureLogsForTests(
   options: { level?: LevelWithSilent; onLine?: (entry: Record<string, unknown>) => void } = {},
@@ -426,7 +618,8 @@ export function captureLogsForTests(
   sink = (line) => {
     const text = line.replace(/\n$/, "");
     lines.push(text);
-    onLine?.(JSON.parse(text) as Record<string, unknown>);
+    const entry = JSON.parse(text) as Record<string, unknown>;
+    onLine?.(entry);
   };
   root.level = level;
   return {

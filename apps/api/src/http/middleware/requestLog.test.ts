@@ -116,6 +116,26 @@ describe("the request log", () => {
     );
   });
 
+  it("says a client left before any answer, with no status", async () => {
+    const hanging = Router();
+    hanging.post("/api/hang", () => {
+      // never answers
+    });
+    await request(createApp({ http: settings(), routers: [hanging] }))
+      .post("/api/hang")
+      .send({})
+      .timeout(100)
+      .catch(() => {});
+    await vi.waitFor(() => expect(requestLines()).toHaveLength(1));
+    expect(requestLines()[0]).toMatchObject({
+      method: "POST",
+      path: "/api/hang",
+      status: null,
+      aborted: true,
+      msg: "POST /api/hang aborted before an answer",
+    });
+  });
+
   it("is not written at info level for probes", async () => {
     logs.restore();
     logs = captureLogsForTests({ level: "info" });

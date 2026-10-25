@@ -4,7 +4,7 @@
  */
 
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { logger } from "./logger.js";
+import { logger, scrub } from "./logger.js";
 
 const log = logger("Server");
 
@@ -150,8 +150,13 @@ export function installProcessHandlers(
     logger("Process").error("Unhandled promise rejection", { err: reason });
   });
   process.on("uncaughtException", (error) => {
-    logger("Process").error("Uncaught exception; exiting", { err: error });
+    // Whatever happens to the log line, the store is still closed and the process exits 1.
     try {
+      try {
+        logger("Process").error("Uncaught exception; exiting", { err: error });
+      } catch {
+        process.stderr.write(`Uncaught exception; exiting: ${scrub(error)}\n`);
+      }
       onFatal();
     } finally {
       exit(1);

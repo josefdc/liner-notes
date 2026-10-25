@@ -14,6 +14,7 @@
  * @see https://musicbrainz.org/doc/MusicBrainz_API
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import {
@@ -202,14 +203,16 @@ class MusicBrainzRateLimiter {
         if (index >= 0) this.queue.splice(index, 1);
         reject(signal?.reason);
       };
-      const task = async () => {
+      // The queue is drained by whichever caller found it idle; bound here, the request runs in
+      // its own caller's context, so what it logs carries that caller's run id.
+      const task = AsyncLocalStorage.bind(async () => {
         signal?.removeEventListener("abort", onAbort);
         try {
           resolve(await fn());
         } catch (error) {
           reject(error);
         }
-      };
+      });
       signal?.addEventListener("abort", onAbort, { once: true });
       this.queue.push(task);
 

@@ -19,7 +19,8 @@ dotenv.config({ path: ENV_PATH });
 
 const log = logger("config");
 // The log's level, file and the values it scrubs come from the loaded environment.
-for (const warning of configureLogger(process.env)) log.warn(warning);
+// A relative LOG_FILE is taken from apps/api, like SQLITE_DB_PATH.
+for (const warning of configureLogger(process.env, { baseDir: API_ROOT })) log.warn(warning);
 
 const result = readSettings(process.env);
 if (!result.ok) {

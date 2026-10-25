@@ -37,6 +37,14 @@ import { logger } from "../../logger.js";
 
 const log = logger("Factoids");
 
+/**
+ * The track a factoids request names: the client sends its title and artist, so they are written
+ * at debug level only, like a typed query.
+ */
+function logTrack(what: string, track: string): void {
+  log.debug(`${what}: track`, { track });
+}
+
 // =============================================================================
 // Input
 // =============================================================================
@@ -281,7 +289,8 @@ export function createFactoidsRouter({
         return;
       }
       if (replay.kind === "replay") {
-        log.info(`Recorded facts for ${track} (${replay.record.slug})`);
+        log.info(`Recorded facts (${replay.record.slug})`);
+        logTrack("Recorded facts", track);
         res.json({
           success: true,
           factoids: recordedFactoids(replay.record, existingFactoidIds, DECRYPT_COUNT),
@@ -295,7 +304,8 @@ export function createFactoidsRouter({
         return;
       }
 
-      log.info(`Decrypting more facts for ${track}`);
+      log.info("Decrypting more facts");
+      logTrack("Decrypting more facts", track);
 
       // Stops the model call when the client leaves before the answer.
       const disconnect = new AbortController();
@@ -396,7 +406,8 @@ export function createFactoidsRouter({
         return;
       }
 
-      log.info(`Streaming factoids for ${track}`);
+      log.info("Streaming factoids");
+      logTrack("Streaming factoids", track);
       stream.send({ type: "connected", timestamp: new Date().toISOString() });
 
       if (replay.kind === "replay") {
@@ -442,7 +453,7 @@ export function createFactoidsRouter({
       }
 
       if (stream.closed) {
-        log.info(`Client left; stopped streaming factoids for ${track}`);
+        log.info("Client left; stopped streaming factoids");
         return;
       }
       stream.done();

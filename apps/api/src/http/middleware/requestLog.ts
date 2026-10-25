@@ -10,7 +10,8 @@ const PROBE_PATHS = new Set(["/api/health", "/api/ready"]);
 /**
  * One log line per request once it is answered (or the client has gone): the method, the path
  * without its query string, the status, the time taken, and a keyed hash of the client address
- * (logger.ts `ipHash`). Never the address, the query string (it holds what the visitor typed),
+ * (logger.ts `ipHash`); a client that left first is marked `aborted`, with no status when no
+ * answer had started. Never the address, the query string (it holds what the visitor typed),
  * the User-Agent or the Referer. A request of an analysis carries its run id (`res.locals.runId`,
  * set by the analyze routes). Health and readiness probes, HEAD and OPTIONS are logged at debug
  * level; answers of 500 and above at warn.
@@ -29,10 +30,13 @@ export const requestLog: RequestHandler = (req, res, next) => {
     written = true;
     const durationMs = Number((process.hrtime.bigint() - started) / 1000n) / 1000;
     const runId = typeof res.locals.runId === "string" ? res.locals.runId : undefined;
+    // A client that left before any answer was sent got none: no status (Express's default 200
+    // would read as a success).
+    const status = aborted && !res.headersSent ? null : res.statusCode;
     const fields = {
       method,
       path,
-      status: res.statusCode,
+      status,
       durationMs,
       ipHash: ipHash(req.ip ?? req.socket.remoteAddress),
       ...(aborted ? { aborted: true } : {}),
@@ -42,9 +46,9 @@ export const requestLog: RequestHandler = (req, res, next) => {
       PROBE_PATHS.has(path.toLowerCase().replace(/\/+$/, "")) ||
       method === "HEAD" ||
       method === "OPTIONS";
-    const message = `${method} ${path} ${res.statusCode}`;
+    const message = `${method} ${path} ${status ?? "aborted before an answer"}`;
     if (quiet) log.debug(message, fields);
-    else if (res.statusCode >= 500) log.warn(message, fields);
+    else if (status !== null && status >= 500) log.warn(message, fields);
     else log.info(message, fields);
   };
 

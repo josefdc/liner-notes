@@ -74,13 +74,13 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.0.0+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.1.0+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `analyzer_version` and
 `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.0.0+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.1.0+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -105,7 +105,7 @@ the perceptual fields and `v2.fingerprint` are `null`.
   "energy": 0.778,
   "duration": 30.0,
   "source": "analyzed",
-  "analyzer_version": "2.0.0+essentia.models-5c5c0c7f",
+  "analyzer_version": "2.1.0+essentia.models-5c5c0c7f",
   "keyMoments": [{ "time": 1.88, "type": "onset", "intensity": 0.986, "description": "Onset" }],
   "valence": 0.389,
   "danceability": 1.0,
@@ -113,7 +113,7 @@ the perceptual fields and `v2.fingerprint` are `null`.
   "instrumentalness": 0.85,
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.0.0+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -198,7 +198,7 @@ times are seconds from the start of the preview. Every block is `null` when it w
   lines (drums, click tracks, a metronome, noise with a beat); when the lines form a single
   harmonic series (a lone tone, or mains hum on 50 or 60 Hz, whose harmonics spell a G major
   triad); when the lines and the notes of a single voice spell fewer than three pitch classes;
-  or when its strength is under the estimator's minimum (Essentia 0.4, librosa 0.45). Neither
+  or when its strength is under the estimator's minimum (0.4 for both). Neither
   strength separates atonal material from tonal music: random chromatic notes or a twelve-tone
   row can still get a key, and so can one pitched source whose overtones or partials spell
   three classes (a bell, a tabla, a cowbell, some one-note basses). The spectral-line rules are

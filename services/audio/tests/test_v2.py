@@ -788,8 +788,8 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
 def test_no_key_for_pitchless_material_at_unseen_seeds(family):
     """
     Drums, noise with a beat, a siren over drums and clicks, 30 seeds each (tempo, kit, noise,
-    levels and sounds drawn from the seed; none was used to set a threshold): never a key,
-    with either estimator (on the same signals).
+    levels and sounds drawn from the seed; the calibration also sees these as controls): never
+    a key, with either estimator (on the same signals).
     """
     make = signals.PITCHLESS_SEEDED[family]
     keyed = {}

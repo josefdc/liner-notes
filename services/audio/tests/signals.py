@@ -490,7 +490,8 @@ UNSEEN_SEEDS = range(100, 130)
 # --- one pitch class at many seeds ---------------------------------------------------------
 # One pitched source (a note and its overtones, its octaves, a bell's or a drum's partials) is
 # no key: its overtones or inharmonic partials can still spell three pitch classes. Seeds
-# 500-529 were not used to set any value.
+# 500-529 are also calibration controls: the calibration sees them, so these tests pin today's
+# counts rather than check unseen signals.
 
 
 def _drums_at(seed: int, bpm: float | None = None) -> np.ndarray:

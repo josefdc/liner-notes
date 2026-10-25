@@ -322,6 +322,21 @@ export const MIGRATIONS: readonly Migration[] = [
       db.exec("ALTER TABLE artwork_cache ADD COLUMN track_artists TEXT");
     },
   },
+  {
+    version: 10,
+    name: "run_evidence",
+    up(db) {
+      // A run keeps its result's evidence pack apart (a JSON list of Evidence), so the sources a
+      // run read can be queried without parsing the whole result. Runs stored before take their
+      // stored result's pack; a run without a stored result has none (null).
+      db.exec(`
+        ALTER TABLE runs ADD COLUMN evidence TEXT;
+        UPDATE runs SET evidence = json_extract(analysis, '$.evidence')
+          WHERE CASE WHEN json_valid(analysis)
+            THEN json_type(analysis, '$.evidence') = 'array' ELSE 0 END;
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

@@ -29,7 +29,7 @@
       },
       "excerpt": { "type": "string" },
       "recordRef": {
-        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id",
+        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A primary record's starts with its scope: track/ (this recording), release/ (a whole release the track is on) or work/ (the song, not this recording)",
         "type": ["string", "null"]
       }
     },
@@ -74,7 +74,7 @@
       },
       "excerpt": { "type": "string" },
       "recordRef": {
-        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id",
+        "description": "Id of the record at the source, e.g. a MusicBrainz MBID or a Discogs release id. A primary record's starts with its scope: track/ (this recording), release/ (a whole release the track is on) or work/ (the song, not this recording)",
         "type": ["string", "null"]
       }
     },

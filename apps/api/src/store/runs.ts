@@ -1,6 +1,6 @@
 /**
- * Run records: one row per analysis run in the `runs` table (migration 2, extended by 5 and 7),
- * and the events each run's streams sent in `run_events` (migration 5).
+ * Run records: one row per analysis run in the `runs` table (migration 2, extended by 5, 7 and
+ * 10), and the events each run's streams sent in `run_events` (migration 5).
  *
  * Columns of `runs`:
  *   run_id          unique id of the run
@@ -30,6 +30,10 @@
  *                   uncommitted changes), read when the server started; null when it could not
  *                   be read, the run was stored before commits were kept (migration 7), or it
  *                   was resumed by a server at another commit (clearRunCommitUnless)
+ *   evidence        JSON list of the stored result's evidence pack (its `evidence`, Evidence
+ *                   items read from the sources, never model text), written with `analysis`;
+ *                   "[]" for an empty pack; null when the run has no stored result, or its
+ *                   result carries no pack
  *
  * Columns of `run_events`:
  *   run_id          the run that sent the event
@@ -335,8 +339,16 @@ export function storeRunResult(
       ? { ...stored.data, run: { ...stored.data.run, mode: "replay" as const } }
       : stored.data;
   const result = db
-    .prepare("UPDATE runs SET spotify_id = ?, mode = ?, analysis = ? WHERE run_id = ?")
-    .run(spotifyId, replay ? "replay" : "live", JSON.stringify(own), runId);
+    .prepare(
+      "UPDATE runs SET spotify_id = ?, mode = ?, analysis = ?, evidence = ? WHERE run_id = ?",
+    )
+    .run(
+      spotifyId,
+      replay ? "replay" : "live",
+      JSON.stringify(own),
+      own.evidence ? JSON.stringify(own.evidence) : null,
+      runId,
+    );
   return result.changes > 0 ? "stored" : "no_run";
 }
 
@@ -366,7 +378,7 @@ export function storeReplayOf(
 ): boolean {
   const result = db
     .prepare(
-      `UPDATE runs SET spotify_id = ?, mode = 'replay', analysis = NULL,
+      `UPDATE runs SET spotify_id = ?, mode = 'replay', analysis = NULL, evidence = NULL,
          payload = json_set(COALESCE(payload, '{}'), '$.replayOf', json(?))
        WHERE run_id = ?`,
     )

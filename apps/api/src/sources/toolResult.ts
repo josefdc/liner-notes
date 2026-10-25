@@ -34,18 +34,40 @@ const isSourceId = (value: unknown): value is SourceId =>
   typeof value === "string" && SOURCES.has(value);
 
 /**
+ * A failure of our own code (a bug in a reader, such as a TypeError past its shape checks), not
+ * of the source: it is reported as an internal error, never as the source's answer.
+ */
+export function isInternalError(error: unknown): boolean {
+  return (
+    error instanceof TypeError || error instanceof ReferenceError || error instanceof RangeError
+  );
+}
+
+/** The prefix of an internal error's message: the status says our reader failed. */
+export const INTERNAL_ERROR_PREFIX = "internal error: ";
+
+/** A failure's message; an internal error says so. */
+export function failureMessage(error: unknown): string {
+  return isInternalError(error)
+    ? `${INTERNAL_ERROR_PREFIX}${describeError(error)}`
+    : describeError(error);
+}
+
+/**
  * The contract code of a failure. A deadline is a timeout; a request the caller cancelled is
- * "unavailable", not a timeout; a TypeError is a payload of an unexpected shape read past a check.
+ * "unavailable", not a timeout. An answer that is not JSON (an HTML error or bot-challenge page,
+ * usually passing) is "unavailable"; JSON the reader cannot read is "invalid_response". A bug in
+ * our own reader is "unavailable" with an internal-error message (failureMessage).
  */
 export function sourceErrorCode(error: unknown): SourceErrorCode {
   if (isSourceError(error)) {
     if (error.kind === "timeout") return "timeout";
     if (error.kind === "rate_limited") return "rate_limited";
-    if (error.kind === "parse" || error.kind === "content_type") return "invalid_response";
+    if (error.kind === "parse") return "invalid_response";
     if (error.kind === "unavailable") return "not_configured";
     return "unavailable";
   }
-  return error instanceof TypeError ? "invalid_response" : "unavailable";
+  return "unavailable";
 }
 
 /** A failed tool call: the source could not be read. */
@@ -106,7 +128,7 @@ export function keyRejected(message: string): ToolFailure {
 
 /** The tool result for a failure, with its code and the source that failed. */
 export function toolFailure(error: unknown): ToolFailure {
-  const failure = failureWith(sourceErrorCode(error), describeError(error));
+  const failure = failureWith(sourceErrorCode(error), failureMessage(error));
   return isSourceError(error) && isSourceId(error.source)
     ? { ...failure, source: error.source }
     : failure;

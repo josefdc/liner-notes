@@ -121,13 +121,23 @@ describe("toolFailure", () => {
     [new SourceError("tavily", "unavailable", "no key"), "not_configured", true],
     [new SourceError("tavily", "timeout", "slow"), "timeout", false],
     [new SourceError("tavily", "rate_limited", "429"), "rate_limited", false],
-    [new SourceError("tavily", "content_type", "html"), "invalid_response", false],
+    // An HTML or bot-challenge page is usually passing: unavailable, not a lasting answer.
+    [new SourceError("tavily", "content_type", "html"), "unavailable", false],
+    [new SourceError("tavily", "parse", "not a list"), "invalid_response", false],
     [new SourceError("tavily", "http", "500"), "unavailable", false],
-    [new TypeError("bad shape"), "invalid_response", false],
+    // A bug in our reader: an internal error, never the source's answer.
+    [new TypeError("bad shape"), "unavailable", false],
   ])("%s → %s", (error, code, unavailable) => {
     const result = toolFailure(error);
     expect(sourceErrorCode(error)).toBe(code);
     expect(result).toMatchObject({ found: false, code });
     expect(result.unavailable === true).toBe(unavailable);
+  });
+
+  it("says a reader's bug is an internal error", () => {
+    expect(toolFailure(new TypeError("rel.type is undefined"))).toMatchObject({
+      code: "unavailable",
+      error: "internal error: rel.type is undefined",
+    });
   });
 });

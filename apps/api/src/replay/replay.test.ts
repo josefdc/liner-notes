@@ -668,6 +668,93 @@ describe("the recorder", () => {
     }
   });
 
+  it("keeps the pages of web-tier evidence, and refuses preview and secret-bearing links", () => {
+    const webItem = (url: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "A page",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "The bass line comes from Under Pressure.",
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const page = "https://www.rollingstone.com/music/news/ice-ice-baby-under-pressure-1234/";
+    const wiki = "https://example.org/wiki/Ice_Ice_Baby_(song)";
+    const cited = { evidenceIds: [`tavily:${page}`, `tavily:${wiki}`] };
+    expect(
+      leaks(
+        {
+          analysis: { evidence: [webItem(page), webItem(wiki)], claims: [cited] },
+          events: [{ type: "evidence", evidence: webItem(page) }],
+        },
+        check,
+      ),
+    ).toEqual([]);
+
+    const preview = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/0/x.mp3";
+    const keyed = `https://example.org/article?api_key=${"k".repeat(12)}`;
+    const found = leaks(
+      {
+        preview: { evidence: [webItem(preview)] },
+        keyed: { evidence: [webItem(keyed)] },
+        // Not web-tier evidence: a URL outside the allow-listed sites, as before.
+        other: { url: page },
+      },
+      check,
+    );
+    expect(found).toEqual(
+      expect.arrayContaining([
+        "preview.evidence[0].url: a preview URL",
+        "keyed.evidence[0].url: a key or token parameter",
+        "keyed.evidence[0].url: a URL outside the allow-listed sites",
+        "other.url: a URL outside the allow-listed sites",
+      ]),
+    );
+  });
+
+  it("refuses a web evidence page whose path carries a token or an address", () => {
+    const webItem = (url: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "A page",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "A page about the track.",
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl";
+    const refused = [
+      `https://example.org/magic-login/${jwt}/`,
+      "https://example.org/share/sk-AbCdEfGhIjKlMnOpQr12/press",
+      "https://example.org/dl/token=abc123def456/file",
+      "https://example.org/people/jane.doe@example.com",
+      "https://example.org/s/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7d/view",
+      "https://example.org/f/0123456789abcdef0123456789abcdef/report",
+    ];
+    for (const url of refused) {
+      expect(leaks({ evidence: [webItem(url)] }, check), url).not.toEqual([]);
+    }
+    // Slugs of words and short ids are pages, not tokens, Title-Case and dated ones too.
+    for (const url of [
+      "https://www.example.com/music/news/ice-ice-baby-under-pressure-lawsuit-1234/",
+      "https://example.org/wiki/List_of_songs_recorded_by_Vanilla_Ice_and_others",
+      "https://example.org/articles/2024/10/a1b2c3",
+      "https://www.quora.com/Why-was-Ice-Ice-Baby-so-popular-in-1990",
+      "https://music.fandom.com/wiki/Billboard_Hot_100_Number_Ones_of_1990",
+      "https://www.wikiwand.com/en/articles/List_of_Billboard_Hot_100_number_ones_of_1990",
+      "https://www.scribd.com/document/123456789/Ice-Ice-Baby-Copyright-Case-1990-Settlement",
+      "https://archive.org/details/IceIceBabyVanillaIce1990SingleRelease",
+      "https://pitchfork.com/thepitch/Ice-Ice-Baby-at-30-An-Oral-History/",
+      "https://www.nme.com/news/music/Vanilla-Ice-Ice-Ice-Baby-Sample-Lawsuit-2024",
+    ]) {
+      expect(leaks({ evidence: [webItem(url)] }, check), url).toEqual([]);
+    }
+  });
+
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {
     const runId = await liveRun("plain words");
     const { run, events } = stored(runId);

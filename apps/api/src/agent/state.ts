@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { Annotation } from "@langchain/langgraph";
 import type {
+  AudioFeatures,
   Claim,
   Evidence,
   PreviewMatch,
@@ -130,8 +131,10 @@ export interface KeyMoment {
  *   Spotify's own clip, or as a Deezer search result that is strictly the same recording)
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
- * - analysis_failed: the service was reached but the analysis failed
- * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio)
+ * - analysis_failed: the service was reached but the analysis failed, or its answer carried no
+ *   v2 block the contract reads (an older service that sends only the v1 fields)
+ * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio), or its
+ *   gate measured nothing (silence, noise, too short: the block says which)
  * - not_run: audio analysis did not run for this track
  */
 export type AudioUnavailableReason =
@@ -143,45 +146,38 @@ export type AudioUnavailableReason =
   | "not_run";
 
 /**
- * Audio features from the analysis service, computed on the preview clip, or null.
- * - bpm, key and energy are measured from the signal (tempo tracking, key profiles, RMS).
- * - valence, danceability, acousticness and instrumentalness are scores from audio models
- *   (Essentia) run over the clip: model estimates, not signal measurements.
- * No value is filled in by this code or by a language model; missing values stay null.
+ * What the engineer leaves for the composer: the audio service's measurement of the preview
+ * clip, as the service sent it (the contract's AudioFeatures v2 block), or why there is none.
+ *
+ * The block is the only source of measured values: the result's copies (bpm, key, energy, the
+ * mood scores, the key moments) and `run.analyzerVersion` are derived from it by code in one
+ * step (finalize.ts). Tempo, key, loudness, beats, energy contour and sections are signal
+ * measurements; the fingerprint's styles, tags and mood heads are scores of audio models, not
+ * probabilities. Nothing here is filled in by this code or by a language model.
  */
-export interface AudioFeatures {
-  bpm: number | null;
-  key: string | null;
-  energy: number | null;
-  valence: number | null;
-  danceability: number | null;
-  acousticness: number | null;
-  instrumentalness: number | null;
+export interface AudioMeasurement {
   /**
-   * 'high' when tempo, key and all perceptual features were measured;
-   * 'low' when some of them are missing (missing values are null, never filled in).
+   * The v2 block as measured, null when nothing was measured. A block whose gate did not pass
+   * (silence, noise, too short) is a measurement of nothing: every value in it is null.
    */
-  confidence: "low" | "high";
-  /** Key moments detected in the audio (drops, peaks, transitions) */
-  keyMoments?: KeyMoment[];
-  /** Set when the analysis did not produce a measurement */
-  unavailableReason?: AudioUnavailableReason;
-  /** Human-readable detail for unavailableReason (e.g. the service error message) */
-  unavailableDetail?: string;
-  /** Fields the service returned outside their valid range; they are null here */
-  outOfRange?: string[];
+  audio: AudioFeatures | null;
   /**
-   * Set to true only on features built from an audio service measurement. Cached rows without
-   * it were written before estimates were removed and are not trusted.
-   */
-  measured?: true;
-  /** What produced the measurement (the audio analysis service) */
-  analyzer?: "audio-service";
-  /**
-   * How the measured clip was matched to the track (never its URL). Cached rows without it were
-   * measured before previews were matched strictly and are not trusted.
+   * How the measured clip was matched to the chosen track (never its URL); set with `audio`.
+   * The audio cache keys a measurement by ISRC only when its clip was matched by ISRC.
    */
   previewMatch?: PreviewSourceMatch;
+  /** Why there is no block (`audio` is null). */
+  unavailableReason?: AudioUnavailableReason;
+  /** Detail for unavailableReason (e.g. the service's error message). */
+  unavailableDetail?: string;
+  /** Mood heads the service returned outside their range; they are null in `audio`. */
+  outOfRange?: string[];
+  /**
+   * Set on a cached measurement served while the service could not say its analyzer version
+   * (down, or naming none): a newer analyzer may measure it differently, so a result built on it
+   * is not stored.
+   */
+  servedUnversioned?: true;
 }
 
 export interface ResearchData {
@@ -474,8 +470,8 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // Audio features (from engineer)
-  audioFeatures: Annotation<AudioFeatures | null>({
+  // The audio measurement (from the engineer); null until it runs
+  audioFeatures: Annotation<AudioMeasurement | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),

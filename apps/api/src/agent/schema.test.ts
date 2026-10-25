@@ -7,8 +7,10 @@
 import { ResearchAction } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema.js";
-import { FactoidSchema, measuredAudioFields } from "./schema.js";
+import { measuredAudioFields } from "./finalize.js";
+import { FactoidSchema } from "./schema.js";
 import { SonicAgentState, generateId } from "./state.js";
+import { audioV2, measurementOf } from "./testing/measuredAudio.js";
 
 describe("result schema", () => {
   it("defines no model-facing schema", () => {
@@ -24,31 +26,16 @@ describe("result schema", () => {
   });
 
   it("takes measured values from the measurement only", () => {
-    expect(
-      measuredAudioFields({
-        bpm: 116,
-        key: "D Minor",
-        energy: 0.72,
-        valence: null,
-        danceability: null,
-        acousticness: null,
-        instrumentalness: null,
-        confidence: "low",
-      }),
-    ).toMatchObject({ bpm: 116, key: "D Minor", energy: 0.72, valence: null });
+    expect(measuredAudioFields(measurementOf(audioV2()))).toMatchObject({
+      bpm: 116,
+      key: "D Minor",
+      energy: 0.64,
+      valence: 0.21,
+      audio: audioV2(),
+    });
 
     expect(
-      measuredAudioFields({
-        bpm: null,
-        key: null,
-        energy: null,
-        valence: null,
-        danceability: null,
-        acousticness: null,
-        instrumentalness: null,
-        confidence: "low",
-        unavailableReason: "service_unavailable",
-      }),
+      measuredAudioFields({ audio: null, unavailableReason: "service_unavailable" }),
     ).toMatchObject({
       bpm: null,
       key: null,

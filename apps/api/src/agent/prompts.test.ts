@@ -20,6 +20,7 @@ import {
   sourceBlock,
 } from "./prompts.js";
 import type { ResearchData } from "./state.js";
+import { audioV2, gatedV2, measurementOf } from "./testing/measuredAudio.js";
 
 const research: ResearchData = {
   samples: ["The drums come from a break."],
@@ -33,6 +34,54 @@ const input = (title: string, year: string | null = null): ComposerPromptInput =
   audio: null,
   evidence: [],
   research,
+});
+
+describe("measured audio in the composer's prompt", () => {
+  const lineAfter = (prompt: string, heading: string) =>
+    prompt.split("\n")[prompt.split("\n").indexOf(heading) + 1];
+  const measuredLine = (prompt: string) => lineAfter(prompt, MEASURED_HEADING);
+  const MEASURED_HEADING = "Measured audio (our analysis of a preview clip; null = not measured):";
+  const ESTIMATES_HEADING =
+    "Audio-model estimates on the same clip (scores, not measurements; null = not produced):";
+
+  it("gives the model the result's own copies and the loudness in dBFS, to read only", () => {
+    const prompt = composerUserPrompt({
+      ...input("Ice Ice Baby"),
+      audio: measurementOf(audioV2()),
+    });
+    expect(JSON.parse(lineAfter(prompt, MEASURED_HEADING))).toEqual({
+      tempoBpm: 116,
+      key: "D Minor",
+      loudnessDbfsRms: -14.9,
+    });
+    expect(lineAfter(prompt, MEASURED_HEADING)).not.toContain("energy");
+    // The models' scores apart, headed as estimates.
+    expect(JSON.parse(lineAfter(prompt, ESTIMATES_HEADING))).toEqual({
+      valence: 0.21,
+      danceability: 0.64,
+      acousticness: 0.05,
+      instrumentalness: 0.01,
+    });
+  });
+
+  it("calls the mood scores model estimates, never measurements", () => {
+    expect(COMPOSER_SYSTEM_PROMPT).toContain(
+      "scores are estimates of audio models run on that clip, not measurements",
+    );
+    expect(COMPOSER_SYSTEM_PROMPT).not.toMatch(/mood scores were measured/);
+  });
+
+  it("says nothing was measured without a block, or with one whose gate measured nothing", () => {
+    for (const audio of [
+      null,
+      { audio: null, unavailableReason: "no_preview" as const },
+      measurementOf(gatedV2()),
+    ]) {
+      expect(measuredLine(composerUserPrompt({ ...input("Ice Ice Baby"), audio }))).toBe(
+        "(not measured)",
+      );
+    }
+  });
 });
 
 describe("literal data", () => {

@@ -36,6 +36,12 @@ import { LATEST_SCHEMA_VERSION, MIGRATIONS, runMigrations, type Migration } from
 import { appendRunEvent, getRun, listRunEvents, startRun, storeRunResult } from "./runs.js";
 import { SqliteStore } from "./store.js";
 import { SonicCache } from "./cache.js";
+import {
+  ANALYZER_VERSION,
+  audioV2,
+  measurementOf,
+  signalOnlyV2,
+} from "../agent/testing/measuredAudio.js";
 
 // =============================================================================
 // Test Helpers
@@ -222,55 +228,30 @@ async function testSonicCacheAudio(): Promise<void> {
     const db = initializeDatabase(dbPath);
     const cache = new SonicCache(db);
 
-    const audioFeatures = {
-      bpm: 105,
-      key: "D Minor",
-      energy: 0.82,
-      valence: 0.6,
-      danceability: 0.7,
-      acousticness: 0.2,
-      instrumentalness: 0.1,
-      confidence: "high" as const,
-      keyMoments: [],
-      measured: true as const,
-      analyzer: "audio-service" as const,
-      previewMatch: {
-        provider: "deezer" as const,
-        method: "isrc" as const,
-        deezerId: 1,
-        score: null,
-      },
-    };
-
-    // Put and get
-    cache.putAudio("spotify-123", audioFeatures);
-    const retrieved = cache.getAudio("spotify-123");
+    // Put and get, by track key and analyzer version
+    const tempo = (bpm: number) => ({ ...audioV2().tempo!, bpm });
+    cache.putAudio("spotify:123", "123", measurementOf(audioV2({ tempo: tempo(105) })));
+    const retrieved = cache.getAudio("spotify:123", ANALYZER_VERSION);
     assert(retrieved != null, "Audio cache hit");
-    assertEqual(retrieved?.bpm, 105, "BPM matches");
-    assertEqual(retrieved?.key, "D Minor", "Key matches");
+    assertEqual(retrieved?.audio.tempo?.bpm, 105, "BPM matches");
+    assertEqual(retrieved?.audio.key?.tonic, "D", "Key matches");
+    assertEqual(cache.getAudio("spotify:123", "9.9.9"), null, "Another analyzer: a miss");
 
-    // Overwrite protection: don't downgrade high → low
-    // A partial measurement, as the engineer builds it: perceptual scores not measured are null.
-    const partial = {
-      valence: null,
-      danceability: null,
-      acousticness: null,
-      instrumentalness: null,
-      confidence: "low" as const,
-    };
-    const lowConfidence = { ...audioFeatures, ...partial, bpm: 100 };
-    cache.putAudio("spotify-123", lowConfidence);
-    const afterDowngrade = cache.getAudio("spotify-123");
-    assertEqual(afterDowngrade?.bpm, 105, "High confidence not overwritten by low");
+    // Overwrite protection: don't downgrade high → low (no models: a partial measurement)
+    const partial = (bpm: number) =>
+      measurementOf(signalOnlyV2({ analyzerVersion: ANALYZER_VERSION, tempo: tempo(bpm) }));
+    cache.putAudio("spotify:123", "123", partial(100));
+    const afterDowngrade = cache.getAudio("spotify:123", ANALYZER_VERSION);
+    assertEqual(afterDowngrade?.audio.tempo?.bpm, 105, "High confidence not overwritten by low");
 
     // Allow upgrade: low → high
-    cache.putAudio("spotify-456", { ...audioFeatures, ...partial, bpm: 90 });
-    cache.putAudio("spotify-456", { ...audioFeatures, confidence: "high" as const, bpm: 95 });
-    const upgraded = cache.getAudio("spotify-456");
-    assertEqual(upgraded?.bpm, 95, "Low confidence overwritten by high");
+    cache.putAudio("spotify:456", "456", partial(90));
+    cache.putAudio("spotify:456", "456", measurementOf(audioV2({ tempo: tempo(95) })));
+    const upgraded = cache.getAudio("spotify:456", ANALYZER_VERSION);
+    assertEqual(upgraded?.audio.tempo?.bpm, 95, "Low confidence overwritten by high");
 
     // Missing key
-    assertEqual(cache.getAudio("nonexistent"), null, "Missing audio returns null");
+    assertEqual(cache.getAudio("spotify:none", ANALYZER_VERSION), null, "Missing audio is null");
   } finally {
     cleanup();
   }
@@ -326,26 +307,10 @@ async function testSonicCacheTTL(): Promise<void> {
     const cache = new SonicCache(db);
 
     // Put with TTL of 0ms (already expired)
-    cache.putAudio(
-      "expired-1",
-      {
-        bpm: 120,
-        key: "C Major",
-        energy: 0.5,
-        valence: 0.5,
-        danceability: 0.5,
-        acousticness: 0.5,
-        instrumentalness: 0.1,
-        confidence: "low",
-        keyMoments: [],
-        measured: true,
-        analyzer: "audio-service",
-      },
-      0,
-    );
+    cache.putAudio("spotify:expired-1", "expired-1", measurementOf(), 0);
 
     // Should be expired
-    const expired = cache.getAudio("expired-1");
+    const expired = cache.getAudio("spotify:expired-1", ANALYZER_VERSION);
     assertEqual(expired, null, "Expired audio entry returns null");
 
     // Purge expired
@@ -422,19 +387,7 @@ async function testConcurrentWrites(): Promise<void> {
 
     // Simulate parallel writes from engineer and historian
     const engineerWrite = Promise.resolve().then(() => {
-      cache.putAudio("concurrent-1", {
-        bpm: 128,
-        key: "A Minor",
-        energy: 0.9,
-        valence: 0.7,
-        danceability: 0.8,
-        acousticness: 0.1,
-        instrumentalness: 0.05,
-        confidence: "high",
-        keyMoments: [],
-        measured: true,
-        analyzer: "audio-service",
-      });
+      cache.putAudio("spotify:concurrent-1", "concurrent-1", measurementOf());
     });
 
     const historianWrite = Promise.resolve().then(() => {
@@ -452,14 +405,14 @@ async function testConcurrentWrites(): Promise<void> {
     await Promise.all([engineerWrite, historianWrite, storeWrite]);
 
     // Verify all data persisted
-    const audio = cache.getAudio("concurrent-1");
+    const audio = cache.getAudio("spotify:concurrent-1", ANALYZER_VERSION);
     const research = cache.getResearch("concurrent-1");
     const storeItem = await store.get(["tracks"], "concurrent-1");
 
     assert(audio != null, "Concurrent audio write succeeded");
     assert(research != null, "Concurrent research write succeeded");
     assert(storeItem != null, "Concurrent store write succeeded");
-    assertEqual(audio?.bpm, 128, "Audio data correct after concurrent write");
+    assertEqual(audio?.audio.tempo?.bpm, 115.8, "Audio data correct after concurrent write");
   } finally {
     cleanup();
   }
@@ -897,15 +850,9 @@ describe("migrations", () => {
     expect(versions).toEqual(MIGRATIONS.map((m) => ({ version: m.version, name: m.name })));
     expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
 
-    const audioIds = db.prepare("SELECT spotify_id FROM audio_cache").pluck().all();
-    expect(audioIds).toEqual(["measured"]);
-
-    const notNull = Object.fromEntries(
-      (db.pragma("table_info(audio_cache)") as Array<{ name: string; notnull: number }>).map(
-        (c) => [c.name, c.notnull],
-      ),
-    );
-    expect(notNull).toMatchObject({ bpm: 0, key_signature: 0, energy: 0 });
+    // Migration 3 kept the marked row only (see below); migration 14 dropped it with every other
+    // flat row: none of them holds a v2 block.
+    expect(db.prepare("SELECT COUNT(*) FROM audio_cache").pluck().get()).toBe(0);
 
     const namespaces = db.prepare("SELECT namespace FROM store_items").pluck().all();
     // Track choices of earlier versions are deleted too (migration 8).
@@ -914,13 +861,33 @@ describe("migrations", () => {
     expect(db.prepare("SELECT COUNT(*) FROM runs").pluck().get()).toBe(0);
   });
 
-  it("lets the audio cache store a measurement without energy", () => {
-    const cache = new SonicCache(initializeDatabase(setup()));
-    cache.putAudio("no-energy", {
-      ...audioRow({ measured: true, analyzer: "audio-service", confidence: "low" }),
-      energy: null,
-    } as Parameters<SonicCache["putAudio"]>[1]);
-    expect(cache.getAudio("no-energy")).toMatchObject({ bpm: 120, energy: null });
+  it("drops the flat audio rows and files measurements by track and analyzer version (migration 14)", () => {
+    const migration = MIGRATIONS.findIndex((m) => m.name === "audio_cache_by_analyzer");
+    expect(MIGRATIONS[migration].version).toBe(14);
+    const dbPath = setup();
+    const raw = new Database(dbPath);
+    runMigrations(raw, MIGRATIONS.slice(0, migration));
+    raw
+      .prepare(
+        "INSERT INTO audio_cache (spotify_id, bpm, key_signature, energy, confidence, full_data, expires_at) VALUES ('sp1', 120, 'C Major', 0.5, 'high', ?, unixepoch() + 86400)",
+      )
+      .run(JSON.stringify(audioRow({ measured: true, analyzer: "audio-service" })));
+    raw.close();
+
+    const db = initializeDatabase(dbPath);
+    expect(db.prepare("SELECT COUNT(*) FROM audio_cache").pluck().get()).toBe(0);
+    const columns = db.pragma("table_info(audio_cache)") as Array<{ name: string; pk: number }>;
+    expect(
+      columns
+        .filter((c) => c.pk > 0)
+        .sort((a, b) => a.pk - b.pk)
+        .map((c) => c.name),
+    ).toEqual(["track_key", "analyzer_version"]);
+
+    const cache = new SonicCache(db);
+    cache.putAudio("isrc:USSB29000129", "sp1", measurementOf());
+    expect(cache.getAudio("spotify:sp1", ANALYZER_VERSION)).toBeNull();
+    expect(cache.getAudio("isrc:USSB29000129", ANALYZER_VERSION)).toEqual(measurementOf());
   });
 
   it("keeps only audio rows the cache would serve and caps low-confidence expiry at a day", () => {
@@ -954,9 +921,10 @@ describe("migrations", () => {
       "high",
       JSON.stringify(audioRow({ measured: true, analyzer: "estimator" })),
     );
-    raw.close();
+    // Up to the migration before 14, which drops these flat rows altogether.
+    runMigrations(raw, MIGRATIONS.slice(0, 13));
 
-    const db = initializeDatabase(dbPath);
+    const db = raw;
     const rows = db
       .prepare(
         "SELECT spotify_id, expires_at - unixepoch() AS ttl FROM audio_cache ORDER BY spotify_id",
@@ -967,6 +935,7 @@ describe("migrations", () => {
     expect(ttl.high).toBeGreaterThan(29 * 86400);
     expect(ttl.low).toBeLessThanOrEqual(86400);
     expect(ttl.low).toBeGreaterThan(86400 - 60);
+    db.close();
   });
 
   it("refuses to start when a recorded migration has another name than this code's", () => {

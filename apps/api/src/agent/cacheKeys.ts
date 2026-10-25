@@ -19,6 +19,12 @@
  * v5: results whose genealogy nodes carry a Spotify id only for a strict match of the track the
  * model named. Earlier results may carry the top search hit's id (a cover, another song), and a
  * click on such a node now analyses that id: they are not served.
+ * v6: results that carry the audio measurement they were finalised from (the AudioFeatures v2
+ * block, `audio`) with copies derived from it, and no 0..1 energy where its scale saturates.
+ * Earlier results carry measured copies without the block that says how they were measured,
+ * which the contract's producer checks refuse: they are not served, and each track searched
+ * again is composed again once (one composer call; the research and the audio are cached
+ * apart, though the audio cache was emptied by migration 14 and is measured again for free).
  *
  * The result key also names which primary-record sources with a credential (Discogs, Genius)
  * are configured: a result stored while one was not configured says so and holds none of its
@@ -37,7 +43,7 @@ import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
-export const TRACKS_NAMESPACE: string[] = ["tracks", "v5"];
+export const TRACKS_NAMESPACE: string[] = ["tracks", "v6"];
 
 /** The optional sources that are configured (have a key). */
 export interface ConfiguredSources {

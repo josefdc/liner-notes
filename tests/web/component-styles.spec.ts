@@ -1,6 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
 import { hoverCard } from "./hover";
-import { analyzeAndOpenDashboard, loadFixture, openPlayer, useMockApi } from "./mock";
+import {
+  analyzeAndOpenDashboard,
+  animationsSettled,
+  loadFixture,
+  openPlayer,
+  useMockApi,
+} from "./mock";
 
 // Computed-style checks for the shared components: transitions, the connected-track card's hover,
 // the small badge's size and the neutral badge's contrast, and the Dashboard skeleton's spacing.
@@ -122,7 +128,7 @@ const over = (top: Rgba, bottom: Rgba): Rgba => ({
 async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/15") {
   await page.addStyleTag({
     content:
-      "[data-measuring],[data-measuring] *{color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
+      "[data-measuring],[data-measuring] *{color:transparent!important;text-decoration-color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
   });
   const badges = page.locator(selector);
   const result: Array<{ text: string; ratio: number }> = [];
@@ -278,4 +284,126 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
       }
     });
   }
+}
+
+// The genealogy's words: the connected-track cards' relation badges and provenance lines on the
+// Dashboard; the legend, the link list and a focused link's detail in the Player.
+const GENEALOGY_TEXT = {
+  dashboard: "span[data-link-kind], p[data-link-relation], p[data-link-provenance]",
+  player: [
+    '[aria-label="Link legend"] li',
+    '[data-testid="links-hidden"]',
+    '[data-testid="genealogy-kinds"]',
+    "#panel-genealogy details summary",
+    '[aria-label="Genealogy links"] li',
+  ].join(", "),
+  detail: '[data-testid="link-detail"]',
+};
+
+for (const cover of ["no cover", "a white cover"]) {
+  test(`genealogy relation, legend and link text meet 4.5:1 (${cover})`, async ({ page }) => {
+    await page.route("https://i.scdn.co/**", (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
+    );
+    // Sourced and inferred relations both, so both badge styles are on the Dashboard.
+    const data = loadFixture("genealogy-kinds");
+    const complete = data.streams["/api/analyze/stream"].find(
+      (event: { type: string }) => event.type === "complete",
+    );
+    const { genealogy } = complete.data;
+    genealogy.nodes = genealogy.nodes.filter((node: { id: string }) =>
+      [
+        "current",
+        "sample-sourced",
+        "sample-inferred",
+        "influence-inferred",
+        "backwards",
+        "rejected",
+      ].includes(node.id),
+    );
+    const kept = new Set(genealogy.nodes.map((node: { id: string }) => node.id));
+    genealogy.links = genealogy.links.filter(
+      (link: { source: string; target: string }) => kept.has(link.source) && kept.has(link.target),
+    );
+    await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    const dashboard = await neutralBadgeContrast(page, GENEALOGY_TEXT.dashboard);
+    // A hovered card lightens behind its badge.
+    const inferred = page
+      .getByRole("button")
+      .filter({ has: page.locator('[data-link-kind="inferred"]') });
+    await inferred.first().hover();
+    await animationsSettled(page);
+    dashboard.push(...(await neutralBadgeContrast(page, 'span[data-link-kind="inferred"]')));
+    await page.mouse.move(0, 0);
+    await openPlayer(page);
+    await page.waitForTimeout(500);
+    // The list opens over the graph; then, closed again, a focused link's detail.
+    const summary = page.getByText(/^Links as a list/);
+    await summary.click();
+    const player = await neutralBadgeContrast(page, GENEALOGY_TEXT.player);
+    await summary.click();
+    await page.locator("#panel-genealogy g.link-targets line").first().focus();
+    player.push(...(await neutralBadgeContrast(page, GENEALOGY_TEXT.detail)));
+    // Inferred badges, every relation and provenance line (sourced badges are amber, not
+    // measured here).
+    expect(dashboard.length).toBeGreaterThanOrEqual(8);
+    // Two kinds and three relations in the legend, the summary, three links and the detail.
+    expect(player.length).toBeGreaterThanOrEqual(10);
+    for (const { text, ratio } of [...dashboard, ...player]) {
+      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
+// Where each claim comes from: its verifier status, its sources and their tier, a conflict with
+// the measurement, the credits, and the rejected claims (opened), in the Player's analysis panel.
+const CLAIM_TEXT = [
+  "[data-claim-kind] > div > span.text-chrome",
+  "[data-claim-kind] > div > span.border-white\\/15",
+  "[data-claim-kind] > p",
+  "#panel-context section li > p",
+  "#panel-context section > p.text-chrome",
+  "#panel-context section > h4",
+  "#panel-context > p.text-chrome",
+  'section[aria-label="Rejected claims"] p',
+  'section[aria-label="Rejected claims"] button',
+].join(", ");
+
+for (const cover of ["no cover", "a white cover"]) {
+  test(`claim provenance and rejected-claim text meet 4.5:1 (${cover})`, async ({ page }) => {
+    // Some fifty lines, each screenshotted on its own.
+    test.slow();
+    await page.route("https://i.scdn.co/**", (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
+    );
+    const data = loadFixture("provenance");
+    await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    await openPlayer(page);
+    await page.getByRole("button", { name: /Rejected by the verifier/ }).click();
+    await page.waitForTimeout(500);
+    const measured = await neutralBadgeContrast(page, CLAIM_TEXT);
+    const texts = measured.map(({ text }) => text);
+    for (const line of [
+      "not checked",
+      "Partly supported",
+      "MusicBrainz · primary record",
+      "1 cited source is not in this result",
+      "Rejected by the verifier (6)",
+      "Credits",
+      "More claims",
+      "1 fact is not shown",
+    ]) {
+      expect(
+        texts.some((text) => text.includes(line)),
+        line,
+      ).toBe(true);
+    }
+    for (const { text, ratio } of measured) {
+      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 }

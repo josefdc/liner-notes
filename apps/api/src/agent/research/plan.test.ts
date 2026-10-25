@@ -34,6 +34,13 @@ vi.mock("../../sources/spotify.js", async (importOriginal) => ({
 }));
 vi.mock("../../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sources/audio.js")>()),
+  // The engineer's own preview lookup and health probe (the analysis itself is stubbed).
+  resolvePreview: async () => ({
+    previewUrl: null,
+    match: null,
+    detail: "No preview in this test",
+  }),
+  audioServiceHealth: async () => null,
   analyzeAudioPreview: {
     invoke: async () => JSON.stringify({ source: "unavailable", reason: "no_preview" }),
   },
@@ -44,6 +51,7 @@ const cache = vi.hoisted(() => ({ putResearch: vi.fn(), research: null as unknow
 vi.mock("../../store/cache.js", () => ({
   getCache: () => ({
     getAudio: () => null,
+    getNewestAudio: () => null,
     putAudio: () => {},
     getResearch: () => cache.research,
     putResearch: cache.putResearch,

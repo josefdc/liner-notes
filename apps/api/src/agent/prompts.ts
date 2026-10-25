@@ -13,7 +13,8 @@ import type { Evidence, ResearchAction, SourceError, SourceId } from "@liner-not
 import type { LlmMessage } from "../llm/invoke.js";
 import { type EvidenceScope, evidenceScope } from "../sources/records.js";
 import { followUpChoices, type RanStep } from "./research/plan.js";
-import type { AudioFeatures, ResearchData } from "./state.js";
+import { loudnessDbfs, measuredAudioFields, moodScore } from "./finalize.js";
+import type { AudioMeasurement, ResearchData } from "./state.js";
 
 // =============================================================================
 // Untrusted text
@@ -133,7 +134,7 @@ Where facts come from
 - Do not quote or paraphrase lyrics.
 
 Measured audio
-- Tempo, key, loudness and mood scores were measured by our own analysis of a preview clip and are shown separately. Do not present them as facts you found. null means not measured: never guess a value.
+- Tempo, key and loudness were measured by our own analysis of a preview clip; the valence, danceability, acousticness and instrumentalness scores are estimates of audio models run on that clip, not measurements. All of them are shown separately. Do not present them as facts you found. null means not measured: never guess a value.
 - Set a claim's field to "tempo" or "key" only when the statement gives the track's tempo or key; otherwise null.
 
 Untrusted text
@@ -167,26 +168,38 @@ export interface PromptRecording {
 export interface ComposerPromptInput {
   track: PromptTrack;
   recording: PromptRecording | null;
-  audio: AudioFeatures | null;
+  audio: AudioMeasurement | null;
   evidence: readonly Evidence[];
   research: ResearchData | null;
   /** The sources the run could not read. */
   sourceErrors?: readonly SourceError[];
 }
 
-/** The measured values the model may read (never write), or null when nothing was measured. */
-function measuredForPrompt(audio: AudioFeatures | null) {
-  if (!audio) return null;
-  const values = {
-    tempoBpm: audio.bpm,
-    key: audio.key,
-    energy: audio.energy,
-    valence: audio.valence,
-    danceability: audio.danceability,
-    acousticness: audio.acousticness,
-    instrumentalness: audio.instrumentalness,
+/**
+ * The audio values the model may read (never write), each part null when it has nothing: the
+ * signal measurements (the result's own tempo and key copies, finalize.ts, and the loudness in
+ * dBFS RMS; no 0..1 energy, it saturates on loud masters), and apart from them the audio models'
+ * scores, which are estimates, not measurements.
+ */
+function audioForPrompt(measurement: AudioMeasurement | null) {
+  const fields = measuredAudioFields(measurement);
+  const passed = fields.audio?.gate.passed === true;
+  const rmsMean = passed ? fields.audio?.loudness?.rmsMean : undefined;
+  const level = rmsMean != null ? loudnessDbfs(rmsMean) : null;
+  const measured = {
+    tempoBpm: fields.bpm,
+    key: fields.key,
+    loudnessDbfsRms: level !== null ? Math.round(level * 10) / 10 : null,
   };
-  return Object.values(values).every((v) => v === null) ? null : values;
+  const estimates = {
+    valence: fields.valence ?? null,
+    danceability: fields.danceability ?? null,
+    acousticness: fields.acousticness ?? null,
+    instrumentalness: passed ? moodScore(fields.audio?.fingerprint?.moods?.instrumental) : null,
+  };
+  const some = (values: Record<string, unknown>) =>
+    Object.values(values).some((v) => v !== null) ? values : null;
+  return { measured: some(measured), estimates: some(estimates) };
 }
 
 /** The research lists, each with the label its blocks get. Song-meaning text is never sent. */
@@ -269,7 +282,7 @@ function promptEvidence(evidence: readonly Evidence[], max: number): { lines: st
 
 export function composerUserPrompt(input: ComposerPromptInput): string {
   const material = researchBlocks(input.research);
-  const measured = measuredForPrompt(input.audio);
+  const audio = audioForPrompt(input.audio);
   return [
     "Write the liner notes for this track.",
     "",
@@ -280,7 +293,10 @@ export function composerUserPrompt(input: ComposerPromptInput): string {
     input.recording ? json(input.recording) : "(not available)",
     "",
     "Measured audio (our analysis of a preview clip; null = not measured):",
-    measured ? json(measured) : "(not measured)",
+    audio.measured ? json(audio.measured) : "(not measured)",
+    "",
+    "Audio-model estimates on the same clip (scores, not measurements; null = not produced):",
+    audio.estimates ? json(audio.estimates) : "(none)",
     "",
     "Evidence pack (cite these ids only):",
     evidenceForPrompt(input.evidence),

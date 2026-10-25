@@ -58,6 +58,8 @@ export interface Factoid {
   content: string;
   type: 'production' | 'trivia' | 'credits' | 'sample' | 'curiosity' | 'connection';
   entities?: FactoidEntity[];
+  /** The claim this card shows (results with claims); read with resultClaims (provenance/). */
+  claimId?: string;
 }
 
 export interface GenealogyNode {
@@ -74,12 +76,20 @@ export interface GenealogyNode {
   trackArtist?: string;
 }
 
+/**
+ * A relation between two genealogy nodes (the contract's GenealogyLink). Shown through
+ * `shownLinks` (components/genealogy/links.ts), which reads it with the contract's schema:
+ * sourced only when it says so and cites evidence that is all in the result's pack.
+ */
 export interface GenealogyLink {
   source: string;
   target: string;
   value: number;
-  // Semantic relationship type for visual styling
-  type?: 'sample' | 'cover' | 'remix' | 'producer' | 'influence';
+  type?: 'sample' | 'interpolation' | 'cover' | 'remix' | 'producer' | 'influence';
+  kind?: 'sourced' | 'inferred';
+  origin?: 'code' | 'model';
+  claimId?: string;
+  evidenceIds?: string[];
 }
 
 // Key moment detected in audio (drops, peaks, transitions)
@@ -187,7 +197,7 @@ export interface TrackData {
   segments: SongSegment[];
   /** 'template': a generic default structure; 'inferred': written by the model. Never measured. */
   segmentsSource?: 'template' | 'inferred';
-  samples: { time: number; description: string }[];
+  samples: { time: number; description: string; claimId?: string }[];
   keyMoments?: KeyMoment[]; // Detected in the audio preview
   // May be fewer than three, or empty, when there was nothing to say
   factoids: Factoid[];
@@ -223,6 +233,13 @@ export interface TrackData {
   run?: ResultRun;
   // How this run's search text matched the track; absent in older results
   queryMatch?: QueryMatch | null;
+  /**
+   * The evidence pack and the claims (the contract's Evidence and Claim lists), as the API sent
+   * them. Read them with `resultClaims` (components/provenance/claims.ts), which keeps what the
+   * contract can read. Absent from results of APIs that do not send them.
+   */
+  evidence?: unknown;
+  claims?: unknown;
 }
 
 export interface AgentLog {

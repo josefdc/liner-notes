@@ -7,11 +7,11 @@
  * are not shown. Values that are not known are left out or null; nothing is filled in.
  */
 
-import { measuredAudioFields, type TrackData } from "./schema.js";
+import { loudnessDbfs, type MeasuredAudioFields, measuredAudioFields } from "./finalize.js";
+import type { TrackData } from "./schema.js";
 import {
   createDefaultSegments,
   generateId as newRandomId,
-  type AudioFeatures,
   type SonicAgentStateType,
   emptyResearch,
   type Factoid,
@@ -59,27 +59,23 @@ function parseMusicBrainzSamples(entry: string): SampleRelation[] {
   }
 }
 
-/** A sentence describing the measured audio values, or null when nothing was measured. */
-function describeMeasuredAudio(audio: AudioFeatures | null): string | null {
-  if (!audio || audio.bpm == null || audio.key == null) return null;
-  // The same values as the payload, unrounded, so the text and the numbers agree.
+/**
+ * A sentence describing the measured audio values (the result's own copies and its block), or
+ * null when the tempo and the key were not both measured.
+ */
+function describeMeasuredAudio(audio: MeasuredAudioFields): string | null {
+  if (audio.audioSource !== "analyzed" || audio.bpm == null || audio.key == null) return null;
+  // The same values as the payload's copies, so the text and the numbers agree.
   const parts = [`${audio.bpm} BPM in ${audio.key}.`];
-  if (audio.energy != null) {
-    const level = audio.energy > 0.7 ? "High" : audio.energy > 0.4 ? "Moderate" : "Low";
-    parts.push(`${level} measured energy.`);
-  }
-  // Mood and danceability come from audio models run over the clip: they are estimates by
-  // those models, not signal measurements, and are labelled that way.
+  // The measured level, in dBFS RMS: the 0..1 energy copy is missing where it saturates.
+  const rmsMean = audio.audio?.loudness?.rmsMean;
+  const level = rmsMean != null ? loudnessDbfs(rmsMean) : null;
+  if (level !== null) parts.push(`Measured level ${level.toFixed(1)} dBFS RMS on the preview.`);
+  // Valence and danceability come from audio models run over the clip: they are estimates by
+  // those models, not signal measurements, and are labelled that way. Valence is the DEAM head's
+  // 1..9 output put on 0..1, so it is given as a score, not named as a mood.
   if (audio.valence != null) {
-    const mood =
-      audio.valence > 0.7
-        ? "euphoric"
-        : audio.valence > 0.5
-          ? "positive"
-          : audio.valence > 0.3
-            ? "melancholic"
-            : "dark";
-    parts.push(`Mood (audio model estimate): ${mood}.`);
+    parts.push(`Valence score (audio model estimate, 0 to 1): ${audio.valence}.`);
   }
   if (audio.danceability != null) {
     parts.push(`Danceability score (audio model estimate): ${audio.danceability}.`);
@@ -115,7 +111,8 @@ export async function createFallbackTrackData(
 ): Promise<TrackData> {
   const generateId = options.newId ?? newRandomId;
   const spotify = state.spotifyData!;
-  const audio = state.audioFeatures ?? null;
+  // The measured copies and the block, as the result carries them (finalize.ts).
+  const audio = measuredAudioFields(state.audioFeatures);
 
   // Extract release year from releaseDate
   const releaseYear = spotify.releaseDate?.split("-")[0] || undefined;
@@ -221,8 +218,9 @@ export async function createFallbackTrackData(
     releaseYear,
     // Unknown (null) is left out rather than shown as "not explicit"
     ...(typeof spotify.explicit === "boolean" ? { explicit: spotify.explicit } : {}),
-    // Measured audio values or null, with the reason when missing
-    ...measuredAudioFields(audio),
+    // Measured audio values or null, with the reason when missing (the composer finalizes the
+    // result with the same function)
+    ...audio,
     // From Spotify only; missing when Spotify gave none
     ...(spotify.durationMs > 0 ? { durationSeconds: Math.round(spotify.durationMs / 1000) } : {}),
     // A generic structure, not an analysis of this track

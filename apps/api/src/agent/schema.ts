@@ -6,9 +6,16 @@
  * the audio measurement. Measured values come from the measurement only.
  */
 
-import { Claim, Evidence, PreviewMatch, QueryMatch, RunInfo } from "@liner-notes/contract";
+import {
+  AudioFeatures,
+  Claim,
+  Evidence,
+  PreviewMatch,
+  QueryMatch,
+  RunInfo,
+} from "@liner-notes/contract";
 import { z } from "zod";
-import type { AudioFeatures } from "./state.js";
+import { measuredAudioFields } from "./finalize.js";
 
 // =============================================================================
 // Segment Schema
@@ -280,7 +287,13 @@ export const TrackDataSchema = z.object({
   // Measured audio analysis: copied from the audio measurement, null when not measured
   bpm: z.number().nullable().describe("Measured tempo BPM, or null when not measured"),
   key: z.string().nullable().optional().describe("Measured key e.g. 'C Major', or null"),
-  energy: z.number().nullable().optional().describe("Measured energy 0-1, or null"),
+  energy: z
+    .number()
+    .nullable()
+    .optional()
+    .describe(
+      "Measured loudness on a 0-1 scale; null when not measured or saturated (finalize.ts)",
+    ),
   valence: z.number().nullable().optional().describe("Measured positiveness 0-1, or null"),
   danceability: z.number().nullable().optional().describe("Measured danceability 0-1, or null"),
   acousticness: z.number().nullable().optional().describe("Measured acousticness 0-1, or null"),
@@ -375,6 +388,9 @@ export const TrackDataSchema = z.object({
       "Why the model call failed, as a category; the provider's text stays in the server log",
     ),
 
+  // The audio measurement the copies above come from (finalize.ts); absent when not measured
+  audio: AudioFeatures.nullable().optional(),
+
   // The evidence model (see @liner-notes/contract TrackAnalysis)
   isrc: z.string().nullable().optional(),
   preview: PreviewMatch.nullable().optional(),
@@ -387,58 +403,6 @@ export const TrackDataSchema = z.object({
 });
 
 export type TrackData = z.infer<typeof TrackDataSchema>;
-
-// =============================================================================
-// Measured audio copies
-// =============================================================================
-
-type MeasuredAudioFields = Pick<
-  TrackData,
-  | "bpm"
-  | "key"
-  | "energy"
-  | "valence"
-  | "danceability"
-  | "acousticness"
-  | "keyMoments"
-  | "audioSource"
-  | "audioConfidence"
-  | "audioUnavailableReason"
->;
-
-/**
- * The TrackData audio fields, taken only from the audio measurement. Values that were not
- * measured are null, and the reason is carried in audioUnavailableReason.
- */
-export function measuredAudioFields(audio: AudioFeatures | null | undefined): MeasuredAudioFields {
-  if (!audio) {
-    return {
-      bpm: null,
-      key: null,
-      energy: null,
-      valence: null,
-      danceability: null,
-      acousticness: null,
-      keyMoments: [],
-      audioSource: "unavailable",
-      audioConfidence: "low",
-      audioUnavailableReason: "not_run",
-    };
-  }
-  const measured = audio.bpm != null && audio.key != null;
-  return {
-    bpm: audio.bpm ?? null,
-    key: audio.key ?? null,
-    energy: audio.energy ?? null,
-    valence: audio.valence ?? null,
-    danceability: audio.danceability ?? null,
-    acousticness: audio.acousticness ?? null,
-    keyMoments: audio.keyMoments ?? [],
-    audioSource: measured ? "analyzed" : "unavailable",
-    audioConfidence: measured ? audio.confidence : "low",
-    audioUnavailableReason: measured ? undefined : (audio.unavailableReason ?? "not_run"),
-  };
-}
 
 // =============================================================================
 // Search Candidates Schema (for Human-in-the-loop)

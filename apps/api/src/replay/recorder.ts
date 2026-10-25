@@ -26,8 +26,8 @@
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
  * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
  * fails the record's schema or says less than a replay must (`runIssues`). The result's other
- * producer checks (`analysisIssues`) are reported as warnings: live results do not pass them all
- * yet, and the record replays what was sent.
+ * producer checks (`analysisIssues`) are reported as warnings: a run stored by older code may not
+ * pass them all, and the record replays what was sent.
  */
 
 import {
@@ -519,8 +519,9 @@ export function buildRecord(
   }
   const record = checked.data as ReplayRecord;
   // A replay must say when and from which commit it was recorded: that is checked here. The
-  // other producer rules are not yet met by live results either (they carry the measured copies
-  // without the measurement they come from), so they are reported, not refused.
+  // other producer rules are reported, not refused: a run stored before results carried their
+  // measurement (`audio`, agent/finalize.ts) has measured copies without it, and the record
+  // replays what was sent.
   const runInfoIssues = record.analysis.run
     ? runIssues(record.analysis.run, record.analysis.audio)
     : ["run: missing"];

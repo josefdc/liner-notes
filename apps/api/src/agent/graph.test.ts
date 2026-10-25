@@ -14,7 +14,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command, InMemoryStore, MemorySaver } from "@langchain/langgraph";
-import { runIssues, TrackAnalysis } from "@liner-notes/contract";
+import { analysisIssues, runIssues, TrackAnalysis } from "@liner-notes/contract";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { captureLogsForTests } from "../logger.js";
 
@@ -73,6 +73,13 @@ vi.mock("../sources/spotify.js", async (importOriginal) => ({
 }));
 vi.mock("../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/audio.js")>()),
+  // The engineer's own preview lookup and health probe (the analysis itself is stubbed).
+  resolvePreview: async () => ({
+    previewUrl: null,
+    match: null,
+    detail: "No preview in this test",
+  }),
+  audioServiceHealth: async () => null,
   analyzeAudioPreview: tools.analyzeAudioPreview,
 }));
 vi.mock("../sources/lastfm.js", () => ({
@@ -109,6 +116,7 @@ const hooks = vi.hoisted(() => ({
 vi.mock("../store/cache.js", () => ({
   getCache: () => ({
     getAudio: () => null,
+    getNewestAudio: () => null,
     putAudio: hooks.putAudio,
     getResearch: () => null,
     putResearch: hooks.putResearch,
@@ -137,6 +145,7 @@ import type { TrackData } from "./schema.js";
 import { TransientError } from "./errors.js";
 import { SourceError } from "../sources/http.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
+import { ANALYZER_VERSION, audioV2 } from "./testing/measuredAudio.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
 // The web's query names the artist: a title alone always asks which recording is meant.
@@ -666,7 +675,7 @@ describe("the analysis graph under failure", () => {
     tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) => {
       audioSignal = (args[1] as { signal?: AbortSignal } | undefined)?.signal;
       controller.abort();
-      return JSON.stringify({ source: "analyzed", bpm: 116, key: "D", mode: "minor" });
+      return JSON.stringify({ source: "analyzed", audio: audioV2() });
     });
 
     const { threw } = await drive(stubModel(["done"]), {
@@ -731,9 +740,7 @@ describe("the analysis graph under failure", () => {
     tools.analyzeAudioPreview.invoke.mockImplementationOnce(async () =>
       JSON.stringify({
         source: "analyzed",
-        bpm: 116,
-        key: "D",
-        mode: "Minor",
+        audio: audioV2(),
         previewUrl: clip,
         previewMatch: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
       }),
@@ -748,6 +755,12 @@ describe("the analysis graph under failure", () => {
       | undefined;
     expect(complete?.data.previewUrl).toBe(clip);
     expect(complete?.data.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+    // The measurement reaches the result through the graph, finalised by code.
+    const result = TrackAnalysis.parse(complete?.data);
+    expect(result.audio).toEqual(audioV2());
+    expect(result).toMatchObject({ bpm: 116, key: "D Minor", audioSource: "analyzed" });
+    expect(result.run?.analyzerVersion).toBe(ANALYZER_VERSION);
+    expect(analysisIssues(result)).toEqual([]);
   });
 });
 

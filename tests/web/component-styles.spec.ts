@@ -65,9 +65,12 @@ test.describe("the connected-track card", () => {
   });
 });
 
-/** Small badges (text-chrome) and their height, in document order. */
+/**
+ * Small badges (bordered, text-chrome) and their height, in document order. Plain text-chrome
+ * lines (a value's provenance) are not badges.
+ */
 const smallBadges = (page: Page) =>
-  page.locator("span.text-chrome").evaluateAll((elements) =>
+  page.locator("span.border.text-chrome").evaluateAll((elements) =>
     elements.map((element) => ({
       text: element.textContent?.trim().slice(0, 30),
       height: element.getBoundingClientRect().height,
@@ -116,12 +119,12 @@ const over = (top: Rgba, bottom: Rgba): Rgba => ({
  * (cover image, blur and every translucent layer included), and its brightest pixel is the
  * background. Coloured values inside a badge (cyan, amber, pink) are not measured here.
  */
-async function neutralBadgeContrast(page: Page) {
+async function neutralBadgeContrast(page: Page, selector = "span.border-white\\/15") {
   await page.addStyleTag({
     content:
       "[data-measuring],[data-measuring] *{color:transparent!important;text-shadow:none!important;transition:none!important}[data-measuring] svg{visibility:hidden!important}",
   });
-  const badges = page.locator("span.border-white\\/15");
+  const badges = page.locator(selector);
   const result: Array<{ text: string; ratio: number }> = [];
   for (let i = 0; i < (await badges.count()); i += 1) {
     const badge = badges.nth(i);
@@ -240,3 +243,39 @@ test("the Dashboard skeleton has the Dashboard's padding and gaps", async ({ pag
   expect(spacing.padding.split(" ")[0]).toBe(loaded.top);
   expect(spacing.padding).toContain(loaded.left);
 });
+
+// The lines that say what a value is (measured, model estimate, its confidence, basis and
+// method) or why it is missing, and the headings of the audio-model scores.
+const PROVENANCE_TEXT = [
+  "[data-value-kind] > span.max-w-60",
+  'section[aria-label$="(model estimate)"] > p',
+  'p:text-is("Audio-model estimates (scores, not probabilities)")',
+  // The timeline's preview-lane header and its notes ("No key moments — <reason>").
+  '[aria-label="Song structure"] [role="group"] > div:first-child > span',
+  '[aria-label="Song structure"] > p',
+].join(", ");
+
+for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
+  for (const cover of ["no cover", "a white cover"]) {
+    test(`provenance and missing-value lines meet 4.5:1 (${fixture}, ${cover})`, async ({
+      page,
+    }) => {
+      await page.route("https://i.scdn.co/**", (route) =>
+        route.fulfill({ contentType: "image/svg+xml", body: WHITE_SVG }),
+      );
+      const data = loadFixture(fixture);
+      await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await analyzeAndOpenDashboard(page, "Track");
+      const dashboard = await neutralBadgeContrast(page, PROVENANCE_TEXT);
+      await openPlayer(page);
+      await page.waitForTimeout(500);
+      const player = await neutralBadgeContrast(page, PROVENANCE_TEXT);
+      expect(dashboard.length).toBeGreaterThan(4);
+      expect(player.length).toBeGreaterThan(2);
+      for (const { text, ratio } of [...dashboard, ...player]) {
+        expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+}

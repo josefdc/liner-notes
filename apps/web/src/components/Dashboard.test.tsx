@@ -83,9 +83,7 @@ describe('Dashboard', () => {
     expect(stats.textContent).toContain('105');
     expect(stats.textContent).toContain('A Minor');
     const scores = screen.getByRole('list', { name: 'Audio-model estimates' });
-    expect(
-      screen.getByText(/Audio-model estimates \(scores 0–1, not probabilities\)/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Audio-model estimates \(scores, not probabilities\)/)).toBeTruthy();
     // The caption labels the list; it is not one of its items.
     expect(scores.textContent).not.toContain('not probabilities');
     expect(scores.textContent).toContain('0.62');

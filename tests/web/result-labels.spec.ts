@@ -24,7 +24,8 @@ test("the Dashboard labels measured values, model scores and the model's genre p
   const stats = page.getByRole("list", { name: "Audio values" });
   await expect(stats).toContainText("105");
   await expect(stats).toContainText("A Minor");
-  await expect(stats).toContainText("71%");
+  await expect(stats).toContainText("0.71");
+  await expect(stats).not.toContainText("71%");
   await expect(stats).not.toContainText("not measured");
 
   const scores = page.getByRole("list", { name: "Audio-model estimates" });

@@ -58,9 +58,10 @@ type Envelope = { runId: string; seq: number };
 
 /**
  * An analysis event as sent. The result (`complete`) is handed to the app as the server wrote
- * it: the app's own readers keep values the contract's reader drops (such as an older result's
- * estimated audio, which is shown as estimated, never as measured). `unreadable` stands for an
- * outcome this page cannot use.
+ * it, except for its measurement (`audio`), which is the contract's reading of it (see
+ * withContractAudio): the app's own readers keep values the contract's reader drops (such as an
+ * older result's estimated audio, which is shown as estimated, never as measured).
+ * `unreadable` stands for an outcome this page cannot use.
  */
 export type AnalysisEvent =
   | Exclude<AnalyzeStreamEvent, { type: 'complete' | 'interrupt' }>
@@ -127,6 +128,31 @@ function readCandidate(value: unknown): SearchCandidate | null {
   };
 }
 
+/** The contract's reading of a measurement: the block it parsed, or null when it cannot. */
+function readContractAudio(audio: unknown): unknown {
+  if (!schemas) throw new Error('The event schemas are not loaded yet (loadEventSchemas)');
+  const parsed = schemas.AudioFeatures.safeParse(audio);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * A result whose `audio` block is the contract's reading of it: the parsed block, or null when
+ * the contract cannot read it (any fault anywhere in it), so nothing in it is shown as measured.
+ * A result without the block keeps it absent.
+ */
+export function withContractAudio(
+  data: Record<string, unknown>,
+  read: (audio: unknown) => unknown,
+): TrackData {
+  if (!('audio' in data) || data.audio === undefined) return data as unknown as TrackData;
+  if (data.audio === null) return { ...data, audio: null } as unknown as TrackData;
+  const audio = read(data.audio);
+  // A block the contract cannot read is null, and the result says it was unreadable.
+  return (audio === null
+    ? { ...data, audio: null, audioUnreadable: true }
+    : { ...data, audio }) as unknown as TrackData;
+}
+
 /**
  * An outcome that does not fit the contract, read by its envelope and payload only; null when
  * even that cannot be read.
@@ -138,9 +164,10 @@ function readOutcome(
   const envelope = envelopeOf(value);
   if (!envelope) return null;
   if (type === 'complete') {
-    // The app's reader (normalizeTrack) copes with missing and unfamiliar fields.
+    // The app's reader (normalizeTrack) copes with missing and unfamiliar fields. The
+    // measurement is still read only as the contract reads it.
     return isObject(value.data)
-      ? { type, ...envelope, data: value.data as unknown as TrackData }
+      ? { type, ...envelope, data: withContractAudio(value.data, readContractAudio) }
       : null;
   }
   if (!Array.isArray(value.candidates)) return null;
@@ -169,7 +196,11 @@ function parse(kind: Kind, data: string): unknown {
   const type = isObject(value) && 'type' in value ? String(value.type) : '?';
   const parsed = schema.safeParse(value);
   if (parsed.success) {
-    // Checked: the message as written (see AnalysisEvent).
+    // Checked: the message as written (see AnalysisEvent), with the contract's reading of the
+    // result's measurement.
+    if (kind === 'analysis' && type === 'complete' && isObject(value) && isObject(value.data)) {
+      return { ...value, data: withContractAudio(value.data, readContractAudio) };
+    }
     return value;
   }
   const known = schema.options.some((option) => option.shape.type.value === type);

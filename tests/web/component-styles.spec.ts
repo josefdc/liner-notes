@@ -292,7 +292,8 @@ const GENEALOGY_TEXT = {
   dashboard: "span[data-link-kind], p[data-link-relation], p[data-link-provenance]",
   player: [
     '[aria-label="Link legend"] li',
-    '[data-testid="links-rejected"]',
+    '[data-testid="links-hidden"]',
+    '[data-testid="genealogy-kinds"]',
     "#panel-genealogy details summary",
     '[aria-label="Genealogy links"] li',
   ].join(", "),

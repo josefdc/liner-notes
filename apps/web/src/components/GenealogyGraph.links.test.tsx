@@ -16,6 +16,8 @@ vi.mock('./genealogy/useAudioPreview', () => ({ useAudioPreview: () => audio }))
 import GenealogyGraph from './GenealogyGraph';
 import { LINK_COLOR } from './genealogy/linkStyle';
 import { claim, link, node, PACK } from './genealogy/testing';
+import { resultClaims } from './provenance/claims';
+import type { TrackData } from '../types';
 
 /** A ResizeObserver that reports a size at once, so the graph is drawn. */
 class SizedObserver {
@@ -59,9 +61,15 @@ const data = {
       claimId: 'cl-bad',
     }),
   ],
+};
+const claims = resultClaims({
   evidence: PACK,
   claims: [claim('cl-bad', { verdict: 'contradicted' })],
-};
+} as unknown as TrackData);
+/** The graph as the Player draws it: with the result's evidence pack and claims. */
+const Graph = (props: Partial<React.ComponentProps<typeof GenealogyGraph>>) => (
+  <GenealogyGraph data={data} evidence={PACK} claims={claims} {...props} />
+);
 
 const MB = 'ev-mb-1 (MusicBrainz primary record, this recording)';
 const lines = (container: HTMLElement) => [...container.querySelectorAll('g.links line')];
@@ -88,7 +96,7 @@ afterEach(() => {
 
 describe('GenealogyGraph links', () => {
   it('draws each link by its kind and relation, names it on the line, and leaves out the rejected', () => {
-    const { container } = render(<GenealogyGraph data={data} />);
+    const { container } = render(<Graph />);
     const drawn = lines(container).map((line) => ({
       kind: line.getAttribute('data-link-kind'),
       type: line.getAttribute('data-link-type'),
@@ -102,13 +110,13 @@ describe('GenealogyGraph links', () => {
     ]);
     const names = [...container.querySelectorAll('g.link-labels text')].map((t) => t.textContent);
     expect(names).toEqual(['sample', 'possible influence', 'possible shared producer']);
-    expect(screen.getByTestId('links-rejected').textContent).toBe(
-      '1 link not shown: the verifier contradicted its claim.',
+    expect(screen.getByTestId('links-hidden').textContent).toBe(
+      '1 link not shown: the claim behind it was rejected or cannot be read.',
     );
   });
 
   it('marks as an origin only a track a sourced link says this one samples', () => {
-    const { container } = render(<GenealogyGraph data={data} />);
+    const { container } = render(<Graph />);
     expect(subLabel(container, 'older')).toBe('[ORIGIN]');
     expect(subLabel(container, 'guess')).toBe('[LINK]');
     // A track whose link was rejected is no origin either.
@@ -116,7 +124,7 @@ describe('GenealogyGraph links', () => {
   });
 
   it('shows every link as inferred without the evidence pack', () => {
-    const { container } = render(<GenealogyGraph data={{ ...data, evidence: undefined }} />);
+    const { container } = render(<Graph evidence={undefined} />);
     expect(lines(container).map((line) => line.getAttribute('data-link-kind'))).toEqual([
       'inferred',
       'inferred',
@@ -127,7 +135,7 @@ describe('GenealogyGraph links', () => {
   });
 
   it('shows a link’s relation and provenance while it is pointed at', async () => {
-    const { container } = render(<GenealogyGraph data={data} />);
+    const { container } = render(<Graph />);
     const targets = [...container.querySelectorAll<SVGLineElement>('g.link-targets line')];
     expect(targets[0].getAttribute('aria-label')).toBe(
       `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB}.`,
@@ -149,7 +157,7 @@ describe('GenealogyGraph links', () => {
 
   it('is one tab stop; the arrow keys move between tracks and links, Enter analyses a track', async () => {
     const onNodeClick = vi.fn();
-    const { container } = render(<GenealogyGraph data={data} onNodeClick={onNodeClick} />);
+    const { container } = render(<Graph onNodeClick={onNodeClick} />);
     const items = focusables(container);
     // Five tracks, then three links; only the first is in the tab order.
     expect(items).toHaveLength(8);
@@ -210,7 +218,7 @@ describe('GenealogyGraph links', () => {
   });
 
   it('keeps the focused link’s detail when the pointer passes over another and leaves', async () => {
-    const { container } = render(<GenealogyGraph data={data} />);
+    const { container } = render(<Graph />);
     const targets = [...container.querySelectorAll<SVGLineElement>('g.link-targets line')];
     await act(async () => targets[2].focus());
     const focusedText = screen.getByTestId('link-detail').textContent;
@@ -228,7 +236,7 @@ describe('GenealogyGraph links', () => {
   });
 
   it('hides the drawing’s own words from screen readers', () => {
-    const { container } = render(<GenealogyGraph data={data} />);
+    const { container } = render(<Graph />);
     expect(container.querySelector('g.link-labels')?.getAttribute('aria-hidden')).toBe('true');
     expect(container.querySelector('g.links')?.getAttribute('aria-hidden')).toBe('true');
     const texts = [...container.querySelectorAll('g.nodes text')];
@@ -237,7 +245,7 @@ describe('GenealogyGraph links', () => {
   });
 
   it('lists every shown link as a sentence with its provenance, and shows the legend', () => {
-    render(<GenealogyGraph data={data} />);
+    render(<Graph />);
     const list = screen.getByRole('list', { name: 'Genealogy links' });
     expect(
       within(list)
@@ -259,12 +267,19 @@ describe('GenealogyGraph links', () => {
   });
 
   it('gives screen readers each track’s relation from its link, not its group', () => {
-    const { container } = render(<GenealogyGraph data={data} />);
+    const { container } = render(<Graph />);
     const summary = container.querySelector('.sr-only')?.textContent;
     expect(summary).toContain('Genealogy network with 4 related tracks.');
     expect(summary).toContain('Older Record - Someone (1984) (Sample, Sourced).');
     expect(summary).toContain('Guess - Someone (1990) (Possible influence, Model inference).');
     expect(summary).toContain('Disputed - Someone (1979) (No direct link to this track).');
+  });
+
+  it('counts the links the caller left out with those it hides itself', () => {
+    render(<Graph hiddenLinks={2} />);
+    expect(screen.getByTestId('links-hidden').textContent).toBe(
+      '3 links not shown: the claims behind them were rejected or cannot be read.',
+    );
   });
 
   it('has no legend or list without links', () => {

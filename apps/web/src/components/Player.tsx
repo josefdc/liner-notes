@@ -27,8 +27,10 @@ import {
 import { resultModeOf } from '../utils/recording';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
+import { linkContext, shownLinks } from './genealogy/links';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
+import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provenance/claims';
 import { ClaimList } from './provenance/ClaimList';
@@ -157,6 +159,17 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => withoutHiddenRelations(track.genealogy, claims.isHidden),
     [track.genealogy, claims],
   );
+  // Relations left out with their claims, said under the graph's legend.
+  const hiddenLinks = track.genealogy.links.length - genealogy.links.length;
+  // How the shown links are known: the panel's label says "model inference" only when none is
+  // sourced (each link says its own kind in the graph, its legend and its list).
+  const linkKinds = useMemo(() => {
+    const links = shownLinks(genealogy, linkContext(track.evidence, claims));
+    return {
+      sourced: links.some((link) => link.kind === 'sourced'),
+      inferred: links.some((link) => link.kind !== 'sourced'),
+    };
+  }, [genealogy, track.evidence, claims]);
   // Cards without a claim of their own are labelled by their section, or each on its own when
   // the cards beside it carry claims.
   const unclaimedFactoids = resultFactoids.some((factoid) => !claimOf(factoid));
@@ -694,19 +707,34 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
           id={tabIds.genealogy}
           role="tabpanel"
           aria-labelledby="tab-genealogy"
+          // On phones the open panel covers the panels' area (absolute, so it has that area's
+          // height for the graph); from md up it is one column of three.
           className={`
-            md:w-1/4 border-l border-white/5 bg-black/25 backdrop-blur-sm relative
-            ${activeTab === 'genealogy' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
+            md:w-1/4 border-l border-white/5 bg-black/25 backdrop-blur-sm md:relative
+            ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
         `}
         >
           <div className="absolute top-4 left-4 z-10 pointer-events-none flex items-center gap-2">
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
               Genealogy Network
             </h3>
-            {genealogy.nodes.length > 1 && <InferenceLabel>{provenance}</InferenceLabel>}
+            {genealogy.nodes.length > 1 &&
+              (linkKinds.sourced ? (
+                <Badge variant="gray" data-testid="genealogy-kinds">
+                  {linkKinds.inferred ? 'Sourced and inferred links' : 'Sourced links'}
+                </Badge>
+              ) : (
+                <InferenceLabel>{provenance}</InferenceLabel>
+              ))}
           </div>
           {genealogy.nodes.length > 1 ? (
-            <GenealogyGraph data={genealogy} onNodeClick={handleNodeClick} />
+            <GenealogyGraph
+              data={genealogy}
+              evidence={track.evidence}
+              claims={claims}
+              hiddenLinks={hiddenLinks}
+              onNodeClick={handleNodeClick}
+            />
           ) : (
             <div className="flex-1 flex items-center justify-center h-full p-6">
               <p className="text-text-tertiary text-xs font-mono text-center">

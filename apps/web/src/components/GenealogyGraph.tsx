@@ -26,6 +26,7 @@ import {
   nodesById,
   provenanceText,
   rank,
+  linkContext,
   readGenealogy,
   relationSentence,
   relationToTrack,
@@ -35,7 +36,6 @@ import { labelHeight, labelWidth, visibleLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
-import { useFillHeight } from './genealogy/useFillHeight';
 import { isValidImageUrl } from '../utils/image';
 import type { TrackData } from '../types';
 
@@ -114,15 +114,25 @@ function generateSvgPlaceholder(label: string, group: number, size: number): str
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) => {
-  const rootRef = useRef<HTMLDivElement>(null);
+const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
+  data,
+  evidence,
+  claims,
+  hiddenLinks = 0,
+  onNodeClick,
+}) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // The links that can be drawn (d3-force throws on a link to an unknown node id, which would
   // take the whole page down), each read with the contract's link schema and shown by its rule
   // and this app's stricter ones; links whose claim the verifier contradicted are left out.
-  const { links, rejected } = useMemo(() => readGenealogy(data), [data]);
+  const reading = useMemo(
+    () => readGenealogy(data, linkContext(evidence, claims)),
+    [data, evidence, claims],
+  );
+  const links = reading.links;
+  const hidden = reading.hidden + hiddenLinks;
   const nameOf = useMemo(() => {
     const nodes = nodesById(data?.nodes);
     return (id: string) => nodeName(nodes.get(id), id);
@@ -135,8 +145,6 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
   // so moving the pointer away does not take the focused item's detail with it.
   const [hovered, setHovered] = useState<Item | null>(null);
   const [focused, setFocused] = useState<Item | null>(null);
-  // On phones the panel has no height of its own: fill the space down to the tab bar.
-  const fillHeight = useFillHeight(rootRef);
 
   // Audio preview (extracted hook)
   const {
@@ -254,7 +262,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
     // Tracks a sourced sample, interpolation, cover or remix says the analysed track uses.
     const isOrigin = (d: CustomNode) => {
       const relation = relations.get(d.id);
-      return d.group !== 1 && relation !== undefined && isDocumentedSource(relation, d.id);
+      return (
+        currentId !== null &&
+        d.group !== 1 &&
+        relation !== undefined &&
+        isDocumentedSource(relation, d.id)
+      );
     };
 
     // Create simulation centered at viewport center
@@ -797,11 +810,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
   const keyboardOnNode = focused?.kind === 'node' && sameItem(active, focused);
 
   return (
-    <div
-      ref={rootRef}
-      className="relative w-full h-full flex flex-col"
-      style={fillHeight === null ? undefined : { height: fillHeight }}
-    >
+    <div className="relative w-full h-full flex flex-col">
       <div
         ref={wrapperRef}
         className="relative flex-1 min-h-0 overflow-hidden cursor-move bg-[radial-gradient(circle_at_center,_rgba(20,20,30,0.5)_0%,_transparent_70%)]"
@@ -916,15 +925,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
       </div>
 
       {/* What the lines mean, in words, and the links as a list (which opens over the graph) */}
-      {(links.length > 0 || rejected > 0) && (
+      {(links.length > 0 || hidden > 0) && (
         // Opaque and above the graph: nodes the graph draws past its edge do not cover it.
         <div className="relative z-10 shrink-0 flex flex-col gap-2 border-t border-white/5 px-4 pt-3 pb-4 md:pb-14 bg-void">
           <LinkLegend types={links.map((link) => link.type)} />
-          {rejected > 0 && (
-            <p className="text-chrome font-mono text-text-chip" data-testid="links-rejected">
-              {rejected === 1
-                ? '1 link not shown: the verifier contradicted its claim.'
-                : `${rejected} links not shown: the verifier contradicted their claims.`}
+          {hidden > 0 && (
+            <p className="text-chrome font-mono text-text-chip" data-testid="links-hidden">
+              {hidden === 1
+                ? '1 link not shown: the claim behind it was rejected or cannot be read.'
+                : `${hidden} links not shown: the claims behind them were rejected or cannot be read.`}
             </p>
           )}
           <LinkList links={links} nameOf={nameOf} />

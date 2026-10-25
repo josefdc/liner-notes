@@ -1,4 +1,6 @@
-import type { GenealogyLink, GenealogyNode } from '../../types';
+import type { GenealogyLink, GenealogyNode, TrackData } from '../../types';
+import { resultClaims } from '../provenance/claims';
+import { type LinkContext, linkContext } from './links';
 
 /** Builders for genealogy tests: an evidence pack and links of every relation and kind. */
 
@@ -45,4 +47,9 @@ export function claim(id: string, fields: Record<string, unknown> = {}) {
     numericCheck: 'n/a',
     ...fields,
   };
+}
+
+/** What links are read against, from a result's claims and evidence pack (absent: none sent). */
+export function contextOf(claims: unknown[] = [], evidence: unknown = PACK): LinkContext {
+  return linkContext(evidence, resultClaims({ claims, evidence } as unknown as TrackData));
 }

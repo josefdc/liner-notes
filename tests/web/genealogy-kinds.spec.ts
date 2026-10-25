@@ -139,16 +139,20 @@ test.describe("the genealogy graph", () => {
     await expect(graph.locator("g.link-labels text")).toHaveText(
       DRAWN.map(([, , , label]) => label),
     );
-    await expect(page.getByTestId("links-rejected")).toHaveText(
-      "1 link not shown: the verifier contradicted its claim.",
+    await expect(page.getByTestId("links-hidden")).toHaveText(
+      "1 link not shown: the claim behind it was rejected or cannot be read.",
     );
+    // Sourced links are shown: the panel's label does not call the whole graph an inference.
+    await expect(page.getByTestId("genealogy-kinds")).toHaveText("Sourced and inferred links");
+    // The track only the rejected link related is left out with it.
+    await expect(graph.locator('g.nodes > g[data-node-id="rejected"]')).toHaveCount(0);
     // A track is marked as an origin (amber halo) only when a sourced link says this one uses
     // it: group 2 is not enough. (The panel is too narrow for the [ORIGIN] sub-label.)
     const halo = (id: string) =>
       graph.locator(`g.nodes > g[data-node-id="${id}"] > circle`).first();
     await expect(halo("sample-sourced")).toHaveAttribute("style", /glow-amber/);
     await expect(halo("model-verified")).toHaveAttribute("style", /glow-amber/);
-    for (const id of ["sample-inferred", "ghost-cite", "model-sourced", "rejected", "backwards"]) {
+    for (const id of ["sample-inferred", "ghost-cite", "model-sourced", "backwards"]) {
       await expect(halo(id), id).toHaveAttribute("style", /filter: none/);
     }
     expect(problems).toEqual([]);
@@ -284,7 +288,7 @@ test.describe("the genealogy graph", () => {
     page,
   }) => {
     const snapshot = await page.locator("#panel-genealogy").ariaSnapshot();
-    expect(snapshot).toContain("Genealogy network with 18 related tracks.");
+    expect(snapshot).toContain("Genealogy network with 17 related tracks.");
     expect(snapshot).toContain("Sourced Sample - Someone (1984) (Sample, Sourced).");
     // The line labels and the tracks' drawn labels are hidden.
     expect(snapshot).not.toContain("possible influence");
@@ -333,7 +337,7 @@ test.describe("the genealogy graph", () => {
     await expect(items.nth(15)).toHaveText(
       `${CURRENT} samples Verified Model Sample - Someone (1982). Sourced · cites ${MB}.`,
     );
-    // The link the verifier rejected is not listed (its track stays, with no relation).
+    // The link the verifier rejected is not listed.
     await expect(items.filter({ hasText: "Rejected Sample" })).toHaveCount(0);
     await screenshot(page, testInfo, "list", page.locator("#panel-genealogy"));
 
@@ -410,7 +414,8 @@ test.describe("connected tracks on the Dashboard", () => {
   test("label what the model or an unbacked link relates as inferred, whatever the group", async ({
     page,
   }, testInfo) => {
-    // All four are in group 2 ("it samples"): none has a sourced link that holds.
+    // All are in group 2 ("it samples"): none has a sourced link that holds. The track only a
+    // rejected link related is left out.
     await useMockApi(
       page,
       withNodes(["sample-inferred", "model-sourced", "backwards", "rejected"]),
@@ -423,8 +428,8 @@ test.describe("connected tracks on the Dashboard", () => {
       "LOGIC: Possible influence",
       "LOGIC: Possible influence",
       "LOGIC: Related, direction unknown",
-      "LOGIC: No direct link to this track",
     ]);
+    await expect(page.locator("#root")).not.toContainText("Rejected Sample");
     await expect(cards.locator("[data-link-provenance]")).toHaveText([
       "Model inference · stated as a sample, shown as an influence; no evidence cited",
       "Model inference · stated as a sample, shown as an influence; proposed by the model; no " +

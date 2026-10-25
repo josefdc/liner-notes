@@ -11,6 +11,7 @@ import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
 import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants';
 import type { TrackRelation } from './genealogy/links';
+import { resultClaims, withoutHiddenRelations } from './provenance/claims';
 import { useLinkReader } from './genealogy/useLinkReader';
 
 interface DashboardProps {
@@ -80,9 +81,19 @@ interface RelatedTrack {
   group: number;
 }
 
+/**
+ * The genealogy the main view shows: without the relations whose claim it hides (rejected, or
+ * unreadable) and the tracks only those related, as in the Player.
+ */
+function shownGenealogy(trackData: TrackData | null) {
+  if (!trackData) return null;
+  const claims = resultClaims(trackData);
+  return { claims, genealogy: withoutHiddenRelations(trackData.genealogy, claims.isHidden) };
+}
+
 /** The tracks other than the analysed one; the link reader is needed only when there are some. */
-const relatedNodes = (trackData: TrackData | null) =>
-  (trackData?.genealogy?.nodes ?? []).filter((node) => node.group !== 1);
+const relatedNodes = (shown: ReturnType<typeof shownGenealogy>) =>
+  (shown?.genealogy.nodes ?? []).filter((node) => node.group !== 1);
 
 /**
  * Tracks connected to this one in its genealogy (empty when there are none: no stand-ins), the
@@ -93,13 +104,17 @@ const relatedNodes = (trackData: TrackData | null) =>
  */
 function getRelatedTracks(
   trackData: TrackData | null,
+  shown: ReturnType<typeof shownGenealogy>,
   reader: LinkReader | null,
 ): RelatedTrack[] | null {
-  const others = relatedNodes(trackData);
-  if (!trackData || others.length === 0) return [];
+  const others = relatedNodes(shown);
+  if (!trackData || !shown || others.length === 0) return [];
   if (!reader) return null;
-  const nodes = trackData.genealogy?.nodes ?? [];
-  const links = reader.shownLinks(trackData.genealogy);
+  const nodes = shown.genealogy.nodes;
+  const links = reader.shownLinks(
+    shown.genealogy,
+    reader.linkContext(trackData.evidence, shown.claims),
+  );
   const named = reader.nodesById(nodes);
   const nameOf = (id: string) => reader.nodeName(named.get(id), id);
   const currentId = nodes.find((node) => node.group === 1)?.id ?? null;
@@ -159,8 +174,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
   // The link reader (and the contract's schemas it validates with) loads only when there are
   // connected tracks to read.
-  const { reader, failed: readerFailed } = useLinkReader(relatedNodes(trackData).length > 0);
-  const relatedTracks = useMemo(() => getRelatedTracks(trackData, reader), [trackData, reader]);
+  const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
+  const { reader, failed: readerFailed } = useLinkReader(relatedNodes(shown).length > 0);
+  const relatedTracks = useMemo(
+    () => getRelatedTracks(trackData, shown, reader),
+    [trackData, shown, reader],
+  );
   const hasGenreProfile = (trackData?.genreProfile?.length ?? 0) > 0;
   // The audio models' style and tag scores; null for a result without an `audio` block.
   const fingerprint = useMemo(

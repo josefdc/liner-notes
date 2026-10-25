@@ -196,10 +196,8 @@ describe('Dashboard connected tracks', () => {
       'LOGIC: Possible influence',
     );
     expect(byTitle('Older Record')?.textContent).toContain('no verifier verdict supports it');
-    // The rejected link is not used at all.
-    expect(byTitle('Guessed Sample')?.querySelector('[data-link-kind]')?.textContent).toBe(
-      'LOGIC: No direct link to this track',
-    );
+    // The rejected link is not used at all, and the track only it related is left out.
+    expect(byTitle('Guessed Sample')).toBeUndefined();
   });
 
   it('gives no direction to a relation the release years contradict', async () => {
@@ -211,6 +209,22 @@ describe('Dashboard connected tracks', () => {
     );
     expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) and Quiet Signal (2011) are related (direction unknown)',
+    );
+  });
+
+  it('relates tracks to each other when the analysed track is not in the graph', async () => {
+    const track = connected([sourcedSample('older', 'later')]);
+    track.genealogy.nodes = track.genealogy.nodes.filter((n) => n.group !== 1);
+    renderDashboard(track);
+    const shown = await cards();
+    const later = shown.find((card) => card.textContent?.includes('Later Track'));
+    expect(later?.querySelector('[data-link-kind]')?.textContent).toBe('LOGIC: Sample');
+    expect(later?.querySelector('[data-link-relation]')?.textContent).toBe(
+      'Later Track - Someone (2015) samples Older Record - Someone (1984)',
+    );
+    const lonely = shown.find((card) => card.textContent?.includes('Lonely Node'));
+    expect(lonely?.querySelector('[data-link-kind]')?.textContent).toBe(
+      'LOGIC: No link to another track',
     );
   });
 

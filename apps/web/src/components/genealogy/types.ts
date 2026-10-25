@@ -1,13 +1,22 @@
 import type { SimulationNodeDatum, SimulationLinkDatum } from 'd3-force';
 import type { TrackData, GenealogyNode } from '../../types';
+import type { ResultClaims } from '../provenance/claims';
 import type { ShownLink } from './links';
 
 export interface GenealogyGraphProps {
-  /**
-   * The genealogy as `normalizeTrack` returns it: with the result's evidence pack, which a link
-   * must cite to be shown as sourced.
-   */
   data: TrackData['genealogy'];
+  /**
+   * The result's evidence pack (`evidence`, as sent). A link is shown as sourced only when every
+   * id it cites is in it; without it every link is a model inference.
+   */
+  evidence?: unknown;
+  /**
+   * The result's claims (`resultClaims`): a link whose claim the main view hides is not drawn,
+   * and a model link is sourced only when its claim has a supporting verdict.
+   */
+  claims?: ResultClaims | null;
+  /** Links the caller left out already because their claim is hidden (said under the legend). */
+  hiddenLinks?: number;
   // Callback to trigger analysis of a clicked node (infinite navigation)
   onNodeClick?: (node: GenealogyNode) => void;
 }

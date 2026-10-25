@@ -8,13 +8,11 @@ import {
 } from '@liner-notes/contract';
 import { describe, expect, it } from 'vitest';
 import { colors } from '../../styles/theme';
+import { claimIsRejected } from '../provenance/claims';
 import {
-  claimIsRejected,
-  claimsById,
   evidencePack,
   LINK_TYPE_LABEL,
   LINK_TYPES,
-  type LinkContext,
   type NamedNode,
   nodeName,
   nodesById,
@@ -28,13 +26,7 @@ import {
   shownLinks,
 } from './links';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY } from './linkStyle';
-import { claim, evidenceItem, link, node, PACK } from './testing';
-
-const context = (claims: unknown[] = [], evidence: unknown = PACK): LinkContext => ({
-  evidence: evidencePack(evidence),
-  hasPack: Array.isArray(evidence),
-  claims: claimsById(claims),
-});
+import { claim, contextOf as context, evidenceItem, link, node, PACK } from './testing';
 const read = (
   value: unknown,
   ctx = context(),
@@ -50,15 +42,14 @@ const sourced = (fields: Record<string, unknown> = {}) =>
 const DOCUMENTED: LinkType[] = ['sample', 'interpolation', 'cover', 'remix'];
 const MB = 'ev-mb-1 (MusicBrainz primary record, this recording)';
 
-describe('evidencePack and claimsById', () => {
-  it('keep the items the contract reads, by id, and leave the others out', () => {
+describe('evidencePack', () => {
+  it('keeps the items the contract reads, by id, and leaves the others out', () => {
     const unreadable = { ...evidenceItem('ev-new'), source: 'a-new-source' };
     expect([...evidencePack([...PACK, unreadable, null, 'ev-text']).keys()]).toEqual([
       'ev-mb-1',
       'ev-shs-1',
     ]);
     expect(evidencePack(undefined).size).toBe(0);
-    expect([...claimsById([claim('cl-1'), { id: 'cl-2' }, null]).keys()]).toEqual(['cl-1']);
   });
 });
 
@@ -165,16 +156,28 @@ describe('readLink', () => {
     expect(provenanceText(dangling)).toContain('its claim is not in this result');
   });
 
-  it('leaves out a link whose claim the verifier contradicted, whatever its kind', () => {
+  it('leaves out a link whose claim the main view hides, by the shared rule', () => {
     for (const fields of [{ verdict: 'contradicted' }, { numericCheck: 'contradicted' }]) {
+      expect(claimIsRejected(claim('cl-bad', fields))).toBe(true);
       const result = readLink(
         sourced({ origin: 'code', claimId: 'cl-bad' }),
         context([claim('cl-bad', fields)]),
       );
-      expect(result).toEqual({ rejected: true });
+      expect(result).toEqual({ hidden: true });
     }
-    const conflict = claimsById([claim('c', { numericCheck: 'conflict' })]).get('c');
-    expect(conflict && claimIsRejected(conflict)).toBe(false);
+    // A claim this page cannot read is hidden too; a numeric conflict is not a rejection.
+    expect(
+      readLink(
+        sourced({ origin: 'code', claimId: 'cl-x' }),
+        context([{ id: 'cl-x', kind: 'new' }]),
+      ),
+    ).toEqual({ hidden: true });
+    expect(
+      readLink(
+        sourced({ origin: 'code', claimId: 'c' }),
+        context([claim('c', { numericCheck: 'conflict' })]),
+      ),
+    ).toMatchObject({ link: { kind: 'sourced' } });
   });
 
   it('gives no direction to a link the release years contradict', () => {
@@ -260,31 +263,31 @@ describe('readGenealogy', () => {
         link('current', 'missing'),
         { source: 'origin1', target: 'current', value: 1, type: 'vibe' },
       ],
-      evidence: PACK,
     };
-    expect(shownLinks(genealogy).map((l) => [l.source, l.target, l.value])).toEqual([
+    expect(shownLinks(genealogy, context()).map((l) => [l.source, l.target, l.value])).toEqual([
       ['origin1', 'current', 3],
     ]);
-    expect(shownLinks({ nodes: 'x', links: null, evidence: null })).toEqual([]);
+    expect(shownLinks({ nodes: 'x', links: null }, context())).toEqual([]);
     expect(shownLinks(undefined)).toEqual([]);
   });
 
-  it('counts the links it leaves out as rejected', () => {
-    const reading = readGenealogy({
-      nodes: [node('current', 1), node('a', 2), node('b', 2)],
-      links: [
-        link('a', 'current', {
-          type: 'sample',
-          kind: 'sourced',
-          evidenceIds: ['ev-mb-1'],
-          claimId: 'cl-bad',
-        }),
-        link('b', 'current', { type: 'influence' }),
-      ],
-      evidence: PACK,
-      claims: [claim('cl-bad', { verdict: 'contradicted' })],
-    });
-    expect(reading.rejected).toBe(1);
+  it('counts the links it leaves out', () => {
+    const reading = readGenealogy(
+      {
+        nodes: [node('current', 1), node('a', 2), node('b', 2)],
+        links: [
+          link('a', 'current', {
+            type: 'sample',
+            kind: 'sourced',
+            evidenceIds: ['ev-mb-1'],
+            claimId: 'cl-bad',
+          }),
+          link('b', 'current', { type: 'influence' }),
+        ],
+      },
+      context([claim('cl-bad', { verdict: 'contradicted' })]),
+    );
+    expect(reading.hidden).toBe(1);
     expect(reading.links.map((l) => l.source)).toEqual(['b']);
   });
 
@@ -295,8 +298,9 @@ describe('readGenealogy', () => {
         link('origin1', 'current', { type: 'sample', kind: 'sourced', evidenceIds: ['ev-mb-1'] }),
       ],
     };
-    expect(shownLinks({ ...genealogy, evidence: PACK })[0]).toMatchObject({ kind: 'sourced' });
+    expect(shownLinks(genealogy, context())[0]).toMatchObject({ kind: 'sourced' });
     expect(shownLinks(genealogy)[0]).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(shownLinks(genealogy, context([], null))[0]).toMatchObject({ kind: 'inferred' });
   });
 });
 
@@ -376,6 +380,18 @@ describe('relations in words', () => {
     expect(relationToTrack([shown('old', 'new', 'sample')], 'old', 'current')).toEqual({
       link: null,
       text: 'No direct link to this track',
+    });
+  });
+
+  it('relates a track by its best link to any track when the analysed one is not in the graph', () => {
+    const toNew = shown('old', 'new', 'sample');
+    expect(relationToTrack([toNew], 'old', null)).toEqual({ link: toNew, text: 'Sample' });
+    expect(relationSentence(toNew, nameOf)).toBe(
+      'Newer Record - Someone (2015) samples Older Record - Someone (1984)',
+    );
+    expect(relationToTrack([toNew], 'lonely', null)).toEqual({
+      link: null,
+      text: 'No link to another track',
     });
   });
 });

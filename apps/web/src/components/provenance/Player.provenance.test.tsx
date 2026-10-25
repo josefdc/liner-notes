@@ -88,7 +88,11 @@ describe('the Player with claims', () => {
     expect(network.textContent).toContain('Kept Influence - Other (2005)');
     expect(network.textContent).toContain('Unclaimed Influence - Third (1990)');
     expect(network.textContent).not.toContain('Rejected Source');
-    expect(network.textContent).toContain('with 3 related tracks');
+    // The current track is not counted among the related ones.
+    expect(network.textContent).toContain('with 2 related tracks');
+    expect(network.textContent).toContain(
+      '1 link not shown: the claim behind it was rejected or cannot be read.',
+    );
   });
 
   it('lists the credits from the credit claims, with their sources and the verifier reasons', () => {

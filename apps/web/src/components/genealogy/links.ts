@@ -1,11 +1,12 @@
 import {
-  Claim,
-  Evidence,
+  type Claim,
+  type Evidence,
   GenealogyLink,
   type LinkKind,
   type LinkType,
   linkDisplayKind as contractLinkDisplayKind,
 } from '@liner-notes/contract';
+import { readEvidence, type ResultClaims } from '../provenance/claims';
 
 /**
  * How the web app reads and names genealogy links. Each link is read with the contract's link
@@ -14,7 +15,8 @@ import {
  * this app's own:
  * - a link the model proposed is sourced only when its claim (`claimId`) carries a supported or
  *   partial verdict: citing is not support;
- * - a link whose claim the verifier contradicted is not shown at all;
+ * - a link whose claim the main view hides (rejected by the verifier, or unreadable: the one
+ *   rule of `resultClaims` in provenance/claims.ts) is not shown at all;
  * - a link whose direction contradicts the release years is "related (direction unknown)".
  *
  * Direction: `source` is the earlier record, the one that is sampled, interpolated, covered,
@@ -116,8 +118,10 @@ export interface LinkContext {
   evidence: ReadonlyMap<string, Evidence>;
   /** False when the result carries no evidence pack at all. */
   hasPack: boolean;
-  /** The claims the contract can read, by id. */
-  claims: ReadonlyMap<string, Claim>;
+  /** The readable claim with this id, or null. */
+  claimOf: (id: string) => Claim | null;
+  /** True for a claim id the main view shows nothing for (`ResultClaims.isHidden`). */
+  isHidden: (id: string) => boolean;
 }
 
 /** A track of the genealogy, as a relation names it. */
@@ -130,43 +134,24 @@ export interface NamedNode {
 /** A result's evidence pack by id: the items the contract can read (others are left out). */
 export function evidencePack(evidence: unknown): ReadonlyMap<string, Evidence> {
   const pack = new Map<string, Evidence>();
-  if (!Array.isArray(evidence)) return pack;
-  for (const item of evidence) {
-    const parsed = Evidence.safeParse(item);
-    if (parsed.success) pack.set(parsed.data.id, parsed.data);
-  }
+  for (const item of readEvidence(evidence)) if (!pack.has(item.id)) pack.set(item.id, item);
   return pack;
 }
 
-/** A result's claims by id: the ones the contract can read (others are left out). */
-export function claimsById(claims: unknown): ReadonlyMap<string, Claim> {
-  const byId = new Map<string, Claim>();
-  if (!Array.isArray(claims)) return byId;
-  for (const item of claims) {
-    const parsed = Claim.safeParse(item);
-    if (parsed.success) byId.set(parsed.data.id, parsed.data);
-  }
-  return byId;
-}
-
-/** The context of a genealogy as `normalizeTrack` returns it (with the result's pack and claims). */
+/**
+ * What a result's links are read against: its evidence pack, and its claims as `resultClaims`
+ * reads them (null when there are none to read: no link then has a claim).
+ */
 export function linkContext(
-  genealogy: { evidence?: unknown; claims?: unknown } | null | undefined,
+  evidence: unknown,
+  claims: ResultClaims | null | undefined,
 ): LinkContext {
   return {
-    evidence: evidencePack(genealogy?.evidence),
-    hasPack: Array.isArray(genealogy?.evidence),
-    claims: claimsById(genealogy?.claims),
+    evidence: evidencePack(evidence),
+    hasPack: Array.isArray(evidence),
+    claimOf: (id) => claims?.byId.get(id)?.claim ?? null,
+    isHidden: (id) => claims?.isHidden(id) ?? false,
   };
-}
-
-/**
- * True when the verifier rejected the claim: its verdict, or the numeric check of its numbers
- * against the measurement, is "contradicted". Such a claim, and a link that states it, leave
- * the main view.
- */
-export function claimIsRejected(claim: Claim): boolean {
-  return claim.verdict === 'contradicted' || claim.numericCheck === 'contradicted';
 }
 
 /** The kind of a link by the contract's `linkDisplayKind`, against the pack's ids. */
@@ -205,11 +190,11 @@ function citationText(citation: Citation): string {
   return `${citation.id} (${parts.join(', ')})`;
 }
 
-type Read = { link: ShownLink } | { rejected: true } | null;
+type Read = { link: ShownLink } | { hidden: true } | null;
 
 /**
- * A link as the app shows it; `{ rejected: true }` when the verifier contradicted its claim
- * (it is not shown); null when the contract's link schema cannot read it.
+ * A link as the app shows it; `{ hidden: true }` when the main view hides its claim (rejected
+ * by the verifier, or unreadable); null when the contract's link schema cannot read it.
  */
 export function readLink(
   value: unknown,
@@ -219,8 +204,8 @@ export function readLink(
   const parsed = GenealogyLink.safeParse(value);
   if (!parsed.success) return null;
   const link = parsed.data;
-  const claim = link.claimId ? (context.claims.get(link.claimId) ?? null) : null;
-  if (claim && claimIsRejected(claim)) return { rejected: true };
+  if (link.claimId && context.isHidden(link.claimId)) return { hidden: true };
+  const claim = link.claimId ? context.claimOf(link.claimId) : null;
 
   const statedType = link.type ?? null;
   const origin = link.origin ?? null;
@@ -301,11 +286,11 @@ export function readLink(
   };
 }
 
-/** What a genealogy shows: its links, and how many were left out as rejected. */
+/** What a genealogy shows: its links, and how many were left out. */
 export interface GenealogyReading {
   links: ShownLink[];
-  /** Links not shown because the verifier contradicted their claim. */
-  rejected: number;
+  /** Links not shown because the main view hides their claim. */
+  hidden: number;
 }
 
 /** The genealogy's nodes, by id (entries that are not nodes are left out). */
@@ -327,36 +312,35 @@ export function nodesById(nodes: unknown): ReadonlyMap<string, NamedNode> {
 
 /**
  * The links of a genealogy that can be shown: those the contract's schema reads whose source
- * and target are both in the node list, in their order, read against the result's pack and
- * claims (`evidence` and `claims`, which `normalizeTrack` copies from the result; without them
- * every link is a model inference). Links whose claim the verifier contradicted are counted,
- * not shown.
+ * and target are both in the node list, in their order, read against the result's evidence pack
+ * and claims (`context`; without them every link is a model inference). Links whose claim the
+ * main view hides are counted, not shown.
  */
 export function readGenealogy(
-  genealogy:
-    | { nodes?: unknown; links?: unknown; evidence?: unknown; claims?: unknown }
-    | null
-    | undefined,
+  genealogy: { nodes?: unknown; links?: unknown } | null | undefined,
+  context: LinkContext = linkContext(undefined, null),
 ): GenealogyReading {
   const nodes = nodesById(genealogy?.nodes);
-  const context = linkContext(genealogy);
   const links: ShownLink[] = [];
-  let rejected = 0;
+  let hidden = 0;
   for (const value of Array.isArray(genealogy?.links) ? genealogy.links : []) {
     const read = readLink(value, context, nodes);
     if (read === null) continue;
-    if ('rejected' in read) {
-      rejected += 1;
+    if ('hidden' in read) {
+      hidden += 1;
       continue;
     }
     if (nodes.has(read.link.source) && nodes.has(read.link.target)) links.push(read.link);
   }
-  return { links, rejected };
+  return { links, hidden };
 }
 
 /** The links of a genealogy that can be shown (see `readGenealogy`). */
-export function shownLinks(genealogy: Parameters<typeof readGenealogy>[0]): ShownLink[] {
-  return readGenealogy(genealogy).links;
+export function shownLinks(
+  genealogy: { nodes?: unknown; links?: unknown } | null | undefined,
+  context?: LinkContext,
+): ShownLink[] {
+  return readGenealogy(genealogy, context).links;
 }
 
 function article(label: string): string {
@@ -428,25 +412,25 @@ export interface TrackRelation {
 
 /**
  * How the track `nodeId` is related to the analysed track `currentId`: by the link that joins
- * them, the best known first (see `rank`).
+ * them, the best known first (see `rank`). A genealogy without the analysed track (no group-1
+ * node: `currentId` null) relates a track by its best link to any other track instead.
  */
 export function relationToTrack(
   links: readonly ShownLink[],
   nodeId: string,
   currentId: string | null,
 ): TrackRelation {
-  const direct = links
-    .filter(
-      (link) =>
-        currentId !== null &&
-        ((link.source === nodeId && link.target === currentId) ||
-          (link.source === currentId && link.target === nodeId)),
-    )
-    .sort((a, b) => rank(b) - rank(a));
-  const link = direct[0] ?? null;
-  return link === null
-    ? { link: null, text: 'No direct link to this track' }
-    : { link, text: relationLabel(link) };
+  const joins = (link: ShownLink) =>
+    currentId === null
+      ? link.source === nodeId || link.target === nodeId
+      : (link.source === nodeId && link.target === currentId) ||
+        (link.source === currentId && link.target === nodeId);
+  const link = links.filter(joins).sort((a, b) => rank(b) - rank(a))[0] ?? null;
+  if (link !== null) return { link, text: relationLabel(link) };
+  return {
+    link: null,
+    text: currentId === null ? 'No link to another track' : 'No direct link to this track',
+  };
 }
 
 /**

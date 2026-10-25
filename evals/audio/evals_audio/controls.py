@@ -321,8 +321,9 @@ GROUPS = {
     "chord-keyed-seeded": "a key: chords that keep the key the other rules give them (held "
     "chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs, "
     "a bass and chord riff on one chord, one-bar I-V-vi-IV riffs, 30 seeds each; triads with "
-    "the third 1.5-6 dB softer than a doubled root at every root, mode and three timbres; a "
-    "third 10-25 cents off over a doubled root; sus2 and sus4 chords, their key not scored)",
+    "the third 1.5-6 dB softer than a doubled root at every root, mode and three timbres; "
+    "seventh chords whose fifth folds into a doubled root and whose third is quiet; a third "
+    "10-25 cents off over a doubled root; sus2 and sus4 chords, their key not scored)",
     "held-out-seeded": "evaluation only: the one-pitch-class families at seeds 600-629 and the "
     "chord families at 800-829; no rule value is chosen on them",
 }
@@ -653,6 +654,17 @@ def controls() -> list[Control]:
                 key=(s.PITCH_NAMES[root], mode),
             )
             for index, (root, mode, timbre, level) in enumerate(s.SOFT_THIRD_GRID)
+        ),
+        *(
+            c(
+                f"seventh-{index}",
+                "chord-keyed-seeded",
+                f"a {quality} chord, its fifth folded into a doubled root, third {third:g} dB, "
+                f"seventh {seventh:+g} dB ({s.PITCH_NAMES[root]})",
+                lambda index=index: s.seventh_chord(index)[0],
+                key=(s.PITCH_NAMES[root], "minor" if quality == "m7" else "major"),
+            )
+            for index, (root, quality, third, seventh) in enumerate(s.SEVENTH_GRID)
         ),
         *(
             c(

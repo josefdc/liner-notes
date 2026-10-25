@@ -203,17 +203,21 @@ times are seconds from the start of the preview. Every block is `null` when it w
   proportions over the whole window (followed in 2 s steps) and rise and fall together, and
   what they spell is one note, or two a fourth, a fifth or a tritone apart, the key is withheld
   as "one pitched source". That is a cowbell or one note repeated on a bass. A chord is three
-  pitch classes, or two a third or a sixth apart; a fifth or a third about as loud as the root
-  below it is a chord tone, not one of the root's harmonics. What the tests and controls show
-  holds: held chords faded, swelling, getting louder, with tremolo or pumped by a sidechain,
-  chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose third is 1.5-6 dB
-  softer than a root doubled an octave down (every root, both modes, three timbres), a third
-  10-25 cents off over a doubled root, and sus2 and sus4 chords over their root lose no key to
-  this rule, and it never gives them its reason. It is not proven beyond those levels and
-  tunings: a third much softer still, or a major third sung or played 8 cents flat or more over
-  its root two octaves down (which reads as the root's fifth harmonic), can make a still chord
-  count as one source. A bell is not caught (its tierce is a minor third over the hum, as in a
-  chord), nor are several drums (toms, tabla strokes with partials of their own). Neither strength
+  pitch classes, or two a second, a third, a sixth or a seventh apart; a fifth or a third about
+  as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
+  and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
+  by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose
+  third is 1.5-6 dB softer than a root doubled an octave down (every root, both modes, three
+  timbres), seventh chords whose fifth folds into a doubled root and whose third is 6-12 dB
+  down, a third 10-25 cents off over a doubled root, and sus2 and sus4 chords over their root
+  lose no key to this rule, and it never gives them its reason. It is not proven beyond those
+  levels and tunings, and two limits are known and pinned in the tests: a fourth (G2 under C3)
+  whose third is 15 dB down reads as two notes a fourth apart (librosa's right C major is
+  withheld), and a sine bass 15 dB louder than a triad over it reads as one note (the right A
+  major is withheld with both estimators). A major third sung or played 8 cents flat or more
+  over its root two octaves down reads as the root's fifth harmonic, so such a still chord can
+  count as one source too. A bell is not caught (its tierce is a minor third over the hum, as in
+  a chord), nor are several drums (toms, tabla strokes with partials of their own). Neither strength
   separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
   still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are
   what keep keys off pitchless sound, and they also withhold many keys of electronic dance
@@ -344,8 +348,9 @@ syllables, from `tests/music.py`), loudness, key moments, sections and the finge
 and that the single-source rule withholds no key of the chord families at seeds 700-729 (held
 chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs, riffs on
 one chord and one-bar riffs), of triads at C3-D#3 with a third 1.5-6 dB softer than a doubled
-root, or of sus chords, and that a third 10-25 cents off still makes a chord; seeds 600-629 and
-800-829 are evaluation-only `evals/audio` controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
+root, or of sus chords, and that a third 10-25 cents off and a seventh over a doubled root
+whose third is quiet still make a chord; the two known limits are pinned as expected failures;
+seeds 600-629 and 800-829 are evaluation-only `evals/audio` controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
 marker `seeded`, and CI runs them in a job of their own (`uv run pytest -m seeded`, next to
 `uv run pytest -m "not seeded"`); a plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round

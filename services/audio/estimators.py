@@ -226,9 +226,11 @@ LIBROSA_MIN_KEY_STRENGTH = 0.4
 #    third is 0.79 % off the fifth harmonic and stays a note (one sung or played 8 cents flat or
 #    more folds into the root). Notes count down to SOURCE_NOTE_COUNT of the strongest note, so
 #    a third a few dB softer than a root doubled an octave down (the strongest line) still
-#    counts. Three pitch classes, or two with a third or a sixth (within SOURCE_THIRD_CENTS)
-#    between any note of one and any note of the other, are a chord and keep the key; one note,
-#    or two a fourth, fifth or tritone apart, is one source.
+#    counts. Three pitch classes, or two with a second, a third, a sixth or a seventh (thirds
+#    and sixths within SOURCE_THIRD_CENTS) between any note of one and any note of the other,
+#    are a chord and keep the key (a seventh chord whose fifth folds into a root doubled below
+#    and whose third is quiet leaves root and seventh); one note, or two a fourth, fifth or
+#    tritone apart, is one source.
 # Measured on the controls of tests/signals.py, with analyzer 2.1.0 as the reference (a lost key
 # is one it served that the rule withholds):
 # - the chords of CHORD_KEYED_SEEDED (seeds 700-729): held chords faded, swelling, getting
@@ -239,8 +241,13 @@ LIBROSA_MIN_KEY_STRENGTH = 0.4
 #   both modes, three timbres, four shapes), on a third 10-25 cents off over a doubled root (144)
 #   or on sus2 and sus4 chords (48), where the rule never fires; the same holds for 528 more
 #   softer-third chords built another way (the same families with the third 3 dB softer, and
-#   stabbed or pumped triads at every root with the third 1.5 or 3 dB softer). The cut has
-#   room: notes counted down to 0.12-0.22 of the strongest lose nothing on any of them;
+#   stabbed or pumped triads at every root with the third 1.5 or 3 dB softer), or on
+#   SEVENTH_GRID (144 m7 and maj7 chords whose fifth folds into a doubled root, third 6-12 dB
+#   down, seventh 0 or +6 dB). The cut has room: notes counted down to 0.12-0.22 of the
+#   strongest lose nothing on any of them. Two limits are known and pinned as expected failures
+#   (tests/test_v2.py): a fourth whose third is 15 dB down, and a sine bass 15 dB over a triad
+#   (three right keys on two of 1,704 further chords tried); neither a lower cut nor a cut
+#   against the loudest note above the bass keeps them without losing one-pitch-class catches;
 # - the one-pitch-class controls (seeds 500-529): of the keys analyzer 2.1.0 gave, it withholds
 #   16 of 19 cowbells' with Essentia and 7 of 9 with librosa (two oscillators a fourth to a
 #   minor sixth apart; the three kept are read as a chord), and 4 of 6 one-note basses' with
@@ -785,10 +792,11 @@ def _overtone(f: float, a: float, f0: float, a0: float, strongest: float) -> boo
 
 def spells_chord(notes: tuple[float, ...]) -> bool:
     """
-    Three pitch classes or more, or two with a third or a sixth between any note of one and
-    any note of the other (within SOURCE_THIRD_CENTS of equal temperament): a chord, or the
-    third over a root whose fifth is the root's own third harmonic. Fewer, or two a fourth,
-    fifth or tritone apart (two oscillators of a cowbell), is one source.
+    Three pitch classes or more, or two with a second, a third, a sixth or a seventh between any
+    note of one and any note of the other (a third or a sixth within SOURCE_THIRD_CENTS of equal
+    temperament): a chord, as the third over a root whose fifth is the root's own third
+    harmonic, or the seventh over it when the third is too quiet to count. Fewer, or two a
+    fourth, fifth or tritone apart (two oscillators of a cowbell), is one source.
     """
     by_class: dict[int, list[float]] = {}
     for f in notes:
@@ -804,7 +812,7 @@ def spells_chord(notes: tuple[float, ...]) -> bool:
             apart = (high - low) % 12
             interval = min(apart, 12 - apart)
             close = abs(interval - round(interval)) * 100 <= SOURCE_THIRD_CENTS
-            if int(round(interval)) in (3, 4) and close:
+            if int(round(interval)) in (1, 2) or (int(round(interval)) in (3, 4) and close):
                 return True
     return False
 

@@ -919,6 +919,72 @@ def sus_chord(root: int, kind: str, timbre: str = "organ", shape: str = "stabs")
     return _shaped(lambda t: _chord_tone(notes, t, timbre), shape)
 
 
+# A seventh chord whose fifth (6 dB down) folds into a root doubled an octave below and whose
+# third is quiet (6-12 dB down) under a seventh at 0 or +6 dB: root and seventh are what is
+# left, and a seventh is a chord. Every root, m7 and maj7, three timbres, four shapes.
+SEVENTH_GRID = tuple(
+    (root, quality, third_db, seventh_db)
+    for root in range(12)
+    for quality in ("m7", "maj7")
+    for third_db in (-6.0, -9.0, -12.0)
+    for seventh_db in (0.0, 6.0)
+)
+
+
+def seventh_chord(index: int):
+    """SEVENTH_GRID[index] as a signal, with its key (m7: minor, maj7: major)."""
+    root, quality, third_db, seventh_db = SEVENTH_GRID[index]
+    mode = "minor" if quality == "m7" else "major"
+    third, seventh = (3, 10) if quality == "m7" else (4, 11)
+    timbre = ("pad", "saw", "organ")[index % 3]
+    voices = [
+        (36 + root, 0.0),
+        (48 + root, 0.0),
+        (48 + root + third, third_db),
+        (55 + root, -6.0),
+        (48 + root + seventh, seventh_db),
+    ]
+
+    def y_of(t):
+        return sum(10 ** (db / 20) * _chord_tone([m], t, timbre) for m, db in voices)
+
+    shape = SHAPES[(index + index // 6) % len(SHAPES)]
+    return _shaped(y_of, shape), (PITCH_NAMES[root], mode)
+
+
+# Two limits of the notes test, kept as signals so that tests can say what happens to them:
+# a fourth (fifth below, root above) with its third 15 dB down, and a sine bass 15 dB over a
+# triad whose third is 3 dB down. In both the third does not count and the key is withheld.
+def fourth_with_quiet_third(root: int = 0, third_db: float = -15.0) -> np.ndarray:
+    voices = [(43 + root, 0.0), (48 + root, 0.0), (52 + root, third_db)]
+    return _shaped(
+        lambda t: sum(10 ** (db / 20) * _chord_tone([m], t, "saw") for m, db in voices),
+        "tremolo",
+    )
+
+
+def _phased_tone(midi: float, t: np.ndarray, partials, db: float = 0.0) -> np.ndarray:
+    """One note whose partials start at phases drawn from the note (not all at zero)."""
+    rng = np.random.default_rng(int(midi * 100))
+    f0 = hz(midi)
+    y = sum(
+        w * np.sin(2 * np.pi * f0 * r * t + rng.uniform(0, 6.28))
+        for r, w in partials
+        if f0 * r < 5000
+    )
+    return 10 ** (db / 20) * y
+
+
+def triad_under_a_loud_sine_bass(root: int = 9, bass_db: float = 15.0) -> np.ndarray:
+    voices = [(48 + root, 0.0), (52 + root, -3.0), (55 + root, 0.0)]
+
+    def y_of(t):
+        bass = _phased_tone(36 + root, t, [(1, 1.0)], bass_db)
+        return bass + sum(_phased_tone(m, t, _TIMBRES["organ"], db) for m, db in voices)
+
+    return _shaped(y_of, "tremolo")
+
+
 def chord_key(family: str, seed: int) -> tuple[str, str]:
     """The key of CHORD_KEYED_SEEDED[family](seed), without making the signal."""
     if family == "c-major-stabs":

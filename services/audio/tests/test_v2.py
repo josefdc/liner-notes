@@ -941,6 +941,43 @@ def test_sus_chords_over_their_root_are_chords(kind):
         assert str(s.key_withheld()) != estimators.ONE_SOURCE
 
 
+@pytest.mark.seeded
+def test_a_seventh_chord_with_a_quiet_third_is_a_chord():
+    """
+    Seventh chords whose fifth (6 dB down) folds into a root doubled below and whose third is
+    6-12 dB down under the seventh (signals.SEVENTH_GRID at C, D#, F# and A; the evals/audio
+    controls hold every root): root and seventh are what is left of the notes, and a seventh
+    is a chord.
+    """
+    for index, (root, _, _, _) in enumerate(signals.SEVENTH_GRID):
+        if root % 3:
+            continue
+        y, key = signals.seventh_chord(index)
+        s = estimators.Signals(y, FIXTURE_SR)
+        notes = estimators.source_notes(s.harmonic_stft, s.sr, s.hop)
+        assert estimators.spells_chord(notes), (signals.SEVENTH_GRID[index], key, notes)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="a known limit: a fourth (G2 under C3) with its third 15 dB down reads as two notes "
+    "a fourth apart; without the rule librosa gives the right C major (0.768), Essentia C minor",
+)
+def test_a_fourth_with_a_third_15_db_down_keeps_its_key():
+    s = estimators.Signals(signals.fourth_with_quiet_third(), FIXTURE_SR)
+    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="a known limit: a sine bass 15 dB over an A major triad (third 3 dB down) reads as one "
+    "note; without the rule both estimators give the right A major (0.75 and 0.862)",
+)
+def test_a_triad_under_a_bass_15_db_louder_keeps_its_key():
+    s = estimators.Signals(signals.triad_under_a_loud_sine_bass(), FIXTURE_SR)
+    assert str(s.key_withheld()) != estimators.ONE_SOURCE, s.source_evidence
+
+
 def test_chord_key_names_each_family_s_key():
     for family, make in signals.CHORD_KEYED_SEEDED.items():
         assert make(700)[1] == signals.chord_key(family, 700), family
@@ -964,6 +1001,13 @@ def test_held_and_struck_lines_by_the_numbers():
         ((130.81, 164.81, 196.0), True),
         # The root's octave 16 cents low and the third 16 cents high: any pair decides.
         ((65.41, 130.81 * 2 ** (-16 / 1200), 164.81 * 2 ** (16 / 1200)), True),
+        # A seventh or a second over the root (a seventh chord whose fifth folded into the
+        # root and whose third is too quiet to count): a chord.
+        ((65.41, 233.08), True),  # C2 and B-flat 3
+        ((65.41, 246.94), True),  # C2 and B3
+        ((130.81, 146.83), True),  # C3 and D3
+        ((220.0, 293.66), False),  # a fourth
+        ((220.0, 311.13), False),  # a tritone
     ):
         evidence = estimators.SourceEvidence(**{**one_note, "notes": notes})
         assert evidence.chord == chord and evidence.single == (not chord), notes

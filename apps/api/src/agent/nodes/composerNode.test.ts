@@ -21,11 +21,19 @@ const enrich = vi.hoisted(() => ({
   during: null as null | (() => void),
   /** A preview URL the enricher gives every genealogy node, when set. */
   nodePreview: null as string | null,
+  /** A source error the enricher reports for the node previews, when set. */
+  reports: null as null | { source: string; code: string; message?: string },
 }));
 const mb = vi.hoisted(() => ({ lookupIsrc: vi.fn() }));
 vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: { nodes: object[] }) => {
+  enrichGenealogyWithArtwork: async (
+    genealogy: { nodes: object[] },
+    _cover: string,
+    _signal: AbortSignal | undefined,
+    report?: (error: unknown) => void,
+  ) => {
     enrich.during?.();
+    if (enrich.reports) report?.(enrich.reports);
     const previewUrl = enrich.nodePreview;
     if (!previewUrl) return genealogy;
     return { ...genealogy, nodes: genealogy.nodes.map((node) => ({ ...node, previewUrl })) };
@@ -193,6 +201,7 @@ describe("composerNode", () => {
     store.put.mockReset();
     store.get.mockReset();
     enrich.nodePreview = null;
+    enrich.reports = null;
     mb.lookupIsrc.mockReset();
     for (const method of ["log", "warn", "error"] as const) {
       vi.spyOn(console, method).mockImplementation(() => {});
@@ -399,6 +408,12 @@ describe("composerNode", () => {
     "neither sends nor stores %s that does not fit the contract, and fails the run",
     async (_name, llm) => {
       const writer = vi.fn();
+      const deezer = {
+        source: "deezer",
+        code: "rate_limited",
+        message: "Genealogy previews: quota",
+      };
+      enrich.reports = deezer;
       // A cover URL the contract cannot carry (it is a string, empty when unknown).
       const out = await createComposerNode(testRuntime(llm()))(
         stateWith(measured, { coverUrl: null }),
@@ -410,6 +425,8 @@ describe("composerNode", () => {
       expect(out.trackData).toBeUndefined();
       expect(out.error).toMatch(/does not fit the contract.*coverUrl/);
       expect(out.usage).toHaveLength(1);
+      // The sources the run could not read still count, the genealogy previews' included.
+      expect(out.sourceErrors).toEqual([deezer]);
     },
   );
 
@@ -672,6 +689,34 @@ describe("composerNode", () => {
       expect(store.put).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ["the composed result", succeeding, true],
+      ["the fallback", () => failing("rate_limited"), false],
+    ])(
+      "lists Deezer read for the genealogy previews in %s's source errors, and still stores the composed one",
+      async (_name, llm, stored) => {
+        const deezer = {
+          source: "deezer",
+          code: "rate_limited",
+          message: "Genealogy previews: quota",
+        };
+        enrich.reports = deezer;
+        const writer = vi.fn();
+
+        const out = await createComposerNode(testRuntime(llm()))(stateWith(measured), {
+          writer,
+          configurable: { thread_id: "run-1" },
+        } as never);
+
+        expect(out.sourceErrors).toEqual([deezer]);
+        expect(out.trackData?.run?.sourceErrors).toEqual([deezer]);
+        const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+        expect(complete.data.run.sourceErrors).toEqual([deezer]);
+        // A stored result never carries a preview, so a preview source does not keep it out.
+        if (stored) expect(store.put).toHaveBeenCalledTimes(1);
+      },
+    );
+
     it("stores a result for a track picked from the track picker under that track", async () => {
       await createComposerNode(testRuntime(succeeding()))(
         { ...stateWith(measured), selectedBy: "user", queryMatch: "none" } as SonicAgentStateType,
@@ -813,42 +858,47 @@ describe("composerNode", () => {
       expect(JSON.stringify(store.put.mock.calls[0][2])).not.toContain("dzcdn.net");
     });
 
-    it("sends the preview URLs with this run's result but stores none, so a cache hit shows none", async () => {
-      const trackPreview = "https://p.scdn.co/mp3-preview/track";
-      const nodePreview = "https://p.scdn.co/mp3-preview/node";
-      enrich.nodePreview = nodePreview;
-      const runtime = testRuntime(succeeding());
-      const writer = vi.fn();
+    it.each([
+      ["Spotify's", "https://p.scdn.co/mp3-preview/node"],
+      ["Deezer's", "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y"],
+    ])(
+      "sends the preview URLs with this run's result but stores none, so a cache hit shows none (node clip %s)",
+      async (_label, nodePreview) => {
+        const trackPreview = "https://p.scdn.co/mp3-preview/track";
+        enrich.nodePreview = nodePreview;
+        const runtime = testRuntime(succeeding());
+        const writer = vi.fn();
 
-      const state = { ...stateWith(measured), previewUrl: trackPreview } as SonicAgentStateType;
-      await createComposerNode(runtime)(state, {
-        writer,
-        configurable: { thread_id: "run-1" },
-      } as never);
+        const state = { ...stateWith(measured), previewUrl: trackPreview } as SonicAgentStateType;
+        await createComposerNode(runtime)(state, {
+          writer,
+          configurable: { thread_id: "run-1" },
+        } as never);
 
-      const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
-      expect(complete.data.previewUrl).toBe(trackPreview);
-      expect(complete.data.genealogy.nodes[0].previewUrl).toBe(nodePreview);
-      expect(store.put).toHaveBeenCalledTimes(1);
-      const [namespace, key, value] = store.put.mock.calls[0];
-      expect(JSON.stringify(value)).not.toContain("mp3-preview");
-      expect(value.trackData).not.toHaveProperty("previewUrl");
+        const complete = writer.mock.calls.find(([event]) => event.type === "complete")?.[0];
+        expect(complete.data.previewUrl).toBe(trackPreview);
+        expect(complete.data.genealogy.nodes[0].previewUrl).toBe(nodePreview);
+        expect(store.put).toHaveBeenCalledTimes(1);
+        const [namespace, key, value] = store.put.mock.calls[0];
+        expect(JSON.stringify(value)).not.toMatch(/mp3-preview|dzcdn|hdnea/);
+        expect(value.trackData).not.toHaveProperty("previewUrl");
 
-      // The next search that finds the song is served from the store.
-      store.get.mockImplementation(async (ns: string[], k: string) =>
-        JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
-      );
-      const served = vi.fn();
-      const out = await scoutNode(
-        { songQuery: "Ice Ice Baby Vanilla Ice", hitlConfig: { maxCandidates: 5 } } as never,
-        { writer: served } as never,
-        runtime,
-      );
-      expect(out.trackData).toBeTruthy();
-      expect(out.trackData).not.toHaveProperty("previewUrl");
-      const hit = served.mock.calls.find(([event]) => event.type === "complete")?.[0];
-      expect(JSON.stringify(hit.data)).not.toContain("mp3-preview");
-    });
+        // The next search that finds the song is served from the store.
+        store.get.mockImplementation(async (ns: string[], k: string) =>
+          JSON.stringify(ns) === JSON.stringify(namespace) && k === key ? { value } : null,
+        );
+        const served = vi.fn();
+        const out = await scoutNode(
+          { songQuery: "Ice Ice Baby Vanilla Ice", hitlConfig: { maxCandidates: 5 } } as never,
+          { writer: served } as never,
+          runtime,
+        );
+        expect(out.trackData).toBeTruthy();
+        expect(out.trackData).not.toHaveProperty("previewUrl");
+        const hit = served.mock.calls.find(([event]) => event.type === "complete")?.[0];
+        expect(JSON.stringify(hit.data)).not.toMatch(/mp3-preview|dzcdn|hdnea/);
+      },
+    );
   });
 
   it("emits the LLM-* status codes", async () => {

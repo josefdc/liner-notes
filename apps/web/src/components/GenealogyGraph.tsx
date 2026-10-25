@@ -83,8 +83,25 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Audio preview (extracted hook)
-  const { isPlaying, playingNodeId, hasPreviewSupport, playPreview, stopPreview } =
-    useAudioPreview();
+  const {
+    isPlaying,
+    playingNodeId,
+    hasPreviewSupport,
+    unavailableNodeId,
+    playPreview,
+    stopPreview,
+  } = useAudioPreview();
+
+  // A clip that could not be loaded takes its hover label with it.
+  useEffect(() => {
+    if (!unavailableNodeId || !svgRef.current) return;
+    select(svgRef.current)
+      .selectAll<SVGTextElement, unknown>('.preview-indicator')
+      .filter(function () {
+        return this.getAttribute('data-node-id') === unavailableNodeId;
+      })
+      .remove();
+  }, [unavailableNodeId]);
 
   // State for responsive dimensions (ResizeObserver)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -365,16 +382,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
         if (d.previewUrl && d.group !== 1) {
           playPreview(d.previewUrl, d.id);
 
-          // Add audio indicator
+          // Add audio indicator (removed again if the clip cannot be loaded, see below)
           select(this)
             .append('text')
             .attr('class', 'preview-indicator')
+            .attr('data-node-id', d.id)
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
             .attr('font-size', '9px')
             .attr('fill', colors.cyber)
-            .text('♪ SAMPLING...')
+            // A preview of the node's track, whatever its relation to this one
+            .text('♪ PREVIEW')
             .style('opacity', 0)
             .transition()
             .duration(300)
@@ -389,7 +408,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
             .attr('font-family', 'IBM Plex Mono')
             .attr('font-size', '9px')
             .attr('fill', colors.analog)
-            .text(d.previewUrl ? '♪ SAMPLING...' : '⚡ CLICK TO EXPLORE')
+            .text('⚡ CLICK TO EXPLORE')
             .style('opacity', 0)
             .transition()
             .duration(300)
@@ -515,10 +534,20 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({ data, onNodeClick }) =>
 
       {/* No Preview Support Warning (browsers may block autoplay) */}
       {!hasPreviewSupport && (
-        <div className="absolute top-4 right-4 pointer-events-none">
-          <div className="flex items-center gap-2 text-gray-500 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+        <div className="absolute top-4 right-4 pointer-events-none" role="status">
+          <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
             <VolumeX size={12} />
             <span>AUDIO BLOCKED</span>
+          </div>
+        </div>
+      )}
+
+      {/* A node's clip that could not be loaded (preview links expire); hover again to retry */}
+      {hasPreviewSupport && unavailableNodeId && (
+        <div className="absolute top-4 right-4 pointer-events-none" role="status">
+          <div className="flex items-center gap-2 text-gray-400 text-xs font-mono bg-black/80 px-3 py-1.5 rounded border border-white/10">
+            <VolumeX size={12} />
+            <span>PREVIEW UNAVAILABLE</span>
           </div>
         </div>
       )}

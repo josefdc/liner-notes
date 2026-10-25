@@ -13,7 +13,8 @@ from evals_audio import calibration as cal
 from evals_audio import calibration_report
 from evals_audio.controls import ANY, NOT_SCORED, controls
 from evals_audio.datasets import DATASETS, split_of
-from evals_audio.report import SCHEMA_VERSION, count_p_values, render
+from evals_audio.metrics import mcnemar_exact
+from evals_audio.report import SCHEMA_VERSION, count_p_values, decision_lines, render
 
 FRAMES_PER_MINUTE = 60.0 * 22050 / 512
 
@@ -469,3 +470,134 @@ def test_controls_have_unique_names_known_groups_and_truths():
 )
 def test_a_control_value_is_judged_against_its_truth(truth, value, kind, ok):
     assert cal.control_ok(truth, value, kind) == ok
+
+
+def vector(third: float) -> list[float]:
+    """C, G strong and E at `third` of the strongest: three classes only at a level <= third."""
+    v = [0.0] * 12
+    v[0], v[7], v[4] = 1.0, 0.9, third
+    return v
+
+
+def key_evidence(third: float) -> dict:
+    ev = evidence()
+    ev["classes"] = {k: vector(third) for k in ("lines", "fundamental", "upper130", "upper260")}
+    return ev
+
+
+def key_control(name: str, truth, third: float) -> dict:
+    clip = key_clip(name, key_evidence(third))
+    clip["estimators"]["librosa"] = key_clip(name, key_evidence(third), name="librosa")[
+        "estimators"
+    ]["librosa"]
+    clip |= {"name": name, "group": "key"}
+    clip["truth"] = {"tempo": NOT_SCORED, "key": truth, "gate": "pass"}
+    clip["servedGate"] = {n: {"passed": True, "reason": None} for n in clip["estimators"]}
+    return clip
+
+
+def key_runs():
+    """
+    40 tonal clips per half that no pitch-class level changes, a bass-heavy band whose third
+    class is at 0.25 of the strongest (truth C major) and a one-note bass whose overtone sits at
+    0.12 (truth: no key): a lower level keys the band, and at 0.1 the bass too.
+    """
+    clips = []
+    for split in ("calibration", "evaluation"):
+        for k in range(40):
+            clip = key_clip(f"{split}-{k}", evidence(), split=split, served=["C", "major"])
+            clip["estimators"]["librosa"] = key_clip(
+                f"{split}-{k}", evidence(), split=split, served=["C", "major"], name="librosa"
+            )["estimators"]["librosa"]
+            clips.append(clip)
+    run = {**tempo_run(clips, ("essentia", "librosa")), "kind": "key"}
+    run["dataset"] = {"name": "giantsteps-key", "title": "GiantSteps Key"}
+    controls = [
+        key_control("band-bass+10", ["C", "major"], 0.25),
+        key_control("one-note-bass", None, 0.12),
+    ]
+    return [run], controls_run(controls, ("essentia", "librosa"))
+
+
+def test_a_value_that_gives_a_control_a_key_is_a_loosening_even_with_no_annotated_change():
+    runs, ctl = key_runs()
+    group = family(cal.select(runs, ctl["controls"]), "classes")["groups"][0]
+    rows = {tuple(c["value"]): c for c in group["candidates"]}
+    # 0.2 keys the band (right) and nothing else: a loosening with no annotated evidence.
+    assert rows[("lines", 0.2)]["verdict"]["loosens"]
+    assert not rows[("lines", 0.2)]["verdict"]["accepted"]
+    # 0.1 also keys the one-note bass: a loosening that breaks a control.
+    assert rows[("lines", 0.1)]["verdict"]["loosens"]
+    assert "L4" in rows[("lines", 0.1)]["verdict"]["failed"]
+    assert group["chosen"] == ["lines", 0.28]
+
+
+def test_the_key_evidence_uses_the_candidate_s_periodicity_minimum():
+    ev = evidence(periodicity=0.25)  # a beat at 0.2, none at 0.3
+    stats = {"tonic": "C", "mode": "major", "strength": 0.8}
+    assert cal.derive_key(True, ev, stats, "essentia", cal.BASELINE) == ["C", "major"]
+    stricter = cal.BASELINE.set("min_periodicity", 0.3)
+    # Without a beat and without a pitch track, the service gives no key.
+    assert cal.evidence_withheld(ev, stricter, "essentia") == "no pitch track"
+
+
+def halves_rows(calibration, evaluation, pooled):
+    """beat-this against essentia, (candidate, default, only candidate, only default) per half."""
+    rows = []
+    for clips, (a, b, x, y) in zip(
+        ("calibration", "evaluation", "all"), (calibration, evaluation, pooled), strict=True
+    ):
+        rows.append(
+            {
+                "data": "giantsteps-tempo",
+                "clips": clips,
+                "name": "beat-this",
+                "n": 200,
+                "candidate": a,
+                "default": b,
+                "onlyCandidate": x,
+                "onlyDefault": y,
+                "p": mcnemar_exact(x, y),
+            }
+        )
+    return rows
+
+
+EVIDENCE = {"default": "essentia", "cost": None, "rows": [], "candidates": ["beat-this"]}
+
+
+def test_a_gain_the_halves_disagree_on_keeps_the_default():
+    unstable = halves_rows((49, 54, 10, 15), (60, 39, 23, 2), (109, 93, 33, 17))
+    (text, _) = decision_lines(EVIDENCE, calibrated=True, halves=unstable)
+    assert text.startswith("Decision: the service keeps `essentia`.")
+    assert "not stable across the halves" in text
+    assert "49 vs 54 of 200 on the calibration clips (p = 0.424)" in text
+    assert "open decision" not in text
+
+
+def test_a_gain_both_halves_show_leaves_the_decision_open():
+    stable = halves_rows((60, 40, 25, 5), (58, 39, 24, 5), (118, 79, 49, 10))
+    (text, _) = decision_lines(EVIDENCE, calibrated=True, halves=stable)
+    assert "both halves agree" in text and "open decision" in text
+    assert "keeps `essentia`" not in text
+
+
+def test_the_halves_sentence_says_whether_the_tempo_rules_changed():
+    runs, ctl = drift_runs()
+    doc = {"schemaVersion": SCHEMA_VERSION, "date": "2026-10-24", "runs": [*runs, ctl]}
+    assert calibration_report.tempo_rules_unchanged(doc, ["essentia", "librosa"])
+    changed = cal.BASELINE.set("steady_tolerance", 0.04).as_dict()
+    doc["runs"][0]["rules"] = changed
+    assert not calibration_report.tempo_rules_unchanged(doc, ["essentia", "librosa"])
+
+
+def test_the_gate_section_names_noise_controls_that_get_a_value():
+    runs, ctl = key_runs()
+    for c in ctl["controls"]:
+        c["truth"]["gate"] = "noise"
+    text = "\n".join(calibration_report.gate_section(runs, ctl, cal.BASELINE))
+    # Under the baseline neither control gets a key.
+    assert "None of those that pass gets a tempo or a key." in text
+    lower = cal.BASELINE.set("class_level", 0.1)
+    text = "\n".join(calibration_report.gate_section(runs, ctl, lower))
+    assert "these get a value: band-bass+10 (`essentia` key)" in text

@@ -1004,7 +1004,8 @@ def default_section(doc: dict) -> list[str]:
     ]
     halves = calibration_report.default_halves(doc, default, candidates)
     if halves:
-        out += halves_lines(halves, default)
+        unchanged = calibration_report.tempo_rules_unchanged(doc, [default, *candidates])
+        out += halves_lines(halves, default, unchanged)
     if cost:
         out += cost_lines(cost, default, candidates) + [""]
     out += decision_lines(
@@ -1013,7 +1014,7 @@ def default_section(doc: dict) -> list[str]:
     return out
 
 
-def halves_lines(halves: list[dict], default: str) -> list[str]:
+def halves_lines(halves: list[dict], default: str, rules_unchanged: bool) -> list[str]:
     rows = [
         [
             f"`{h['name']}`",
@@ -1027,8 +1028,15 @@ def halves_lines(halves: list[dict], default: str) -> list[str]:
     ]
     return [
         f"The same comparison against `{default}` on both halves of the calibration runs' "
-        "clips and on all of them (as served; the tempo rules these estimators use did not "
-        "change, so both halves serve this comparison equally). The clips come in groups "
+        "clips and on all of them, as served ("
+        + (
+            "the tempo rules these estimators use are the ones before this calibration, so both "
+            "halves serve this comparison equally"
+            if rules_unchanged
+            else "this calibration changed tempo rules these estimators use, on the calibration "
+            "clips: the evaluation clips are the fairer half"
+        )
+        + "). The clips come in groups "
         "(artists, labels, tracks cut from the same release), so they are not independent and "
         "each p-value overstates the evidence.",
         "",
@@ -1081,14 +1089,18 @@ def cost_lines(cost: dict, default: str, candidates: list[str]) -> list[str]:
     return out
 
 
-def halves_verdict(halves: list[dict]) -> tuple[list[str], list[str]]:
-    """Candidates ahead on all clips (McNemar p < 0.05), and sentences on halves that disagree."""
-    wins, notes = [], []
+def halves_verdict(halves: list[dict]) -> tuple[list[str], list[str], set[str]]:
+    """
+    Candidates ahead on all clips (McNemar p < 0.05), sentences on halves that disagree, and
+    the candidates whose halves disagree on a dataset where they are ahead (not stable).
+    """
+    wins, notes, unstable = [], [], set()
     for name in dict.fromkeys(h["name"] for h in halves):
         for data in dict.fromkeys(h["data"] for h in halves if h["name"] == name):
             rows = {h["clips"]: h for h in halves if h["name"] == name and h["data"] == data}
             pooled = rows.get("all")
-            if pooled and pooled["p"] < 0.05 and pooled["candidate"] > pooled["default"]:
+            ahead = bool(pooled and pooled["p"] < 0.05 and pooled["candidate"] > pooled["default"])
+            if ahead:
                 wins.append(name)
             parts = [rows.get(k) for k in ("calibration", "evaluation")]
             if all(parts):
@@ -1099,6 +1111,8 @@ def halves_verdict(halves: list[dict]) -> tuple[list[str], list[str]]:
                 # A disagreement: one half significant and the other not, or opposite
                 # directions with a significant half (two noisy halves are not one).
                 if len(significance) > 1 or (len(signs) > 1 and True in significance):
+                    if ahead:
+                        unstable.add(name)
                     c, e = parts
                     notes.append(
                         f"On {data} the halves disagree: `{name}` {c['candidate']} vs "
@@ -1106,7 +1120,7 @@ def halves_verdict(halves: list[dict]) -> tuple[list[str], list[str]]:
                         f"{e['candidate']} vs {e['default']} of {e['n']} on the evaluation clips "
                         f"(p {pval(e['p'])}); the pooled result is not stable."
                     )
-    return list(dict.fromkeys(wins)), notes
+    return list(dict.fromkeys(wins)), notes, unstable
 
 
 def decision_lines(
@@ -1115,17 +1129,31 @@ def decision_lines(
     default, cost = evidence["default"], evidence["cost"]
     annotated = [r for r in evidence["rows"] if not r.get("golden")]
     notes: list[str] = []
+    first = (
+        f"Decision: the service keeps `{default}` under the current withholding rules. As "
+        "served, no candidate gives significantly more correct tempos (Acc1 over n) on data it "
+        "was not trained on."
+    )
     if halves:
-        wins, notes = halves_verdict(halves)
-        if wins:
-            names = ", ".join(f"`{n}`" for n in wins)
+        wins, notes, unstable = halves_verdict(halves)
+        stable = [n for n in wins if n not in unstable]
+        if stable:
+            names = ", ".join(f"`{n}`" for n in stable)
             return [
                 f"On all the clips of the calibration runs, as served, {names} meets the "
-                "accuracy part of the criterion on data it was not trained on. "
-                + " ".join(notes)
-                + " Whether that and its cost are worth a change is the open decision.",
+                "accuracy part of the criterion on data it was not trained on, and both halves "
+                "agree. " + " ".join(notes) + " Whether that and its cost are worth a change is "
+                "the open decision.",
                 "",
             ]
+        if wins:
+            names = ", ".join(f"`{n}`" for n in wins)
+            first = (
+                f"Decision: the service keeps `{default}`. On all the clips of the calibration "
+                f"runs, as served, {names} meets the accuracy part of the criterion on data it "
+                "was not trained on, but the comparison is not stable across the halves, so it "
+                "is no ground for a change."
+            )
     # With the calibration runs, the pooled clips decide (above), not one half's run.
     served_wins = [] if halves else [r for r in annotated if significant(r["served1"], more=True)]
     if served_wins:
@@ -1135,11 +1163,7 @@ def decision_lines(
             "trained on; whether its cost is worth it is the open decision.",
             "",
         ]
-    parts = [
-        f"Decision: the service keeps `{default}` under the current withholding rules. As "
-        "served, no candidate gives significantly more correct tempos (Acc1 over n) on data it "
-        "was not trained on."
-    ] + notes
+    parts = [first, *notes]
     for r in annotated:
         w1, w2 = r.get("wrong1"), r.get("wrong2")
         figures = (

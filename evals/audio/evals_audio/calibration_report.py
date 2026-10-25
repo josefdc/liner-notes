@@ -136,17 +136,19 @@ def section(doc: dict) -> list[str]:
         "clips (`evals_audio.calibration.select`), so it can be checked against the values the "
         "service has.",
         "",
-        f"- The procedure was written down before the calibration runs. A **loosening** "
-        f"(answers the old value withheld) is accepted when its extra answers are right "
+        f"- The procedure was written down before the calibration runs. A **loosening** (a "
+        f"value under which a clip or a control gets a value it did not have) is accepted when "
+        f"its extra answers on the annotated clips are right "
         f"({KIND_RIGHT['tempo']} for tempo, exact for key) with a Wilson 95 % lower bound of at "
         f"least {100 * cal.L1_MIN_LOWER:g} % (L1), at most {100 * cal.L2_MAX_DROP:g} points less "
         f"often than the old answers (L2), wrong even forgiving octave and meter (key: "
-        f"unrelated) at most {100 * cal.L3_MAX_GROSS_RISE:g} points more often (L3), and no "
-        f"control goes from right to wrong (L4); the loosest value that passes is taken. A "
-        f"**tightening** is accepted when it removes a value a control shows wrongly (T1), "
+        f"unrelated) at most {100 * cal.L3_MAX_GROSS_RISE:g} points more often (L3); the "
+        f"loosest value that passes is taken. A **tightening** is accepted when it removes a "
+        f"value a control shows wrongly (T1), "
         f"lowers correct / n by at most {100 * cal.T2_MAX_DROP:g} points on each dataset and "
         "withholds answers that are right less often than those it keeps (T2); the least "
-        "strict value that passes is taken. A rule the service keeps per estimator (the "
+        "strict value that passes is taken. Either way, no control may go from right to wrong "
+        "(L4). A rule the service keeps per estimator (the "
         "confidence and strength minimums) is decided on that estimator's clips; a shared rule "
         "on Essentia's (the default) and checked on librosa's: a change librosa's clips reject "
         "is not made. beat-this is shown under the service's rules and decides nothing.",
@@ -174,7 +176,7 @@ def section(doc: dict) -> list[str]:
     out += evaluation_section(runs, after)
     out += controls_section(controls, after)
     out += octave_section(runs, after)
-    out += gate_section(runs, controls)
+    out += gate_section(runs, controls, after)
     return out
 
 
@@ -329,8 +331,8 @@ def choice_section(choice: dict) -> list[str]:
     out += [
         "In each table *answered* and *correct* are over all calibration clips of the rule's "
         "datasets, with the value in place; *extra answers* are those the value gives and the "
-        "previous one withheld, *answers withheld* the reverse. *Controls broken* is a criterion "
-        "for a loosening (L4) only. Gross errors: "
+        "previous one withheld, *answers withheld* the reverse; a control broken fails any "
+        "value (L4). Gross errors: "
         f"tempo {KIND_GROSS['tempo']}, key {KIND_GROSS['key']}.",
         "",
     ]
@@ -632,7 +634,7 @@ def octave_section(runs: list[dict], after: cal.Rules) -> list[str]:
     ]
 
 
-def gate_section(runs: list[dict], controls: dict) -> list[str]:
+def gate_section(runs: list[dict], controls: dict, after: cal.Rules) -> list[str]:
     rows = []
     for run in runs:
         gated = [
@@ -647,15 +649,29 @@ def gate_section(runs: list[dict], controls: dict) -> list[str]:
         for c in noise
         if any(g and not g["passed"] for g in (c.get("servedGate") or {}).values())
     ]
-    passed = [c["name"] for c in noise if c["name"] not in gated]
+    passed = [c for c in noise if c["name"] not in gated]
+    valued = sorted(
+        {
+            f"{c['name']} (`{name}` {kind})"
+            for c in passed
+            for name in controls["estimators"]
+            for kind in ("tempo", "key")
+            if cal.usable(c, name, kind) and cal.derived(c, name, kind, after) is not None
+        }
+    )
+    then = (
+        "None of those that pass gets a tempo or a key."
+        if not valued
+        else f"Of those that pass, these get a value: {', '.join(valued)}."
+    )
+    passed_names = ", ".join(c["name"] for c in passed) or "none"
     return [
         "### The noise gate",
         "",
         *table(["data", "clips", "gated as noise or silence"], rows),
         "",
         f"Noise controls gated: {len(gated)} of {len(noise)} ({', '.join(gated) or 'none'}); "
-        f"passed: {', '.join(passed) or 'none'}. Those that pass get no tempo and no key in the "
-        "table above. Nothing here measures what a stricter gate would cost on speech, a "
+        f"passed: {passed_names}. {then} Nothing here measures what a stricter gate would cost on speech, a "
         "cappella or solo instruments (the annotated sets hold none), so the gate's values are "
         "not changed by this calibration.",
         "",
@@ -703,3 +719,30 @@ def default_halves(doc: dict, default: str, candidates: list[str]) -> list[dict]
                     }
                 )
     return out
+
+
+TEMPO_FIELDS = (
+    "min_periodicity",
+    "min_confidence",
+    "steady_tolerance",
+    "steady_lag_frames",
+    "onset_check",
+    "drift",
+)
+
+
+def tempo_rules_unchanged(doc: dict, names: list[str]) -> bool:
+    """Whether every tempo calibration run was made with the tempo rules before calibration."""
+    runs, _ = runs_of(doc)
+    for run in runs:
+        if run["kind"] != "tempo":
+            continue
+        rules = cal.Rules.from_dict(run["rules"])
+        for field in TEMPO_FIELDS:
+            value = getattr(rules, field)
+            if isinstance(value, dict):
+                if any(rules.get(field, n) != cal.BASELINE.get(field, n) for n in names):
+                    return False
+            elif value != getattr(cal.BASELINE, field):
+                return False
+    return True

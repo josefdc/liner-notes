@@ -391,9 +391,9 @@ def tempo_swing(bpm: float = 100.0, swing: float = 0.1, period: float = 12.0) ->
 
 
 # --- pitchless material at many seeds ------------------------------------------------------
-# Each generator draws its tempo, kit, noise colour, levels and sounds from the seed, so that a
-# rule can be checked on material it was not tuned on (seeds 100-129 were not used to choose
-# any value). None of it has a key.
+# Each generator draws its tempo, kit, noise colour, levels and sounds from the seed. None of it
+# has a key. Seeds 100-129 are calibration controls (evals/audio): the calibration sees them, so
+# the tests on them check material the rules were chosen with, not new material.
 
 
 def _db(y: np.ndarray, db: float) -> np.ndarray:
@@ -484,7 +484,7 @@ PITCHLESS_SEEDED = {
     "siren-over-drums": seeded_siren_over_drums,
     "clicks": seeded_clicks,
 }
-UNSEEN_SEEDS = range(100, 130)
+CONTROL_SEEDS = range(100, 130)
 
 
 # --- one pitch class at many seeds ---------------------------------------------------------

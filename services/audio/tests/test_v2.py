@@ -785,7 +785,7 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
 
 
 @pytest.mark.parametrize("family", signals.PITCHLESS_SEEDED)
-def test_no_key_for_pitchless_material_at_unseen_seeds(family):
+def test_no_key_for_pitchless_material_at_control_seeds(family):
     """
     Drums, noise with a beat, a siren over drums and clicks, 30 seeds each (tempo, kit, noise,
     levels and sounds drawn from the seed; the calibration also sees these as controls): never
@@ -793,7 +793,7 @@ def test_no_key_for_pitchless_material_at_unseen_seeds(family):
     """
     make = signals.PITCHLESS_SEEDED[family]
     keyed = {}
-    for seed in signals.UNSEEN_SEEDS:
+    for seed in signals.CONTROL_SEEDS:
         signals_ = estimators.Signals(make(seed), FIXTURE_SR)
         for name in KEY_ESTIMATORS:
             key = estimators.select_estimator(name).key(signals_)

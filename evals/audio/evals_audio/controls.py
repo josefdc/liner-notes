@@ -602,7 +602,7 @@ def controls() -> list[Control]:
                 key=NONE,
             )
             for family, make in s.PITCHLESS_SEEDED.items()
-            for seed in s.UNSEEN_SEEDS
+            for seed in s.CONTROL_SEEDS
         ),
         # one pitch class at many seeds (services/audio/tests/signals.py ONE_PITCH_CLASS_SEEDED)
         *(

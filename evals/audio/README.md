@@ -59,9 +59,12 @@ the service image), with the same runs' figures when the withholding rules are l
 criterion for changing it, each candidate against the default on data it was not trained on
 (as served and with the rules lifted, exact McNemar), the tempos each shows that are wrong
 (strict 4 % and forgiving octave and meter, exact McNemar on the same clips), the cost per
-candidate, and the decision those numbers support. Everything in it is derived from the
-results file at render time. Pair tables of an estimator on its own training data are not printed. The bake-off
-evidence is the GiantSteps Tempo run (`--limit 400`, every clip), and, when the report holds the
+candidate, and the decision those numbers support. With the calibration runs in the report, a
+candidate ahead on all their clips leaves the decision open only when both halves agree; when
+the halves disagree, the report keeps the current default and says why, with the numbers.
+Everything in it is derived from the results file at render time. Pair tables of an estimator
+on its own training data are not printed. The bake-off evidence is the GiantSteps Tempo run
+(`--limit 400`: 400 of the usable tracks, both halves), and, when the report holds the
 calibration runs, the same comparison on each half of their clips and on all of them.
 
 ### Calibration

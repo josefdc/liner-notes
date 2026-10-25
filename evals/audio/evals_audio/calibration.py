@@ -25,8 +25,9 @@ Acceptance (pooled over the family's datasets):
   (tempo Acc1, key exact) with a Wilson 95 % lower bound of at least L1_MIN_LOWER (L1); their
   share right is at most L2_MAX_DROP below that of the answers the old value gave (L2); their
   share wrong even forgiving octave and meter (tempo) or unrelated (key: MIREX 0) is at most
-  L3_MAX_GROSS_RISE above the old answers' share (L3); and no control goes from right to wrong
-  (L4). The loosest value that passes is taken.
+  L3_MAX_GROSS_RISE above the old answers' share (L3). The loosest value that passes is taken.
+  A candidate under which any control gets a value it did not have is a loosening too.
+- whatever its direction, no control may go from right to wrong (L4).
 - a tightening (answers the old value gave, withheld) is accepted when it removes a value a
   control shows wrongly (T1), correct / n falls by at most T2_MAX_DROP on each dataset and the
   answers it withholds are right less often than those it keeps (T2). The least strict value
@@ -421,7 +422,7 @@ ONE_SERIES = "one harmonic series"
 def evidence_withheld(ev: dict, rules: Rules, name: str) -> str | None:
     """Signals.key_withheld for estimator `name`, on the recorded evidence, under `rules`."""
     _, est = service.load()
-    has_beat = ev["periodicity"] >= est.MIN_TEMPO_PERIODICITY
+    has_beat = ev["periodicity"] >= rules.min_periodicity
     ratio = ev["tonalRatio"] if rules.tonal_source == "mix" else ev["harmonicTonalRatio"]
     vector = ev["classes"][rules.class_vector]
     line_classes = {i for i, a in enumerate(vector) if a > 0 and a >= rules.class_level}
@@ -583,13 +584,18 @@ def control_ok(truth, value, kind: str) -> bool | None:
 
 
 def control_changes(controls: list[dict], name: str, kind: str, new: Rules, old: Rules) -> dict:
-    """Controls that go from wrong to right (fixed) and from right to wrong (broken)."""
-    fixed, broken = [], []
+    """
+    Controls that go from wrong to right (fixed), from right to wrong (broken), and that get a
+    value they did not have (gained, whatever their truth or whether the field is scored).
+    """
+    fixed, broken, gained = [], [], []
     for ctl in controls:
         if not usable(ctl, name, kind):
             continue
         truth = ctl["truth"][kind]
         a, b = derived(ctl, name, kind, new), derived(ctl, name, kind, old)
+        if b is None and a is not None:
+            gained.append(ctl["name"])
         ok_new, ok_old = control_ok(truth, a, kind), control_ok(truth, b, kind)
         if ok_new is None:
             continue
@@ -597,7 +603,7 @@ def control_changes(controls: list[dict], name: str, kind: str, new: Rules, old:
             fixed.append(ctl["name"])
         if ok_old and not ok_new:
             broken.append(ctl["name"])
-    return {"fixed": fixed, "broken": broken}
+    return {"fixed": fixed, "broken": broken, "gained": gained}
 
 
 # --- the families of rules and the choice ------------------------------------------------------------
@@ -745,21 +751,28 @@ def judge(cmp: dict, per_dataset: dict, changes: dict, held_out: bool = False) -
     evaluation clips (`held_out`) only L1-L3 and T2 are judged; the controls are the same ones
     the choice saw.
     """
-    out: dict = {"loosens": cmp["extra"] > 0}
+    # A loosening: any clip or control gets a value it did not have. With no extra annotated
+    # answer there is nothing to judge it on (L1 fails).
+    loosens = cmp["extra"] > 0 or (not held_out and bool(changes.get("gained")))
+    out: dict = {"loosens": loosens}
     reasons = []
-    if cmp["extra"]:
-        w = wilson(cmp["extraRight"], cmp["extra"])
-        old_share = _share(cmp["oldRight"], cmp["old"]) or 0.0
-        extra_share = cmp["extraRight"] / cmp["extra"]
-        old_gross = _share(cmp["oldGross"], cmp["old"]) or 0.0
-        out["L1"] = w.low >= L1_MIN_LOWER
-        out["L2"] = extra_share >= old_share - L2_MAX_DROP
-        out["L3"] = cmp["extraGross"] / cmp["extra"] <= old_gross + L3_MAX_GROSS_RISE
-        reasons += [r for r in ("L1", "L2", "L3") if not out[r]]
-        if not held_out:
-            out["L4"] = not changes["broken"]
-            reasons += [] if out["L4"] else ["L4"]
-    if cmp["lost"] or (changes["fixed"] and not cmp["extra"]):
+    if loosens:
+        if cmp["extra"]:
+            w = wilson(cmp["extraRight"], cmp["extra"])
+            old_share = _share(cmp["oldRight"], cmp["old"]) or 0.0
+            extra_share = cmp["extraRight"] / cmp["extra"]
+            old_gross = _share(cmp["oldGross"], cmp["old"]) or 0.0
+            out["L1"] = w.low >= L1_MIN_LOWER
+            out["L2"] = extra_share >= old_share - L2_MAX_DROP
+            out["L3"] = cmp["extraGross"] / cmp["extra"] <= old_gross + L3_MAX_GROSS_RISE
+        else:
+            out["L1"] = False
+        reasons += [r for r in ("L1", "L2", "L3") if out.get(r) is False]
+    if not held_out:
+        # No control goes from right to wrong, whatever the direction of the change.
+        out["L4"] = not changes["broken"]
+        reasons += [] if out["L4"] else ["L4"]
+    if cmp["lost"] or (changes["fixed"] and not loosens):
         drops = [(d["newRight"] - d["oldRight"]) / d["n"] for d in per_dataset.values() if d["n"]]
         lost_share = _share(cmp["lostRight"], cmp["lost"])
         kept_share = _share(cmp["keptRight"], cmp["kept"])

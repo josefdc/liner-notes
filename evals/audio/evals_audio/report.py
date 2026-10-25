@@ -1583,9 +1583,23 @@ def tempo_key_sections(run: dict, legacy: bool) -> list[str]:
     return out
 
 
+def mixed_versions(doc: dict) -> list[str]:
+    """A warning when the runs of this report were made with different analyzer versions."""
+    versions = sorted({run["analyzerVersion"] for run in doc["runs"] if run.get("analyzerVersion")})
+    if len(versions) < 2:
+        return []
+    return [
+        f"**This report mixes analyzer versions ({', '.join(versions)}).** Each run's own "
+        "figures are those of its version, but the sections that combine runs (bake-off, "
+        "default estimator, calibration) compare results the service would not give together. "
+        "Run every suite again with one version before reading them side by side.",
+        "",
+    ]
+
+
 def render(doc: dict) -> str:
     legacy = is_legacy(doc)
-    out = [f"# Audio accuracy, {doc['date']}", "", *intro(doc), *guide(doc)]
+    out = [f"# Audio accuracy, {doc['date']}", "", *intro(doc), *mixed_versions(doc), *guide(doc)]
     if not legacy:
         out += bakeoff_section(doc) + default_section(doc) + calibration_report.section(doc)
     for run in doc["runs"]:

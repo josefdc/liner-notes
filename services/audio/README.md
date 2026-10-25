@@ -74,13 +74,13 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.1.0+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.2.0+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `analyzer_version` and
 `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.1.0+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.2.0+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -105,7 +105,7 @@ the perceptual fields and `v2.fingerprint` are `null`.
   "energy": 0.778,
   "duration": 30.0,
   "source": "analyzed",
-  "analyzer_version": "2.1.0+essentia.models-5c5c0c7f",
+  "analyzer_version": "2.2.0+essentia.models-5c5c0c7f",
   "keyMoments": [{ "time": 1.88, "type": "onset", "intensity": 0.986, "description": "Onset" }],
   "valence": 0.389,
   "danceability": 1.0,
@@ -113,7 +113,7 @@ the perceptual fields and `v2.fingerprint` are `null`.
   "instrumentalness": 0.85,
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.2.0+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -198,10 +198,29 @@ times are seconds from the start of the preview. Every block is `null` when it w
   lines (drums, click tracks, a metronome, noise with a beat); when the lines form a single
   harmonic series (a lone tone, or mains hum on 50 or 60 Hz, whose harmonics spell a G major
   triad); when the lines and the notes of a single voice spell fewer than three pitch classes;
-  or when its strength is under the estimator's minimum (0.4 for both). Neither
-  strength separates atonal material from tonal music: random chromatic notes or a twelve-tone
-  row can still get a key, and so can one pitched source whose overtones or partials spell
-  three classes (a bell, a tabla, a cowbell, some one-note basses). The spectral-line rules are
+  or when its strength is under the estimator's minimum (0.4 for both). One pitched source has
+  no key either, whatever its strength: when the harmonic part's spectral lines keep the same
+  proportions over the whole window (followed in 2 s steps) and rise and fall together, and
+  what they spell is one note, or two a fourth, a fifth or a tritone apart, the key is withheld
+  as "one pitched source". That catches most cowbells, but one note repeated on a bass only
+  sometimes: lines next to the note often count as notes of their own. A chord is three
+  pitch classes, or two a second, a third, a sixth or a seventh apart; a fifth or a third about
+  as loud as the root below it is a chord tone, not one of the root's harmonics. What the tests
+  and controls show holds: held chords faded, swelling, getting louder, with tremolo or pumped
+  by a sidechain, chord stabs, bass and chord riffs on one chord, one-bar riffs, triads whose
+  third is 1.5-6 dB softer than a root doubled an octave down (every root, both modes, three
+  timbres), seventh chords whose fifth folds into a doubled root and whose third is 6-12 dB
+  down, a third 10-25 cents off over a doubled root, and sus2 and sus4 chords over their root
+  lose no key to this rule, and it never gives them its reason. It is not proven beyond those
+  levels and tunings, and two limits are known and pinned in the tests: a fourth (G2 under C3)
+  whose third is 15 dB down reads as two notes a fourth apart (librosa's right C major is
+  withheld), and a sine bass 15 dB louder than a triad over it reads as one note (the right A
+  major is withheld with both estimators). A major third sung or played 8 cents flat or more
+  over its root two octaves down reads as the root's fifth harmonic, so such a still chord can
+  count as one source too. A bell is not caught (its tierce is a minor third over the hum, as in
+  a chord), nor are several drums (toms, tabla strokes with partials of their own). Neither strength
+  separates atonal material from tonal music: random chromatic notes or a twelve-tone row can
+  still get a key, and so can a bell or a few tuned drums whose partials spell three classes. The spectral-line rules are
   what keep keys off pitchless sound, and they also withhold many keys of electronic dance
   music, whose synthesizers leave few narrow lines (the calibration section of
   `evals/reports/audio-*.md` has the numbers). Without a beat, a pitch track of the harmonic part also
@@ -326,7 +345,20 @@ pins the v1 fields. `tests/test_v2.py` covers the `v2` block with both estimator
 (noise, silence, short input, and music under noise or with human timing, from
 `tests/signals.py`), music without a beat and single held pitches or speech (sung and played
 lines with vibrato, band mixes with and without drums, a pad, a drone, speech with irregular
-syllables, from `tests/music.py`), loudness, key moments, sections and the fingerprint. Every
+syllables, from `tests/music.py`), loudness, key moments, sections and the fingerprint. Service tests pin exactly which one-pitch-class seeds get a key (equality, both directions)
+and that the single-source rule withholds no key of the chord families at seeds 700-729 (held
+chords faded, swelling, getting louder, with tremolo or a sidechain pump, chord stabs, riffs on
+one chord and one-bar riffs), of triads at C3-D#3 with a third 1.5-6 dB softer than a doubled
+root, or of sus chords, and that a third 10-25 cents off and a seventh over a doubled root
+whose third is quiet still make a chord; the two known limits are pinned as expected failures;
+seeds 600-629 and 800-829 are evaluation-only `evals/audio` controls. These seeded families, and the pitchless ones, take minutes: they carry the pytest
+marker `seeded`, and the ci workflow runs them in two jobs next to `python`
+(`uv run pytest -m "not seeded"`): `python-seeded`, the one-pitch-class pins, the pitchless
+families and the softer thirds, and `python-seeded-chords`, the chord families and the seventh
+chords (`-k "chords_keep_the_key or seventh_chord"` and its complement). The
+seeded tests that run the key estimators also carry the marker `estimators`: the audio-models
+workflow, with Essentia, runs `-m "not seeded or estimators"` for their Essentia half; the
+others do not depend on the estimator. A plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round
 trip, and for v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model
 tests are reported as skipped without the `models` extra and the models; run

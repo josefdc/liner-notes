@@ -182,6 +182,14 @@ def test_render_gives_coverage_over_n_and_over_answered_with_intervals():
     assert "beat-this" in text  # says what is not covered yet
 
 
+def test_a_report_that_mixes_analyzer_versions_says_so():
+    one = run()
+    assert "mixes analyzer versions" not in render({"date": "2026-10-21", "runs": [one]})
+    other = {**run(), "analyzerVersion": "9.9.9"}
+    text = render({"date": "2026-10-21", "runs": [one, other]})
+    assert f"**This report mixes analyzer versions ({one['analyzerVersion']}, 9.9.9).**" in text
+
+
 def test_render_scopes_the_licence_and_credits_the_data():
     text = render({"date": "2026-10-21", "runs": [run()]})
     assert "| licence (annotations) | CC BY-NC-SA 4.0" in text

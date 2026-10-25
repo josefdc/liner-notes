@@ -318,7 +318,22 @@ GROUPS = {
     "tempo": "a known tempo (octave and meter)",
     "key": "a known key the service lost or changed",
     "noise": "noise: nothing to measure",
+    "chord-keyed-seeded": "a key: chords that keep the key the other rules give them (held "
+    "chords faded, swelling, getting louder, with tremolo or a sidechain pump, C major stabs, "
+    "a bass and chord riff on one chord, one-bar I-V-vi-IV riffs, 30 seeds each; triads with "
+    "the third 1.5-6 dB softer than a doubled root at every root, mode and three timbres; "
+    "seventh chords whose fifth folds into a doubled root and whose third is quiet; a third "
+    "10-25 cents off over a doubled root; sus2 and sus4 chords, their key not scored)",
+    "held-out-seeded": "evaluation only: the one-pitch-class families at seeds 600-629 and the "
+    "chord families at 800-829; no rule value is chosen on them",
 }
+# Groups the calibration's choice never sees (calibration.select and confirm leave them out).
+EVALUATION_GROUPS = frozenset({"held-out-seeded"})
+
+
+# Seeds no test pins and no value is chosen on (EVALUATION_GROUPS).
+HELD_OUT_ONE_PITCH_SEEDS = range(600, 630)
+HELD_OUT_CHORD_SEEDS = range(800, 830)
 
 
 def controls() -> list[Control]:
@@ -615,6 +630,88 @@ def controls() -> list[Control]:
             )
             for family, make in s.ONE_PITCH_CLASS_SEEDED.items()
             for seed in s.ONE_PITCH_CLASS_SEEDS
+        ),
+        # chords that keep their key (services/audio/tests/signals.py CHORD_KEYED_SEEDED)
+        *(
+            c(
+                f"{family}-s{seed}",
+                "chord-keyed-seeded",
+                f"a chord in one key: {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed)[0],
+                key=s.chord_key(family, seed),
+            )
+            for family, make in s.CHORD_KEYED_SEEDED.items()
+            for seed in s.CHORD_KEYED_SEEDS
+        ),
+        # a third softer than root and fifth over a doubled root, a detuned third, sus chords
+        *(
+            c(
+                f"soft-third-{index}",
+                "chord-keyed-seeded",
+                f"a chord in one key, its third {level:g} dB under a doubled root "
+                f"({s.PITCH_NAMES[root]} {mode}, {timbre}, {s.soft_third_shape(index)})",
+                lambda index=index: s.soft_third_chord(index)[0],
+                key=(s.PITCH_NAMES[root], mode),
+            )
+            for index, (root, mode, timbre, level) in enumerate(s.SOFT_THIRD_GRID)
+        ),
+        *(
+            c(
+                f"seventh-{index}",
+                "chord-keyed-seeded",
+                f"a {quality} chord, its fifth folded into a doubled root, third {third:g} dB, "
+                f"seventh {seventh:+g} dB ({s.PITCH_NAMES[root]})",
+                lambda index=index: s.seventh_chord(index)[0],
+                key=(s.PITCH_NAMES[root], "minor" if quality == "m7" else "major"),
+            )
+            for index, (root, quality, third, seventh) in enumerate(s.SEVENTH_GRID)
+        ),
+        *(
+            c(
+                f"detuned-third-{s.PITCH_NAMES[root]}-{mode}-{cents:+g}",
+                "chord-keyed-seeded",
+                f"a doubled root with its {mode} third {cents:+g} cents off, no fifth",
+                lambda root=root, mode=mode, cents=cents: s.detuned_third(root, mode, cents),
+                key=(s.PITCH_NAMES[root], mode),
+            )
+            for root in range(12)
+            for mode in ("minor", "major")
+            for cents in s.THIRD_DETUNE_CENTS
+        ),
+        *(
+            c(
+                f"{kind}-{s.PITCH_NAMES[root]}-{shape}",
+                "chord-keyed-seeded",
+                f"a {kind} chord with its root doubled below ({shape}): a chord, its key not scored",
+                lambda root=root, kind=kind, shape=shape: s.sus_chord(root, kind, shape=shape),
+                key=NOT_SCORED,
+            )
+            for root in range(12)
+            for kind in ("sus2", "sus4")
+            for shape in ("stabs", "pumped")
+        ),
+        # evaluation only: unseen seeds of both
+        *(
+            c(
+                f"{family}-s{seed}",
+                "held-out-seeded",
+                f"held out: one pitch class, {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed),
+                key=NONE,
+            )
+            for family, make in s.ONE_PITCH_CLASS_SEEDED.items()
+            for seed in HELD_OUT_ONE_PITCH_SEEDS
+        ),
+        *(
+            c(
+                f"{family}-s{seed}",
+                "held-out-seeded",
+                f"held out: a chord in one key, {family}, seed {seed}",
+                lambda make=make, seed=seed: make(seed)[0],
+                key=s.chord_key(family, seed),
+            )
+            for family, make in s.CHORD_KEYED_SEEDED.items()
+            for seed in HELD_OUT_CHORD_SEEDS
         ),
         # the service's own probe sets (tests/test_v2.py)
         *one_source_controls(),

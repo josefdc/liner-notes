@@ -86,6 +86,10 @@ class Rules:
     class_level: float
     min_classes: int
     min_strength: dict
+    # The single-source rule (Signals.source_evidence): the values the run was made with
+    # (source_values: the SOURCE_* constants), or None when it was off (before it, and in the runs
+    # recorded without it). It was added after this calibration and is not varied.
+    one_source: dict | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -156,7 +160,36 @@ def service_rules() -> Rules:
         class_level=est.KEY_PITCH_CLASS_LEVEL,
         min_classes=est.KEY_MIN_PITCH_CLASSES,
         min_strength={n: c.min_key_strength for n, c in classes.items()},
+        one_source=source_values(est),
     )
+
+
+# The service's constants the single-source rule reads, by the name a run records them under.
+SOURCE_CONSTANTS = {
+    "cover": "SOURCE_COVER",
+    "minBins": "SOURCE_MIN_BINS",
+    "windowSeconds": "SOURCE_WINDOW_S",
+    "maxMovement": "SOURCE_MAX_MOVEMENT",
+    "minShared": "SOURCE_MIN_SHARED",
+    "minDepth": "SOURCE_MIN_DEPTH",
+    "noteCentsBin": "SOURCE_NOTE_CENTS_BIN",
+    "noteMergeCents": "SOURCE_NOTE_MERGE_CENTS",
+    "noteFloor": "SOURCE_NOTE_FLOOR",
+    "noteLevel": "SOURCE_NOTE_LEVEL",
+    "noteCount": "SOURCE_NOTE_COUNT",
+    "noteTolerance": "SOURCE_NOTE_TOLERANCE",
+    "octaveTolerance": "SOURCE_OCTAVE_TOLERANCE",
+    "overtoneRatio": "SOURCE_OVERTONE_RATIO",
+    "noteMaxHarmonic": "SOURCE_NOTE_MAX_HARMONIC",
+    "thirdCents": "SOURCE_THIRD_CENTS",
+}
+
+
+def source_values(est) -> dict | None:
+    """The single-source rule's values in the imported service (None when it has none)."""
+    if not all(hasattr(est, constant) for constant in SOURCE_CONSTANTS.values()):
+        return None
+    return {name: getattr(est, constant) for name, constant in SOURCE_CONSTANTS.items()}
 
 
 # --- recording (in the worker) -----------------------------------------------------------------
@@ -253,7 +286,19 @@ def evidence(signals) -> dict:
         "movement": _f(signals.chroma_movement),
         "classes": vectors,
         "voice": None,
+        "source": None,
     }
+    source = getattr(signals, "source_evidence", None)
+    if source is not None:
+        record["source"] = {
+            "bins": int(source.bins),
+            "movement": _f(source.movement),
+            "shared": _f(source.shared),
+            "depth": _f(source.depth),
+            # Measured only when the time measurements hold at the service's values.
+            "notes": None if source.notes is None else [_f(f) for f in source.notes],
+            "chord": None if source.notes is None else bool(source.chord),
+        }
     if voice is not None:
         record["voice"] = {
             "single": voice.single,
@@ -419,8 +464,34 @@ def derive_tempo(
 ONE_SERIES = "one harmonic series"
 
 
+def one_source(ev: dict, values: dict) -> bool:
+    """
+    SourceEvidence.single on the recorded evidence, at the rule's recorded `values` (False when
+    nothing was recorded). The notes were recorded only where the time measurements held at
+    the values of the run; where they were not, the rule cannot say one source.
+    """
+    source = ev.get("source")
+    if not source:
+        return False
+    still = (
+        source["bins"] >= values["minBins"]
+        and source["movement"] <= values["maxMovement"]
+        and source["shared"] >= values["minShared"]
+        and source["depth"] >= values["minDepth"]
+    )
+    return still and source.get("chord") is False
+
+
 def evidence_withheld(ev: dict, rules: Rules, name: str) -> str | None:
     """Signals.key_withheld for estimator `name`, on the recorded evidence, under `rules`."""
+    withheld = _evidence_withheld(ev, rules)
+    if withheld is None and rules.one_source and one_source(ev, rules.one_source):
+        _, est = service.load()
+        return est.ONE_SOURCE
+    return withheld
+
+
+def _evidence_withheld(ev: dict, rules: Rules) -> str | None:
     _, est = service.load()
     has_beat = ev["periodicity"] >= rules.min_periodicity
     ratio = ev["tonalRatio"] if rules.tonal_source == "mix" else ev["harmonicTonalRatio"]
@@ -858,14 +929,22 @@ def veto(rows: list[dict], checked: list[dict]) -> None:
             row["verdict"]["failed"] = [*row["verdict"]["failed"], "librosa's check"]
 
 
+def choice_controls(controls: list[dict]) -> list[dict]:
+    """The controls the choice may see: all but the evaluation-only groups."""
+    from .controls import EVALUATION_GROUPS
+
+    return [c for c in controls if c["group"] not in EVALUATION_GROUPS]
+
+
 def select(runs: list[dict], controls: list[dict]) -> dict:
     """
     The choice, family by family in the plan's order, from the baseline: each family's
     candidates on the calibration clips of the runs of its kind and on the controls, with the
     earlier choices in place. Only changes that withhold more are applied: a loosening the
     procedure picks is recorded (`proposed`) but not shipped, since these clips are the only
-    evidence for it.
+    evidence for it. Evaluation-only controls (controls.EVALUATION_GROUPS) are left out.
     """
+    controls = choice_controls(controls)
     rules = BASELINE
     out = []
     for family in FAMILIES:
@@ -930,6 +1009,7 @@ def confirm(runs: list[dict], controls: list[dict], choice: dict) -> dict:
     before it. A shared rule is judged on Essentia's clips and checked on librosa's. Returns the
     changes with their verdicts and the rules that remain.
     """
+    controls = choice_controls(controls)
     rules = BASELINE
     out = []
     for entry in choice["families"]:

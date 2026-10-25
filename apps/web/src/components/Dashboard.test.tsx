@@ -1,8 +1,9 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TrackData } from '../types';
 import Dashboard from './Dashboard';
 import { claim, link, node, PACK } from './genealogy/testing';
+import { setReaderImport } from './genealogy/useLinkReader';
 
 afterEach(cleanup);
 
@@ -151,9 +152,7 @@ describe('Dashboard connected tracks', () => {
     expect(later.querySelector('[data-link-relation]')?.textContent).toBe(
       'Later Track - Someone (2015) samples Quiet Signal (2011)',
     );
-    expect(older.textContent).toContain(
-      'Sourced · cites ev-mb-1 (MusicBrainz primary record, this recording)',
-    );
+    expect(older.textContent).toContain('Sourced · cites ev-mb-1 (MusicBrainz · primary record)');
     expect(guess.querySelector('[data-link-relation]')?.textContent).toBe(
       'Possible influence between Guessed Sample - Someone (1990) and Quiet Signal (2011)',
     );
@@ -226,6 +225,50 @@ describe('Dashboard connected tracks', () => {
     expect(lonely?.querySelector('[data-link-kind]')?.textContent).toBe(
       'LOGIC: No link to another track',
     );
+  });
+
+  it('counts the related tracks it shows, in the singular for one', async () => {
+    const one = connected([sourcedSample('older', 'current')]);
+    one.genealogy.nodes = one.genealogy.nodes.filter((n) => ['current', 'older'].includes(n.id));
+    const { unmount } = renderDashboard(one);
+    await cards();
+    expect(screen.getByText('1 RELATED TRACK')).toBeTruthy();
+    unmount();
+
+    // Four related tracks, all shown.
+    const four = renderDashboard(connected([]));
+    await cards();
+    expect(screen.getByText('4 RELATED TRACKS')).toBeTruthy();
+    four.unmount();
+
+    // Five related, four cards: the count says so.
+    const five = connected([]);
+    five.genealogy.nodes = [...five.genealogy.nodes, node('fifth', 4, 'Fifth - Someone (2000)')];
+    renderDashboard(five);
+    expect(await cards()).toHaveLength(4);
+    expect(screen.getByText('4 OF 5 RELATED TRACKS')).toBeTruthy();
+  });
+
+  it('says when the link reader cannot be loaded, and tries again when asked', async () => {
+    const real = () => import('./genealogy/links');
+    let fail = true;
+    setReaderImport(() => (fail ? Promise.reject(new Error('chunk failed')) : real()));
+    try {
+      renderDashboard(connected([sourcedSample('older', 'current')]));
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toBe('Connected tracks could not be loaded.TRY AGAIN');
+      expect(screen.queryByText(/LOGIC:/)).toBeNull();
+      // Not busy for ever: the row says it is done (with nothing).
+      expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+      fail = false;
+      await act(async () => {
+        fireEvent.click(within(alert).getByRole('button', { name: 'TRY AGAIN' }));
+      });
+      expect(await badges()).toContain('LOGIC: Sample');
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      setReaderImport(real);
+    }
   });
 
   it('never takes a relation from the node group', async () => {

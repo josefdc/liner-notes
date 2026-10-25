@@ -9,8 +9,10 @@ import {
 import { describe, expect, it } from 'vitest';
 import { colors } from '../../styles/theme';
 import { claimIsRejected } from '../provenance/claims';
+import { sourceLabel } from '../provenance/SourceLink';
 import {
   evidencePack,
+  linkContext,
   LINK_TYPE_LABEL,
   LINK_TYPES,
   type NamedNode,
@@ -24,6 +26,7 @@ import {
   relationToTrack,
   type ShownLink,
   shownLinks,
+  yearFrom,
 } from './links';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY } from './linkStyle';
 import { claim, contextOf as context, evidenceItem, link, node, PACK } from './testing';
@@ -40,7 +43,9 @@ const sourced = (fields: Record<string, unknown> = {}) =>
   link('a', 'b', { type: 'sample', kind: 'sourced', evidenceIds: ['ev-mb-1'], ...fields });
 
 const DOCUMENTED: LinkType[] = ['sample', 'interpolation', 'cover', 'remix'];
-const MB = 'ev-mb-1 (MusicBrainz primary record, this recording)';
+// As a claim's chip names the item: its tier only for a sourced link.
+const MB = 'ev-mb-1 (MusicBrainz)';
+const MB_SOURCED = 'ev-mb-1 (MusicBrainz · primary record)';
 
 describe('evidencePack', () => {
   it('keeps the items the contract reads, by id, and leaves the others out', () => {
@@ -67,12 +72,10 @@ describe('readLink', () => {
     for (const type of LINK_TYPES) {
       const shown = read(sourced({ type, origin: 'code' }));
       expect(shown).toMatchObject({ kind: 'sourced', type, statedType: type, reasons: [] });
-      expect(provenanceText(shown)).toBe(`Sourced · cites ${MB}`);
+      expect(provenanceText(shown)).toBe(`Sourced · cites ${MB_SOURCED}`);
     }
     const shs = read(sourced({ evidenceIds: ['ev-shs-1'] }));
-    expect(provenanceText(shs)).toBe(
-      'Sourced · cites ev-shs-1 (SecondHandSongs primary record, this recording)',
-    );
+    expect(provenanceText(shs)).toBe('Sourced · cites ev-shs-1 (SecondHandSongs · primary record)');
   });
 
   it('shows an inferred sample, interpolation, cover or remix as an influence', () => {
@@ -122,8 +125,7 @@ describe('readLink', () => {
       link('a', 'b', { type: 'influence', kind: 'inferred', evidenceIds: ['ev-shs-1'] }),
     );
     expect(provenanceText(shown)).toBe(
-      'Model inference · cites ev-shs-1 (SecondHandSongs primary record, this recording), not ' +
-        'checked by a verifier',
+      'Model inference · cites ev-shs-1 (SecondHandSongs), not ' + 'checked by a verifier',
     );
   });
 
@@ -156,6 +158,33 @@ describe('readLink', () => {
     expect(provenanceText(dangling)).toContain('its claim is not in this result');
   });
 
+  it('follows its claim: a link of any origin is sourced only when its claim reads sourced', () => {
+    // No origin on the link; its claim, a model one, the verifier found unsupported.
+    const unsupported = claim('cl-u', {
+      kind: 'sourced',
+      origin: 'model',
+      evidenceIds: ['ev-mb-1'],
+      verdict: 'unsupported',
+    });
+    const shown = read(sourced({ claimId: 'cl-u' }), context([unsupported]));
+    expect(shown.kind).toBe('inferred');
+    expect(provenanceText(shown)).toContain('the verifier found its claim unsupported');
+    // A claim with no verdict that is not sourced: said so.
+    const unjudged = read(sourced({ claimId: 'cl-n', origin: 'code' }), context([claim('cl-n')]));
+    expect(unjudged.kind).toBe('inferred');
+    expect(provenanceText(unjudged)).toContain('its claim is not sourced');
+    // A code-built claim keeps its kind whatever the judge said, as its chip does.
+    const code = claim('cl-c', {
+      kind: 'sourced',
+      origin: 'code',
+      evidenceIds: ['ev-mb-1'],
+      verdict: 'unsupported',
+    });
+    expect(read(sourced({ claimId: 'cl-c', origin: 'code' }), context([code])).kind).toBe(
+      'sourced',
+    );
+  });
+
   it('leaves out a link whose claim the main view hides, by the shared rule', () => {
     for (const fields of [{ verdict: 'contradicted' }, { numericCheck: 'contradicted' }]) {
       expect(claimIsRejected(claim('cl-bad', fields))).toBe(true);
@@ -175,7 +204,14 @@ describe('readLink', () => {
     expect(
       readLink(
         sourced({ origin: 'code', claimId: 'c' }),
-        context([claim('c', { numericCheck: 'conflict' })]),
+        context([
+          claim('c', {
+            numericCheck: 'conflict',
+            kind: 'sourced',
+            origin: 'code',
+            evidenceIds: ['ev-mb-1'],
+          }),
+        ]),
       ),
     ).toMatchObject({ link: { kind: 'sourced' } });
   });
@@ -192,8 +228,8 @@ describe('readLink', () => {
     );
     expect(backwards).toMatchObject({ kind: 'inferred', directionKnown: false, type: 'influence' });
     expect(provenanceText(backwards)).toBe(
-      'Not sourced · stated as a sample; its direction contradicts the release years (2020 ' +
-        `before 1990); cites ${MB}, not checked by a verifier`,
+      'Not sourced · stated as a sample; the years (2020 and 1990) do not fit this direction; ' +
+        `cites ${MB}, not checked by a verifier`,
     );
     expect(relationLabel(backwards)).toBe('Related, direction unknown');
     const name = (id: string) => nodeName(nodes.get(id), id);
@@ -207,6 +243,57 @@ describe('readLink', () => {
       nodes,
     );
     expect(producer).toMatchObject({ kind: 'sourced', directionKnown: true });
+  });
+
+  it('names a cited item as its claim chip does, never above the tier the contract allows', () => {
+    const pack = [
+      // A web search result stated as a primary record; a primary record with no known scope;
+      // one whose scope is a property every object has.
+      { ...evidenceItem('ev-t', 'tavily'), sourceTier: 'primary-record', recordRef: null },
+      { ...evidenceItem('ev-u'), recordRef: 'recording/abc' },
+      { ...evidenceItem('ev-c'), recordRef: 'constructor/abc' },
+      { ...evidenceItem('ev-w', 'secondhandsongs'), recordRef: 'work/performance/1' },
+    ];
+    const ctx = context([], pack);
+    const cites = (id: string) =>
+      provenanceText(read(sourced({ origin: 'code', evidenceIds: [id] }), ctx));
+    for (const item of pack) {
+      const parsed = evidencePack(pack).get(item.id);
+      if (!parsed) throw new Error(`${item.id} was not read`);
+      expect(cites(item.id)).toBe(`Sourced · cites ${item.id} (${sourceLabel(parsed)})`);
+    }
+    expect(cites('ev-t')).toBe('Sourced · cites ev-t (Web search · web page)');
+    expect(cites('ev-u')).toBe('Sourced · cites ev-u (MusicBrainz · web page)');
+    expect(cites('ev-c')).toBe('Sourced · cites ev-c (MusicBrainz · web page)');
+    expect(cites('ev-w')).toBe(
+      'Sourced · cites ev-w (SecondHandSongs · primary record · about the song, not this recording)',
+    );
+    expect(pack.map((item) => cites(item.id)).join(' ')).not.toMatch(/native code|function/);
+  });
+
+  it('takes the analysed track’s year from the result when its node’s label names none', () => {
+    // The API labels the analysed track with its title alone.
+    const genealogy = {
+      nodes: [
+        { id: 'current', group: 1, label: 'Bright Lines', trackTitle: 'Bright Lines', size: 40 },
+        node('newer', 4, 'Newer Record - Someone (2020)'),
+      ],
+      links: [sourced({ source: 'newer', target: 'current', origin: 'code' })],
+    };
+    const withYear = linkContext(PACK, null, { releaseYear: '2011-05-02' });
+    const [backwards] = shownLinks(genealogy, withYear);
+    expect(backwards).toMatchObject({ kind: 'inferred', directionKnown: false });
+    expect(provenanceText(backwards)).toContain(
+      'the years (2020 and 2011) do not fit this direction',
+    );
+    const named = nodesById(genealogy.nodes, yearFrom('2011-05-02'));
+    expect(nodeName(named.get('current'), 'current')).toBe('Bright Lines (2011)');
+    // Without the result's year the check cannot tell, and says nothing.
+    expect(shownLinks(genealogy, linkContext(PACK, null))[0]).toMatchObject({
+      kind: 'sourced',
+      directionKnown: true,
+    });
+    expect([yearFrom(2011), yearFrom('n/a'), yearFrom(null)]).toEqual([2011, null, null]);
   });
 
   it('reads an older link with no kind or type as an inferred influence', () => {

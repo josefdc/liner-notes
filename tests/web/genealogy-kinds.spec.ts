@@ -23,7 +23,11 @@ import {
 const fixture = loadFixture("genealogy-kinds");
 const ANALYZE = "/api/analyze/stream";
 const CURRENT = "Bright Lines (2011)";
-const MB = "ev-mb-1 (MusicBrainz primary record, this recording)";
+// As a claim chip names the item: its tier only for a sourced link.
+const MB = "ev-mb-1 (MusicBrainz)";
+const MB_SOURCED = "ev-mb-1 (MusicBrainz · primary record)";
+const SHS_SOURCED =
+  "ev-shs-1 (SecondHandSongs · primary record · about the song, not this recording)";
 
 type Event = { type: string; data?: Record<string, unknown> };
 type Link = Record<string, unknown> & { source: string; target: string };
@@ -152,7 +156,14 @@ test.describe("the genealogy graph", () => {
       graph.locator(`g.nodes > g[data-node-id="${id}"] > circle`).first();
     await expect(halo("sample-sourced")).toHaveAttribute("style", /glow-amber/);
     await expect(halo("model-verified")).toHaveAttribute("style", /glow-amber/);
-    for (const id of ["sample-inferred", "ghost-cite", "model-sourced", "backwards"]) {
+    // A track that remixes this one (a sourced link, the other way) is no origin either.
+    for (const id of [
+      "sample-inferred",
+      "ghost-cite",
+      "model-sourced",
+      "backwards",
+      "remix-sourced",
+    ]) {
       await expect(halo(id), id).toHaveAttribute("style", /filter: none/);
     }
     expect(problems).toEqual([]);
@@ -227,7 +238,7 @@ test.describe("the genealogy graph", () => {
       });
     await page.mouse.move(point.x, point.y);
     await expect(detail).toHaveText(
-      `${CURRENT} samples Sourced Sample - Someone (1984)Sourced · cites ${MB}`,
+      `${CURRENT} samples Sourced Sample - Someone (1984)Sourced · cites ${MB_SOURCED}`,
     );
     await screenshot(page, testInfo, "hover", page.locator("#panel-genealogy"));
     await page.mouse.move(5, 5);
@@ -263,8 +274,8 @@ test.describe("the genealogy graph", () => {
     await expect(targets.last()).toBeFocused();
     await expect(detail).toHaveText(
       "Backwards Sample - Someone (2020) and Bright Lines (2011) are related (direction unknown)" +
-        "Not sourced · stated as a sample; its direction contradicts the release years (2020 " +
-        `before 2011); cites ${MB}, not checked by a verifier`,
+        "Not sourced · stated as a sample; the years (2020 and 2011) do not fit this direction; " +
+        `cites ${MB}, not checked by a verifier`,
     );
     await page.mouse.move(5, 5);
     await expect(detail).toContainText("direction unknown");
@@ -289,7 +300,12 @@ test.describe("the genealogy graph", () => {
   }) => {
     const snapshot = await page.locator("#panel-genealogy").ariaSnapshot();
     expect(snapshot).toContain("Genealogy network with 17 related tracks.");
-    expect(snapshot).toContain("Sourced Sample - Someone (1984) (Sample, Sourced).");
+    expect(snapshot).toContain(
+      `Sourced Sample - Someone (1984): ${CURRENT} samples Sourced Sample - Someone (1984) (Sourced).`,
+    );
+    expect(snapshot).toContain(
+      `Sourced Remix - Someone (2015): Sourced Remix - Someone (2015) remixes ${CURRENT} (Sourced).`,
+    );
     // The line labels and the tracks' drawn labels are hidden.
     expect(snapshot).not.toContain("possible influence");
     expect(snapshot).not.toContain("[LINK]");
@@ -316,11 +332,11 @@ test.describe("the genealogy graph", () => {
     expect(await graph.locator(":scope > g").getAttribute("transform")).toBe(zoomed);
 
     await expect(items.nth(0)).toHaveText(
-      `${CURRENT} samples Sourced Sample - Someone (1984). Sourced · cites ${MB}.`,
+      `${CURRENT} samples Sourced Sample - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
     );
     // The remix is newer than the track it remixes: Bright Lines (2011) → the 2015 remix.
     await expect(items.nth(3)).toHaveText(
-      `Sourced Remix - Someone (2015) remixes ${CURRENT}. Sourced · cites ${MB}.`,
+      `Sourced Remix - Someone (2015) remixes ${CURRENT}. Sourced · cites ${MB_SOURCED}.`,
     );
     await expect(items.nth(6)).toHaveText(
       `Possible influence between Inferred Sample - Someone Else (1990) and ${CURRENT}. ` +
@@ -335,7 +351,7 @@ test.describe("the genealogy graph", () => {
         "verifier verdict supports it",
     );
     await expect(items.nth(15)).toHaveText(
-      `${CURRENT} samples Verified Model Sample - Someone (1982). Sourced · cites ${MB}.`,
+      `${CURRENT} samples Verified Model Sample - Someone (1982). Sourced · cites ${MB_SOURCED}.`,
     );
     // The link the verifier rejected is not listed.
     await expect(items.filter({ hasText: "Rejected Sample" })).toHaveCount(0);
@@ -389,6 +405,8 @@ test.describe("connected tracks on the Dashboard", () => {
     await useMockApi(page, fixture);
     await page.setViewportSize({ width: 1440, height: 900 });
     await analyzeAndOpenDashboard(page, "Bright Lines");
+    // Four cards out of the 17 related tracks (the one only a rejected link related is left out).
+    await expect(page.getByText("4 OF 17 RELATED TRACKS")).toBeVisible();
     const cards = page.getByRole("button").filter({ hasText: "LOGIC:" });
     await expect(cards.locator("[data-link-kind]")).toHaveText([
       "LOGIC: Sample",
@@ -403,10 +421,10 @@ test.describe("connected tracks on the Dashboard", () => {
       `${CURRENT} covers Sourced Cover - Someone (1984)`,
     ]);
     await expect(cards.locator("[data-link-provenance]")).toHaveText([
-      `Sourced · cites ${MB}`,
-      "Sourced · cites ev-shs-1 (SecondHandSongs primary record, the song)",
-      `Sourced · cites ${MB}`,
-      "Sourced · cites ev-shs-1 (SecondHandSongs primary record, the song)",
+      `Sourced · cites ${MB_SOURCED}`,
+      `Sourced · cites ${SHS_SOURCED}`,
+      `Sourced · cites ${MB_SOURCED}`,
+      `Sourced · cites ${SHS_SOURCED}`,
     ]);
     await screenshot(page, testInfo, "dashboard-sourced", cards.first().locator(".."));
   });
@@ -434,8 +452,8 @@ test.describe("connected tracks on the Dashboard", () => {
       "Model inference · stated as a sample, shown as an influence; no evidence cited",
       "Model inference · stated as a sample, shown as an influence; proposed by the model; no " +
         `verifier verdict supports it; cites ${MB}, not checked by a verifier`,
-      "Not sourced · stated as a sample; its direction contradicts the release years (2020 " +
-        `before 2011); cites ${MB}, not checked by a verifier`,
+      "Not sourced · stated as a sample; the years (2020 and 2011) do not fit this direction; " +
+        `cites ${MB}, not checked by a verifier`,
     ]);
     await screenshot(page, testInfo, "dashboard-inferred", cards.first().locator(".."));
   });

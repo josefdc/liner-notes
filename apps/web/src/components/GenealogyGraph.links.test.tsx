@@ -71,7 +71,8 @@ const Graph = (props: Partial<React.ComponentProps<typeof GenealogyGraph>>) => (
   <GenealogyGraph data={data} evidence={PACK} claims={claims} {...props} />
 );
 
-const MB = 'ev-mb-1 (MusicBrainz primary record, this recording)';
+// As a claim's chip names the item, with its tier for a sourced link.
+const MB_SOURCED = 'ev-mb-1 (MusicBrainz · primary record)';
 const lines = (container: HTMLElement) => [...container.querySelectorAll('g.links line')];
 const nodeGroup = (container: HTMLElement, id: string) => {
   const group = container.querySelector(`g.nodes > g[data-node-id="${id}"]`);
@@ -123,6 +124,42 @@ describe('GenealogyGraph links', () => {
     expect(subLabel(container, 'disputed')).toBe('[LINK]');
   });
 
+  it('marks no origin for a track that samples or remixes this one, sourced as it is', () => {
+    // Bright Lines (2011) → Later (2015): the later track uses this one, not the other way.
+    const derived = {
+      nodes: [
+        ...data.nodes,
+        node('later', 3, 'Later - Someone (2015)'),
+        node('remix', 3, 'Remix - Someone (2016)'),
+      ],
+      links: [
+        ...data.links,
+        link('current', 'later', {
+          type: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-mb-1'],
+        }),
+        link('current', 'remix', {
+          type: 'remix',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-mb-1'],
+        }),
+      ],
+    };
+    const { container } = render(<Graph data={derived} />);
+    const kinds = lines(container).map((line) => line.getAttribute('data-link-kind'));
+    expect(kinds.slice(-2)).toEqual(['sourced', 'sourced']);
+    for (const id of ['later', 'remix']) {
+      expect(subLabel(container, id)).toBe('[LINK]');
+      expect((nodeGroup(container, id).querySelector('circle') as SVGElement).style.filter).toBe(
+        'none',
+      );
+    }
+    expect(subLabel(container, 'older')).toBe('[ORIGIN]');
+  });
+
   it('shows every link as inferred without the evidence pack', () => {
     const { container } = render(<Graph evidence={undefined} />);
     expect(lines(container).map((line) => line.getAttribute('data-link-kind'))).toEqual([
@@ -138,7 +175,7 @@ describe('GenealogyGraph links', () => {
     const { container } = render(<Graph />);
     const targets = [...container.querySelectorAll<SVGLineElement>('g.link-targets line')];
     expect(targets[0].getAttribute('aria-label')).toBe(
-      `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB}.`,
+      `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
     );
     // No native tooltip repeating the detail.
     expect(targets[0].querySelector('title')).toBeNull();
@@ -147,7 +184,7 @@ describe('GenealogyGraph links', () => {
       targets[0].dispatchEvent(new MouseEvent('mouseenter'));
     });
     expect(screen.getByTestId('link-detail').textContent).toBe(
-      `Bright Lines (2011) samples Older Record - Someone (1984)Sourced · cites ${MB}`,
+      `Bright Lines (2011) samples Older Record - Someone (1984)Sourced · cites ${MB_SOURCED}`,
     );
     await act(async () => {
       targets[0].dispatchEvent(new MouseEvent('mouseleave'));
@@ -185,7 +222,7 @@ describe('GenealogyGraph links', () => {
     expect(items[1].querySelector('.focus-ring')?.getAttribute('opacity')).toBe('1');
     expect(screen.getByTestId('link-detail').textContent).toBe(
       'Older Record - Someone (1984)Bright Lines (2011) samples Older Record - Someone (1984)' +
-        `Sourced · cites ${MB}Enter: analyse this track`,
+        `Sourced · cites ${MB_SOURCED}Enter: analyse this track`,
     );
     await act(async () => {
       fireEvent.keyDown(items[1], { key: 'Enter' });
@@ -252,11 +289,11 @@ describe('GenealogyGraph links', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual([
-      `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB}.`,
+      `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
       'Possible influence between Guess - Someone (1990) and Bright Lines (2011). Model ' +
         'inference · stated as a sample, shown as an influence; no evidence cited.',
       'Peer - Someone (2001) and Bright Lines (2011) may share a producer. Model inference · ' +
-        'cites ev-shs-1 (SecondHandSongs primary record, this recording), not checked by a ' +
+        'cites ev-shs-1 (SecondHandSongs), not checked by a ' +
         'verifier.',
     ]);
     expect(screen.getByText('Links as a list (3)').closest('details')?.open).toBe(false);
@@ -270,9 +307,14 @@ describe('GenealogyGraph links', () => {
     const { container } = render(<Graph />);
     const summary = container.querySelector('.sr-only')?.textContent;
     expect(summary).toContain('Genealogy network with 4 related tracks.');
-    expect(summary).toContain('Older Record - Someone (1984) (Sample, Sourced).');
-    expect(summary).toContain('Guess - Someone (1990) (Possible influence, Model inference).');
-    expect(summary).toContain('Disputed - Someone (1979) (No direct link to this track).');
+    // Which track uses which, as a sentence naming both.
+    expect(summary).toContain(
+      'Older Record - Someone (1984): Bright Lines (2011) samples Older Record - Someone (1984) (Sourced).',
+    );
+    expect(summary).toContain(
+      'Guess - Someone (1990): Possible influence between Guess - Someone (1990) and Bright Lines (2011) (Model inference).',
+    );
+    expect(summary).toContain('Disputed - Someone (1979): no direct link to this track.');
   });
 
   it('counts the links the caller left out with those it hides itself', () => {

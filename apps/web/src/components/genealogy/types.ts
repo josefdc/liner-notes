@@ -15,6 +15,11 @@ export interface GenealogyGraphProps {
    * and a model link is sourced only when its claim has a supporting verdict.
    */
   claims?: ResultClaims | null;
+  /**
+   * The result's `releaseYear`: the analysed track's year for the direction check and its name,
+   * when its node's label names none (the API labels it with the title alone).
+   */
+  releaseYear?: unknown;
   /** Links the caller left out already because their claim is hidden (said under the legend). */
   hiddenLinks?: number;
   // Callback to trigger analysis of a clicked node (infinite navigation)

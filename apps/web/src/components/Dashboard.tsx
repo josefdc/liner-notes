@@ -113,9 +113,9 @@ function getRelatedTracks(
   const nodes = shown.genealogy.nodes;
   const links = reader.shownLinks(
     shown.genealogy,
-    reader.linkContext(trackData.evidence, shown.claims),
+    reader.linkContext(trackData.evidence, shown.claims, { releaseYear: trackData.releaseYear }),
   );
-  const named = reader.nodesById(nodes);
+  const named = reader.nodesById(nodes, reader.yearFrom(trackData.releaseYear));
   const nameOf = (id: string) => reader.nodeName(named.get(id), id);
   const currentId = nodes.find((node) => node.group === 1)?.id ?? null;
   const strength = (relation: TrackRelation) => (relation.link ? reader.rank(relation.link) : -1);
@@ -175,7 +175,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   // The link reader (and the contract's schemas it validates with) loads only when there are
   // connected tracks to read.
   const shown = useMemo(() => shownGenealogy(trackData), [trackData]);
-  const { reader, failed: readerFailed } = useLinkReader(relatedNodes(shown).length > 0);
+  const relatedCount = relatedNodes(shown).length;
+  const { reader, failed: readerFailed, retry: retryReader } = useLinkReader(relatedCount > 0);
   const relatedTracks = useMemo(
     () => getRelatedTracks(trackData, shown, reader),
     [trackData, shown, reader],
@@ -446,7 +447,10 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
             {relatedTracks !== null && relatedTracks.length > 0 && (
               <span className="text-xs font-mono text-analog">
-                {relatedTracks.length} RELATED ARTIFACTS
+                {/* What the cards show, out of how many connected tracks there are */}
+                {relatedTracks.length < relatedCount
+                  ? `${relatedTracks.length} OF ${relatedCount} RELATED TRACKS`
+                  : `${relatedCount} RELATED ${relatedCount === 1 ? 'TRACK' : 'TRACKS'}`}
               </span>
             )}
           </div>
@@ -457,9 +461,15 @@ const Dashboard: React.FC<DashboardProps> = ({
             </p>
           )}
           {relatedTracks === null && readerFailed && (
-            <p className="text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4">
-              Connected tracks could not be loaded. Reload the page to try again.
-            </p>
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 text-xs font-mono text-text-tertiary border border-dashed border-white/10 rounded-md p-4"
+            >
+              <span>Connected tracks could not be loaded.</span>
+              <Button variant="ghost" size="sm" onClick={retryReader}>
+                TRY AGAIN
+              </Button>
+            </div>
           )}
 
           {/* Busy while the link reader loads: the cards follow once their relations are read */}

@@ -27,7 +27,7 @@ import {
 import { resultModeOf } from '../utils/recording';
 import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
-import { linkContext, shownLinks } from './genealogy/links';
+import { kindLabel, linkContext, shownLinks } from './genealogy/links';
 import InteractiveFactoid from './InteractiveFactoid';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Badge } from './ui/Badge';
@@ -159,17 +159,22 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
     () => withoutHiddenRelations(track.genealogy, claims.isHidden),
     [track.genealogy, claims],
   );
-  // Relations left out with their claims, said under the graph's legend.
-  const hiddenLinks = track.genealogy.links.length - genealogy.links.length;
-  // How the shown links are known: the panel's label says "model inference" only when none is
-  // sourced (each link says its own kind in the graph, its legend and its list).
+  // Relations left out because their claim is hidden, said under the graph's legend (entries
+  // that are not links at all are not counted: they had no claim to hide).
+  const hiddenLinks = track.genealogy.links.filter(
+    (link) => typeof link === 'object' && link !== null && claims.isHidden(link.claimId),
+  ).length;
+  // How the shown links are known: the panel's label says "model inference" only when every one
+  // is the model's (each link says its own kind in the graph, its legend and its list).
   const linkKinds = useMemo(() => {
-    const links = shownLinks(genealogy, linkContext(track.evidence, claims));
+    const context = linkContext(track.evidence, claims, { releaseYear: track.releaseYear });
+    const links = shownLinks(genealogy, context);
     return {
       sourced: links.some((link) => link.kind === 'sourced'),
       inferred: links.some((link) => link.kind !== 'sourced'),
+      notSourced: links.some((link) => kindLabel(link) === 'Not sourced'),
     };
-  }, [genealogy, track.evidence, claims]);
+  }, [genealogy, track.evidence, track.releaseYear, claims]);
   // Cards without a claim of their own are labelled by their section, or each on its own when
   // the cards beside it carry claims.
   const unclaimedFactoids = resultFactoids.some((factoid) => !claimOf(factoid));
@@ -723,6 +728,11 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 <Badge variant="gray" data-testid="genealogy-kinds">
                   {linkKinds.inferred ? 'Sourced and inferred links' : 'Sourced links'}
                 </Badge>
+              ) : linkKinds.notSourced ? (
+                // Not the model's: built from records whose evidence does not hold.
+                <Badge variant="gray" data-testid="genealogy-kinds">
+                  Not sourced
+                </Badge>
               ) : (
                 <InferenceLabel>{provenance}</InferenceLabel>
               ))}
@@ -732,6 +742,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
               data={genealogy}
               evidence={track.evidence}
               claims={claims}
+              releaseYear={track.releaseYear}
               hiddenLinks={hiddenLinks}
               onNodeClick={handleNodeClick}
             />

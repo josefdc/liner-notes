@@ -28,6 +28,7 @@ import {
   rank,
   linkContext,
   readGenealogy,
+  yearFrom,
   relationSentence,
   relationToTrack,
   type ShownLink,
@@ -118,6 +119,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   data,
   evidence,
   claims,
+  releaseYear,
   hiddenLinks = 0,
   onNodeClick,
 }) => {
@@ -128,15 +130,15 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   // take the whole page down), each read with the contract's link schema and shown by its rule
   // and this app's stricter ones; links whose claim the verifier contradicted are left out.
   const reading = useMemo(
-    () => readGenealogy(data, linkContext(evidence, claims)),
-    [data, evidence, claims],
+    () => readGenealogy(data, linkContext(evidence, claims, { releaseYear })),
+    [data, evidence, claims, releaseYear],
   );
   const links = reading.links;
   const hidden = reading.hidden + hiddenLinks;
   const nameOf = useMemo(() => {
-    const nodes = nodesById(data?.nodes);
+    const nodes = nodesById(data?.nodes, yearFrom(releaseYear));
     return (id: string) => nodeName(nodes.get(id), id);
-  }, [data]);
+  }, [data, releaseYear]);
   const currentId = useMemo(
     () => graphNodes(data).find((node) => node.group === 1)?.id ?? null,
     [data],
@@ -831,10 +833,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .
           {nodeList
             .map((node) => {
-              if (node.group === 1) return ` ${nameOf(node.id)} (the analysed track).`;
+              if (node.group === 1) return ` ${nameOf(node.id)}: the analysed track.`;
+              // Which track uses which, as a sentence naming both, and how it is known.
               const relation = relationToTrack(links, node.id, currentId);
-              const kind = relation.link ? `, ${kindLabel(relation.link)}` : '';
-              return ` ${nameOf(node.id)} (${relation.text}${kind}).`;
+              return relation.link
+                ? ` ${nameOf(node.id)}: ${relationSentence(relation.link, nameOf)} (${kindLabel(relation.link)}).`
+                : ` ${nameOf(node.id)}: ${relation.text.toLowerCase()}.`;
             })
             .join('')}
           {links.length > 0 &&

@@ -65,10 +65,18 @@ describe('the genealogy panel label', () => {
     expect(panelLabel()).toBe('Genealogy NetworkSourced links');
   });
 
-  it('does not count a "sourced" link whose evidence is not in the pack', () => {
+  it('says not sourced, not model inference, for a code-built link whose evidence is not in the pack', () => {
     const track = withLinks([]);
     track.genealogy.links = [{ ...sourced, evidenceIds: ['ev-not-in-pack'] }];
     render(<Player trackData={track} onBack={() => {}} />);
-    expect(panelLabel()).toBe('Genealogy NetworkModel inference');
+    expect(panelLabel()).toBe('Genealogy NetworkNot sourced');
+  });
+
+  it('does not count entries that are not links as links with a hidden claim', () => {
+    const track = withLinks([inferred]);
+    track.claims = [];
+    track.genealogy.links = [null, ...track.genealogy.links] as unknown as GenealogyLink[];
+    render(<Player trackData={track} onBack={() => {}} />);
+    expect(document.querySelector('[data-testid="links-hidden"]')).toBeNull();
   });
 });

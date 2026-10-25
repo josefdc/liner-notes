@@ -1,5 +1,6 @@
 import {
   type Claim,
+  type ClaimKind,
   type Evidence,
   GenealogyLink,
   type LinkKind,
@@ -7,6 +8,7 @@ import {
   linkDisplayKind as contractLinkDisplayKind,
 } from '@liner-notes/contract';
 import { readEvidence, type ResultClaims } from '../provenance/claims';
+import { sourceLabel } from '../provenance/SourceLink';
 
 /**
  * How the web app reads and names genealogy links. Each link is read with the contract's link
@@ -51,31 +53,6 @@ export const LINK_TYPE_LABEL: Record<LinkType, string> = {
   influence: 'Influence',
 };
 
-const SOURCE_NAME: Record<string, string> = {
-  spotify: 'Spotify',
-  deezer: 'Deezer',
-  musicbrainz: 'MusicBrainz',
-  discogs: 'Discogs',
-  secondhandsongs: 'SecondHandSongs',
-  listenbrainz: 'ListenBrainz',
-  lastfm: 'Last.fm',
-  genius: 'Genius',
-  tavily: 'web search',
-};
-
-const TIER_LABEL: Record<Evidence['sourceTier'], string> = {
-  'primary-record': 'primary record',
-  editorial: 'editorial',
-  web: 'web page',
-};
-
-/** What a primary record's `recordRef` scope says the item is about. */
-const SCOPE_LABEL: Record<string, string> = {
-  track: 'this recording',
-  release: 'a release',
-  work: 'the song',
-};
-
 /** An evidence id a link cites, with the pack's item for it (null when it is not in the pack). */
 export interface Citation {
   id: string;
@@ -118,10 +95,12 @@ export interface LinkContext {
   evidence: ReadonlyMap<string, Evidence>;
   /** False when the result carries no evidence pack at all. */
   hasPack: boolean;
-  /** The readable claim with this id, or null. */
-  claimOf: (id: string) => Claim | null;
+  /** The readable claim with this id and how its chip shows it, or null. */
+  claimOf: (id: string) => { claim: Claim; kind: ClaimKind } | null;
   /** True for a claim id the main view shows nothing for (`ResultClaims.isHidden`). */
   isHidden: (id: string) => boolean;
+  /** The analysed track's release year, for its node when the node's label names none. */
+  trackYear: number | null;
 }
 
 /** A track of the genealogy, as a relation names it. */
@@ -129,6 +108,8 @@ export interface NamedNode {
   id: string;
   label: string;
   trackTitle?: string;
+  /** Its release year when its label does not end with one (the analysed track's). */
+  year?: number;
 }
 
 /** A result's evidence pack by id: the items the contract can read (others are left out). */
@@ -145,13 +126,27 @@ export function evidencePack(evidence: unknown): ReadonlyMap<string, Evidence> {
 export function linkContext(
   evidence: unknown,
   claims: ResultClaims | null | undefined,
+  { releaseYear }: { releaseYear?: unknown } = {},
 ): LinkContext {
   return {
     evidence: evidencePack(evidence),
     hasPack: Array.isArray(evidence),
-    claimOf: (id) => claims?.byId.get(id)?.claim ?? null,
+    claimOf: (id) => {
+      const shown = claims?.byId.get(id);
+      return shown ? { claim: shown.claim, kind: shown.kind } : null;
+    },
     isHidden: (id) => claims?.isHidden(id) ?? false,
+    trackYear: yearFrom(releaseYear),
   };
+}
+
+/** A year from a result's `releaseYear` ("2011", "2011-05-02"), or null. */
+export function yearFrom(value: unknown): number | null {
+  const match =
+    typeof value === 'string' || typeof value === 'number'
+      ? /^(\d{4})/.exec(String(value).trim())
+      : null;
+  return match ? Number(match[1]) : null;
 }
 
 /** The kind of a link by the contract's `linkDisplayKind`, against the pack's ids. */
@@ -165,7 +160,7 @@ export function linkDisplayKind(
 /** The release year at the end of a node's label ("Title - Artist (1984)"), or null. */
 export function yearOf(node: NamedNode | undefined): number | null {
   const match = node ? /\((\d{4})\)\s*$/.exec(node.label) : null;
-  return match ? Number(match[1]) : null;
+  return match ? Number(match[1]) : (node?.year ?? null);
 }
 
 /** How a relation names a track: its title and year, or its label (which carries both). */
@@ -178,16 +173,15 @@ export function nodeName(node: NamedNode | undefined, id: string): string {
 
 const list = (items: readonly string[]) => items.join(', ');
 
-/** An evidence id in words: the source, its tier and, for a record, what it is about. */
-function citationText(citation: Citation): string {
-  const item = citation.evidence;
-  if (!item) return citation.id;
-  const scope = item.recordRef ? SCOPE_LABEL[item.recordRef.split('/')[0]] : undefined;
-  const parts = [
-    `${SOURCE_NAME[item.source] ?? item.source} ${TIER_LABEL[item.sourceTier]}`,
-    ...(scope ? [scope] : []),
-  ];
-  return `${citation.id} (${parts.join(', ')})`;
+/**
+ * An evidence id in words, as a claim's chip names the same item (`sourceLabel`): the source,
+ * its tier as the contract's rules allow it (only for a sourced link), and what its record is
+ * about when that is not this recording.
+ */
+function citationText(citation: Citation, showTier: boolean): string {
+  return citation.evidence
+    ? `${citation.id} (${sourceLabel(citation.evidence, showTier)})`
+    : citation.id;
 }
 
 type Read = { link: ShownLink } | { hidden: true } | null;
@@ -205,7 +199,8 @@ export function readLink(
   if (!parsed.success) return null;
   const link = parsed.data;
   if (link.claimId && context.isHidden(link.claimId)) return { hidden: true };
-  const claim = link.claimId ? context.claimOf(link.claimId) : null;
+  const claimed = link.claimId ? context.claimOf(link.claimId) : null;
+  const claim = claimed?.claim ?? null;
 
   const statedType = link.type ?? null;
   const origin = link.origin ?? null;
@@ -220,16 +215,20 @@ export function readLink(
   const directionKnown =
     statedType === 'producer' || fromYear === null || toYear === null || fromYear <= toYear;
   if (!directionKnown) {
-    reasons.push(`its direction contradicts the release years (${fromYear} before ${toYear})`);
+    reasons.push(`the years (${fromYear} and ${toYear}) do not fit this direction`);
   }
 
+  // A link that states a claim is sourced only when that claim's chip says sourced, whoever
+  // wrote the link; a model link without a claim is never sourced (citing is not support).
   let kind = linkDisplayKind(link, context.evidence);
-  if (kind === 'sourced' && origin === 'model') {
-    const supported = claim?.verdict === 'supported' || claim?.verdict === 'partial';
-    if (!supported) {
+  if (kind === 'sourced' && claimed) {
+    if (claimed.kind !== 'sourced') {
       kind = 'inferred';
-      if (!claim?.verdict) reasons.push('proposed by the model; no verifier verdict supports it');
+      if (!claim?.verdict) reasons.push('its claim is not sourced');
     }
+  } else if (kind === 'sourced' && origin === 'model') {
+    kind = 'inferred';
+    reasons.push('proposed by the model; no verifier verdict supports it');
   }
   if (!directionKnown) kind = 'inferred';
   if (kind === 'inferred' && claim?.verdict) {
@@ -253,7 +252,7 @@ export function readLink(
     }
     if (known.length > 0) {
       reasons.push(
-        `cites ${list(known.map(citationText))}${claim?.verdict ? '' : ', not checked by a verifier'}`,
+        `cites ${list(known.map((c) => citationText(c, false)))}${claim?.verdict ? '' : ', not checked by a verifier'}`,
       );
     }
     if (citations.length === 0) {
@@ -293,17 +292,26 @@ export interface GenealogyReading {
   hidden: number;
 }
 
-/** The genealogy's nodes, by id (entries that are not nodes are left out). */
-export function nodesById(nodes: unknown): ReadonlyMap<string, NamedNode> {
+/**
+ * The genealogy's nodes, by id (entries that are not nodes are left out). The analysed track's
+ * node (group 1) takes `trackYear` when its label names no year: the API labels it with the
+ * title alone.
+ */
+export function nodesById(
+  nodes: unknown,
+  trackYear: number | null = null,
+): ReadonlyMap<string, NamedNode> {
   const byId = new Map<string, NamedNode>();
   if (!Array.isArray(nodes)) return byId;
   for (const node of nodes) {
     if (node && typeof node === 'object' && typeof (node as NamedNode).id === 'string') {
       const { id, label, trackTitle } = node as NamedNode;
+      const isCurrent = (node as { group?: unknown }).group === 1;
       byId.set(id, {
         id,
         label: typeof label === 'string' ? label : id,
         ...(typeof trackTitle === 'string' ? { trackTitle } : {}),
+        ...(isCurrent && trackYear !== null ? { year: trackYear } : {}),
       });
     }
   }
@@ -320,7 +328,7 @@ export function readGenealogy(
   genealogy: { nodes?: unknown; links?: unknown } | null | undefined,
   context: LinkContext = linkContext(undefined, null),
 ): GenealogyReading {
-  const nodes = nodesById(genealogy?.nodes);
+  const nodes = nodesById(genealogy?.nodes, context.trackYear);
   const links: ShownLink[] = [];
   let hidden = 0;
   for (const value of Array.isArray(genealogy?.links) ? genealogy.links : []) {
@@ -359,7 +367,7 @@ export function kindLabel(link: ShownLink): string {
 /** Where a link comes from, in words: its kind, the evidence it cites, and why it is not sourced. */
 export function provenanceText(link: ShownLink): string {
   if (link.kind === 'sourced') {
-    return `Sourced · cites ${list(link.citations.map(citationText))}`;
+    return `Sourced · cites ${list(link.citations.map((c) => citationText(c, true)))}`;
   }
   return `${kindLabel(link)} · ${link.reasons.join('; ')}`;
 }

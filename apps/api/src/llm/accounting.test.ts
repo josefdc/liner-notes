@@ -354,6 +354,45 @@ describe("HTTP statuses", () => {
     ]);
   });
 
+  // The errors fetch (undici) throws when no connection was made, as Node 24 shapes them.
+  const undiciCause = (name: string, message: string, code?: string) =>
+    Object.assign(new Error(message), { name, ...(code ? { code } : {}) });
+  it.each([
+    [
+      "a connect timeout",
+      undiciCause(
+        "ConnectTimeoutError",
+        "Connect Timeout Error (attempted address: 10.255.255.1:443, timeout: 10000ms)",
+        "UND_ERR_CONNECT_TIMEOUT",
+      ),
+    ],
+    [
+      "an unreachable network",
+      Object.assign(undiciCause("Error", "connect ENETUNREACH 10.0.0.1:443", "ENETUNREACH"), {
+        syscall: "connect",
+      }),
+    ],
+    [
+      "an unreachable host",
+      Object.assign(undiciCause("Error", "connect EHOSTUNREACH 10.0.0.1:443", "EHOSTUNREACH"), {
+        syscall: "connect",
+      }),
+    ],
+    // fetch refuses the ports browsers block before connecting, with no code.
+    ["a port fetch blocks", undiciCause("Error", "bad port")],
+  ])("settles at zero and records the attempts as not sent for %s", async (_, cause) => {
+    const { llm, rows } = setup(() => {
+      throw new TypeError("fetch failed", { cause });
+    });
+    const error = await llm.invoke("x", "research", "hi", Schema, OPTIONS).catch((e) => e);
+    expect(isLlmError(error)).toBe(true);
+    expect(settles().length).toBeGreaterThan(0);
+    expect(settles().every((l) => l.usd_est === 0 && l.estimated === false)).toBe(true);
+    expect(summarise(lines()).totalUsd).toBe(0);
+    expect(rows.length).toBe(settles().length);
+    expect(rows.every((row) => row.sent === false && row.usdEst === 0)).toBe(true);
+  });
+
   it("keeps the worst case for a reset connection, recording the attempts as sent", async () => {
     const { llm, rows } = setup(() => {
       throw new TypeError("fetch failed", {

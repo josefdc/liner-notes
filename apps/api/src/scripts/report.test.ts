@@ -396,10 +396,13 @@ describe("buildReport", () => {
     // Never pruned: marked from the setting, and it says so.
     expect(report).toMatchObject({ cutoffSource: "setting", retentionDays: 30 });
     expect(text).toContain(
-      "Retention: the database records no cutoff applied by retention (it has not been pruned " +
-        "since schema v12), so days are marked from the current RUN_RETENTION_DAYS=30: none in " +
-        "this window is past it. Days deleted under a shorter setting would show as kept.",
+      "Retention: the database has not been pruned since it began to record the cutoffs " +
+        "retention applies, so days are marked from the current RUN_RETENTION_DAYS=30: none in " +
+        "this window is past it.",
     );
+    // A new database: no prune can have deleted anything unrecorded.
+    expect(report.unrecordedUntil).toBeNull();
+    expect(text).not.toContain("marked ?");
     expect(text).not.toContain(TYPED);
     expect(text).not.toContain("run-id-");
     expect(JSON.stringify(report)).not.toMatch(new RegExp(`${TYPED}|run-id-`));
@@ -539,10 +542,88 @@ describe("buildReport past the run retention", () => {
   });
 });
 
+describe("buildReport on a database pruned before it recorded its cutoffs", () => {
+  it("marks the days an unrecorded prune may have emptied as unknown, with a note", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(Date.parse("2026-10-01T00:00:00Z"));
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      recordRuns(db, [
+        { id: "oct05", status: "completed", start: "2026-10-05T10:00:00Z", seconds: 30 },
+        { id: "oct12", status: "completed", start: "2026-10-12T10:00:00Z", seconds: 30 },
+        { id: "oct20", status: "completed", start: "2026-10-20T10:00:00Z", seconds: 30 },
+      ]);
+      // Schema 11 at RUN_RETENTION_DAYS=7, on 2026-10-22 12:00: oct05 and oct12 are deleted.
+      const sevenDays = { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS };
+      const pruned = pruneDatabase(db, sevenDays, Date.parse("2026-10-22T12:00:00Z"));
+      expect(pruned).toMatchObject({ runs: 2 });
+      // Upgraded on 2026-10-23 12:00 with RUN_RETENTION_DAYS=30, and pruned at once.
+      vi.setSystemTime(Date.parse("2026-10-23T12:00:00Z"));
+      expect(runMigrations(db)).toEqual([12]);
+      expect(pruneDatabase(db, DEFAULT_RETENTION, Date.parse("2026-10-23T12:00:01Z")).runs).toBe(0);
+      recordRuns(db, [
+        { id: "oct24", status: "completed", start: "2026-10-24T10:00:00Z", seconds: 30 },
+      ]);
+
+      const report = buildReport(db, { days: 21, now: NOW, retentionDays: 30 });
+
+      // The unrecorded prunes deleted only what ended a day (the shortest retention) before
+      // the migration: up to 2026-10-22 12:00.
+      expect(report).toMatchObject({
+        cutoffSource: "recorded",
+        cutoff: "2026-09-23T12:00:01.000Z",
+        unrecordedUntil: "2026-10-22T12:00:00.000Z",
+        keptFrom: "2026-10-23",
+      });
+      const byDay = new Map(report.perDay.map((row) => [row.day, row]));
+      expect(byDay.get("2026-10-05")).toMatchObject({ retention: "unknown", runs: 0 });
+      expect(byDay.get("2026-10-12")).toMatchObject({ retention: "unknown", runs: 0 });
+      expect(byDay.get("2026-10-20")).toMatchObject({ retention: "unknown", runs: 1 });
+      expect(byDay.get("2026-10-22")).toMatchObject({ retention: "unknown" });
+      expect(byDay.get("2026-10-23")).toMatchObject({ retention: "kept" });
+      expect(report.perDay.filter((row) => row.retention === "unknown")).toHaveLength(18);
+      expect(report.perDay.filter(isPrunedDay)).toHaveLength(0);
+      expect(report.total).toMatchObject({ retention: "unknown", runs: 2 });
+
+      const text = formatReport(report);
+      expect(text).toMatch(/^2026-10-12\?\s+0\s/m);
+      expect(text).toMatch(/^2026-10-20\?\s+1\s/m);
+      expect(text).toMatch(/^2026-10-23\s+0\s/m);
+      expect(text).toContain(
+        "Retention before schema v12 was not recorded: prunes made then may have deleted runs " +
+          "and usage rows up to 2026-10-22 12:00 UTC. The 18 days marked ? show what is left: " +
+          "they may have had more, and so may the total.",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("marks no day unknown once the recorded cutoff has passed the migration", () => {
+    const db = new Database(":memory:");
+    try {
+      vi.setSystemTime(Date.parse("2026-09-01T00:00:00Z"));
+      runMigrations(db, MIGRATIONS.slice(0, 11));
+      recordRuns(db, [{ id: "a", status: "completed", start: "2026-09-02T10:00:00Z" }]);
+      vi.setSystemTime(Date.parse("2026-09-10T00:00:00Z"));
+      runMigrations(db);
+      // RUN_RETENTION_DAYS=7 since: the cutoff is past the migration's time.
+      pruneDatabase(db, { ...DEFAULT_RETENTION, runRetentionMs: 7 * DAY_MS }, NOW);
+      const report = buildReport(db, { days: 10, now: NOW, retentionDays: 7 });
+      expect(report.unrecordedUntil).toBe("2026-09-09T00:00:00.000Z");
+      expect(report.perDay.some((row) => row.retention === "unknown")).toBe(false);
+      expect(formatReport(report)).not.toContain("marked ?");
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("buildReport on usage rows recorded before sends were kept", () => {
   it("counts their tokens and cost but not as calls sent, and says so", () => {
     const db = new Database(":memory:");
     try {
+      vi.setSystemTime(NOW);
       runMigrations(db, MIGRATIONS.slice(0, 11));
       db.prepare(
         `INSERT INTO llm_usage (id, run_id, call_site, tier, deployment, purpose, mode, status,
@@ -570,9 +651,16 @@ describe("buildReport on usage rows recorded before sends were kept", () => {
         inputTokens: 110,
       });
       expect(report.total.model?.usdEstimate).toBeCloseTo(0.35, 10);
-      expect(formatReport(report)).toContain(
+      const text = formatReport(report);
+      expect(text).toContain(
         "1 attempts recorded before schema v12 do not say whether they were sent: not counted " +
-          "as calls, their tokens and USD are.",
+          "as calls (shown as +N? in calls), their tokens and USD are.",
+      );
+      // Not "0 calls" or "1 calls": the attempts not known to be sent are shown as such.
+      expect(text).toMatch(/^2026-10-24\S*(\s+\S+){11}\s+0\+1\?\s/m);
+      expect(text).toMatch(/^total(\s+\S+){11}\s+1\+1\?\s/m);
+      expect(text).toContain(
+        "Model by purpose: dev 1 calls (and 1 attempts not known to be sent) $0.3500.",
       );
     } finally {
       db.close();
@@ -831,9 +919,9 @@ describe("main", () => {
     expect(out).toMatch(/^2026-10-19\s+pruned$/m);
     expect(out).toMatch(/^2026-10-20\*\s/m);
     expect(out).toContain(
-      "records no cutoff applied by retention (it has not been pruned since schema v12), so " +
-        "days are marked from the current RUN_RETENTION_DAYS=5: records are complete from " +
-        "2026-10-21.",
+      "Retention: the database has not been pruned since it began to record the cutoffs " +
+        "retention applies, so days are marked from the current RUN_RETENTION_DAYS=5: records " +
+        "are complete from 2026-10-21.",
     );
   });
 

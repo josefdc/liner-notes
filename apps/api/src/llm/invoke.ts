@@ -32,9 +32,11 @@
  *   HTTP 400 with code content_filter                            input bound only, estimated
  *   HTTP 400 (incl. context overflow), 401, 403, 404, 429         0: rejected before processing
  *   any other HTTP status (408, 409, 5xx, …)                     worst case, estimated
- *   no connection made (DNS failure, connection refused)          0
- *   timeout, reset connection, abort after sending, a body
- *   that is not a Responses API object                           worst case, estimated
+ *   no connection made (DNS failure, connection refused, network
+ *   or host unreachable, connect timeout, a port fetch blocks)    0
+ *   timeout, reset connection, abort after sending (or while
+ *   connecting: the two cannot be told apart), a body that is
+ *   not a Responses API object                                    worst case, estimated
  *   stopped before the request was sent                           0
  * Azure's billing of a filtered prompt is not documented: its input is counted, its output not.
  * Usage that cannot be right (text answered with 0 output tokens, more reasoning than output
@@ -363,10 +365,38 @@ const NETWORK_CODES = new Set([
   "UND_ERR_SOCKET",
   "UND_ERR_CONNECT_TIMEOUT",
 ]);
-/** Codes that mean no connection was made: the request cannot have reached the provider. */
-const UNDELIVERED_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+/**
+ * Codes that mean no connection was made, so the request cannot have reached the provider: the
+ * name did not resolve, the connection was refused, the network or host was unreachable, or the
+ * connection was not made within undici's connect timeout (which covers the TLS handshake; the
+ * request is written only once it is made).
+ */
+const UNDELIVERED_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
 /** HTTP statuses the provider answers before processing a request: not billed. */
 const UNBILLED_STATUSES = new Set([400, 401, 403, 404, 429]);
+
+/**
+ * Whether an attempt's error shows that no connection was made: its first code is one of
+ * UNDELIVERED_CODES, or fetch refused the endpoint's port before connecting ("bad port", for
+ * the ports browsers block).
+ */
+function neverConnected(error: unknown): boolean {
+  const code = errorCode(error);
+  if (code !== undefined) return UNDELIVERED_CODES.has(code);
+  let current = error as { message?: unknown; cause?: unknown } | undefined;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (current.message === "bad port") return true;
+    current = current.cause as typeof current;
+  }
+  return false;
+}
 
 /** The first error code in an error's cause chain. */
 function errorCode(error: unknown): string | undefined {
@@ -999,7 +1029,7 @@ export function createLlm(deps: LlmDependencies): Llm {
     const error = "error" in answer ? answer.error : null;
     // Whether the request was sent to the provider (the usage row's `sent`): it left this
     // process, and an answer came back or the failure does not show that no connection was made.
-    const undelivered = thrown !== null && UNDELIVERED_CODES.has(errorCode(thrown) ?? "");
+    const undelivered = thrown !== null && neverConnected(thrown);
     const answered = (httpStatus as number | null) !== null;
     const sentToProvider: boolean = (sent as boolean) && (answered || !undelivered);
 

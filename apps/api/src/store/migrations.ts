@@ -354,24 +354,35 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   {
     version: 12,
-    name: "retention_cutoff_sent_calls",
+    name: "retention_record_sent_calls",
     up(db) {
-      // `retention_state` keeps, in its one row, the latest run cutoff retention has applied
-      // (unix seconds: runs and usage rows at or before it may have been deleted), so the run
-      // report marks the days that were pruned, not the days the current setting would prune. A
-      // database has no row until it is pruned after this migration; what earlier prunes
-      // deleted was not recorded.
+      // `retention_state` keeps, in its one row, what the run report needs to mark pruned days:
+      // `run_cutoff`, the latest run cutoff retention has applied (unix seconds: runs and usage
+      // rows at or before it may have been deleted; null until the first prune after this
+      // migration), and `recorded_since`, when cutoffs began to be recorded. The prunes before
+      // that were not recorded, so on a database that already holds runs or usage rows it is
+      // this migration's time; on one that holds none (a new database) it is null: no record
+      // can have been deleted unseen.
       // `llm_usage.sent` is 1 when the attempt's request was sent to the provider, 0 when it was
       // not (stopped before sending, no connection made, or answered from stored answers), and
       // null for rows written before this migration (llm/usage.ts).
       db.exec(`
         CREATE TABLE retention_state (
           id INTEGER PRIMARY KEY CHECK (id = 1),
-          run_cutoff INTEGER NOT NULL,
+          run_cutoff INTEGER,
+          recorded_since INTEGER,
           updated_at INTEGER NOT NULL
         );
         ALTER TABLE llm_usage ADD COLUMN sent INTEGER;
       `);
+      const now = Math.floor(Date.now() / 1000);
+      const held = db
+        .prepare("SELECT EXISTS (SELECT 1 FROM runs) OR EXISTS (SELECT 1 FROM llm_usage)")
+        .pluck()
+        .get();
+      db.prepare(
+        "INSERT INTO retention_state (id, run_cutoff, recorded_since, updated_at) VALUES (1, NULL, ?, ?)",
+      ).run(held ? now : null, now);
     },
   },
 ];

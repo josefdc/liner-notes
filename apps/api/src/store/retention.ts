@@ -37,6 +37,9 @@ const log = logger("Retention");
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+/** The shortest run retention RUN_RETENTION_DAYS can set (smaller values are raised to it). */
+export const MIN_RUN_RETENTION_MS = DAY_MS;
+
 export interface RetentionPolicy {
   checkpointRetentionMs: number;
   storeRetentionMs: number;
@@ -97,7 +100,7 @@ export function retentionFromEnv(
         "RUN_RETENTION_DAYS",
         env.RUN_RETENTION_DAYS,
         DEFAULT_RETENTION.runRetentionMs / DAY_MS,
-        1,
+        MIN_RUN_RETENTION_MS / DAY_MS,
       ) * DAY_MS,
     runEventRetentionMs:
       setting(
@@ -161,21 +164,30 @@ function idleThreads(db: Database.Database, cutoffSec: number, openRunCutoffSec:
 function recordRunCutoff(db: Database.Database, cutoffSec: number, now: number): void {
   db.prepare(
     `INSERT INTO retention_state (id, run_cutoff, updated_at) VALUES (1, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET run_cutoff = MAX(run_cutoff, excluded.run_cutoff),
+     ON CONFLICT (id) DO UPDATE SET
+       run_cutoff = MAX(COALESCE(run_cutoff, excluded.run_cutoff), excluded.run_cutoff),
        updated_at = excluded.updated_at`,
   ).run(cutoffSec, Math.floor(now / 1000));
 }
 
-/**
- * The latest run cutoff retention applied (unix seconds), or null when the database records
- * none: not migrated to keep it (schema before 12), or not pruned since.
- */
-export function recordedRunCutoff(db: Database.Database): number | null {
+/** What a database records of the deletions retention made (migration 12). */
+export interface RetentionRecord {
+  /** The latest run cutoff applied (unix seconds); null when not pruned since migration 12. */
+  runCutoff: number | null;
+  /**
+   * When cutoffs began to be recorded (unix seconds): the prunes before it were not recorded.
+   * Null when the database held no runs or usage rows then, so none was deleted unrecorded.
+   */
+  recordedSince: number | null;
+}
+
+/** The database's record of retention, or null when it keeps none (schema before 12). */
+export function retentionRecord(db: Database.Database): RetentionRecord | null {
   if (!tableExists(db, "retention_state")) return null;
-  const row = db.prepare("SELECT run_cutoff FROM retention_state WHERE id = 1").get() as
-    | { run_cutoff: number }
-    | undefined;
-  return row?.run_cutoff ?? null;
+  const row = db
+    .prepare("SELECT run_cutoff, recorded_since FROM retention_state WHERE id = 1")
+    .get() as { run_cutoff: number | null; recorded_since: number | null } | undefined;
+  return { runCutoff: row?.run_cutoff ?? null, recordedSince: row?.recorded_since ?? null };
 }
 
 /** Deletes everything older than the policy allows. Runs in one transaction. */

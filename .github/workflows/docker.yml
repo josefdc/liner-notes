@@ -189,7 +189,9 @@ jobs:
           curl -fsS http://127.0.0.1:3101/api/ready | grep -q '"status":"ready"'
           test "$(docker exec api-smoke id -u)" -ne 0
           # The run report, as the API's user, against the database the API has open.
-          docker exec api-smoke node dist/report.js --days 1 | tee report.txt
+          # Written to a file, not piped, so the step fails when the report exits non-zero.
+          docker exec api-smoke node dist/report.js --days 1 > report.txt
+          cat report.txt
           grep -q '^total ' report.txt
           for _ in $(seq 1 45); do
             status=$(docker inspect -f '{{.State.Health.Status}}' api-smoke)

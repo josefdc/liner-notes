@@ -189,6 +189,6 @@ export function main(argv: string[], deps: RecordDependencies = {}): number {
   return 0;
 }
 
-if (isMainModule(import.meta.url)) {
+if (isMainModule(import.meta)) {
   process.exitCode = main(process.argv.slice(2));
 }

@@ -86,7 +86,7 @@ describe("llm_usage", () => {
   });
 
   it("keeps whether each attempt was sent from migration 12; earlier rows say neither", () => {
-    expect(MIGRATIONS[11]).toMatchObject({ version: 12, name: "retention_cutoff_sent_calls" });
+    expect(MIGRATIONS[11]).toMatchObject({ version: 12, name: "retention_record_sent_calls" });
     const db = new Database(":memory:");
     runMigrations(db, MIGRATIONS.slice(0, 11));
     db.prepare(

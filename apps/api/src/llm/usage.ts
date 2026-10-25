@@ -20,7 +20,10 @@
  *   sent              1 when the request was sent to the provider: it left the process, and
  *                     did not fail in a way that shows no connection was made. 0 when it was not:
  *                     stopped before it was sent, no connection made (DNS failure, connection
- *                     refused), or a replayed call. Null for rows written before migration 12
+ *                     refused, network or host unreachable, connect timeout, a port fetch
+ *                     blocks), or a replayed call. An abort or timeout while connecting cannot
+ *                     be told from one after sending and counts as sent. Null for rows written
+ *                     before migration 12
  */
 
 import type Database from "better-sqlite3";

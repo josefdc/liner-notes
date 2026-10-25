@@ -197,8 +197,9 @@ answers replayed from stored answers) and cached result and by outcome; p50/p95 
 completed live runs, with the time spent waiting at the track picker left out; the fallback rate;
 and, by the day of the call, model calls sent to the provider, their tokens and estimated USD
 from the database's usage rows. Days before the cutoff retention last applied (recorded in the
-database) are shown as pruned. It never prints what anyone typed or a run id; the spend log
-(`LLM_SPEND_LOG`) stays the authoritative record of spend.
+database) are shown as pruned; on a database migrated from before cutoffs were recorded, the
+days an earlier prune may have emptied are marked unknown. It never prints what anyone typed or
+a run id; the spend log (`LLM_SPEND_LOG`) stays the authoritative record of spend.
 
 ```bash
 npm run report -w apps/api -- --days 14            # a checkout's database (SQLITE_DB_PATH)
@@ -206,10 +207,10 @@ docker compose exec sonic-server node dist/report.js --days 14 --json   # the de
 ```
 
 It writes nothing when the database has both its `-wal` and `-shm` files (the API has it open: it
-is opened read-only) or neither (the API is stopped: a file of up to 1 GiB is read into memory,
-and kept only if it did not change meanwhile). Otherwise it is opened read-only and SQLite creates
-the missing `-wal` or `-shm`, so run it as the API's user (`docker compose exec` runs it as that
-user, against the `sonic-data` volume).
+is opened read-only) or no `-wal` (the API is stopped: a file of up to 1 GiB is read into memory,
+about 2.3 times its size at peak, and kept only if it did not change meanwhile). Otherwise it is
+opened read-only and SQLite creates the missing `-wal` or `-shm`, so run it as the API's user
+(`docker compose exec` runs it as that user, against the `sonic-data` volume).
 
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with

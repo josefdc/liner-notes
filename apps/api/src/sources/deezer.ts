@@ -45,7 +45,7 @@ import {
   words,
 } from "../agent/trackMatch.js";
 import { abortError, cassetteMode, fetchJson, type Shape, SourceError } from "./http.js";
-import { type Pace, PaceRefused, RequestPacer } from "./pacing.js";
+import { LanePacer, type LanePace, PaceRefused } from "./pacing.js";
 import { type SourceErrorCode, sourceErrorCode } from "./toolResult.js";
 import { logger } from "../logger.js";
 
@@ -104,32 +104,30 @@ export const DEEZER_MAX_PER_WINDOW = 40;
 export const DEEZER_NODE_MAX_PER_WINDOW = 30;
 
 /**
- * Every Deezer request of the process (sources/pacing.ts). A request waits at most a window for
- * its slot; a later one is refused (PaceRefused) and not sent.
+ * Every Deezer request of the process, in two lanes (sources/pacing.ts LanePacer): the analysed
+ * tracks' requests (priority: they never wait behind node requests) and the genealogy node
+ * previews' (background: at most DEEZER_NODE_MAX_PER_WINDOW of the window). A request waits at
+ * most a window for its slot; a later one is refused (PaceRefused) and not sent.
  */
-export const DEEZER_PACE: Pace = {
-  intervalMs: 0,
-  budgets: [{ max: DEEZER_MAX_PER_WINDOW, windowMs: DEEZER_WINDOW_MS }],
+export const DEEZER_PACE: LanePace = {
+  windowMs: DEEZER_WINDOW_MS,
+  max: DEEZER_MAX_PER_WINDOW,
+  backgroundMax: DEEZER_NODE_MAX_PER_WINDOW,
   maxWaitMs: DEEZER_WINDOW_MS,
 };
-/** The genealogy node previews' share of DEEZER_PACE; their requests take a slot in both. */
-export const DEEZER_NODE_PACE: Pace = {
-  intervalMs: 0,
-  budgets: [{ max: DEEZER_NODE_MAX_PER_WINDOW, windowMs: DEEZER_WINDOW_MS }],
-  maxWaitMs: DEEZER_WINDOW_MS,
-};
-const pacer = new RequestPacer("Deezer", () => DEEZER_PACE);
-const nodePacer = new RequestPacer("Deezer (genealogy previews)", () => DEEZER_NODE_PACE);
+const pacer = new LanePacer("Deezer", () => DEEZER_PACE);
 
 /** How a lookup's requests are paced. */
 export interface DeezerPacing {
-  /** "nodes": a genealogy node's preview, held to DEEZER_NODE_PACE as well. */
+  /** "nodes": a genealogy node's preview, in the background lane. Else the priority lane. */
   lane?: "nodes";
   /**
-   * On `pacingClock`: the latest a request may start; a later slot is refused (PaceRefused) and
-   * the request is not sent.
+   * On `pacingClock`, read for each request: the latest it may start; a later slot is refused
+   * (PaceRefused) and the request is not sent.
    */
-  notAfter?: number;
+  notAfter?: () => number;
+  /** Told when a request got its slot: it is sent then. */
+  onSlot?: () => void;
 }
 
 /** How far a matched entry's duration may be from the requested one. */
@@ -217,6 +215,11 @@ export type DeezerPreviewResult =
       message: string;
       /** Set when Deezer could not be read (quota, network): nothing is known then. */
       error?: string;
+      /**
+       * Set when a request was not sent: Deezer's pace (DEEZER_PACE) had no slot in time. Not
+       * an error: Deezer was not asked, and nothing is known.
+       */
+      notAsked?: true;
       /** The kind of that failure, for the run's source errors. */
       errorCode?: SourceErrorCode;
     };
@@ -240,10 +243,12 @@ async function deezerGet<T extends { error?: DeezerError }>(
   pacing: DeezerPacing = {},
 ): Promise<T | null> {
   if (cassetteMode() !== "replay") {
-    const { notAfter } = pacing;
     try {
-      if (pacing.lane === "nodes") await nodePacer.slot({ signal, notAfter });
-      await pacer.slot({ signal, notAfter });
+      await pacer.slot({
+        signal,
+        notAfter: pacing.notAfter?.(),
+        lane: pacing.lane === "nodes" ? "background" : "priority",
+      });
     } catch (error) {
       // Stopped while it waited: as a request stopped while it is under way.
       if (signal?.aborted && !(error instanceof PaceRefused)) {
@@ -252,6 +257,7 @@ async function deezerGet<T extends { error?: DeezerError }>(
       throw error;
     }
   }
+  pacing.onSlot?.();
   const data = await fetchJson<T>({
     source: "deezer",
     url,
@@ -530,13 +536,24 @@ export async function deezerPreviewBySearch(
 
 /**
  * A Deezer failure as a result without a preview that carries the error; for a cancelled run
- * the error is thrown again.
+ * the error is thrown again. A request the pacer refused (PaceRefused) is no failure: the result
+ * says Deezer was not asked (`notAsked`), with no error.
  */
 export function deezerFailure(
   error: unknown,
   signal: AbortSignal | undefined,
 ): DeezerPreviewResult {
   if (signal?.aborted) throw error;
+  if (error instanceof PaceRefused) {
+    log.info(`Not asked: ${error.message}`);
+    return {
+      found: false,
+      previewUrl: null,
+      rejected: [],
+      message: "Deezer was not asked",
+      notAsked: true,
+    };
+  }
   const message = error instanceof Error ? error.message : "Unknown error";
   log.error(`Error: ${message}`);
   return notFound([], "Deezer could not be read", {

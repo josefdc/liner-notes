@@ -122,13 +122,17 @@ export const MAX_DEEZER_LOOKUPS = 20;
  * them is under way (the Spotify searches between them do not count).
  */
 export const PREVIEW_BUDGET_MS = 8_000;
-/** How long one node's lookup (its ISRC entry, and that entry's alternative) may take. */
+/**
+ * How long one node's lookup (its ISRC entry, and that entry's alternative) may take, from when
+ * its first request got its slot of Deezer's pace: the wait for that slot counts against the
+ * budget only.
+ */
 export const LOOKUP_TIMEOUT_MS = 4_000;
 /**
- * The least time a lookup's request must have left, of its own time and the budget's, when it
- * starts: a later slot of Deezer's pace is refused, and the node gets no preview.
+ * The least time a request must have left when it starts: of the budget, and once the lookup's
+ * own time runs, of that too. A later slot of Deezer's pace is refused.
  */
-const START_MARGIN_MS = 1_000;
+export const START_MARGIN_MS = 1_000;
 /** Failures of other kinds than those in `stops` after which no more lookups are made. */
 const MAX_FAILURES = 2;
 
@@ -186,17 +190,28 @@ export function limiter(limit: number) {
 
 /**
  * A signal that aborts as a deadline (a TimeoutError, which the sources report as a timeout,
- * never as a cancelled run) after `ms`. Timers, not AbortSignal.timeout, so tests can run the
- * clock.
+ * never as a cancelled run) `ms` after `start` (the first call; later ones do nothing). `endsAt`
+ * is that time on `pacingClock`, Infinity before the start. Timers, not AbortSignal.timeout, so
+ * tests can run the clock.
  */
 function deadline(ms: number) {
   const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(new DOMException(`no answer within ${ms} ms`, "TimeoutError")),
-    ms,
-  );
-  timer.unref?.();
-  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let endsAt = Number.POSITIVE_INFINITY;
+  return {
+    signal: controller.signal,
+    start() {
+      if (timer) return;
+      endsAt = pacingClock() + ms;
+      timer = setTimeout(
+        () => controller.abort(new DOMException(`no answer within ${ms} ms`, "TimeoutError")),
+        ms,
+      );
+      timer.unref?.();
+    },
+    endsAt: () => endsAt,
+    clear: () => clearTimeout(timer),
+  };
 }
 
 /**
@@ -246,17 +261,19 @@ const withoutLinks = (text: string) => text.replace(/\bhttps?:\/\/\S+/gi, "[link
 /**
  * Deezer previews by ISRC for one enrichment. A preview is optional, so its cost is bounded:
  * - at most DEEZER_CONCURRENCY lookups at once and MAX_DEEZER_LOOKUPS in all;
- * - each lookup within LOOKUP_TIMEOUT_MS, and all of them within PREVIEW_BUDGET_MS of lookup
- *   time; a node whose turn comes after that gets no preview, and the run goes on. A spent
- *   budget is said once in the log; it is not a Deezer failure;
+ * - each lookup within LOOKUP_TIMEOUT_MS of its first request's slot, and all of them within
+ *   PREVIEW_BUDGET_MS of lookup time (waits for a slot included); a node whose turn comes after
+ *   that gets no preview, and the run goes on. A spent budget is said once in the log; it is not
+ *   a Deezer failure;
  * - none after a rate limit or a timeout of Deezer's, nor after MAX_FAILURES other failures. A
  *   lookup that finds no usable entry is not a failure;
- * - their requests take Deezer's pace for the whole process, within the share left to node
- *   previews (sources/deezer.ts DEEZER_NODE_PACE), so that concurrent runs stay under Deezer's
- *   quota and an analysed track's lookup still gets a slot. A lookup whose slot would come too
- *   late for its own time or the budget (less START_MARGIN_MS) is skipped: that request is not
- *   sent, it is not a failure, and it does not count against MAX_DEEZER_LOOKUPS. Skips are said
- *   once in the log.
+ * - their requests take Deezer's pace for the whole process (sources/deezer.ts DEEZER_PACE), in
+ *   the background lane: within the share left to node previews, and after any analysed track's
+ *   request, which never waits behind them. So concurrent runs stay under Deezer's quota. A
+ *   request whose slot would come too late (START_MARGIN_MS) is refused and not sent. When that
+ *   is the lookup's first request, the lookup is skipped: not a failure, not counted against
+ *   MAX_DEEZER_LOOKUPS, and said once in the log. When its first request was sent (its
+ *   alternative's was refused), it is a lookup like any other, without a preview.
  * A lookup gives the preview only of an entry deezerPreviewByIsrc accepts and the player may
  * load; anything else is no preview. The first Deezer failure is reported (`report`) as a
  * source error of the run. A cancelled run rejects. `done` clears the budget's timer.
@@ -296,7 +313,10 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
     );
   };
 
-  /** A lookup Deezer's pace had no slot for in time: said once; it counts against nothing. */
+  /**
+   * A lookup whose first request Deezer's pace had no slot for in time: said once; it counts
+   * against nothing.
+   */
   const skipped = () => {
     started--;
     if (skipsSaid) return;
@@ -313,17 +333,23 @@ function deezerPreviews(signal: AbortSignal | undefined, report?: (error: Source
       const own = deadline(LOOKUP_TIMEOUT_MS);
       const signals = [budget.signal, own.signal, ...(signal ? [signal] : [])];
       budget.begin();
-      const left = Math.min(budget.remaining(), LOOKUP_TIMEOUT_MS) - START_MARGIN_MS;
+      // The budget runs while this lookup is under way: it ends then at the latest.
+      const budgetEndsAt = pacingClock() + budget.remaining();
+      let sent = false;
       try {
         const result = await deezerPreviewByIsrc(request, AbortSignal.any(signals), {
           lane: "nodes",
-          notAfter: pacingClock() + Math.max(0, left),
+          notAfter: () => Math.min(budgetEndsAt, own.endsAt()) - START_MARGIN_MS,
+          onSlot: () => {
+            sent = true;
+            own.start();
+          },
         });
         return result.found && isAllowedPreviewUrl(result.previewUrl) ? result.previewUrl : null;
       } catch (error) {
         if (signal?.aborted) throw error;
         if (error instanceof PaceRefused) {
-          skipped();
+          if (!sent) skipped();
           return null;
         }
         if (budget.signal.aborted) {

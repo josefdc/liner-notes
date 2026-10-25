@@ -50,7 +50,13 @@ describe("PreviewFreeSqliteSaver", () => {
           trackData: {
             id: "x",
             previewUrl: state.previewUrl,
-            genealogy: { nodes: [{ id: "n", img: CLIP }] },
+            genealogy: {
+              nodes: [
+                { id: "n", img: CLIP },
+                // A genealogy node's own clip (Spotify's, or Deezer's by ISRC).
+                { id: "m", spotifyId: "y", previewUrl: CLIP },
+              ],
+            },
           },
         };
       })
@@ -65,6 +71,7 @@ describe("PreviewFreeSqliteSaver", () => {
 
     expect(composerSaw).toBe(CLIP);
     expect(out.trackData?.previewUrl).toBe(CLIP);
+    expect(out.trackData?.genealogy).toMatchObject({ nodes: [{}, { previewUrl: CLIP }] });
 
     const saved = savedText(db);
     expect(saved).toContain("Ice Ice Baby");
@@ -78,7 +85,12 @@ describe("PreviewFreeSqliteSaver", () => {
     expect(state.values.spotifyData).toEqual({ id: "x", title: "Ice Ice Baby" });
     expect(state.values.trackData).toEqual({
       id: "x",
-      genealogy: { nodes: [{ id: "n", img: "" }] },
+      genealogy: {
+        nodes: [
+          { id: "n", img: "" },
+          { id: "m", spotifyId: "y" },
+        ],
+      },
     });
     expect(state.values.note).toBe("kept");
   });

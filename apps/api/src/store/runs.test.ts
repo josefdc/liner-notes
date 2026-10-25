@@ -141,6 +141,8 @@ describe("settleOpenRuns", () => {
 // =============================================================================
 
 const TRACK = "4uLU6hMCjMI75M1A2tKUQC";
+const SPOTIFY_NODE_CLIP = "https://p.scdn.co/mp3-preview/node";
+const DEEZER_NODE_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/n.mp3?hdnea=exp=1~hmac=y";
 
 /** A result of run `runId` that fits the contract, with any extra fields. */
 const result = (runId: string, extra: Record<string, unknown> = {}) => ({
@@ -210,6 +212,24 @@ describe("storeRunResult", () => {
       mode: "live",
       analysis: { id: TRACK, segments: [], samples: [], factoids: [] },
     });
+  });
+
+  it("stores no genealogy node's clip, Spotify's or Deezer's, in the result or the run's events", () => {
+    const nodes = [
+      { id: "a", group: 4, label: "A", size: 22, spotifyId: "a1", previewUrl: SPOTIFY_NODE_CLIP },
+      { id: "b", group: 4, label: "B", size: 22, spotifyId: "b1", previewUrl: DEEZER_NODE_CLIP },
+    ];
+    const withClips = result("r", { genealogy: { nodes, links: [] } });
+    startRun(db, { runId: "r", threadId: "r", query: "q" });
+    appendRunEvent(db, "r", 0, { seq: 0, type: "complete", data: withClips } as { seq: number });
+    expect(storeRunResult(db, "r", withClips)).toBe("stored");
+
+    const saved = [
+      db.prepare("SELECT analysis FROM runs WHERE run_id = 'r'").pluck().get(),
+      ...db.prepare("SELECT event FROM run_events WHERE run_id = 'r'").pluck().all(),
+    ].join("\n");
+    expect(saved).toContain('"spotifyId":"b1"');
+    expect(saved).not.toMatch(/previewUrl|p\.scdn\.co|dzcdn|hdnea/);
   });
 
   it("does not store how the run's search text matched the track", () => {

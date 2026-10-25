@@ -7,8 +7,8 @@
  *
  * The stub scout picks its path from the query: "ambiguous …" offers two candidates (the run
  * pauses), anything else matches TRACK_ID; for "echo …" its status repeats the typed query. The
- * stub composer's result carries a preview URL (under `previewUrl` and as a genealogy image), a
- * cover URL and the typed query in a field the contract does not name.
+ * stub composer's result carries a preview URL (under `previewUrl`, as a genealogy image and as a
+ * genealogy node's clip), a cover URL and the typed query in a field the contract does not name.
  */
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -158,7 +158,18 @@ vi.mock("../agent/nodes/index.js", async () => {
           { id: "fb", title: "B fact", content: "Recorded fact two.", type: "trivia" },
         ],
         genealogy: {
-          nodes: [{ id: "self", group: 1, label: "Recorded Song", size: 10, img: preview }],
+          nodes: [
+            { id: "self", group: 1, label: "Recorded Song", size: 10, img: preview },
+            // A genealogy node's own clip (Spotify's, or Deezer's by ISRC).
+            {
+              id: "influence",
+              group: 4,
+              label: "An Influence",
+              size: 8,
+              spotifyId: "0ReplayInfluence000001",
+              previewUrl: preview,
+            },
+          ],
           links: [],
         },
         run: {
@@ -425,6 +436,8 @@ describe("the recorder", () => {
     expect(built.analysis).not.toHaveProperty("previewUrl");
     expect(built.analysis.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
     expect(built.analysis.genealogy.nodes[0].img).toBe("");
+    expect(built.analysis.genealogy.nodes[1].spotifyId).toBe("0ReplayInfluence000001");
+    expect(built.analysis.genealogy.nodes[1]).not.toHaveProperty("previewUrl");
     expect(content(built.analysis)).toEqual(content(stored(runId).run.analysis));
     expect(types(built.events.map((e) => e.event as Event))).toEqual([
       "connected",

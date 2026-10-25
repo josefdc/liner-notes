@@ -40,7 +40,7 @@ import {
 import { type AgentRuntime, defaultAgentRuntime, runIdFor } from "./runtime.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import { SonicAgentState, type SonicAgentStateType } from "./state.js";
-import { currentRunId, logger } from "../logger.js";
+import { currentRunId, currentRunSignal, logger } from "../logger.js";
 import { isAbortError } from "./errors.js";
 
 const log = logger("Graph");
@@ -58,9 +58,10 @@ export type NodeName = "scout" | "clarification" | "engineer" | "historian" | "c
  *   error        it threw, or returned an `error`
  *   interrupted  it paused the run for the user's choice (the time waiting for the choice is not
  *                the node's: the node runs again on resume and logs a line of its own)
- *   cancelled    the run was cancelled (the client left, or the route stopped it), whether the
+ *   cancelled    the run was cancelled (the client left, or its deadline passed), whether the
  *                node then threw or still returned
- *   aborted      LangGraph stopped it without a cancel: another node of the same step failed
+ *   aborted      stopped without a cancel of the run: LangGraph stops the other nodes of a step
+ *                when one fails
  */
 export type NodeOutcome = "ok" | "error" | "interrupted" | "cancelled" | "aborted";
 
@@ -72,23 +73,14 @@ const reportedError = (update: unknown) =>
   typeof update === "object" && update !== null && Boolean(Reflect.get(update, "error"));
 
 /**
- * The run's own signal as LangGraph hands it to a node: the caller's signal (a cancel) apart from
- * the one LangGraph aborts when another node of the step fails. `config.signal` combines both.
- * Read from LangGraph's configurable (`__pregel_abort_signals`, @langchain/langgraph 1.4); null
- * when it is not there, and then a stop is reported as `aborted`.
+ * `cancelled` when the run's own signal (logger.ts `currentRunSignal`, set by the analyze
+ * routes for each run) was aborted; `aborted` when only the node's signal was (LangGraph stops
+ * the other nodes of a step when one fails), or the node threw an abort error without a known
+ * cancel; else null. A graph run outside the routes has no run signal: a stop there is
+ * `aborted`.
  */
-function cancelSignal(config: LangGraphRunnableConfig): AbortSignal | null {
-  const signals: unknown = config.configurable?.__pregel_abort_signals;
-  const external =
-    typeof signals === "object" && signals !== null
-      ? Reflect.get(signals, "externalAbortSignal")
-      : null;
-  return external instanceof AbortSignal ? external : null;
-}
-
-/** `cancelled` or `aborted` when the node's signal was aborted, else null. */
 function stopOf(config: LangGraphRunnableConfig, error?: unknown): NodeOutcome | null {
-  if (cancelSignal(config)?.aborted) return "cancelled";
+  if (currentRunSignal()?.aborted) return "cancelled";
   if (config.signal?.aborted || (error !== undefined && isAbortError(error))) return "aborted";
   return null;
 }

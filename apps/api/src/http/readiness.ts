@@ -6,21 +6,26 @@
  *               is rolled back (nothing is kept), without waiting for another connection's lock
  *   migrations  every migration of this code is recorded, and none other
  *   audio       the audio service's /health answers (ok, or degraded without its models)
- *   provider    the model provider is configured (variable names only, never a value)
+ *   provider    the model provider is configured: configured, not configured or invalid
+ *               (what is missing or invalid is logged at warn, by variable name)
  *   budget      the state of the model budget only (available, exhausted, unverifiable or
- *               not_live), never an amount
+ *               not_live), never an amount; read only where live analysis can be served, and
+ *               quietly (a probe logs no pause)
  *
  * Whether live analysis is served comes from the decision the routes take (replay/mode.ts
  * `liveRefused`). When it is refused (REPLAY_MODE=only; fallback without the Spotify keys, with
  * a spend log that cannot be used or with the budget spent), only recorded runs and stored
  * results are served: the audio and provider checks are `not_needed`, the budget is reported
- * and readiness rests on the database and its migrations. When live analysis is served, the
+ * (not read where the decision needs no budget: REPLAY_MODE=only, fallback without the Spotify
+ * keys) and readiness rests on the database and its migrations. When live analysis is served, the
  * audio service and the provider must be there; with REPLAY_MODE=off, where nothing else is
  * served, an exhausted or unverifiable budget fails too (every model call would be refused).
  * Should that decision not come within the timeout, live analysis is taken as needed.
  *
- * Every check reports its name, whether it is ok, a status and a short reason. No reason holds
- * a key, an endpoint, a host or an amount. No check makes a paid call: the provider check reads
+ * Every check reports its name, whether it is ok, a status and a short reason. The answer is
+ * public (rate-limited per address, http/app.ts): no reason holds a key, an endpoint, a host,
+ * an amount, the provider's name or a variable name; the schema version and the states are
+ * shown. No check makes a paid call: the provider check reads
  * the configuration, the budget check reads the spend log (llm/budgetState.ts, cached there).
  * A check that does not answer within READY_CHECK_TIMEOUT_MS is cut and reported as timed out.
  *
@@ -31,6 +36,8 @@
  * - /health answering does not prove /analyze works (e.g. a wrong AUDIO_SERVICE_TOKEN).
  * - Another connection holding the write lock reads as ok (the file takes writes), even if it
  *   never lets go; the API's own writes would then fail after the busy timeout.
+ * - The database probe never commits, so nothing reaches the disk: a full disk, an I/O error on
+ *   write or a database file deleted while open all read as "open and writable".
  */
 
 import type { ReadyCheck } from "@liner-notes/contract";
@@ -39,7 +46,13 @@ import { defaultAgentRuntime } from "../agent/runtime.js";
 import { readLlmSettings } from "../config/settings.js";
 import { liveBudgetState } from "../llm/budgetState.js";
 import { assertProviderConfigured } from "../llm/factory.js";
-import { currentReplayMode, type LiveRefusal, liveRefused } from "../replay/mode.js";
+import { logger } from "../logger.js";
+import {
+  currentReplayMode,
+  type LiveRefusal,
+  liveRefused,
+  liveUnavailableReason,
+} from "../replay/mode.js";
 import { getDb } from "../store/database.js";
 import { LATEST_SCHEMA_VERSION } from "../store/migrations.js";
 import { DEFAULT_AUDIO_SERVICE_URL } from "../sources/audio.js";
@@ -59,8 +72,35 @@ export const AUDIO_PROBE_TTL_MS = 5_000;
 const audioServiceUrl = (env: NodeJS.ProcessEnv) =>
   env.AUDIO_ANALYSIS_URL || DEFAULT_AUDIO_SERVICE_URL;
 
-/** Largest /health answer read. The service's is a few dozen bytes. */
-const MAX_HEALTH_BYTES = 4096;
+/**
+ * Largest /health answer read: the body is read as it streams in and the request is stopped
+ * past this many bytes. The service's answer is a few dozen bytes.
+ */
+export const MAX_HEALTH_BYTES = 4096;
+
+/** The body as text, or null once it is longer than MAX_HEALTH_BYTES (the rest is not read). */
+async function readLimited(res: Response): Promise<string | null> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_HEALTH_BYTES) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_HEALTH_BYTES) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 const check = (
   name: CheckName,
@@ -101,29 +141,39 @@ export function databaseCheck(): ReadyCheck {
     return check("database", false, "unavailable", "the database does not answer a query");
   }
   if (db.readonly) return check("database", false, "read_only", "opened read-only");
-  // A transaction of this connection is open: it holds the write lock, so writes work.
-  if (db.inTransaction) return check("database", true, "ok", "open and writable");
+  // Every transaction of the API is synchronous (better-sqlite3), so one open between requests
+  // was left open by a failure, and holds what it took.
+  if (db.inTransaction) {
+    return check("database", false, "unavailable", "a transaction was left open");
+  }
   const busyTimeout = db.pragma("busy_timeout", { simple: true });
   try {
     db.pragma("busy_timeout = 0");
-    db.exec("BEGIN IMMEDIATE");
-    const version = Number(db.pragma("user_version", { simple: true })) || 0;
-    db.pragma(`user_version = ${version}`);
-    db.exec("ROLLBACK");
-    return check("database", true, "ok", "open and writable");
-  } catch (error) {
-    const code = sqliteCode(error) ?? "";
-    // Another connection is writing: the file takes writes.
-    if (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED")) {
-      return check("database", true, "ok", "open; another connection holds the write lock");
+    try {
+      db.exec("BEGIN IMMEDIATE");
+      const version = Number(db.pragma("user_version", { simple: true })) || 0;
+      db.pragma(`user_version = ${version}`);
+      db.exec("ROLLBACK");
+      return check("database", true, "ok", "open and writable");
+    } catch (error) {
+      const code = sqliteCode(error) ?? "";
+      // Another connection is writing: the file takes writes.
+      if (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED")) {
+        return check("database", true, "ok", "open; another connection holds the write lock");
+      }
+      if (code.startsWith("SQLITE_READONLY")) {
+        return check("database", false, "read_only", "the database file cannot be written");
+      }
+      return check("database", false, "unavailable", "the write lock cannot be taken");
+    } finally {
+      try {
+        if (db.inTransaction) db.exec("ROLLBACK");
+      } catch {
+        // The connection failed meanwhile; the next probe reports the open transaction.
+      }
     }
-    if (code.startsWith("SQLITE_READONLY")) {
-      return check("database", false, "read_only", "the database file cannot be written");
-    }
-    return check("database", false, "unavailable", "the write lock cannot be taken");
   } finally {
     try {
-      if (db.inTransaction) db.exec("ROLLBACK");
       db.pragma(`busy_timeout = ${Number(busyTimeout) || 0}`);
     } catch {
       // The connection failed meanwhile; the next probe reports it.
@@ -184,15 +234,16 @@ async function probeAudio(url: string): Promise<ReadyCheck> {
       redirect: "error",
       headers: { accept: "application/json" },
     });
-    const text = await res.text();
     if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
       return check("audio", false, "unreachable", `/health answered ${res.status}`, {
         models: null,
       });
     }
+    const text = await readLimited(res);
     let body: unknown = null;
     try {
-      body = text.length <= MAX_HEALTH_BYTES ? JSON.parse(text) : null;
+      body = text === null ? null : JSON.parse(text);
     } catch {
       body = null;
     }
@@ -236,53 +287,81 @@ export function audioCheck(env: NodeJS.ProcessEnv = process.env): Promise<ReadyC
 // Model provider and budget
 // =============================================================================
 
-/** Leading variable names of the settings errors (the messages themselves are not reported). */
+const log = logger("Readiness");
+
+/** Leading variable names of the settings errors (the messages themselves are not logged). */
 const variableNames = (errors: string[]) => [
   ...new Set(errors.map((error) => /^[A-Z][A-Z0-9_]*/.exec(error)?.[0]).filter(Boolean)),
 ];
 
-/** The model provider can be called: configuration only, no request. */
+let providerWarning = "";
+
+/** Logs what the provider lacks at warn level, once until it changes. Names only, never values. */
+function warnProvider(warning: string): void {
+  if (warning === providerWarning) return;
+  providerWarning = warning;
+  log.warn(warning);
+}
+
+/**
+ * The model provider can be called: configuration only, no request. The answer is public, so
+ * its reason names no provider and no variable: what is missing or invalid goes to the log.
+ */
 export function providerCheck(env: NodeJS.ProcessEnv = process.env): ReadyCheck {
   const { settings, errors } = readLlmSettings(env);
   if (errors.length > 0) {
     const names = variableNames(errors);
+    warnProvider(
+      `Not ready: invalid model settings${names.length > 0 ? `: ${names.join(", ")}` : ""}`,
+    );
     return check(
       "provider",
       false,
-      "not_configured",
-      names.length > 0 ? `invalid model settings: ${names.join(", ")}` : "invalid model settings",
+      "invalid",
+      "the model settings are invalid (see the API's log)",
     );
   }
   if (settings.cassette === "replay") {
-    return check("provider", true, "cassettes", "LLM_CASSETTE=replay: answers come from cassettes");
+    providerWarning = "";
+    return check("provider", true, "cassettes", "model answers come from recorded calls");
   }
   try {
     assertProviderConfigured(settings);
   } catch (error) {
     // Its messages name variables only (llm/factory.ts).
-    const reason = error instanceof Error ? error.message : "not configured";
-    return check("provider", false, "not_configured", reason);
+    warnProvider(`Not ready: ${error instanceof Error ? error.message : "no model provider"}`);
+    return check(
+      "provider",
+      false,
+      "not_configured",
+      "no model provider is configured (see the API's log)",
+    );
   }
-  return check("provider", true, "configured", `${settings.provider}: key and endpoint set`);
+  providerWarning = "";
+  return check("provider", true, "configured", "a model provider is configured");
 }
 
 export type BudgetStateName = "available" | "exhausted" | "unverifiable" | "not_live";
 
-/** The budget's state, never its amounts or caps. */
+/**
+ * The budget's state, never its amounts or caps. Read quietly: a probe logs no pause (the
+ * routes do, when they act on it).
+ */
 export async function budgetState(env: NodeJS.ProcessEnv = process.env): Promise<BudgetStateName> {
   try {
-    return (await liveBudgetState(env, defaultAgentRuntime.purpose)).state;
+    return (await liveBudgetState(env, defaultAgentRuntime.purpose, { quiet: true })).state;
   } catch {
     return "unverifiable";
   }
 }
 
 const SERVED_RECORDED = "recorded runs and stored results are served";
+const LIVE_ONLY = "and this server serves live analysis only";
 
 /**
  * The budget check for `state` under `mode`. It fails only with REPLAY_MODE=off, where live
  * analysis is all that is served: there an exhausted or unverifiable budget refuses every model
- * call. In fallback and only mode recorded runs and stored results are still served.
+ * call. In fallback mode recorded runs and stored results are still served.
  */
 export function budgetCheck(
   state: BudgetStateName,
@@ -296,23 +375,20 @@ export function budgetCheck(
           "budget",
           false,
           state,
-          "a budget cap is reached: every model call is refused, and REPLAY_MODE=off serves no recorded runs",
+          `a budget cap is reached: every model call is refused, ${LIVE_ONLY}`,
         );
       case "unverifiable":
         return check(
           "budget",
           false,
           state,
-          "the spend log cannot be used: every model call is refused, and REPLAY_MODE=off serves no recorded runs",
+          `the spend log cannot be used: every model call is refused, ${LIVE_ONLY}`,
         );
       case "available":
         return check("budget", true, state, "live analysis can start");
       default:
         return check("budget", true, state, "no paid provider is configured: nothing is spent");
     }
-  }
-  if (mode === "only") {
-    return check("budget", true, state, "REPLAY_MODE=only calls no model: nothing is spent");
   }
   switch (state) {
     case "exhausted":
@@ -343,7 +419,7 @@ export function budgetCheck(
 
 /** Why live analysis is not served, as a check's reason. */
 function refusalReason(refusal: LiveRefusal, mode: ReplayMode): string {
-  if (mode === "only") return `REPLAY_MODE=only: ${SERVED_RECORDED} only`;
+  if (mode === "only") return `replay-only mode: ${SERVED_RECORDED} only`;
   return refusal === "budget_exhausted"
     ? `live analysis is paused (budget_exhausted): ${SERVED_RECORDED} only`
     : `live analysis is off (live_disabled): ${SERVED_RECORDED} only`;
@@ -376,22 +452,30 @@ export interface Readiness {
   checks: ReadyCheck[];
 }
 
-/** Runs every check (the slow ones cut at `timeoutMs`). */
+/**
+ * Runs every check (the slow ones cut at `timeoutMs`). The budget is read only where live
+ * analysis can be served: REPLAY_MODE=off, or fallback with the Spotify keys set (where it is
+ * part of the routes' decision, and that read is shared).
+ */
 export async function readiness(
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = READY_CHECK_TIMEOUT_MS,
 ): Promise<Readiness> {
   const cut = `no answer within ${timeoutMs} ms`;
   const mode = currentReplayMode(env);
+  const readsBudget =
+    mode === "off" || (mode === "fallback" && liveUnavailableReason(env) === null);
   const [state, refusal] = await Promise.all([
-    withTimeout(
-      () => budgetState(env),
-      (): BudgetStateName | "timeout" => "timeout",
-      timeoutMs,
-    ),
+    readsBudget
+      ? withTimeout(
+          () => budgetState(env),
+          (): BudgetStateName | "timeout" => "timeout",
+          timeoutMs,
+        )
+      : null,
     // The routes' own decision; undecided in time: live analysis is taken as needed.
     withTimeout(
-      () => liveRefused(env).catch(() => null),
+      () => liveRefused(env, defaultAgentRuntime.purpose, { quiet: true }).catch(() => null),
       () => null,
       timeoutMs,
     ),
@@ -411,15 +495,20 @@ export async function readiness(
     );
     provider = providerCheck(env);
   }
-  const budget =
-    state === "timeout"
-      ? { ...budgetCheck("unverifiable", mode, refusal), reason: cut }
-      : budgetCheck(state, mode, refusal);
+  let budget: ReadyCheck;
+  if (state === null) {
+    budget = check("budget", true, "not_needed", refusalReason(refusal ?? "live_disabled", mode));
+  } else if (state === "timeout") {
+    budget = { ...budgetCheck("unverifiable", mode, refusal), reason: cut };
+  } else {
+    budget = budgetCheck(state, mode, refusal);
+  }
   const checks = [databaseCheck(), migrationsCheck(), audio, provider, budget];
   return { ready: checks.every((c) => c.ok), checks };
 }
 
-/** For tests: forgets the cached audio probe. */
+/** For tests: forgets the cached audio probe and the provider warning already logged. */
 export function resetReadinessForTests(): void {
   audioProbe = null;
+  providerWarning = "";
 }

@@ -21,6 +21,8 @@ const stub = vi.hoisted(() => ({
   scout: null as null | ((state: unknown, config: unknown) => Promise<unknown>),
   engineer: null as null | ((state: unknown, config: unknown) => Promise<unknown>),
   historian: null as null | ((state: unknown, config: unknown) => Promise<unknown>),
+  /** What the clarification does with the choice, once the run resumes. */
+  chosen: null as null | ((config: unknown) => Promise<unknown>),
 }));
 
 vi.mock("./nodes/index.js", () => {
@@ -35,8 +37,10 @@ vi.mock("./nodes/index.js", () => {
       stub.scout
         ? stub.scout(state, config)
         : { spotifyData: { id: "t", title: "OUTPUT-MARKER", artist: "A" } },
-    clarificationNode: async () => {
+    clarificationNode: async (_state: State, config: Config) => {
       const choice = interrupt({ candidates: [{ id: "a" }, { id: "b" }] });
+      // The real node fetches the chosen track here.
+      if (stub.chosen) await stub.chosen(config);
       return { selectedTrackId: choice };
     },
     engineerNode: async (state: State, config: Config) => {
@@ -55,6 +59,22 @@ const INPUT = { songQuery: "INPUT-MARKER typed text" };
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Invokes `graph` as the analyze routes run it: in the run's context, with the run's signal
+ * (`controller`'s) both there and in the invoke's config.
+ */
+const runAs = (
+  graph: ReturnType<typeof buildSonicAgentGraph>,
+  input: Parameters<ReturnType<typeof buildSonicAgentGraph>["invoke"]>[0],
+  threadId: string,
+  controller: AbortController,
+) =>
+  withRun(
+    threadId,
+    () => graph.invoke(input, { configurable: { thread_id: threadId }, signal: controller.signal }),
+    { signal: controller.signal },
+  );
+
 /** Settles once `signal` aborts, rejecting with its reason. */
 const aborted = (signal: AbortSignal | undefined) =>
   new Promise((_resolve, reject) => {
@@ -67,6 +87,7 @@ beforeEach(() => {
   stub.scout = null;
   stub.engineer = null;
   stub.historian = null;
+  stub.chosen = null;
   logs = captureLogsForTests({ level: "debug" });
 });
 afterEach(() => {
@@ -220,12 +241,7 @@ describe("node timings", () => {
     };
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
-    await expect(
-      graph.invoke(INPUT, {
-        configurable: { thread_id: "thread-cancelled" },
-        signal: controller.signal,
-      }),
-    ).rejects.toThrow();
+    await expect(runAs(graph, INPUT, "thread-cancelled", controller)).rejects.toThrow();
     expect(timings().find((line) => line.node === "historian")).toMatchObject({
       outcome: "cancelled",
       runId: "thread-cancelled",
@@ -247,6 +263,27 @@ describe("node timings", () => {
     for (const line of clarification) expect(line.durationMs).toBeLessThan(100);
   });
 
+  it("logs the first node of a resumed run that is cancelled as cancelled", async () => {
+    stub.scout = async () => ({ candidates: [{ id: "a" }, { id: "b" }] });
+    const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
+    await runAs(graph, INPUT, "thread-resumed", new AbortController());
+    logs.clear();
+
+    // The client leaves while the clarification fetches the chosen track.
+    const controller = new AbortController();
+    stub.chosen = async (config) => {
+      setTimeout(() => controller.abort(), 10);
+      await aborted((config as LangGraphRunnableConfig).signal);
+    };
+    await expect(
+      runAs(graph, new Command({ resume: "a" }), "thread-resumed", controller),
+    ).rejects.toThrow();
+
+    expect(timings().map((line) => [line.node, line.outcome, line.runId])).toEqual([
+      ["clarification", "cancelled", "thread-resumed"],
+    ]);
+  });
+
   it("logs a node stopped because another node of its step failed as aborted", async () => {
     stub.engineer = async () => {
       await wait(5);
@@ -255,9 +292,10 @@ describe("node timings", () => {
     stub.historian = async (_state, config) => aborted((config as LangGraphRunnableConfig).signal);
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
-    await expect(
-      graph.invoke(INPUT, { configurable: { thread_id: "thread-sibling" } }),
-    ).rejects.toThrow("engineer bug");
+    // Run as the routes run it: the run's own signal is never aborted.
+    await expect(runAs(graph, INPUT, "thread-sibling", new AbortController())).rejects.toThrow(
+      "engineer bug",
+    );
     await wait(20);
 
     const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));
@@ -277,12 +315,7 @@ describe("node timings", () => {
     };
     const graph = buildSonicAgentGraph({ checkpointer: new MemorySaver() });
 
-    await expect(
-      graph.invoke(INPUT, {
-        configurable: { thread_id: "thread-late" },
-        signal: controller.signal,
-      }),
-    ).rejects.toThrow();
+    await expect(runAs(graph, INPUT, "thread-late", controller)).rejects.toThrow();
     await wait(120);
 
     const outcomes = Object.fromEntries(timings().map((line) => [line.node, line.outcome]));

@@ -188,7 +188,9 @@ answers 200 when the API can serve what it is set up to serve and 503 otherwise,
 check (database and migrations, audio service and its models, model provider, budget state).
 While live analysis is not served (`REPLAY_MODE=only`, or `fallback` with live analysis off or
 the budget spent) the audio service and the provider are not needed; with `REPLAY_MODE=off` a
-spent budget answers 503. See `apps/api/.env.example`.
+spent budget answers 503. The answer is public and limited per address like search; it shows
+check names and states (and the schema version), never a key, host, amount, provider name or
+variable name: what the provider lacks is written to the API's log. See `apps/api/.env.example`.
 
 The web container's nginx forwards `/api` to the API, so browsers only talk to port 80. The API's
 and the audio service's ports are published on the host's loopback only. The API runs with

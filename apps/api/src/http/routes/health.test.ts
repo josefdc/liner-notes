@@ -1,4 +1,13 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,9 +17,15 @@ import Database from "better-sqlite3";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetBudgetStateForTests } from "../../llm/budgetState.js";
+import { captureLogsForTests } from "../../logger.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { LATEST_SCHEMA_VERSION } from "../../store/migrations.js";
-import { readiness, resetReadinessForTests } from "../readiness.js";
+import {
+  databaseCheck,
+  MAX_HEALTH_BYTES,
+  readiness,
+  resetReadinessForTests,
+} from "../readiness.js";
 import { createTestApp } from "../testApp.js";
 import healthRouter from "./health.js";
 
@@ -151,6 +166,8 @@ function liveProvider(spentUsd: number | null): string {
 }
 
 const ready = () => request(createTestApp(healthRouter)).get("/api/ready");
+/** An environment variable's name (REPLAY_MODE, AZURE_OPENAI_API_KEY, …). */
+const ENV_NAME = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/;
 const detail = (body: { details?: Array<{ name: string; reason?: string }> }, name: string) =>
   body.details?.find((check) => check.name === name);
 
@@ -275,40 +292,65 @@ describe("GET /api/ready", () => {
     expect(audio.requests()).toBe(1);
   });
 
-  it("answers 503 when no model provider is configured, naming the variables only", async () => {
+  it("answers 503 when no model provider is configured, naming the variables in the log only", async () => {
     openDatabase();
     process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
     process.env.LLM_CASSETTE = "off";
     delete process.env.AZURE_OPENAI_API_KEY;
     delete process.env.AZURE_OPENAI_ENDPOINT;
     delete process.env.AZURE_OPENAI_BASE_URL;
+    const logs = captureLogsForTests();
+    try {
+      const res = await ready();
+      await ready();
 
-    const res = await ready();
-
-    expect(res.status).toBe(503);
-    expect(detail(res.body, "provider")).toMatchObject({
-      ok: false,
-      status: "not_configured",
-      reason: expect.stringContaining("AZURE_OPENAI_API_KEY"),
-    });
+      expect(res.status).toBe(503);
+      expect(detail(res.body, "provider")).toEqual({
+        name: "provider",
+        ok: false,
+        status: "not_configured",
+        reason: "no model provider is configured (see the API's log)",
+      });
+      expect(res.text).not.toMatch(ENV_NAME);
+      // Logged once, at warn, by variable name.
+      const warnings = logs.entries().filter((entry) => entry.level === "warn");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        component: "Readiness",
+        msg: expect.stringContaining("AZURE_OPENAI_API_KEY"),
+      });
+    } finally {
+      logs.restore();
+    }
   });
 
-  it("answers 503 for invalid model settings, naming the variable and not its value", async () => {
+  it("answers 503 for invalid model settings, naming the variable in the log, not its value", async () => {
     openDatabase();
     process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
     process.env.LLM_CASSETTE = "off";
     process.env.AZURE_OPENAI_API_KEY = KEY;
     process.env.AZURE_OPENAI_ENDPOINT = `http://${ENDPOINT_HOST}/`;
 
-    const res = await ready();
+    const logs = captureLogsForTests();
+    try {
+      const res = await ready();
 
-    expect(res.status).toBe(503);
-    expect(detail(res.body, "provider")).toMatchObject({
-      status: "not_configured",
-      reason: "invalid model settings: AZURE_OPENAI_ENDPOINT",
-    });
-    expect(JSON.stringify(res.body)).not.toContain(ENDPOINT_HOST);
-    expect(JSON.stringify(res.body)).not.toContain(KEY);
+      expect(res.status).toBe(503);
+      expect(detail(res.body, "provider")).toMatchObject({
+        ok: false,
+        status: "invalid",
+        reason: "the model settings are invalid (see the API's log)",
+      });
+      expect(res.text).not.toMatch(ENV_NAME);
+      const text = `${res.text}\n${logs.lines().join("\n")}`;
+      expect(text).not.toContain(ENDPOINT_HOST);
+      expect(text).not.toContain(KEY);
+      expect(logs.messages("warn")).toEqual([
+        "Not ready: invalid model settings: AZURE_OPENAI_ENDPOINT",
+      ]);
+    } finally {
+      logs.restore();
+    }
   });
 
   it("reports a configured provider and an available budget, with no key, endpoint or amount", async () => {
@@ -324,6 +366,9 @@ describe("GET /api/ready", () => {
     for (const secret of [KEY, ENDPOINT_HOST, spendLog, "0.5", "usd", "USD", "$"]) {
       expect(text).not.toContain(secret);
     }
+    // Neither the provider's name nor a variable.
+    expect(text).not.toMatch(/azure/i);
+    expect(text).not.toMatch(ENV_NAME);
   });
 
   it("answers 503 with a spent budget under REPLAY_MODE=off, with no amount", async () => {
@@ -338,7 +383,7 @@ describe("GET /api/ready", () => {
     expect(detail(res.body, "budget")).toMatchObject({
       ok: false,
       status: "exhausted",
-      reason: expect.stringContaining("REPLAY_MODE=off serves no recorded runs"),
+      reason: expect.stringContaining("this server serves live analysis only"),
     });
     // The checks, without the timestamp (whose date may hold the same digits).
     const text = JSON.stringify({ checks: res.body.checks, details: res.body.details });
@@ -382,7 +427,9 @@ describe("GET /api/ready", () => {
     expect(res.status).toBe(200);
     expect(res.text).toContain('"status":"ready"');
     expect(res.body.checks).toMatchObject({ audio: "not_needed", provider: "not_needed" });
-    expect(detail(res.body, "audio")?.reason).toContain("REPLAY_MODE=only");
+    expect(detail(res.body, "audio")?.reason).toBe(
+      "replay-only mode: recorded runs and stored results are served only",
+    );
   });
 
   type Mode = "off" | "fallback" | "only";
@@ -446,8 +493,10 @@ describe("GET /api/ready", () => {
         migrations: "ok",
         audio: audioStatus,
         provider: providerStatus,
-        budget: budget === "no provider" ? "not_live" : budget,
+        budget: mode === "only" ? "not_needed" : budget === "no provider" ? "not_live" : budget,
       });
+      // The public answer names no variable.
+      expect(res.text).not.toMatch(ENV_NAME);
       expect(detail(res.body, "budget")).toMatchObject({ ok: budgetOk });
       // A service that is not needed is not asked.
       if (stub && audioStatus === "not_needed") expect(stub.requests()).toBe(0);
@@ -535,6 +584,57 @@ describe("GET /api/ready", () => {
     });
   });
 
+  it("writes nothing when it proves the database can write", async () => {
+    openDatabase();
+    process.env.REPLAY_MODE = "only"; // nothing else to ask
+    const hash = (path: string) =>
+      existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+    const files = () => [hash(dbPath), hash(`${dbPath}-wal`)];
+    const other = new Database(dbPath, { readonly: true });
+    try {
+      const before = {
+        files: files(),
+        userVersion: getDb().pragma("user_version", { simple: true }),
+        dataVersion: other.pragma("data_version", { simple: true }),
+      };
+
+      for (let i = 0; i < 20; i++) {
+        expect(databaseCheck()).toMatchObject({ ok: true, reason: "open and writable" });
+      }
+      const res = await ready();
+      expect(detail(res.body, "database")).toMatchObject({ ok: true, status: "ok" });
+
+      expect(getDb().inTransaction).toBe(false);
+      expect(getDb().pragma("user_version", { simple: true })).toBe(before.userVersion);
+      expect(getDb().pragma("busy_timeout", { simple: true })).toBe(5000);
+      // No commit: another connection sees no change, and the files are as they were.
+      expect(other.pragma("data_version", { simple: true })).toBe(before.dataVersion);
+      expect(files()).toEqual(before.files);
+    } finally {
+      other.close();
+    }
+  });
+
+  it("answers 503 when a transaction was left open", async () => {
+    openDatabase();
+    process.env.REPLAY_MODE = "only";
+    getDb().exec("BEGIN");
+    try {
+      const res = await ready();
+
+      expect(res.status).toBe(503);
+      expect(detail(res.body, "database")).toMatchObject({
+        ok: false,
+        status: "unavailable",
+        reason: "a transaction was left open",
+      });
+      // The transaction is not the probe's to end.
+      expect(getDb().inTransaction).toBe(true);
+    } finally {
+      getDb().exec("ROLLBACK");
+    }
+  });
+
   it.skipIf(process.getuid?.() === 0)(
     "answers 503 when the database file cannot be written",
     async () => {
@@ -558,4 +658,86 @@ describe("GET /api/ready", () => {
       expect(getDb().pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
     },
   );
+
+  it.each(["off", "fallback", "only"] as const)(
+    "with REPLAY_MODE=%s, a probe logs no warning about the budget",
+    async (mode) => {
+      openDatabase();
+      process.env.REPLAY_MODE = mode;
+      process.env.SPOTIFY_CLIENT_ID = "dummy-spotify-id";
+      process.env.SPOTIFY_CLIENT_SECRET = "dummy-spotify-secret";
+      process.env.BUDGET_TOTAL_USD = "25";
+      process.env.AUDIO_ANALYSIS_URL = (await audioStub(healthy)).url;
+      const logs = captureLogsForTests();
+      try {
+        liveProvider(30); // spent
+        await ready();
+        resetBudgetStateForTests();
+        liveProvider(null); // the spend log cannot be used
+        await ready();
+        await ready();
+
+        expect(logs.entries().filter((entry) => entry.level === "warn")).toEqual([]);
+      } finally {
+        logs.restore();
+      }
+    },
+  );
+
+  it("with REPLAY_MODE=only, does not read the budget at all", async () => {
+    openDatabase();
+    process.env.REPLAY_MODE = "only";
+    liveProvider(30);
+    const spendDir = join(dir as string);
+    const before = statSync(spendDir).mtimeMs;
+
+    const res = await ready();
+
+    expect(res.status).toBe(200);
+    expect(detail(res.body, "budget")).toMatchObject({ ok: true, status: "not_needed" });
+    // No lock file was made (and removed) next to the spend log.
+    expect(statSync(spendDir).mtimeMs).toBe(before);
+  });
+
+  it("stops reading an audio /health answer past its size limit", async () => {
+    openDatabase();
+    // An endless body, chunked: only a probe that stops reading answers before its timeout.
+    const chunk = "x".repeat(MAX_HEALTH_BYTES);
+    process.env.AUDIO_ANALYSIS_URL = (
+      await audioStub((res) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        const timer = setInterval(() => res.write(chunk), 5);
+        res.on("close", () => clearInterval(timer));
+      })
+    ).url;
+
+    const started = Date.now();
+    const res = await ready();
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(detail(res.body, "audio")).toMatchObject({
+      ok: false,
+      status: "unreachable",
+      reason: "/health did not answer as the audio service",
+    });
+  });
+
+  it("does not read an audio /health answer that says it is too long", async () => {
+    openDatabase();
+    process.env.AUDIO_ANALYSIS_URL = (
+      await audioStub((res) => {
+        res.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(MAX_HEALTH_BYTES + 1),
+        });
+        res.flushHeaders(); // and never sends the body
+      })
+    ).url;
+
+    const started = Date.now();
+    const res = await ready();
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(detail(res.body, "audio")).toMatchObject({ ok: false, status: "unreachable" });
+  });
 });

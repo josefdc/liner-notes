@@ -632,6 +632,26 @@ describe("rate limits", () => {
     expect((await request(server).post("/api/factoids/decrypt").send({})).status).toBe(400);
   });
 
+  it("limits readiness per address, on a counter of its own", async () => {
+    // Replay-only: the readiness checks ask no audio service.
+    const replayMode = process.env.REPLAY_MODE;
+    process.env.REPLAY_MODE = "only";
+    try {
+      const server = app({ ...limited, searchRateLimit: { windowMs: 60_000, max: 2 } });
+      const ready = [];
+      for (let i = 0; i < 3; i++) ready.push((await request(server).get("/api/ready")).status);
+      expect(ready[0]).not.toBe(429);
+      expect(ready[1]).not.toBe(429);
+      expect(ready[2]).toBe(429);
+      // Search and health are counted apart.
+      expect((await request(server).get("/api/search/suggest?query=a")).status).toBe(400);
+      expect((await request(server).get("/api/health")).status).toBe(200);
+    } finally {
+      if (replayMode === undefined) delete process.env.REPLAY_MODE;
+      else process.env.REPLAY_MODE = replayMode;
+    }
+  });
+
   it("keys on the client address from X-Forwarded-For only behind a trusted proxy", async () => {
     const behindProxy = app({ ...limited, trustProxy: 1 });
     const from = (ip: string) =>

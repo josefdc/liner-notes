@@ -5,6 +5,13 @@
 //   suggestionsByQuery: { "<query>": [candidate, ...] } overrides `suggestions` per query
 //   suggestWaits: { "<query>": "<name>" } holds the suggestions for that query until the test
 //                calls `window.__mockApi.release("<name>")`
+//   suggestEcho: true answers every query with three suggestions made from its own text
+//                ("<query>", "<query> (Live)", "<query> (Remix)"), listed in an order that
+//                changes from one answer to the next, so an answer for older text shows
+//   suggestJitter: { maxMs, seed } delays each suggestion answer by 0 to maxMs (a seeded
+//                sequence, the same on every run), so answers arrive out of order
+// A suggestion request whose signal aborts rejects with an AbortError, as fetch does, and is
+// recorded in `window.__mockApi.aborted` as "<path>?query=<query>".
 //   replays:     recorded tracks returned by /api/replays (default none)
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
@@ -35,6 +42,7 @@
   const config = window.__mockApi ?? { suggestions: [], streams: {} };
   config.log = [];
   config.streamLog = [];
+  config.aborted = [];
   const isApi = (url) => new URL(url, location.href).pathname.startsWith("/api/");
   const pathOf = (url) => new URL(url, location.href).pathname;
 
@@ -63,6 +71,49 @@
     return entry.opens[Math.min(count, entry.opens.length - 1)];
   };
 
+  // A seeded sequence of numbers in [0, 1) (mulberry32): the same delays and orders on every run.
+  let seed = config.suggestJitter?.seed ?? 1;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const echoSuggestions = (query) => {
+    const titles = [query, `${query} (Live)`, `${query} (Remix)`];
+    const start = Math.floor(random() * titles.length);
+    return titles.map((_, index) => {
+      const title = titles[(start + index) % titles.length];
+      return { id: `echo-${title}`, title, artist: "Echo", album: "Echoes", coverUrl: "" };
+    });
+  };
+  const abortError = () => new DOMException("The operation was aborted.", "AbortError");
+  // Settles with `promise`, or rejects as soon as `signal` aborts.
+  const abortable = (promise, signal, onAbort) => {
+    if (!signal) return promise;
+    return new Promise((resolve, reject) => {
+      const abort = () => {
+        onAbort();
+        reject(abortError());
+      };
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+      signal.addEventListener("abort", abort, { once: true });
+      promise.then(
+        (value) => {
+          signal.removeEventListener("abort", abort);
+          resolve(value);
+        },
+        (error) => {
+          signal.removeEventListener("abort", abort);
+          reject(error);
+        },
+      );
+    });
+  };
+
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -77,12 +128,22 @@
     }
     if (pathOf(url) === "/api/search/suggest") {
       const query = new URL(url, location.href).searchParams.get("query") ?? "";
-      const wait = config.suggestWaits?.[query];
-      if (wait) await new Promise((resolve) => whenReleased(wait, resolve));
-      const suggestions = config.suggestionsByQuery?.[query] ?? config.suggestions ?? [];
-      return new Response(JSON.stringify({ success: true, suggestions }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      const answer = async () => {
+        const wait = config.suggestWaits?.[query];
+        if (wait) await new Promise((resolve) => whenReleased(wait, resolve));
+        const jitter = config.suggestJitter?.maxMs;
+        if (jitter) await new Promise((resolve) => setTimeout(resolve, random() * jitter));
+        const suggestions = config.suggestEcho
+          ? echoSuggestions(query)
+          : (config.suggestionsByQuery?.[query] ?? config.suggestions ?? []);
+        return new Response(JSON.stringify({ success: true, suggestions }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      };
+      return abortable(answer(), signal, () =>
+        config.aborted.push(`${pathOf(url)}?query=${query}`),
+      );
     }
     if (pathOf(url) === "/api/replays") {
       return new Response(JSON.stringify({ success: true, replays: config.replays ?? [] }), {

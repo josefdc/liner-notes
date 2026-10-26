@@ -50,12 +50,22 @@ export async function useMockApi(page: Page, fixture: unknown) {
 }
 
 type MockWindow = {
-  __mockApi: { log: string[]; streamLog: string[]; release: (name: string) => void };
+  __mockApi: {
+    log: string[];
+    streamLog: string[];
+    aborted: string[];
+    release: (name: string) => void;
+  };
 };
 
 /** API requests the app has made so far ("fetch <path>" or "stream <path>?<query>"). */
 export function apiRequests(page: Page) {
   return page.evaluate(() => (window as unknown as MockWindow).__mockApi.log);
+}
+
+/** Suggestion requests the app aborted so far ("<path>?query=<query>"). */
+export function abortedRequests(page: Page) {
+  return page.evaluate(() => (window as unknown as MockWindow).__mockApi.aborted);
 }
 
 /** What the mocked streams have done so far ("<path> open|<event>|closed|ended"). */

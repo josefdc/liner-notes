@@ -1,4 +1,4 @@
-// Shared visual styles for text inputs (used by the search box in Onboarding).
+// Shared visual styles for text inputs (used by the search box, search/SearchBox.tsx).
 export const inputVisualStyles = [
   'w-full py-4 bg-black/40 border border-border rounded-sm',
   'text-white placeholder-text-muted font-mono text-sm tracking-wide',

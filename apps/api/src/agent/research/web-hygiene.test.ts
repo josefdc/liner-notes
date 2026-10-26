@@ -395,7 +395,15 @@ const FORUM_THREADS: Array<[string, string]> = [
   ],
   [
     "a Stack Exchange comment chain",
-    "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20",
+    "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20 Show 2 more comments",
+  ],
+  [
+    "a XenForo thread with day-first dates",
+    "RecordFan 22 Feb 2021 #1 The vocal is Romanthony. Joined 3 Mar 2010 Messages 4,512 DiscoHead 22 Feb 2021 #2 RIP, and the sample is More Spell on You. Joined 1 Jun 2012 Messages 1,203",
+  ],
+  [
+    "a XenForo thread with day-first dates and colons",
+    "RecordFan Joined: 3 Mar 2010 Messages: 4,512 22 Feb 2021 #1 The vocal is Romanthony. DiscoHead Joined: 1 Jun 2012 Messages: 1,203 22 Feb 2021 #2 RIP.",
   ],
   [
     "a XenForo 2 thread, its user cards without colons",
@@ -567,6 +575,48 @@ const MUSIC_PROSE: Array<[string, string]> = [
   [
     "a fact page with an edit note",
     "The vocalist is Romanthony. edited Feb 22, 2021 at 10:00 by staff. This was asked Feb 21, 2021 at 9:15 by a reader: is it a sample? Yes, More Spell on You by Eddie Johns.",
+  ],
+  // Dated stamps, set times and logs after a dash, which read like a Stack Exchange signature.
+  [
+    "a live-blog's update stamps",
+    "Daft Punk have split after 28 years. — Updated Feb 22, 2021 at 10:00 The duo posted an eight-minute video, Epilogue. — Updated Feb 22, 2021 at 12:30 Nile Rodgers paid tribute.",
+  ],
+  [
+    "news with its published and updated stamps",
+    "Daft Punk announce their split. – Published Feb 22, 2021 at 10:00 The duo formed in 1993. – Updated Feb 22, 2021 at 12:30",
+  ],
+  [
+    "a live-blog's key events",
+    "Key events. – Updated Feb 22 at 15:02 Nile Rodgers tweeted his thanks. – Updated Feb 22 at 15:40 Pharrell paid tribute.",
+  ],
+  [
+    "a festival's set times",
+    "Friday line-up announced. – Daft Punk Jul 14 at 22:00. – Justice Jul 14 at 23:30. – Cassius Jul 15 at 01:00.",
+  ],
+  [
+    "a festival's stages",
+    "Coachella 2006, Sahara tent. – Daft Punk Apr 29 at 21:00 The pyramid debuted here. – Depeche Mode Apr 29 at 22:30 on the main stage.",
+  ],
+  [
+    "a tour list without commas",
+    "Alive 2007 tour. – Bercy Jun 14, 2007 at 20:00 Sold out. – Wembley Jun 16, 2007 at 19:30 Sold out. – Dublin Jun 18, 2007 at 20:00",
+  ],
+  [
+    "a radio log",
+    "Most played this week. – Daft Punk Feb 22 at 10:00 One More Time. – Daft Punk Feb 22 at 14:00 Digital Love.",
+  ],
+  // A song named Messages beside a dated chart position, which reads like a XenForo post card.
+  [
+    "a chart run of a song named Messages",
+    "Orchestral Manoeuvres in the Dark – Messages 1980 single, from their debut album. UK Singles Chart: entered Oct 25, 1980 #13, its peak position.",
+  ],
+  [
+    "a discography with a song named Messages",
+    "Electricity 1979. Red Frame/White Light 1980. Messages 1980 – peaked Nov 1, 1980 #13. Enola Gay 1980.",
+  ],
+  [
+    "a chart run of Messages, day first",
+    "Messages 25 Oct 1980 – entered the UK chart; 1 Nov 1980 #13, its peak.",
   ],
   [
     "a blog whose theme writes a lowercase byline",

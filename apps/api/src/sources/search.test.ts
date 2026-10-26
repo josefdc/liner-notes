@@ -358,6 +358,18 @@ describe("web research searches", () => {
     }
   });
 
+  it.each([
+    ["spaces", `share${" ".repeat(40_000)}x`],
+    ["tabs, no-break spaces and newlines", `share${"\t\u00a0\n ".repeat(10_000)}x`],
+    ["spaces around a pipe", `share${" ".repeat(20_000)}|${" ".repeat(19_993)}x`],
+    ["spaces before cite", `share | cite${" ".repeat(40_000)}x`],
+  ])("checks a stored text of 40,000 characters of %s in linear time", (_name, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(40_000);
+    const start = performance.now();
+    expect(webTextIssue(text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(50);
+  });
+
   it("counts a forum quote only when its expander follows the quote closely", () => {
     const story = " One More Time opened Discovery and topped the French chart.".repeat(7);
     // An interview: a quote, a long story, a panel, then a quote right before another panel.

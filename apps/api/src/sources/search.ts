@@ -300,8 +300,13 @@ const FORUM_BYLINE = new RegExp(
   "u",
 );
 
-/** A post's date as a forum writes it: "Feb 22, 2021", "3 hours ago", "Yesterday at 9:12 PM". */
-const POST_DATE = `(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago|(?:Yesterday|Today)\\s+at\\s+\\d{1,2}:\\d{2}(?:\\s*[AP]M)?)`;
+/** A date written day first, as many boards' languages write it: "22 Feb 2021", "3 March 2010". */
+const DAY_FIRST = `\\d{1,2}\\s+${MONTH},?\\s+\\d{4}`;
+/**
+ * A post's date as a forum writes it: "Feb 22, 2021", "22 Feb 2021", "3 hours ago", "Yesterday
+ * at 9:12 PM".
+ */
+const POST_DATE = `(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|${DAY_FIRST}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago|(?:Yesterday|Today)\\s+at\\s+\\d{1,2}:\\d{2}(?:\\s*[AP]M)?)`;
 /**
  * A Stack Exchange post's or comment's time: "Feb 22, 2021", "Feb 22 '21" or "Feb 22", then
  * "at 15:00".
@@ -312,6 +317,12 @@ const WEEKDAY =
   "(?:Mon(?:day)?|Tue(?:s|sday)?|Wed(?:nesday)?|Thu(?:rs?|rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\\.?\\s";
 /** A word of a Stack Exchange commenter's name: no dash, no comma, no weekday. */
 const SE_NAME_WORD = `(?!${WEEKDAY})[^\\s–—,]+`;
+
+/**
+ * A poster's count on a XenForo user card ("4,512", "1.203", "987"): digits in groups of three,
+ * never a year ("Messages 1980", a song's name and year) or a date ("Messages 25 Oct 1980").
+ */
+const CARD_COUNT = `\\d{1,3}(?:[,.\\u00a0\\u202f]\\d{3})*k?(?![\\p{L}\\p{N}]|[/.:-]\\d|\\s+${MONTH}\\b)`;
 
 /** How far a XenForo quote's expander stands from its "said:", in characters: one post's quote. */
 const QUOTE_REACH = 400;
@@ -329,25 +340,41 @@ interface ForumMark {
  * The marks of each forum software's thread layout, as a search returns a page (on one line).
  * Two marks of one software make a comment thread (forumThread). `once` marks are those a music
  * page may repeat (a chart's "Feb 24, 2001 #1" week by week, an article's "answered Feb 22 at
- * 10:45"); an `alone` mark is one no music page writes.
+ * 10:45", a live-blog's "– Updated Feb 22 at 15:02"); an `alone` mark is one no music page
+ * writes.
  * - XenForo (the Steve Hoffman forums): a quote with XenForo's arrow ("<name> said: ↑", alone),
  *   a quote closed by its expander within QUOTE_REACH characters ("<name> said: … Click to
- *   expand…"), a post's date and number ("Feb 22, 2021 #12"), a poster's "Joined: Mar 3, 2010"
- *   and "Messages: 4,512" (or reaction score, likes, trophy points; with or without the colon,
- *   as XenForo 2's user cards read), and "Discussion in '…' started by <name>".
+ *   expand…"), a post's date and number ("Feb 22, 2021 #12", "22 Feb 2021 #12"), a poster's
+ *   "Joined: Mar 3, 2010" (or "3 Mar 2010") and "Messages: 4,512" (a CARD_COUNT; or reaction
+ *   score, likes, trophy points; with or without the colon, as XenForo 2's user cards read), and
+ *   "Discussion in '…' started by <name>".
  * - vBulletin: a quote ("Quote: Originally Posted by <name>"), "Reply With Quote", a post's date
  *   ("02-22-2021, 03:15 PM"), a poster's "Join Date: Mar 2005" and "Posts: 1,234".
  * - Stack Exchange: "share | improve this answer | follow", "asked" or "answered" with a time
  *   ("answered Feb 21, 2021 at 10:12"), a comment's signature after its sentence ("… sample? –
  *   <name> Feb 22 '21 at 16:01", the name with no comma or weekday), "Show 3 more comments" and
- *   "add a comment".
+ *   "add a comment". A signature counts once, so a chain of them takes another mark.
  * - MetaFilter: a comment's byline ("posted by <name> at 6:47 AM on February 22, 2021") with its
  *   favourites ("[3 favorites]"): each counts once, so it takes both.
  * Kept: a writer quoted with "said:" (no arrow, or no expander right after), a signed article
- * ("– Jane Doe, Feb 22, 2021 at 10:00") with its "edited Feb 23, 2021 at 9:00" note, a tour's
- * dates ("Paris (Bercy) – London Wembley Arena Jun 16, 2007 at 19:30", "Bercy, Paris. – Sat Jun
- * 14, 2007 at 20:00"), a member's "Joined: 1993", and a blog's bylines ("Posted by <name> at 9:00
- * AM", or "posted by admin at 9:00 AM on February 22, 2021" on each post).
+ * ("– Jane Doe, Feb 22, 2021 at 10:00") with its "edited Feb 23, 2021 at 9:00" note, any number
+ * of dated stamps, set times or tour dates after a dash ("– Updated Feb 22, 2021 at 10:00", "–
+ * Daft Punk Jul 14 at 22:00", "– Bercy Jun 14, 2007 at 20:00"), a member's "Joined: 1993", a song
+ * named "Messages" beside its chart run ("Messages 1980 … Oct 25, 1980 #13"), and a blog's
+ * bylines ("Posted by <name> at 9:00 AM", or "posted by admin at 9:00 AM on February 22, 2021"
+ * on each post).
+ * Known limits:
+ * - Missed, names included: one mark alone (a quote without XenForo's arrow, one "Originally
+ *   Posted by", one answer card, one MetaFilter byline); a chain of Stack Exchange comment
+ *   signatures with no other Stack Exchange mark (a signature counts once); XenForo threads
+ *   whose excerpt holds post headers only ("RecordFan Feb 22, 2021 #1 … DiscoHead Feb 22, 2021
+ *   #2 …", one `once` mark); a MetaFilter byline without favourites; headers dated "Sunday at
+ *   10:15 AM"; Stack Exchange's capitalised "Add a comment"; and the layouts of other software
+ *   (Discourse, phpBB, Reddit-like text, comment widgets), which are left to the sites' exclusion.
+ * - Dropped, although music writing: two quotes each right before an expander (an interview or
+ *   lecture with collapsed answers); a blog byline with "[3 favorites]"; "asked … at 9:15" with
+ *   "add a comment"; "Originally Posted by" twice, or with "Posts: 245"; and `once` marks of one
+ *   software in unrelated fields ("Joined: Feb 1, 1999" beside a chart's "Feb 24, 2001 #1").
  */
 const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   xenforo: [
@@ -361,13 +388,16 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
     { mark: new RegExp(`${POST_DATE}\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`, "gu"), counts: "once" },
     {
       mark: new RegExp(
-        `\\bJoined:?\\s*(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}/\\d{1,2}/\\d{2,4})`,
+        `\\bJoined:?\\s*(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|${DAY_FIRST}|\\d{1,2}/\\d{1,2}/\\d{2,4})`,
         "gu",
       ),
       counts: "once",
     },
     {
-      mark: /\b(?:Messages|Reaction score|Likes Received|Trophy Points):?\s*\d[\d,.]*k?(?![\p{L}\p{N}])/gu,
+      mark: new RegExp(
+        `\\b(?:Messages|Reaction score|Likes Received|Trophy Points):?\\s*${CARD_COUNT}`,
+        "gu",
+      ),
       counts: "once",
     },
     { mark: /Discussion in ['‘][^'’]{1,80}['’] started by \S/gu, counts: "once" },
@@ -386,8 +416,9 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
     { mark: /Posts:\s*\d[\d,.]*(?![\p{L}\p{N}])/gu, counts: "once" },
   ],
   stackExchange: [
+    // One whitespace run before each pipe and after it, so a long run is read in linear time.
     {
-      mark: /\bshare\s*[|｜]?\s*(?:cite\s*[|｜]?\s*)?improve this (?:answer|question)\b/giu,
+      mark: /\bshare\s*(?:[|｜]\s*)?(?:cite\s*(?:[|｜]\s*)?)?improve this (?:answer|question)\b/giu,
     },
     { mark: new RegExp(`\\b(?:asked|answered)\\s+${SE_WHEN}`, "gu"), counts: "once" },
     {
@@ -395,6 +426,7 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
         `[.!?]\\s+[–—]\\s+${SE_NAME_WORD}(?:\\s+${SE_NAME_WORD}){0,2}?\\s+${SE_WHEN}`,
         "gu",
       ),
+      counts: "once",
     },
     { mark: /Show \d+ more comments?/gu },
     { mark: /\badd a comment\b/gu, counts: "once" },

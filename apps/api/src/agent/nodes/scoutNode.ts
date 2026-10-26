@@ -43,7 +43,7 @@ export const MAX_RETRY_WAIT_MS = 10_000;
 type Update = Partial<SonicAgentStateType>;
 
 /** The status line of a track the run found: "Found the track on Spotify: <title> by <artist>". */
-const foundLine = (track: SpotifyData) =>
+export const foundLine = (track: Pick<SpotifyData, "title" | "artist">) =>
   `Found the track on Spotify: ${track.title} by ${track.artist}`;
 
 /** A Spotify call with the scout's retries (see the top of this file), each wait said. */

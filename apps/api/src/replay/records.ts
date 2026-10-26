@@ -5,7 +5,8 @@
  *
  * The files are read once, at first use, and each is checked strictly: the record's schema and
  * refinements, the run rules of a replay (`runIssues`: it says when and from which commit it was
- * recorded), and the text the run routes and the recorder refuse (`heldIssues`). A file that
+ * recorded), and what the recorder refuses (recorder.ts `recordIssues`: the run routes' text
+ * checks, its own, the events it never writes and a commit hash). A file that
  * fails is logged and left out (not listed, never replayed); it is never served in part. The
  * result's other producer rules (`analysisIssues`) are logged for each record that breaks them,
  * so a recording made before a producer fix stays visible until it is recorded again.
@@ -27,12 +28,11 @@ import {
   runIssues,
   type SearchCandidate,
 } from "@liner-notes/contract";
-import { heldTextIssue } from "../agent/storedResults.js";
 import { API_ROOT } from "../config/apiPackage.js";
 import { logger } from "../logger.js";
 import { archiveCoverOf } from "./cover.js";
 import { normalizeQuery } from "./query.js";
-import { leaks } from "./recorder.js";
+import { publicTextsOf, recordIssues } from "./recorder.js";
 
 export { normalizeQuery } from "./query.js";
 
@@ -104,51 +104,6 @@ function suggestion(record: ReplayRecord): SearchCandidate {
   };
 }
 
-/**
- * Where a record holds text that is not served, never the text itself:
- * - what the run routes refuse in a stored result (heldTextIssue: a web page the web tier leaves
- *   out, or a source error's message with markup, a stack trace, a token parameter or a link),
- *   in the record's result and in what its events send (the complete event's result, each
- *   evidence event's item);
- * - what the recorder refuses (leaks), as far as the file can tell: the configured credentials,
- *   the query the user typed and the ids of the database's runs are checked when it is recorded.
- * Each place is listed once, with the first reason found for it: a field of an item the run
- * routes' check already names (an evidence item's excerpt) is not listed again.
- * A file written by the recorder passes both; one placed in the directory by hand, or written by
- * an older recorder, may not.
- */
-function heldIssues(record: ReplayRecord, cover: string): string[] {
-  const found = new Map<string, string>();
-  const add = (issue: string) => {
-    const at = issue.indexOf(": ");
-    const path = issue.slice(0, at);
-    const listed = [...found.keys()].some(
-      (place) => path === place || path.startsWith(`${place}.`) || path.startsWith(`${place}[`),
-    );
-    if (!listed) found.set(path, issue.slice(at + 2));
-  };
-  const held = (prefix: string, issue: string | null) => {
-    if (issue) add(`${prefix}.${issue}`);
-  };
-  held("analysis", heldTextIssue(record.analysis));
-  for (const [i, { event }] of record.events.entries()) {
-    if (event.type === "complete") held(`events[${i}].event.data`, heldTextIssue(event.data));
-    if (event.type === "evidence") {
-      // The item is checked as the one item of an evidence list: "evidence[0]: …".
-      const issue = heldTextIssue({ evidence: [event.evidence] });
-      if (issue) add(`events[${i}].event.evidence${issue.slice("evidence[0]".length)}`);
-    }
-  }
-  const leaked = leaks(record, {
-    secrets: [],
-    typedQuery: "",
-    publicTexts: [],
-    allowedCover: cover,
-  });
-  for (const issue of leaked) add(issue);
-  return [...found].map(([path, why]) => `${path}: ${why}`);
-}
-
 /** Reads and checks every record in `dir`. A missing directory holds no records. */
 export function loadReplays(dir: string): ReplaySet {
   const records: ReplayRecord[] = [];
@@ -174,7 +129,8 @@ export function loadReplays(dir: string): ReplaySet {
     try {
       raw = JSON.parse(readFileSync(path, "utf8"));
     } catch (err) {
-      problems.push(`${file}: not JSON (${(err as Error).message})`);
+      // The reason only: a parse error quotes the file, which may hold anything.
+      problems.push(`${file}: ${err instanceof SyntaxError ? "not JSON" : "cannot be read"}`);
       continue;
     }
     const parsed = ReplayRecord.safeParse(raw);
@@ -201,9 +157,16 @@ export function loadReplays(dir: string): ReplaySet {
       problems.push(`${file}: the recorded run information is wrong (${issues.join("; ")})`);
       continue;
     }
-    // Held to the run routes' and the recorder's checks again: the file may not be the
-    // recorder's. Where and why only; the text itself is not logged.
-    const held = heldIssues(record, cover);
+    // Held to the recorder's checks again (recordIssues), as far as a file can tell: the file
+    // may not be the recorder's. The configured credentials, the query the user typed and the
+    // ids of the database's runs are checked when it is recorded. Where and why only; the text
+    // itself is not logged.
+    const held = recordIssues(record, {
+      secrets: [],
+      typedQuery: "",
+      publicTexts: publicTextsOf(record.analysis),
+      allowedCover: cover,
+    });
     if (held.length > 0) {
       problems.push(`${file}: holds text a recording must not (${held.slice(0, 5).join("; ")})`);
       continue;

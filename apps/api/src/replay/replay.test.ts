@@ -40,10 +40,26 @@ import {
   storedErrorStatus,
 } from "../agent/storedResults.js";
 import { lostRecordsLine, MODEL_FAILURE_TEXT, sourceErrorLine } from "../agent/statusText.js";
+import {
+  cachedLine,
+  MEASURING_LINE,
+  measuredLine,
+  measuredSummary,
+  UNVERSIONED_REASON,
+} from "../agent/nodes/engineerNode.js";
+import { foundLine } from "../agent/nodes/scoutNode.js";
 import { PLANNER_LINES, plannerLine } from "../agent/research/plannerLines.js";
 import { reasonIssue } from "../sources/http.js";
 import { INTERNAL_ERROR_PREFIX } from "../sources/toolResult.js";
-import { ANALYZER_VERSION, audioV2, measurementOf } from "../agent/testing/measuredAudio.js";
+import {
+  ANALYZER_VERSION,
+  audioV2,
+  gatedV2,
+  ISRC_MATCH,
+  keyWithheldV2,
+  measurementOf,
+  signalOnlyV2,
+} from "../agent/testing/measuredAudio.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
 import { runningCommit } from "../config/checkoutCommit.js";
 import { main as recordMain } from "./record.js";
@@ -977,9 +993,37 @@ describe("the recorder", () => {
     expect(reasons.join(" ")).not.toContain("fetchJson");
   });
 
-  it("passes every kind of status line today's code writes", async () => {
+  it("passes every kind of status line today's code writes, with the track's own text", async () => {
     const codes = SourceError.shape.code.options;
+    // The scout's and the engineer's lines carry the track's title and artist, and the
+    // analyzer's version and a date.
+    const track = { title: "One More Time <3 -> Edit", artist: "Daft Punk", album: "Discovery" };
+    const measurements = [
+      measurementOf(audioV2()),
+      measurementOf(signalOnlyV2()),
+      measurementOf(gatedV2("noise")),
+      measurementOf(keyWithheldV2()),
+      { audio: null, unavailableReason: "no_preview" as const },
+    ];
+    const engineerLines = [
+      MEASURING_LINE,
+      ...measurements.flatMap((measurement) => {
+        const summary = measuredSummary(measurement);
+        return [summary.text, measuredLine(summary)];
+      }),
+      ...measurements.slice(0, 4).flatMap((m) => {
+        const measurement = { ...m, audio: m.audio!, previewMatch: ISRC_MATCH };
+        return [
+          cachedLine({ measurement }),
+          ...Object.values(UNVERSIONED_REASON).map((reason) =>
+            cachedLine({ measurement, unversioned: { reason, measuredAt: new Date(1e12) } }),
+          ),
+        ];
+      }),
+    ];
     const lines = [
+      foundLine(track),
+      ...engineerLines,
       ...SourceId.options.flatMap((source) => [
         ...codes.flatMap((code) => [
           sourceErrorLine({ source, code }),
@@ -1008,10 +1052,72 @@ describe("the recorder", () => {
     );
     expect(sent.length).toBeGreaterThan(10);
     const all = [...lines, ...sent];
-    const check = { secrets: [], typedQuery: "", publicTexts: [] };
+    const check = { secrets: [], typedQuery: "", publicTexts: publicTextsOf(track) };
     const statusEvents = all.map((message) => ({ event: { type: "status", message } }));
     expect(leaks({ events: statusEvents }, check)).toEqual([]);
-    for (const message of all) expect(reasonIssue(message), message).toBeNull();
+    // Without the track's own text, each line passes what an error message is held to.
+    for (const message of [...engineerLines, ...lines.slice(1 + engineerLines.length), ...sent]) {
+      expect(reasonIssue(message), message).toBeNull();
+    }
+  });
+
+  it("records and loads a track whose title or artist holds < or >, and still refuses markup in a status line", () => {
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const found = fixture.events.findIndex(
+      ({ event }) => event.type === "status" && event.message.startsWith("Found the track"),
+    );
+    expect(found).toBeGreaterThan(0);
+    const retitled = (id: string, title: string, artist: string): ReplayRecord => ({
+      ...fixture,
+      analysis: { ...fixture.analysis, id, title, artist },
+      events: fixture.events.map((item, i) =>
+        i === found
+          ? { ...item, event: { ...item.event, message: foundLine({ title, artist }) } }
+          : item,
+      ),
+    });
+    const build = (fixtureRecord: ReplayRecord, slug: string) => {
+      const { run, events } = fixtureAsLiveRun(fixtureRecord, fixtureRecord.analysis.title);
+      return buildRecord(run, events, { slug, commit: "abc1234", secrets: [SECRET] }).record;
+    };
+    const out = join(dir, "titles");
+    rmSync(out, { recursive: true, force: true });
+    mkdirSync(out);
+    for (const [slug, id, title, artist] of [
+      ["heart", "0ReplayTitleTrack00001", "One More Time <3", "Daft Punk"],
+      ["arrow", "0ReplayTitleTrack00002", "One More Time -> Edit", "Daft Punk"],
+      ["artist", "0ReplayTitleTrack00003", "One More Time", "<Daft> Punk"],
+    ]) {
+      writeFileSync(
+        join(out, `${slug}.json`),
+        JSON.stringify(build(retitled(id, title, artist), slug)),
+      );
+    }
+    const set = loadReplays(out);
+    expect(set.problems).toEqual([]);
+    expect(set.records.map((r) => r.slug).sort()).toEqual(["arrow", "artist", "heart"]);
+
+    // A line that holds markup besides the track's own text is still refused when recorded,
+    // and left out when loaded.
+    const markup = " <html><body>Bad gateway</body></html>";
+    const withPage = (r: ReplayRecord): ReplayRecord => ({
+      ...r,
+      events: r.events.map((item, i) =>
+        i === found && item.event.type === "status"
+          ? { ...item, event: { ...item.event, message: item.event.message + markup } }
+          : item,
+      ),
+    });
+    const pageTrack = retitled("0ReplayTitleTrack00004", "One More Time <3 (Live)", "Daft Punk");
+    expect(refusal(() => build(withPage(pageTrack), "page"))).toContain(
+      `events[${found}].event.message: markup in a status line`,
+    );
+    writeFileSync(join(out, "page.json"), JSON.stringify(withPage(build(pageTrack, "page"))));
+    const again = loadReplays(out);
+    expect(again.records.map((r) => r.slug).sort()).toEqual(["arrow", "artist", "heart"]);
+    expect(again.problems).toEqual([
+      `page.json: holds text a recording must not (events[${found}].event.message: markup in a status line)`,
+    ]);
   });
 
   it("refuses a token or signature parameter in any link, also on an allow-listed site", () => {
@@ -1046,6 +1152,32 @@ describe("the recorder", () => {
         "analysis.evidence[0].url: a signed URL",
       ]),
     );
+  });
+
+  it("refuses a stored run whose web evidence the run routes refuse, so the loader never drops what it writes", async () => {
+    const runId = await liveRun("plain words");
+    const { run, events } = stored(runId);
+    const analysis = run.analysis as TrackAnalysis;
+    const page = {
+      id: "tavily:www.instagram.com/p/abc123/",
+      source: "tavily" as const,
+      sourceTier: "web" as const,
+      // Without its scheme: the URL scan of `leaks` does not see it, the run routes' check does.
+      url: "www.instagram.com/p/abc123/",
+      title: "A page about the song",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt: "A caption about the song.",
+      recordRef: null,
+    };
+    const evidence = [...(analysis.evidence ?? []), page];
+    const reasons = refusal(() =>
+      buildRecord({ ...run, analysis: { ...analysis, evidence } }, events, {
+        slug: "recorded-song",
+        commit: "abc1234",
+        secrets: [SECRET],
+      }),
+    );
+    expect(reasons).toContain(`analysis.evidence[${evidence.length - 1}]: a social platform page`);
   });
 
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {
@@ -1951,7 +2083,8 @@ describe("the replay directory", () => {
     const bad = join(dir, "bad-replays");
     mkdirSync(bad, { recursive: true });
     writeFileSync(join(bad, "good-one.json"), JSON.stringify(good));
-    writeFileSync(join(bad, "not-json.json"), "{");
+    // Its parse error would quote the file: the problem names the file only.
+    writeFileSync(join(bad, "not-json.json"), '{"key": sk-live-SECRETVALUE0123456789}');
     writeFileSync(join(bad, "renamed.json"), JSON.stringify(good));
     writeFileSync(
       join(bad, "live-result.json"),
@@ -2009,7 +2142,8 @@ describe("the replay directory", () => {
     expect(set.warnings).toEqual([
       'good-one.json: the recorded result breaks factoids[0].claimId: unknown claim "claim-a"',
     ]);
-    expect(set.problems.join("\n")).toMatch(/not-json\.json: not JSON/);
+    expect(set.problems).toContain("not-json.json: not JSON");
+    expect(set.problems.join("\n")).not.toContain("sk-live");
     expect(set.problems.join("\n")).toMatch(/renamed\.json: slug "good-one"/);
     expect(set.problems.join("\n")).toMatch(/live-result\.json: not a replay record/);
     expect(set.forQuery("Recorded Song The Recorders")?.slug).toBe("good-one");
@@ -2036,35 +2170,44 @@ describe("the replay directory", () => {
     expect(status).toBeGreaterThan(0);
     const added = clean.analysis.evidence?.length ?? 0;
 
-    // The clean recording as another track: its result, the result its complete event sends and
-    // its first status line changed as given.
+    // The clean recording as another track, changed as given: its result (which a replay
+    // sends, player.ts), the result its complete event stores (which a replay replaces with the
+    // record's result), its first status line, an event added before the complete event, and
+    // the commit it names.
     const variant = (
       slug: string,
       id: string,
       title: string,
       change: {
         analysis?: (a: TrackAnalysis) => TrackAnalysis;
-        sent?: (a: TrackAnalysis) => TrackAnalysis;
+        stored?: (a: TrackAnalysis) => TrackAnalysis;
         statusLine?: string;
+        added?: Record<string, unknown>;
+        commit?: string;
       },
     ): ReplayRecord => {
-      const base = { ...clean.analysis, id, title };
+      const commit = change.commit ?? clean.commit;
+      const withCommit = (a: TrackAnalysis) => ({ ...a, run: { ...a.run!, commit } });
+      const base = withCommit({ ...clean.analysis, id, title });
       const analysis = change.analysis?.(base) ?? base;
-      const sent = change.sent?.(analysis) ?? analysis;
+      const stored = change.stored?.(base) ?? analysis;
+      const events = clean.events.flatMap((item, i) => {
+        if (item.event.type === "complete") {
+          const done = { ...item, event: { ...item.event, data: stored } };
+          return change.added ? [{ atMs: item.atMs, event: change.added }, done] : [done];
+        }
+        if (i === status && change.statusLine !== undefined) {
+          return [{ ...item, event: { ...item.event, message: change.statusLine } }];
+        }
+        return [item];
+      });
       return ReplayRecord.parse({
         ...clean,
         slug,
+        commit,
         request: { query: `${title} The Recorders`, selectedTrackId: null },
         analysis,
-        events: clean.events.map((item, i) => {
-          if (item.event.type === "complete") {
-            return { ...item, event: { ...item.event, data: sent } };
-          }
-          if (i === status && change.statusLine !== undefined) {
-            return { ...item, event: { ...item.event, message: change.statusLine } };
-          }
-          return item;
-        }),
+        events: events.map((item, seq) => ({ ...item, event: { ...item.event, seq } })),
       });
     };
     const webItem = (url: string, excerpt: string) => ({
@@ -2077,6 +2220,8 @@ describe("the replay directory", () => {
       excerpt,
       recordRef: null,
     });
+    const envelope = { runId: clean.events[0].event.runId, seq: 0 };
+    const social = webItem("www.instagram.com/p/abc123/", "A caption about the song.");
     const withItem = (item: ReturnType<typeof webItem>) => (a: TrackAnalysis) => ({
       ...a,
       evidence: [...(a.evidence ?? []), item],
@@ -2102,23 +2247,39 @@ describe("the replay directory", () => {
       });
 
     const bad: Record<string, [ReplayRecord, string]> = {
-      // In the result and in what its complete event sends: both checks see it.
+      // In the result and in the result its complete event stores: both checks see it.
       "forum-thread": [
         variant("forum-thread", CHOICE_A, "Forum Song", {
           analysis: withItem(webItem("https://example.org/threads/one-more-time.1234/", thread)),
         }),
-        `analysis.evidence[${added}]: a comment thread; events[${complete}].event.data.evidence[${added}]: a comment thread`,
+        `events[${complete}].event.data.evidence[${added}].excerpt: a comment thread; analysis.evidence[${added}].excerpt: a comment thread`,
       ],
-      // In what its complete event sends: both checks see it.
+      // In the result its complete event stores: both checks see it.
       "stack-trace": [
-        variant("stack-trace", CHOICE_B, "Trace Song", { sent: withTrace }),
-        `events[${complete}].event.data.run.sourceErrors[0].message: a stack trace`,
+        variant("stack-trace", CHOICE_B, "Trace Song", { stored: withTrace }),
+        `events[${complete}].event.data.run.sourceErrors[0].message: a stack trace in a source error`,
       ],
-      // A social page written without its scheme, only in what the complete event sends: the
-      // run routes' check of the event (heldTextIssue) sees it, the recorder's does not.
-      "social-sent": [
-        variant("social-sent", "0ReplayTestTrackC00001", "Social Song", {
-          sent: withItem(webItem("www.instagram.com/p/abc123/", "A caption about the song.")),
+      // A social page written without its scheme: the run routes' check (heldTextIssue) sees
+      // it, the recorder's URL scan (leaks) does not. In the result, which a replay sends.
+      "social-analysis": [
+        variant("social-analysis", "0ReplayTestTrackF00001", "Profile Song", {
+          analysis: withItem(social),
+          stored: (a) => a,
+        }),
+        `analysis.evidence[${added}]: a social platform page`,
+      ],
+      // In an evidence event, which a replay sends as it is.
+      "social-event": [
+        variant("social-event", "0ReplayTestTrackG00001", "Event Song", {
+          added: { type: "evidence", ...envelope, evidence: social },
+        }),
+        `events[${complete}].event.evidence: a social platform page`,
+      ],
+      // Only in the result the complete event stores, which a replay never sends (it sends the
+      // record's result): checked all the same, should the player ever send it.
+      "social-stored": [
+        variant("social-stored", "0ReplayTestTrackC00001", "Social Song", {
+          stored: withItem(social),
         }),
         `events[${complete}].event.data.evidence[${added}]: a social platform page`,
       ],
@@ -2133,8 +2294,36 @@ describe("the replay directory", () => {
         variant("trace-status", "0ReplayTestTrackE00001", "Status Song", { statusLine: trace }),
         `events[${status}].event.message: a stack trace in a status line`,
       ],
+      // Events the recorder never writes, and a commit that is not a commit hash.
+      "error-event": [
+        variant("error-event", "0ReplayTestTrackH00001", "Error Song", {
+          added: { type: "error", ...envelope, code: "failed", error: trace },
+        }),
+        `events[${complete}].event: an error event, which a recording never holds`,
+      ],
+      "interrupt-event": [
+        variant("interrupt-event", "0ReplayTestTrackI00001", "Pause Song", {
+          added: {
+            type: "interrupt",
+            ...envelope,
+            reason: "disambiguation",
+            threadId: envelope.runId,
+            candidates: [],
+            message: trace,
+          },
+        }),
+        `events[${complete}].event: an interrupt event, which a recording never holds`,
+      ],
+      "bad-commit": [
+        variant("bad-commit", "0ReplayTestTrackJ00001", "Commit Song", {
+          commit: "abc1234 <b>at fetchJson (/x.ts:1:2)</b>",
+        }),
+        "commit: not a commit hash",
+      ],
     };
-    expect(recorderCheck(bad["social-sent"][0])).toEqual([]);
+    for (const slug of ["social-analysis", "social-event", "social-stored"]) {
+      expect(recorderCheck(bad[slug][0]), slug).toEqual([]);
+    }
     for (const slug of ["email-status", "trace-status"]) {
       const [file] = bad[slug];
       const sent = file.events.find(({ event }) => event.type === "complete")?.event;

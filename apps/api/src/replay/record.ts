@@ -27,7 +27,7 @@ import { knownSecrets } from "../llm/cassette.js";
 import { isMainModule } from "../scripts/isMain.js";
 import { getDefaultDbPath } from "../store/database.js";
 import { getRun, keepsRunCommits, listRunEvents } from "../store/runs.js";
-import { buildRecord, RecordRefused } from "./recorder.js";
+import { buildRecord, COMMIT_PATTERN, RecordRefused } from "./recorder.js";
 import { replayDir } from "./records.js";
 
 /** The settings file's values, for the credential check only; empty when there is none. */
@@ -40,9 +40,6 @@ function settingsFileValues(): NodeJS.ProcessEnv {
     return {};
   }
 }
-
-/** A commit hash as --commit takes it: 7 to 40 hex digits, "-dirty" when the tree had changes. */
-const COMMIT_PATTERN = /^[0-9a-f]{7,40}(-dirty)?$/;
 
 /**
  * The commit a record names: the one the run ran at, as the server stored it with the run.

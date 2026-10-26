@@ -96,12 +96,15 @@ describe('audio values from a measurement', () => {
   });
 
   it('show a partly measured result: what was measured, and what was not with why', () => {
-    const track = measuredTrack(audioBlock({ key: null, fingerprint: null }), {
-      key: null,
-      audioSource: 'unavailable',
-      audioConfidence: 'low',
-      audioUnavailableReason: 'not_detected',
-    });
+    const track = measuredTrack(
+      audioBlock({ analyzerVersion: '2.1.0+essentia', key: null, fingerprint: null }),
+      {
+        key: null,
+        audioSource: 'unavailable',
+        audioConfidence: 'low',
+        audioUnavailableReason: 'not_detected',
+      },
+    );
     render(
       <>
         <ResultNotices track={track} />
@@ -183,7 +186,9 @@ describe('the fingerprint from a measurement', () => {
   });
 
   it('says why the scores are missing when the audio models are not loaded', () => {
-    const { fingerprint } = audioReadings(measuredTrack(audioBlock({ fingerprint: null })));
+    const { fingerprint } = audioReadings(
+      measuredTrack(audioBlock({ analyzerVersion: '2.1.0+essentia', fingerprint: null })),
+    );
     render(<SonicFingerprint fingerprint={fingerprint} />);
     expect(document.body.textContent).toBe(
       'Styles not available— the audio models are not loadedTags not available— the audio models are not loaded',

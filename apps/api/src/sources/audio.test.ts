@@ -217,6 +217,8 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
     );
     expect(read.audio?.tempo).toEqual(block.tempo);
     expect(read.audio?.withheld).toEqual(block.withheld);
+    // Dropped, not kept as an undefined entry.
+    expect(Object.keys(read.audio?.withheld ?? {})).toEqual(["key"]);
   });
 
   it("treats an answer with only the v1 fields as no measurement, and says why", async () => {

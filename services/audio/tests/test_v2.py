@@ -621,6 +621,7 @@ def test_a_tempo_needs_four_beats(monkeypatch, ticks, expected):
         (120.0, 3, 4.0, "too_few_beats"),
         (220.0, 60, 4.0, "tempo_out_of_range"),
         (39.0, 60, 4.0, "tempo_out_of_range"),
+        (float("nan"), 60, 4.0, "estimate_failed"),
     ],
 )
 def test_essentia_says_which_rule_withheld_the_tempo(monkeypatch, bpm, ticks, raw, code):
@@ -735,6 +736,67 @@ def test_librosa_tempo_is_withheld_at_low_confidence(monkeypatch, confidence, ke
     monkeypatch.setattr(estimators, "periodicity_at_lag", lambda envelope, lag: confidence)
     estimate = estimators.LibrosaEstimator().tempo(steady_signals())
     assert (estimate is not None) == kept
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_a_tempo_under_the_confidence_minimum_says_so_for_both_estimators(monkeypatch, estimator):
+    """The reason is the confidence rule's, whichever estimator withheld the tempo."""
+    monkeypatch.setattr(estimators, "periodicity_at_lag", lambda envelope, lag: 0.29)
+    ticks = np.arange(60) * 0.5
+    with_essentia_algorithms(monkeypatch, rhythm=FakeAlgorithm((120.0, ticks, 1.49, [], [])))
+    withheld = estimators.select_estimator(estimator).measure_tempo(steady_signals())
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == "low_confidence"
+    assert withheld.reason.startswith("the tempo estimator's confidence")
+
+
+def test_a_steady_clip_too_short_to_check_is_not_called_unsteady():
+    """
+    Six seconds at 60 BPM: five beats, a steady tempo, but too few beat intervals for the
+    steadiness check. The tempo is withheld as before; the reason is the beat count, not a change.
+    """
+    v2 = check_result(
+        main.analyze_signals(
+            estimators.Signals(click_track(60, seconds=6.0), FIXTURE_SR),
+            estimators.select_estimator("librosa"),
+        )
+    )
+    assert v2["tempo"] is None and v2["beats"] is None
+    assert v2["withheld"]["tempo"] == v2["withheld"]["beats"] == main.UNCHECKED_TEMPO.entry()
+
+
+# Each key rule says which rule it is: the probes where it decides (values pinned here).
+KEY_RULE_PROBES = {
+    "no_sustained_pitch": lambda: PROBES["drums-only-120"],
+    "one_harmonic_series": lambda: PROBES["hum-50Hz-gentle"],
+    "one_held_pitch": lambda: PROBES["A4-vibrato-80c"],
+    "few_pitch_classes": lambda: PROBES["drone-with-drums"],
+    "speech_like": lambda: music.speech(4),
+    "one_pitched_source": lambda: signals.seeded_cowbell(500),
+}
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("code", KEY_RULE_PROBES)
+def test_each_key_rule_names_itself(code, estimator):
+    signals_ = estimators.Signals(KEY_RULE_PROBES[code](), FIXTURE_SR)
+    withheld = estimators.select_estimator(estimator).measure_key(signals_)
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == code, withheld
+
+
+def test_without_a_pitch_track_the_key_rule_is_no_pitch_track(monkeypatch):
+    monkeypatch.setattr(estimators, "voice", raises)
+    signals_ = estimators.Signals(PROBES["chords-D"], FIXTURE_SR)
+    for name in KEY_ESTIMATORS:
+        assert estimators.select_estimator(name).measure_key(signals_).code == "no_pitch_track"
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_a_weak_key_says_its_strength_was_under_the_minimum(monkeypatch, estimator):
+    monkeypatch.setattr(estimators, "krumhansl_key", lambda chroma: ("C", "major", 0.39))
+    with_essentia_algorithms(monkeypatch, key=FakeAlgorithm(("C", "major", 0.39)))
+    signals_ = estimators.Signals(a_major_triad(), 22050)
+    withheld = estimators.select_estimator(estimator).measure_key(signals_)
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == "low_key_strength"
 
 
 def test_essentia_algorithms_are_per_thread_and_reused():

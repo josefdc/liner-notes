@@ -158,7 +158,8 @@ test("a partly measured result says what was not measured and why", async ({ pag
   const values = page.getByRole("list", { name: "Audio values" });
   // Its audioSource is "unavailable", but the tempo is in the measurement: it is shown.
   await expect(valueItem(values, "BPM")).toHaveText(
-    `BPM 123Measured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · ${ANALYZER}`,
+    // Its service ran without the models: the analyzer version names no model set.
+    "BPM 123Measured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · analyzer 2.1.0+essentia",
   );
   await expect(valueItem(values, "Key")).toHaveText(
     "Key not measured— not detected in the preview",
@@ -206,9 +207,10 @@ test("a withheld key says which check withheld it, and a withheld mood head says
   await analyzeAndOpenDashboard(page, "Cowbell Loop");
 
   const values = page.getByRole("list", { name: "Audio values" });
-  // The audio service's reason, in this page's words: never "not detected" alone.
+  // The audio service's reason, in this page's words (the check that fired, never a cause it did
+  // not test): never "not detected" alone.
   await expect(valueItem(values, "Key")).toHaveText(
-    "Key not measured— one pitched source (a cowbell or similar), so no key",
+    "Key not measured— one pitched source whose partials hold still, so no key",
   );
   await expect(valueItem(values, "BPM")).toContainText("BPM 105.2Measured");
   const estimates = page.getByRole("list", { name: "Audio-model estimates" });
@@ -219,7 +221,7 @@ test("a withheld key says which check withheld it, and a withheld mood head says
   const notices = page.getByRole("region", { name: "Missing data" });
   await expect(notices).toHaveText(
     "Audio partly measured" +
-      "Not measured: key (one pitched source (a cowbell or similar), so no key)." +
+      "Not measured: key (one pitched source whose partials hold still, so no key)." +
       "Audio-model estimates not available: mood (outside the range its model produces).",
   );
   await expect(notices).not.toContainText("did not detect");

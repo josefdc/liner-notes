@@ -242,16 +242,18 @@ words (`reason`), e.g. `"key": {"code": "one_pitched_source", "reason": "one pit
 (its partials hold still and rise and fall together)"}`. Every measured block left `null` has
 one (`tempo`, `key`, `loudness`, `beats`, `energyContour`, `sections`, `fingerprint`); within a
 fingerprint, so do `styles`, `tags` and each of `moods` that is `null`; a measured value never
-has one. The codes (the contract's `AudioWithheldCode`):
+has one. A code names the check that fired, not a cause: `no_sustained_pitch` is as true of a
+drum loop as of a dense mix whose key a listener would name. The codes (the contract's
+`AudioWithheldCode`):
 
 | field | code | the check |
 |---|---|---|
 | every block | `gate_silence`, `gate_noise`, `gate_too_short` | the gate did not pass |
 | tempo, beats | `no_beat` | onset periodicity under 0.2: nothing repeats at a beat rate |
 | tempo, beats | `tempo_out_of_range` | the estimate is outside 40-208 BPM |
-| tempo, beats | `too_few_beats` | fewer than 4 tracked beats |
+| tempo, beats | `too_few_beats` | fewer than 4 tracked beats, or fewer than 6 beat intervals to check the tempo holds (a short clip) |
 | tempo, beats | `low_confidence` | under the estimator's minimum (Essentia 1.5 of 5.32, librosa 0.3); it does not rank octave errors, and no rule here catches them |
-| tempo, beats | `unsteady_tempo` | the tempo does not hold in each third of the window (beats are kept with Essentia) |
+| tempo, beats | `unsteady_tempo` | a third of the window that has a beat disagrees with the tempo (Essentia keeps its beat grid, with no reason; librosa's grid is null with this code) |
 | tempo, beats | `no_tempo_estimate` | an estimator that gives no reasons (only the evals' beat-this) gave no tempo |
 | key | `no_sustained_pitch` | too little energy in spectral lines (drums, clicks, noise) |
 | key | `speech_like` | one voice without stable notes |
@@ -266,7 +268,7 @@ has one. The codes (the contract's `AudioWithheldCode`):
 | styles, tags, moods | `model_failed` | that model or head failed, or gave non-finite or misshapen output |
 | moods | `out_of_range` | the head's output is outside its range |
 | moods | `non_music_style` | the strongest Discogs style is a `Non-Music---` one |
-| any | `estimate_failed` | the estimator raised (logged) |
+| any | `estimate_failed` | the estimator raised (logged), or gave a non-finite tempo |
 
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
 times full scale, is refused with `422`.

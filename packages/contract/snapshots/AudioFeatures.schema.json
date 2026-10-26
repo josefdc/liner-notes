@@ -633,7 +633,7 @@
             "required": ["code", "reason"]
           },
           "beats": {
-            "description": "The beat grid follows the tempo: no tempo, no grid",
+            "description": "Null with the tempo's reason when no tempo was estimated; when the tempo is withheld as unsteady, a tracker that follows tempo changes keeps its grid (no reason), one that keeps one period has none",
             "type": "object",
             "properties": {
               "code": {
@@ -1762,7 +1762,7 @@
             "additionalProperties": false
           },
           "beats": {
-            "description": "The beat grid follows the tempo: no tempo, no grid",
+            "description": "Null with the tempo's reason when no tempo was estimated; when the tempo is withheld as unsteady, a tracker that follows tempo changes keeps its grid (no reason), one that keeps one period has none",
             "type": "object",
             "properties": {
               "code": {

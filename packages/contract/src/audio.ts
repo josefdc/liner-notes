@@ -169,21 +169,27 @@ export const Fingerprint = z.object({
  * service's `reason` says the same for logs and tools). A code a reader does not know drops that
  * one reason, never the measurement.
  * - the gate (every measured block): `gate_silence`, `gate_noise`, `gate_too_short`;
- * - tempo (and the beat grid, which follows it): `no_beat` (the onsets do not repeat enough),
- *   `tempo_out_of_range` (the estimate is outside the 40-208 BPM the estimators search),
- *   `too_few_beats`, `low_confidence` (under the estimator's minimum; the confidence does not
- *   rank half- or double-tempo errors, and no check here does), `unsteady_tempo` (the tempo does
- *   not hold over the window), `no_tempo_estimate` (an estimator that gives no reason gave none);
- * - key: `no_sustained_pitch`, `speech_like`, `one_harmonic_series` (a tone, mains hum),
- *   `one_held_pitch`, `no_pitch_track`, `few_pitch_classes`, `one_pitched_source` (its partials
- *   hold still and rise and fall together: a cowbell, one note repeated on a bass),
+ * - tempo (and the beat grid, see AudioWithheld.beats): `no_beat` (the onsets do not repeat
+ *   enough), `tempo_out_of_range` (the estimate is outside AUDIO_TEMPO_RANGE_BPM, the range the
+ *   estimators search), `too_few_beats` (too few beats tracked to fit a tempo, or too few beat
+ *   intervals to check that it holds), `low_confidence` (under the estimator's minimum; the
+ *   confidence does not rank half- or double-tempo errors, and no check here does),
+ *   `unsteady_tempo` (a part of the window disagrees with the tempo), `no_tempo_estimate` (an
+ *   estimator that gives no reasons gave no tempo);
+ * - key: `no_sustained_pitch` (too little energy in spectral lines), `speech_like` (one pitch
+ *   line without stable notes), `one_harmonic_series` (the lines form one harmonic series),
+ *   `one_held_pitch`, `no_pitch_track`, `few_pitch_classes`, `one_pitched_source` (the partials
+ *   hold still, rise and fall together and spell one note or an open interval),
  *   `low_key_strength`, `no_key_estimate` (the estimator named no key);
- * - the fingerprint and its parts: `models_not_loaded`, `not_music` (no beat, and one tone,
- *   held pitch or voice without notes), `model_failed` (failed, or gave non-finite values or the
- *   wrong width), `out_of_range` (a mood head outside the range its model produces),
- *   `non_music_style` (the strongest Discogs style is a Non-Music one: the mood heads describe
- *   music only);
- * - any value: `estimate_failed` (the estimator raised; logged by the service).
+ * - the fingerprint and its parts: `models_not_loaded`, `not_music` (no beat, and the key rules
+ *   found one harmonic series, one held pitch or one pitch line without stable notes),
+ *   `model_failed` (failed, or gave non-finite values or the wrong width), `out_of_range` (a mood
+ *   head outside the range its model produces), `non_music_style` (the strongest Discogs style is
+ *   a Non-Music one: the mood heads describe music only);
+ * - any value: `estimate_failed` (the estimator raised, or gave a non-finite value).
+ *
+ * The codes name the check that fired, not a cause: the same check fires on different material
+ * (spectral lines too weak for a key on drums alone and on a dense electronic mix alike).
  */
 export const AudioWithheldCode = z.enum([
   "gate_silence",
@@ -213,6 +219,9 @@ export const AudioWithheldCode = z.enum([
 ]);
 export type AudioWithheldCode = z.infer<typeof AudioWithheldCode>;
 
+/** The tempo range both estimators search, in BPM. */
+export const AUDIO_TEMPO_RANGE_BPM = [40, 208] as const;
+
 /** One withheld value: the code and the service's reason in words (no withheld value in it). */
 export const WithheldReason = z.object({
   code: AudioWithheldCode,
@@ -228,13 +237,19 @@ const reasonFor = () => WithheldReason.optional().catch(undefined);
  * Why each null value of the block is null, per field. The service names a reason for every
  * measured block it leaves null; for the parts of a fingerprint it computed (styles, tags, each
  * mood head) when one is null; and none for a value it measured. A null fingerprint's parts have
- * no reasons of their own: `fingerprint` says why. Absent in blocks from analyzers before 2.3.0.
+ * no reasons of their own: `fingerprint` says why. Blocks from analyzers before 2.3.0 have none
+ * of the service's reasons; the API still adds `moods.<head>: out_of_range` to such a block when
+ * it drops a mood head itself, since that reason is the API's own and true for any analyzer.
  */
 export const AudioWithheld = z.object({
   tempo: reasonFor(),
   key: reasonFor(),
   loudness: reasonFor(),
-  beats: reasonFor().describe("The beat grid follows the tempo: no tempo, no grid"),
+  beats: reasonFor().describe(
+    "Null with the tempo's reason when no tempo was estimated; when the tempo is withheld as " +
+      "unsteady, a tracker that follows tempo changes keeps its grid (no reason), one that " +
+      "keeps one period has none",
+  ),
   energyContour: reasonFor(),
   sections: reasonFor(),
   fingerprint: reasonFor(),

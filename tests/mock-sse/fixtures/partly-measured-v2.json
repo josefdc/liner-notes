@@ -136,7 +136,7 @@
           "audioConfidence": "low",
           "audio": {
             "version": 2,
-            "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f",
+            "analyzerVersion": "2.1.0+essentia",
             "window": {
               "kind": "preview-30s",
               "durationSeconds": 22.4
@@ -182,7 +182,7 @@
             "mode": "live",
             "recordedAt": null,
             "commit": null,
-            "analyzerVersion": "2.1.0+essentia.models-5c5c0c7f"
+            "analyzerVersion": "2.1.0+essentia"
           },
           "audioUnavailableReason": "not_detected"
         }

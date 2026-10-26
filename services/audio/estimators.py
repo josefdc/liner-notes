@@ -1247,6 +1247,7 @@ TEMPO_OUT_OF_RANGE = Withheld(
     code="tempo_out_of_range",
 )
 TOO_FEW_BEATS = Withheld(f"fewer than {MIN_BEATS} beats were tracked", code="too_few_beats")
+NON_FINITE_TEMPO = Withheld("the tempo estimator gave a non-finite value", code="estimate_failed")
 NO_KEY_ESTIMATE = Withheld("the key estimator named no key", code="no_key_estimate")
 
 
@@ -1318,6 +1319,8 @@ class LibrosaEstimator(_Estimator):
             onset_envelope=oenv, sr=signals.sr, hop_length=signals.hop, max_tempo=MAX_BPM
         )
         start_bpm = float(np.atleast_1d(start)[0])
+        if not np.isfinite(start_bpm):
+            return NON_FINITE_TEMPO
         if not MIN_BPM <= start_bpm <= MAX_BPM:
             return TEMPO_OUT_OF_RANGE
         _, frames = librosa.beat.beat_track(
@@ -1395,6 +1398,8 @@ class EssentiaEstimator(_Estimator):
         )
         bpm, ticks, raw, _, _ = rhythm(signals.at(ESSENTIA_RATE))
         ticks = np.asarray(ticks, dtype=float)
+        if not np.isfinite(bpm):
+            return NON_FINITE_TEMPO
         if not MIN_BPM <= bpm <= MAX_BPM:
             return TEMPO_OUT_OF_RANGE
         if len(ticks) < MIN_BEATS:

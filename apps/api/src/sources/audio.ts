@@ -152,6 +152,22 @@ function withinRange(score: ModelScore): boolean {
   );
 }
 
+/**
+ * The block without the reasons the contract could not read: the contract reads each as absent
+ * (undefined), and the block keeps no key for it.
+ */
+function withoutUnreadReasons(audio: AudioFeatures): AudioFeatures {
+  const { withheld, ...rest } = audio;
+  if (!withheld) return rest;
+  const defined = <T extends object>(entries: T) =>
+    Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined)) as T;
+  const { moods, ...fields } = withheld;
+  return {
+    ...rest,
+    withheld: { ...defined(fields), ...(moods ? { moods: defined(moods) } : {}) },
+  };
+}
+
 /** What the service's answer measured: its v2 block, or why it cannot be used. */
 export type ServiceMeasurement =
   | { audio: AudioFeatures; outOfRange: string[] }
@@ -184,7 +200,7 @@ export function readServiceMeasurement(answer: unknown): ServiceMeasurement {
       error: `The audio service's v2 block does not fit the contract (${where})`,
     };
   }
-  const audio = parsed.data;
+  const audio = withoutUnreadReasons(parsed.data);
   const outOfRange: (typeof MOOD_HEADS)[number][] = [];
   const moods = audio.fingerprint?.moods;
   if (audio.fingerprint && moods) {

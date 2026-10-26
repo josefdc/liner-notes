@@ -110,6 +110,26 @@ describe("SonicCache audio", () => {
     expect(cache.getAudio(`isrc:${ISRC}`, "2.0.0+essentia")).toBeNull();
   });
 
+  it("serves a measurement with the reasons its block gives for what it withheld", () => {
+    const base = audioV2();
+    const block = audioV2({
+      analyzerVersion: "2.3.0+essentia.models-5c5c0c7f",
+      fingerprint: {
+        ...base.fingerprint!,
+        tags: null,
+        moods: { ...base.fingerprint!.moods!, valence: null },
+      },
+      withheld: {
+        tags: { code: "model_failed", reason: "the tag model failed or gave unusable output" },
+        moods: { valence: { code: "out_of_range", reason: "outside its range 1.0-9.0" } },
+      },
+    });
+    cache.putAudio(`isrc:${ISRC}`, "sp1", measurementOf(block, ISRC_MATCH));
+
+    const hit = cache.getAudio(`isrc:${ISRC}`, "2.3.0+essentia.models-5c5c0c7f");
+    expect(hit?.audio?.withheld).toEqual(block.withheld);
+  });
+
   it("keeps the measurements of two analyzer versions apart", () => {
     cache.putAudio(`isrc:${ISRC}`, "sp1", complete());
     cache.putAudio(

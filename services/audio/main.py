@@ -47,6 +47,7 @@ import fingerprint  # noqa: E402
 import signal_features  # noqa: E402
 from estimators import (  # noqa: E402
     NO_KEY_ESTIMATE,
+    STEADY_TEMPO_PARTS,
     KeyEstimate,
     Signals,
     TempoEstimate,
@@ -70,7 +71,10 @@ for _client_logger in ("httpx", "httpcore"):
 # Version of the analysis output: bump it whenever a measurement can change for the same input
 # (algorithm, parameters, decoder or model change). The full version (analyzer_version())
 # adds the estimator and the model set as semver build metadata.
-# 2.3.0 adds `withheld` (no measurement changed), so cached blocks without it are measured again.
+# 2.3.0 adds `withheld` (no measurement changed). The API's audio cache is keyed by this version,
+# so while the service names it, cached blocks without reasons are measured again; results the
+# API already stored, and cache rows it serves while the service is down, keep their older
+# blocks (without reasons) until they expire.
 ANALYZER_VERSION = "2.3.0"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
@@ -169,7 +173,7 @@ class InvalidAudioError(ValueError):
 # Why the gate measured nothing, for each block it leaves null (v2.withheld).
 GATE_WITHHELD = {
     "silence": Withheld("the preview is silent", code="gate_silence"),
-    "noise": Withheld("the preview is noise (no beat and no pitch)", code="gate_noise"),
+    "noise": Withheld("no beat and no musical pitch in the preview", code="gate_noise"),
     "too_short": Withheld("the preview is too short to measure", code="gate_too_short"),
 }
 ESTIMATE_FAILED = Withheld("the estimator failed (logged by the service)", code="estimate_failed")
@@ -180,6 +184,19 @@ UNSTEADY_BEATS = Withheld(
     "the tempo does not hold over the window, and this beat tracker keeps one period",
     code="unsteady_tempo",
 )
+# The steadiness check needs 2 * STEADY_TEMPO_PARTS beat intervals; with fewer (a short clip) it
+# cannot say whether the tempo holds, which is not evidence that it changes.
+UNCHECKED_TEMPO = Withheld(
+    f"fewer than {2 * STEADY_TEMPO_PARTS} beat intervals, too few to check the tempo holds",
+    code="too_few_beats",
+)
+
+
+def _unsteady(tempo: TempoEstimate) -> Withheld:
+    """Why a tempo that is not steady is withheld: it changes, or it cannot be checked."""
+    if tempo.steadiness is not None and not tempo.steadiness.enough_beats:
+        return UNCHECKED_TEMPO
+    return UNSTEADY_TEMPO
 
 
 def _signal_block(**fields) -> dict:
@@ -254,7 +271,8 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]
         )
     elif tempo is not None:
-        withheld["beats"] = UNSTEADY_BEATS.entry()
+        unsteady = _unsteady(tempo)
+        withheld["beats"] = (UNSTEADY_BEATS if unsteady is UNSTEADY_TEMPO else unsteady).entry()
     if tempo is not None:
         if tempo.steady:
             raw = tempo.raw_confidence
@@ -272,7 +290,7 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
                 tempo.bpm,
                 "" if tempo.beats_follow_changes else " (and no beats)",
             )
-            withheld["tempo"] = UNSTEADY_TEMPO.entry()
+            withheld["tempo"] = _unsteady(tempo).entry()
     if key is not None:
         v2["key"] = _signal_block(
             tonic=key.tonic,

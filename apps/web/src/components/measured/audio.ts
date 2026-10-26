@@ -128,6 +128,8 @@ export const MOMENT_TYPES: ReadonlySet<string> = new Set([
   'silence',
 ]);
 export const GATE_REASONS: ReadonlySet<string> = new Set(['silence', 'noise', 'too_short']);
+/** The contract's AUDIO_TEMPO_RANGE_BPM: the tempo range the estimators search. */
+export const TEMPO_RANGE_BPM = [40, 208] as const;
 export const WITHHELD_CODES: ReadonlySet<string> = new Set([
   'gate_silence',
   'gate_noise',
@@ -315,6 +317,14 @@ export function readAudio(value: unknown): MeasuredAudio | null {
 /** The key as the result's `key` copy writes it, e.g. "A# Minor". */
 export function keyLabel(key: MusicalKey): string {
   return `${key.tonic} ${key.mode === 'major' ? 'Major' : 'Minor'}`;
+}
+
+/**
+ * True when an analyzer version names the model set it ran with (`2.2.0+essentia.models-…`):
+ * the service names one exactly when its audio models were loaded.
+ */
+export function namesModelSet(analyzerVersion: string): boolean {
+  return /[+.]models-/.test(analyzerVersion);
 }
 
 /** Mean RMS as dBFS (full scale = 0 dB), or null for a zero level (no finite value). */

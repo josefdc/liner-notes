@@ -1,4 +1,5 @@
 import {
+  AUDIO_TEMPO_RANGE_BPM,
   AudioFeatures,
   AudioGateReason,
   AudioWithheldCode,
@@ -22,6 +23,7 @@ import {
   PITCH_CLASSES,
   readAudio,
   SIGNAL_BASIS,
+  TEMPO_RANGE_BPM,
   WINDOW_KIND,
   WITHHELD_CODES,
   WITHHELD_FIELDS,
@@ -253,6 +255,7 @@ describe("the page's copy of the contract's enums", () => {
     expect([...MOMENT_TYPES].sort()).toEqual([...MOMENT_KINDS].sort());
     expect([...GATE_REASONS].sort()).toEqual([...GATES].sort());
     expect([...WITHHELD_CODES].sort()).toEqual([...CODES].sort());
+    expect(TEMPO_RANGE_BPM).toEqual(AUDIO_TEMPO_RANGE_BPM);
     expect(WINDOW_KIND).toBe(WINDOW);
     expect(SIGNAL_BASIS).toBe(SignalBasis.value);
     expect(MODEL_BASIS).toBe(ModelBasis.value);
@@ -261,7 +264,11 @@ describe("the page's copy of the contract's enums", () => {
 });
 
 describe('readAudio against the contract', () => {
-  it('accepts exactly the blocks the contract accepts (valid and single-fault blocks)', () => {
+  // Over 10,000 candidate blocks: on a loaded machine this takes several seconds, so it gets its
+  // own time limit rather than fewer blocks.
+  it('accepts exactly the blocks the contract accepts (valid and single-fault blocks)', {
+    timeout: 30_000,
+  }, () => {
     const disagreements: string[] = [];
     let checked = 0;
     for (const seed of SEEDS) {

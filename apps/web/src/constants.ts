@@ -6,7 +6,9 @@ import {
   type MeasuredAudio,
   type MoodHead,
   readAudio,
+  namesModelSet,
   rmsToDbfs,
+  TEMPO_RANGE_BPM,
   type WithheldField,
 } from './components/measured/audio';
 import { isWholeRecording } from './utils/recording';
@@ -335,7 +337,8 @@ function unavailableShort(reason: string | undefined): string | null {
 /** Why the audio service measured nothing on a preview (its gate), in a few words. */
 export const AUDIO_GATE_TEXT: Record<string, string> = {
   silence: 'the preview is silent',
-  noise: 'the preview is noise, not music',
+  // The gate's "noise": no beat and no musical pitch (its check, not a cause).
+  noise: 'no beat and no musical pitch in the preview',
   too_short: 'the preview is too short to measure',
 };
 
@@ -346,34 +349,42 @@ function gateText(audio: MeasuredAudio): string | null {
   return (reason && AUDIO_GATE_TEXT[reason]) || 'the preview did not pass the analysis gate';
 }
 
+/** Why the audio-model values are missing when the result has a measurement without them. */
+export const MODELS_NOT_LOADED_TEXT = 'the audio models are not loaded';
+
+/** Why a value is missing when the result's measurement does not say. */
+export const NO_REASON_TEXT = 'the result does not say why';
+
 /**
  * Why the audio service withheld a value (the block's `withheld` codes), in a few plain words:
- * short enough for a chip, and never naming the value that was withheld.
+ * the check that fired, never a cause it did not test (the same check fires on a drum loop and
+ * on a dense mix with a key), never the value it withheld, short enough for a chip, and without
+ * parentheses, since the notice puts each reason in parentheses.
  */
 export const AUDIO_WITHHELD_TEXT: Record<AudioWithheldCode, string> = {
   gate_silence: AUDIO_GATE_TEXT.silence,
   gate_noise: AUDIO_GATE_TEXT.noise,
   gate_too_short: AUDIO_GATE_TEXT.too_short,
-  no_beat: 'no steady beat in the preview',
-  tempo_out_of_range: 'outside the 40–208 BPM the analysis searches',
-  too_few_beats: 'too few beats in the preview',
-  low_confidence: 'the tempo estimate was not confident enough',
-  unsteady_tempo: 'the tempo changes within the preview',
+  no_beat: 'no repeating beat was found',
+  tempo_out_of_range: `outside the ${TEMPO_RANGE_BPM[0]}–${TEMPO_RANGE_BPM[1]} BPM the analysis searches`,
+  too_few_beats: 'too few beats to measure a steady tempo',
+  low_confidence: 'the tempo estimate was below the confidence needed',
+  unsteady_tempo: 'the tempo did not hold across the preview',
   no_tempo_estimate: 'the tempo estimator gave no tempo',
-  no_sustained_pitch: 'no sustained pitch (drums or noise), so no key',
-  speech_like: 'a voice without steady notes (speech), so no key',
-  one_harmonic_series: 'a single tone or hum, so no key',
-  one_held_pitch: 'one held note, so no key',
-  no_pitch_track: 'the pitch could not be followed, so no key',
-  few_pitch_classes: 'fewer than three notes, so no key',
-  one_pitched_source: 'one pitched source (a cowbell or similar), so no key',
+  no_sustained_pitch: 'too little sustained pitch was found, so no key',
+  speech_like: 'the pitch had no steady notes, so no key',
+  one_harmonic_series: 'one harmonic series dominated, so no key',
+  one_held_pitch: 'one held pitch dominated, so no key',
+  no_pitch_track: 'the pitch could not be tracked, so no key',
+  few_pitch_classes: 'fewer than three pitch classes, so no key',
+  one_pitched_source: 'one pitched source whose partials hold still, so no key',
   low_key_strength: 'the key estimate was too weak',
   no_key_estimate: 'the key estimator named no key',
-  models_not_loaded: 'the audio models are not loaded',
-  not_music: 'not music (one tone or a voice, no beat)',
+  models_not_loaded: MODELS_NOT_LOADED_TEXT,
+  not_music: 'no beat and only one pitch line, so no model scores',
   model_failed: 'the audio model gave no usable output',
   out_of_range: 'outside the range its model produces',
-  non_music_style: 'the models read the preview as not music',
+  non_music_style: 'the top style score was a non-music style',
   estimate_failed: 'the estimator failed on this preview',
 };
 
@@ -384,9 +395,6 @@ function withheldText(reason: { code: AudioWithheldCode } | undefined): string |
 
 /** The v1 energy (0-1) reads 1.0 for any master louder than about -11 dBFS RMS. */
 export const SATURATED_ENERGY_TEXT = 'energy saturates on loud masters';
-
-/** Why the audio-model values are missing when the result has a measurement without them. */
-export const MODELS_NOT_LOADED_TEXT = 'the audio models are not loaded';
 
 /** Why the values of a result whose `audio` block is null or unreadable are not confirmed. */
 export const UNREADABLE_AUDIO_TEXT = "the result's measurement is missing or could not be read";
@@ -589,10 +597,15 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
         : missing('loudness', 'Loudness', gateReason ?? fieldReason('loudness')),
   ];
 
-  // A null fingerprint's reason covers its parts; without one from the service, a block with no
-  // fingerprint had no models loaded.
+  // A null fingerprint's reason covers its parts.
+  // A block with no fingerprint and no reason for it (an analyzer before 2.3.0) had the models
+  // loaded only when its analyzer version names a model set; then the result does not say why.
   const modelReason =
-    gateReason ?? (fingerprint ? null : (fieldReason('fingerprint') ?? MODELS_NOT_LOADED_TEXT));
+    gateReason ??
+    (fingerprint
+      ? null
+      : (fieldReason('fingerprint') ??
+        (namesModelSet(audio.analyzerVersion) ? NO_REASON_TEXT : MODELS_NOT_LOADED_TEXT)));
   const model: Reading[] = MOOD_HEADS.map((head) => {
     const [field, label] = MOOD_LABELS[head];
     const score = fingerprint?.moods?.[head] ?? null;
@@ -835,7 +848,14 @@ export function audioNoticeOf(track: TrackData): AudioNotice | null {
     notMeasuredReadings.some((r) => r.reason !== null) &&
     (Object.keys(state.audio.withheld.fields).length > 0 ||
       Object.keys(state.audio.withheld.moods).length > 0);
-  const notMeasured = lineOf('Not measured', notMeasuredReadings, perField);
+  // In that mode a missing value the block gives no reason for says so rather than nothing.
+  const notMeasured = lineOf(
+    'Not measured',
+    perField
+      ? notMeasuredReadings.map((r) => (r.reason ? r : { ...r, reason: NO_REASON_TEXT }))
+      : notMeasuredReadings,
+    perField,
+  );
   const notShown = lineOf('Not shown', notShownReadings, true);
   const estimates = missingModelEstimates(track);
   const estimatesLine =

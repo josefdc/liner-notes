@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CirclePause, Disc3 } from 'lucide-react';
 import { fetchReplays, type ReplayTrack } from '../hooks/agent/apiClient';
 import { recordedDate } from '../utils/recording';
@@ -34,8 +34,10 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
 
   // The search form is mounted again after the analysis view, so the focus the user had on it
   // is lost: the banner takes it, so keyboard and screen-reader users land on the explanation
-  // and the recorded tracks after it.
-  useEffect(() => {
+  // and the recorded tracks after it. In the commit that mounts it (a layout effect): the
+  // banner replaces the loading line that held the focus, and an effect run after the paint
+  // would leave the focus on the page for a frame or more.
+  useLayoutEffect(() => {
     headingRef.current?.focus();
   }, []);
 

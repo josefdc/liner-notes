@@ -30,12 +30,19 @@
  * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
- * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), markup
- * in a source error's message (a page a source answered with, also entity-escaped), a social
- * platform page, a web evidence title or excerpt with a private @handle, profile boilerplate or
- * a comment thread (webTextIssue), or that fails the record's schema or says less than a replay must (`runIssues`). The result's other
- * producer checks (`analysisIssues`) are reported as warnings: a run stored by older code may not
- * pass them all, and the record replays what was sent.
+ * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), a link
+ * with a signature or token parameter (on any site), a source error's message or a status line
+ * (whole; the markup rule aside for the lines that name the track in Spotify's words) the run
+ * routes would refuse as an error message (reasonIssue: markup, also entity-escaped, a stack
+ * trace, a signature or token parameter, or a link), a social platform page, a web evidence
+ * title or excerpt with a private @handle, profile boilerplate or a comment thread
+ * (webTextIssue), web evidence the run routes refuse (heldTextIssue, which also reads a page
+ * written without its scheme), an `error` or `interrupt` event, a commit that is not a commit
+ * hash, or that fails the record's schema or says less than a replay must (`runIssues`). The result's other producer checks
+ * (`analysisIssues`) are reported as warnings: a run stored by older code may not pass them all,
+ * and the record replays what was sent. The loader (records.ts) runs the same checks
+ * (`recordIssues`) again on every file it reads, as far as a file can tell, so it never leaves
+ * out a file the recorder wrote.
  */
 
 import {
@@ -45,11 +52,13 @@ import {
   runIssues,
   TrackAnalysis,
 } from "@liner-notes/contract";
-import { isMediaUrl, MARKUP } from "../sources/http.js";
+import { foundLine, selectedLine } from "../agent/statusText.js";
+import { heldTextIssue } from "../agent/storedResults.js";
+import { isMediaUrl, reasonIssue } from "../sources/http.js";
 import { isSocialPage, webTextIssue } from "../sources/search.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
 import { ARCHIVE_FRONT, archiveCover } from "./cover.js";
-import { normalizeQuery } from "./records.js";
+import { normalizeQuery } from "./query.js";
 
 export { archiveCover, archiveCoverOf } from "./cover.js";
 
@@ -149,8 +158,11 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
   ["an e-mail address", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
 ];
 
-/** A URL signed with an expiring token, on any host. */
-const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature)=/i;
+/**
+ * A URL signed with an expiring token, or carrying a token parameter, on any host (as an error
+ * message may not: reasonIssue).
+ */
+const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature|token)=/i;
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -317,20 +329,30 @@ export interface LeakCheck {
    * (`events[n].event.data.coverUrl`), and nowhere else.
    */
   allowedCover?: string;
+  /**
+   * The recorded track's title and artist, as its result gives them: the status lines that name
+   * it in Spotify's words (statusText.ts foundLine and selectedLine) are its own.
+   */
+  track?: { title: string; artist: string };
 }
 
-/** The paths of the result's cover in a record: its result's, and its complete events'. */
-function resultCoverPaths(record: unknown): Set<string> {
-  const paths = new Set(["analysis.coverUrl"]);
+/** The paths of `field` in a record's events of `type`. */
+function eventPaths(record: unknown, type: string, field: string): Set<string> {
+  const paths = new Set<string>();
   const events = (record as { events?: unknown } | null)?.events;
   if (Array.isArray(events)) {
     events.forEach((item, i) => {
-      if ((item as { event?: { type?: unknown } } | null)?.event?.type === "complete") {
-        paths.add(`events[${i}].event.data.coverUrl`);
+      if ((item as { event?: { type?: unknown } } | null)?.event?.type === type) {
+        paths.add(`events[${i}].event.${field}`);
       }
     });
   }
   return paths;
+}
+
+/** The paths of the result's cover in a record: its result's, and its complete events'. */
+function resultCoverPaths(record: unknown): Set<string> {
+  return new Set(["analysis.coverUrl", ...eventPaths(record, "complete", "data.coverUrl")]);
 }
 
 /**
@@ -347,6 +369,7 @@ export function leaks(
     ownRunIds = [],
     otherRunIds = [],
     allowedCover = "",
+    track,
   }: LeakCheck,
 ): string[] {
   const found: string[] = [];
@@ -359,6 +382,8 @@ export function leaks(
     allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
   const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
   const coverPaths = resultCoverPaths(record);
+  const statusLines = eventPaths(record, "status", "message");
+  const ownLines = new Set(track ? [foundLine(track), selectedLine(track)] : []);
   const webTexts = webEvidenceTexts(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
@@ -380,9 +405,25 @@ export function leaks(
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
     }
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
-    // A source error says what failed in words; markup is an answer's page that slipped in.
-    if (SOURCE_ERROR_MESSAGE.test(path) && MARKUP.test(text)) {
-      found.push(`${path}: markup in a source error`);
+    // A source error says what failed in words, as the run routes read it (reasonIssue): markup
+    // is an answer's page that slipped in, and a stack trace, a token parameter or a link is not
+    // what an error message keeps. A status line is held to the same, whole: the run writes its
+    // lines from fixed words, error codes (agent/statusText.ts), numbers, dates and the audio
+    // service's analyzer version. Two lines name the track in Spotify's words, which may hold
+    // "<", ">" or "&" ("<3", "->"): the scout's "Found the track on Spotify: <title> by
+    // <artist>" (foundLine) and the clarification's "Selected: <title> by <artist>"
+    // (selectedLine; the recorder leaves the clarification's lines out, but a file may hold
+    // one). A line that is exactly one of these for the recorded track is not held to
+    // the markup rule (its "<", ">" and "&" are not read); its other rules, and the scans above
+    // and below, still apply.
+    const reason = SOURCE_ERROR_MESSAGE.test(path)
+      ? reasonIssue(text)
+      : statusLines.has(path)
+        ? reasonIssue(ownLines.has(text) ? text.replace(/[<>&]/g, " ") : text)
+        : null;
+    if (reason) {
+      const where = statusLines.has(path) ? "a status line" : "a source error";
+      found.push(`${path}: ${reason} in ${where}`);
     }
     // A web page's stored text never holds a private handle, boilerplate or a comment thread.
     const webIssue = webTexts.has(path) ? webTextIssue(text) : null;
@@ -405,6 +446,55 @@ export function leaks(
     }
   }
   return [...new Set(found)];
+}
+
+/** A commit hash: 7 to 40 hex digits, "-dirty" when the tree had changes. */
+export const COMMIT_PATTERN = /^[0-9a-f]{7,40}(-dirty)?$/;
+
+/** Events a record never holds: a recorded run completed, and a pause is joined away. */
+const UNRECORDED_EVENTS = new Set(["error", "interrupt"]);
+
+/**
+ * Everything a record must not hold, by path, each place once with the first reason found for
+ * it (never the text): an event the recorder never writes (an `error` or an `interrupt`), a
+ * commit that is not a commit hash, what `leaks` finds, and what the run routes refuse in a
+ * stored result (heldTextIssue: a web page the web tier leaves out, or a source error's message
+ * with markup, a stack trace, a token parameter or a link) in the record's result, in each
+ * evidence event's item, and in the result its complete events store. A replay sends the
+ * record's result in place of the stored one (player.ts), which is checked all the same, should
+ * the player ever send it. The recorder refuses a record with any of these, and the loader
+ * (records.ts) leaves out a file with any, so a file the recorder writes is never left out.
+ */
+export function recordIssues(record: ReplayRecord, check: LeakCheck): string[] {
+  const found = new Map<string, string>();
+  const add = (path: string, why: string) => {
+    const near = (a: string, b: string) =>
+      b === a || b.startsWith(`${a}.`) || b.startsWith(`${a}[`);
+    const listed = [...found.keys()].some((place) => near(place, path) || near(path, place));
+    if (!listed) found.set(path, why);
+  };
+  const addIssue = (prefix: string, issue: string | null) => {
+    if (!issue) return;
+    const at = issue.indexOf(": ");
+    add(`${prefix}${issue.slice(0, at)}`, issue.slice(at + 2));
+  };
+  for (const [i, { event }] of record.events.entries()) {
+    if (UNRECORDED_EVENTS.has(event.type)) {
+      add(`events[${i}].event`, `an ${event.type} event, which a recording never holds`);
+    }
+  }
+  if (!COMMIT_PATTERN.test(record.commit)) add("commit", "not a commit hash");
+  for (const leak of leaks(record, check)) addIssue("", leak);
+  addIssue("analysis.", heldTextIssue(record.analysis));
+  for (const [i, { event }] of record.events.entries()) {
+    if (event.type === "evidence") {
+      // The item is checked as the one item of a list: "evidence[0]: …".
+      const issue = heldTextIssue({ evidence: [event.evidence] });
+      addIssue(`events[${i}].event.`, issue?.replace(/^evidence\[0\]/, "evidence") ?? null);
+    }
+    if (event.type === "complete") addIssue(`events[${i}].event.data.`, heldTextIssue(event.data));
+  }
+  return [...found].map(([path, why]) => `${path}: ${why}`);
 }
 
 // =============================================================================
@@ -611,11 +701,12 @@ export function buildRecord(
     secrets,
     typedQuery: run.query,
     publicTexts: publicTextsOf(analysis),
+    track: analysis,
     ownRunIds: [run.runId, run.threadId],
     otherRunIds,
     allowedCover: cover,
   };
-  for (const leak of leaks(record, check)) refuse(leak);
+  for (const issue of recordIssues(record, check)) refuse(issue);
   stop();
   const warnings = analysisIssues(record.analysis).filter(
     (issue) => !runInfoIssues.includes(issue),

@@ -62,6 +62,8 @@ const held = [
   { type: "status", node: "engineer", message: "Analyzing audio", code: "AUDIO-INIT" },
   { $wait: "never" },
 ];
+// A resume the server holds before it says any step has started.
+const heldBeforeAnyStep = [{ type: "resuming", threadId: "thread-hitl" }, { $wait: "never" }];
 
 const resumes = (log: string[]) => log.filter((entry) => entry.startsWith(`stream ${RESUME}`));
 const analyses = (log: string[]) => log.filter((entry) => entry.startsWith(`stream ${ANALYZE}?`));
@@ -193,9 +195,11 @@ test("the picker takes the focus when it appears, and the progress status takes 
   page,
 }) => {
   const problems = collectProblems(page);
+  // The resume is held before the server names a step, so the status line's words do not
+  // depend on how soon the next event arrives.
   await useMockApi(page, {
     suggestions: [],
-    streams: { [ANALYZE]: pickerStream(three), [RESUME]: held },
+    streams: { [ANALYZE]: pickerStream(three), [RESUME]: heldBeforeAnyStep },
   });
   await openPicker(page);
   await expect(option(page, three[0])).toBeFocused();
@@ -207,6 +211,40 @@ test("the picker takes the focus when it appears, and the progress status takes 
   await expect(progressStatus(page)).toBeFocused();
   await expect(progressStatus(page)).toHaveText("Reading the track you selected...");
   expect(problems).toEqual([]);
+});
+
+test("while the server holds the resume, the status never claims a step it has not named", async ({
+  page,
+}) => {
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: pickerStream(three),
+      [RESUME]: [
+        { type: "resuming", threadId: "thread-hitl" },
+        { $wait: "measure" },
+        { type: "status", node: "engineer", message: "Analyzing audio", code: "AUDIO-INIT" },
+        { $wait: "never" },
+      ],
+    },
+  });
+  await openPicker(page);
+  await option(page, three[1]).click();
+  await expect(progressStatus(page)).toHaveText("Reading the track you selected...");
+
+  // Ten seconds of a held resume: the line stays on the pick, sampled every 250 ms.
+  const seen = new Set<string>();
+  for (let elapsed = 0; elapsed < 10_000; elapsed += 250) {
+    seen.add((await progressStatus(page).textContent()) ?? "");
+    await page.waitForTimeout(250);
+  }
+  expect([...seen]).toEqual(["Reading the track you selected..."]);
+
+  // The measurement is claimed once the server says it has started, not before.
+  await releaseStream(page, "measure");
+  await expect(progressStatus(page)).toHaveText(
+    "Measuring tempo, key and energy from the preview clip...",
+  );
 });
 
 test("after Try again the progress status takes the focus, not the page", async ({ page }) => {
@@ -460,12 +498,36 @@ test("Space on a row neither scrolls the page nor picks", async ({ page }) => {
   await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: pickerStream(five) } });
   await openPicker(page);
   await expect.poll(() => clippedRows(page)).toEqual([]);
-  const scrollTop = () =>
-    picker(page).evaluate((list) => list.closest(".overflow-y-auto")?.scrollTop ?? -1);
-  const before = await scrollTop();
+  // Read once the box has stopped moving: the picker scrolls itself into view as it opens, and
+  // on a slow machine that scroll (or the layout settling around it) can still be under way
+  // when the rows are already whole.
+  const settledScrollTop = () =>
+    picker(page).evaluate(
+      (list) =>
+        new Promise<number>((resolve) => {
+          const box = list.closest(".overflow-y-auto");
+          if (!box) {
+            resolve(-1);
+            return;
+          }
+          let last = box.scrollTop;
+          let still = 0;
+          const tick = () => {
+            if (box.scrollTop === last) still++;
+            else {
+              last = box.scrollTop;
+              still = 0;
+            }
+            if (still >= 10) resolve(last);
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+  const before = await settledScrollTop();
   await page.keyboard.press("Space");
   await page.waitForTimeout(500);
-  expect(await scrollTop()).toBe(before);
+  expect(await settledScrollTop()).toBe(before);
   await expect(option(page, five[0])).toBeFocused();
   expect(resumes(await apiRequests(page))).toEqual([]);
 });

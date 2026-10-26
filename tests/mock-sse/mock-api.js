@@ -13,6 +13,12 @@
 // A suggestion request whose signal aborts rejects with an AbortError, as fetch does, and is
 // recorded in `window.__mockApi.aborted` as "<path>?query=<query>".
 //   replays:     recorded tracks returned by /api/replays (default none)
+//   runs:        { "<spotifyId>": RunResponse } — the stored runs GET /api/runs/by-track/<id>
+//                answers with; a well-formed id without one answers 404 not_found, and an id
+//                that is not 22 letters or digits 400 invalid_input, as the API does
+//   runWaits:    { "<spotifyId>": "<name>" } holds that answer until the test calls
+//                `window.__mockApi.release("<name>")`; a `fetchStatus` set for its path while it
+//                is held applies when it is released
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
 //                stream ends like a server response does (onerror unless the app closed it).
@@ -144,6 +150,39 @@
       return abortable(answer(), signal, () =>
         config.aborted.push(`${pathOf(url)}?query=${query}`),
       );
+    }
+    const byTrack = /^\/api\/runs\/by-track\/([^/]*)$/.exec(pathOf(url));
+    if (byTrack) {
+      const id = decodeURIComponent(byTrack[1]);
+      const wait = config.runWaits?.[id];
+      if (wait) await new Promise((resolve) => whenReleased(wait, resolve));
+      // A failure set while the answer was held (the test changes `fetchStatus` meanwhile).
+      const late = config.fetchStatus?.[pathOf(url)];
+      if (late) {
+        return new Response(JSON.stringify({ success: false, error: "mocked failure" }), {
+          status: late,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const json = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (!/^[0-9A-Za-z]{22}$/.test(id)) {
+        return json(
+          {
+            success: false,
+            code: "invalid_input",
+            error: "The request is not valid.",
+            detail: "The Spotify track id is 22 letters or digits",
+          },
+          400,
+        );
+      }
+      const run = config.runs?.[id];
+      if (run) return json(run);
+      return json({ success: false, code: "not_found", error: "Not found." }, 404);
     }
     if (pathOf(url) === "/api/replays") {
       return new Response(JSON.stringify({ success: true, replays: config.replays ?? [] }), {

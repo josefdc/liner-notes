@@ -10,9 +10,10 @@ as MP3 (the preview format), so the tests also cover decoding through libsndfile
 - a click track and the triad as 44.1 kHz stereo MP3, like a real preview, with the material
   split across the channels so that only a correct downmix (and resampling) gives the answer.
 
-These tests pin the v1 fields, which are derived from the v2 block (main.v1_fields): every
-result here is also checked against the contract and for v1/v2 agreement (tests/checks.py).
-The v2 block has its own tests in test_v2.py.
+These tests pin what the v2 block measures on them (tempo rounded to a whole BPM, key and mode,
+loudness, duration, key moments) and why it withholds the rest; every result here is also
+checked against the contract and its reasons (tests/checks.py). The v2 block has its own,
+finer tests in test_v2.py.
 """
 
 import numpy as np
@@ -96,9 +97,26 @@ def split_triad_stereo() -> np.ndarray:
     return np.stack([left, right], axis=1)
 
 
+def measured(v2: dict) -> dict:
+    """What the tests below pin from a v2 block: null wherever the block measured nothing."""
+    tempo, key, loudness = v2["tempo"], v2["key"], v2["loudness"]
+    return {
+        "bpm": None if tempo is None else round(tempo["bpm"]),
+        "key": None if key is None else key["tonic"],
+        "mode": None if key is None else key["mode"],
+        "rms": None if loudness is None else loudness["rmsMean"],
+        "duration": v2["window"]["durationSeconds"],
+        "keyMoments": v2["keyMoments"],
+        "withheld": {field: reason["code"] for field, reason in v2["withheld"].items()},
+    }
+
+
 @pytest.fixture(scope="module")
 def analyse(tmp_path_factory):
-    """Writes a signal in the given format and rate and returns analyze_audio_file's result."""
+    """
+    Writes a signal in the given format and rate, analyses it with analyze_audio_file, checks
+    the result and returns what it measured (measured()).
+    """
     directory = tmp_path_factory.mktemp("fixtures")
     count = 0
 
@@ -109,9 +127,7 @@ def analyse(tmp_path_factory):
         sf.write(path, y, sr, format=fmt)
         info = sf.info(path)
         assert (info.samplerate, info.channels) == (sr, 1 if y.ndim == 1 else y.shape[1])
-        result = main.analyze_audio_file(str(path))
-        check_result(result)
-        return result
+        return measured(check_result(main.analyze_audio_file(str(path))))
 
     return run
 
@@ -121,8 +137,8 @@ def assert_in_range(result: dict, duration: float) -> None:
     bpm = result["bpm"]
     assert bpm is None or (isinstance(bpm, int) and 20 <= bpm <= 320)
     assert result["key"] is None or result["key"] in PITCH_CLASSES
-    assert result["mode"] in ({None} if result["key"] is None else {"Major", "Minor"})
-    assert result["energy"] is None or 0.0 <= result["energy"] <= 1.0
+    assert result["mode"] in ({None} if result["key"] is None else {"major", "minor"})
+    assert result["rms"] is None or 0.0 <= result["rms"] <= 1.0
     assert result["duration"] == pytest.approx(duration, abs=0.1)
     for moment in result["keyMoments"]:
         assert 0.0 <= moment["time"] <= result["duration"]
@@ -135,7 +151,7 @@ def assert_in_range(result: dict, duration: float) -> None:
 @pytest.mark.parametrize("fmt", FORMATS)
 @pytest.mark.parametrize("bpm", [85, 120, 140, 174])
 def test_click_track_tempo(analyse, bpm, fmt):
-    """v1 bpm is the v2 tempo rounded, no longer the beat tracker's grid (120 read 117)."""
+    """The tempo is refined from the beats, not the beat tracker's grid (120 read 117)."""
     result = analyse(click_track(bpm), fmt)
     assert result["bpm"] == bpm, f"{bpm} BPM click track measured as {result['bpm']}"
     assert result["duration"] == pytest.approx(30.0, abs=0.1)
@@ -165,19 +181,19 @@ def test_click_track_onsets_fall_on_the_clicks(analyse, fmt):
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_a_major_triad_is_a_major(analyse, fmt):
     result = analyse(a_major_triad(), fmt)
-    assert (result["key"], result["mode"]) == ("A", "Major")
+    assert (result["key"], result["mode"]) == ("A", "major")
 
 
 def test_a_major_triad_from_a_44k_stereo_mp3(analyse):
     result = analyse(split_triad_stereo(), "MP3", sr=PREVIEW_SR)
-    assert (result["key"], result["mode"]) == ("A", "Major")
+    assert (result["key"], result["mode"]) == ("A", "major")
     assert result["duration"] == pytest.approx(10.0, abs=0.1)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
 @pytest.mark.parametrize(
     ("chords", "expected"),
-    [(C_MAJOR_PROGRESSION, ("C", "Major")), (A_MINOR_PROGRESSION, ("A", "Minor"))],
+    [(C_MAJOR_PROGRESSION, ("C", "major")), (A_MINOR_PROGRESSION, ("A", "minor"))],
     ids=["C-F-G-C", "Am-Dm-E-Am"],
 )
 def test_progression_key_and_mode(analyse, chords, expected, fmt):
@@ -193,19 +209,21 @@ def test_silence_has_no_tempo_and_no_key(analyse, fmt):
     result = analyse(np.zeros(10 * FIXTURE_SR, dtype=np.float32), fmt)
     assert result["bpm"] is None
     assert (result["key"], result["mode"]) == (None, None)
-    assert result["energy"] is None  # gated: v2 measures no loudness
+    assert result["rms"] is None  # gated: no loudness either
+    assert result["withheld"]["tempo"] == result["withheld"]["key"] == "gate_silence"
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_one_second_triad_is_too_short_for_a_key(analyse, fmt):
-    """A 1 s cut of a steady chord measures nothing; 10 s of it gets its key and energy."""
+    """A 1 s cut of a steady chord measures nothing; 10 s of it gets its key and loudness."""
     short = analyse(a_major_triad(seconds=1.0, gain=0.4), fmt)
     long = analyse(a_major_triad(seconds=10.0, gain=0.4), fmt)
-    assert 0.0 < long["energy"] < 1.0
-    assert (long["key"], long["mode"]) == ("A", "Major")
+    assert 0.0 < long["rms"] < 1.0
+    assert (long["key"], long["mode"]) == ("A", "major")
     assert short["duration"] == pytest.approx(1.0, abs=0.05)
-    assert (short["bpm"], short["key"], short["mode"], short["energy"]) == (None,) * 4
+    assert (short["bpm"], short["key"], short["mode"], short["rms"]) == (None,) * 4
     assert short["keyMoments"] == []
+    assert set(short["withheld"].values()) == {"gate_too_short"}
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
@@ -216,7 +234,7 @@ def test_one_second_click_clip_is_too_short_to_measure(analyse, fmt):
     long = analyse(click_track(120), fmt)
     assert_in_range(short, 1.0)
     assert long["bpm"] == 120
-    assert (short["bpm"], short["key"], short["energy"]) == (None, None, None)
+    assert (short["bpm"], short["key"], short["rms"]) == (None, None, None)
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
@@ -233,6 +251,7 @@ def test_noise_is_analysed_with_values_in_range(analyse, fmt):
 def test_noise_has_no_key(analyse, fmt):
     result = analyse(white_noise(), fmt)
     assert (result["key"], result["mode"]) == (None, None)
+    assert result["withheld"]["key"] == "gate_noise"
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
@@ -240,7 +259,7 @@ def test_noise_has_no_tempo(analyse, fmt):
     assert analyse(white_noise(), fmt)["bpm"] is None
 
 
-# --- energy ------------------------------------------------------------------------------
+# --- loudness ----------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -248,49 +267,41 @@ def test_noise_has_no_tempo(analyse, fmt):
     [lambda gain: gain * click_track(120), lambda gain: a_major_triad(gain=gain)],
     ids=["click-track", "triad"],
 )
-def test_louder_signal_does_not_measure_lower_energy(analyse, make):
+def test_louder_signal_does_not_measure_lower_loudness(analyse, make):
     gains = [0.02, 0.1, 0.25, 0.5, 1.0]
-    energies = [analyse(make(gain), "WAV")["energy"] for gain in gains]
-    assert all(0.0 <= e <= 1.0 for e in energies), energies
-    assert energies == sorted(energies), energies
+    levels = [analyse(make(gain), "WAV")["rms"] for gain in gains]
+    assert all(0.0 < level <= 1.0 for level in levels), levels
+    assert levels == sorted(levels), levels
 
 
-def test_energy_keeps_the_scale_it_had(analyse):
+def test_audible_click_track_has_a_loudness(analyse):
+    """Mean frame RMS 0.0112 (-39 dBFS): measured as it is, whatever scale a reader puts it on."""
+    assert analyse(click_track(120), "WAV")["rms"] == pytest.approx(0.0112, abs=0.0002)
+
+
+def test_quiet_music_has_a_loudness_above_silence(analyse):
     """
-    Pins the definition (README, "How it works"): energy = (mean frame RMS - 0.02) / 0.25,
-    clipped to 0..1, as before v2 (frames of 2048 samples, DC removed). A chord at RMS 0.05 for
-    5 s then 0.15 for 5 s has a mean frame RMS of 0.1, so energy 0.32 (the scale the API's
-    "above 0.7 is high" and the web's percentage were set on).
+    The drum pattern peaking at -48 dBFS passes the gate, and its loudness is measured: mean
+    frame RMS 0.000498 (-66.1 dBFS), the level the first service version's energy floor read as
+    0.011.
     """
-    rms = float(np.sqrt(np.mean(a_major_triad() ** 2)))
-    y = np.concatenate(
-        [a_major_triad(seconds=5.0, gain=0.05 / rms), a_major_triad(seconds=5.0, gain=0.15 / rms)]
-    )
-    assert analyse(y, "WAV")["energy"] == pytest.approx(0.32, abs=0.003)
-
-
-def test_audible_click_track_has_energy(analyse):
-    """Mean frame RMS 0.0112 (-39 dBFS): 0 on the old scale, so the floor for gated-in input."""
-    assert analyse(click_track(120), "WAV")["energy"] == pytest.approx(0.019, abs=0.001)
-
-
-def test_quiet_music_has_energy_above_silence(analyse):
-    """The drum pattern peaking at -48 dBFS passes the gate and reads above 0 (it read 0.0)."""
     from tests.signals import drum_pattern
 
     result = analyse(drum_pattern(97) * 10 ** (-48 / 20) / 0.8, "WAV")
     assert result["bpm"] == 97
-    assert result["energy"] == pytest.approx(0.011, abs=0.001)
+    assert result["rms"] == pytest.approx(0.000498, rel=0.02)
 
 
-def test_dc_offset_has_no_energy(analyse):
+def test_dc_offset_has_no_loudness(analyse):
     result = analyse(np.full(10 * FIXTURE_SR, 0.5, dtype=np.float32), "WAV")
-    assert result["energy"] is None  # gated as silence
+    assert result["rms"] is None  # gated as silence
     assert (result["bpm"], result["key"], result["mode"]) == (None, None, None)
+    assert result["withheld"]["loudness"] == "gate_silence"
 
 
-def test_zero_length_file_has_no_energy(analyse):
+def test_zero_length_file_has_no_loudness(analyse):
     result = analyse(np.zeros(0, dtype=np.float32), "WAV")
-    assert result["energy"] is None
+    assert result["rms"] is None
     assert result["duration"] == 0.0
     assert (result["bpm"], result["key"], result["keyMoments"]) == (None, None, [])
+    assert result["withheld"]["loudness"] == "gate_too_short"

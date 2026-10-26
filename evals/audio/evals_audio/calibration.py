@@ -522,7 +522,7 @@ def _evidence_withheld(ev: dict, rules: Rules) -> str | None:
         if voice["withoutNotes"]:
             return est.SPEECH_LIKE
         if voice["onePitch"] and voice["explainedHeld"] >= est.ONE_PITCH_MIN_EXPLAINED:
-            return "one held pitch over the beat (a drone or one bass note)"
+            return est.ONE_HELD_PITCH_OVER_BEAT
         return None
     if voice is None:
         return tonality_rule(None, ev["movement"] < est.STILL_MAX_MOVEMENT) or "no pitch track"

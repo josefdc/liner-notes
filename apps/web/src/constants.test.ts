@@ -1,7 +1,10 @@
+import { AudioWithheldCode } from '@liner-notes/contract';
 import { describe, expect, it } from 'vitest';
 import { audioBlock, measuredTrack } from './components/measured/testing';
 import {
+  AUDIO_GATE_TEXT,
   AUDIO_UNAVAILABLE_SHORT,
+  AUDIO_WITHHELD_TEXT,
   audioNoticeOf,
   audioReadings,
   audioValues,
@@ -11,6 +14,7 @@ import {
   hasMeasuredAudioSource,
   MODELS_NOT_LOADED_TEXT,
   measuredKeyMoments,
+  NO_REASON_TEXT,
   modelUnavailableText,
   noKeyMomentsReason,
   normalizeTrack,
@@ -205,7 +209,7 @@ describe('hasMeasuredAudioSource', () => {
     expect(audioValues(gated).bpm).toBeNull();
     expect(byField(audioReadings(gated).signal).bpm).toMatchObject({
       state: 'missing',
-      reason: 'the preview is noise, not music',
+      reason: 'no beat and no musical pitch in the preview',
     });
   });
 });
@@ -255,14 +259,174 @@ describe('audioReadings', () => {
     expect(values.bpm).toMatchObject({ state: 'shown', confidence: 'no confidence given' });
   });
 
+  it('says the models were not loaded only when the analyzer version names no model set', () => {
+    // An analyzer before 2.3.0 with its models loaded left the fingerprint null for input it
+    // judged not music: the block does not say why, and it is not that the models were missing.
+    const loaded = audioBlock({
+      analyzerVersion: '2.2.0+essentia.models-1a2b3c4d',
+      fingerprint: null,
+    });
+    const readings = audioReadings(measuredTrack(loaded));
+    expect(byField(readings.model).valence).toMatchObject({
+      state: 'missing',
+      reason: NO_REASON_TEXT,
+    });
+    expect(readings.fingerprint?.styles).toMatchObject({ reason: NO_REASON_TEXT });
+    expect(fingerprintSubtitle(measuredTrack(loaded), false)).not.toContain('not loaded');
+    // The service's own reason wins when the block has one.
+    const withReason = audioBlock({
+      analyzerVersion: '2.3.0+essentia.models-1a2b3c4d',
+      fingerprint: null,
+      withheld: { fingerprint: { code: 'model_failed', reason: 'no model part worked' } },
+    });
+    expect(byField(audioReadings(measuredTrack(withReason)).model).valence).toMatchObject({
+      reason: AUDIO_WITHHELD_TEXT.model_failed,
+    });
+  });
+
   it('says the audio models are not loaded when the measurement has no fingerprint', () => {
-    const readings = audioReadings(measuredTrack(audioBlock({ fingerprint: null })));
+    const readings = audioReadings(
+      measuredTrack(audioBlock({ analyzerVersion: '2.1.0+essentia', fingerprint: null })),
+    );
     expect(readings.model.every((r) => r.state === 'missing')).toBe(true);
     expect(byField(readings.model).valence).toMatchObject({ reason: MODELS_NOT_LOADED_TEXT });
     expect(readings.fingerprint).toEqual({
       styles: { label: 'Styles', state: 'missing', reason: MODELS_NOT_LOADED_TEXT },
       tags: { label: 'Tags', state: 'missing', reason: MODELS_NOT_LOADED_TEXT },
     });
+  });
+
+  it('says which check withheld the key, in plain words, and nothing for what was measured', () => {
+    const block = audioBlock({
+      key: null,
+      withheld: {
+        key: {
+          code: 'one_pitched_source',
+          reason: 'the partials hold still, rise and fall together and spell no chord',
+        },
+      },
+    });
+    const track = measuredTrack(block, { key: null, audioUnavailableReason: 'not_detected' });
+    const values = byField(audioReadings(track).signal);
+    expect(values.key).toEqual({
+      field: 'key',
+      label: 'Key',
+      state: 'missing',
+      status: 'not measured',
+      reason: AUDIO_WITHHELD_TEXT.one_pitched_source,
+    });
+    expect(values.bpm).toMatchObject({ state: 'shown', value: '123.1' });
+    expect(audioNoticeOf(track)).toEqual({
+      title: 'Audio partly measured',
+      lines: ['Not measured: key (its partials held still and moved together, so no key).'],
+    });
+  });
+
+  it('gives a tempo its own reason and the key its own', () => {
+    const block = audioBlock({
+      tempo: null,
+      key: null,
+      withheld: {
+        tempo: { code: 'unsteady_tempo', reason: 'the tempo does not hold over the window' },
+        key: { code: 'low_key_strength', reason: 'the key strength (0.31 of 1) is under 0.40' },
+      },
+    });
+    const values = byField(audioReadings(measuredTrack(block)).signal);
+    expect(values.bpm).toMatchObject({ reason: 'the tempo did not hold across the preview' });
+    expect(values.key).toMatchObject({ reason: 'the key estimate was too weak' });
+  });
+
+  it('drops a reason whose code this page cannot read, and says only what the result says', () => {
+    const block = audioBlock({ key: null });
+    const track = measuredTrack(block);
+    // A reader given the block directly (not through the contract) with a code it cannot read
+    // drops that reason: the result-level reason is shown instead, when it is about detection.
+    const odd = measuredTrack(
+      audioBlock({ key: null, withheld: { key: { code: 'newer_rule', reason: 'a newer rule' } } }),
+      { audioUnavailableReason: 'not_detected' },
+    );
+    expect(byField(audioReadings(track).signal).key).toMatchObject({ reason: null });
+    expect(byField(audioReadings(odd).signal).key).toMatchObject({
+      reason: AUDIO_UNAVAILABLE_SHORT.not_detected,
+    });
+  });
+
+  it('gives each missing mood head, style or tag list the reason the service gave', () => {
+    const fingerprint = {
+      ...audioBlock().fingerprint,
+      tags: null,
+      moods: { ...audioBlock().fingerprint.moods, valence: null, arousal: null },
+    };
+    const notMusic = { code: 'non_music_style', reason: 'the strongest style is Spoken Word' };
+    const block = audioBlock({
+      fingerprint,
+      withheld: {
+        tags: { code: 'model_failed', reason: 'the tag model failed or gave unusable output' },
+        moods: { valence: notMusic, arousal: notMusic },
+      },
+    });
+    const readings = audioReadings(measuredTrack(block));
+    expect(byField(readings.model).valence).toMatchObject({
+      state: 'missing',
+      reason: AUDIO_WITHHELD_TEXT.non_music_style,
+    });
+    expect(byField(readings.model).danceability).toMatchObject({ state: 'shown' });
+    expect(readings.fingerprint?.tags).toEqual({
+      label: 'Tags',
+      state: 'missing',
+      reason: 'the audio model gave no usable output',
+    });
+  });
+
+  it('says why there is no fingerprint when the service says, else that no models are loaded', () => {
+    const notMusic = audioBlock({
+      fingerprint: null,
+      withheld: { fingerprint: { code: 'not_music', reason: 'not music: one harmonic series' } },
+    });
+    const readings = audioReadings(measuredTrack(notMusic));
+    expect(byField(readings.model).valence).toMatchObject({
+      reason: AUDIO_WITHHELD_TEXT.not_music,
+    });
+    expect(readings.fingerprint?.styles).toMatchObject({
+      reason: AUDIO_WITHHELD_TEXT.not_music,
+    });
+  });
+
+  it('has words for every code the service sends', () => {
+    for (const code of AudioWithheldCode.options) {
+      const text = AUDIO_WITHHELD_TEXT[code];
+      expect(text, code).toMatch(/\S/);
+      expect(text.length, code).toBeLessThanOrEqual(60);
+      // No measured-looking number: a reason never shows the value it withheld.
+      expect(text, code).not.toMatch(/\d+\.\d+/);
+      // The notice puts each reason in parentheses.
+      expect(text, code).not.toMatch(/[()]/);
+    }
+  });
+
+  it('names the check that fired, never an instrument or a kind of source', () => {
+    // The checks test the signal, not what made it: the same rule withholds a key on a drum
+    // loop and on a dense mix with a labelled key, so no text may say which it was.
+    const sources =
+      /\b(drums?|percussion|noise|speech|spoken|talk\w*|voices?|vocals?|sing\w*|cowbells?|bells?|hum|bass|guitars?|piano|synth\w*|instruments?|tones?|whine|drones?|sources?)\b/i;
+    const texts = [
+      ...AudioWithheldCode.options.map((code) => AUDIO_WITHHELD_TEXT[code]),
+      ...Object.values(AUDIO_GATE_TEXT),
+      MODELS_NOT_LOADED_TEXT,
+      NO_REASON_TEXT,
+    ];
+    for (const text of texts) expect(text).not.toMatch(sources);
+  });
+
+  it('names a missing value the block gives no reason for as such, in the notice', () => {
+    const block = audioBlock({
+      tempo: null,
+      key: null,
+      withheld: { tempo: { code: 'no_beat', reason: 'no repeating onsets' } },
+    });
+    expect(audioNoticeOf(measuredTrack(block))?.lines).toEqual([
+      `Not measured: BPM (${AUDIO_WITHHELD_TEXT.no_beat}), key (${NO_REASON_TEXT}).`,
+    ]);
   });
 
   it('shows a saturated energy (1.0) as missing, with why, not as a measurement', () => {
@@ -439,7 +603,9 @@ describe('model scores', () => {
   });
 
   it('missing are "not available", not "not measured"', () => {
-    const { model, fingerprint } = audioReadings(measuredTrack(audioBlock({ fingerprint: null })));
+    const { model, fingerprint } = audioReadings(
+      measuredTrack(audioBlock({ analyzerVersion: '2.1.0+essentia', fingerprint: null })),
+    );
     expect(model.every((r) => r.state === 'missing' && r.status === 'not available')).toBe(true);
     expect(fingerprint?.styles).toMatchObject({ state: 'missing' });
   });
@@ -491,7 +657,9 @@ describe('audioNoticeOf', () => {
   });
 
   it('does not call a result with every signal value measured "partly measured"', () => {
-    const track = measuredTrack(audioBlock({ fingerprint: null }));
+    const track = measuredTrack(
+      audioBlock({ analyzerVersion: '2.1.0+essentia', fingerprint: null }),
+    );
     expect(audioNoticeOf(track)).toEqual({
       title: 'Audio-model estimates not available',
       lines: [
@@ -505,7 +673,7 @@ describe('audioNoticeOf', () => {
     const track = measuredTrack(audioBlock({ gate: { passed: false, reason: 'noise' } }));
     expect(audioNoticeOf(track)).toEqual({
       title: 'Audio not measured',
-      lines: ['Nothing was measured on the preview: the preview is noise, not music.'],
+      lines: ['Nothing was measured on the preview: no beat and no musical pitch in the preview.'],
     });
   });
 
@@ -529,9 +697,12 @@ describe('fingerprintSubtitle', () => {
     expect(fingerprintSubtitle(measuredTrack(), false)).toBe(
       'Style and tag scores from audio models run on the preview',
     );
-    expect(fingerprintSubtitle(measuredTrack(audioBlock({ fingerprint: null })), false)).toBe(
-      `Style and tag scores not available: ${MODELS_NOT_LOADED_TEXT}`,
-    );
+    expect(
+      fingerprintSubtitle(
+        measuredTrack(audioBlock({ analyzerVersion: '2.1.0+essentia', fingerprint: null })),
+        false,
+      ),
+    ).toBe(`Style and tag scores not available: ${MODELS_NOT_LOADED_TEXT}`);
     expect(
       fingerprintSubtitle(
         measuredTrack(audioBlock({ gate: { passed: false, reason: 'silence' } })),

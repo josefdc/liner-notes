@@ -20,6 +20,7 @@ import {
   ANALYZER_VERSION,
   audioV2,
   gatedV2,
+  keyWithheldV2,
   measurementOf,
   signalOnlyV2,
 } from "./testing/measuredAudio.js";
@@ -167,6 +168,18 @@ describe("finalizeResult", () => {
     });
     expect(result.run?.analyzerVersion).toBe("2.1.0+essentia");
     expect(checked(result).issues).toEqual([]);
+  });
+
+  it("carries why the key was withheld in the block only, with no flat field for it", () => {
+    const block = keyWithheldV2();
+    const result = finalizeResult(draftWithModelValues(), measurementOf(block));
+
+    expect(result.audio?.withheld).toEqual(block.withheld);
+    expect(result).toMatchObject({ key: null, audioUnavailableReason: "not_detected" });
+    expect(result).not.toHaveProperty("withheld");
+    expect(checked(result).issues).toEqual([]);
+    // The contract's reader keeps the reason too.
+    expect(TrackAnalysis.parse(result).audio?.withheld).toEqual(block.withheld);
   });
 
   it("never builds a block from a measurement that is not a v2 block", () => {

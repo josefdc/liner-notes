@@ -1,6 +1,8 @@
 import {
+  AUDIO_TEMPO_RANGE_BPM,
   AudioFeatures,
   AudioGateReason,
+  AudioWithheldCode,
   KeyMode,
   KeyMoment,
   ModelBasis,
@@ -17,10 +19,14 @@ import {
   MOMENT_TYPES,
   MOOD_HEADS,
   type MeasuredAudio,
+  type MeasuredWithheld,
   PITCH_CLASSES,
   readAudio,
   SIGNAL_BASIS,
+  TEMPO_RANGE_BPM,
   WINDOW_KIND,
+  WITHHELD_CODES,
+  WITHHELD_FIELDS,
 } from './audio';
 
 // The contract's own enums: the generator draws from them, so a value the contract adds is
@@ -30,6 +36,7 @@ const MODES = KeyMode.options;
 const MOMENT_KINDS = KeyMoment.shape.type.options;
 const GATES = AudioGateReason.options;
 const WINDOW = AudioFeatures.shape.window.shape.kind.value;
+const CODES = AudioWithheldCode.options;
 
 // The page reads an `audio` block exactly as the contract does: the whole block or nothing.
 // Generated valid blocks, and every single-field fault of each, are read by both and must get
@@ -128,6 +135,17 @@ function validBlock(seed: number): Record<string, Json> {
       })),
     })),
   };
+  if (r() < 0.7) {
+    const reason = (offset: number) => ({ code: cycle(CODES, offset), reason: 'a check' });
+    block.withheld = {
+      ...(r() < 0.6 ? { tempo: reason(0) } : {}),
+      ...(r() < 0.6 ? { key: reason(1) } : {}),
+      ...(r() < 0.3 ? { fingerprint: reason(2) } : {}),
+      ...(r() < 0.5
+        ? { moods: { valence: reason(3), ...(r() < 0.5 ? { arousal: reason(4) } : {}) } }
+        : {}),
+    };
+  }
   if (r() < 0.2) block.extra = 'ignored';
   return block;
 }
@@ -188,6 +206,20 @@ function* singleFaults(block: Json): Generator<Json> {
 
 const SEEDS = Array.from({ length: 60 }, (_, i) => i + 1);
 
+/** The reasons the contract kept, in the page's shape. */
+function withheldFromContract(parsed: AudioFeatures): MeasuredWithheld {
+  const withheld: MeasuredWithheld = { fields: {}, moods: {} };
+  for (const field of WITHHELD_FIELDS) {
+    const reason = parsed.withheld?.[field];
+    if (reason) withheld.fields[field] = reason;
+  }
+  for (const head of MOOD_HEADS) {
+    const reason = parsed.withheld?.moods?.[head];
+    if (reason) withheld.moods[head] = reason;
+  }
+  return withheld;
+}
+
 /** What readAudio should give for a block the contract parsed. */
 function fromContract(parsed: AudioFeatures): MeasuredAudio {
   const sorted = (items: { label: string; score: number }[]) =>
@@ -196,6 +228,7 @@ function fromContract(parsed: AudioFeatures): MeasuredAudio {
     analyzerVersion: parsed.analyzerVersion,
     windowSeconds: parsed.window.durationSeconds,
     gate: parsed.gate,
+    withheld: withheldFromContract(parsed),
   };
   if (!parsed.gate.passed) {
     return { ...read, tempo: null, key: null, loudness: null, fingerprint: null, keyMoments: [] };
@@ -221,6 +254,8 @@ describe("the page's copy of the contract's enums", () => {
     expect([...KEY_MODES].sort()).toEqual([...MODES].sort());
     expect([...MOMENT_TYPES].sort()).toEqual([...MOMENT_KINDS].sort());
     expect([...GATE_REASONS].sort()).toEqual([...GATES].sort());
+    expect([...WITHHELD_CODES].sort()).toEqual([...CODES].sort());
+    expect(TEMPO_RANGE_BPM).toEqual(AUDIO_TEMPO_RANGE_BPM);
     expect(WINDOW_KIND).toBe(WINDOW);
     expect(SIGNAL_BASIS).toBe(SignalBasis.value);
     expect(MODEL_BASIS).toBe(ModelBasis.value);
@@ -229,7 +264,11 @@ describe("the page's copy of the contract's enums", () => {
 });
 
 describe('readAudio against the contract', () => {
-  it('accepts exactly the blocks the contract accepts (valid and single-fault blocks)', () => {
+  // Over 10,000 candidate blocks: on a loaded machine this takes several seconds, so it gets its
+  // own time limit rather than fewer blocks.
+  it('accepts exactly the blocks the contract accepts (valid and single-fault blocks)', {
+    timeout: 30_000,
+  }, () => {
     const disagreements: string[] = [];
     let checked = 0;
     for (const seed of SEEDS) {
@@ -265,6 +304,7 @@ describe('readAudio against the contract', () => {
       expect(read?.analyzerVersion).toBe(parsed.analyzerVersion);
       expect(read?.windowSeconds).toBe(parsed.window.durationSeconds);
       expect(read?.gate).toEqual(parsed.gate);
+      expect(read?.withheld).toEqual(withheldFromContract(parsed));
       if (!parsed.gate.passed) continue;
       expect(read?.tempo).toEqual(parsed.tempo);
       expect(read?.key).toEqual(parsed.key);

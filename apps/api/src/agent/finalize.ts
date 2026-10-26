@@ -21,12 +21,12 @@
  * -34 dBFS it reads 0, the same as silence. There the copy is null rather than a saturated
  * number; the loudness stays in the block as measured. No other energy scale is made up.
  *
- * Why a value is missing. The contract has no per-field reason yet; the audio service slice adds
- * one (`withheld`, next to the block). Until then two reasons are known only here: a mood head
- * the service returned outside its own range is null in the block and named in the measurement's
- * `outOfRange` (kept in the run's state and in the audio cache, not in the result), and a null
- * `energy` beside a measured loudness means the scale saturates (ENERGY_RMS_OFFSET and
- * ENERGY_RMS_SPAN below). Both belong in that per-field reason when it exists.
+ * Why a value is missing. The block says why each value it leaves null was withheld
+ * (`audio.withheld`, from analyzer 2.3.0; the service's reasons, plus `out_of_range` for a mood
+ * head the API drops because it lies outside its own range, see readServiceMeasurement). It
+ * stays in the block: no flat field repeats it. A null `energy` beside a measured loudness
+ * means the copy's scale saturates (ENERGY_RMS_OFFSET and ENERGY_RMS_SPAN below); that copy is
+ * not part of the block, so readers say so themselves.
  */
 
 import {

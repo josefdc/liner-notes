@@ -11,6 +11,8 @@
  * payload that breaks this rule and show nothing measured for it; producers check it with
  * `audioFeaturesIssues()`, and the exported JSON Schema (`audioFeaturesJsonSchema()`) states
  * it with `if`/`then`.
+ * `withheld` says, per field, which check left a value null (a stable code and the reason in
+ * words); a reader that cannot read a reason drops that reason only.
  * Signal values (`basis: "signal"`) come from DSP; model values (`basis: "model"`) are
  * classifier or regression outputs, i.e. scores and not probabilities, and name the model.
  *
@@ -162,6 +164,111 @@ export const Fingerprint = z.object({
   moods: MoodHeads.nullable(),
 });
 
+/**
+ * Why the service withheld a value, as a stable code (readers show their own words for it; the
+ * service's `reason` says the same for logs and tools). A code a reader does not know drops that
+ * one reason, never the measurement.
+ * - the gate (every measured block): `gate_silence`, `gate_noise`, `gate_too_short`;
+ * - tempo (and the beat grid, see AudioWithheld.beats): `no_beat` (the onsets do not repeat
+ *   enough), `tempo_out_of_range` (the estimate is outside AUDIO_TEMPO_RANGE_BPM, the range the
+ *   service accepts), `too_few_beats` (too few beats tracked to fit a tempo, or too few beat
+ *   intervals to check that it holds), `low_confidence` (under the estimator's minimum; the
+ *   confidence does not rank half- or double-tempo errors, and no check here does),
+ *   `unsteady_tempo` (a part of the window disagrees with the tempo), `no_tempo_estimate` (an
+ *   estimator that gives no reasons gave no tempo);
+ * - key: `no_sustained_pitch` (too little energy in spectral lines), `speech_like` (one pitch
+ *   line without stable notes), `one_harmonic_series` (the lines form one harmonic series),
+ *   `one_held_pitch`, `no_pitch_track`, `few_pitch_classes`, `one_pitched_source` (the partials
+ *   hold still, rise and fall together and spell one note or an open interval),
+ *   `low_key_strength`, `no_key_estimate` (the estimator named no key);
+ * - the fingerprint and its parts: `models_not_loaded`, `not_music` (no beat, and the key rules
+ *   found one harmonic series, one held pitch or one pitch line without stable notes),
+ *   `model_failed` (failed, or gave non-finite values or the wrong width), `out_of_range` (a mood
+ *   head outside the range its model produces), `non_music_style` (the strongest Discogs style is
+ *   a Non-Music one: the mood heads describe music only);
+ * - any value: `estimate_failed` (the estimator raised, or gave a non-finite value).
+ *
+ * The codes name the check that fired, not a cause: the same check fires on different material
+ * (spectral lines too weak for a key on drums alone and on a dense electronic mix alike).
+ */
+export const AudioWithheldCode = z.enum([
+  "gate_silence",
+  "gate_noise",
+  "gate_too_short",
+  "no_beat",
+  "tempo_out_of_range",
+  "too_few_beats",
+  "low_confidence",
+  "unsteady_tempo",
+  "no_tempo_estimate",
+  "no_sustained_pitch",
+  "speech_like",
+  "one_harmonic_series",
+  "one_held_pitch",
+  "no_pitch_track",
+  "few_pitch_classes",
+  "one_pitched_source",
+  "low_key_strength",
+  "no_key_estimate",
+  "models_not_loaded",
+  "not_music",
+  "model_failed",
+  "out_of_range",
+  "non_music_style",
+  "estimate_failed",
+]);
+export type AudioWithheldCode = z.infer<typeof AudioWithheldCode>;
+
+/** The tempo range, in BPM, the service accepts from either estimator. */
+export const AUDIO_TEMPO_RANGE_BPM = [40, 208] as const;
+
+/** One withheld value: the code and the service's reason in words (no withheld value in it). */
+export const WithheldReason = z.object({
+  code: AudioWithheldCode,
+  reason: z.string().min(1).describe("The check that withheld the value, in words"),
+});
+export type WithheldReason = z.infer<typeof WithheldReason>;
+
+// A reason a reader cannot read (an unknown code, a malformed entry) is absent; the rest of the
+// block is kept.
+const reasonFor = () => WithheldReason.optional().catch(undefined);
+
+/**
+ * Why each null value of the block is null, per field. The service names a reason for every
+ * measured block it leaves null; for the parts of a fingerprint it computed (styles, tags, each
+ * mood head) when one is null; and none for a value it measured. A null fingerprint's parts have
+ * no reasons of their own: `fingerprint` says why. Blocks from analyzers before 2.3.0 have none
+ * of the service's reasons; the API still adds `moods.<head>: out_of_range` to such a block when
+ * it drops a mood head itself, since that reason is the API's own and true for any analyzer.
+ */
+export const AudioWithheld = z.object({
+  tempo: reasonFor(),
+  key: reasonFor(),
+  loudness: reasonFor(),
+  beats: reasonFor().describe(
+    "When no tempo was estimated, the grid is null with the tempo's reason. When a tempo was " +
+      "estimated but withheld (unsteady_tempo, or too_few_beats on a short clip), a tracker " +
+      "that follows tempo changes (Essentia) keeps its grid, with no reason; a tracker that " +
+      "keeps one period (librosa) has a null grid, with the tempo's reason",
+  ),
+  energyContour: reasonFor(),
+  sections: reasonFor(),
+  fingerprint: reasonFor(),
+  styles: reasonFor(),
+  tags: reasonFor(),
+  moods: z
+    .object({
+      danceability: reasonFor(),
+      acoustic: reasonFor(),
+      instrumental: reasonFor(),
+      valence: reasonFor(),
+      arousal: reasonFor(),
+    })
+    .optional()
+    .catch(undefined),
+});
+export type AudioWithheld = z.infer<typeof AudioWithheld>;
+
 /** The blocks a gate that did not pass leaves null. */
 export const AUDIO_MEASURED_BLOCKS = [
   "tempo",
@@ -195,5 +302,8 @@ export const AudioFeatures = z.object({
   sections: Sections.nullable(),
   keyMoments: tolerantList(KeyMoment),
   fingerprint: Fingerprint.nullable().describe("null when the models are not loaded"),
+  withheld: AudioWithheld.optional()
+    .catch(undefined)
+    .describe("Why each null value is null (analyzer 2.3.0 and later)"),
 });
 export type AudioFeatures = z.infer<typeof AudioFeatures>;

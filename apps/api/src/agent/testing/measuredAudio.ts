@@ -93,10 +93,33 @@ export function gatedV2(reason: "silence" | "noise" | "too_short" = "silence"): 
 }
 
 /**
- * An /analyze answer of the current service: the v1 fields derived from the block, and the
- * block as `v2`. The v1 fields are the service's own derivation (they are not read).
+ * A block of analyzer 2.3.0 whose key was withheld, with the reason: the single-source rule (the
+ * service's words), the rest measured.
  */
-export function serviceAnswer(block: AudioFeatures | null, v1: Record<string, unknown> = {}) {
+export function keyWithheldV2(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
+  return audioV2({
+    analyzerVersion: "2.3.0+essentia.models-5c5c0c7f",
+    key: null,
+    withheld: {
+      key: {
+        code: "one_pitched_source",
+        reason: "the partials hold still, rise and fall together and spell no chord",
+      },
+    },
+    ...overrides,
+  });
+}
+
+/** An /analyze answer of the current service: the block as `v2`, and anything in `extra`. */
+export function serviceAnswer(block: AudioFeatures | null, extra: Record<string, unknown> = {}) {
+  return { ...extra, ...(block ? { v2: block } : {}) };
+}
+
+/**
+ * An /analyze answer of a service before analyzer 2.3.0: the v1 fields it derived from the
+ * block (never read), and the block as `v2`.
+ */
+export function v1Answer(block: AudioFeatures | null, v1: Record<string, unknown> = {}) {
   return {
     bpm: block?.tempo ? Math.round(block.tempo.bpm) : null,
     key: block?.key?.tonic ?? null,

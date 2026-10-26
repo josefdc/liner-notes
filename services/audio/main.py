@@ -4,16 +4,13 @@ Audio analysis service for Liner Notes.
 Downloads a 30-second Deezer or Spotify preview and analyses it. The preview is decoded once
 (soundfile, libsndfile) and every step shares that signal.
 
-The response has two layers:
-- `v2`, AudioFeatures v2 from packages/contract (camelCase, as the contract names them):
-  a gate for too-short, silent and noise-like input, tempo and key with a confidence
-  (estimators.py), loudness, the beat grid, the energy contour, neutral sections and key
-  moments (signal_features.py), and the model fingerprint (fingerprint.py: Discogs styles,
-  MusiCNN tags and mood heads) when essentia-tensorflow is installed (the "models" extra) and
-  the models are present and verified (see download_models.py);
-- the v1 fields (bpm, key, mode, energy, keyMoments and the perceptual scores), kept until the
-  API reads v2. They are derived from `v2` and never say more than it: a tempo, key, level or
-  model score that v2 withholds is null in v1 too, and silence is never "C Major".
+The response is `{"v2": ...}`: AudioFeatures v2 from packages/contract (camelCase, as the
+contract names them). It holds a gate for too-short, silent and noise-like input, tempo and key
+with a confidence (estimators.py), loudness, the beat grid, the energy contour, neutral
+sections and key moments (signal_features.py), and the model fingerprint (fingerprint.py:
+Discogs styles, MusiCNN tags and mood heads) when essentia-tensorflow is installed (the
+"models" extra) and the models are present and verified (see download_models.py). Every value
+the service leaves null has its reason in `v2.withheld`: a stable code and the check in words.
 
 Run locally:
     uv run uvicorn main:app --host 127.0.0.1 --port 3002
@@ -32,7 +29,6 @@ Settings (environment variables, all optional):
 
 import asyncio
 import logging
-import math
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -49,12 +45,24 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 import fingerprint  # noqa: E402
 import signal_features  # noqa: E402
-from estimators import Signals, select_estimator  # noqa: E402
+from estimators import (  # noqa: E402
+    NO_KEY_ESTIMATE,
+    STEADY_TEMPO_PARTS,
+    KeyEstimate,
+    Signals,
+    TempoEstimate,
+    Withheld,
+    select_estimator,
+)
 from guards import AnalysisSlots, RequestGuardMiddleware, ServiceBusyError  # noqa: E402
 from preview import PreviewDownloadError, PreviewURLError, download_preview  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("audio")
+# httpx logs every request with its full URL at info level, and a preview URL is signed (Deezer's
+# hdnea/hmac query): only its warnings and errors are logged. The service names no preview URL.
+for _client_logger in ("httpx", "httpcore"):
+    logging.getLogger(_client_logger).setLevel(logging.WARNING)
 
 # =============================================================================
 # Configuration
@@ -63,7 +71,11 @@ logger = logging.getLogger("audio")
 # Version of the analysis output: bump it whenever a measurement can change for the same input
 # (algorithm, parameters, decoder or model change). The full version (analyzer_version())
 # adds the estimator and the model set as semver build metadata.
-ANALYZER_VERSION = "2.2.0"
+# 2.3.0 adds `withheld` (no measurement changed). The API's audio cache is keyed by this version,
+# so while the service names it, cached blocks without reasons are measured again; results the
+# API already stored, and cache rows it serves while the service is down, keep their older
+# blocks (without reasons) until they expire.
+ANALYZER_VERSION = "2.3.0"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -82,6 +94,8 @@ MAX_CONCURRENT_ANALYSES = int(os.environ.get("MAX_CONCURRENT_ANALYSES") or 4)
 MAX_QUEUED_ANALYSES = int(os.environ.get("MAX_QUEUED_ANALYSES") or 16)
 QUEUE_WAIT_S = float(os.environ.get("QUEUE_WAIT_S") or 10)
 RETRY_AFTER_S = 5
+# The blocks a gate that did not pass leaves null (the contract's AUDIO_MEASURED_BLOCKS).
+MEASURED_BLOCKS = ("tempo", "key", "loudness", "beats", "energyContour", "sections", "fingerprint")
 
 
 def _cors_origins() -> list[str]:
@@ -109,7 +123,7 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.2.0+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    "2.3.0+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
     cache is keyed by track and this version, so a version change measures again; a row of
     another version is served, labelled with its analyzer, only when the service cannot say its
     version.)
@@ -131,33 +145,11 @@ class AnalyzeRequest(BaseModel):
     preview_url: str = Field(min_length=1, max_length=2048)
 
 
-class KeyMoment(BaseModel):
-    """A significant moment detected in the audio"""
-
-    time: float  # Time in seconds
-    type: str  # "energy_peak" | "energy_drop" | "onset" | "harmonic_change" | "silence"
-    intensity: float  # 0-1 scale for marker visualization
-    description: str  # Human-readable description
-
-
 class AudioAnalysisResult(BaseModel):
-    """Analysis result: the v1 fields, derived from the v2 block, and the v2 block"""
+    """Analysis result: the AudioFeatures v2 block, nothing else"""
 
-    bpm: int | None  # v2 tempo rounded; null when v2 has no tempo
-    key: str | None  # v2 key tonic; null when v2 has no key
-    mode: str | None  # "Major" or "Minor"; null with key
-    energy: float | None  # v2 loudness on 0-1 (see v1_energy); null when v2 has none
-    duration: float  # seconds
-    source: str = "analyzed"  # "analyzed" or "estimated"
-    analyzer_version: str  # analyzer_version() of the service that measured it
-    keyMoments: list[KeyMoment] = []  # Key moments detected in the audio
-    # Perceptual features from the v2 mood heads (None without them)
-    valence: float | None = None
-    danceability: float | None = None
-    acousticness: float | None = None
-    instrumentalness: float | None = None
-    # AudioFeatures v2 (packages/contract/schemas/audio-features.schema.json)
-    v2: dict[str, Any] | None = None
+    # packages/contract/schemas/audio-features.schema.json
+    v2: dict[str, Any]
 
 
 class HealthResponse(BaseModel):
@@ -172,79 +164,72 @@ class HealthResponse(BaseModel):
 # Audio Analysis Functions
 # =============================================================================
 
-# v1 energy keeps the scale the service had before v2 (the API calls "energy" above 0.7 high
-# and the web shows it as a percentage): (mean frame RMS - 0.02) / 0.25, clipped to 0-1. That
-# reads 0 for any mean RMS up to 0.02 (-34 dBFS), the same as silence, so input that passes
-# the gate gets at least a small floor instead: V1_ENERGY_FLOOR at -86 dBFS mean RMS (the
-# quietest the gate passes: 5% of frames at -60 dBFS) rising linearly in dB to
-# V1_ENERGY_FLOOR_TOP at -34 dBFS. Where the old scale gives more, it is used unchanged.
-# Gated input has no energy (null).
-V1_ENERGY_OFFSET = 0.02
-V1_ENERGY_SPAN = 0.25
-V1_ENERGY_FLOOR = 0.005
-V1_ENERGY_FLOOR_TOP = 0.02
-V1_ENERGY_FLOOR_DBFS = (-86.0, -34.0)
-
 
 class InvalidAudioError(ValueError):
     """The preview cannot be analysed: not decodable, or non-finite or absurd samples. The
     message is one of a fixed set (no paths or decoder output) and is returned with the 422."""
 
 
-def v1_energy(rms_mean: float) -> float:
-    """The v1 `energy` field for input that passed the gate (see V1_ENERGY_OFFSET)."""
-    scaled = float(np.clip((rms_mean - V1_ENERGY_OFFSET) / V1_ENERGY_SPAN, 0, 1))
-    low, high = V1_ENERGY_FLOOR_DBFS
-    dbfs = 20 * math.log10(rms_mean) if rms_mean > 0 else low
-    position = float(np.clip((dbfs - low) / (high - low), 0, 1))
-    floor = V1_ENERGY_FLOOR + (V1_ENERGY_FLOOR_TOP - V1_ENERGY_FLOOR) * position
-    return round(max(scaled, floor), 3)
+# Why the gate measured nothing, for each block it leaves null (v2.withheld).
+GATE_WITHHELD = {
+    "silence": Withheld("the preview is silent", code="gate_silence"),
+    "noise": Withheld("no beat and no musical pitch in the preview", code="gate_noise"),
+    "too_short": Withheld("the preview is too short to measure", code="gate_too_short"),
+}
+ESTIMATE_FAILED = Withheld("the estimator failed (logged by the service)", code="estimate_failed")
+# An estimator that only answers tempo() or key() (one the evals run) gives None without a reason.
+NO_TEMPO_ESTIMATE = Withheld("the tempo estimator gave no tempo", code="no_tempo_estimate")
+UNSTEADY_TEMPO = Withheld("the tempo does not hold over the window", code="unsteady_tempo")
+UNSTEADY_BEATS = Withheld(
+    "the tempo does not hold over the window, and this beat tracker keeps one period",
+    code="unsteady_tempo",
+)
+# The steadiness check needs 2 * STEADY_TEMPO_PARTS beat intervals; with fewer (a short clip) it
+# cannot say whether the tempo holds, which is not evidence that it changes.
+UNCHECKED_TEMPO = Withheld(
+    f"fewer than {2 * STEADY_TEMPO_PARTS} beat intervals, too few to check the tempo holds",
+    code="too_few_beats",
+)
 
 
-def v1_fields(v2: dict) -> dict:
-    """The v1 fields, derived from the v2 block (null wherever v2 has nothing)."""
-    tempo, key, loudness = v2["tempo"], v2["key"], v2["loudness"]
-    moods = (v2["fingerprint"] or {}).get("moods") or {}
-
-    def mood(name: str) -> float | None:
-        score = moods.get(name)
-        return None if score is None else round(score["value"], 3)
-
-    valence = mood("valence")
-    return {
-        "bpm": None if tempo is None else round(tempo["bpm"]),
-        "key": None if key is None else key["tonic"],
-        "mode": None if key is None else key["mode"].capitalize(),
-        "energy": None if loudness is None else v1_energy(loudness["rmsMean"]),
-        "duration": round(v2["window"]["durationSeconds"], 2),
-        "keyMoments": v2["keyMoments"],
-        # DEAM's 1-9 scale mapped linearly onto 0-1.
-        "valence": None if valence is None else round((valence - 1.0) / 8.0, 3),
-        "danceability": mood("danceability"),
-        "acousticness": mood("acoustic"),
-        "instrumentalness": mood("instrumental"),
-    }
+def _unsteady(tempo: TempoEstimate) -> Withheld:
+    """Why a tempo that is not steady is withheld: it changes, or it cannot be checked."""
+    if tempo.steadiness is not None and not tempo.steadiness.enough_beats:
+        return UNCHECKED_TEMPO
+    return UNSTEADY_TEMPO
 
 
 def _signal_block(**fields) -> dict:
     return {**fields, "basis": "signal"}
 
 
-def _estimate(method, signals: Signals, what: str):
-    """An estimator call; a failure is logged and reported as missing, not as an error."""
+def _estimate(estimator, what: str, signals: Signals):
+    """
+    An estimator's measure_tempo or measure_key: the estimate or why there is none (Withheld).
+    An estimator with only tempo() or key() gives no reason for a None. A failure is logged and
+    reported as withheld, not as an error.
+    """
+    estimate, missing = (
+        (TempoEstimate, NO_TEMPO_ESTIMATE) if what == "tempo" else (KeyEstimate, NO_KEY_ESTIMATE)
+    )
+    measure = getattr(estimator, f"measure_{what}", None) or getattr(estimator, what)
     try:
-        return method(signals)
+        found = measure(signals)
     except Exception:
         logger.warning("The %s estimate failed; reporting it as missing", what, exc_info=True)
-        return None
+        return ESTIMATE_FAILED
+    if isinstance(found, estimate | Withheld):
+        return found
+    return missing
 
 
 def analyze_signals(signals: Signals, estimator=None) -> dict:
-    """The v2 block for one decoded preview, and the v1 fields derived from it."""
+    """The response for one decoded preview: {"v2": the AudioFeatures v2 block}."""
     estimator = estimator or ESTIMATOR
     duration = signals.duration
     loudness = signal_features.levels(signals) if signals.native.size else None
     gate = signal_features.check_gate(signals, loudness)
+    withheld: dict[str, Any] = {}
 
     v2: dict[str, Any] = {
         "version": AUDIO_FEATURES_VERSION,
@@ -259,14 +244,23 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
         "sections": None,
         "keyMoments": [],
         "fingerprint": None,
+        "withheld": withheld,
     }
     if not gate.passed:
-        return {**v1_fields(v2), "v2": v2}
+        reason = GATE_WITHHELD[gate.reason].entry()
+        withheld.update(dict.fromkeys(MEASURED_BLOCKS, reason))
+        return {"v2": v2}
 
-    tempo = _estimate(estimator.tempo, signals, "tempo")
-    key = _estimate(estimator.key, signals, "key")
-    if key is None and (reason := signals.key_withheld()):
-        logger.info("No key: %s", reason)
+    tempo = _estimate(estimator, "tempo", signals)
+    key = _estimate(estimator, "key", signals)
+    if isinstance(tempo, Withheld):
+        logger.info("No tempo: %s", tempo)
+        withheld["tempo"] = withheld["beats"] = tempo.entry()
+        tempo = None
+    if isinstance(key, Withheld):
+        logger.info("No key: %s", key)
+        withheld["key"] = key.entry()
+        key = None
 
     # A beat grid is trusted when the tempo holds, or when the tracker follows tempo changes;
     # librosa's tracker keeps one period, so after a change its grid drifts off the music.
@@ -276,6 +270,9 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
         v2["beats"] = _signal_block(
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]
         )
+    elif tempo is not None:
+        unsteady = _unsteady(tempo)
+        withheld["beats"] = (UNSTEADY_BEATS if unsteady is UNSTEADY_TEMPO else unsteady).entry()
     if tempo is not None:
         if tempo.steady:
             raw = tempo.raw_confidence
@@ -293,6 +290,7 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
                 tempo.bpm,
                 "" if tempo.beats_follow_changes else " (and no beats)",
             )
+            withheld["tempo"] = _unsteady(tempo).entry()
     if key is not None:
         v2["key"] = _signal_block(
             tonic=key.tonic,
@@ -317,11 +315,13 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     v2["keyMoments"] = signal_features.key_moments(signals, loudness, harmonic)
     if MODELS_LOADED and (reason := signals.not_music()):
         logger.info("No fingerprint: %s", reason)
+        withheld["fingerprint"] = {"code": "not_music", "reason": reason}
     else:
+        # Reasons for a null fingerprint, or for its null parts, go into `withheld`.
         v2["fingerprint"] = fingerprint.fingerprint(
-            signals.native, signals.native_sr, MODELS_LOADED
+            signals.native, signals.native_sr, MODELS_LOADED, withheld
         )
-    return {**v1_fields(v2), "v2": v2}
+    return {"v2": v2}
 
 
 def decode(file_path: str) -> Signals:
@@ -359,10 +359,7 @@ def decode(file_path: str) -> Signals:
 
 
 def analyze_audio_file(file_path: str) -> dict:
-    """
-    Analyse a file: the v1 fields (bpm, key, mode, energy, duration, keyMoments and the
-    perceptual scores) plus the `v2` block.
-    """
+    """Analyse a file: {"v2": the AudioFeatures v2 block}."""
     return analyze_signals(decode(file_path))
 
 
@@ -408,10 +405,8 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
     """
     Analyze a Deezer or Spotify preview URL.
 
-    Returns the AudioFeatures v2 block (`v2`) and the v1 fields derived from it (BPM, key,
-    mode, energy and, with the Essentia models, valence, danceability, acousticness and
-    instrumentalness). Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are
-    accepted.
+    Returns {"v2": the AudioFeatures v2 block}, with why each null value is null in
+    `v2.withheld`. Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
     """
     slots: AnalysisSlots = http_request.app.state.analysis_slots
     try:
@@ -445,21 +440,7 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
         logger.exception("Audio analysis failed")
         raise HTTPException(status_code=500, detail="Audio analysis failed") from None
 
-    return AudioAnalysisResult(
-        bpm=result["bpm"],
-        key=result["key"],
-        mode=result["mode"],
-        energy=result["energy"],
-        duration=result["duration"],
-        source="analyzed",
-        analyzer_version=result["v2"]["analyzerVersion"],
-        keyMoments=[KeyMoment(**m) for m in result.get("keyMoments", [])],
-        valence=result.get("valence"),
-        danceability=result.get("danceability"),
-        acousticness=result.get("acousticness"),
-        instrumentalness=result.get("instrumentalness"),
-        v2=result.get("v2"),
-    )
+    return AudioAnalysisResult(v2=result["v2"])
 
 
 async def root():

@@ -170,7 +170,10 @@ export interface AudioMeasurement {
   unavailableReason?: AudioUnavailableReason;
   /** Detail for unavailableReason (e.g. the service's error message). */
   unavailableDetail?: string;
-  /** Mood heads the service returned outside their range; they are null in `audio`. */
+  /**
+   * Mood heads the service returned outside their range; they are null in `audio`, with that
+   * reason in `audio.withheld`.
+   */
   outOfRange?: string[];
   /**
    * Set on a cached measurement served while the service could not say its analyzer version

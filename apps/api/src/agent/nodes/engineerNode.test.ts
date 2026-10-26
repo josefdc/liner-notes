@@ -18,6 +18,7 @@ import {
   SEARCH_MATCH,
   serviceAnswer,
   signalOnlyV2,
+  v1Answer,
 } from "../testing/measuredAudio.js";
 
 const cache = vi.hoisted(() => ({
@@ -207,8 +208,8 @@ describe("engineerNode", () => {
     expect(text).not.toMatch(/verified/i);
   });
 
-  it("reads nothing of the v1 fields the service sends next to the block", async () => {
-    stubNetwork("up", PREVIEW, serviceAnswer(audioV2(), { bpm: 58, key: "C", mode: "Major" }));
+  it("reads nothing of the v1 fields an older service sends next to the block", async () => {
+    stubNetwork("up", PREVIEW, v1Answer(audioV2(), { bpm: 58, key: "C", mode: "Major" }));
     const { out, text } = await run("D");
     expect(out.audioFeatures?.audio).toEqual(audioV2());
     expect(out.audioFeatures).not.toHaveProperty("bpm");
@@ -623,7 +624,7 @@ describe("engineerNode", () => {
 
   describe("service answers without a full measurement", () => {
     it("treats an answer without a v2 block as no measurement, whatever its v1 fields say", async () => {
-      const { v2: _block, ...v1Only } = serviceAnswer(SIGNAL_ONLY);
+      const { v2: _block, ...v1Only } = v1Answer(SIGNAL_ONLY);
       stubNetwork("up", PREVIEW, v1Only);
       const { out, text } = await run("V1");
       expect(out.audioFeatures).toMatchObject({

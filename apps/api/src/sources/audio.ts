@@ -4,7 +4,8 @@
  * Measures a 30-second preview clip with the audio service, which answers with the contract's
  * AudioFeatures v2 block (`v2`): tempo, key, loudness, beats, energy contour, sections and key
  * moments from the signal, and model scores (styles, tags, mood heads) when the Essentia models
- * are loaded. Only that block is read. The v1 fields the service still sends next to it (bpm,
+ * are loaded, and why each value it left null was withheld (`withheld`). Only that block is
+ * read: the service sends nothing else since analyzer 2.3.0, an older service's v1 fields (bpm,
  * key, mode, energy, ...) are ignored, and an answer without a readable block is no measurement.
  *
  * The clip is a preview of the chosen recording only (see resolvePreview): the Deezer entry for
@@ -151,6 +152,22 @@ function withinRange(score: ModelScore): boolean {
   );
 }
 
+/**
+ * The block without the reasons the contract could not read: the contract reads each as absent
+ * (undefined), and the block keeps no key for it.
+ */
+function withoutUnreadReasons(audio: AudioFeatures): AudioFeatures {
+  const { withheld, ...rest } = audio;
+  if (!withheld) return rest;
+  const defined = <T extends object>(entries: T) =>
+    Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined)) as T;
+  const { moods, ...fields } = withheld;
+  return {
+    ...rest,
+    withheld: { ...defined(fields), ...(moods ? { moods: defined(moods) } : {}) },
+  };
+}
+
 /** What the service's answer measured: its v2 block, or why it cannot be used. */
 export type ServiceMeasurement =
   | { audio: AudioFeatures; outOfRange: string[] }
@@ -160,8 +177,8 @@ export type ServiceMeasurement =
  * The v2 block of an /analyze answer, as the contract reads it. Nothing else of the answer is
  * read: an answer with only the v1 fields (an older service), a block of another version, or
  * one that breaks the contract's rules (a gate that did not pass with values set) is no
- * measurement, with the reason. A mood head outside its own range is dropped (null) and named in
- * `outOfRange`; the rest of the block is kept.
+ * measurement, with the reason. A mood head outside its own range is dropped (null), named in
+ * `outOfRange` and given that reason in the block's `withheld`; the rest of the block is kept.
  */
 export function readServiceMeasurement(answer: unknown): ServiceMeasurement {
   const block =
@@ -183,8 +200,8 @@ export function readServiceMeasurement(answer: unknown): ServiceMeasurement {
       error: `The audio service's v2 block does not fit the contract (${where})`,
     };
   }
-  const audio = parsed.data;
-  const outOfRange: string[] = [];
+  const audio = withoutUnreadReasons(parsed.data);
+  const outOfRange: (typeof MOOD_HEADS)[number][] = [];
   const moods = audio.fingerprint?.moods;
   if (audio.fingerprint && moods) {
     const kept = { ...moods };
@@ -195,7 +212,17 @@ export function readServiceMeasurement(answer: unknown): ServiceMeasurement {
         outOfRange.push(head);
       }
     }
-    if (outOfRange.length > 0) audio.fingerprint = { ...audio.fingerprint, moods: kept };
+    if (outOfRange.length > 0) {
+      audio.fingerprint = { ...audio.fingerprint, moods: kept };
+      const reasons = { ...audio.withheld?.moods };
+      for (const head of outOfRange) {
+        reasons[head] = {
+          code: "out_of_range",
+          reason: `the ${head} head gave a value outside the range its model produces`,
+        };
+      }
+      audio.withheld = { ...audio.withheld, moods: reasons };
+    }
   }
   const issues = audioFeaturesIssues(audio);
   if (issues.length > 0) {

@@ -1,5 +1,6 @@
 """HTTP behaviour of the service (FastAPI TestClient, no internet)."""
 
+import logging
 import re
 
 import numpy as np
@@ -134,9 +135,9 @@ def test_analyzes_a_downloaded_preview_and_removes_it(client, monkeypatch, tmp_p
     response = client.post("/analyze", json={"preview_url": DEEZER_URL})
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["source"] == "analyzed"
-    assert body["analyzer_version"] == main.analyzer_version()
-    assert 5.5 < body["duration"] < 6.5
+    assert list(body) == ["v2"]
+    assert body["v2"]["analyzerVersion"] == main.analyzer_version()
+    assert 5.5 < body["v2"]["window"]["durationSeconds"] < 6.5
     assert not path.exists()
 
 
@@ -216,3 +217,30 @@ def test_cors_allows_configured_origins_without_credentials(monkeypatch):
     assert "access-control-allow-credentials" not in simple.headers
     assert refused.status_code == 400
     assert "access-control-allow-origin" not in refused.headers
+
+
+def test_the_signed_preview_url_is_never_logged(client, cdn, monkeypatch, caplog):
+    """
+    A preview URL is signed (Deezer's hdnea/hmac query): no log record at info or above names
+    its path or query, the HTTP client's request lines included. The local server stands in for
+    the CDN, so the allowlist is lifted for this one test.
+    """
+    import io
+
+    import preview
+
+    base, server = cdn
+    clip = io.BytesIO()
+    sf.write(clip, np.zeros(22050 * 2, dtype=np.float32), 22050, format="WAV")
+    server.files["/api/1/1/f/8/c/0/f8c5.mp3"] = clip.getvalue()
+    monkeypatch.setattr(preview, "validate_preview_url", lambda url: None)
+    url = f"{base}/api/1/1/f/8/c/0/f8c5.mp3?hdnea=exp=1~acl=*~hmac=0123abcd"
+
+    caplog.set_level(logging.INFO)
+    response = client.post("/analyze", json={"preview_url": url})
+
+    assert response.status_code == 200, response.text
+    assert server.hits == ["/api/1/1/f/8/c/0/f8c5.mp3?hdnea=exp=1~acl=*~hmac=0123abcd"]
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    for secret in ("f8c5.mp3", "hdnea", "hmac", "0123abcd"):
+        assert secret not in logged, logged

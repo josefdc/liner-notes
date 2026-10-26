@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import { Timestamp } from "./common.js";
+import { Claim } from "./evidence.js";
 import { AnalyzeStreamEvent, OpenErrorCode } from "./events.js";
 import { refineNamed } from "./refinements.js";
 import { Factoid, RunMode, RunStatus, RunUsage, SearchCandidate, TrackAnalysis } from "./track.js";
@@ -112,6 +113,10 @@ export const FactoidsRequest = z.object({
 
 export const FactoidsResponse = z.object({
   factoids: z.array(Factoid),
+  claims: z
+    .array(Claim)
+    .optional()
+    .describe("Each new factoid's claim (Factoid.claimId), checked against the run's evidence"),
 });
 
 // =============================================================================

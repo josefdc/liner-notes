@@ -36,6 +36,11 @@
           },
           "required": ["id", "title", "content", "type"]
         }
+      },
+      "claims": {
+        "description": "Each new factoid's claim (Factoid.claimId), checked against the run's evidence",
+        "type": "array",
+        "items": { "$ref": "Claim.schema.json" }
       }
     },
     "required": ["factoids"]
@@ -79,6 +84,11 @@
           "required": ["id", "title", "content", "type"],
           "additionalProperties": false
         }
+      },
+      "claims": {
+        "description": "Each new factoid's claim (Factoid.claimId), checked against the run's evidence",
+        "type": "array",
+        "items": { "$ref": "Claim.schema.json" }
       }
     },
     "required": ["factoids"],

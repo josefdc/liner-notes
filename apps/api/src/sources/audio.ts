@@ -38,7 +38,7 @@ import {
   deezerPreviewBySearch,
   type PreviewRequest,
 } from "./deezer.js";
-import { describeError, fetchJson, isSourceError } from "./http.js";
+import { describeError, fetchJson, isSourceError, plainReason } from "./http.js";
 import type { SourceErrorCode } from "./toolResult.js";
 import type { AudioUnavailableReason } from "../agent/state.js";
 import { logger } from "../logger.js";
@@ -408,7 +408,8 @@ async function analyzeWithService(
     const detail = isSourceError(error, "http")
       ? (error.body as { detail?: unknown } | undefined)?.detail
       : undefined;
-    if (typeof detail === "string" && detail) throw new Error(detail);
+    const reason = plainReason(detail);
+    if (reason) throw new Error(reason);
     throw error;
   }
 }

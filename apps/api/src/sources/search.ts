@@ -8,7 +8,10 @@
  *   - nothing found: `{ found: false, reason: "no_results" }`;
  *   - search unavailable (no key, timeout, API error): `{ found: false, code, error }`; a key
  *     Tavily refuses (HTTP 401, 403) also carries `keyRejected: true`.
- * Lyric sites are excluded from every search, so no lyric text reaches research.
+ * Lyric sites are excluded from every search, so no lyric text reaches research. So are social
+ * platforms, whose pages are mostly comments and the handles of the people who wrote them (a
+ * video page on YouTube carries a title, channel and description, and is kept), and any result
+ * whose text is profile or handle boilerplate.
  */
 
 import { tool } from "@langchain/core/tools";
@@ -60,6 +63,20 @@ export const LYRIC_SITES = [
   "paroles.net",
 ] as const;
 
+/**
+ * Social platforms: their pages are page chrome, comments and the handles of private people, and
+ * weak evidence of a song's history. Excluded in the request and filtered from the answer.
+ */
+export const SOCIAL_SITES = [
+  "instagram.com",
+  "tiktok.com",
+  "facebook.com",
+  "x.com",
+  "twitter.com",
+  "threads.net",
+  "reddit.com",
+] as const;
+
 /** A host as Google's translate proxy writes it: "genius.com" → "genius-com.translate.goog". */
 function translateProxyHost(host: string): string {
   return `${host.replace(/-/g, "--").replace(/\./g, "-")}.translate.goog`;
@@ -71,8 +88,13 @@ function unproxyHost(host: string): string {
   return label.replace(/--/g, "\0").replace(/-/g, ".").replace(/\0/g, "-");
 }
 
-/** Domains sent as `exclude_domains`: the lyric sites and their translate-proxy hosts. */
-export const EXCLUDED_DOMAINS = [...LYRIC_SITES, ...LYRIC_SITES.map(translateProxyHost)];
+const EXCLUDED_SITES = [...LYRIC_SITES, ...SOCIAL_SITES];
+
+/**
+ * Domains sent as `exclude_domains`: the lyric sites and social platforms, and their
+ * translate-proxy hosts.
+ */
+export const EXCLUDED_DOMAINS = [...EXCLUDED_SITES, ...EXCLUDED_SITES.map(translateProxyHost)];
 
 function isLyricHost(host: string): boolean {
   if (LYRIC_SITES.some((site) => host === site || host.endsWith(`.${site}`))) return true;
@@ -82,31 +104,85 @@ function isLyricHost(host: string): boolean {
 // Path words that mark a lyrics page. "lyric" alone is not one: "lyric-video" pages are news.
 const LYRIC_PATH = /(?:^|[/_.,-])(?:lyrics|songtexte?|paroles|letras?|teksty?)(?=[/_.,?#-]|$)/i;
 
-/**
- * True for a URL on a lyric site (also through a translate proxy, and with or without a
- * scheme), or a page whose path says it is lyrics.
- */
-export function isLyricPage(url: string): boolean {
+/** A URL written with or without a scheme, parsed; null when it does not parse. */
+function looseUrl(url: string): URL | null {
   const text = url.trim();
-  let parsed: URL;
   try {
     const withScheme = text.startsWith("//")
       ? `https:${text}`
       : /^[a-z][a-z0-9+.-]*:\/\//i.test(text)
         ? text
         : `https://${text}`;
-    parsed = new URL(withScheme);
+    return new URL(withScheme);
   } catch {
-    return false;
+    return null;
   }
-  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+}
+
+/** The page a Google translate link (translate.google.*?u=…) stands for, if it is one. */
+function translatedPage(parsed: URL, host: string): string | null {
+  if (!/^translate\.google\./.test(host)) return null;
+  return parsed.searchParams.get("u") ?? parsed.searchParams.get("url");
+}
+
+const hostOf = (parsed: URL) => parsed.hostname.toLowerCase().replace(/\.$/, "");
+
+/**
+ * True for a URL on a lyric site (also through a translate proxy, and with or without a
+ * scheme), or a page whose path says it is lyrics.
+ */
+export function isLyricPage(url: string): boolean {
+  const parsed = looseUrl(url);
+  if (!parsed) return false;
+  const host = hostOf(parsed);
   if (isLyricHost(host)) return true;
   if (host.endsWith(".translate.goog") && isLyricHost(unproxyHost(host))) return true;
-  if (/^translate\.google\./.test(host)) {
-    const inner = parsed.searchParams.get("u") ?? parsed.searchParams.get("url");
-    if (inner && isLyricPage(inner)) return true;
-  }
+  const inner = translatedPage(parsed, host);
+  if (inner && isLyricPage(inner)) return true;
   return LYRIC_PATH.test(parsed.pathname);
+}
+
+const onSite = (host: string, site: string) => host === site || host.endsWith(`.${site}`);
+
+/**
+ * True for a page on a social platform (also through a translate proxy, and with or without a
+ * scheme).
+ */
+export function isSocialPage(url: string): boolean {
+  const parsed = looseUrl(url);
+  if (!parsed) return false;
+  const host = hostOf(parsed);
+  const named = host.endsWith(".translate.goog") ? unproxyHost(host) : host;
+  if (SOCIAL_SITES.some((site) => onSite(named, site))) return true;
+  const inner = translatedPage(parsed, host);
+  return inner !== null && isSocialPage(inner);
+}
+
+/** "someone's profile picture": the alt text a social page writes beside each commenter. */
+const PROFILE_PICTURE = /['’]s profile (?:picture|photo)/i;
+const HANDLE = /^@[\w.]{2,30}[,:;.!·]*$/;
+
+/**
+ * True for text with the profile or handle boilerplate of a comment thread: any "'s profile
+ * picture" (it always stands beside a commenter's handle), or three or more @handles in a row or
+ * that make up a fifth of the words. One handle in a sentence ("Thomas Bangalter
+ * (@thomasbangalter)") is not.
+ */
+export function isProfileBoilerplate(text: string): boolean {
+  if (PROFILE_PICTURE.test(text)) return true;
+  const words = text.split(/\s+/).filter(Boolean);
+  let handles = 0;
+  let run = 0;
+  for (const word of words) {
+    if (HANDLE.test(word)) {
+      handles++;
+      run++;
+      if (run >= 3) return true;
+    } else {
+      run = 0;
+    }
+  }
+  return handles >= 3 && handles / words.length >= 0.2;
 }
 
 const RESPONSE_SHAPE: Shape = { results: [{ title: true, url: true, content: true }] };
@@ -170,9 +246,9 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<We
 
   return data.results.flatMap((r) => {
     if (typeof r?.url !== "string" || typeof r.content !== "string") return [];
-    if (isLyricPage(r.url)) return [];
+    if (isLyricPage(r.url) || isSocialPage(r.url)) return [];
     const content = r.content.replace(/\s+/g, " ").trim().slice(0, MAX_RESULT_TEXT);
-    if (!content) return [];
+    if (!content || isProfileBoilerplate(content)) return [];
     const title = typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url;
     return [{ title, url: r.url, content }];
   });

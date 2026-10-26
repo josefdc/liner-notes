@@ -39,7 +39,12 @@ import {
   evidenceScope,
   isPrimaryRecordEvidence,
 } from "../../sources/records.js";
-import { isLyricPage, type WebResult } from "../../sources/search.js";
+import {
+  isLyricPage,
+  isProfileBoilerplate,
+  isSocialPage,
+  type WebResult,
+} from "../../sources/search.js";
 import { isPreviewUrl } from "../../store/runs.js";
 import { isErrorPage, isPlaceholder, type SearchedTrack } from "./plan.js";
 
@@ -173,7 +178,8 @@ function webPage(url: string): string | null {
  * Web-tier Evidence from the web search's results: the page's title, URL and the text the
  * search returned for it, cut to the contract's excerpt limit. One item per URL; a result
  * without a web URL or text, a placeholder text, an error page ("404 Not Found", a bot wall), a
- * page on a lyric site, or one whose URL is a preview or signed link gives none.
+ * page on a lyric site or a social platform, text of profile or handle boilerplate (people's
+ * handles), or one whose URL is a preview or signed link gives none.
  */
 export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvidence[] {
   const items: SourcedEvidence[] = [];
@@ -184,6 +190,7 @@ export function webSearchEvidence(findings: readonly WebFinding[]): SourcedEvide
     const text = typeof result?.content === "string" ? result.content.trim() : "";
     if (!url || isPlaceholder(text) || isErrorPage(result, track)) continue;
     if (isLyricPage(url) || isPreviewUrl(url) || isPreviewUrl(raw)) continue;
+    if (isSocialPage(url) || isProfileBoilerplate(text)) continue;
     if (seen.has(url)) continue;
     seen.add(url);
     const title = typeof result.title === "string" && result.title.trim() ? result.title : url;
@@ -304,9 +311,10 @@ function storedRecordIssue(item: Evidence, context: StoredContext): string | nul
  * Why a stored item is not one this module's constructors would have made for the cached run,
  * or null: a primary record as its source module writes it (storedRecordIssue), or a web page
  * of the web search with its id and a web URL, none of the pages the web tier leaves out (lyric
- * pages, preview or signed links, error pages, placeholders); no item read after the run; no
- * URL that is a lyric page (other than a Genius song's own page) or a preview link; and the
- * contract's evidence checks (at sealing).
+ * pages, preview or signed links, error pages, placeholders, social platform pages and profile
+ * or handle boilerplate, which a run before they were left out may have cached); no item read
+ * after the run; no URL that is a lyric page (other than a Genius song's own page) or a preview
+ * link; and the contract's evidence checks (at sealing).
  */
 function storedItemIssue(item: Evidence, context: StoredContext): string | null {
   if (Date.parse(item.retrievedAt) > Date.parse(context.readAt)) return "read after the run";
@@ -318,6 +326,8 @@ function storedItemIssue(item: Evidence, context: StoredContext): string | null 
     const url = item.url ? webPage(item.url) : null;
     if (!url || url !== item.url || item.id !== `tavily:${url}`) return "not a web page's id";
     if (isPlaceholder(item.excerpt)) return "a placeholder";
+    if (isSocialPage(url)) return "a social platform page";
+    if (isProfileBoilerplate(item.excerpt)) return "profile or handle boilerplate";
     if (isErrorPage({ title: item.title, content: item.excerpt }, context.track)) {
       return "an error page";
     }

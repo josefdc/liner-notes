@@ -130,6 +130,39 @@ describe("fetchJson", () => {
     expect(error.message).toContain("text/html");
   });
 
+  it("keeps an HTML error page out of the error message, and logs it at debug level only", async () => {
+    const page =
+      '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>' +
+      `<meta http-equiv="Content-Type" content="text/html"></head><body>${"challenge ".repeat(300)}</body></html>`;
+    stubFetch(() => html(page, 403));
+    const logs = captureLogsForTests();
+
+    let error: SourceError;
+    try {
+      error = await rejection(fetchJson({ source: "secondhandsongs", url: URL_A }));
+    } finally {
+      logs.restore();
+    }
+
+    expect(error).toMatchObject({ kind: "http", status: 403 });
+    expect(error.message).toBe("secondhandsongs: HTTP 403 (the source refused the request)");
+    expect(error.message).not.toContain("<");
+    expect(describeError(error).length).toBeLessThan(100);
+    const shown = logs.entries().filter((entry) => JSON.stringify(entry).includes("Just a moment"));
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((entry) => entry.level === "debug")).toBe(true);
+  });
+
+  it("keeps only a short plain-text reason from a JSON error body", async () => {
+    stubFetch(() => json({ message: "<html><body>Forbidden</body></html>" }, { status: 403 }));
+    const markup = await rejection(fetchJson({ source: "deezer", url: URL_A }));
+    expect(markup.message).toBe("deezer: HTTP 403 (the source refused the request)");
+
+    stubFetch(() => json({ message: `Too long ${"x".repeat(400)}` }, { status: 500 }));
+    const long = await rejection(fetchJson({ source: "deezer", url: URL_A }));
+    expect(long.message.length).toBeLessThan(150);
+  });
+
   it("rejects a JSON content type with a broken body as a parse error", async () => {
     stubFetch(() => new Response("{not json", { headers: { "content-type": "application/json" } }));
 

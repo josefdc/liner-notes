@@ -241,6 +241,44 @@ describe("scoutNode's stored results", () => {
     expect(spotify.calls).toBe(1);
   });
 
+  it("composes again instead of serving a stored result with a page the web tier now leaves out", async () => {
+    const webItem = (url: string, excerpt: string) => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "A page",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt,
+      recordRef: null,
+    });
+    for (const item of [
+      webItem("https://www.instagram.com/p/abc123/", "A caption about the song."),
+      webItem("https://example.org/post", "someone's profile picture someone 2w Love it"),
+    ]) {
+      const store = new InMemoryStore();
+      await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+        ...stored,
+        trackData: { ...stored.trackData, evidence: [item] },
+      });
+      const { graph } = scoutGraph(store);
+
+      const out = await graph.invoke({ songQuery: "Song A" });
+
+      expect(out.trackData ?? null, item.url).toBeNull();
+      expect(out.spotifyData).toMatchObject({ id: "t1" });
+    }
+    // A page the web tier keeps is served.
+    const store = new InMemoryStore();
+    const kept = webItem("https://www.youtube.com/watch?v=abc", "The official video.");
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+      ...stored,
+      trackData: { ...stored.trackData, evidence: [kept] },
+    });
+    const out = await scoutGraph(store).graph.invoke({ songQuery: "Song A" });
+    expect(out.trackData).toMatchObject({ id: track.id, evidence: [kept] });
+  });
+
   it("serves this run's search match, never one stored with the result", async () => {
     const store = new InMemoryStore();
     await store.put(TRACKS_NAMESPACE, keyOf(track.id), {

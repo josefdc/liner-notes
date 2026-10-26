@@ -103,6 +103,73 @@ describe("web research searches", () => {
     expect(text).not.toContain("genius.com");
   });
 
+  it.each(searches)(
+    "%s excludes social platforms from the request and the answer",
+    async (_n, run) => {
+      const social = (url: string) => ({
+        ...WHOSAMPLED,
+        url,
+        content: "SOCIAL_TEXT_SHOULD_NOT_APPEAR",
+      });
+      const net = stubFetch((call) =>
+        call.url === TAVILY
+          ? json(
+              answer([
+                social("https://www.instagram.com/p/abc123/"),
+                social("https://www.tiktok.com/@someone/video/123"),
+                social("https://m.facebook.com/somepage/posts/1"),
+                social("https://x.com/someone/status/1"),
+                social("https://www.reddit.com/r/music/comments/abc/"),
+                WHOSAMPLED,
+              ]),
+            )
+          : undefined,
+      );
+
+      const text = String(await run());
+
+      const body = JSON.parse(net.calls[0].body ?? "{}");
+      expect(body.exclude_domains).toEqual(
+        expect.arrayContaining([
+          "instagram.com",
+          "tiktok.com",
+          "facebook.com",
+          "x.com",
+          "twitter.com",
+          "threads.net",
+          "reddit.com",
+        ]),
+      );
+      expect(body.exclude_domains).not.toContain("youtube.com");
+      expect(text).not.toContain("SOCIAL_TEXT_SHOULD_NOT_APPEAR");
+      expect(JSON.parse(text).results).toHaveLength(1);
+    },
+  );
+
+  it("drops a result whose text is profile or handle boilerplate", async () => {
+    const comments = {
+      ...WHOSAMPLED,
+      url: "https://example.org/post/1",
+      content:
+        "dj_someone's profile picture dj_someone 2w Love this track! another.person's profile picture another.person 1w so good",
+    };
+    const handles = {
+      ...WHOSAMPLED,
+      url: "https://example.org/post/2",
+      content: "@first_user @second.user @third_user @fourth_user this one",
+    };
+    stubFetch((call) =>
+      call.url === TAVILY ? json(answer([comments, handles, WHOSAMPLED])) : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+  });
+
   it("sends the key as a bearer token, never in the body", async () => {
     const net = stubFetch((call) => (call.url === TAVILY ? json(answer([WHOSAMPLED])) : undefined));
 

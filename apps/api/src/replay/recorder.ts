@@ -30,8 +30,10 @@
  * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
- * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), or that
- * fails the record's schema or says less than a replay must (`runIssues`). The result's other
+ * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), markup
+ * in a source error's message (a page a source answered with), a social platform page or the
+ * profile or handle boilerplate of a comment thread (people's handles), or that fails the
+ * record's schema or says less than a replay must (`runIssues`). The result's other
  * producer checks (`analysisIssues`) are reported as warnings: a run stored by older code may not
  * pass them all, and the record replays what was sent.
  */
@@ -44,6 +46,7 @@ import {
   TrackAnalysis,
 } from "@liner-notes/contract";
 import { isMediaUrl } from "../sources/http.js";
+import { isProfileBoilerplate, isSocialPage } from "../sources/search.js";
 import { isPreviewUrl, type RunRecord, type StoredRunEvent } from "../store/runs.js";
 import { ARCHIVE_FRONT, archiveCover } from "./cover.js";
 import { normalizeQuery } from "./records.js";
@@ -148,6 +151,9 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
 
 /** A URL signed with an expiring token, on any host. */
 const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature)=/i;
+
+/** The message of a source error, wherever the record holds one (its result, its events). */
+const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
 
 /**
  * Sites a record may link to: the track's Spotify page and the sources the pipeline cites. Any
@@ -353,8 +359,15 @@ export function leaks(
       if (pattern.test(scanned) || pattern.test(decoded(scanned))) found.push(`${path}: ${what}`);
     }
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
+    // A source error says what failed in words; markup is an answer's page that slipped in.
+    if (SOURCE_ERROR_MESSAGE.test(path) && /[<>]/.test(text)) {
+      found.push(`${path}: markup in a source error`);
+    }
+    // A comment thread's page chrome names the people who wrote in it.
+    if (isProfileBoilerplate(text)) found.push(`${path}: profile or handle boilerplate`);
     for (const url of text.match(URL_IN_TEXT) ?? []) {
       if (isPreviewUrl(url)) found.push(`${path}: a preview URL`);
+      else if (isSocialPage(url)) found.push(`${path}: a social platform page`);
       else if (allowedHere(url)) continue;
       else if (isMediaUrl(url)) found.push(`${path}: an image or media URL`);
       else found.push(`${path}: a URL outside the allow-listed sites`);

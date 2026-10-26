@@ -11,7 +11,7 @@ import underPressure from "./fixtures/shs-performance-under-pressure.json" with 
 import work from "./fixtures/shs-work-ice-ice-baby.json" with { type: "json" };
 import type { TrackRef } from "./records.js";
 import { shsLink, shsRelationships } from "./shs.js";
-import { type FetchRoute, json, stubFetch } from "./testing/fetchStub.js";
+import { type FetchRoute, html, json, stubFetch } from "./testing/fetchStub.js";
 import { recordThenReplay } from "./testing/roundTrip.js";
 
 const KEY = "shs-test-key-0123456789";
@@ -153,6 +153,23 @@ describe("SecondHandSongs", () => {
       status: "missing",
       error: { source: "secondhandsongs", code: "unavailable" },
     });
+  });
+
+  it("reports a refusal answered with an HTML page by its status, without the page", async () => {
+    const challenge =
+      '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title></head>' +
+      `<body>${"Checking your browser ".repeat(100)}</body></html>`;
+    stubFetch(() => html(challenge, 403));
+    const result = await shsRelationships(TRACK, [WORK]);
+    expect(result).toMatchObject({
+      status: "missing",
+      error: { source: "secondhandsongs", code: "unavailable" },
+    });
+    const message = result.error?.message ?? "";
+    expect(message).toContain("HTTP 403");
+    expect(message).not.toContain("<");
+    expect(message.length).toBeLessThan(100);
+    expect(JSON.stringify(result)).not.toContain("Just a moment");
   });
 
   it("replays the recorded run with no network; the cassette keeps only the fields read", async () => {

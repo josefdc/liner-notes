@@ -789,6 +789,68 @@ describe("the recorder", () => {
     }
   });
 
+  it("refuses markup in a source error's message, in the result and in its events", () => {
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const page = {
+      source: "secondhandsongs",
+      code: "unavailable",
+      message: 'secondhandsongs: HTTP 403 — <!DOCTYPE html><html lang="en-US"><head>',
+    };
+    const plain = {
+      source: "secondhandsongs",
+      code: "unavailable",
+      message: "secondhandsongs: HTTP 403 (the source refused the request)",
+    };
+    expect(
+      leaks(
+        {
+          analysis: { run: { sourceErrors: [plain, page] } },
+          events: [{ event: { type: "complete", data: { run: { sourceErrors: [page] } } } }],
+        },
+        check,
+      ),
+    ).toEqual([
+      "analysis.run.sourceErrors[1].message: markup in a source error",
+      "events[0].event.data.run.sourceErrors[0].message: markup in a source error",
+    ]);
+    expect(leaks({ analysis: { run: { sourceErrors: [plain] } } }, check)).toEqual([]);
+  });
+
+  it("refuses a social platform page and profile boilerplate, which carry people's handles", () => {
+    const webItem = (url: string, excerpt = "A caption about the song.") => ({
+      id: `tavily:${url}`,
+      source: "tavily",
+      sourceTier: "web",
+      url,
+      title: "A page",
+      retrievedAt: "2026-10-20T12:00:00.000Z",
+      excerpt,
+      recordRef: null,
+    });
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    expect(
+      leaks(
+        {
+          analysis: {
+            evidence: [
+              webItem("https://www.instagram.com/p/abc123/"),
+              webItem("https://example.org/post", "someone's profile picture someone 2w Love it"),
+            ],
+          },
+        },
+        check,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "analysis.evidence[0].url: a social platform page",
+        "analysis.evidence[1].excerpt: profile or handle boilerplate",
+      ]),
+    );
+    expect(
+      leaks({ analysis: { evidence: [webItem("https://www.youtube.com/watch?v=abc")] } }, check),
+    ).toEqual([]);
+  });
+
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {
     const runId = await liveRun("plain words");
     const { run, events } = stored(runId);

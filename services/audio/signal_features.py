@@ -98,11 +98,11 @@ SILENCE_FULL_S = 2.0
 # A tracked beat is reported only where there is sound to carry it: the RMS of the signal
 # within BEAT_LEVEL_WINDOW_S of the beat (the window's own mean removed, so a DC offset counts
 # as silence) must be no more than BEAT_BELOW_PEAK_DB under the loudest frame of the energy
-# contour, and at least BEAT_MIN_RMS. Trackers keep counting through silence: Essentia put 23 of its 55 beats in the
-# 10 s of digital silence before a 97 BPM band (tests/signals.py), and both trackers four beats
-# in a 2.5 s gap inside one. Those beats are extrapolated, not measured. The tempo is still
-# fitted to the tracked beats on onsets, and the steadiness check and the sections still use
-# every tracked beat, as before.
+# contour, and at least BEAT_MIN_RMS. Trackers keep counting through silence: Essentia put
+# 23 of its 55 beats in the 10 s of digital silence before a 97 BPM band (tests/signals.py),
+# and both trackers four beats in a 2.5 s gap inside one. Those beats are extrapolated, not
+# measured. The tempo is still fitted to the tracked beats on onsets, and the steadiness
+# check and the sections still use every tracked beat, as before.
 # Measured on the probes: the beats in digital silence read exactly 0 (WAV and MP3); the
 # quietest other beat is 26 dB under the loudest frame (brown noise with a kick). On 30 s clips
 # of 100 Ballroom and 100 GiantSteps Tempo tracks (a random window of each, and the first 30 s
@@ -114,10 +114,11 @@ SILENCE_FULL_S = 2.0
 # The relative floor alone keeps beats over dither in a quiet clip: with its loudest frame at
 # -45.5 dBFS, 60 dB under it is -105.5 dBFS, and Essentia's beats over a dithered intro (-98
 # dBFS) were all reported. BEAT_MIN_RMS (-90.5 dBFS) is above 16-bit TPDF dither in the
-# window (1.1e-5 after rounding to 16 bits, 8.9e-6 in float; shaped dither less once resampled
-# to 22.05 kHz; MP3 decodes it to 0 or 1.2e-6; SILENCE_RMS's note measured 1.5e-5 to 1.8e-5,
-# 4.4 dB under it) and 25.7 dB under the quietest beat kept on the clips above, which it leaves
-# unchanged.
+# window (rounded to 16 bits at 22.05 kHz, 1.43e-5 to 1.62e-5; at 44.1 kHz, once resampled,
+# 1.1e-5, and 8.9e-6 in float; shaped dither less; MP3 decodes it to 0 or 1.2e-6;
+# SILENCE_RMS's note measured 1.5e-5 to 1.8e-5, 4.4 dB under it) and 25.7 dB under the
+# quietest beat kept on the clips above, which it leaves unchanged. The tests pin it between
+# the two: rounded dither must count as silence, a triad at 7e-5 on a quiet clip as sound.
 # Known limits: beats tracked through an audible intro without onsets (a pad) are kept: of the
 # 208 beats off onsets at either end of those grids, 101 are within 20 dB of the loudest frame,
 # in the music, so onsets alone cannot tell them from extrapolated ones. Beats over a low noise

@@ -201,6 +201,108 @@ describe("the text of a web page", () => {
     expect(items.map((item) => item.url)).toEqual(["https://www.example.org/news/one-more-time"]);
   });
 
+  it("leaves out a forum comment thread by its byline, on any site, and keeps prose like it", () => {
+    const threads = [
+      "some_user on Feb 22, 2021 | parent | next (javascript:void(0)) Love it! One More Time is still the best house record.",
+      "some_user 3 hours ago | parent | next [–] The sample is More Spell on You by Eddie Johns.",
+      "Discovery came out in 2001. some_user 1 day ago | prev | next [–] Still a classic.",
+      "some_user 2 years ago | root | parent | next [–] Romanthony sang it.",
+      "someone on Sep 3, 2010 | next [–] Daft Punk recorded it in Paris.",
+    ];
+    const prose = [
+      "Hacker News readers discussed Daft Punk's One More Time when the duo split in 2021.",
+      "Daft Punk | Discovery | 2001 | Virgin Records",
+      "One More Time, a review by Jane Smith on Feb 22, 2021. The single opened Discovery.",
+      "Posted 3 hours ago | Music | News. Daft Punk's One More Time turns 25.",
+    ];
+    const items = webSearchEvidence([
+      ...threads.map((text, i) => web(`https://www.example.org/thread/${i}`, text)),
+      ...prose.map((text, i) => web(`https://www.example.org/page/${i}`, text)),
+    ]);
+
+    expect(items.map((item) => item.excerpt)).toEqual(prose);
+  });
+
+  it.each([
+    "Posted on Feb 22, 2021 | next article: Daft Punk split",
+    "Released on Mar 13, 2001 | root note is D minor",
+    "Updated 3 days ago | next page of the discography",
+    "Added 5 days ago | prev album: Homework",
+    "Reissued on Nov 3, 2023 | parent label Virgin Records",
+    "Live at Wembley on Jun 6, 2007 | next date: Paris",
+    "Uploaded 2 years ago | next track: Aerodynamic",
+    "Released 10 years ago | parent album Discovery",
+    "Recorded 1 year ago | root of the sample chain",
+    "Setlist: Rollin' & Scratchin' Played on Sep 3, 2010 | prev show",
+    "Released on Mar 13, 2001 | next-gen remaster",
+  ])("keeps a dated page whose next link word reads on as prose: %s", (text) => {
+    expect(webSearchEvidence([web("https://www.example.org/page", text)])).toHaveLength(1);
+  });
+
+  it.each([
+    "Posted on February 22, 2021 | prev | next Daft Punk announced their split with the video Epilogue.",
+    "Daft Punk announced their split. Published on Feb 22, 2021 | next",
+    "Daft Punk at Coachella on April 29, 2006 | prev | next",
+    "The single was released on November 30 2000 | prev | next",
+    "Uploaded an hour ago | next | Discovery tracklist",
+    "Daft Punk | 25 years ago | next | Discovery",
+    "Comments (3) | Posted on Feb 22, 2021 | context | share",
+    "Reviewed on Mar 3, 2020 | prev | next",
+    "Published on Oct 12, 2001 | next",
+    "Posted by Jane 3 hours ago | next",
+    "Released on Feb 22, 2021 | next (2001 remaster)",
+    "Released a year ago | parent label Virgin Records",
+  ])("keeps a dated page with a blog's prev and next links: %s", (text) => {
+    expect(webSearchEvidence([web("https://www.example.org/page", text)])).toHaveLength(1);
+  });
+
+  it.each([
+    ["the end of the text", "some_user 3 hours ago | parent"],
+    ["the end of the text after a context link", "some_user on Feb 22, 2021 | context | flag"],
+    [
+      "a script link (a top-level comment as the search returns it)",
+      "| | | | | --- | | | some_user on Feb 22, 2021 | next (javascript:void(0)) Love it! One More Time is still the best house record.",
+    ],
+    ["an age of 'a day'", "some_user a day ago | parent | next [–] Still a classic."],
+    ["an age of 'an hour'", "some_user an hour ago | prev | next [–] Still a classic."],
+    ["a date without a comma", "some_user on Feb 2 2021 | parent | next [–] Love it!"],
+    ["a vote link", "some_user 18 hours ago | unvote | prev | next [–] Romanthony sang it."],
+  ])("leaves out a forum comment byline at %s", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toEqual([]);
+  });
+
+  it.each([
+    ["a [flagged] marker", "some_user 3 hours ago [flagged] [–] nice sample"],
+    ["a [dead] marker", "some_user 3 hours ago [dead] | parent | next [–] the drop is great"],
+    ["a flag chain", "some_user 3 hours ago | flag | favorite [–] the drop is great"],
+    ["Algolia's order", "some_user | 3 hours ago | parent | context | on: One More Time"],
+    ["a fullwidth pipe", "some_user 3 hours ago ｜ parent ｜ next [–] Romanthony sang it."],
+    // A user name need not look like a handle: many have no digit or "_".
+    ["a full month name", "listener on February 22, 2021 | parent | next [–] Love it!"],
+  ])("leaves out a forum comment byline with %s", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toEqual([]);
+  });
+
+  it("refuses a forum comment byline or a Hacker News page when read back (written by older code)", async () => {
+    const [item] = webSearchEvidence([
+      web("https://www.example.org/news/one-more-time", "A page about the song."),
+    ]);
+    const older = {
+      ...item,
+      excerpt: "some_user on Feb 22, 2021 | parent | next (javascript:void(0)) Love it!",
+    } as SourcedEvidence;
+    const onForum = { ...item, url: "https://news.ycombinator.com/item?id=26214151" };
+
+    expect(restores([older])).toBe(false);
+    expect(restores([onForum])).toBe(false);
+    expect(await served([older])).toBe(false);
+    expect(await served([onForum])).toBe(false);
+    expect(recorderRefuses([older])).toEqual(["analysis.evidence[0].excerpt: a comment thread"]);
+    expect(recorderRefuses([onForum])).toContain(
+      "analysis.evidence[0].url: a social platform page",
+    );
+  });
+
   it("keeps a YouTube video's title and its channel's name: the channel is the publisher", () => {
     const [item] = webSearchEvidence([
       web(

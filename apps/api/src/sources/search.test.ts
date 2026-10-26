@@ -216,6 +216,148 @@ describe("web research searches", () => {
     expect(isSocialPage("https://www.toscana.com/")).toBe(false);
   });
 
+  it("excludes forum comment pages: Hacker News, on any subdomain or translate proxy", async () => {
+    const pages = [
+      "https://news.ycombinator.com/item?id=26214151",
+      "https://m.news.ycombinator.com/item?id=26214151",
+      "https://news-ycombinator-com.translate.goog/item?id=26214151",
+      "https://translate.google.com/translate?u=https://news.ycombinator.com/item?id=26214151",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(
+            answer([
+              ...pages.map((url) => ({
+                ...WHOSAMPLED,
+                url,
+                content: "One More Time is still the best house record ever made.",
+              })),
+              WHOSAMPLED,
+            ]),
+          )
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    expect(JSON.parse(net.calls[0].body ?? "{}").exclude_domains).toEqual(
+      expect.arrayContaining(["news.ycombinator.com", "news-ycombinator-com.translate.goog"]),
+    );
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    // Y Combinator's own pages are not its forum.
+    expect(isSocialPage("https://www.ycombinator.com/companies")).toBe(false);
+  });
+
+  it("excludes Quora and Gearspace, and leaves out Discogs' forum and group pages only", async () => {
+    const pages = [
+      "https://www.quora.com/What-does-One-More-Time-by-Daft-Punk-sample",
+      "https://fr.quora.com/Quel-sample-Daft-Punk",
+      "https://www-quora-com.translate.goog/What-does-Daft-Punk-sample",
+      "https://gearspace.com/board/so-much-gear-so-little-time/123-daft-punk-vocoder.html",
+      "https://www.gearspace.com/board/electronic-music-instruments/456-one-more-time.html",
+      "https://gearspace-com.translate.goog/board/123-daft-punk.html",
+      "https://www.discogs.com/forum/thread/123456",
+      "https://www.discogs.com/group/thread/654321",
+      "https://www.discogs.com/de/forum/thread/123456",
+      "https://www-discogs-com.translate.goog/forum/thread/123456",
+      "https://translate.google.com/translate?u=https://www.discogs.com/group/thread/654321",
+    ];
+    const RELEASE = {
+      ...WHOSAMPLED,
+      url: "https://www.discogs.com/release/1289-Daft-Punk-One-More-Time",
+      content: "Daft Punk – One More Time, 12-inch single, Virgin, 2000.",
+    };
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), RELEASE, WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([
+      RELEASE.url,
+      WHOSAMPLED.url,
+    ]);
+    const excluded: string[] = JSON.parse(net.calls[0].body ?? "{}").exclude_domains;
+    expect(excluded).toEqual(
+      expect.arrayContaining([
+        "quora.com",
+        "gearspace.com",
+        "quora-com.translate.goog",
+        "gearspace-com.translate.goog",
+      ]),
+    );
+    // Discogs is a primary source: only its forum pages are left out, by path.
+    expect(excluded).not.toContain("discogs.com");
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    for (const url of [
+      "https://www.discogs.com/master/1289-Daft-Punk-One-More-Time",
+      "https://www.discogs.com/artist/1289-Daft-Punk",
+      "https://www.discogs.com/de/release/1289-Daft-Punk-One-More-Time",
+      "https://www.discogs.com/release/1289-forum-edition",
+    ]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+  });
+
+  it("excludes Gearspace's former host and Hacker News' search, on any subdomain or translate proxy", async () => {
+    const pages = [
+      "https://gearslutz.com/board/so-much-gear-so-little-time/123-daft-punk-vocoder.html",
+      "https://www.gearslutz.com/board/electronic-music-instruments/456-one-more-time.html",
+      "https://gearslutz-com.translate.goog/board/123-daft-punk.html",
+      "https://hn.algolia.com/?q=daft+punk+one+more+time",
+      "https://hn-algolia-com.translate.goog/?q=daft+punk",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    expect(JSON.parse(net.calls[0].body ?? "{}").exclude_domains).toEqual(
+      expect.arrayContaining([
+        "gearslutz.com",
+        "hn.algolia.com",
+        "gearslutz-com.translate.goog",
+        "hn-algolia-com.translate.goog",
+      ]),
+    );
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    expect(isSocialPage("https://www.algolia.com/doc/")).toBe(false);
+  });
+
+  it("leaves out Discogs' forum after an underscore locale or a doubled slash, and keeps its releases", () => {
+    for (const url of [
+      "https://www.discogs.com/pt_BR/forum/thread/123456",
+      "https://www.discogs.com/zh_CN/group/thread/654321",
+      "https://www.discogs.com//forum/thread/123456",
+      "https://www.discogs.com/pt_BR//forum/thread/123456",
+    ]) {
+      expect(isSocialPage(url), url).toBe(true);
+    }
+    for (const url of [
+      "https://www.discogs.com/pt_BR/release/1289-Daft-Punk-One-More-Time",
+      "https://www.discogs.com//release/1289-Daft-Punk-One-More-Time",
+      "https://www.discogs.com/zh_CN/master/1289-forum",
+    ]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+  });
+
   it("masks every @handle in a result's text and title", async () => {
     const page = {
       ...WHOSAMPLED,

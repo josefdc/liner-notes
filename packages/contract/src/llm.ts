@@ -117,7 +117,8 @@ export type ComposerNode = z.infer<typeof ComposerNode>;
 
 /**
  * A relation between two nodes, from the earlier work (`source`) to the later one (`target`),
- * as `GenealogyLink` states it; a `producer` link has no direction.
+ * as `GenealogyLink` states it; a `producer` link has no direction. Code writes one claim per
+ * link from it (its type, ends, evidence and scope), which the verifier judges.
  */
 export const ComposerLink = z.strictObject({
   source: z
@@ -131,6 +132,7 @@ export const ComposerLink = z.strictObject({
     .describe("Node id of the later work: the record that uses or follows the source"),
   type: LinkType,
   evidenceIds: evidenceIds(),
+  scope: scope(),
 });
 export type ComposerLink = z.infer<typeof ComposerLink>;
 

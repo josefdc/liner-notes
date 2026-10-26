@@ -35,11 +35,6 @@ export const SongSegmentSchema = z.object({
     .describe(
       "End % (0-100). Last segment MUST end at 100. Next segment starts where previous ends.",
     ),
-  color: z
-    .string()
-    .describe(
-      "Hex color: '#00F0FF' chorus, '#1F2937' verse, '#374151' intro/outro, '#6B21A8' bridge",
-    ),
 });
 
 export type SongSegment = z.infer<typeof SongSegmentSchema>;
@@ -506,9 +501,9 @@ export function createEmptyTrackData(id: string, title: string, artist: string):
     explicit: undefined,
     ...measuredAudioFields(null),
     segments: [
-      { label: "Intro", start: 0, end: 10, color: "#374151" },
-      { label: "Main", start: 10, end: 90, color: "#1F2937" },
-      { label: "Outro", start: 90, end: 100, color: "#374151" },
+      { label: "Intro", start: 0, end: 10 },
+      { label: "Main", start: 10, end: 90 },
+      { label: "Outro", start: 90, end: 100 },
     ],
     segmentsSource: "template",
     samples: [],

@@ -76,7 +76,7 @@ describe('readLink', () => {
       expect(shown).toMatchObject({ kind: 'sourced', type, statedType: type, reasons: [] });
       expect(provenanceText(shown)).toBe(`Sourced · cites ${MB_SOURCED}`);
     }
-    const shs = read(sourced({ evidenceIds: ['ev-shs-1'] }));
+    const shs = read(sourced({ evidenceIds: ['ev-shs-1'], origin: 'code' }));
     expect(provenanceText(shs)).toBe('Sourced · cites ev-shs-1 (SecondHandSongs · primary record)');
   });
 
@@ -520,7 +520,12 @@ describe('readGenealogy', () => {
     const genealogy = {
       nodes: [node('current', 1), node('origin1', 2)],
       links: [
-        link('origin1', 'current', { type: 'sample', kind: 'sourced', evidenceIds: ['ev-mb-1'] }),
+        link('origin1', 'current', {
+          type: 'sample',
+          kind: 'sourced',
+          origin: 'code',
+          evidenceIds: ['ev-mb-1'],
+        }),
       ],
     };
     expect(shownLinks(genealogy, context())[0]).toMatchObject({ kind: 'sourced' });

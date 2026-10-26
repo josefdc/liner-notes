@@ -254,7 +254,9 @@ const answering: ProviderRoute = (call) => {
             year: null,
           },
         ],
-        genealogyLinks: [{ source: "up", target: "current", type: "sample", evidenceIds: [] }],
+        genealogyLinks: [
+          { source: "up", target: "current", type: "sample", evidenceIds: [], scope: "recording" },
+        ],
       },
       { input: 900, output: 300, reasoning: 100 },
     ),
@@ -297,11 +299,16 @@ async function run(
       },
     );
     for await (const update of stream) {
-      const composer = (update as { composer?: { trackData?: TrackData } }).composer;
-      if (composer) {
+      const nodes = update as {
+        composer?: { trackData?: TrackData };
+        verifier?: { trackData?: TrackData };
+      };
+      if (nodes.composer) {
         result.composerRuns++;
-        result.trackData = composer.trackData ?? null;
+        // The composer hands the verifier a draft; it never sends the result itself.
+        expect(nodes.composer.trackData).toBeUndefined();
       }
+      if (nodes.verifier) result.trackData = nodes.verifier.trackData ?? null;
     }
   } catch (error) {
     result.threw = error;
@@ -745,7 +752,15 @@ describe("the analysis graph under failure", () => {
 
     const stamped = events.filter((event) => event.timestamp !== undefined);
     expect(new Set(stamped.map((event) => event.node))).toEqual(
-      new Set(["scout", "engineer", "historian", "research_manager", "research_tool", "composer"]),
+      new Set([
+        "scout",
+        "engineer",
+        "historian",
+        "research_manager",
+        "research_tool",
+        "composer",
+        "verifier",
+      ]),
     );
     for (const event of stamped) expect(event.timestamp).toBe("2020-02-02T02:02:02.000Z");
   });

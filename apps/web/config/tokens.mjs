@@ -34,6 +34,13 @@ export function readTokens(css) {
       if (!text.endsWith(' ')) text += ' ';
       continue;
     }
+    if (char === '\\') {
+      // A CSS escape (`.a\\{b`, `.focus\\:x`): the next character is part of the name.
+      if (i + 1 >= css.length) throw new Error(`escape at the end of the sheet (offset ${i})`);
+      text += char + css[i + 1];
+      i += 1;
+      continue;
+    }
     if (char === '"' || char === "'") {
       quote = char;
       text += char;
@@ -133,7 +140,20 @@ export function parseColor(value) {
   }
   const fn = /^rgba?\(\s*([^)]*)\)$/.exec(text);
   if (!fn) return null;
-  const parts = fn[1].split(/\s*[,/]\s*|\s+/).filter(Boolean);
+  // Legacy syntax: commas between every part (rgba(0, 0, 0, 0.5)). Modern syntax: spaces, and a
+  // slash before the alpha (rgb(0 0 0 / 0.5)). Browsers reject a mix, such as rgb(0 0 0 0.5).
+  const body = fn[1].trim();
+  let parts;
+  if (body.includes(',')) {
+    if (body.includes('/')) return null;
+    parts = body.split(/\s*,\s*/);
+  } else {
+    const [channels, alpha, extra] = body.split(/\s*\/\s*/);
+    if (extra !== undefined) return null;
+    parts = channels.split(/\s+/);
+    if (parts.length !== 3) return null;
+    if (alpha !== undefined) parts.push(alpha);
+  }
   if (parts.length !== 3 && parts.length !== 4) return null;
   const number = (part, scale) => {
     if (!/^\d*\.?\d+%?$/.test(part)) return Number.NaN;

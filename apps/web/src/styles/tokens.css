@@ -9,7 +9,8 @@
  *   fails when theme.ts is out of date.
  * - apps/web/config/contrast.mjs (scripts/contrast.mjs; also run before every build) checks every
  *   colour used as text at 4.5:1 or more: the text, prov, status and accent families, cyber,
- *   analog, spotify and white, and any colour a text-* class in apps/web/src names. It checks
+ *   analog, spotify and white, and any colour a text-* class in apps/web/src names (at its
+ *   opacity and the element's own; what it cannot see is listed in that file). It checks
  *   them on every surface: a void base, a translucent surface panel on it, and a hover or active
  *   state (or the class string's own bg tint) on that. Data-visualisation colours (--color-viz-*)
  *   are checked at 3:1 or more.
@@ -155,21 +156,25 @@
   --radius-full: 9999px;
 
   /* ===== Shadows ===== */
+  /* The accent and Spotify glows follow their colour tokens */
   --shadow-glow-cyber: 0 0 20px rgba(0, 240, 255, 0.25);
   --shadow-glow-analog: 0 0 20px rgba(255, 176, 0, 0.25);
-  --shadow-glow-purple: 0 0 20px rgba(168, 85, 247, 0.25);
-  --shadow-glow-pink: 0 0 20px rgba(236, 72, 153, 0.25);
-  --shadow-glow-green: 0 0 20px rgba(34, 197, 94, 0.25);
-  --shadow-glow-spotify: 0 0 20px rgba(29, 185, 84, 0.25);
-  --shadow-glow-indigo: 0 0 20px rgba(99, 102, 241, 0.25);
+  --shadow-glow-purple: 0 0 20px color-mix(in srgb, var(--color-accent-purple) 25%, transparent);
+  --shadow-glow-pink: 0 0 20px color-mix(in srgb, var(--color-accent-pink) 25%, transparent);
+  --shadow-glow-green: 0 0 20px color-mix(in srgb, var(--color-accent-green) 25%, transparent);
+  --shadow-glow-spotify: 0 0 20px color-mix(in srgb, var(--color-spotify) 25%, transparent);
+  --shadow-glow-indigo: 0 0 20px color-mix(in srgb, var(--color-accent-indigo) 25%, transparent);
   --shadow-glow-amber: var(--shadow-glow-analog);
   --shadow-glow-cyber-subtle: 0 0 12px rgba(0, 240, 255, 0.15);
   --shadow-glow-analog-subtle: 0 0 12px rgba(255, 176, 0, 0.15);
-  --shadow-glow-purple-subtle: 0 0 12px rgba(168, 85, 247, 0.15);
-  --shadow-glow-green-subtle: 0 0 12px rgba(34, 197, 94, 0.15);
-  --shadow-glow-pink-subtle: 0 0 12px rgba(236, 72, 153, 0.15);
-  --shadow-glow-spotify-subtle: 0 0 12px rgba(29, 185, 84, 0.15);
-  --shadow-glow-indigo-subtle: 0 0 12px rgba(99, 102, 241, 0.15);
+  --shadow-glow-purple-subtle: 0 0 12px
+    color-mix(in srgb, var(--color-accent-purple) 15%, transparent);
+  --shadow-glow-green-subtle: 0 0 12px
+    color-mix(in srgb, var(--color-accent-green) 15%, transparent);
+  --shadow-glow-pink-subtle: 0 0 12px color-mix(in srgb, var(--color-accent-pink) 15%, transparent);
+  --shadow-glow-spotify-subtle: 0 0 12px color-mix(in srgb, var(--color-spotify) 15%, transparent);
+  --shadow-glow-indigo-subtle: 0 0 12px
+    color-mix(in srgb, var(--color-accent-indigo) 15%, transparent);
   --shadow-glow-amber-subtle: var(--shadow-glow-analog-subtle);
   --shadow-glow-white: 0 0 20px rgba(255, 255, 255, 0.15); /* play button */
   --shadow-glow-white-hover: 0 0 30px rgba(255, 255, 255, 0.3);

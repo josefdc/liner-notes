@@ -6,13 +6,20 @@
 // Text colours reach 4.5:1 (AA for body text) on every surface. A colour is text when
 // - its name says so: --color-text-*, --color-prov-*, --color-status-*, --color-accent-*,
 //   cyber, analog, spotify and white; or
-// - the app draws text with it: a text-*, placeholder-* or caret-* class in the source names it
-//   (at the class's opacity, so text-cyber/60 is checked at 60 %), or a chart role that colours
-//   text (ROLES in theme.mjs with `text`).
+// - the app draws text with it: a text-*, placeholder-* or caret-* class in the source names it,
+//   or a chart role that colours text (ROLES in theme.mjs with `text`). Classes are read with the
+//   TypeScript parser (classes.mjs): every string and template part outside comments, a quoted
+//   class inside ${…}, each branch of a conditional on its own, a class-joining call's arguments
+//   together. A colour is checked at the class's opacity (text-cyber/60, /[0.6]) times the
+//   element's own opacity-* class.
 // A class string that also sets a background tint (`text-accent-pink hover:bg-accent-pink/20`)
 // has its text checked on that tint too, over every surface. Dark text on a light fill
-// (INVERSE) is checked on that fill instead. Data-visualisation colours (--color-viz-*) reach
-// 3:1 (AA for graphics) on the page and on panels.
+// (INVERSE) is checked on that fill instead. A text class naming Tailwind's default palette
+// (text-red-900) fails: it is not a token. Data-visualisation colours (--color-viz-*) reach
+// 3:1 (AA for graphics) on the page and on panels. KNOWN lists failures whose fix is planned.
+//
+// Not seen: opacity or a background set on an ancestor element, a colour inherited from one,
+// inline styles, and classes built from variables (`text-${tone}`).
 //
 // Surfaces are the opaque --color-void* tokens, each translucent --color-surface* panel drawn on
 // them, and each translucent state (--color-surface-hover, --color-surface-active) drawn on a
@@ -24,6 +31,7 @@
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classStrings } from './classes.mjs';
 import { ROLES, SRC_DIR } from './theme.mjs';
 import { parseColor, readTokens, resolveToken } from './tokens.mjs';
 
@@ -38,6 +46,17 @@ export const INVERSE = {
   '--color-black': ['--color-white'],
   '--color-void': ['--color-cyber'],
 };
+/**
+ * Text below 4.5:1 whose fix is planned elsewhere: { name (as reported), file (under src), issue }.
+ * Only the app's own source is matched against it.
+ */
+export const KNOWN = [
+  {
+    name: '--color-text-tertiary/60',
+    file: 'components/SystemConsole.tsx',
+    issue: 'the console timestamp is opacity-60; the #30 sweep removes it',
+  },
+];
 const isBase = (name) => /^--color-void(-|$)/.test(name);
 const isTranslucentSurface = (name) => /^--color-surface(-|$)/.test(name);
 const isState = (name) => /^--color-surface-(hover|active)$/.test(name);
@@ -112,21 +131,67 @@ export function surfaceStacks(tokens) {
   return stacks;
 }
 
-/** The string literals of a script ('…', "…" and `…`, a template's ${} parts left out). */
-function literals(source) {
-  const found = /'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g;
-  return [...source.matchAll(found)].map((match) => ({
-    text: (match[1] ?? match[2] ?? match[3]).replace(/\$\{[^}]*\}/g, ' '),
-    line: source.slice(0, match.index).split('\n').length,
-  }));
+/** Tailwind's default palette, which the app's tokens replace: such a class is not checked. */
+const DEFAULT_PALETTE =
+  /^(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(50|[1-9]00|950)$/;
+
+/** An opacity modifier or value: 40, [0.4] or [40%] → 0.4; null when there is none. */
+function amount(value) {
+  if (value === undefined) return null;
+  const arbitrary = /^\[(\d*\.?\d+)(%?)\]$/.exec(value);
+  if (arbitrary) return Number(arbitrary[1]) / (arbitrary[2] ? 100 : 1);
+  return /^\d+$/.test(value) ? Number(value) / 100 : Number.NaN;
 }
 
 /**
- * The colour tokens the source draws text with: Map "<token>@<alpha>" → { token, alpha, sites,
- * tints }, where tints are the background colours set in the same class string.
+ * What one class string draws text with: { texts, tints, offPalette }. Each text colour is at its
+ * class's opacity times the element's own `opacity-*` (at rest; for an element hidden at rest,
+ * `opacity-0`, as shown by its state classes). `!` (important) is ignored.
+ */
+export function readClasses(text, tokens) {
+  const texts = [];
+  const tints = [];
+  const offPalette = [];
+  let rest = null;
+  let shown = null;
+  for (const raw of text.split(/\s+/)) {
+    if (!raw) continue;
+    const colon = raw.lastIndexOf(':');
+    const prefix = colon === -1 ? '' : raw.slice(0, colon);
+    const utility = raw.slice(colon + 1).replace(/^!|!$/g, '');
+    const opacity = /^opacity-(\d+|\[[^\]]+\])$/.exec(utility);
+    if (opacity) {
+      const value = amount(opacity[1]);
+      if (prefix) shown = Math.max(shown ?? 0, value);
+      else rest = value;
+      continue;
+    }
+    const match = /^(text|placeholder|caret|bg)-([a-z][\w-]*?)(?:\/(\d+|\[[^\]]+\]))?$/.exec(
+      utility,
+    );
+    if (!match) continue;
+    const token = `--color-${match[2]}`;
+    if (!tokens.has(token)) {
+      if (match[1] !== 'bg' && DEFAULT_PALETTE.test(match[2])) offPalette.push(raw);
+      continue;
+    }
+    const alpha = amount(match[3]) ?? 1;
+    (match[1] === 'bg' ? tints : texts).push({ token, alpha });
+  }
+  const element = rest === null ? 1 : rest === 0 ? (shown ?? 1) : rest;
+  for (const use of texts) use.alpha = Math.round(use.alpha * element * 1000) / 1000;
+  return { texts, tints, offPalette };
+}
+
+/**
+ * What the source draws text with: { uses, offPalette }. uses: Map "<token>@<alpha>" → { token,
+ * alpha, sites, tints }, where tints are the background colours set in the same class string.
+ * offPalette: [{ cls, site }], text classes naming a colour of Tailwind's default palette instead
+ * of a token.
  */
 export function textUses(tokens, srcDir) {
   const uses = new Map();
+  const offPalette = [];
   const visit = (folder) => {
     for (const entry of readdirSync(folder, { withFileTypes: true })) {
       const path = join(folder, entry.name);
@@ -135,28 +200,22 @@ export function textUses(tokens, srcDir) {
         continue;
       }
       if (!/\.[cm]?[jt]sx?$/.test(entry.name) || /\.(test|spec)\./.test(entry.name)) continue;
-      for (const { text, line } of literals(readFileSync(path, 'utf8'))) {
-        const found = [];
-        const tints = [];
-        for (const candidate of text.split(/\s+/)) {
-          const utility = candidate.slice(candidate.lastIndexOf(':') + 1);
-          const match = /^(text|placeholder|caret|bg)-([a-z][\w-]*?)(?:\/(\d+))?$/.exec(utility);
-          if (!match || !tokens.has(`--color-${match[2]}`)) continue;
-          const alpha = match[3] ? Number(match[3]) / 100 : 1;
-          (match[1] === 'bg' ? tints : found).push({ token: `--color-${match[2]}`, alpha });
-        }
-        for (const use of found) {
+      for (const { text, line } of classStrings(readFileSync(path, 'utf8'), path)) {
+        const site = `${relative(srcDir, path)}:${line}`;
+        const read = readClasses(text, tokens);
+        for (const cls of read.offPalette) offPalette.push({ cls, site });
+        for (const use of read.texts) {
           const key = `${use.token}@${use.alpha}`;
           if (!uses.has(key)) uses.set(key, { ...use, sites: [], tints: new Map() });
-          const entry = uses.get(key);
-          entry.sites.push(`${relative(srcDir, path)}:${line}`);
-          for (const tint of tints) entry.tints.set(`${tint.token}@${tint.alpha}`, tint);
+          const found = uses.get(key);
+          if (!found.sites.includes(site)) found.sites.push(site);
+          for (const tint of read.tints) found.tints.set(`${tint.token}@${tint.alpha}`, tint);
         }
       }
     }
   };
   if (srcDir) visit(srcDir);
-  return uses;
+  return { uses, offPalette };
 }
 
 const label = ({ token, alpha }) => `${token}${alpha < 1 ? `/${Math.round(alpha * 100)}` : ''}`;
@@ -165,7 +224,7 @@ const label = ({ token, alpha }) => `${token}${alpha < 1 ? `/${Math.round(alpha 
  * Every checked colour with its ratio on each surface (and tint):
  * [{ name, minimum, sites, results: [{ surface, ratio }], lowest, passes }].
  */
-export function contrastReport(css, srcDir = null) {
+export function contrastReport(css, srcDir = null, known = srcDir === SRC_DIR ? KNOWN : []) {
   const tokens = readTokens(css);
   const stacks = surfaceStacks(tokens);
   const checks = new Map();
@@ -184,7 +243,8 @@ export function contrastReport(css, srcDir = null) {
       add({ token: name, alpha: 1 }, TEXT_MINIMUM);
     else if (isGraphic(name)) add({ token: name, alpha: 1 }, GRAPHIC_MINIMUM);
   }
-  for (const use of textUses(tokens, srcDir).values()) {
+  const { uses, offPalette } = textUses(tokens, srcDir);
+  for (const use of uses.values()) {
     if (!(use.token in INVERSE)) add(use, TEXT_MINIMUM, use.sites);
   }
   for (const [role, { text, map }] of Object.entries(ROLES)) {
@@ -233,9 +293,43 @@ export function contrastReport(css, srcDir = null) {
     });
     report.push({ name: token, minimum: TEXT_MINIMUM, sites: [], results });
   }
+  // A default-palette colour is not a design token: nothing says which surfaces it was chosen for.
+  for (const { cls, site } of offPalette) {
+    report.push({
+      name: cls,
+      minimum: TEXT_MINIMUM,
+      sites: [site],
+      results: [{ surface: 'nothing: not a design token (use a --color-* token)', ratio: 0 }],
+    });
+  }
   for (const entry of report) {
     entry.lowest = entry.results.reduce((low, result) => (result.ratio < low.ratio ? result : low));
     entry.passes = entry.lowest.ratio >= entry.minimum;
+  }
+  // Known failures, each with the issue that fixes it: reported, not failed, as long as every
+  // site of the colour is a listed one. A listed one that no longer fails fails, so the list
+  // only shrinks.
+  const matched = new Set();
+  for (const entry of report) {
+    if (entry.passes || entry.sites.length === 0) continue;
+    const listed = entry.sites.map((site) =>
+      known.find((item) => item.name === entry.name && site.startsWith(`${item.file}:`)),
+    );
+    if (listed.every(Boolean)) {
+      entry.known = [...new Set(listed.map((item) => item.issue))].join('; ');
+      for (const item of listed) matched.add(item);
+    }
+  }
+  for (const item of known) {
+    if (matched.has(item)) continue;
+    report.push({
+      name: item.name,
+      minimum: TEXT_MINIMUM,
+      sites: [item.file],
+      results: [{ surface: 'nothing: listed as known but it no longer fails here', ratio: 0 }],
+      lowest: { surface: 'nothing: listed as known but it no longer fails here', ratio: 0 },
+      passes: false,
+    });
   }
   return report;
 }
@@ -281,15 +375,18 @@ export function main(args, log = console.log, error = console.error) {
       detail = shown.join(', ');
       if (entry.sites.length > 0) detail += `; text at ${entry.sites.slice(0, 3).join(', ')}`;
     }
-    const status = entry.passes ? 'ok  ' : 'FAIL';
+    if (entry.known) detail += ` [known: ${entry.known}]`;
+    const status = entry.passes ? 'ok  ' : entry.known ? 'KNOWN' : 'FAIL';
     log(`${status} ${entry.name.padEnd(width)}  needs ${entry.minimum}:1  ${detail}`);
   }
-  const failures = report.filter((entry) => !entry.passes).length;
+  const failures = report.filter((entry) => !entry.passes && !entry.known).length;
+  const known = report.filter((entry) => entry.known).length;
+  const also = known > 0 ? ` (${known} known, listed in KNOWN with the issue that fixes it)` : '';
   if (failures > 0) {
-    error(`contrast: ${failures} of ${report.length} colours fall short on some surface`);
+    error(`contrast: ${failures} of ${report.length} colours fall short on some surface${also}`);
     return 1;
   }
-  log(`contrast: all ${report.length} colours pass on every surface`);
+  log(`contrast: all ${report.length - known} other colours pass on every surface${also}`);
   return 0;
 }
 

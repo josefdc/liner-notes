@@ -250,7 +250,9 @@ describe("contrast report", () => {
       encoding: "utf8",
     });
     expect(fail.status).toBe(1);
-  });
+    // Two processes that each load the TypeScript parser and read the app's source: on a busy
+    // machine that alone can take several seconds.
+  }, 30_000);
 });
 
 describe("token sheet", () => {
@@ -317,5 +319,111 @@ describe("token sheet", () => {
     expect(parseColor("red")).toBeNull();
     expect(parseColor("rgb(300, 0, 0)")).toBeNull();
     expect(parseColor("color-mix(in srgb, #fff 50%, transparent)")).toBeNull();
+    // Browsers reject these, so a token written that way must not pass as a colour.
+    expect(parseColor("rgb(0 0 0 0.5)")).toBeNull();
+    expect(parseColor("rgb(0, 0 0)")).toBeNull();
+    expect(parseColor("rgba(0, 0, 0 / 0.5)")).toBeNull();
+    expect(parseColor("rgb(0 0 0 / 0.5 / 1)")).toBeNull();
+  });
+
+  it("reads a CSS escape outside a string as part of a name", () => {
+    expect([...readTokens(".a\\{b { color: red; } .c\\:d { } @theme { --a: #000; }")]).toEqual([
+      ["--a", "#000"],
+    ]);
+    expect(() => readTokens("@theme { --a: 1px; }\\")).toThrow("escape at the end");
+  });
+});
+
+describe("class strings", () => {
+  /** The checked colours that `code`, as a component, draws text with: name → passes. */
+  const checked = (code) => {
+    const report = contrastReport(tokens, source(code));
+    return Object.fromEntries(
+      report
+        .filter((item) => item.sites.some((site) => site.startsWith("components/")))
+        .map((item) => [item.name, item.passes]),
+    );
+  };
+
+  it("reads a className over several lines", () => {
+    const code = `export const A = () => (
+  <p
+    className="text-xs font-mono
+               text-white/40 uppercase"
+  >
+    a
+  </p>
+);`;
+    expect(checked(code)).toMatchObject({ "--color-white/40": false });
+    const { out } = run([tokensPath, "--src", source(code)]);
+    expect(out).toMatch(/^FAIL --color-white\/40 .*; text at components\/Thing\.tsx:3$/m);
+  });
+
+  it("reads quoted classes inside a template placeholder, each branch on its own", () => {
+    const code = `export const A = ({ dim, on }) => (
+  <p className={\`font-mono \${dim ? 'text-white/40' : 'text-text-secondary'} \${on ? 'bg-cyber text-void' : 'text-text-tertiary'}\`}>a</p>
+);`;
+    const report = contrastReport(tokens, source(code));
+    const names = (name) => report.find((item) => item.name === name);
+    expect(names("--color-white/40").passes).toBe(false);
+    expect(names("--color-text-secondary").sites).toContain("components/Thing.tsx:2");
+    // One branch's background is not drawn under the other branch's text.
+    expect(
+      names("--color-text-tertiary").results.some((r) => r.surface.startsWith("bg-cyber ")),
+    ).toBe(false);
+  });
+
+  it("reads the important mark and arbitrary opacities", () => {
+    expect(checked("const a = 'text-white/40!';")).toMatchObject({ "--color-white/40": false });
+    expect(checked("const a = '!text-white/40';")).toMatchObject({ "--color-white/40": false });
+    expect(checked("const a = 'text-white/[0.4]';")).toMatchObject({ "--color-white/40": false });
+    expect(checked("const a = 'text-white/[40%]';")).toMatchObject({ "--color-white/40": false });
+  });
+
+  it("applies the element's own opacity, and reads a hidden-at-rest element as shown", () => {
+    expect(checked("const a = 'text-text-secondary opacity-50';")).toMatchObject({
+      "--color-text-secondary/50": false,
+    });
+    expect(checked("const a = 'text-text-secondary hover:opacity-50';")).toMatchObject({
+      "--color-text-secondary": true,
+    });
+    expect(
+      checked("const a = 'opacity-0 group-hover:opacity-100 text-text-secondary';"),
+    ).toMatchObject({ "--color-text-secondary": true });
+  });
+
+  it("takes a tint passed to a class-joining call as the same element's", () => {
+    const css = withToken("--color-accent-purple", "#a855f7");
+    const code = "const a = cn('text-accent-purple', active && 'hover:bg-accent-purple/20');";
+    const purple = contrastReport(css, source(code)).find(
+      (item) => item.name === "--color-accent-purple",
+    );
+    expect(purple.results.some((r) => r.surface.startsWith("bg-accent-purple/20 on "))).toBe(true);
+  });
+
+  it("fails a default-palette colour used as text: it is not a design token", () => {
+    const { code, out } = run([tokensPath, "--src", source('<p className="text-red-900">a</p>')]);
+    expect(code).toBe(1);
+    expect(out).toMatch(
+      /^FAIL text-red-900 .*not a design token.*; text at components\/Thing\.tsx:1$/m,
+    );
+  });
+
+  it("ignores classes in comments", () => {
+    const code = "// was 'text-white/30'\n/* also \"text-white/30\" */\nexport const a = 1;";
+    expect(checked(code)).toEqual({});
+  });
+
+  it("reports a listed known failure without failing, and fails a listed one that is gone", () => {
+    const { code, out } = run([tokensPath]);
+    expect(code).toBe(0);
+    expect(out).toMatch(/^KNOWN --color-text-tertiary\/60 .*components\/SystemConsole\.tsx:\d+/m);
+    const src = source("const a = 'text-text-secondary';");
+    const stale = contrastReport(tokens, src, [
+      { name: "--color-white/40", file: "components/Thing.tsx", issue: "fixed elsewhere" },
+    ]);
+    const entry = stale.find((item) => item.name === "--color-white/40");
+    expect(entry.passes).toBe(false);
+    expect(entry.lowest.surface).toContain("no longer fails");
   });
 });

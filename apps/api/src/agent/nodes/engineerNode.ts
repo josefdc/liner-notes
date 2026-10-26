@@ -22,10 +22,11 @@
  * fresh clip is looked up for the player, and `preview` still describes the clip the cached
  * values were measured on: both are clips of the chosen recording, not always the same entry.
  * Without a clip the player has none, never another recording's clip. "No clip" (`no_preview`) is
- * said only when Deezer answered every request of the lookup. When the lookup could not be
- * finished (Deezer could not be read, which is also recorded as a source error, or a request had
- * no slot of its pace in time and was not sent), the reason is `preview_lookup_incomplete`, and
- * the result is not stored (composerNode.ts).
+ * said only when Deezer answered every request of the lookup. When there is no clip and the
+ * lookup could not be finished (Deezer could not be read, which is also recorded as a source
+ * error, or a request had no slot of its pace in time and was not sent), nothing is measured,
+ * the reason is `preview_lookup_incomplete`, and the result is not stored (composerNode.ts). A
+ * cached measurement, or one of Spotify's own clip, is still served when the lookup is unfinished.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";

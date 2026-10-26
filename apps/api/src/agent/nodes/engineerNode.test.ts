@@ -8,7 +8,17 @@
  */
 
 import type { AudioFeatures } from "@liner-notes/contract";
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import type { AudioMeasurement } from "../state.js";
 import {
   ANALYZER_VERSION,
@@ -140,43 +150,48 @@ function stateFor(id: string, isrc: string | null = null): SonicAgentStateType {
 }
 
 /** Runs the node and collects the status text it writes and returns. */
-async function run(id: string, isrc: string | null = null) {
+async function run(id: string, isrc: string | null = null, signal?: AbortSignal) {
   const written: string[] = [];
   const config = {
     writer: (event: { message?: string }) => written.push(event.message ?? ""),
+    signal,
   } as never;
   const out = await engineerNode(stateFor(id, isrc), config);
   return { out, text: [...written, ...(out.statusMessages ?? [])].join("\n") };
 }
 
 /**
- * Fills Deezer's pace with other requests: a full window, and as many again waiting for the next
- * one, so every later request of the lookup is refused and not sent. With `when`, it is filled
- * when the lookup first asks for a URL `when` matches (that request is answered). The pace, the
- * clock and the waiting requests are undone when the test finishes, whatever its outcome.
+ * Fills Deezer's pace with `ahead` other requests: by default a full window, and as many again
+ * waiting for the next one, so every later request of the lookup is refused and not sent. With
+ * `when`, it is filled when the lookup first asks for a URL `when` matches (that request is
+ * answered). Returns the signal to run the engineer with. When the test finishes, whatever its
+ * outcome, the run and the other requests are stopped and the pace is undone.
  */
-function fillDeezerPace(when?: (url: string) => boolean): void {
-  // A whole-millisecond clock: on a fractional one a full window can hang the pacer (#133).
-  vi.useFakeTimers({ toFake: ["performance"] });
+function fillDeezerPace(
+  options: { when?: (url: string) => boolean; ahead?: number } = {},
+): AbortSignal {
+  const { when, ahead: count = 2 * DEEZER_MAX_PER_WINDOW } = options;
   setUnpacedForTests(false);
   const others = new AbortController();
+  const run = new AbortController();
   const ahead: Array<Promise<unknown>> = [];
   onTestFinished(async () => {
-    // Stopped, never let go: a waiting request sends nothing once the network is restored.
+    // Stopped, never let go: the real network is back by now (afterEach runs first), and
+    // undoing the pace lets every waiting request go, the run's own among them.
+    run.abort();
     others.abort();
     setUnpacedForTests(true);
     await Promise.all(ahead);
-    vi.useRealTimers();
   });
   const fill = () => {
     const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
-    for (let i = 0; i < 2 * DEEZER_MAX_PER_WINDOW; i++) {
+    for (let i = 0; i < count; i++) {
       ahead.push(deezerPreviewByIsrc(other, others.signal).catch(() => null));
     }
   };
   if (!when) {
     fill();
-    return;
+    return run.signal;
   }
   let filled = false;
   deezer.onRequest = (url) => {
@@ -184,6 +199,7 @@ function fillDeezerPace(when?: (url: string) => boolean): void {
     filled = true;
     fill();
   };
+  return run.signal;
 }
 
 /** The line for a preview lookup that could not be finished, whatever stopped it. */
@@ -680,7 +696,7 @@ describe("engineerNode", () => {
       expect(out.preview).toEqual({ provider: "spotify", method: "id", score: null });
     });
 
-    it("reports a Deezer outage as a source error, apart from the missing clip", async () => {
+    it("reports a Deezer outage as a source error and the lookup as incomplete, never as a missing clip", async () => {
       const stub = stubNetwork("up");
       deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
       const { out, text } = await run("Q", "USSB29000129");
@@ -714,8 +730,8 @@ describe("engineerNode", () => {
 
     it("says the lookup could not be finished, never that no clip was found, when Deezer's pace refuses its first request", async () => {
       const stub = stubNetwork("up", null);
-      fillDeezerPace();
-      const { out, text } = await run("PACED", "USSB29000129");
+      const signal = fillDeezerPace();
+      const { out, text } = await run("PACED", "USSB29000129", signal);
 
       // Nothing reached Deezer.
       expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
@@ -727,8 +743,8 @@ describe("engineerNode", () => {
 
     it("says the lookup could not be finished when Deezer answered the ISRC and its pace refused the search", async () => {
       const stub = stubNetwork("up", null);
-      fillDeezerPace((url) => url.includes("/track/isrc:USSB29000129"));
-      const { out, text } = await run("PACED-B", "USSB29000129");
+      const signal = fillDeezerPace({ when: (url) => url.includes("/track/isrc:USSB29000129") });
+      const { out, text } = await run("PACED-B", "USSB29000129", signal);
 
       expect(stub.calls).toContain("https://api.deezer.com/track/isrc:USSB29000129");
       expect(stub.calls.some((url) => url.includes("/search/track"))).toBe(false);
@@ -748,8 +764,8 @@ describe("engineerNode", () => {
         ...deezerEntry(8, "Ice Ice Baby", "Vanilla Ice", PREVIEW),
         isrc: "USSB29000129",
       };
-      fillDeezerPace((url) => url.includes("/track/isrc:USSB29000129"));
-      const { out, text } = await run("PACED-C", "USSB29000129");
+      const signal = fillDeezerPace({ when: (url) => url.includes("/track/isrc:USSB29000129") });
+      const { out, text } = await run("PACED-C", "USSB29000129", signal);
 
       expect(stub.calls).toContain("https://api.deezer.com/track/isrc:USSB29000129");
       expect(stub.calls).not.toContain("https://api.deezer.com/track/8");
@@ -759,11 +775,11 @@ describe("engineerNode", () => {
 
     it("measures Spotify's own clip when Deezer's pace refused the ISRC request", async () => {
       const stub = stubNetwork("up", null);
-      fillDeezerPace();
+      const signal = fillDeezerPace();
       const spotifyClip = "https://p.scdn.co/mp3-preview/own";
       const state = stateFor("S2", "USSB29000129");
       state.spotifyData = { ...state.spotifyData, previewUrl: spotifyClip } as never;
-      const out = await engineerNode(state, { writer: () => {} } as never);
+      const out = await engineerNode(state, { writer: () => {}, signal } as never);
 
       expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
       expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
@@ -791,6 +807,37 @@ describe("engineerNode", () => {
       const { out } = await run("N2", "USSB29000129");
       expect(out.audioFeatures).toMatchObject({ unavailableReason: "no_preview" });
       expect(out.sourceErrors).toBeUndefined();
+    });
+  });
+
+  describe("a paced run still waiting when its test ends", () => {
+    // The tests' own stubs are removed in afterEach, before onTestFinished runs: anything a
+    // waiting run sends after its test reaches this instead of the network, and is refused.
+    const leaked: string[] = [];
+    let network: typeof fetch;
+    beforeAll(() => {
+      network = globalThis.fetch;
+      globalThis.fetch = (async (input: string | URL | Request) => {
+        leaked.push(
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        );
+        throw new TypeError("network denied after the test");
+      }) as typeof fetch;
+    });
+    afterAll(async () => {
+      // A request let go by the cleanup is sent within a few ticks.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      globalThis.fetch = network;
+      expect(leaked).toEqual([]);
+    });
+
+    it("sends nothing after the test, though Deezer's pace still holds its request", async () => {
+      const stub = stubNetwork("up", null);
+      // A full window: the run's first request waits for the next one, as in a test that timed out.
+      const signal = fillDeezerPace({ ahead: DEEZER_MAX_PER_WINDOW });
+      void run("WAITING", "USSB29000129", signal).catch(() => null);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
     });
   });
 

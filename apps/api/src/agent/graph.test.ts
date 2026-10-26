@@ -886,24 +886,24 @@ describe("the analysis graph's stored results", () => {
         ),
       ),
     );
-    // A whole-millisecond clock: on a fractional one a full window can hang the pacer (#133).
-    vi.useFakeTimers({ toFake: ["performance"] });
     setUnpacedForTests(false);
     const others = new AbortController();
+    const paced = new AbortController();
     const ahead: Array<Promise<unknown>> = [];
     onTestFinished(async () => {
-      // Stopped, never let go: a waiting request sends nothing after the test.
+      // Stopped, never let go: the real network is back by now (afterEach runs first), and
+      // undoing the pace lets every waiting request go, the run's own among them.
+      paced.abort();
       others.abort();
       setUnpacedForTests(true);
       await Promise.all(ahead);
-      vi.useRealTimers();
     });
     // A full window of other Deezer requests, and as many again waiting for the next one.
     const other = { title: "Song 99", artist: "Queen", isrc: "GBXXX9900099" };
     for (let i = 0; i < 2 * DEEZER_MAX_PER_WINDOW; i++) {
       ahead.push(deezerPreviewByIsrc(other, others.signal).catch(() => null));
     }
-    const first = await drive(stubModel(["done"]), { store });
+    const first = await drive(stubModel(["done"]), { store, signal: paced.signal });
 
     // Not a finished analysis: nothing is stored for the track.
     expect(await store.search(TRACKS_NAMESPACE)).toEqual([]);

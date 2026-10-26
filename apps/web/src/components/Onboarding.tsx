@@ -359,10 +359,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
   }, [showsErrorBlock, failureId, error, errorCode]);
   // The block replaces the view that had the focus (the progress screen, the picker): its
   // heading takes the focus for each failure, so it is announced with what happened (its
-  // description) and focus never falls to the page.
+  // description) and focus never falls to the page: in the commit that shows it (a layout
+  // effect), not after a paint with the focused view gone.
   const errorHeadingRef = useRef<HTMLHeadingElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per failure (failureId)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (showsErrorBlock) errorHeadingRef.current?.focus();
   }, [showsErrorBlock, failureId]);
   const shownError = showsErrorBlock ? errorView(error, errorCode) : null;

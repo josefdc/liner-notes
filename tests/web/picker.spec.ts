@@ -498,12 +498,36 @@ test("Space on a row neither scrolls the page nor picks", async ({ page }) => {
   await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: pickerStream(five) } });
   await openPicker(page);
   await expect.poll(() => clippedRows(page)).toEqual([]);
-  const scrollTop = () =>
-    picker(page).evaluate((list) => list.closest(".overflow-y-auto")?.scrollTop ?? -1);
-  const before = await scrollTop();
+  // Read once the box has stopped moving: the picker scrolls itself into view as it opens, and
+  // on a slow machine that scroll (or the layout settling around it) can still be under way
+  // when the rows are already whole.
+  const settledScrollTop = () =>
+    picker(page).evaluate(
+      (list) =>
+        new Promise<number>((resolve) => {
+          const box = list.closest(".overflow-y-auto");
+          if (!box) {
+            resolve(-1);
+            return;
+          }
+          let last = box.scrollTop;
+          let still = 0;
+          const tick = () => {
+            if (box.scrollTop === last) still++;
+            else {
+              last = box.scrollTop;
+              still = 0;
+            }
+            if (still >= 10) resolve(last);
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+  const before = await settledScrollTop();
   await page.keyboard.press("Space");
   await page.waitForTimeout(500);
-  expect(await scrollTop()).toBe(before);
+  expect(await settledScrollTop()).toBe(before);
   await expect(option(page, five[0])).toBeFocused();
   expect(resumes(await apiRequests(page))).toEqual([]);
 });

@@ -16,8 +16,9 @@
  * - the run's id in the envelope (`runId`, `threadId`, `run.id`) becomes `recorded-<slug>` (each
  *   replay stamps its own id);
  * - the stored query (what the user typed) is not kept: `request.query` is "<title> <artist>";
- * - status messages about the user's own actions in that run ("User confirmed …",
- *   "Remembered preference …") are left out: a viewer of the replay did neither.
+ * - status messages about the user's own actions in that run (the clarification node's
+ *   "Selected: …", in older runs "User confirmed …", and "Remembered preference …") are left
+ *   out: a viewer of the replay did neither.
  *
  * Refusals: a run that is not completed, has no stored result of its own, or was not live (a
  * replayed or cached result is not recorded again); a run whose last stream does not end with

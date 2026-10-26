@@ -617,7 +617,7 @@ describe("the recorder", () => {
     const resumed = await sse(
       `/api/analyze/stream/resume?threadId=${threadId}&selectedTrackId=${CHOICE_A}`,
     );
-    expect(resumed.some((e) => /^User confirmed/.test(String(e.message)))).toBe(true);
+    expect(resumed.some((e) => /^Selected: /.test(String(e.message)))).toBe(true);
     expect(new Set(stored(threadId).events.map((e) => e.stream))).toEqual(new Set([0, 1]));
 
     const { record: built } = record(threadId);
@@ -628,7 +628,7 @@ describe("the recorder", () => {
     expect(types(recorded).slice(-2)).toEqual(["complete", "done"]);
     expect(recorded.map((e) => e.seq)).toEqual(recorded.map((_, i) => i));
     // The user's own choice in that run is not part of the recording.
-    expect(recorded.some((e) => /^User confirmed/.test(String(e.message)))).toBe(false);
+    expect(recorded.some((e) => /^Selected: /.test(String(e.message)))).toBe(false);
     expect(built.request.selectedTrackId).toBe(CHOICE_A);
     expect(built.analysis.id).toBe(CHOICE_A);
     // The other candidate (and its image) went with the pause.

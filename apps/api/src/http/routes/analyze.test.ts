@@ -5,7 +5,7 @@
  *
  * The stub scout picks its path from the query:
  *   "cached …"     cache hit: reports `complete` through the writer and in its update
- *   "ambiguous …"  two candidates, so the run pauses for a choice
+ *   "ambiguous …"  two candidates, so the run pauses for a choice ("ambiguous-one …": one)
  *   "nomatch …"    Spotify found nothing
  *   "outage …"     Spotify could not be reached
  *   "ratelimited …" Spotify kept rate limiting; "ratelimited-unsaid …" without saying how long
@@ -156,7 +156,8 @@ vi.mock("../../agent/nodes/index.js", async () => {
       }
       if (query.startsWith("odd")) return { error: "secret-odd-detail" };
       if (query.startsWith("ambiguous")) {
-        const candidates = ["track-a", "track-b"].map((id) => ({
+        const ids = query.startsWith("ambiguous-one") ? ["track-a"] : ["track-a", "track-b"];
+        const candidates = ids.map((id) => ({
           id,
           title: `Title ${id}`,
           artist: "Artist",
@@ -356,8 +357,18 @@ describe("analyze routes", () => {
       const threadId = interrupts[0].threadId as string;
       expect(threadId).toMatch(/^[0-9a-f-]{36}$/);
       expect(interrupts[0].candidates).toHaveLength(2);
+      expect(interrupts[0].message).toBe("2 possible tracks from Spotify; choose one");
       expect(ofType(res.events, "complete")).toHaveLength(0);
       expect(runStatus(threadId)).toBe("interrupted");
+    });
+
+    it("asks about one candidate as one, in the stream and in the POST answer", async () => {
+      const one = "One possible track from Spotify; confirm it or search again";
+      const streamed = ofType((await sse(streamPath("ambiguous-one hurt"))).events, "interrupt");
+      expect(streamed.map((event) => event.message)).toEqual([one]);
+      const posted = await request(app).post("/api/analyze").send({ query: "ambiguous-one hurt" });
+      expect(posted.body.interrupt).toMatchObject({ message: one });
+      expect(posted.body.interrupt.candidates).toHaveLength(1);
     });
 
     it("POST interrupt: POST /api/analyze returns 200 with the threadId and the candidates", async () => {

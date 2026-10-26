@@ -171,9 +171,11 @@ function jsonStrings(text) {
 // In a recorded run (fixtures/replays/*.json), the text the app wrote into its events: the
 // `message` of status and interrupt events and the `error` of error events. The result itself
 // (claims, factoids, analysis) and every other model answer are not scanned: a recording keeps
-// what the model said, and must never be edited to bring a count down. The planner's status
-// lines (`🔍 <reasoning>`, `✅ <reasoning>`, node `research_manager`) are model text after the
-// app's leading emoji, so only that emoji is scanned.
+// what the model said, and must never be edited to bring a count down.
+//
+// The planner (node `research_manager`) sends only its own lines, and they are scanned in full.
+// Older runs also sent its reasoning, model text after the app's leading emoji (`🔍 <reasoning>`,
+// `✅ <reasoning>`): of those lines only that emoji is scanned.
 const PLANNER_LINE = /^(?:🔍|✅) (?!Deep dive complete$)/u;
 function recordedMessageSpans(text) {
   const run = JSON.parse(text);

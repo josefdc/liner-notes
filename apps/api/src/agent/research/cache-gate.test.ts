@@ -177,12 +177,14 @@ describe("research is cached with the run's evidence only when the run is comple
     const records = (fresh.out.evidence ?? []).filter((e) => e.sourceTier === "primary-record");
     const mb = records.filter((e) => e.source === "musicbrainz").length;
     expect(statusOf(hit.events)).toContain(
-      `📇 Primary sources: ${records.length} records (MusicBrainz ${mb}, SecondHandSongs ${
+      `Using ${records.length} records from the research cache (MusicBrainz ${mb}, SecondHandSongs ${
         records.length - mb
-      }), from the research cache (read 2026-10-20; not asked again)`,
+      }; read 2026-10-20); the primary sources were not asked again`,
     );
+    // None of them was read in this run.
+    expect(statusOf(hit.events).filter((line) => line.startsWith("Read "))).toEqual([]);
     expect(statusOf(hit.events)).not.toContain(
-      "📇 Reading primary sources (MusicBrainz, SecondHandSongs)...",
+      "Reading the primary sources again (MusicBrainz, SecondHandSongs)",
     );
   });
 
@@ -255,7 +257,7 @@ describe("research is cached with the run's evidence only when the run is comple
     expect(hit.out.sourceErrors).toEqual(expect.arrayContaining([shape]));
     expect(hit.out.lastingSourceErrors).toEqual([shape]);
     expect(statusOf(hit.events)).toContain(
-      "⚠️ SecondHandSongs could not be read (invalid_response)",
+      "SecondHandSongs answered in a form the reader does not know",
     );
   });
 });
@@ -462,7 +464,7 @@ describe("a run whose MusicBrainz releases could not be read", () => {
     expect((first.out.sourceErrors ?? []).filter((e) => e.code !== "not_configured")).toEqual([]);
     expect(ids(first.out.evidence).some((id) => id.startsWith("musicbrainz:release/"))).toBe(false);
     expect(statusOf(first.events)).toContain(
-      "MusicBrainz: releases incomplete, the recording's releases could not be read, so no release is named for it; a later run reads them",
+      "MusicBrainz releases incomplete: the recording's releases could not be read, so no release is named for it; a later run reads them",
     );
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
       { source: "musicbrainz", part: "releases" },
@@ -566,9 +568,14 @@ describe("a row left for a later run", () => {
     const hit = await historian(LATER);
     expect(ids(hit.out.evidence)).toEqual(expect.arrayContaining(shsIds));
     expect(hit.out.primaryNotAsked ?? []).toEqual([]);
+    const kept = `${shsIds.length} ${shsIds.length === 1 ? "record" : "records"}`;
     expect(statusOf(hit.events)).toContain(
-      `📇 SecondHandSongs not asked again: its ${shsIds.length} records come from the research cache (read 2026-10-20)`,
+      `SecondHandSongs not asked again: its ${kept} come from the research cache (read 2026-10-20)`,
     );
+    // The records read in this run are counted apart from the ones kept from the cache.
+    const read = statusOf(hit.events).filter((line) => line.startsWith("Read "));
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatch(/^Read \d+ records? from the primary sources \(MusicBrainz \d+\)$/);
     const row = cache.getResearch(key());
     expect(row?.evidence?.items.map((e) => e.id)).toEqual(expect.arrayContaining(shsIds));
     expect(row?.evidence?.incomplete).toEqual([]);
@@ -605,8 +612,8 @@ describe("a row left for a later run", () => {
     expect(out.primaryNotAsked).toEqual(["secondhandsongs"]);
     expect(statusOf(events)).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/^📇 MusicBrainz: dates incomplete/),
-        "📇 SecondHandSongs not asked: the research cached on 2026-10-20 did not ask it; a later run asks it",
+        expect.stringMatching(/^MusicBrainz release dates incomplete/),
+        "SecondHandSongs not asked: the research cached on 2026-10-20 did not ask it; a later run asks it",
       ]),
     );
   });
@@ -654,7 +661,7 @@ describe("a source our pacing did not ask", () => {
     expect(out.primaryNotAsked).toEqual(["secondhandsongs"]);
     expect(out.sourceErrors?.some((e) => e.source === "secondhandsongs")).toBe(false);
     expect(statusOf(events)).toContain(
-      "📇 SecondHandSongs not asked: our own pacing of its requests left no time in this run; a later run asks it",
+      "SecondHandSongs not asked: our own pacing of its requests left no time in this run; a later run asks it",
     );
     expect(cache.getResearch(key())?.evidence?.incomplete).toEqual([
       { source: "secondhandsongs", part: "not_asked" },
@@ -737,7 +744,7 @@ describe("the historian, researcher and research cache log through the API's log
     expect(of("Historian")).toContainEqual(
       expect.objectContaining({
         level: "debug",
-        msg: "Deep dive research for: Ice Ice Baby by Vanilla Ice",
+        msg: "Researching: Ice Ice Baby by Vanilla Ice",
       }),
     );
     const above = [...of("Historian"), ...of("Researcher"), ...of("Cache")].filter(

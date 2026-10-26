@@ -20,7 +20,7 @@ import {
   SourceError as SourceErrorSchema,
   TrackAnalysis,
 } from "@liner-notes/contract";
-import { SOURCE_NAMES } from "./prompts.js";
+import { sourceErrorLine } from "./statusText.js";
 import { withoutPreviewUrls } from "../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "./cacheKeys.js";
 import type { TrackData } from "./schema.js";
@@ -135,6 +135,9 @@ export async function storeResult(
   });
 }
 
+/** The status line of a result served from the store instead of composed again. */
+export const STORED_LINE = "Serving the analysis stored for this track";
+
 /**
  * The status lines of a served result: one per source its run could not read, so the reader
  * knows that data is missing, not empty.
@@ -145,8 +148,6 @@ export function storedErrorStatus(errors: readonly SourceError[]): string[] {
     const key = `${e.source}:${e.code}`;
     if (seen.has(key)) return [];
     seen.add(key);
-    return [
-      `⚠️ Stored result: ${SOURCE_NAMES[e.source]} could not be read when it was composed (${e.code})`,
-    ];
+    return [`Stored analysis: ${sourceErrorLine(e)}`];
   });
 }

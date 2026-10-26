@@ -304,8 +304,8 @@ export function createFactoidsRouter({
         return;
       }
 
-      log.info("Decrypting more facts");
-      logTrack("Decrypting more facts", track);
+      log.info("Writing more facts");
+      logTrack("Writing more facts", track);
 
       // Stops the model call when the client leaves before the answer.
       const disconnect = new AbortController();
@@ -320,7 +320,7 @@ export function createFactoidsRouter({
           factoidMessages({ title: trackTitle, artist: trackArtist }, STREAM_CATEGORIES),
         );
       } catch (error) {
-        log.error(`Decrypt failed (${failure(error)})`);
+        log.error(`More facts failed (${failure(error)})`);
         if (!disconnect.signal.aborted) sendError(res, failureCode(error));
         return;
       } finally {

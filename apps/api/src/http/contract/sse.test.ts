@@ -131,17 +131,21 @@ function holdNextRun() {
 
 graph.scripts = {
   async *cached() {
-    yield status("scout", "Cache hit — returning stored analysis", { code: "NET-200" });
+    yield status("scout", "Serving the analysis stored for this track", { code: "NET-200" });
     yield* result("scout", COMPOSED);
   },
   async *plain() {
-    yield status("scout", "Target acquired", { code: "SPOTIFY-FOUND" });
-    yield status("engineer", "Initializing audio waveform parser...", { code: "AUDIO-INIT" });
+    yield status("scout", "Found the track on Spotify", { code: "SPOTIFY-FOUND" });
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
+      code: "AUDIO-INIT",
+    });
     yield* result("composer", COMPOSED);
   },
   async *fallback() {
-    yield status("scout", "Target acquired", { code: "SPOTIFY-FOUND" });
-    yield status("composer", "Model unavailable; showing source data only", { code: "SYS-WARN" });
+    yield status("scout", "Found the track on Spotify", { code: "SPOTIFY-FOUND" });
+    yield status("composer", "The model request failed; showing source data only", {
+      code: "SYS-WARN",
+    });
     yield* result("composer", FALLBACK);
   },
   async *ambiguous(_signal, threadId) {
@@ -155,7 +159,7 @@ graph.scripts = {
   async *resume(signal, threadId, selected) {
     const thread = graph.threads.get(threadId);
     if (thread) thread.choice = null;
-    yield status("clarification", `User confirmed: ${selected}`, { code: "SPOTIFY-FOUND" });
+    yield status("clarification", `Selected: ${selected}`, { code: "SPOTIFY-FOUND" });
     if (selected === "track-b") {
       // The choice is applied; the run then stalls until it is aborted.
       await untilAborted(signal);
@@ -185,11 +189,15 @@ graph.scripts = {
     throw new Error("secret-graph-failure");
   },
   async *stall(signal) {
-    yield status("engineer", "Initializing audio waveform parser...", { code: "AUDIO-INIT" });
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
+      code: "AUDIO-INIT",
+    });
     await untilAborted(signal);
   },
   async *slow() {
-    yield status("engineer", "Initializing audio waveform parser...", { code: "AUDIO-INIT" });
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
+      code: "AUDIO-INIT",
+    });
     const waited = new Promise((resolve) => setTimeout(resolve, 40_000));
     hold?.entered();
     await waited;
@@ -197,10 +205,12 @@ graph.scripts = {
   },
   /** Ignores the abort: keeps reporting progress and finally a result after the client left. */
   async *deaf() {
-    yield status("engineer", "Initializing audio waveform parser...", { code: "AUDIO-INIT" });
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
+      code: "AUDIO-INIT",
+    });
     hold?.entered();
     await hold?.gate;
-    yield status("engineer", "Frequency analysis done", { code: "AUDIO-COMPLETE" });
+    yield status("engineer", "Measured from the preview", { code: "AUDIO-COMPLETE" });
     yield* result("composer", COMPOSED);
   },
   // Payloads the route must not write as they are.
@@ -209,7 +219,7 @@ graph.scripts = {
     yield* result("composer", COMPOSED);
   },
   async *badresult() {
-    yield status("scout", "Target acquired", { code: "SPOTIFY-FOUND" });
+    yield status("scout", "Found the track on Spotify", { code: "SPOTIFY-FOUND" });
     yield* result("composer", { title: "No id, no artist" });
   },
   async *mystery() {

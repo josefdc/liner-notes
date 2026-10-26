@@ -340,7 +340,9 @@ describe("research inputs", () => {
       expect(final.sourceErrors).toEqual([
         expect.objectContaining({ source: "musicbrainz", code: "rate_limited" }),
       ]);
-      expect(final.statusMessages).toContain("⚠️ MusicBrainz could not be read (rate_limited)");
+      expect(final.statusMessages).toContain(
+        "MusicBrainz could not be read: it is limiting requests",
+      );
     });
 
     it("Last.fm's 'not found' is recorded as nothing found, never as a sentence", async () => {
@@ -382,8 +384,8 @@ describe("research inputs", () => {
       expect(out.sourceErrors).toContainEqual(
         expect.objectContaining({ source: "lastfm", code: "not_configured" }),
       );
-      expect(out.statusMessages).toContain("⚠️ Last.fm could not be read (not_configured)");
-      expect(out.statusMessages).not.toContain("Found lastfm tags information");
+      expect(out.statusMessages).toContain("Last.fm not asked: no key is configured for it");
+      expect(out.statusMessages).not.toContain("Found: Last.fm tags");
       const [first] = prompts;
       expect(first.user).toContain('"lastfmTags":"unavailable"');
       expect(first.user).not.toContain('"lastfmTags":0');
@@ -402,9 +404,9 @@ describe("research inputs", () => {
         expect.objectContaining({ source: "tavily", code: "unavailable" }),
       ]);
       expect(final.statusMessages).toContain(
-        "⚠️ Web search (Tavily) could not be read (unavailable)",
+        "Web search (Tavily) could not be read: it gave no usable answer",
       );
-      expect(final.statusMessages).not.toContain("Found samples information");
+      expect(final.statusMessages).not.toContain("Found: sample history on the web");
     });
 
     it("a MusicBrainz failure while ListenBrainz resolves the name is MusicBrainz's", async () => {
@@ -485,8 +487,10 @@ describe("research inputs", () => {
         "ListenBrainz similar artists (not asked: no MusicBrainz artist with exactly this name)",
       ]);
       expect(final.researchData.noneFound).toEqual([]);
-      expect(final.statusMessages).toContain("Not asked or not identified: listenbrainz similar");
-      expect(final.statusMessages).not.toContain("Nothing found: listenbrainz similar");
+      expect(final.statusMessages).toContain(
+        "Not asked or not identified: ListenBrainz similar artists",
+      );
+      expect(final.statusMessages).not.toContain("Nothing found: ListenBrainz similar artists");
       expect(final.sourceErrors).toEqual([]);
     });
   });
@@ -672,7 +676,7 @@ describe("research inputs", () => {
           message: expect.stringContaining("Last.fm rejected the API key"),
         }),
       ]);
-      expect(out.statusMessages).toContain("⚠️ Last.fm key rejected: fix the key (unavailable)");
+      expect(out.statusMessages).toContain("Last.fm refused the configured key");
       expect(store.puts).toEqual([]);
     });
 
@@ -687,9 +691,7 @@ describe("research inputs", () => {
       const first = await historian(ICE);
       const second = await historian(ICE);
 
-      expect(first.out.statusMessages).toContain(
-        "⚠️ Web search (Tavily) key rejected: fix the key (unavailable)",
-      );
+      expect(first.out.statusMessages).toContain("Web search (Tavily) refused the configured key");
       expect(store.puts).toEqual([]);
       expect(second.plannerCalls).toBe(1);
       expect(net.calls).not.toHaveLength(0);

@@ -525,6 +525,9 @@ describe("composerNode", () => {
       expect(store.put).not.toHaveBeenCalled();
       expect(out.trackData).toBeUndefined();
       expect(out.error).toMatch(/does not fit the contract.*coverUrl/);
+      expect(out.statusMessages).toEqual([
+        "The analysis could not be completed: the result failed its checks",
+      ]);
       expect(out.usage).toHaveLength(1);
       // The sources the run could not read still count, the genealogy previews' included.
       expect(out.sourceErrors).toEqual([deezer]);
@@ -597,22 +600,27 @@ describe("composerNode", () => {
   });
 
   describe("on a provider failure", () => {
-    it.each<[LlmErrorKind, string]>([
-      ["budget_exceeded", "budget_exhausted"],
-      ["call_cap", "budget_exhausted"],
-      ["rate_limited", "rate_limited"],
-      ["timeout", "timeout"],
-      ["network", "error"],
-      ["invalid_output", "no_output"],
-      ["incomplete", "no_output"],
-      ["refused", "no_output"],
-      ["not_configured", "auth"],
+    it.each<[LlmErrorKind, string, string]>([
+      [
+        "budget_exceeded",
+        "budget_exhausted",
+        "The model budget is used up, so the model was not asked",
+      ],
+      ["call_cap", "budget_exhausted", "The model budget is used up, so the model was not asked"],
+      ["rate_limited", "rate_limited", "The model is unavailable: it is limiting requests"],
+      ["timeout", "timeout", "The model is unavailable: it did not answer in time"],
+      ["network", "error", "The model request failed"],
+      ["invalid_output", "no_output", "The model's answer could not be used"],
+      ["incomplete", "no_output", "The model's answer could not be used"],
+      ["refused", "no_output", "The model's answer could not be used"],
+      ["not_configured", "auth", "The model is unavailable: no working key is configured"],
     ])(
       "%s: returns the flagged fallback without model text and records the error",
-      async (kind, reason) => {
+      async (kind, reason, said) => {
+        const writer = vi.fn();
         const out = await createComposerNode(testRuntime(failing(kind)))(
           stateWith(measured),
-          config(),
+          config({ writer }),
         );
 
         expect(out.trackData).toMatchObject({
@@ -628,7 +636,13 @@ describe("composerNode", () => {
         expect(out.usage).toEqual([
           expect.objectContaining({ callSite: "composer", status: kind }),
         ]);
-        expect(out.statusMessages?.join(" ")).toMatch(/Model unavailable/);
+        // "Unavailable" only where the model could not be reached; the line names what it shows.
+        const line = `${said}; showing source data only, with a template song structure and no written notes`;
+        expect(out.statusMessages).toEqual([line]);
+        // The client is told the same as the state says.
+        expect(writer).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "status", code: "LLM-ERROR", message: line }),
+        );
       },
     );
 

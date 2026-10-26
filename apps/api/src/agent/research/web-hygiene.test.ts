@@ -240,6 +240,38 @@ describe("the text of a web page", () => {
   });
 
   it.each([
+    "Posted on February 22, 2021 | prev | next Daft Punk announced their split with the video Epilogue.",
+    "Daft Punk announced their split. Published on Feb 22, 2021 | next",
+    "Daft Punk at Coachella on April 29, 2006 | prev | next",
+    "The single was released on November 30 2000 | prev | next",
+    "Uploaded an hour ago | next | Discovery tracklist",
+    "Daft Punk | 25 years ago | next | Discovery",
+    "Comments (3) | Posted on Feb 22, 2021 | context | share",
+    "Reviewed on Mar 3, 2020 | prev | next",
+    "Published on Oct 12, 2001 | next",
+    "Posted by Jane 3 hours ago | next",
+    "Released on Feb 22, 2021 | next (2001 remaster)",
+    "Released a year ago | parent label Virgin Records",
+  ])("keeps a dated page with a blog's prev and next links: %s", (text) => {
+    expect(webSearchEvidence([web("https://www.example.org/page", text)])).toHaveLength(1);
+  });
+
+  it.each([
+    ["the end of the text", "some_user 3 hours ago | parent"],
+    ["the end of the text after a context link", "some_user on Feb 22, 2021 | context | flag"],
+    [
+      "a script link (a top-level comment as the search returns it)",
+      "| | | | | --- | | | some_user on Feb 22, 2021 | next (javascript:void(0)) Love it! One More Time is still the best house record.",
+    ],
+    ["an age of 'a day'", "some_user a day ago | parent | next [–] Still a classic."],
+    ["an age of 'an hour'", "some_user an hour ago | prev | next [–] Still a classic."],
+    ["a date without a comma", "some_user on Feb 2 2021 | parent | next [–] Love it!"],
+    ["a vote link", "some_user 18 hours ago | unvote | prev | next [–] Romanthony sang it."],
+  ])("leaves out a forum comment byline at %s", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toEqual([]);
+  });
+
+  it.each([
     ["a [flagged] marker", "some_user 3 hours ago [flagged] [–] nice sample"],
     ["a [dead] marker", "some_user 3 hours ago [dead] | parent | next [–] the drop is great"],
     ["a flag chain", "some_user 3 hours ago | flag | favorite [–] the drop is great"],

@@ -65,12 +65,13 @@ export const LYRIC_SITES = [
 ] as const;
 
 /**
- * Social platforms and their short-link hosts, and forums (Hacker News, Quora, Gearspace): their
- * pages are page chrome, comments and the names or handles of private people, and weak evidence
- * of a song's history. Filtered from the answer by exact host or subdomain (m.facebook.com,
- * old.reddit.com) and through a translate proxy, and excluded in the request except for
- * SHORT_SITES. YouTube is not one of them: a video page carries a title, a channel (its
- * publisher) and a description. Discogs' forum is left out by path (FORUM_PATHS).
+ * Social platforms and their short-link hosts, and forums (Hacker News and its search, Quora,
+ * Gearspace under both its names): their pages are page chrome, comments and the names or
+ * handles of private people, and weak evidence of a song's history. Filtered from the answer by
+ * exact host or subdomain (m.facebook.com, old.reddit.com) and through a translate proxy, and
+ * excluded in the request except for SHORT_SITES. YouTube is not one of them: a video page
+ * carries a title, a channel (its publisher) and a description. Discogs' forum is left out by
+ * path (FORUM_PATHS).
  */
 export const SOCIAL_SITES = [
   "instagram.com",
@@ -93,16 +94,19 @@ export const SOCIAL_SITES = [
   "news.ycombinator.com",
   "quora.com",
   "gearspace.com",
+  "gearslutz.com",
+  "hn.algolia.com",
 ] as const;
 
 /**
  * Forum pages on a site whose other pages are primary sources: Discogs' forum and groups
- * (discogs.com/forum/…, /group/…, also after a language prefix such as /de/). Left out of the
+ * (discogs.com/forum/…, /group/…, also after a doubled slash or a language prefix such as /de/,
+ * /pt-BR/ or /pt_BR/). Left out of the
  * answer by host and path in isSocialPage, never sent in `exclude_domains`: the request's list
  * names whole domains, and excluding discogs.com would drop its release and artist pages.
  */
 const FORUM_PATHS: ReadonlyArray<readonly [site: string, path: RegExp]> = [
-  ["discogs.com", /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:forum|group)s?(?:\/|$)/i],
+  ["discogs.com", /^\/+(?:[a-z]{2}(?:[-_][a-z]{2})?\/+)?(?:forum|group)s?(?:\/|$)/i],
 ];
 
 /**
@@ -255,20 +259,30 @@ const MONTH =
 const COMMENT_WHEN = `(?:on\\s+${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago)`;
 /** A pipe, also the fullwidth one a translate proxy writes. */
 const PIPE = "[|｜]";
+/** One of a comment's links: "| parent", "| next", "| flag" … */
+const LINK = `${PIPE}\\s*(?:parent|prev|next|root|context|flag|favorite|unvote)\\s*`;
+/** Where a comment's links end on Hacker News: the collapse button ("[–]") or its script link. */
+const LINKS_END = "(?=\\[[–-]\\]|\\(javascript)";
 /**
- * A thread link: "| parent", "| prev", "| next", "| root", "| context" or "| flag", followed by
- * another pipe, the collapse button ("[–]"), its script link ("(javascript…") or the end of the
- * text. A link word that reads on ("| next article", "| root note", "| next-gen") is not one.
+ * A comment's thread links, one of:
+ * - links up to "| parent", then another pipe, LINKS_END or the end of the text;
+ * - links that end in LINKS_END ("| prev | next [–]", "| next (javascript:void(0))");
+ * - links at the end of the text that are not all prev and next ("| context | flag").
+ * A blog's bare "| prev | next" is not one, nor a link word that reads on ("| next article",
+ * "| parent label", "| next-gen", "| context | share").
  */
-const THREAD_LINK = `${PIPE}\\s*(?:parent|prev|next|root|context|flag)\\s*(?=${PIPE}|\\[[–-]\\]|\\(javascript|$)`;
+const THREAD_LINKS =
+  `(?:(?:${LINK})*${PIPE}\\s*parent\\s*(?=${PIPE}|\\[[–-]\\]|\\(javascript|$)` +
+  `|(?:${LINK})+${LINKS_END}` +
+  `|(?:${LINK})*${PIPE}\\s*(?:root|context|flag|favorite|unvote)\\s*(?:${LINK})*$)`;
 /**
  * A forum comment's byline, as Hacker News writes it: a user name (any token: many have no digit
  * or "_"), the comment's date or age (COMMENT_WHEN; after a pipe in Algolia's "name | 3 hours
- * ago"), then a thread link (THREAD_LINK) or a "[flagged]" or "[dead]" marker. A byline without
+ * ago"), then its thread links (THREAD_LINKS) or a "[flagged]" or "[dead]" marker. A byline without
  * them ("by Jane Smith on Feb 22, 2021", "Posted on Feb 22, 2021 | next article") is not one.
  */
 const FORUM_BYLINE = new RegExp(
-  `(?:^|\\s)[^\\s|｜]+(?:\\s+|\\s*${PIPE}\\s*)${COMMENT_WHEN}\\s*(?:\\[(?:flagged|dead)\\]|${THREAD_LINK})`,
+  `(?:^|\\s)[^\\s|｜]+(?:\\s+|\\s*${PIPE}\\s*)${COMMENT_WHEN}\\s*(?:\\[(?:flagged|dead)\\]|${THREAD_LINKS})`,
   "u",
 );
 
@@ -305,8 +319,9 @@ function labelledAges(words: readonly string[]): number {
  *   comment's byline (FORUM_BYLINE: "some_user on Feb 22, 2021 | parent | next [–]").
  * One handle in a sentence ("Thomas Bangalter (@…)"), "Following the success of …", "the '90s",
  * a tracklist ("A1: …"), "R.E.M.: …", a "|"-separated title, and a date followed by no thread
- * link or by a link word that reads on ("Posted on Feb 22, 2021 | next article") are kept. The web tier runs this on the text it stores,
- * and every reader of stored evidence runs it again on the same text.
+ * links, by a blog's "| prev | next" or by a link word that reads on ("Posted on Feb 22, 2021 |
+ * next article") are kept. The web tier runs this on the text it stores, and every reader of
+ * stored evidence runs it again on the same text.
  */
 export function webTextIssue(text: string): string | null {
   if ((text.match(HANDLE_IN_TEXT)?.length ?? 0) > 0) return "a private @handle";

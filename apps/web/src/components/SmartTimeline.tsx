@@ -95,7 +95,7 @@ const SegmentsChip: React.FC<{ source: TrackData['segmentsSource'] }> = ({ sourc
   source === 'inferred' ? (
     <InferenceLabel />
   ) : source === 'template' ? (
-    <ProvenanceChip kind="missing">Template — not analysed</ProvenanceChip>
+    <ProvenanceChip kind="missing">Template — not analyzed</ProvenanceChip>
   ) : (
     <ProvenanceChip kind="unconfirmed">Not measured</ProvenanceChip>
   );
@@ -294,7 +294,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       ) : (
         <Note>
           {audioAnalyzed === false
-            ? `No key moments — ${noMomentsReason ?? 'the audio was not analysed'}`
+            ? `No key moments — ${noMomentsReason ?? 'the audio was not analyzed'}`
             : audioAnalyzed
               ? 'No key moments detected'
               : 'No key moments'}

@@ -50,9 +50,10 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
   composing: 'Writing the liner notes...',
   checking: 'Checking the notes against their sources...',
   // Used only when the server's own question is missing.
-  disambiguation: 'Pick the track to analyse...',
+  disambiguation: 'Pick the track to analyze...',
   complete: 'Analysis complete. Opening the results',
-  error: 'The analysis failed. Check your search and try again.',
+  // Nothing here: an error replaces this view with the error block, which says what happened.
+  error: '',
 };
 
 // While a recorded run plays, the recorded progress is not live work: these replace the
@@ -103,6 +104,16 @@ class BannerBoundary extends Component<
         <p className="text-text-tertiary text-xs font-mono">
           The recorded tracks could not be loaded. Reload the page to see them.
         </p>
+        <div className="flex justify-center">
+          <Button
+            variant="neutral"
+            size="md"
+            leftIcon={<RotateCcw size={14} />}
+            onClick={() => window.location.reload()}
+          >
+            Reload the page
+          </Button>
+        </div>
       </section>
     );
   }
@@ -203,43 +214,108 @@ function pickerTarget(key: string, current: number, count: number): number | nul
   }
 }
 
-const GENERIC_ERROR_HINT = 'Unexpected interference. The system is ready to retry.';
+/** The heading of the error block. */
+const ERROR_TITLE = 'The analysis did not finish';
 
-// What to do next for each failure code the API sends with an error.
-const ERROR_HINTS_BY_CODE: Record<string, string> = {
-  no_match: 'No signal detected. Verify track name and artist.',
-  choice_expired: 'That choice is no longer open. Search again.',
-  run_interrupted: 'That choice is no longer open. Search again.',
-  upstream_unavailable: 'An upstream service is not answering. Try again later.',
-  timeout: 'An upstream service is not answering. Try again later.',
-  // The app's own code: a newer version was deployed since this page loaded.
-  outdated_client: 'A newer version is out. Reload the page to get it.',
+/** The error block's primary button: the step that can help after this failure. */
+type ErrorAction = 'retry' | 'search' | 'reload';
+
+interface ErrorView {
+  /** What happened and what to do next. */
+  lines: string[];
+  action: ErrorAction;
+}
+
+const NEXT_STEP = 'Try again, or search for a different song.';
+const GENERIC_ERROR = `Something went wrong. ${NEXT_STEP}`;
+const NO_MATCH = 'No song matched your search. Check the title and artist, then search again.';
+const CHOICE_CLOSED = 'That choice is no longer open. Try again to get a fresh list of tracks.';
+const UNREADABLE_REQUEST = 'The request could not be read. Search again.';
+// The connection can fail on either side (the user's network, or a server that is down or
+// restarting): neither is blamed.
+const EITHER_SIDE = "The problem may be on your side or on the server's. Try again in a moment.";
+const CONNECTION_LOST = `The connection to the analysis server was lost. ${EITHER_SIDE}`;
+
+const view = (line: string, action: ErrorAction): ErrorView => ({ lines: [line], action });
+
+// The page's words, for the codes whose server message says nothing more than the code, and for
+// the app's own codes (useAgent's CLIENT_ERROR_CODES and OUTDATED_ERROR). A code that is not here
+// (rate_limited, upstream_unavailable, failed, internal_error, and any code this page does not
+// know) shows the server's own message: it can say how long to wait, or which service refused.
+const ERROR_VIEW_BY_CODE: Record<string, ErrorView> = {
+  no_match: view(NO_MATCH, 'search'),
+  choice_expired: view(CHOICE_CLOSED, 'retry'),
+  run_interrupted: view(CHOICE_CLOSED, 'retry'),
+  not_waiting: view(CHOICE_CLOSED, 'retry'),
+  invalid_selection: view(CHOICE_CLOSED, 'retry'),
+  // The run's own deadline: the whole analysis took too long, not one service.
+  timeout: view(`The analysis took too long and was stopped. ${NEXT_STEP}`, 'retry'),
+  forbidden_origin: view(
+    'The analysis server does not accept requests from this page. Open Liner Notes at its usual address, then search again.',
+    'search',
+  ),
+  invalid_input: view(UNREADABLE_REQUEST, 'search'),
+  invalid_json: view(UNREADABLE_REQUEST, 'search'),
+  bad_request: view(UNREADABLE_REQUEST, 'search'),
+  // The app's own codes.
+  wrong_track: view(
+    'The recording found is not the track you picked, so it is not shown. Search again to pick another take.',
+    'search',
+  ),
+  no_result: view(`The analysis ended without a result. ${NEXT_STEP}`, 'retry'),
+  stream_stalled: view(`The analysis server stopped answering. ${EITHER_SIDE}`, 'retry'),
+  connection_lost: view(CONNECTION_LOST, 'retry'),
+  stream_open_failed: view('The analysis could not be started. Try again in a moment.', 'retry'),
+  resume_failed: view(
+    'Your choice could not be sent to the analysis server. Try again in a moment.',
+    'retry',
+  ),
+  choice_lost: view('The track you picked could not be found again. Search again.', 'search'),
+  // A newer version was deployed since this page loaded: retrying from this page cannot help.
+  outdated_client: view(
+    'This page is out of date. Reload the page to get the new version, then search again.',
+    'reload',
+  ),
 };
 
-// UX: Error hint helper (Item 10 - in-character error copy). A failure code decides; only an
-// error without one (connection errors, older servers) is matched on its text.
-function getErrorHint(error: string | null, code: string | null): string {
-  if (code) return ERROR_HINTS_BY_CODE[code] ?? GENERIC_ERROR_HINT;
-  if (!error) return GENERIC_ERROR_HINT;
-  const lower = error.toLowerCase();
-  if (
-    lower.includes('timeout') ||
-    lower.includes('connection') ||
-    lower.includes('network') ||
-    lower.includes('fetch')
-  )
-    return 'Uplink unstable. Check your connection and retry.';
-  if (lower.includes('not found') || lower.includes('no results') || lower.includes('404'))
-    return 'No signal detected. Verify track name and artist.';
-  return GENERIC_ERROR_HINT;
+/**
+ * What the error block says, and its primary button. A code with the page's own words gets
+ * them. Any other code shows the server's message (written for people, by the contract), with
+ * the next step only when the message gives none. Every failure useAgent raises carries a code,
+ * so an error without one is a server `error` event with an empty code: its text is not shown
+ * (it could be anything), only read for the kind of failure.
+ */
+function errorView(error: string | null, code: string | null): ErrorView {
+  if (code) {
+    // Own keys only: a code such as "toString" or "constructor" is not one of these.
+    const known = Object.hasOwn(ERROR_VIEW_BY_CODE, code) ? ERROR_VIEW_BY_CODE[code] : undefined;
+    if (known) return known;
+    if (!error) return view(GENERIC_ERROR, 'retry');
+    return { lines: /try again/i.test(error) ? [error] : [error, NEXT_STEP], action: 'retry' };
+  }
+  const text = error ?? '';
+  if (/connection|network|fetch|offline|responding|timed? ?out/i.test(text)) {
+    return view(CONNECTION_LOST, 'retry');
+  }
+  if (/not (?:be )?found|no match|no results|\b404\b/i.test(text)) return view(NO_MATCH, 'search');
+  return view(GENERIC_ERROR, 'retry');
 }
+
+const ERROR_ACTION_LABEL: Record<ErrorAction, string> = {
+  retry: 'Try again',
+  search: 'Search again',
+  reload: 'Reload the page',
+};
 
 interface OnboardingProps {
   status: AgentStatus;
   logs: AgentLog[];
   trackData: TrackData | null;
   error: string | null;
-  /** The failure code of the error, when the server sent one. */
+  /**
+   * The failure code of the error: the server's, or the app's own for a failure useAgent
+   * raised itself (see agent/types.ts).
+   */
   errorCode: string | null;
   isLoading: boolean;
   /** The run replays a recorded run (the status line says so instead of the live steps). */
@@ -281,6 +357,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
   onSearchAgain,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  // Empty searches submitted since the query last changed: the box says what to type until it
+  // changes. Each submit renders a new alert, so a repeat is announced again.
+  const [emptySubmits, setEmptySubmits] = useState(0);
   const [sugState, sugDispatch] = useReducer(suggestionReducer, initialSuggestionState);
   const {
     suggestions,
@@ -461,9 +540,45 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      setEmptySubmits(0);
+      // The suggestions and their state ("Suggestions are unavailable… You can still search")
+      // are for the search being typed: once it is submitted, the run says how it went.
+      sugDispatch({ type: 'CLEAR' });
       analyze(searchQuery.trim());
+    } else {
+      setEmptySubmits((count) => count + 1);
+      inputRef.current?.focus();
     }
   };
+  const showEmptyHint = emptySubmits > 0 && !searchQuery.trim();
+
+  // The error block shows plain words; the error's own text goes to the console.
+  const showsErrorBlock = status === 'error' && !isLiveUnavailable(errorCode);
+  // Each failure, told apart by the log line useAgent's `fail()` writes for it: a retry that
+  // fails at once leaves the block up (no new mount), and is still a new failure.
+  let failureId: string | null = null;
+  if (showsErrorBlock) {
+    for (let index = logs.length - 1; index >= 0; index--) {
+      if (logs[index].code === 'SYS-ERROR') {
+        failureId = logs[index].id;
+        break;
+      }
+    }
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logged once per failure (failureId)
+  useEffect(() => {
+    if (showsErrorBlock)
+      console.warn('[Onboarding] The analysis failed:', errorCode ?? '(no code)', error);
+  }, [showsErrorBlock, failureId, error, errorCode]);
+  // The block replaces the view that had the focus (the progress screen, the picker): its
+  // heading takes the focus for each failure, so it is announced with what happened (its
+  // description) and focus never falls to the page.
+  const errorHeadingRef = useRef<HTMLHeadingElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per failure (failureId)
+  useEffect(() => {
+    if (showsErrorBlock) errorHeadingRef.current?.focus();
+  }, [showsErrorBlock, failureId]);
+  const shownError = showsErrorBlock ? errorView(error, errorCode) : null;
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
@@ -609,10 +724,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
           </div>
 
           <h1 className="text-4xl md:text-5xl font-sans font-light tracking-wide leading-tight text-shadow-glow-cyber">
-            The Sonic Agent
+            Liner Notes
           </h1>
           <p className="text-text-secondary font-sans text-base max-w-md mx-auto leading-relaxed">
-            Enter a song to analyze its DNA — BPM, samples, production history, and more.
+            Type a song and its artist. Liner Notes traces the song's samples, credits, history and
+            sound, and shows which claims are measured, sourced or inferred.
           </p>
 
           {/* Search Form */}
@@ -639,12 +755,15 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   }}
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setEmptySubmits(0);
+                  }}
                   onKeyDown={handleKeyDown}
                   onFocus={() =>
                     suggestions.length > 0 && sugDispatch({ type: 'SET_SHOW', show: true })
                   }
-                  placeholder="Song title + artist (e.g., Midnight City M83)"
+                  placeholder="Song title and artist"
                   maxLength={200}
                   className={`${inputVisualStyles} pl-12 pr-10`}
                   autoComplete="off"
@@ -652,8 +771,21 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   aria-autocomplete="list"
                   aria-expanded={showSuggestions}
                   aria-controls="search-suggestions"
+                  aria-invalid={showEmptyHint || undefined}
                 />
               </div>
+
+              {showEmptyHint && (
+                // The alert speaks the sentence; the field does not also take it as its
+                // description, which would read it twice once focus lands there.
+                <p
+                  key={emptySubmits}
+                  role="alert"
+                  className="mt-2 text-xs font-mono text-text-secondary text-left"
+                >
+                  Type a song title and its artist first, for example: Midnight City M83.
+                </p>
+              )}
 
               {suggestionsFailed && (
                 <p role="status" className="mt-2 text-xs font-mono text-text-tertiary text-left">
@@ -695,7 +827,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     </button>
                   ))}
                   <div className="px-3 py-2 text-xs text-text-tertiary border-t border-white/5 font-mono">
-                    ↑↓ navigate • Click/Enter analyze • Esc close
+                    Arrow keys to move, Enter to analyze, Esc to close
                   </div>
                 </div>
               )}
@@ -705,11 +837,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
               type="submit"
               variant="cyber"
               size="lg"
-              disabled={!searchQuery.trim()}
               isLoading={isAnalyzing}
               className="w-full"
             >
-              ANALYZE_SONG
+              Analyze
             </Button>
           </form>
 
@@ -738,35 +869,58 @@ const Onboarding: React.FC<OnboardingProps> = ({
             </div>
           )}
 
-          {/* Error State (Item 10 — in-character error copy) */}
-          {status === 'error' && !isLiveUnavailable(errorCode) && (
+          {/* Error state: what happened and what to do next, in plain words */}
+          {shownError && (
             <div className="bg-status-error/5 border border-status-error/20 rounded-md p-6 space-y-4">
-              <div className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
-                <CircleAlert size={16} />
-                SIGNAL LOST
-              </div>
-              {error && (
-                <p className="text-text-secondary text-xs font-mono text-center">{error}</p>
-              )}
-              <p className="text-text-tertiary text-xs font-mono text-center">
-                {getErrorHint(error, errorCode)}
-              </p>
+              <h2
+                ref={errorHeadingRef}
+                tabIndex={-1}
+                aria-describedby={shownError.lines
+                  .map((_, index) => `error-line-${index}`)
+                  .join(' ')}
+                className="text-status-error text-sm font-mono text-balance flex items-center justify-center gap-2 focus:outline-none"
+              >
+                <CircleAlert size={16} aria-hidden="true" className="shrink-0" />
+                {ERROR_TITLE}
+              </h2>
+              {shownError.lines.map((line, index) => (
+                <p
+                  // The lines are fixed for one error: their place is their identity.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: see above
+                  key={index}
+                  id={`error-line-${index}`}
+                  className={`text-xs font-mono text-center ${index === 0 ? 'text-text-secondary' : 'text-text-tertiary'}`}
+                >
+                  {line}
+                </p>
+              ))}
               <div className="flex flex-col items-center gap-3">
                 <Button
                   variant="cyber"
                   size="md"
-                  leftIcon={<RotateCcw size={14} />}
-                  onClick={retry}
+                  leftIcon={
+                    shownError.action === 'search' ? <Search size={14} /> : <RotateCcw size={14} />
+                  }
+                  onClick={
+                    shownError.action === 'retry'
+                      ? retry
+                      : shownError.action === 'search'
+                        ? handleSearchAgain
+                        : () => window.location.reload()
+                  }
                 >
-                  RETRY ANALYSIS
+                  {ERROR_ACTION_LABEL[shownError.action]}
                 </Button>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
-                >
-                  or try a different song
-                </button>
+                {/* "Search again" already leads to a different song: no second link beside it */}
+                {shownError.action !== 'search' && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                  >
+                    or try a different song
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -779,7 +933,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               className="text-text-tertiary hover:text-cyber text-xs font-mono animate-fade-in transition-colors focus-visible:outline-none focus-visible:underline flex items-center gap-1.5"
             >
               <ArrowLeft size={12} />
-              RESTORE PREVIOUS SESSION
+              Back to the last result
             </button>
           )}
         </div>

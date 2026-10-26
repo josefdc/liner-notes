@@ -18,7 +18,7 @@ const resumeWith = (id: string, pickedBy = "click") =>
 async function openPicker(page: Page) {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
   const picker = page.locator('div[tabindex="0"]', { hasText: "Is this the right track?" });
   await expect(picker).toBeVisible();
   return picker;

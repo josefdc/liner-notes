@@ -133,6 +133,7 @@ describe('useAgent stream errors', () => {
     analysis.fail();
 
     expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('connection_lost');
     expect(result.current.isLoading).toBe(false);
     expect(analysis.closed).toBe(true);
     expect(streams()).toHaveLength(1);
@@ -193,6 +194,49 @@ describe('useAgent stream errors', () => {
     lastStream().send({ type: 'done' });
 
     expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('no_result');
+  });
+
+  it('gives a search without candidates the no_match code', () => {
+    const { result } = startAnalysis();
+    lastStream().send({ type: 'connected', threadId: 't1' });
+    lastStream().send(interrupt([]));
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('no_match');
+  });
+
+  it('gives a stream that cannot be opened its own code', () => {
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        constructor() {
+          throw new TypeError('Failed to fetch');
+        }
+      },
+    );
+    const { result } = startAnalysis();
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('stream_open_failed');
+  });
+
+  it('gives a resume that cannot be opened its own code', async () => {
+    const { hook } = openPicker();
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        constructor() {
+          throw new TypeError('Failed to fetch');
+        }
+      },
+    );
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.errorCode).toBe('resume_failed');
   });
 });
 
@@ -304,8 +348,8 @@ describe('useAgent progress', () => {
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ ...interrupt(candidates.slice(0, 1)), message: '' });
 
-    expect(hook.result.current.logs.at(-1)?.message).toBe('Pick the track to analyse');
-    expect(hook.result.current.statusNote).toBe('Pick the track to analyse');
+    expect(hook.result.current.logs.at(-1)?.message).toBe('Pick the track to analyze');
+    expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
   });
 
   // The API's order, from the recorded demo run: the historian reports before any await, the
@@ -485,6 +529,7 @@ describe('useAgent track picker', () => {
     expect(streams()).toHaveLength(opened);
     expect(hook.result.current.status).toBe('error');
     expect(hook.result.current.error).toContain('could not be found again');
+    expect(hook.result.current.errorCode).toBe('choice_lost');
   });
 
   it('opens one resume per picker and closes the analysis stream', async () => {
@@ -597,7 +642,7 @@ describe('useAgent track picker', () => {
     });
     expect(result.current.isReplay).toBe(true);
     expect(result.current.logs.at(-1)?.message).toBe(
-      'Recorded analysis replayed. Nothing was analysed live.',
+      'Recorded analysis replayed. Nothing was analyzed live.',
     );
     expect(completeLogs(result.current.logs)).toBe(0);
     act(() => {
@@ -708,6 +753,7 @@ describe('useAgent inactivity watchdog', () => {
 
     expect(result.current.status).toBe('error');
     expect(result.current.error).toMatch(/stopped responding/);
+    expect(result.current.errorCode).toBe('stream_stalled');
     expect(analysis.closed).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
   });

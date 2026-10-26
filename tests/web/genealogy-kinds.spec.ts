@@ -38,7 +38,7 @@ const resultOf = (data: { streams: Record<string, Event[]> }) =>
     genealogy: { nodes: Node[]; links: Link[] };
   };
 
-/** The fixture with only the given nodes (and the analysed track) and the links between them. */
+/** The fixture with only the given nodes (and the analyzed track) and the links between them. */
 function withNodes(ids: string[]) {
   const copy = loadFixture("genealogy-kinds");
   const { genealogy } = resultOf(copy);
@@ -348,12 +348,12 @@ test.describe("the genealogy graph", () => {
     await expect(tracks.first()).not.toBeFocused();
     await page.keyboard.press("Tab");
     await expect(tracks.first()).toBeFocused();
-    await expect(detail).toHaveText(`${CURRENT}The analysed track`);
+    await expect(detail).toHaveText(`${CURRENT}The analyzed track`);
 
     await page.keyboard.press("ArrowRight");
     await expect(tracks.nth(1)).toBeFocused();
     await expect(detail).toContainText(`${CURRENT} samples Sourced Sample - Someone (1984)`);
-    await expect(detail).toContainText("Enter: analyse this track");
+    await expect(detail).toContainText("Enter: analyze this track");
     await screenshot(page, testInfo, "focus-track", page.locator("#panel-genealogy"));
 
     // End: the last link; its provenance stays while focused, whatever the pointer does.

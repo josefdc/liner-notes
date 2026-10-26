@@ -273,8 +273,8 @@ describe('readLink', () => {
     expect(pack.map((item) => cites(item.id)).join(' ')).not.toMatch(/native code|function/);
   });
 
-  it('takes the analysed track’s year from the result when its node’s label names none', () => {
-    // The API labels the analysed track with its title alone.
+  it('takes the analyzed track’s year from the result when its node’s label names none', () => {
+    // The API labels the analyzed track with its title alone.
     const genealogy = {
       nodes: [
         { id: 'current', group: 1, label: 'Bright Lines', trackTitle: 'Bright Lines', size: 40 },

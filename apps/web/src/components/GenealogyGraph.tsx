@@ -374,13 +374,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     function nodeAriaLabel(d: CustomNode): string {
       const name = nameOf(d.id);
-      if (d.group === 1) return `${name}, the analysed track`;
+      if (d.group === 1) return `${name}, the analyzed track`;
       const relation = relations.get(d.id);
       const link = relation?.link;
       const said = link
         ? `${relationSentence(link, nameOf)}. ${provenanceText(link)}.`
-        : 'No direct link to the analysed track.';
-      return `${name}: ${said} Press Enter to analyse it.`;
+        : 'No direct link to the analyzed track.';
+      return `${name}: ${said} Press Enter to analyze it.`;
     }
 
     // Node - Outer Glow Ring (The Halo)
@@ -889,7 +889,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .
           {nodeList
             .map((node) => {
-              if (node.group === 1) return ` ${nameOf(node.id)}: the analysed track.`;
+              if (node.group === 1) return ` ${nameOf(node.id)}: the analyzed track.`;
               // Which track uses which, as a sentence naming both, and how it is known.
               const relation = relationToTrack(links, node.id, currentId);
               return relation.link
@@ -898,7 +898,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             })
             .join('')}
           {links.length > 0 &&
-            ' In the graph, the arrow keys move between the tracks and the links; Enter analyses the focused track.'}
+            ' In the graph, the arrow keys move between the tracks and the links; Enter analyzes the focused track.'}
         </div>
 
         {/* What the pointer or keyboard focus is on: a link's relation and where it comes from,
@@ -919,7 +919,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               <>
                 <p className="text-text-secondary">{nameOf(activeNode.id)}</p>
                 {activeNode.group === 1 ? (
-                  <p>The analysed track</p>
+                  <p>The analyzed track</p>
                 ) : activeRelation?.link ? (
                   <>
                     <p>{relationSentence(activeRelation.link, nameOf)}</p>
@@ -928,7 +928,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                 ) : (
                   <p>No direct link to this track</p>
                 )}
-                {keyboardOnNode && activeNode.group !== 1 && <p>Enter: analyse this track</p>}
+                {keyboardOnNode && activeNode.group !== 1 && <p>Enter: analyze this track</p>}
               </>
             )}
           </div>

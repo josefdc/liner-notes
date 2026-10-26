@@ -44,7 +44,7 @@ const failure = (code: string, error: string) => [
 async function search(page: Page, query: string) {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
 test("an interrupt-only picker with data heartbeats resumes to one result", async ({ page }) => {
@@ -101,47 +101,94 @@ test("a refused resume shows its error with the hint for its code, and retry sea
   await expect(page.getByText("Is this the right track?")).toBeVisible();
   await page.keyboard.press("Enter");
 
-  await expect(page.getByText("SIGNAL LOST")).toBeVisible();
-  await expect(page.getByText(/This choice has expired/)).toBeVisible();
-  // The code decides the hint, not the words "not found" in the message.
-  await expect(page.getByText("That choice is no longer open. Search again.")).toBeVisible();
-  await expect(page.getByText(/Verify track name/)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
+  // The code decides the words, not the words "not found" in the message.
+  await expect(
+    page.getByText("That choice is no longer open. Try again to get a fresh list of tracks."),
+  ).toBeVisible();
+  await expect(page.getByText(/No song matched/)).toHaveCount(0);
+  // A code this page has words for shows those words alone, not the server's message too.
+  await expect(page.getByText(/This choice has expired/)).toHaveCount(0);
 
-  await page.getByRole("button", { name: "RETRY ANALYSIS" }).click();
+  await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByText("Is this the right track?")).toBeVisible();
   const log = await apiRequests(page);
   expect(log.filter((entry) => entry.startsWith(`stream ${ANALYZE}?`))).toHaveLength(2);
   expect(log.filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual([]);
 });
 
-for (const { code, error, hint } of [
+// What the error block says for each code: the page's words where the server's message says
+// nothing more, the server's own message where it carries specifics (a wait time, a service),
+// with a next step only when the message has none.
+for (const { code, error, lines, action } of [
   {
     code: "no_match",
-    error: "No song matched the search.",
-    hint: "No signal detected. Verify track name and artist.",
+    error: "No song matched that search.",
+    lines: ["No song matched your search. Check the title and artist, then search again."],
+    action: "Search again",
   },
   {
     code: "timeout",
-    error: "The analysis took too long.",
-    hint: "An upstream service is not answering. Try again later.",
+    error: "The analysis took too long. Please try again.",
+    lines: [
+      "The analysis took too long and was stopped. Try again, or search for a different song.",
+    ],
+    action: "Try again",
   },
   {
     code: "upstream_unavailable",
-    error: "A music service could not be reached.",
-    hint: "An upstream service is not answering. Try again later.",
+    error: "Spotify is limiting requests right now. Please try again in about 45 s.",
+    lines: ["Spotify is limiting requests right now. Please try again in about 45 s."],
+    action: "Try again",
   },
   {
     code: "failed",
-    error: "The analysis failed.",
-    hint: "Unexpected interference. The system is ready to retry.",
+    error: "The request could not be completed. Please try again.",
+    lines: ["The request could not be completed. Please try again."],
+    action: "Try again",
   },
+  {
+    code: "internal_error",
+    error: "Something went wrong. Please try again.",
+    lines: ["Something went wrong. Please try again."],
+    action: "Try again",
+  },
+  {
+    code: "invalid_input",
+    error: "The request is not valid.",
+    lines: ["The request could not be read. Search again."],
+    action: "Search again",
+  },
+  // Codes this page does not know: the server's message, then the next step. The names of an
+  // object's own built-in members are codes like any other.
+  ...["some_new_code", "toString", "constructor"].map((code) => ({
+    code,
+    error: "A new kind of failure.",
+    lines: ["A new kind of failure.", "Try again, or search for a different song."],
+    action: "Try again",
+  })),
 ]) {
-  test(`a failure with code ${code} shows its hint`, async ({ page }) => {
-    await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: failure(code, error) } });
+  test(`a failure with code ${code} says what happened and offers ${action}`, async ({ page }) => {
+    await useMockApi(page, {
+      suggestions: [],
+      streams: {
+        [ANALYZE]: failure(code, error).map((event) =>
+          event.type === "error" && error === "A new kind of failure."
+            ? { $unchecked: event }
+            : event,
+        ),
+      },
+    });
     await search(page, "Hurt");
-    await expect(page.getByText("SIGNAL LOST")).toBeVisible();
-    await expect(page.getByText(error)).toBeVisible();
-    await expect(page.getByText(hint)).toBeVisible();
+    const heading = page.getByRole("heading", { name: "The analysis did not finish" });
+    await expect(heading).toBeVisible();
+    const block = heading.locator("xpath=..");
+    await expect(block.locator("p")).toHaveText(lines);
+    await expect(block.getByRole("button", { name: action, exact: true })).toBeVisible();
+    // Never a second "try again" after a message that already says it.
+    expect(
+      (await block.locator("p").allInnerTexts()).join(" ").match(/try again/gi)?.length ?? 0,
+    ).toBeLessThanOrEqual(1);
   });
 }
 

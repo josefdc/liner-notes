@@ -29,21 +29,21 @@ import type {
 export const AUDIO_UNAVAILABLE_TEXT: Record<AudioUnavailableReason, string> = {
   service_unavailable: 'The audio analysis service did not respond.',
   no_preview: 'No audio preview is available for this track.',
-  preview_rejected: 'The audio preview is not from an allowed source, so it was not analysed.',
+  preview_rejected: 'The audio preview is not from an allowed source, so it was not analyzed.',
   analysis_failed: 'The audio analysis failed.',
   not_detected: 'The analysis ran but could not detect the tempo or key.',
   not_run: 'The audio analysis did not run.',
   low_confidence:
     'The analysis ran, but its tempo or key was below the confidence needed to show it.',
   preview_lookup_incomplete:
-    'The preview lookup on Deezer could not be finished, so the audio was not analysed. A later analysis tries again.',
+    'The preview lookup on Deezer could not be finished, so the audio was not analyzed. A later analysis tries again.',
 };
 
 export function audioUnavailableText(reason: string | undefined): string {
   if (reason && Object.hasOwn(AUDIO_UNAVAILABLE_TEXT, reason)) {
     return AUDIO_UNAVAILABLE_TEXT[reason as AudioUnavailableReason];
   }
-  return reason ? `The audio was not analysed (${reason}).` : 'The analysis did not report why.';
+  return reason ? `The audio was not analyzed (${reason}).` : 'The analysis did not report why.';
 }
 
 /**
@@ -296,7 +296,7 @@ export function noKeyMomentsReason(track: TrackData): string | null {
   if (state.kind === 'unreadable') return UNREADABLE_TEXT;
   if (legacyMeasured(track)) return null;
   if (track.audioSource === 'unavailable') {
-    return unavailableShort(track.audioUnavailableReason) ?? 'the audio was not analysed';
+    return unavailableShort(track.audioUnavailableReason) ?? 'the audio was not analyzed';
   }
   return 'the audio was not measured';
 }
@@ -901,7 +901,7 @@ export function audioNoticeOf(track: TrackData): AudioNotice | null {
   if (!notMeasured && !notShown) title = 'Audio-model estimates not available';
   else if (!notMeasured) title = 'Some audio values not shown';
   else if (somethingMeasured) title = 'Audio partly measured';
-  else title = state.kind === 'none' ? 'Audio not analysed' : 'Audio not measured';
+  else title = state.kind === 'none' ? 'Audio not analyzed' : 'Audio not measured';
 
   let reason: string | null = null;
   if (notMeasured && !perField) {

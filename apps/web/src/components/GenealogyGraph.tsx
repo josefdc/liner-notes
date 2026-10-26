@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { select, selectAll } from 'd3-selection';
+import { type Selection, select, selectAll } from 'd3-selection';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   forceSimulation,
@@ -40,6 +40,7 @@ import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './gen
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
 import { isValidImageUrl } from '../utils/image';
+import { useReducedMotion } from '../utils/motion';
 import type { TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -157,6 +158,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     return () => resizeObserver.disconnect();
   }, []);
 
+  // Under reduced motion the layout is worked out before it is drawn, and nothing glides.
+  const reducedMotion = useReducedMotion();
+
   useEffect(() => {
     if (!svgRef.current || !wrapperRef.current || dimensions.width === 0 || dimensions.height === 0)
       return;
@@ -164,6 +168,12 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // 1. Setup & Cleanup
     const svg = select(svgRef.current);
     svg.selectAll('*').remove();
+
+    // A hint shown on hover fades in, or appears at once under reduced motion.
+    const fadeIn = (hint: Selection<SVGTextElement, unknown, null, undefined>) => {
+      if (reducedMotion) hint.style('opacity', 1);
+      else hint.style('opacity', 0).transition().duration(300).style('opacity', 1);
+    };
 
     // Use dimensions from ResizeObserver state
     const { width, height } = dimensions;
@@ -255,10 +265,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       // none sent) is not pushed off into the distance, taking the fit with it.
       .force('x', forceX(width / 2).strength(0.04))
       .force('y', forceY(height / 2).strength(0.04));
+    // Under reduced motion the layout is not played out frame by frame: it is computed at once
+    // once the graph is built (see the end of this effect), and drawn settled.
+    if (reducedMotion) simulation.stop();
 
     // Auto-fit once the layout first settles; a later drag keeps the user's view.
     let fitted = false;
-    simulation.on('end', () => {
+    const settle = () => {
       if (fitted) {
         fitText();
         return;
@@ -294,11 +307,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const translateX = width / 2 - graphCenterX * scale;
       const translateY = height / 2 - graphCenterY * scale;
 
-      svg
-        .transition()
-        .duration(500)
-        .call(zoomBehavior.transform, zoomIdentity.translate(translateX, translateY).scale(scale));
-    });
+      const fit = zoomIdentity.translate(translateX, translateY).scale(scale);
+      if (reducedMotion) svg.call(zoomBehavior.transform, fit);
+      else svg.transition().duration(500).call(zoomBehavior.transform, fit);
+    };
+    simulation.on('end', settle);
 
     // 5. Render links: the colour is the relation a link is shown as, the line its kind (solid
     // when sourced, dashed when not), and a label names the relation. Widths and dashes are
@@ -776,10 +789,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('fill', colors.cyber)
             // A preview of the node's track, whatever its relation to this one
             .text('♪ PREVIEW')
-            .style('opacity', 0)
-            .transition()
-            .duration(300)
-            .style('opacity', 1);
+            .call(fadeIn);
         } else if (isOrigin(d)) {
           // Fallback visual for origin nodes without preview
           select(this)
@@ -792,10 +802,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
             .attr('fill', colors.analog)
             .text('⚡ CLICK TO EXPLORE')
-            .style('opacity', 0)
-            .transition()
-            .duration(300)
-            .style('opacity', 1);
+            .call(fadeIn);
         }
       })
       .on('mouseleave', () => {
@@ -816,7 +823,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       });
 
     // 8. Tick Function
-    simulation.on('tick', () => {
+    function draw() {
       for (const line of [link, linkTarget]) {
         line
           .attr('x1', (d: any) => d.source.x)
@@ -827,22 +834,33 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       linkLabel.attr('x', labelX).attr('y', labelY);
 
       node.attr('transform', (d) => `translate(${d.x},${d.y})`);
-    });
+    }
+    simulation.on('tick', draw);
 
     // 9. Drag Logic
     function dragBehavior(simulation: Simulation<CustomNode, undefined>) {
+      // Under reduced motion a drag moves the dragged track alone, under the pointer: the
+      // others stay where they are instead of drifting into a new layout.
       function dragstarted(event: any) {
+        if (reducedMotion) return;
         if (!event.active) simulation.alphaTarget(0.3).restart();
         event.subject.fx = event.subject.x;
         event.subject.fy = event.subject.y;
       }
 
       function dragged(event: any) {
+        if (reducedMotion) {
+          event.subject.x = event.x;
+          event.subject.y = event.y;
+          draw();
+          return;
+        }
         event.subject.fx = event.x;
         event.subject.fy = event.y;
       }
 
       function dragended(event: any) {
+        if (reducedMotion) return;
         if (!event.active) simulation.alphaTarget(0);
         event.subject.fx = null;
         event.subject.fy = null;
@@ -851,12 +869,32 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       return drag().on('start', dragstarted).on('drag', dragged).on('end', dragended);
     }
 
+    // The settled layout, computed in one go: the ticks the simulation would have played.
+    if (reducedMotion) {
+      const ticks = Math.ceil(
+        Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()),
+      );
+      simulation.tick(ticks);
+      draw();
+      settle();
+    }
+
     return () => {
       simulation.stop();
       setHovered(null);
       setFocused(null);
     };
-  }, [data, links, nameOf, currentId, onNodeClick, dimensions, playPreview, stopPreview]); // Add dimensions to dependency array for responsive redraw
+  }, [
+    data,
+    links,
+    nameOf,
+    currentId,
+    onNodeClick,
+    dimensions,
+    playPreview,
+    stopPreview,
+    reducedMotion,
+  ]); // Add dimensions to dependency array for responsive redraw
 
   const nodeList = graphNodes(data);
   const related = nodeList.filter((node) => node.group !== 1);

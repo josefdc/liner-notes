@@ -1,9 +1,12 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentLog } from '../types';
 import SystemConsole from './SystemConsole';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const log = (code: AgentLog['code'], node?: string): AgentLog => ({
   id: `${code}-${node}`,
@@ -113,5 +116,66 @@ describe('SystemConsole', () => {
       <SystemConsole logs={[log(undefined, 'research_tool')]} isComplete={false} />,
     );
     expect(label(container).textContent).toBe('Sources');
+  });
+
+  it('says how many earlier lines the log no longer shows, and counts them as events', () => {
+    const kept = Array.from({ length: 3 }, (_, n) => ({
+      ...log('SYS-INIT'),
+      id: `kept-${n}`,
+      message: `Line ${n + 12}`,
+      index: n + 12,
+    }));
+    const { container } = render(<SystemConsole logs={kept} isComplete={false} />);
+    expect(container.querySelector('[data-log-dropped]')?.textContent).toBe(
+      '12 earlier lines not shown',
+    );
+    expect(screen.getByText('15 events')).toBeTruthy();
+  });
+
+  it('says nothing was left out of a whole log', () => {
+    const { container } = render(<SystemConsole logs={[log('SYS-INIT')]} isComplete={false} />);
+    expect(container.querySelector('[data-log-dropped]')).toBeNull();
+  });
+
+  /** A log box `height` px tall whose lines take `content` px, scrolled to `top`. */
+  function sized(box: HTMLElement, content: () => number, height = 288) {
+    Object.defineProperty(box, 'scrollHeight', { configurable: true, get: content });
+    Object.defineProperty(box, 'clientHeight', { configurable: true, get: () => height });
+  }
+  const lines = (count: number) =>
+    Array.from({ length: count }, (_, n) => ({
+      ...log('SYS-INIT'),
+      id: `line-${n}`,
+      message: `Line ${n}`,
+    }));
+
+  it('keeps its own scroll at the newest line, without scrolling the page into view', () => {
+    const intoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    let content = 600;
+    const { rerender } = render(<SystemConsole logs={lines(20)} isComplete={false} />);
+    const box = screen.getByRole('log');
+    sized(box, () => content);
+    content = 700;
+    rerender(<SystemConsole logs={lines(22)} isComplete={false} />);
+    expect(box.scrollTop).toBe(700);
+    expect(intoView).not.toHaveBeenCalled();
+  });
+
+  it('leaves a reader who scrolled up to an earlier line where they are', () => {
+    let content = 600;
+    const { rerender } = render(<SystemConsole logs={lines(20)} isComplete={false} />);
+    const box = screen.getByRole('log');
+    sized(box, () => content);
+    box.scrollTop = 40;
+    fireEvent.scroll(box);
+    content = 700;
+    rerender(<SystemConsole logs={lines(22)} isComplete={false} />);
+    expect(box.scrollTop).toBe(40);
+    // Back at the end, the newest lines are followed again.
+    box.scrollTop = 700 - 288;
+    fireEvent.scroll(box);
+    content = 800;
+    rerender(<SystemConsole logs={lines(24)} isComplete={false} />);
+    expect(box.scrollTop).toBe(800);
   });
 });

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEventSchemas, resetSkippedReports } from './agent/events';
+import { LOG_LIMIT } from './agent/runLog';
 import { OUTDATED_ERROR, STREAM_INACTIVITY_TIMEOUT_MS, useAgent } from './useAgent';
 
 /**
@@ -421,6 +422,58 @@ describe('useAgent progress', () => {
     expect(hook.result.current.status).toBe('researching');
   });
 
+  // The engineer and the historian run side by side: their lines arrive in any order. Whatever
+  // the order, the run never goes back from the research (or the measurement beside it) to
+  // reading the audio. (The bar's own guard is pinned in console/progress.test.ts.)
+  it.each([
+    ['a measurement', ['AUDIO-INIT', 'AUDIO-COMPLETE']],
+    ['a partial measurement', ['AUDIO-INIT', 'AUDIO-ERROR']],
+    ['an audio cache hit', ['AUDIO-COMPLETE']],
+  ])(
+    'never moves the step back, whatever the order of the engineer and historian (%s)',
+    (_, audio) => {
+      const RANK: Partial<Record<string, number>> = {
+        searching: 1,
+        analyzing: 2,
+        measuring: 3,
+        researching: 3,
+        composing: 4,
+      };
+      const research = ['RESEARCH-START', 'RESEARCH-FOUND'];
+      // Every interleaving of the two branches' lines, each branch in its own order.
+      const orders: string[][] = [];
+      const merge = (a: string[], b: string[], done: string[]) => {
+        if (a.length === 0 && b.length === 0) orders.push(done);
+        if (a.length > 0) merge(a.slice(1), b, [...done, a[0]]);
+        if (b.length > 0) merge(a, b.slice(1), [...done, b[0]]);
+      };
+      merge(audio, research, []);
+      expect(orders.length).toBeGreaterThan(2);
+
+      for (const order of orders) {
+        const { hook, send } = realOrder();
+        const seen: string[] = [hook.result.current.status];
+        for (const code of [...order, 'LLM-CONNECT']) {
+          const node = code.startsWith('AUDIO')
+            ? 'engineer'
+            : code.startsWith('RESEARCH')
+              ? 'historian'
+              : 'composer';
+          send(node, `${node} ${code}`, code);
+          seen.push(hook.result.current.status);
+        }
+        const ranks = seen.map((status) => RANK[status] ?? 0);
+        for (let n = 1; n < ranks.length; n++) {
+          expect(ranks[n], `${order.join(' ')}: ${seen.join(' > ')}`).toBeGreaterThanOrEqual(
+            ranks[n - 1],
+          );
+        }
+        expect(seen.at(-1)).toBe('composing');
+        hook.unmount();
+      }
+    },
+  );
+
   it('says it reads the selected track after a pick, not that it reads the audio', async () => {
     const { hook } = openPicker();
     await act(async () => {
@@ -453,6 +506,59 @@ describe('useAgent progress', () => {
     analysis.send({ type: 'status', node: 'composer', code: 'LLM-ERROR', message: fallback });
     expect(result.current.status).toBe('composing');
     expect(result.current.statusNote).toBe(fallback);
+  });
+});
+
+describe('useAgent run log', () => {
+  const status = (message: string, code?: string) => ({
+    type: 'status',
+    node: 'research_tool',
+    message,
+    ...(code ? { code } : {}),
+  });
+
+  it('shows a line the server sends twice in a row once, without a new state', () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send(status('Searching: sample history on the web'));
+    const before = result.current;
+    analysis.send(status('Searching: sample history on the web'));
+    expect(result.current).toBe(before);
+    expect(
+      result.current.logs.filter((log) => log.message === 'Searching: sample history on the web'),
+    ).toHaveLength(1);
+    // The same words again later, after another line, are a new line.
+    analysis.send(status('Searching: Last.fm similar artists'));
+    analysis.send(status('Searching: sample history on the web'));
+    expect(result.current.logs.map((log) => log.message).slice(-3)).toEqual([
+      'Searching: sample history on the web',
+      'Searching: Last.fm similar artists',
+      'Searching: sample history on the web',
+    ]);
+  });
+
+  it("keeps the run's latest lines only, numbered in the run", () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    for (let n = 0; n < LOG_LIMIT + 10; n++) analysis.send(status(`Line ${n}`));
+    const { logs } = result.current;
+    expect(logs).toHaveLength(LOG_LIMIT);
+    expect(logs.at(-1)?.message).toBe(`Line ${LOG_LIMIT + 9}`);
+    // "Searching for…" and "Connected…" come first: 12 lines were dropped.
+    expect(logs[0].index).toBe(12);
+  });
+
+  it('starts the numbering again for a new run', () => {
+    const { result } = startAnalysis();
+    lastStream().send({ type: 'connected', threadId: 't1' });
+    act(() => {
+      result.current.analyze('Another song');
+    });
+    expect(result.current.logs.map((log) => [log.message, log.index])).toEqual([
+      ['Searching for "Another song"', 0],
+    ]);
   });
 });
 

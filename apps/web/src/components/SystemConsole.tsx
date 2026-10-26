@@ -1,7 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AgentLog } from '../types';
 import { Terminal, LoaderCircle, CircleCheck } from 'lucide-react';
 import { logStyle } from './console/logCodes';
+import { droppedLines, writtenLines } from '../hooks/agent/runLog';
+
+// How close to its end, in pixels, the log counts as read to the end: new lines keep it there.
+const AT_END_PX = 24;
 
 interface SystemConsoleProps {
   logs: AgentLog[];
@@ -20,7 +24,7 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ lo
   return (
     <div
       data-log-code={log.code}
-      className={`flex items-start font-mono text-xs leading-relaxed py-0.5 content-auto ${isLatest ? 'animate-fade-in-right' : ''}`}
+      className={`flex items-start font-mono text-xs leading-relaxed py-0.5 ${isLatest ? 'animate-fade-in-right' : ''}`}
     >
       <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums">{time}</span>
       <span
@@ -51,7 +55,9 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
         : 'Running';
 
   const consoleRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // The reader is at the end of the log (or has not scrolled it): new lines keep them there.
+  const atEndRef = useRef(true);
+  const linesRef = useRef<HTMLDivElement>(null);
 
   // P3:26 — Track elapsed time from first log
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -72,13 +78,34 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
     return () => clearInterval(interval);
   }, [logs.length, isComplete]);
 
-  // Keep the newest log line in view
+  // Keep the newest line in view by scrolling the log itself, at once: never the page or the
+  // views around it, and never a reader who has scrolled up to read an earlier line.
   // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
+  useLayoutEffect(() => {
+    const box = consoleRef.current;
+    if (box && atEndRef.current) box.scrollTop = box.scrollHeight;
+  }, [logs, isComplete]);
+
+  // Lines can change height after they are drawn (a font loads, the window narrows and they
+  // wrap): a reader at the end stays there.
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs]);
+    const box = consoleRef.current;
+    const lines = linesRef.current;
+    if (!box || !lines || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (atEndRef.current) box.scrollTop = box.scrollHeight;
+    });
+    observer.observe(lines);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleScroll = () => {
+    const box = consoleRef.current;
+    if (box) atEndRef.current = box.scrollHeight - box.scrollTop - box.clientHeight <= AT_END_PX;
+  };
+
+  const dropped = droppedLines(logs);
+  const written = writtenLines(logs);
 
   return (
     <section className="relative w-full max-w-3xl mx-auto" aria-label="Analysis log">
@@ -100,6 +127,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
           role="log"
           aria-live="polite"
           aria-relevant="additions"
+          onScroll={handleScroll}
           className="relative h-72 overflow-y-auto scrollbar-hide p-4 font-mono overscroll-contain"
         >
           {/* Empty state */}
@@ -110,7 +138,13 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
           )}
 
           {/* Log entries */}
-          <div className="space-y-0.5 relative z-0">
+          <div ref={linesRef} className="space-y-0.5 relative z-0">
+            {/* The log keeps the latest lines only */}
+            {dropped > 0 && (
+              <p data-log-dropped className="text-xs font-mono text-text-tertiary pb-1">
+                {dropped} earlier {dropped === 1 ? 'line' : 'lines'} not shown
+              </p>
+            )}
             {logs.map((log, idx) => (
               <LogLine key={log.id} log={log} isLatest={idx === logs.length - 1 && !isComplete} />
             ))}
@@ -136,16 +170,13 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Scrolled into view to keep the newest line visible */}
-            <div ref={bottomRef} className="h-1" />
           </div>
         </div>
 
         {/* Footer: how many events and how long since the first one */}
         <div className="bg-white/5 border-t border-white/5 px-4 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary">
           <span>
-            {logs.length} {logs.length === 1 ? 'event' : 'events'}
+            {written} {written === 1 ? 'event' : 'events'}
           </span>
           <span>{elapsedSeconds} s since you started</span>
         </div>

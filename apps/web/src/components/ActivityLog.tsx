@@ -1,8 +1,9 @@
 import type React from 'react';
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Activity, CircleCheck, ChevronDown, LoaderCircle } from 'lucide-react';
 import type { AgentLog } from '../types';
 import { logStyle } from './console/logCodes';
+import { writtenLines } from '../hooks/agent/runLog';
 
 interface ActivityLogProps {
   logs: AgentLog[];
@@ -12,20 +13,41 @@ interface ActivityLogProps {
 // The number of latest entries the log shows.
 const SHOWN = 6;
 
-// Format relative time
-function formatRelativeTime(timestamp: string): string {
-  const now = Date.now();
-  const then = new Date(timestamp).getTime();
-  const diff = Math.floor((now - then) / 1000);
+/** How often the entries' times are brought up to date while the log is open. */
+export const RELATIVE_TIME_TICK_MS = 30_000;
 
-  if (diff < 5) return 'Just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
+/**
+ * How long before `now` an entry was logged, in words. Its steps are no finer than the clock
+ * that updates it (RELATIVE_TIME_TICK_MS): under a minute is "Just now".
+ */
+export function formatRelativeTime(timestamp: string, now: number): string {
+  const diff = Math.floor((now - new Date(timestamp).getTime()) / 1000);
+  // A time this page cannot read, or one ahead of its clock, reads as just now too.
+  if (!Number.isFinite(diff) || diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  return `${Math.floor(diff / 3600)} h ago`;
+}
+
+/**
+ * The time the entries are measured from: read when the log opens, then once every
+ * RELATIVE_TIME_TICK_MS while it stays open. One timer for the whole log, none per entry.
+ */
+function useClock(running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), RELATIVE_TIME_TICK_MS);
+    return () => clearInterval(timer);
+  }, [running]);
+  return now;
 }
 
 const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const now = useClock(isExpanded);
+  // The run's lines, those the log no longer keeps included.
+  const written = writtenLines(logs);
 
   // The latest entries, newest first
   const displayLogs = useMemo(() => [...logs].slice(-SHOWN).reverse(), [logs]);
@@ -54,7 +76,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           <h3 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">
             <Activity size={12} aria-hidden="true" className="text-text-tertiary" />
             Activity log
-            <span className="text-chrome text-text-muted">({logs.length})</span>
+            <span className="text-chrome text-text-muted">({written})</span>
           </h3>
           {/* P3:27 — Collapsed preview snippet */}
           {!isExpanded && logs.length > 0 && (
@@ -142,7 +164,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                         {label}
                       </span>
                       <span className="text-chrome text-text-muted font-mono">
-                        {formatRelativeTime(log.timestamp)}
+                        {formatRelativeTime(log.timestamp, now)}
                       </span>
                     </div>
 
@@ -158,9 +180,9 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           {/* Footer: how much of the log is shown */}
           <div className="relative z-10 bg-white/[0.02] border-t border-white/5 px-3 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary">
             <span>
-              {logs.length > SHOWN
-                ? `The latest ${SHOWN} of ${logs.length} events`
-                : `${logs.length} ${logs.length === 1 ? 'event' : 'events'}`}
+              {written > SHOWN
+                ? `The latest ${SHOWN} of ${written} events`
+                : `${written} ${written === 1 ? 'event' : 'events'}`}
             </span>
           </div>
         </div>

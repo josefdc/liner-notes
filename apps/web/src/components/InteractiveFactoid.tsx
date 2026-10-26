@@ -34,7 +34,8 @@ const ENTITY_COLORS: Record<FactoidEntity['type'], string> = {
   sample: 'text-analog hover:bg-analog/20 border-analog/30',
   technique: 'text-accent-pink hover:bg-accent-pink/20 border-accent-pink/30',
   artist: 'text-accent-green hover:bg-accent-green/20 border-accent-green/30',
-  album: 'text-accent-blue hover:bg-accent-blue/20 border-accent-blue/30',
+  // Neutral: a light blue reads as the inferred violet with red-green colour deficiencies
+  album: 'text-text-secondary hover:bg-white/10 border-white/30',
   year: 'text-text-tertiary hover:bg-white/10 border-white/20',
 };
 

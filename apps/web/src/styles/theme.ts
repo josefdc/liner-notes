@@ -61,12 +61,10 @@ export const colors = {
   success: '#22c55e',
   warning: '#fb923c',
   error: '#ff8a8a',
-  info: '#60a5fa',
   accent: {
     pink: '#f9a8d4',
     green: '#22c55e',
     amber: '#ffb000',
-    blue: '#93c5fd',
   },
   spotify: '#1ed760',
   gray: {

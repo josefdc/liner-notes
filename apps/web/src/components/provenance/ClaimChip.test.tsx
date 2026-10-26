@@ -232,7 +232,11 @@ describe('ClaimChip', () => {
     );
     const chip = renderChip({ ...result, audioUnavailableReason: 'not_detected' });
     expect(chip.dataset.claimKind).toBe('inferred');
-    expect(chip.textContent).toContain('Not sourced');
+    // A measurement claim whose value was not measured: not confirmed, not "not sourced".
+    const kindChip = chip.querySelector('[data-provenance]') as HTMLElement;
+    expect(kindChip.dataset.provenance).toBe('unconfirmed');
+    expect(kindChip.textContent).toBe('Not confirmed');
+    expect(chip.textContent).not.toContain('Not sourced');
     const missing = chip.querySelector('[data-value-kind="missing"]');
     expect(missing?.textContent).toMatch(/^Key not measured— /);
   });

@@ -246,6 +246,12 @@ describe('Dashboard connected tracks', () => {
       'Model inference · stated as a sample, shown as an influence; no evidence cited',
     );
     expect(lonely.textContent).not.toMatch(/Sourced|Model inference/);
+    // The heading names every kind a card can show.
+    expect(
+      screen.getByText(
+        'From the genealogy graph — each card says whether its link is sourced, not sourced or a model inference',
+      ),
+    ).toBeTruthy();
     // Kind in words, and the provenance chip the graph's list uses: amber and a book for
     // sourced, violet and sparkles for a model inference, neutral without a link.
     const badge = (card: Element) =>

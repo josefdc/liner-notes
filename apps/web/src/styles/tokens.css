@@ -69,12 +69,15 @@
   --color-prov-sourced: var(--color-analog);
   /* Violet means inferred, and only that: what a model wrote or estimated (its text, genre
      profile, song sections and sample times, the model steps of a run, and audio-model scores).
-     No other token is violet or near it (the purple and indigo hues are gone, and the honesty
-     guard keeps their names out of web source). It is the lightest violet still clearly a hue:
-     5.5:1 or more on every surface and 4.6:1 on its own badge tint. A light neutral (#cbd5e1)
-     read as the neutral badge (CIE76 ΔE 27 from its grey) and, with protanopia, as the measured
-     cyan (ΔE 9); this violet is ΔE 51 and 33 from them, and over 99 from the sourced amber and
-     the warning orange */
+     No other token is violet or near it: check:contrast fails any colour token, whatever its
+     name, closer than CIE76 ΔE 15 to it with normal vision, deuteranopia or protanopia
+     (config/contrast.mjs), and the honesty guard keeps the old purple and indigo names out of web
+     source. It is the lightest violet still clearly a hue: 5.5:1 or more on every surface and
+     4.6:1 on its own badge tint. A light neutral (#cbd5e1) read as the neutral badge (ΔE 27 from
+     its grey) and, with protanopia, as the measured cyan (ΔE 9); this violet is ΔE 51 and 33
+     from them. Its closest token is the measured cyan, ΔE 17.5 with deuteranopia; the light
+     blues (info, the album accent) were ΔE 5 to 6 from it with red-green deficiencies and are
+     gone */
   --color-prov-inferred: #c4a4fc;
   --color-prov-missing: var(--color-text-tertiary);
 
@@ -104,14 +107,12 @@
      a source". Warnings carry their own icon too (a triangle) */
   --color-status-warning: #fb923c;
   --color-status-error: #ff8a8a;
-  --color-status-info: #60a5fa;
 
   /* ===== Accents: the data-visualisation hues for text and badges, lighter where the chart
      value is under 4.5:1 as text ===== */
   --color-accent-pink: #f9a8d4;
   --color-accent-green: var(--color-viz-green);
   --color-accent-amber: var(--color-analog);
-  --color-accent-blue: #93c5fd;
 
   /* ===== Spotify brand ===== */
   --color-spotify: #1ed760; /* Spotify's current brand green */

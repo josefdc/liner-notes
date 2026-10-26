@@ -270,6 +270,13 @@ describe("unmeaning-hues-design-system", () => {
     ["a camelCase name", "const accentPurple = 1;", 1],
     ["a snake_case name", "const accent_purple = 1;", 1],
     ["a name in capitals", "const PURPLE_GLOW = 1;", 1],
+    ["a PascalCase name", "const PinkBadge = () => null;", 1],
+    ["a component", "<PurpleDot />", 1],
+    ["a capitalised name", "const Lavender = 1;", 1],
+    ["fuchsia", "'text-accent-fuchsia'", 1],
+    ["lavender", "--color-accent-lavender: #d8b4fe;", 1],
+    ["magenta", "const magenta_dim = 1;", 1],
+    ["violet", "'bg-violet-glow'", 1],
   ])("counts %s", (_name, line, expected) => {
     expect(count("unmeaning-hues-design-system", line, path)).toBe(expected);
   });
@@ -278,8 +285,10 @@ describe("unmeaning-hues-design-system", () => {
     ["the meaning variants", "'text-prov-inferred bg-status-warning/10'"],
     ["a comment", "// was text-accent-pink"],
     ["a longer word", "const greenhouse = 1; const pinkish = 2;"],
-    ["a capitalised name in prose", "const band = 'Green Day';"],
     ["JSX text", "<span>green light</span>"],
+    ["an aria-label", '<div aria-label="green light" />'],
+    ["a title", "<span title={'pink noise floor'} />"],
+    ["an alt text", '<img alt="Green Day live" />'],
   ])("ignores %s", (_name, line) => {
     expect(count("unmeaning-hues-design-system", line, path)).toBe(0);
   });
@@ -316,6 +325,10 @@ describe("near-violet-outside-inference", () => {
     ["a theme value", "onset: colors.accent.indigo,", 1],
     ["a theme hue", "cover: colors.purple,", 1],
     ["a role's token", "sampler: '--color-viz-purple',", 1],
+    ["a variant of a token", "'text-accent-purple-dim'", 1],
+    ["a glow", "'shadow-glow-purple-subtle'", 1],
+    ["a theme value by key", "colors['purple']", 1],
+    ["a family value by key", 'colors.viz["indigo"]', 1],
   ])("counts %s", (_name, line, expected) => {
     expect(count("near-violet-outside-inference", line)).toBe(expected);
   });
@@ -368,6 +381,10 @@ describe("tiny-text-web", () => {
     ["a font size attribute", "<text fontSize={11}>"],
     ["a font size style in rem", "style={{ fontSize: '0.6rem' }}"],
     ["a font size style from a template", "style={{ fontSize: `\u0024{9}px` }}"],
+    ["an SVG font size attribute", '<text fontSize="10">x</text>'],
+    ["an SVG font size attribute in pixels", "<text fontSize='10px'>x</text>"],
+    ["a decimal font size", "style={{ fontSize: 9.5 }}"],
+    ["a decimal font size attribute", "<text fontSize={10.5}>"],
   ])("counts %s", (_name, line) => {
     expect(count("tiny-text-web", line)).toBe(1);
   });
@@ -390,6 +407,8 @@ describe("tiny-text-web", () => {
     ["a comment", "// was text-[10px]"],
     ["a width", "'w-[10px] h-[9px]'"],
     ["a unitless fraction", "tick={{ fontSize: 1.2 }}"],
+    ["a unitless scale under 2", "<text fontSize={1.5}>"],
+    ["a 12 px attribute", '<text fontSize="12">'],
     ["a variable named fontSize", "const fontSize = 10;"],
   ])("ignores %s", (_name, line) => {
     expect(count("tiny-text-web", line)).toBe(0);

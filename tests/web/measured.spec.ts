@@ -400,10 +400,10 @@ test("a measurement the contract cannot read is not shown as measured", async ({
 
   await expect(page.locator('[data-value-kind="measured"]')).toHaveCount(0);
   const values = page.getByRole("list", { name: "Audio values" });
-  await expect(valueItem(values, "BPM")).toHaveText("BPM 105.2Not confirmed");
+  await expect(valueItem(values, "BPM")).toHaveText("BPM 105.2Not confirmed, basis unknown");
   await openProvenance(page);
   await expect(valueItem(values, "BPM")).toHaveText(
-    "BPM 105.2Not confirmedNot confirmed as measured · confidence and basis unknown",
+    "BPM 105.2Not confirmed, basis unknownNot confirmed as measured · confidence and basis unknown",
   );
   await expect(page.getByRole("region", { name: "Missing data" })).toContainText(
     "Audio values not confirmed",
@@ -463,7 +463,7 @@ test.describe("a result with a null audio block", () => {
     const values = page.getByRole("list", { name: "Audio values" });
     await openProvenance(page);
     await expect(valueItem(values, "BPM")).toHaveText(
-      "BPM 105Not confirmedNot confirmed as measured · confidence and basis unknown",
+      "BPM 105Not confirmed, basis unknownNot confirmed as measured · confidence and basis unknown",
     );
     await expect(valueItem(values, "Loudness")).toHaveText("Loudness not measured");
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
@@ -515,21 +515,25 @@ test.describe("a result without the audio block", () => {
     await analyzeAndOpenDashboard(page, "Bright Lines");
     const values = page.getByRole("list", { name: "Audio values" });
     // The first analyzer's energy: on its own 0-1 scale, never a percentage or "Measured".
-    await expect(valueItem(values, "Energy")).toHaveText("Energy 0.71v1 score");
-    // Its result gives no confidence or basis: the hero's chip says so, closed.
+    await expect(valueItem(values, "Energy")).toHaveText("Energy 0.71v1 score, basis unknown");
+    // Its result gives no basis: the hero's chips say so, closed, for its measured values and
+    // its model scores alike (which carry a confidence, a description of the score).
     await expect(valueItem(values, "BPM")).toHaveText("BPM 105Measured, basis unknown");
+    await expect(
+      valueItem(page.getByRole("list", { name: "Audio-model estimates" }), "Mood"),
+    ).toHaveText("Mood Mellow 0.34Model estimate, basis unknown");
     await openProvenance(page);
     await expect(valueItem(values, "BPM")).toHaveText(
       "BPM 105Measured, basis unknownMeasured · confidence and basis unknown",
     );
     await expect(valueItem(values, "Energy")).toHaveText(
-      "Energy 0.71v1 scorev1 energy score (0–1, saturates on loud masters) · confidence and basis unknown",
+      "Energy 0.71v1 score, basis unknownv1 energy score (0–1, saturates on loud masters) · confidence and basis unknown",
     );
     await screenshot(page, testInfo, "legacy-dashboard");
     // Its model scores are estimates, never measured.
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
     await expect(valueItem(scores, "Mood")).toHaveText(
-      "Mood Mellow 0.34Model estimateModel estimate · score, not a probability · basis unknown",
+      "Mood Mellow 0.34Model estimate, basis unknownModel estimate · score, not a probability · basis unknown",
     );
     await expect(scores).not.toContainText("Measured");
     await expect(scores.locator('[data-value-kind="measured"]')).toHaveCount(0);

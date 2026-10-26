@@ -79,10 +79,15 @@ const SHAPE_PATH: Record<Shape, React.ReactNode> = {
 // The song's structure is never measured: the model's sections are drawn in the inferred colour,
 // a template's (or one of unknown origin) in neutral greys. The colour a result sends with each
 // section (chosen by the model) is not used: it would put the measured or sourced colours on an
-// inference. Neighbouring sections alternate two tints and are drawn apart.
+// inference. Neighbouring sections alternate two tints and are drawn apart. Each section is
+// focusable, so its boundary reaches 3:1 against the page (WCAG 1.4.11): a 1 px border in the
+// solid inferred violet, or a light grey for a template, around the tint.
 const SEGMENT_TINTS: Record<'inferred' | 'other', [string, string]> = {
-  inferred: ['bg-prov-inferred/60', 'bg-prov-inferred/35'],
-  other: ['bg-white/25', 'bg-white/10'],
+  inferred: [
+    'bg-prov-inferred/60 border border-prov-inferred',
+    'bg-prov-inferred/35 border border-prov-inferred',
+  ],
+  other: ['bg-white/25 border border-white/55', 'bg-white/10 border border-white/55'],
 };
 
 /** The chip that says where the structure comes from: a model, a template, or nobody knows. */

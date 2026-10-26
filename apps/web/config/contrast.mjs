@@ -219,7 +219,12 @@ const label = ({ token, alpha }) => `${token}${alpha < 1 ? `/${Math.round(alpha 
  * Every checked colour with its ratio on each surface (and tint):
  * [{ name, minimum, sites, results: [{ surface, ratio }], lowest, passes }].
  */
-export function contrastReport(css, srcDir = null, known = srcDir === SRC_DIR ? KNOWN : []) {
+export function contrastReport(
+  css,
+  srcDir = null,
+  known = srcDir === SRC_DIR ? KNOWN : [],
+  roles = ROLES,
+) {
   const tokens = readTokens(css);
   const stacks = surfaceStacks(tokens);
   const checks = new Map();
@@ -242,7 +247,7 @@ export function contrastReport(css, srcDir = null, known = srcDir === SRC_DIR ? 
   for (const use of uses.values()) {
     if (!(use.token in INVERSE)) add(use, TEXT_MINIMUM, use.sites);
   }
-  for (const [role, { text, map }] of Object.entries(ROLES)) {
+  for (const [role, { text, map }] of Object.entries(roles)) {
     if (!text) continue;
     for (const [key, token] of Object.entries(map)) {
       if (tokens.has(token)) add({ token, alpha: 1 }, TEXT_MINIMUM, [`theme.ts ${role}.${key}`]);
@@ -329,6 +334,88 @@ export function contrastReport(css, srcDir = null, known = srcDir === SRC_DIR ? 
   return report;
 }
 
+// ===== Distance from the inferred violet =====
+// Violet means inferred, and only prov-inferred is violet: every other colour token must look
+// clearly different from it, whatever its name, to normal vision and with the two common red-green
+// deficiencies. Distance is CIE76 ΔE in CIELAB (D65), of each colour as drawn on the page (a
+// translucent token over --color-void), after simulating deuteranopia and protanopia (Machado,
+// Oliveira and Fernandes 2009, severity 1, in linear RGB).
+//
+// The minimum, 15, comes from how prov-inferred itself was chosen (tokens.css): the light
+// neutral it replaced was rejected for being ΔE 9 from the measured cyan with protanopia, and
+// the violet kept is ΔE 17.5 from that cyan at its closest (deuteranopia). 15 rejects the first
+// and keeps a margin under the second.
+export const INFERRED = '--color-prov-inferred';
+export const MIN_DISTANCE_FROM_INFERRED = 15;
+
+const linear = (v) => {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const gamma = (v) => 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
+const VISIONS = {
+  normal: null,
+  deuteranopia: [
+    [0.367322, 0.860646, -0.227968],
+    [0.280085, 0.672501, 0.047413],
+    [-0.01182, 0.04294, 0.968881],
+  ],
+  protanopia: [
+    [0.152286, 1.052583, -0.204868],
+    [0.114503, 0.786281, 0.099216],
+    [-0.003882, -0.048116, 1.051998],
+  ],
+};
+
+/** A colour as seen with a vision deficiency (null: normal vision). */
+function simulate(colour, matrix) {
+  if (!matrix) return colour;
+  const v = [linear(colour.r), linear(colour.g), linear(colour.b)];
+  const [r, g, b] = matrix.map((row) =>
+    gamma(Math.min(1, Math.max(0, row[0] * v[0] + row[1] * v[1] + row[2] * v[2]))),
+  );
+  return { r, g, b, a: 1 };
+}
+
+/** CIELAB (D65) of an opaque sRGB colour. */
+function lab({ r, g, b }) {
+  const [R, G, B] = [linear(r), linear(g), linear(b)];
+  const x = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047;
+  const y = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  const z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+  const f = (t) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+}
+
+/** CIE76 ΔE of two opaque colours. */
+export function deltaE(a, b) {
+  const [p, q] = [lab(a), lab(b)];
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+}
+
+/**
+ * How far each colour token is from the inferred violet, at its closest over the three visions:
+ * [{ name, distance, vision, passes }], closest first. Empty for a sheet without prov-inferred.
+ */
+export function distancesFromInferred(css) {
+  const tokens = readTokens(css);
+  if (!tokens.has(INFERRED)) return [];
+  const page = color(tokens, PAGE);
+  const inferred = over(color(tokens, INFERRED), page);
+  const rows = [];
+  for (const name of tokens.keys()) {
+    if (!name.startsWith('--color-') || name === INFERRED) continue;
+    const drawn = over(color(tokens, name), page);
+    let closest = { distance: Number.POSITIVE_INFINITY, vision: 'normal' };
+    for (const [vision, matrix] of Object.entries(VISIONS)) {
+      const distance = deltaE(simulate(drawn, matrix), simulate(inferred, matrix));
+      if (distance < closest.distance) closest = { distance, vision };
+    }
+    rows.push({ name, ...closest, passes: closest.distance >= MIN_DISTANCE_FROM_INFERRED });
+  }
+  return rows.sort((a, b) => a.distance - b.distance);
+}
+
 const ratio = (value) => `${(Math.floor(value * 100) / 100).toFixed(2)}:1`;
 
 /**
@@ -380,11 +467,28 @@ export function main(args, log = console.log, error = console.error, knownList =
   const failures = report.filter((entry) => !entry.passes && !entry.known).length;
   const known = report.filter((entry) => entry.known).length;
   const also = known > 0 ? ` (${known} known, listed in KNOWN with the issue that fixes it)` : '';
+  const distances = distancesFromInferred(readFileSync(files[0], 'utf8'));
+  const tooClose = distances.filter((row) => !row.passes);
+  for (const row of tooClose) {
+    log(
+      `FAIL ${row.name}  ΔE ${row.distance.toFixed(1)} from ${INFERRED} (${row.vision}); needs ${MIN_DISTANCE_FROM_INFERRED}: only the inferred colour may look violet`,
+    );
+  }
   if (failures > 0) {
     error(`contrast: ${failures} of ${report.length} colours fall short on some surface${also}`);
     return 1;
   }
+  if (tooClose.length > 0) {
+    error(`contrast: ${tooClose.length} colours are too close to ${INFERRED}`);
+    return 1;
+  }
   log(`contrast: all ${report.length - known} other colours pass on every surface${also}`);
+  if (distances.length > 0) {
+    const [closest] = distances;
+    log(
+      `distance: every colour is ΔE ${MIN_DISTANCE_FROM_INFERRED} or more from ${INFERRED} (normal, deuteranopia, protanopia); closest ${closest.name} ΔE ${closest.distance.toFixed(1)} (${closest.vision})`,
+    );
+  }
   return 0;
 }
 

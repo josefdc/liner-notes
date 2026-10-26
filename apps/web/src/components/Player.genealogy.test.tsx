@@ -78,6 +78,12 @@ describe('the genealogy panel label', () => {
     render(<Player trackData={withLinks([inferred])} onBack={() => {}} />);
     expect(kind()).toBe('inferred');
     cleanup();
+    // A result built without the model: its links are its source data, not the model's.
+    render(
+      <Player trackData={{ ...withLinks([inferred]), modelUnavailable: true }} onBack={() => {}} />,
+    );
+    expect(kind()).toBe('record');
+    cleanup();
     const track = withLinks([]);
     track.genealogy.links = [{ ...sourced, evidenceIds: ['ev-not-in-pack'] }];
     render(<Player trackData={track} onBack={() => {}} />);

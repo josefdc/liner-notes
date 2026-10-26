@@ -908,6 +908,93 @@ test("the paused banner's focus rings reach 3:1 against what is beside them", as
   for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
 });
 
+/**
+ * The contrast of each song section's boundary against what is drawn behind the bar: its border
+ * (when it has one) or its fill, whichever stands out more, composited over the brightest pixel
+ * behind the section (the bar hidden). Sections are focusable, so WCAG 1.4.11 asks 3:1.
+ */
+async function sectionBoundaries(page: Page) {
+  const bar = page.getByRole("group", { name: "Song structure" }).getByRole("list").first();
+  await bar.scrollIntoViewIfNeeded();
+  await backgroundSettled(page);
+  const sections = await bar.getByRole("listitem").evaluateAll((items) => {
+    const asRgba = (color: string) => {
+      const context = new OffscreenCanvas(1, 1).getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+      return { r, g, b, a: a / 255 };
+    };
+    return items.map((item) => {
+      const style = getComputedStyle(item);
+      const box = item.getBoundingClientRect();
+      return {
+        label: item.getAttribute("aria-label") ?? "",
+        border: Number.parseFloat(style.borderTopWidth) >= 1 ? asRgba(style.borderTopColor) : null,
+        fill: asRgba(style.backgroundColor),
+        box: { x: box.x, y: box.y, width: box.width, height: box.height },
+      };
+    });
+  });
+  // A handle: once hidden, the bar is no longer found by its role.
+  const handle = await bar.elementHandle();
+  if (!handle) throw new Error("no song structure bar");
+  await handle.evaluate((element) => {
+    (element as HTMLElement).style.visibility = "hidden";
+  });
+  const result: Array<{ label: string; ratio: number }> = [];
+  for (const section of sections) {
+    const { x, y, width, height } = section.box;
+    const clip = {
+      x: Math.floor(x),
+      y: Math.floor(y),
+      width: Math.max(1, Math.ceil(width)),
+      height: Math.max(1, Math.ceil(height)),
+    };
+    const png = await page.screenshot({ clip, animations: "disabled" });
+    const behind: Rgba = await page.evaluate(async (base64) => {
+      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.drawImage(bitmap, 0, 0);
+      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+      let best = { r: 0, g: 0, b: 0, a: 1 };
+      for (let j = 0; j < data.length; j += 4) {
+        if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
+          best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+        }
+      }
+      return best;
+    }, png.toString("base64"));
+    const ratio = (colour: Rgba) => {
+      const drawn = over(colour, behind);
+      const [light, dark] = [luminance(drawn), luminance(behind)].sort((p, q) => q - p);
+      return (light + 0.05) / (dark + 0.05);
+    };
+    const best = Math.max(ratio(section.fill), section.border ? ratio(section.border) : 0);
+    result.push({ label: section.label, ratio: Math.round(best * 100) / 100 });
+  }
+  await handle.evaluate((element) => {
+    (element as HTMLElement).style.removeProperty("visibility");
+  });
+  return result;
+}
+
+for (const fixture of ["full-result", "missing-states"]) {
+  test(`song sections stand out 3:1 against the page (${fixture})`, async ({ page }) => {
+    await useMockApi(page, loadFixture(fixture));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    await openPlayer(page);
+    const sections = await sectionBoundaries(page);
+    expect(sections.length).toBeGreaterThan(1);
+    for (const { label, ratio } of sections) expect(ratio, label).toBeGreaterThanOrEqual(3);
+  });
+}
+
 /** The provenance fixture with a "sample" fact whose text names an entity of every colour. */
 function withEntities() {
   const fixture = loadFixture("provenance");

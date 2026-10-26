@@ -64,17 +64,17 @@ const CHIP: Record<MeasuredValueProps['kind'], { kind: ProvenanceKind; text: str
 };
 
 /**
- * The chip's words. A measured value or an estimate whose result gives neither its confidence
- * nor its basis (a result from an older API) says so on the chip itself: in the compact view it
- * must not look like a value with both.
+ * The chip's words. A value whose result does not say what it rests on (a result from an older
+ * API, or a copy no measurement confirms) says so on the chip itself, exactly when its
+ * provenance line says "basis unknown": the compact view must not make it look like a value with
+ * a known basis. An older estimate always has a confidence (a fixed description of the score),
+ * so the basis alone decides.
  */
 export function chipText(
   kind: MeasuredValueProps['kind'],
-  confidence: string | null | undefined,
   basis: string | null | undefined,
 ): string {
-  const unknown = !confidence && !basis && (kind === 'measured' || kind === 'estimate');
-  return unknown ? `${CHIP[kind].text}, basis unknown` : CHIP[kind].text;
+  return basis ? CHIP[kind].text : `${CHIP[kind].text}, basis unknown`;
 }
 
 /** The value's badge: the colour of how it is known; the label in a text colour, never faded. */
@@ -105,7 +105,7 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   const linesId = useId();
   const provenance = provenanceText(kind, confidence, basis);
   const badge = BADGE[kind];
-  const chip = chipText(kind, confidence, basis);
+  const chip = chipText(kind, basis);
   const compact = layout === 'compact';
   const lines = (
     <>

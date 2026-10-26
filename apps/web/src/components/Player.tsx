@@ -744,7 +744,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   // Not the model's: built from records whose evidence does not hold.
                   <ProvenanceChip kind="unconfirmed">Not sourced</ProvenanceChip>
                 ) : (
-                  <InferenceLabel />
+                  <ResultOriginLabel fromSourceData={fromSourceData} />
                 )}
               </span>
             )}

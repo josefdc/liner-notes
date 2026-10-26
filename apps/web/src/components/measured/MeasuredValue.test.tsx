@@ -6,6 +6,8 @@ import SmartTimeline from '../SmartTimeline';
 import SonicFingerprint from '../SonicFingerprint';
 import { MeasuredValue } from './MeasuredValue';
 import { MissingValue } from './MissingValue';
+import fullResultRaw from '../../../../../tests/mock-sse/fixtures/full-result.json?raw';
+import type { TrackData } from '../../types';
 import { audioBlock, measuredTrack } from './testing';
 
 afterEach(cleanup);
@@ -119,7 +121,7 @@ describe('MeasuredValue, compact', () => {
     const { container } = render(
       <MeasuredValue label="BPM" value="105" kind="unverified" title="Copy" layout="compact" />,
     );
-    expect(container.textContent).toBe('BPM 105Not confirmed');
+    expect(container.textContent).toBe('BPM 105Not confirmed, basis unknown');
     const chip = container.querySelector('[data-provenance]') as HTMLElement;
     expect(chip.dataset.provenance).toBe('unconfirmed');
     expect(chip.dataset.variant).toBe('neutral');
@@ -187,6 +189,55 @@ describe('MeasuredValue, compact, without a confidence or basis', () => {
     expect(pair.className).toContain('gap-1');
     expect(pair.children).toHaveLength(2);
     expect((pair.lastElementChild as HTMLElement).className).toContain('shrink-0');
+  });
+});
+
+describe('the compact view of a result from an older API', () => {
+  // The full-result fixture: no `audio` block, so its values' basis is unknown, and its model
+  // scores carry a confidence (the description of the score) but no basis.
+  const legacy = () => {
+    const fixture = JSON.parse(fullResultRaw) as {
+      streams: Record<string, Array<{ type: string; data?: unknown }>>;
+    };
+    return fixture.streams['/api/analyze/stream'].find((event) => event.type === 'complete')
+      ?.data as TrackData;
+  };
+
+  it('says "basis unknown" on each chip exactly where the provenance line says it', () => {
+    const track = legacy();
+    const chips = (() => {
+      const { container } = render(<AudioStats track={track} compact />);
+      const found = [...container.querySelectorAll('[data-value-pair]')].map((pair) => ({
+        label: pair.firstElementChild?.textContent ?? '',
+        chip: pair.lastElementChild?.textContent ?? '',
+      }));
+      cleanup();
+      return found;
+    })();
+    const { container } = render(<AudioStats track={track} />);
+    const lines = new Map(
+      [...container.querySelectorAll('[data-value-kind]')].map((value) => [
+        value.firstElementChild?.textContent ?? '',
+        value.textContent ?? '',
+      ]),
+    );
+    expect(chips.map(({ label }) => label)).toEqual([
+      'BPM 105',
+      'Key A Minor',
+      'Energy 0.71',
+      'Mood Mellow 0.34',
+      'Dance 0.62',
+      'Acoustic 0.12',
+    ]);
+    for (const { label, chip } of chips) {
+      const line = lines.get(label) ?? '';
+      expect(chip.includes('basis unknown'), `${label}: ${chip} / ${line}`).toBe(
+        line.includes('basis unknown'),
+      );
+    }
+    expect(chips.find(({ label }) => label.startsWith('Mood'))?.chip).toBe(
+      'Model estimate, basis unknown',
+    );
   });
 });
 

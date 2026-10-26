@@ -174,8 +174,9 @@ test.describe("a result with claims", () => {
       page.getByRole("region", { name: "More claims" }),
       "The preview's key, as measured.",
     );
-    // Written by code, but its value was not measured: inferred, not the model's.
-    await expect(key).toContainText("Not sourced");
+    // Written by code, but its value was not measured: not confirmed, and not the model's.
+    await expect(key).toContainText("Not confirmed");
+    await expect(key).not.toContainText("Not sourced");
     await expect(key).not.toContainText("Model inference");
     await expect(key.locator('[data-value-kind="missing"]')).toHaveText(
       "Key not measured— not detected in the preview",

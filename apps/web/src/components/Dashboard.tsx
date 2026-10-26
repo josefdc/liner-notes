@@ -450,7 +450,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-chrome font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
-                  : 'From the genealogy graph — each card says whether its link is sourced or a model inference'}
+                  : 'From the genealogy graph — each card says whether its link is sourced, not sourced or a model inference'}
               </p>
             </div>
             {relatedTracks !== null && relatedTracks.length > 0 && (

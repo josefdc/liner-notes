@@ -69,6 +69,9 @@ const isModuleSpecifier = (parent, grandparent) =>
     ts.isCallExpression(grandparent) &&
     grandparent.expression.kind === ts.SyntaxKind.ImportKeyword);
 
+// JSX attributes whose value is words for people, not code: a colour name there is prose.
+const PROSE_ATTRIBUTE = /^(?:aria-[\w-]+|title|alt|placeholder|label)$/;
+
 // The comment, string-literal and JSX-text spans of a script, read with the TypeScript parser, so
 // that `//` inside a string or in JSX text is not taken for a comment, and comments spanning
 // several lines (JSX `{/* … */}` included) are found. Every comment lies in the trivia before a
@@ -78,6 +81,7 @@ function scriptSpans(text, path) {
   const comments = [];
   const strings = [];
   const jsxText = [];
+  const proseAttributes = [];
   const visit = (node, parent, grandparent) => {
     if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) {
       return; // JSDoc is a comment, found as the trivia of the token that follows it
@@ -94,6 +98,16 @@ function scriptSpans(text, path) {
       !/^(['"])\s*\1$/.test(text.slice(start, node.end))
     ) {
       strings.push([start, node.end]);
+      // The value of a JSX attribute that holds words for people (aria-label, title, alt…).
+      const attribute =
+        parent && ts.isJsxAttribute(parent)
+          ? parent
+          : parent && ts.isJsxExpression(parent) && grandparent && ts.isJsxAttribute(grandparent)
+            ? grandparent
+            : null;
+      if (attribute && PROSE_ATTRIBUTE.test(attribute.name.getText(source))) {
+        proseAttributes.push([start, node.end]);
+      }
     }
     // A token's trivia (from its pos to its start) holds only whitespace and comments. JSX text
     // has none: a `//` in it is text shown to the user.
@@ -101,7 +115,7 @@ function scriptSpans(text, path) {
     else comments.push([node.pos, start]);
   };
   visit(source);
-  return { comments, strings, jsxText };
+  return { comments, strings, jsxText, proseAttributes };
 }
 
 // Blanks (keep: false) or keeps only (keep: true) the given spans; line breaks always stay, so
@@ -201,7 +215,8 @@ function recordedMessageSpans(text) {
 //   (none)    the text as it is
 //   "code"    comments blanked: script comments (line, block, JSX `{/* … */}`), CSS `/* … */`
 //             and HTML `<!-- … -->`
-//   "code-not-jsx-text"  as "code", and a script's JSX text blanked too (words on the page)
+//   "code-not-jsx-text"  as "code", and a script's words for people blanked too: JSX text and
+//             the values of prose attributes (aria-label, title, alt, placeholder, label)
 //   "strings" string and template literals of a script
 //   "copy"    text in source: a script's strings and JSX text, or an HTML page without its
 //             comments, scripts and styles
@@ -212,7 +227,10 @@ export function scannedText(rule, text, path) {
   if (rule.scan === "code" || rule.scan === "code-not-jsx-text") {
     if (isScript(path)) {
       const spans = scriptSpans(text, path);
-      const hidden = rule.scan === "code" ? spans.comments : [...spans.comments, ...spans.jsxText];
+      const hidden =
+        rule.scan === "code"
+          ? spans.comments
+          : [...spans.comments, ...spans.jsxText, ...spans.proseAttributes];
       return mask(text, hidden, false);
     }
     if (/\.css$/.test(path)) return mask(text, spansOf(text, /\/\*[\s\S]*?\*\//g), false);
@@ -533,14 +551,16 @@ const isHueRuleCode = (p) =>
   !isTestSupport(p);
 // A hue that means nothing about where a value comes from, named in code: a class
 // (text-accent-pink), a variant ("green"), a glow (shadow-glow-purple-subtle), a theme value
-// (colors.indigo), an identifier in camelCase (accentPurple), snake_case (accent_purple) or
-// capitals (PURPLE_GLOW). Case-sensitive, so a name in prose ("Green Day") is not a colour;
-// JSX text is not scanned.
-const HUES = ["pink", "green", "purple", "indigo", "violet"];
+// (colors.indigo), an identifier in camelCase (accentPurple), PascalCase (PinkBadge,
+// <PurpleDot />), snake_case (accent_purple) or capitals (PURPLE_GLOW). Case-sensitive, so a
+// longer word (greenhouse) is not a colour; words for people (JSX text, aria-label, title, alt)
+// are not scanned. A colour of any name is held apart from the inferred violet by distance
+// (apps/web/config/contrast.mjs, distinctFromInferred).
+const HUES = ["pink", "green", "purple", "indigo", "violet", "fuchsia", "lavender", "magenta"];
 const title = (word) => word[0].toUpperCase() + word.slice(1);
 export const UNMEANING_HUE = [
   new RegExp(`(?<![A-Za-z0-9])(?:${HUES.join("|")})(?![a-z0-9])`, "g"),
-  new RegExp(`(?<=[a-z0-9])(?:${HUES.map(title).join("|")})(?![a-z])`, "g"),
+  new RegExp(`(?:${HUES.map(title).join("|")})(?![a-z])`, "g"),
   new RegExp(
     `(?<![A-Za-z0-9])(?:${HUES.map((h) => h.toUpperCase()).join("|")})(?![A-Za-z0-9])`,
     "g",
@@ -550,18 +570,20 @@ export const UNMEANING_HUE = [
 // prov-inferred token is violet. A class, a token or a theme value naming one anywhere in web
 // source brings a near-violet back.
 export const NEAR_VIOLET = [
-  /(?<![A-Za-z0-9_])(?:accent|viz)-(?:purple|indigo|violet)(?![\w-])/g,
-  /\b(?:colors|accent|viz)\.(?:purple|indigo|violet)\b/g,
+  /(?<![A-Za-z0-9_])(?:accent|viz|glow)-(?:purple|indigo|violet)(?:-[\w-]+)?(?![\w-])/g,
+  /\b(?:colors|accent|viz)(?:\.|\[\s*['"])(?:purple|indigo|violet)\b/g,
 ];
 
 // Text under 12 px (0.75 rem, 9 pt): a Tailwind size (text-[10px], text-[0.7rem],
 // text-[length:10px], text-[8pt]), a stylesheet font-size or font shorthand, a --text-* size
 // token, or a size set from script (D3 .attr('font-size', 9), `${9}px` or d => 9; a fontSize: 10
-// prop or style, '0.6rem' or '10px'). A unitless fraction (fontSize: 1.2) and a variable named
-// fontSize (const fontSize = 10) are not sizes. Sizes kept in constants are pinned by their own
-// tests (scripts/graph-text-size.test.mjs).
+// prop, attribute or style: 10, 9.5, "10", '0.6rem' or '10px'). In a font-size context a
+// unitless number is pixels when it is 2 or more: under 2 (fontSize: 1.2) it is an em scale,
+// not a size. A variable named fontSize (const fontSize = 10) is not a size. Sizes kept in
+// constants are pinned by their own tests (scripts/graph-text-size.test.mjs).
 const N = String.raw`(?:\d|1[01])(?:\.\d+)?`;
-const N_INT = String.raw`(?:\d|1[01])`;
+// A unitless size in pixels: 2 to under 12.
+const NU = String.raw`(?:[2-9]|1[01])(?:\.\d+)?`;
 const REM = String.raw`0?\.(?:[0-6]\d*|7(?:[0-4]\d*)?)r?em`;
 const PT = String.raw`[0-8](?:\.\d+)?pt`;
 const SMALL = `(?:${N}px|${REM}|${PT})`;
@@ -574,11 +596,11 @@ export const TINY_TEXT = [
     "g",
   ),
   new RegExp(
-    String.raw`(['"])font-size\1\s*,\s*(?:(?:\(\s*\w*\s*\)|\w+)\s*=>\s*)?(?:${N}(?![\w.])|(['"\x60])(?:\$\{\s*${N}\s*\}|${N})(?:px)?\2|(['"\x60])(?:${REM}|${PT})\3)`,
+    String.raw`(['"])font-size\1\s*,\s*(?:(?:\(\s*\w*\s*\)|\w+)\s*=>\s*)?(?:${NU}(?![\w.])|(['"\x60])(?:(?:\$\{\s*${N}\s*\}|${N})px|\$\{\s*${NU}\s*\}|${NU})\2|(['"\x60])(?:${REM}|${PT})\3)`,
     "g",
   ),
   new RegExp(
-    String.raw`\bfontSize\s*(?::|=\s*\{)\s*(?:${N_INT}(?![\w.])|(['"\x60])(?:\$\{\s*${N}\s*\}|${N})px\1|(['"\x60])(?:${REM}|${PT})\2|(['"\x60])${N_INT}\3)`,
+    String.raw`\bfontSize\s*(?::\s*|=\s*\{\s*|=\s*(?=['"]))(?:${NU}(?![\w.])|(['"\x60])(?:(?:\$\{\s*${N}\s*\}|${N})px|\$\{\s*${NU}\s*\}|${NU})\1|(['"\x60])(?:${REM}|${PT})\2)`,
     "g",
   ),
 ];

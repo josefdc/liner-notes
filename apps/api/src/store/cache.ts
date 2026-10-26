@@ -24,6 +24,7 @@
 import type Database from "better-sqlite3";
 import { Evidence, SourceError, SourceId } from "@liner-notes/contract";
 import { z } from "zod";
+import { PrimaryRelation } from "../agent/research/relations.js";
 import type { ResearchData } from "../agent/state.js";
 import { logger } from "../logger.js";
 import type { IdentifiedRecording } from "../sources/identity.js";
@@ -103,6 +104,11 @@ export interface CachedEvidence {
   omitted: number;
   /** The recording's MusicBrainz sample relations, as the research entry the run added. */
   samples: string[];
+  /**
+   * The relations the primary records state, each with the item among `items` that states it
+   * (agent/research/relations.ts): what the result's code-built claims and links are made from.
+   */
+  relations: PrimaryRelation[];
   /** The recording the ISRC identified, for the composer; null when none was. */
   recording: IdentifiedRecording | null;
   /** Whether the recording is its song's original recording (its covers are then about it). */
@@ -191,6 +197,7 @@ const CachedEvidenceSchema = z.object({
   items: z.array(Evidence),
   omitted: z.number().int().nonnegative(),
   samples: stringList,
+  relations: z.array(PrimaryRelation),
   recording: RecordingSchema.nullable(),
   trackIsOriginal: z.boolean(),
   errors: z.array(SourceError),

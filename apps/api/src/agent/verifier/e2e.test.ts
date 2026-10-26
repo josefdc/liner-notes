@@ -297,6 +297,6 @@ describe("the verifier in the analysis graph", () => {
     expect(result.run?.usage?.llmCalls).toBe(3);
     expect(analysisIssues(result)).toEqual([]);
     // Judged in full: stored for the track.
-    expect(await store.search(["tracks", "v8"])).toHaveLength(1);
+    expect(await store.search(["tracks", "v9"])).toHaveLength(1);
   });
 });

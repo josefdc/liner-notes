@@ -84,6 +84,7 @@ describe("historianNode", () => {
         items: [],
         omitted: 0,
         samples: [],
+        relations: [],
         recording: null,
         trackIsOriginal: false,
         errors: [],

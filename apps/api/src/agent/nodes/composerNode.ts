@@ -11,11 +11,15 @@
  * kind `inferred`, and every link the model proposes states one claim of its own (its stated
  * type, its two ends, its evidence and a scope set by code), until the verifier judges it.
  *
+ * Beside what the model wrote, the draft holds the claims and links code builds from the
+ * relations the primary records state (codeClaims.ts): sourced by construction, never model
+ * text. A model link that duplicates one of them folds into it.
+ *
  * On any failure of the model call (budget refused, per-run call cap, rate limit, timeout,
  * network, an incomplete, refused or invalid answer) the draft is the fallback built from
- * measured and sourced data only, with the reason the model gave nothing usable, and the call's
- * typed error is recorded in `usage`. The node does not throw for a model failure; a cancelled
- * run stops it.
+ * measured and sourced data only, the code-built claims and links included, with the reason the
+ * model gave nothing usable, and the call's typed error is recorded in `usage`. The node does
+ * not throw for a model failure; a cancelled run stops it.
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -36,6 +40,7 @@ import { LlmError } from "../../llm/errors.js";
 import type { InvokeResult } from "../../llm/invoke.js";
 import type { IdentifiedRecording } from "../../sources/identity.js";
 import { answeredCall, failedCall, refusedAnswer } from "../callRecords.js";
+import { buildCodeClaims, withCodeClaims } from "../codeClaims.js";
 import { isAbortError } from "../errors.js";
 import { createFallbackTrackData } from "../fallback.js";
 import { composerMessages, type PromptRecording, promptTrack, shownEvidence } from "../prompts.js";
@@ -398,12 +403,14 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       runtime.newId,
     );
     signal?.throwIfAborted();
+    // The claims and links code builds from the primary records; the model's duplicates fold in.
+    const withCode = withCodeClaims(composed, codeBuilt());
     const draft: ComposedDraft = {
       modelUnavailableReason: null,
       factoids: composed.factoids,
-      claims: composed.claims,
-      genealogy: composed.genealogy,
-      nodeYears: composed.nodeYears,
+      claims: withCode.claims,
+      genealogy: withCode.genealogy,
+      nodeYears: withCode.nodeYears,
       // A generic structure, not an analysis of this track
       segments: createDefaultSegments(spotify.durationMs),
       segmentsSource: "template",
@@ -411,7 +418,15 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     };
     return { draft, usage: [call] };
 
-    /** The honest fallback: measured and sourced data only, no model text. */
+    /** The run's code-built claims and links, from the whole evidence pack. */
+    function codeBuilt() {
+      return buildCodeClaims(state.relations, state.evidence, runtime.newId);
+    }
+
+    /**
+     * The honest fallback: measured and sourced data only, no model text. It carries the
+     * code-built claims and links, so it is evidence-backed without any model call.
+     */
     async function composeFallback(
       error: unknown,
       failed: LlmCallRecord,
@@ -425,12 +440,16 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
       const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
       signal?.throwIfAborted();
+      const withCode = withCodeClaims(
+        { claims: [], genealogy: fallback.genealogy, nodeYears: {} },
+        codeBuilt(),
+      );
       const draft: ComposedDraft = {
         modelUnavailableReason: reason,
         factoids: fallback.factoids,
-        claims: [],
-        genealogy: fallback.genealogy,
-        nodeYears: {},
+        claims: withCode.claims,
+        genealogy: withCode.genealogy,
+        nodeYears: withCode.nodeYears,
         segments: fallback.segments,
         segmentsSource: "template",
         samples: fallback.samples,

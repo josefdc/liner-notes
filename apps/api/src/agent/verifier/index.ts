@@ -9,7 +9,7 @@
  *      does not match the claim's (`scopeSupports`: a release-wide credit or a record about the
  *      song never supports a claim about this recording). A link cites what its claim still
  *      cites. A claim left citing nothing cannot be sourced; why is kept in `verdictReason`;
- *    - every claim that is not a link's relation claim gets the numeric check (numeric.ts):
+ *    - every model claim that is not a link's relation claim gets the numeric check (numeric.ts):
  *      the tempo and key it states, unless said of another record, against the measured ones,
  *      in `numericCheck`, apart from the judge's verdict. Only a claim that points at the field
  *      itself (its `field`, or an uncited model claim restating the track's value) can be
@@ -17,7 +17,8 @@
  *      dropped: one that restates a measured value is kept and marked by the check (consistent:
  *      the web shows that it agrees with the measurement, beside the measured value; conflict:
  *      both values; contradicted: the rejected panel), so nothing the model wrote is lost and
- *      nothing reads as its own measurement.
+ *      nothing reads as its own measurement. A code-built claim (codeClaims.ts) restates a
+ *      source record, which names records, never this track's tempo or key: it is not checked.
  * 2. Model-written genealogy text (node labels, titles, artists) has its @handles masked.
  * 3. One judge call (judge.ts) on the model claims that still cite evidence: the links' claims
  *    first, then the others in result order, at most JUDGE_BATCH_MAX; the rest get no verdict.
@@ -31,6 +32,8 @@
  *    excerpts supporting it (`supported` or `partial`) and it cites at least one item, and
  *    inferred otherwise. A link's claim states one relation, whole or not at all: only
  *    `supported` sources it (a `partial` one usually means a weaker or another relation). A
+ *    code-built claim is sourced by construction and gets no verdict; one left citing nothing
+ *    by the deterministic step reads as not sourced (inferred), and so does its link. A
  *    contradicted claim (verdict or numeric check) stays in the claims, and readers show it in
  *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
@@ -172,7 +175,7 @@ export function checkClaims(
           }
         : {}),
     };
-    if (!stated.has(claim.id)) {
+    if (!stated.has(claim.id) && claim.origin === "model") {
       const cardRecords = (claim.factoid?.entities ?? [])
         .filter((entity) => entity.type === "sample" || entity.type === "album")
         .map((entity) => entity.text.split(" - ")[0]);
@@ -234,7 +237,12 @@ export function applyVerdicts(
 ): { claims: Claim[]; genealogy: Genealogy } {
   const stated = linkClaimIds(checked.genealogy);
   const claims = checked.claims.map((claim): Claim => {
-    if (claim.origin !== "model") return claim;
+    // A code claim is sourced by construction, while it still cites the item that states it.
+    if (claim.origin !== "model") {
+      return claim.kind === "sourced" && claim.evidenceIds.length === 0
+        ? { ...claim, kind: "inferred" }
+        : claim;
+    }
     const judged = verdicts.get(claim.id);
     const verdict = judged?.verdict ?? null;
     // A relation is stated whole: a partly supported link claim does not source its link.

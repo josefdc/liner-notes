@@ -14,7 +14,9 @@
  * It writes the run's evidence pack (research/runEvidence.ts): the primary sources' records,
  * read from the track's ISRC (MusicBrainz, Discogs, SecondHandSongs, Genius), and the web
  * search's results. Each item is sent as an `evidence` event; the primary sources' errors are
- * the run's source errors.
+ * the run's source errors. With the pack it writes the relations those records state
+ * (`relations`, research/relations.ts), for the result's code-built claims and links; the cache
+ * keeps them with the evidence.
  *
  * Research is cached with its evidence, and only when it is complete and the track's details
  * were read (see the gate below). A research-cache hit gives the cached run's evidence, errors
@@ -386,6 +388,7 @@ export async function historianNode(
     // the research cache keeps them with the evidence.
     researchData: mergeResearch(mergedResearch, { samples: pack.samples }),
     evidence: pack.evidence,
+    relations: pack.relations,
     isrcRecording: recording,
     usage: finalState.usage ?? [],
     // The primary sources' errors are the run's too.
@@ -510,6 +513,7 @@ async function cacheHit(
       samples: [...(cachedResearch.samples ?? []), ...pack.samples],
     },
     evidence: pack.evidence,
+    relations: pack.relations,
     isrcRecording: recording,
     ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
     ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),

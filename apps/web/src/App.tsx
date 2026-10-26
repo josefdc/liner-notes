@@ -90,7 +90,11 @@ interface PhaseViewProps {
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
   retry: () => void;
-  searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
+  searchSuggest: (
+    query: string,
+    limit?: number,
+    signal?: AbortSignal,
+  ) => Promise<SearchCandidate[]>;
   // Player props
   decryptMoreFactoidsStream: (
     trackTitle: string,

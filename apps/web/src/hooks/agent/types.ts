@@ -91,8 +91,12 @@ export interface UseAgentReturn extends AgentState {
     /** How the result was produced (its run.mode): more facts stay on that side. */
     resultMode?: ResultMode,
   ) => Promise<void>;
-  /** Rejects when the request fails. */
-  searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
+  /** Rejects when the request fails, or when `signal` aborts it. */
+  searchSuggest: (
+    query: string,
+    limit?: number,
+    signal?: AbortSignal,
+  ) => Promise<SearchCandidate[]>;
   reset: () => void;
 }
 

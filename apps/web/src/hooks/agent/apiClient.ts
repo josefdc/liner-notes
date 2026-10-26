@@ -10,14 +10,16 @@ import { API_BASE_URL } from './types';
 import type { SearchCandidate } from './types';
 
 /**
- * Fetch autocomplete search suggestions
+ * Fetch autocomplete search suggestions. Rejects when `signal` aborts the request.
  */
 export async function fetchSuggestions(
   query: string,
   limit: number = 5,
+  signal?: AbortSignal,
 ): Promise<SearchCandidate[]> {
   const response = await fetch(
     `${API_BASE_URL}/search/suggest?query=${encodeURIComponent(query)}&limit=${limit}`,
+    { signal },
   );
   if (!response.ok) {
     throw new Error(`Search suggestions failed (HTTP ${response.status})`);

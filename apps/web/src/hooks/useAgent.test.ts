@@ -308,37 +308,82 @@ describe('useAgent progress', () => {
     expect(hook.result.current.statusNote).toBe('Pick the track to analyse');
   });
 
-  it('says it is measuring only while a measurement runs, and never moves back a step', () => {
-    const { result } = startAnalysis();
+  // The API's order, from the recorded demo run: the historian reports before any await, the
+  // engineer only after its health probe and preview lookup (research at 328 ms, AUDIO-INIT at
+  // 753 ms, the engineer's result at 10 877 ms).
+  function realOrder() {
+    const hook = startAnalysis();
     const analysis = lastStream();
-    const engineer = (code: string, message: string) =>
-      analysis.send({ type: 'status', node: 'engineer', code, message });
+    const send = (node: string, message: string, code?: string) =>
+      analysis.send({ type: 'status', node, message, ...(code ? { code } : {}) });
     analysis.send({ type: 'connected', threadId: 't1' });
-    engineer('AUDIO-COMPLETE', 'Measured in an earlier run: 123 BPM, A minor');
-    expect(result.current.status).toBe('analyzing');
-    engineer('AUDIO-INIT', 'Measuring tempo and key from the preview clip');
-    expect(result.current.status).toBe('measuring');
-    engineer('AUDIO-COMPLETE', 'Measured from the preview: 123 BPM, A minor');
-    expect(result.current.status).toBe('analyzing');
-    analysis.send({
-      type: 'status',
-      node: 'historian',
-      code: 'RESEARCH-START',
-      message: 'Sources',
-    });
-    expect(result.current.status).toBe('researching');
-    // The engineer runs beside the historian: its later lines do not move the run back.
-    engineer('AUDIO-INIT', 'Measuring tempo and key from the preview clip');
-    engineer('AUDIO-COMPLETE', 'Measured from the preview: 123 BPM, A minor');
-    expect(result.current.status).toBe('researching');
+    send('scout', 'Reading the track from Spotify', 'NET-100');
+    send('scout', 'Found the track on Spotify: One More Time by Daft Punk', 'SPOTIFY-FOUND');
+    return { hook, analysis, send };
+  }
+
+  it('shows the measurement while research runs, in the order the API sends them', () => {
+    const { hook, send } = realOrder();
+    const status = () => hook.result.current.status;
+    send('historian', 'Starting the research: Last.fm, MusicBrainz', 'RESEARCH-START');
+    expect(status()).toBe('researching');
+    send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
+    expect(status()).toBe('measuring');
+    send('research_manager', 'Starting the research steps');
+    send('research_tool', 'Searching: sample history on the web');
+    send('research_manager', 'Choosing follow-up step 1 of at most 2');
+    expect(status()).toBe('measuring');
+    send(
+      'engineer',
+      'Measured 123 BPM; key not given: one pitch line without stable notes',
+      'AUDIO-ERROR',
+    );
+    // The measurement is over and the research goes on.
+    expect(status()).toBe('researching');
+    send('composer', 'Writing the liner notes', 'LLM-CONNECT');
+    expect(status()).toBe('composing');
   });
 
-  it('reads the audio after a resume, without saying it measures', async () => {
+  it('keeps measuring for the whole measurement after a research cache hit', () => {
+    const { hook, send } = realOrder();
+    const stored = 'Using the research stored by an earlier run';
+    send('historian', stored, 'RESEARCH-FOUND');
+    expect(hook.result.current.status).toBe('researching');
+    expect(hook.result.current.statusNote).toBe(stored);
+    send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
+    expect(hook.result.current.status).toBe('measuring');
+    // A historian line during the measurement does not hide it.
+    send('historian', 'Sources read', 'RESEARCH-FOUND');
+    expect(hook.result.current.status).toBe('measuring');
+    send('engineer', 'Measured from the preview: 123 BPM, A minor', 'AUDIO-COMPLETE');
+    expect(hook.result.current.status).toBe('researching');
+  });
+
+  it('measures first when the engineer reports before the historian, as older runs did', () => {
+    const { hook, send } = realOrder();
+    send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
+    expect(hook.result.current.status).toBe('measuring');
+    send('historian', 'Starting the research', 'RESEARCH-START');
+    expect(hook.result.current.status).toBe('measuring');
+    send('engineer', 'Measured from the preview: 123 BPM, A minor', 'AUDIO-COMPLETE');
+    expect(hook.result.current.status).toBe('researching');
+  });
+
+  it('never says it measures on an audio cache hit', () => {
+    const { hook, send } = realOrder();
+    send('engineer', 'Measured in an earlier run: 123 BPM, A minor', 'AUDIO-COMPLETE');
+    expect(hook.result.current.status).toBe('analyzing');
+    send('historian', 'Starting the research', 'RESEARCH-START');
+    expect(hook.result.current.status).toBe('researching');
+  });
+
+  it('says it reads the selected track after a pick, not that it reads the audio', async () => {
     const { hook } = openPicker();
     await act(async () => {
       await hook.result.current.selectCandidate('c2', 'countdown');
     });
     expect(hook.result.current.status).toBe('analyzing');
+    expect(hook.result.current.statusNote).toBe('Reading the track you selected...');
   });
 
   it("checks only on the verifier's model lines, not on its cover-art lookup", () => {
@@ -487,7 +532,7 @@ describe('useAgent track picker', () => {
     expect(hook.result.current.status).not.toBe('error');
     // The reason stays in the log of the new run.
     expect(hook.result.current.logs.map((log) => log.message)).toContain(
-      'Live analysis is unavailable: replaying the recording of the track you picked.',
+      'Live analysis is unavailable: replaying the recording of the selected track.',
     );
     search.send({ type: 'complete', data: track });
     expect(hook.result.current.status).toBe('complete');

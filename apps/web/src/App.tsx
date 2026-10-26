@@ -169,6 +169,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
             onRestorePrevious={onRestorePrevious ?? undefined}
+            onSearchAgain={onNewSearch}
           />
         );
       case AppPhase.DASHBOARD:
@@ -215,6 +216,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
             onRestorePrevious={onRestorePrevious ?? undefined}
+            onSearchAgain={onNewSearch}
           />
         );
     }

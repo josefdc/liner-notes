@@ -120,16 +120,6 @@
     }
   }
 
-  @keyframes glow-breathe {
-    0%,
-    100% {
-      box-shadow: 0 0 8px color-mix(in srgb, var(--color-cyber) 15%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 20px color-mix(in srgb, var(--color-cyber) 30%, transparent);
-    }
-  }
-
   @keyframes scale-in {
     from {
       opacity: 0;

@@ -45,7 +45,7 @@ describe('ActivityLog', () => {
       'GRAPH-ENRICH': ['Graph', 'text-text-tertiary'],
       'SYS-WARN': ['System warning', 'text-status-warning'],
       'LLM-CONNECT': ['Model', 'text-prov-inferred'],
-      'AUDIO-ERROR': ['Audio error', 'text-status-error'],
+      'AUDIO-ERROR': ['Audio warning', 'text-status-warning'],
     };
     for (const [code, [word, tone]] of Object.entries(expected)) {
       const label = labelOf(container, code);
@@ -71,11 +71,11 @@ describe('ActivityLog', () => {
   it("names the run's state and the last event's label in the toggle's accessible name", () => {
     const { rerender } = render(<ActivityLog logs={[log('AUDIO-ERROR')]} isComplete={false} />);
     expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
-      'Expand activity log, running, last event: Audio error: Message for AUDIO-ERROR',
+      'Expand activity log, running, last event: Audio warning: Message for AUDIO-ERROR',
     );
     rerender(<ActivityLog logs={[log('AUDIO-ERROR')]} isComplete />);
     expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(
-      /^Expand activity log, done, last event: Audio error: /,
+      /^Expand activity log, done, last event: Audio warning: /,
     );
   });
 });

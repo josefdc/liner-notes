@@ -25,13 +25,26 @@ describe('logStyle', () => {
   it.each([
     ['SYS-WARN', 'System warning'],
     ['AUDIO-WARN', 'Audio warning'],
+    // The run goes on without the values the analysis could not give: missing data, not a
+    // failed run. Recorded runs carry AUDIO-ERROR for a partial measurement.
+    ['AUDIO-ERROR', 'Audio warning'],
   ])('draws %s in the warning colour, with the word', (code, label) => {
     expect(logStyle(code)).toMatchObject({ label, tone: 'text-status-warning' });
   });
 
+  it("draws the recorded demo's partial measurement as an audio warning, not an error", () => {
+    const line = 'Measured 123 BPM; key not given: one pitch line without stable notes';
+    expect(logStyle('AUDIO-ERROR', 'engineer', line)).toMatchObject({
+      label: 'Audio warning',
+      tone: LOG_TONES.warning,
+    });
+    expect(
+      logStyle('AUDIO-ERROR', 'engineer', 'The analysis found no key (not_detected)').label,
+    ).toBe('Audio warning');
+  });
+
   it.each([
     ['SYS-ERROR', 'System error'],
-    ['AUDIO-ERROR', 'Audio error'],
     // A failed model call wrote nothing: it is an error, not something inferred.
     ['LLM-ERROR', 'Model error'],
     ['GEMINI-ERROR', 'Model error'],
@@ -68,13 +81,24 @@ describe('logStyle', () => {
     for (const tone of Object.values(LOG_TONES)) expect(tone).not.toMatch(/cyber|analog|amber/);
   });
   it.each([
-    ['research_manager', 'Sources'],
+    // The research planner is a model step.
+    ['research_manager', 'Model'],
     ['research_tool', 'Sources'],
     ['scout', 'Spotify'],
     ['engineer', 'Audio'],
     ['composer', 'Model'],
   ])('labels a line without a code from %s by its node: %s', (node, label) => {
     expect(logStyle(undefined, node).label).toBe(label);
+  });
+
+  it("draws the research planner's lines as model steps, and the research tools' as sources", () => {
+    expect(
+      logStyle(undefined, 'research_manager', 'Choosing follow-up step 1 of at most 2'),
+    ).toMatchObject({ label: 'Model', tone: LOG_TONES.model });
+    expect(logStyle(undefined, 'research_tool', 'Searching: Last.fm artist info')).toMatchObject({
+      label: 'Sources',
+      tone: LOG_TONES.neutral,
+    });
   });
 
   it("labels the app's own lines without a code or a node as system lines", () => {

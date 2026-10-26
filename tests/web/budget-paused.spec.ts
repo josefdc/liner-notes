@@ -235,7 +235,7 @@ test("a track picked after the budget tripped replays its recording", async ({ p
 
   // The resume is refused (budget spent); the recording of that very track is replayed.
   await expect(page.getByRole("log")).toContainText(
-    "Live analysis is unavailable: replaying the recording of the track you picked.",
+    "Live analysis is unavailable: replaying the recording of the selected track.",
   );
   await expect(page.getByRole("log")).toContainText("Replaying an analysis recorded on");
   expect(await apiRequests(page)).toContain(

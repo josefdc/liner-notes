@@ -257,6 +257,8 @@ interface OnboardingProps {
   searchInputRef?: React.Ref<HTMLInputElement>;
   // UX: Session restore
   onRestorePrevious?: () => void;
+  /** Leaves the track picker for the search box, the query kept. */
+  onSearchAgain?: () => void;
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({
@@ -276,6 +278,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   onComplete,
   searchInputRef,
   onRestorePrevious,
+  onSearchAgain,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sugState, sugDispatch] = useReducer(suggestionReducer, initialSuggestionState);
@@ -486,6 +489,21 @@ const Onboarding: React.FC<OnboardingProps> = ({
       hitlRef.current.focus({ preventScroll: true });
     }
   }, [status, candidates]);
+
+  // "Search again" in the picker: the countdown stops, the run is dropped and the search box
+  // gets the keyboard once it is back.
+  const focusSearchOnIdle = useRef(false);
+  const handleSearchAgain = useCallback(() => {
+    setHitlCountdown(null);
+    focusSearchOnIdle.current = true;
+    onSearchAgain?.();
+  }, [onSearchAgain]);
+  useEffect(() => {
+    if (status === 'idle' && focusSearchOnIdle.current) {
+      focusSearchOnIdle.current = false;
+      inputRef.current?.focus();
+    }
+  }, [status]);
 
   // HITL candidate selection handler: a click or Enter on a row, or the countdown at zero.
   const handleHitlSelect = useCallback(
@@ -903,6 +921,19 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       `Take your time. We'll pick the top match if you don't.`
                     )}
                   </p>
+                </div>
+              )}
+              {onSearchAgain && (
+                <div className="mt-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={handleSearchAgain}
+                    // Its own Enter, not the picker's (which picks the highlighted row)
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="px-2 py-1 text-xs font-mono text-text-secondary hover:text-text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                  >
+                    Search again
+                  </button>
                 </div>
               )}
             </div>

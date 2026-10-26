@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { collectProblems, fullResultData, releaseStream, useMockApi } from "./mock";
+import { apiRequests, collectProblems, fullResultData, releaseStream, useMockApi } from "./mock";
 
 // The progress screen and its run log say what the run is doing: the picker in the server's
 // words, measuring only while a measurement runs, waiting and replaying as such, and a progress
@@ -61,55 +61,137 @@ test("a picker with one candidate says so in the server's words, and waits", asy
   expect(problems).toEqual([]);
 });
 
-test("measuring is said only while a measurement runs, and the bar never moves back", async ({
+// The opening of the recorded demo run, in the API's order: the historian reports before any
+// await, the engineer only after its health probe and preview lookup (research at 328 ms,
+// AUDIO-INIT at 753 ms, the engineer's result at 10 877 ms).
+const status = (node: string, message: string, code?: string) => ({
+  type: "status",
+  node,
+  message,
+  ...(code ? { code } : {}),
+});
+const OPENING = [
+  { type: "connected", threadId: "t-steps" },
+  status("scout", "Reading the track from Spotify", "NET-100"),
+  status("scout", "Found the track on Spotify: One More Time by Daft Punk", "SPOTIFY-FOUND"),
+];
+const MEASURING = "Measuring tempo, key and energy from the preview clip...";
+const SEARCHING = "Searching sources for samples, credits and history...";
+
+/** Reads the status line and the bar at each pause of the stream, in order. */
+async function stepsAt(page: Page, waits: string[]) {
+  const seen: Array<{ line: string; bar: number }> = [];
+  for (const wait of waits) {
+    await expect(page.getByRole("log")).toContainText(`[${wait}]`);
+    seen.push({ line: (await statusLine(page).textContent()) ?? "", bar: await progress(page) });
+    await releaseStream(page, wait);
+  }
+  return seen;
+}
+
+const marker = (wait: string) => [status("research_tool", `[${wait}]`), { $wait: wait }];
+
+test("a picker with one candidate can be left to search again, from the keyboard", async ({
   page,
 }) => {
-  const engineer = (code: string, message: string) => ({
-    type: "status",
-    node: "engineer",
-    code,
-    message,
-  });
   await useMockApi(page, {
     suggestions: [],
     streams: {
       [ANALYZE]: [
-        { type: "connected", threadId: "t-steps" },
-        { type: "status", node: "scout", code: "SPOTIFY-FOUND", message: "Found the track" },
-        engineer("AUDIO-COMPLETE", "Measured in an earlier run: 123 BPM, A minor"),
-        { $wait: "cache" },
-        engineer("AUDIO-INIT", "Measuring tempo and key from the preview clip"),
-        { $wait: "measuring" },
-        { type: "status", node: "historian", code: "RESEARCH-START", message: "Searching sources" },
-        engineer("AUDIO-COMPLETE", "Measured from the preview: 123 BPM, A minor"),
-        { $wait: "parallel" },
+        { type: "connected", threadId: "t-again" },
+        {
+          type: "interrupt",
+          reason: "disambiguation",
+          threadId: "t-again",
+          candidates: [candidate],
+          message: "One possible track from Spotify; confirm it or search again",
+        },
+        { type: "done" },
+      ],
+    },
+  });
+  await search(page, "Hurt");
+  await expect(page.getByText("Is this the right track?")).toBeVisible();
+  const again = page.getByRole("button", { name: "Search again" });
+  await expect(again).toBeVisible();
+  // Reached with Tab from the picker, and used with Enter.
+  for (
+    let step = 0;
+    step < 5 && !(await again.evaluate((el) => el === document.activeElement));
+    step++
+  ) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(again).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  const input = page.getByPlaceholder(/Song title/);
+  await expect(input).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("Hurt");
+  await expect(page.getByText("Is this the right track?")).toHaveCount(0);
+  // The countdown is cancelled: nothing is picked after it would have run out.
+  await page.waitForTimeout(6000);
+  expect((await apiRequests(page)).filter((entry) => entry.includes("resume"))).toEqual([]);
+});
+
+test("the measurement shows while research runs, in the API's order, and the bar never moves back", async ({
+  page,
+}) => {
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        ...OPENING,
+        status("historian", "Starting the research: Last.fm, MusicBrainz", "RESEARCH-START"),
+        ...marker("research"),
+        status("engineer", "Measuring tempo and key from the preview clip", "AUDIO-INIT"),
+        status("research_manager", "Starting the research steps"),
+        status("research_manager", "Choosing follow-up step 1 of at most 2"),
+        ...marker("measuring"),
+        status(
+          "engineer",
+          "Measured 123 BPM; key not given: one pitch line without stable notes",
+          "AUDIO-ERROR",
+        ),
+        ...marker("measured"),
         { type: "complete", data: fullResultData() },
         { type: "done" },
       ],
     },
   });
-  await search(page, "Bright Lines");
+  await search(page, "One More Time");
+  const seen = await stepsAt(page, ["research", "measuring", "measured"]);
+  expect(seen.map(({ line }) => line)).toEqual([SEARCHING, MEASURING, SEARCHING]);
+  const bars = seen.map(({ bar }) => bar);
+  expect(bars).toEqual([...bars].sort((a, b) => a - b));
+});
 
-  const seen: number[] = [];
-  await expect(statusLine(page)).toHaveText("Reading the audio...");
-  seen.push(await progress(page));
-
-  await releaseStream(page, "cache");
-  await expect(statusLine(page)).toHaveText(
-    "Measuring tempo, key and energy from the preview clip...",
-  );
-  seen.push(await progress(page));
-
-  await releaseStream(page, "measuring");
-  await expect(page.getByRole("log")).toContainText("Measured from the preview");
-  await expect(statusLine(page)).toHaveText(
-    "Searching sources for samples, credits and history...",
-  );
-  seen.push(await progress(page));
-
-  expect(seen).toEqual([...seen].sort((a, b) => a - b));
-  expect(seen.at(-1)).toBe(70);
-  await releaseStream(page, "parallel");
+test("after a research cache hit, the measurement shows for as long as it runs", async ({
+  page,
+}) => {
+  const stored = "Using the research stored by an earlier run";
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        ...OPENING,
+        status("historian", stored, "RESEARCH-FOUND"),
+        ...marker("stored"),
+        status("engineer", "Measuring tempo and key from the preview clip", "AUDIO-INIT"),
+        ...marker("measuring"),
+        status("engineer", "Measured from the preview: 123 BPM, A minor", "AUDIO-COMPLETE"),
+        ...marker("measured"),
+        { type: "complete", data: fullResultData() },
+        { type: "done" },
+      ],
+    },
+  });
+  await search(page, "One More Time");
+  const seen = await stepsAt(page, ["stored", "measuring", "measured"]);
+  expect(seen.map(({ line }) => line)).toEqual([stored, MEASURING, stored]);
+  const bars = seen.map(({ bar }) => bar);
+  expect(bars).toEqual([...bars].sort((a, b) => a - b));
 });
 
 test("a replay says it replays the recorded run, not that it is running", async ({ page }) => {

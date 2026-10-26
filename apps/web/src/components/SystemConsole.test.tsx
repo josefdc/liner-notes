@@ -43,7 +43,7 @@ describe('SystemConsole', () => {
 
   it.each([
     ['SYS-WARN', 'System warning', 'text-status-warning'],
-    ['AUDIO-ERROR', 'Audio error', 'text-status-error'],
+    ['AUDIO-ERROR', 'Audio warning', 'text-status-warning'],
     ['LLM-ERROR', 'Model error', 'text-status-error'],
   ] as const)('labels %s as "%s" in its status colour', (code, word, tone) => {
     const { container } = render(<SystemConsole logs={[log(code)]} isComplete />);

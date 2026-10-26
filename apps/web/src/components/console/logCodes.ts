@@ -57,7 +57,8 @@ const NODE_FAMILIES: Record<string, string> = {
   scout: 'SPOTIFY',
   engineer: 'AUDIO',
   historian: 'RESEARCH',
-  research_manager: 'RESEARCH',
+  // The research planner's lines are a model's steps ("Choosing follow-up step 1 of at most 2").
+  research_manager: 'LLM',
   research_tool: 'RESEARCH',
   composer: 'LLM',
 };
@@ -86,9 +87,13 @@ export function logStyle(code?: string, node?: string, message?: string): LogSty
     Icon = ListChecks;
   }
 
-  // A failed request (NET-400, NET-500) is an error too.
-  const failed = suffix === 'ERROR' || (prefix === 'NET' && Number(suffix) >= 400);
-  const warned = suffix === 'WARN' || (!code && LEGACY_WARNING.test(message ?? ''));
+  // An audio error leaves values missing and the run goes on without them (recorded runs carry
+  // it for a partial measurement): a warning. Red is kept for failures: a failed request
+  // (NET-400, NET-500), a model call that wrote nothing, a system error.
+  const audioMissing = prefix === 'AUDIO' && suffix === 'ERROR';
+  const failed =
+    (suffix === 'ERROR' && !audioMissing) || (prefix === 'NET' && Number(suffix) >= 400);
+  const warned = suffix === 'WARN' || audioMissing || (!code && LEGACY_WARNING.test(message ?? ''));
   if (failed) return { label: `${label} error`, Icon, tone: LOG_TONES.error };
   if (warned) return { label: `${label} warning`, Icon, tone: LOG_TONES.warning };
   return { label, Icon, tone: model ? LOG_TONES.model : LOG_TONES.neutral };

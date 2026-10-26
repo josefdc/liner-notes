@@ -20,6 +20,7 @@ const LOG_CODES = "apps/web/src/components/console/logCodes.ts";
 const AGENT_HOOK = "apps/web/src/hooks/useAgent.ts";
 const ONBOARDING = "apps/web/src/components/Onboarding.tsx";
 const STYLES = "apps/web/src/styles/index.css";
+const TOKENS = "apps/web/src/styles/tokens.css";
 
 /**
  * The part of a file from the line holding `from` up to the line holding `to` (excluded), `to`
@@ -68,6 +69,11 @@ describe("console copy", () => {
     expect(screen).toContain("animate-completion-reveal");
     const glow = section(read(STYLES), "@keyframes completion-reveal", "@keyframes", 1);
     expect(glow).not.toMatch(/cyber|analog|amber/);
+  });
+
+  it("the completion button's old cyan glow is gone, with its animation token", () => {
+    expect(read(STYLES)).not.toMatch(/@keyframes glow-breathe\s*\{/);
+    expect(read(TOKENS)).not.toMatch(/--animate-glow-breathe:/);
   });
 
   it("the run log has no mock window controls and no CRT scanlines", () => {

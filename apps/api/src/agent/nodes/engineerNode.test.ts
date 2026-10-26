@@ -920,6 +920,28 @@ describe("engineerNode", () => {
       expect(text).toMatch(/not given: not detected/);
     });
 
+    it("reports a passed gate with both tempo and key withheld as an error", async () => {
+      const block = audioV2({
+        analyzerVersion: "2.3.0+essentia",
+        tempo: null,
+        beats: null,
+        key: null,
+        fingerprint: null,
+        withheld: {
+          tempo: { code: "unsteady_tempo", reason: "the tempo does not hold over the window" },
+          beats: { code: "unsteady_tempo", reason: "the tempo does not hold over the window" },
+          key: { code: "speech_like", reason: "one pitch line without stable notes" },
+          fingerprint: { code: "models_not_loaded", reason: "the models are not loaded" },
+        },
+      });
+      expect(block.gate.passed).toBe(true);
+      stubNetwork("up", PREVIEW, serviceAnswer(block));
+      const { codes, text } = await run("BW");
+      expect(codes.at(-1)).toBe("AUDIO-ERROR");
+      expect(codes).not.toContain("AUDIO-COMPLETE");
+      expect(text).toContain("Tempo not given: the tempo does not hold across the preview");
+    });
+
     it("reports a run that measured neither tempo nor key as an error", async () => {
       stubNetwork("up", PREVIEW, serviceAnswer(gatedV2("noise")));
       const { codes } = await run("N");

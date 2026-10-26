@@ -2,7 +2,6 @@ import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
-import { mergeDuplicates } from './useSuggestions';
 
 /** The picker's question: its heading and the name of its list. */
 export const PICKER_QUESTION = 'Is this the right track?';
@@ -39,17 +38,21 @@ interface TrackPickerProps {
  * focus is not held in a text box here, which is what `aria-activedescendant` is for.
  *
  * Nothing is chosen for the user: the run waits until a row is picked or the picker is left.
- * A recording listed twice (two rows with one ISRC) is shown once, by the rule the search
- * suggestions use; rows without an ISRC are never merged.
+ *
+ * Every track the server offers gets a row (a repeated track id once), so the rows always match
+ * the count in the server's question. Rows are not merged as the search suggestions are: the
+ * server sends no ISRC here, and two rows with one title and artist can be two takes (a studio
+ * and a live one), of which the picker is the last place to choose.
  */
 export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerProps) {
   const id = useId();
   const headingId = `${id}-question`;
   const hintId = `${id}-hint`;
 
-  // A row without an ISRC is kept apart: two takes with one title and artist (a studio and a
-  // live take) both stay, since no other step offers the one left out.
-  const rows = useMemo(() => mergeDuplicates(candidates, { withoutIsrc: 'apart' }), [candidates]);
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    return candidates.filter((candidate) => !seen.has(candidate.id) && seen.add(candidate.id));
+  }, [candidates]);
   const [highlighted, setHighlighted] = useState(0);
   // A new list starts at its first row.
   const [listShown, setListShown] = useState(rows);
@@ -59,7 +62,7 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
   }
   const current = Math.min(highlighted, rows.length - 1);
 
-  const pickerRef = useRef<HTMLElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // When a list appears, the picker is brought into view and its first row takes the focus, so
@@ -90,10 +93,11 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
   };
 
   return (
-    // Escape anywhere in the picker leaves it, from a row or from "Search again".
-    <section
+    // Escape anywhere in the picker leaves it, from a row or from "Search again". Not a named
+    // region: the question names the list, and is read once.
+    // biome-ignore lint/a11y/noStaticElementInteractions: only listens for Escape
+    <div
       ref={pickerRef}
-      aria-labelledby={headingId}
       className="mb-6 animate-fade-in-up"
       onKeyDown={(event) => {
         if (event.key === 'Escape' && onSearchAgain) {
@@ -107,7 +111,9 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
           {PICKER_QUESTION}
         </h2>
         <p id={hintId} className="text-chrome font-mono text-text-muted mt-1">
-          Arrow keys to move, Enter to analyze, Esc to search again
+          {onSearchAgain
+            ? 'Arrow keys to move, Enter to analyze, Esc to search again'
+            : 'Arrow keys to move, Enter to analyze'}
         </p>
       </div>
       <div
@@ -126,6 +132,9 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
               rowRefs.current[index] = element;
             }}
             role="option"
+            // Selection follows focus, as a single-select listbox allows: the row the arrows
+            // reach is the selected one. Choosing it, which starts the analysis, takes Enter or
+            // a click.
             aria-selected={index === current}
             tabIndex={index === current ? 0 : -1}
             onFocus={() => setHighlighted(index)}
@@ -167,6 +176,6 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
           </button>
         </div>
       )}
-    </section>
+    </div>
   );
 }

@@ -73,11 +73,16 @@ interface ProgressScreenProps {
  * The progress screen: the track, the picker when there is one, the run log, the bar and the
  * status line.
  *
- * Screen readers hear the run's progress from one live region, the run log (SystemConsole's
- * `role="log"`, polite): each line the run adds is announced once, the picker's question and
- * the completion included. The status line sums up the same step, so it is not a live region;
- * it takes the focus after a pick or a retry, and is read then. The progress bar is a
- * `progressbar`, read when it is reached, never announced.
+ * What screen readers hear, and from where:
+ * - The run log (SystemConsole's `role="log"`, polite) announces each line the run adds, once:
+ *   the steps, the picker's question, "Analysis complete." It is the only region that speaks
+ *   while the run is under way.
+ * - The completion notice (`role="status"`, polite, empty until then) announces once, when the
+ *   run completes, that the results are opening: they open by themselves a few seconds later
+ *   (Onboarding), and the log does not say so. A replay says "Replay complete" there.
+ * - The status line sums up the step the log already announced, so it is not a live region. It
+ *   takes the focus when a search, a pick or a retry starts a step, and is read then.
+ * - The progress bar is a `progressbar`, read when it is reached, never announced.
  */
 export function ProgressScreen({
   status,
@@ -193,6 +198,12 @@ export function ProgressScreen({
           )}
         </div>
       </div>
+
+      {/* The completion notice: in the page from the start of the run, so the one change of its
+          text, at completion, is announced. */}
+      <p role="status" className="sr-only">
+        {status === 'complete' ? statusMessage(status, isReplay, statusNote) : ''}
+      </p>
 
       {/* Status Text (P0:1 — human-readable messages). Not a live region: the run log
           announces the progress. */}

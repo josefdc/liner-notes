@@ -335,7 +335,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
     }
     if (statusRef.current) {
       focusStatusNext.current = false;
-      statusRef.current.focus();
+      // Scrolled no further than it takes to show the line: on a short window the track and the
+      // top of the log stay in view as far as they can.
+      statusRef.current.focus({ preventScroll: true });
+      statusRef.current.scrollIntoView?.({ block: 'nearest' });
     }
   }, [status, showPicker]);
 

@@ -35,8 +35,15 @@ function section(text, from, to, skip = 0) {
   return text.slice(text.lastIndexOf("\n", start) + 1, end);
 }
 
+/** The part of a file from the line holding `from` to its end. Fails when `from` is missing. */
+function from(text, marker) {
+  const start = text.indexOf(marker);
+  expect(start, `"${marker}" is in the file`).toBeGreaterThanOrEqual(0);
+  return text.slice(text.lastIndexOf("\n", start) + 1);
+}
+
 describe("console copy", () => {
-  it.each([CONSOLE, ACTIVITY_LOG, LOG_CODES, AGENT_HOOK])(
+  it.each([CONSOLE, ACTIVITY_LOG, LOG_CODES, AGENT_HOOK, TRACK_PICKER])(
     "%s holds no prototype copy or emoji",
     (path) => {
       const text = read(path);
@@ -49,8 +56,8 @@ describe("console copy", () => {
     const text = read(PROGRESS_SCREEN);
     const parts = [
       section(text, "const STATUS_MESSAGES", "function statusMessage"),
-      // To the end of the file: the console, the bar, the status line and the button.
-      text.slice(text.indexOf("{/* System Console */}")),
+      // To the end of the file: the console, the bar, the status lines and the button.
+      from(text, "{/* System Console */}"),
     ];
     for (const part of parts) {
       expect(found("prototype-copy", part, PROGRESS_SCREEN)).toEqual([]);
@@ -62,7 +69,7 @@ describe("console copy", () => {
 
   it("the progress screen uses neither cyan nor amber: reticle, picker, bar, button", () => {
     const text = read(PROGRESS_SCREEN);
-    const screen = text.slice(text.indexOf("{/* Central Node Graphic"));
+    const screen = from(text, "{/* Central Node Graphic");
     expect(screen).toContain("Open the results");
     expect(screen).not.toMatch(/cyber|analog|-amber/);
     expect(read(TRACK_PICKER)).not.toMatch(/cyber|analog|-amber/);

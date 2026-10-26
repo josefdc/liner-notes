@@ -92,9 +92,20 @@ describe('TrackPicker', () => {
     expect(onSearchAgain).toHaveBeenCalledTimes(2);
     fireEvent.click(again);
     expect(onSearchAgain).toHaveBeenCalledTimes(3);
-    // Enter on the button is the button's own: it picks nothing.
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('leaves Enter on Search again to the button: the highlighted row is not picked', () => {
+    const { onPick } = renderPicker();
+    press('ArrowDown');
+    const again = screen.getByRole('button', { name: 'Search again' });
+    again.focus();
+    // The key reaches every handler around the button; none of them may pick a row.
     fireEvent.keyDown(again, { key: 'Enter' });
     expect(onPick).not.toHaveBeenCalled();
+    // The same key on the row does pick it, so the check above can fail.
+    fireEvent.keyDown(options()[1], { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith(FIVE[1]);
   });
 
   it('never picks a row by itself, however long it stays open', () => {
@@ -108,35 +119,60 @@ describe('TrackPicker', () => {
     expect(screen.getByText('Nothing is analyzed until you choose a track.')).toBeTruthy();
   });
 
-  it('lists a recording once (one ISRC), keeping its first release in the place of its first row', () => {
+  it('shows every track the server offers: rows sharing an ISRC, or a title and artist, all stay', () => {
+    // The API sends no ISRC in the picker yet; whatever it sends, the rows match its count.
     const single = {
       ...track('m-single', 'M83', '2012'),
       title: 'Midnight City',
       isrc: 'GB55H1100002',
     };
     const album = { ...single, id: 'm-album', releaseYear: '2011' };
-    const cover = {
-      ...single,
-      id: 'm-cover',
-      artist: 'Ellie Goulding',
-      releaseYear: '2014',
-      isrc: 'GBUM71400001',
-    };
-    const { onPick } = renderPicker([single, cover, album]);
-    expect(options()).toHaveLength(2);
-    expect(options()[0].textContent).toContain('M83 • 2011');
-    press('Enter');
-    expect(onPick).toHaveBeenCalledWith(album);
-  });
-
-  it('keeps two takes with one title and artist but no ISRC: the picker is the last place to choose', () => {
     const studio = { ...track('t-full', 'Test Artist', '2001'), title: 'Bright Lines' };
     const live = { ...studio, id: 't-live-take', album: 'Live at the Hall', releaseYear: '2004' };
-    renderPicker([studio, live]);
+    const { onPick } = renderPicker([single, album, studio, live]);
     expect(options().map((row) => row.textContent)).toEqual([
+      expect.stringContaining('M83 • 2012'),
+      expect.stringContaining('M83 • 2011'),
       expect.stringContaining('Test Artist • 2001'),
       expect.stringContaining('Test Artist • 2004'),
     ]);
+    press('End');
+    press('Enter');
+    expect(onPick).toHaveBeenCalledWith(live);
+  });
+
+  it('lists a track id once', () => {
+    renderPicker([
+      track('c1', 'Johnny Cash'),
+      track('c2', 'Nine Inch Nails'),
+      track('c1', 'Johnny Cash'),
+    ]);
+    expect(options()).toHaveLength(2);
+  });
+
+  it('names the list by its question, and only the list', () => {
+    renderPicker();
+    expect(screen.getByRole('listbox').getAttribute('aria-labelledby')).toBe(
+      screen.getByRole('heading', { name: 'Is this the right track?' }).id,
+    );
+    expect(screen.queryByRole('region')).toBeNull();
+  });
+
+  it('offers Escape in its hint only when there is a way back to the search', () => {
+    const onPick = vi.fn();
+    render(<TrackPicker candidates={FIVE} onPick={onPick} />);
+    const hint = document.getElementById(
+      screen.getByRole('listbox').getAttribute('aria-describedby') ?? '',
+    );
+    expect(hint?.textContent).toBe('Arrow keys to move, Enter to analyze');
+    cleanup();
+    renderPicker();
+    const withEscape = document.getElementById(
+      screen.getByRole('listbox').getAttribute('aria-describedby') ?? '',
+    );
+    expect(withEscape?.textContent).toBe(
+      'Arrow keys to move, Enter to analyze, Esc to search again',
+    );
   });
 
   it('starts a new list at its first row, with the focus there', () => {

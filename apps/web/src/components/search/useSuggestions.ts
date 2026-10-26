@@ -48,19 +48,15 @@ const dateOf = (suggestion: Suggestion) => {
 const songOf = (suggestion: Suggestion) =>
   `${normalized(suggestion.title)}\u0000${normalized(suggestion.artist)}`;
 
-/** How rows without an ISRC are told apart (see `recordingKeys`). */
-export type WithoutIsrc = 'by-title-and-artist' | 'apart';
-
 /**
  * The recording each of `rows` stands for, as a key. A row with an ISRC is that recording, and
  * rows with different ISRCs are different recordings (a live take, a re-recording). A row
  * without one stands for the one recording listed with its title and artist (case, spacing and
  * Unicode forms aside); when the list holds no recording with them, or several, it cannot tell
  * which, and stands for its title and artist alone. So no row joins two ISRCs, and the keys do
- * not depend on the order of the rows. With `withoutIsrc: 'apart'` a row without an ISRC stands
- * for itself alone: it is never taken for another row.
+ * not depend on the order of the rows.
  */
-function recordingKeys(rows: Suggestion[], withoutIsrc: WithoutIsrc) {
+function recordingKeys(rows: Suggestion[]) {
   const isrcsBySong = new Map<string, Set<string>>();
   for (const row of rows) {
     const isrc = isrcOf(row);
@@ -72,7 +68,6 @@ function recordingKeys(rows: Suggestion[], withoutIsrc: WithoutIsrc) {
   return (row: Suggestion) => {
     const isrc = isrcOf(row);
     if (isrc) return `isrc:${isrc}`;
-    if (withoutIsrc === 'apart') return `id:${row.id}`;
     const isrcs = isrcsBySong.get(songOf(row));
     return isrcs?.size === 1 ? `isrc:${[...isrcs][0]}` : `song:${songOf(row)}`;
   };
@@ -94,17 +89,10 @@ function isEarlier(date: string | null, than: string | null) {
  * look the same. Of the rows for one recording, the one released first is kept, in the place of
  * the one listed first; when a date is missing, Spotify's order decides. Which recordings are
  * listed does not depend on Spotify's order; only which of two equal rows is kept can.
- *
- * `withoutIsrc` says what a row without an ISRC stands for: its title and artist (the default,
- * for suggestions: a take hidden there is still offered by a typed search), or itself alone
- * (`'apart'`, for the track picker, the last place a take can be chosen).
  */
-export function mergeDuplicates(
-  candidates: SearchCandidate[],
-  { withoutIsrc = 'by-title-and-artist' }: { withoutIsrc?: WithoutIsrc } = {},
-): SearchCandidate[] {
+export function mergeDuplicates(candidates: SearchCandidate[]): SearchCandidate[] {
   const rows = candidates as Suggestion[];
-  const keyOf = recordingKeys(rows, withoutIsrc);
+  const keyOf = recordingKeys(rows);
   const kept: Suggestion[] = [];
   const places = new Map<string, number>();
   const ids = new Set<string>();

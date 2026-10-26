@@ -374,23 +374,4 @@ describe('mergeDuplicates', () => {
       'One',
     ]);
   });
-
-  it('with rows without an ISRC kept apart, merges only rows that share an ISRC or a track id', () => {
-    const list = [
-      record('studio', 'Bright Lines', { releaseDate: '2001' }),
-      record('live', 'Bright Lines', { releaseDate: '2004' }),
-      record('single', 'Midnight City', { isrc: 'GB55H1100002', releaseDate: '2012' }),
-      record('album', 'Midnight City', { isrc: 'gb55h1100002', releaseDate: '2011' }),
-      record('undated', 'Midnight City', {}),
-      record('studio', 'Bright Lines', { releaseDate: '2001' }),
-    ];
-    expect(mergeDuplicates(list, { withoutIsrc: 'apart' }).map((s) => s.id)).toEqual([
-      'studio',
-      'live',
-      'album',
-      'undated',
-    ]);
-    // The default joins rows without an ISRC by their title and artist.
-    expect(mergeDuplicates(list).map((s) => s.id)).toEqual(['studio', 'album']);
-  });
 });

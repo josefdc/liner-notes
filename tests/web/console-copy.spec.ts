@@ -221,6 +221,10 @@ test("a replay says it replays the recorded run, not that it is running", async 
   await expect(runLog(page)).toContainText("Replaying the recorded run");
   await expect(runLog(page)).not.toContainText(/Running|Run in progress/);
   await releaseStream(page, "end");
+  // Before the results open by themselves, a screen reader hears that they are opening.
+  await expect(page.getByRole("status").filter({ hasText: "Opening the results" })).toHaveText(
+    "Replay complete. Opening the results",
+  );
 });
 
 for (const width of [390, 1440]) {
@@ -281,7 +285,36 @@ function liveRegions(page: Page) {
   });
 }
 
-test("one live region announces each progress line: the run log", async ({ page }) => {
+/**
+ * Records, from now on, each text a live region other than the run log is given: what a screen
+ * reader would announce from it.
+ */
+function recordAnnouncements(page: Page) {
+  return page.evaluate(() => {
+    const selector =
+      '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="timer"], [role="marquee"]';
+    const seen: string[] = [];
+    (window as unknown as { __announced: string[] }).__announced = seen;
+    new MutationObserver((mutations) => {
+      const changed = new Set<Element>();
+      for (const mutation of mutations) {
+        const target =
+          mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+        const region = target?.closest(selector);
+        if (region && !region.closest('[role="log"]')) changed.add(region);
+      }
+      for (const region of changed) if (region.textContent) seen.push(region.textContent);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+}
+const announced = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __announced: string[] }).__announced);
+
+const OPENING_RESULTS = "Analysis complete. Opening the results";
+
+test("one live region announces each progress line, and one says the results are opening", async ({
+  page,
+}) => {
   const lines = [
     "Reading the track from Spotify",
     "Starting the research: Last.fm, MusicBrainz",
@@ -304,12 +337,14 @@ test("one live region announces each progress line: the run log", async ({ page 
     },
   });
   await search(page, "One More Time");
+  await recordAnnouncements(page);
   for (const wait of ["found", "research", "measuring"]) {
     await expect(page.getByRole("log")).toContainText(`[${wait}]`);
     // Past the half second an announcement could be held back for.
     await page.waitForTimeout(700);
     const regions = await liveRegions(page);
-    expect(regions.map(({ role }) => role)).toEqual(["log"]);
+    // Only the run log speaks while the run is under way.
+    expect(regions.filter(({ role, text }) => role !== "log" && text.trim())).toEqual([]);
     const statusText = (await page.locator("[data-progress-status]").textContent()) ?? "";
     for (const line of lines.slice(0, ["found", "research", "measuring"].indexOf(wait) + 1)) {
       expect(
@@ -321,4 +356,14 @@ test("one live region announces each progress line: the run log", async ({ page 
     expect(regions.filter(({ text }) => text.includes(statusText))).toHaveLength(0);
     await releaseStream(page, wait);
   }
+
+  // The run completes: the results open by themselves 3.5 s later, and that is said once,
+  // before they do.
+  await expect(page.locator("[data-progress-status]")).toHaveText(OPENING_RESULTS);
+  await page.waitForTimeout(700);
+  const regions = await liveRegions(page);
+  expect(regions.filter(({ text }) => text.includes("Opening the results"))).toEqual([
+    expect.objectContaining({ text: OPENING_RESULTS }),
+  ]);
+  expect(await announced(page)).toEqual([OPENING_RESULTS]);
 });

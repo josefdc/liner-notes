@@ -14,7 +14,6 @@ type Candidate = {
   album: string;
   coverUrl: string;
   releaseYear: string;
-  isrc?: string | null;
 };
 
 const hitl = loadFixture("hitl");
@@ -40,6 +39,12 @@ const five: Candidate[] = [
   },
 ];
 
+// The server's question, in its own words (apps/api/src/agent/trackMatch.ts choiceMessage).
+const question = (count: number) =>
+  count === 1
+    ? "One possible track from Spotify; confirm it or search again"
+    : `${count} possible tracks from Spotify; choose one`;
+// The candidates as the API sends them in `interrupt`: no ISRC (scoutNode.ts).
 const pickerStream = (candidates: Candidate[]) => [
   { type: "connected", threadId: "thread-hitl" },
   { type: "status", node: "scout", message: "Searching for the track", code: "SPOTIFY-SEARCH" },
@@ -48,7 +53,7 @@ const pickerStream = (candidates: Candidate[]) => [
     reason: "disambiguation",
     threadId: "thread-hitl",
     candidates,
-    message: "Please select the correct song",
+    message: question(candidates.length),
   },
   { type: "done" },
 ];
@@ -67,6 +72,51 @@ const picker = (page: Page) => page.getByRole("listbox", { name: QUESTION });
 const option = (page: Page, candidate: Candidate) =>
   picker(page).getByRole("option", { name: `${candidate.title} ${candidate.artist}` });
 const progressStatus = (page: Page) => page.locator("[data-progress-status]");
+
+/**
+ * What keeps a row of the picker from being seen whole where it is now, without scrolling: a
+ * listbox taller than its box, or a row outside the viewport or outside the visible area of any
+ * box around it that clips or scrolls. Empty when every row is shown whole.
+ */
+function clippedRows(page: Page) {
+  return picker(page).evaluate((list) => {
+    const problems: string[] = [];
+    if (list.scrollHeight > list.clientHeight) {
+      problems.push(`the list scrolls: ${list.scrollHeight} > ${list.clientHeight}`);
+    }
+    for (const row of list.querySelectorAll('[role="option"]')) {
+      const box = row.getBoundingClientRect();
+      const areas = [
+        { name: "the viewport", top: 0, bottom: innerHeight, left: 0, right: innerWidth },
+      ];
+      for (let around = row.parentElement; around; around = around.parentElement) {
+        const { overflowX, overflowY } = getComputedStyle(around);
+        if (overflowX === "visible" && overflowY === "visible") continue;
+        const rect = around.getBoundingClientRect();
+        const top = rect.top + around.clientTop;
+        const left = rect.left + around.clientLeft;
+        areas.push({
+          name: `${around.tagName} ${around.className}`,
+          top,
+          bottom: top + around.clientHeight,
+          left,
+          right: left + around.clientWidth,
+        });
+      }
+      for (const area of areas) {
+        if (
+          box.top < area.top - 0.5 ||
+          box.bottom > area.bottom + 0.5 ||
+          box.left < area.left - 0.5 ||
+          box.right > area.right + 0.5
+        ) {
+          problems.push(`${row.textContent} is cut by ${area.name}`);
+        }
+      }
+    }
+    return problems;
+  });
+}
 
 async function openPicker(page: Page, query = "Hurt") {
   await page.goto("/");
@@ -93,8 +143,9 @@ test("nothing is picked for the user, however long the picker stays open", async
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 1440, height: 900 },
+  { width: 844, height: 390 },
 ]) {
-  test(`at ${viewport.width} px every candidate is shown whole and reached with arrows, Home and End`, async ({
+  test(`at ${viewport.width}x${viewport.height} every candidate is shown whole and reached with arrows, Home and End`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -105,11 +156,9 @@ for (const viewport of [
     await openPicker(page);
     const rows = five.map((candidate) => option(page, candidate));
 
-    // No row is cut off by a scrolling box: the fifth one is as visible as the first.
-    for (const row of rows) {
-      await row.scrollIntoViewIfNeeded();
-      await expect(row).toBeInViewport({ ratio: 1 });
-    }
+    // Once the picker has come into view, nothing scrolled by the test: no row is cut off by
+    // a scrolling box or by the window, the fifth no more than the first.
+    await expect.poll(() => clippedRows(page)).toEqual([]);
     await expect(rows[0]).toBeFocused();
     await expect(rows[0]).toHaveAttribute("aria-selected", "true");
 
@@ -198,6 +247,8 @@ test("after Try again the progress status takes the focus, not the page", async 
 test("a typed search moves the focus to the progress status, then the picker takes it", async ({
   page,
 }) => {
+  // A short window: the focused line is scrolled into view.
+  await page.setViewportSize({ width: 844, height: 390 });
   await useMockApi(page, {
     suggestions: [],
     streams: {
@@ -219,6 +270,7 @@ test("a typed search moves the focus to the progress status, then the picker tak
   await page.keyboard.press("Enter");
   await expect(page.getByRole("log")).toContainText("Searching for the track");
   await expect(progressStatus(page)).toBeFocused();
+  await expect(progressStatus(page)).toBeInViewport({ ratio: 1 });
   await releaseStream(page, "picker");
   await expect(option(page, three[0])).toBeFocused();
 });
@@ -239,45 +291,90 @@ test("Escape leaves the picker for the search box and starts no run", async ({ p
   expect(analyses(log)).toHaveLength(1);
 });
 
-test("the same recording listed twice is offered once; takes without an ISRC all stay", async ({
+test("every track the server counts gets a row: a studio and a live take with one title and artist", async ({
   page,
 }) => {
-  const single = {
-    id: "m-single",
+  const studio = {
+    id: "m-album",
     title: "Midnight City",
     artist: "M83",
-    album: "Midnight City",
-    coverUrl: "",
-    releaseYear: "2012",
-    isrc: "GB55H1100002",
-  };
-  const album = {
-    ...single,
-    id: "m-album",
     album: "Hurry Up, We're Dreaming",
+    coverUrl: "",
     releaseYear: "2011",
   };
-  // Same title and artist, no ISRC: it may be another take, so it is never merged away.
-  const live = {
-    ...single,
-    id: "m-live",
-    album: "Live at Coachella",
-    releaseYear: "2012",
-    isrc: null,
-  };
+  const live = { ...studio, id: "m-live", album: "Live at Coachella", releaseYear: "2012" };
   await useMockApi(page, {
     suggestions: [],
-    streams: { [ANALYZE]: pickerStream([single, live, album]), [RESUME]: held },
+    streams: { [ANALYZE]: pickerStream([studio, live]), [RESUME]: held },
   });
   await openPicker(page, "Midnight City");
 
+  // The server says how many tracks it offers; the picker shows that many.
+  await expect(progressStatus(page)).toHaveText(question(2));
   const rows = picker(page).getByRole("option");
   await expect(rows).toHaveCount(2);
-  // The first release of the recording stays, in the place the first of its rows had.
   await expect(rows.nth(0)).toContainText("M83 • 2011");
   await expect(rows.nth(1)).toContainText("M83 • 2012");
+  await page.keyboard.press("End");
   await page.keyboard.press("Enter");
-  await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-album")]);
+  await expect.poll(async () => resumes(await apiRequests(page))).toEqual([resumeWith("m-live")]);
+});
+
+test("the question names the list alone, so it is read once", async ({ page }) => {
+  await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: pickerStream(three) } });
+  await openPicker(page);
+  await expect(page.getByRole("region", { name: QUESTION })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: QUESTION })).toBeVisible();
+  await expect(picker(page)).toHaveAccessibleDescription(
+    "Arrow keys to move, Enter to analyze, Esc to search again",
+  );
+});
+
+test("a picked suggestion moves the focus to the progress status", async ({ page }) => {
+  // A Spotify track id: the suggestion's own track is asked for.
+  const suggestion = { ...three[1], id: "4iV5W9uYEdYUVa79Axb7Rh" };
+  await useMockApi(page, {
+    suggestions: [suggestion],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: "thread-typed" },
+        {
+          type: "status",
+          node: "scout",
+          message: "Reading the track from Spotify",
+          code: "NET-100",
+        },
+        { $wait: "never" },
+      ],
+    },
+  });
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Song title and artist" }).fill("Hurt");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("log")).toContainText("Reading the track from Spotify");
+  expect(analyses(await apiRequests(page))[0]).toContain(`trackId=${suggestion.id}`);
+  await expect(progressStatus(page)).toBeFocused();
+});
+
+test("a recorded track picked while live analysis is paused moves the focus to the progress status", async ({
+  page,
+}) => {
+  const fixture = loadFixture("budget-paused");
+  const [refusal, replay] = fixture.streams[ANALYZE].opens;
+  // Held after the replay's first steps, before its result.
+  const heldReplay = [...replay.slice(0, 3), { $wait: "never" }];
+  await useMockApi(page, {
+    ...fixture,
+    streams: { ...fixture.streams, [ANALYZE]: { opens: [refusal, heldReplay] } },
+  });
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Song title and artist" }).fill("Some Other Song");
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await page.getByRole("button", { name: /Bright Lines/ }).click();
+  await expect(page.getByRole("log")).toContainText("nothing below runs live");
+  await expect(progressStatus(page)).toBeFocused();
 });
 
 test("a choice the server no longer holds: the picker waits, then says so when the pick is refused", async ({

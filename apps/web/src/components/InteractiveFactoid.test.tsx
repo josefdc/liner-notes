@@ -64,5 +64,8 @@ describe('InteractiveFactoid', () => {
       expect(chip.getAttribute('aria-label'), type).toBe(`${type}-name (${type})`);
       expect(chip.querySelectorAll('svg').length, type).toBe(2);
     }
+    // The count of chips under the card is neutral too.
+    const count = container.querySelector('[data-entity-count]') as HTMLElement;
+    expect(count.outerHTML).not.toMatch(PROVENANCE_HUES);
   });
 });

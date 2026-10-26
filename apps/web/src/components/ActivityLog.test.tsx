@@ -68,4 +68,14 @@ describe('ActivityLog', () => {
     rerender(<ActivityLog logs={LOGS} isComplete />);
     expect(screen.getByText('Done')).toBeTruthy();
   });
+  it("names the run's state and the last event's label in the toggle's accessible name", () => {
+    const { rerender } = render(<ActivityLog logs={[log('AUDIO-ERROR')]} isComplete={false} />);
+    expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
+      'Expand activity log, running, last event: Audio error: Message for AUDIO-ERROR',
+    );
+    rerender(<ActivityLog logs={[log('AUDIO-ERROR')]} isComplete />);
+    expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(
+      /^Expand activity log, done, last event: Audio error: /,
+    );
+  });
 });

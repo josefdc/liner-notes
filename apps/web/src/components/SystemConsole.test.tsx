@@ -91,4 +91,27 @@ describe('SystemConsole', () => {
     );
     expect(label(container).textContent).toBe('Model check');
   });
+  it('says it waits for a pick while the run is paused at the picker', () => {
+    render(<SystemConsole logs={[log('SYS-INIT')]} isComplete={false} isWaiting />);
+    expect(screen.getAllByText('Waiting for your pick').length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/Running|Run in progress/);
+  });
+
+  it('says it replays the recorded run during a replay', () => {
+    render(<SystemConsole logs={[log('SYS-INIT')]} isComplete={false} isReplay />);
+    expect(screen.getAllByText('Replaying the recorded run').length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/Running|Run in progress/);
+  });
+
+  it('says what the elapsed time counts', () => {
+    render(<SystemConsole logs={[log('SYS-INIT')]} isComplete={false} />);
+    expect(screen.getByText(/s since you started$/)).toBeTruthy();
+  });
+
+  it('labels a line without a code by the node that sent it', () => {
+    const { container } = render(
+      <SystemConsole logs={[log(undefined, 'research_tool')]} isComplete={false} />,
+    );
+    expect(label(container).textContent).toBe('Sources');
+  });
 });

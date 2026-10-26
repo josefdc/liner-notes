@@ -31,6 +31,7 @@ import {
 import type { ReplayTrack } from '../hooks/agent/apiClient';
 import { Button } from './ui/Button';
 import { inputVisualStyles } from './ui/Input';
+import { ANALYZING_STATUSES, nextProgress } from './console/progress';
 
 // Loaded only when live analysis turns out to be unavailable.
 const BudgetBanner = lazy(() => import('./BudgetBanner'));
@@ -42,11 +43,14 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
   idle: '',
   connecting: 'Connecting to the analysis server...',
   searching: 'Searching Spotify for your track...',
-  analyzing: 'Measuring tempo, key and energy from the preview clip...',
+  // The engineer's step: measuring only while the server says a measurement runs.
+  analyzing: 'Reading the audio...',
+  measuring: 'Measuring tempo, key and energy from the preview clip...',
   researching: 'Searching sources for samples, credits and history...',
   composing: 'Writing the liner notes...',
   checking: 'Checking the notes against their sources...',
-  disambiguation: 'Multiple matches found — confirm your track...',
+  // Used only when the server's own question is missing.
+  disambiguation: 'Pick the track to analyse...',
   complete: 'Analysis complete. Opening the results',
   error: 'The analysis failed. Check your search and try again.',
 };
@@ -57,8 +61,12 @@ const REPLAY_PROGRESS_MESSAGE = 'Replaying a recorded analysis — nothing runs 
 // At most 40 characters: the completion line is revealed up to 40ch (typing-reveal).
 export const REPLAY_COMPLETE_MESSAGE = 'Replay complete. Opening the results';
 
-/** The status line for a run, live or replayed. */
-function statusMessage(status: AgentStatus, isReplay: boolean): string {
+/**
+ * The status line for a run, live or replayed. The server's own words for the step (`note`:
+ * the picker's question, the composer's fallback) win; the picker is asked live in a replay too.
+ */
+function statusMessage(status: AgentStatus, isReplay: boolean, note: string | null): string {
+  if (note && (!isReplay || status === 'disambiguation')) return note;
   if (!isReplay || status === 'idle' || status === 'error') return STATUS_MESSAGES[status];
   return status === 'complete' ? REPLAY_COMPLETE_MESSAGE : REPLAY_PROGRESS_MESSAGE;
 }
@@ -179,16 +187,6 @@ function suggestionReducer(state: SuggestionState, action: SuggestionAction): Su
   }
 }
 
-// Hoisted constant — Set for O(1) status lookups
-const ANALYZING_STATUSES = new Set<AgentStatus>([
-  'searching',
-  'analyzing',
-  'researching',
-  'composing',
-  'checking',
-  'disambiguation',
-]);
-
 /** The picker row a navigation key moves the highlight to, or null for other keys. */
 function pickerTarget(key: string, current: number, count: number): number | null {
   switch (key) {
@@ -246,6 +244,8 @@ interface OnboardingProps {
   isLoading: boolean;
   /** The run replays a recorded run (the status line says so instead of the live steps). */
   isReplay?: boolean;
+  /** The server's own words for the step under way (useAgent's `statusNote`). */
+  statusNote?: string | null;
   candidates: SearchCandidate[] | null;
   analyze: (query: string, options?: AnalyzeOptions) => Promise<void>;
   selectCandidate: (candidateId: string, pickedBy?: PickedBy) => Promise<void>;
@@ -267,6 +267,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   errorCode,
   isLoading,
   isReplay = false,
+  statusNote = null,
   candidates,
   analyze,
   selectCandidate,
@@ -301,11 +302,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const [announcedStatus, setAnnouncedStatus] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => {
-      const message = statusMessage(status, isReplay);
+      const message = statusMessage(status, isReplay, statusNote);
       if (message) setAnnouncedStatus(message);
     }, 500);
     return () => clearTimeout(timer);
-  }, [status, isReplay]);
+  }, [status, isReplay, statusNote]);
 
   // ─── P1:14 HITL disambiguation state ─────────────────────────────────────
   const [hitlSelectedIndex, setHitlSelectedIndex] = useState(0);
@@ -559,31 +560,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
     inputRef.current?.focus();
   }, []);
 
-  // Calculate progress based on status
-  const getProgress = () => {
-    switch (status) {
-      case 'idle':
-        return 0;
-      case 'connecting':
-        return 10;
-      case 'searching':
-        return 25;
-      case 'disambiguation':
-        return 25; // P1:14 — hold at searching position
-      case 'analyzing':
-        return 50;
-      case 'researching':
-        return 70;
-      case 'composing':
-        return 90;
-      case 'checking':
-        return 95;
-      case 'complete':
-        return 100;
-      default:
-        return 0;
-    }
-  };
+  // The bar's place: it never moves back within a run (console/progress.ts).
+  const shownProgress = useRef(0);
+  shownProgress.current = nextProgress(shownProgress.current, status);
+  const progress = shownProgress.current;
 
   // Display track for analysis view (P1:10 — previewTrack || trackData)
   const displayTrack =
@@ -795,10 +775,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
               className={`relative ${status === 'complete' ? 'animate-completion-reveal' : ''} ${status === 'disambiguation' ? 'scale-75' : ''} transition-transform duration-300`}
             >
               <div
-                className={`w-28 h-28 rounded-full border ${status === 'complete' ? 'border-status-success/50' : 'border-cyber/20'} flex items-center justify-center animate-spin-slow`}
+                className={`w-28 h-28 rounded-full border ${status === 'complete' ? 'border-status-success/50' : 'border-white/20'} flex items-center justify-center animate-spin-slow`}
               >
                 <div
-                  className={`w-16 h-16 rounded-full border ${status === 'complete' ? 'border-status-success/30' : 'border-analog/40'} flex items-center justify-center animate-spin-reverse`}
+                  className={`w-16 h-16 rounded-full border ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'} flex items-center justify-center animate-spin-reverse`}
                 >
                   {status === 'complete' ? (
                     <Check size={24} className="text-status-success" />
@@ -809,23 +789,23 @@ const Onboarding: React.FC<OnboardingProps> = ({
               </div>
               {/* Data Lines */}
               <div
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[1px] bg-gradient-to-r from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-cyber/50'} to-transparent animate-pulse`}
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[1px] bg-gradient-to-r from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-white/30'} to-transparent animate-pulse`}
               ></div>
               <div
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[200%] bg-gradient-to-b from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-cyber/50'} to-transparent animate-pulse`}
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[200%] bg-gradient-to-b from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-white/30'} to-transparent animate-pulse`}
               ></div>
               {/* Corner brackets */}
               <div
-                className={`absolute -top-2 -left-2 w-4 h-4 border-l border-t ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+                className={`absolute -top-2 -left-2 w-4 h-4 border-l border-t ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
               />
               <div
-                className={`absolute -top-2 -right-2 w-4 h-4 border-r border-t ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+                className={`absolute -top-2 -right-2 w-4 h-4 border-r border-t ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
               />
               <div
-                className={`absolute -bottom-2 -left-2 w-4 h-4 border-l border-b ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+                className={`absolute -bottom-2 -left-2 w-4 h-4 border-l border-b ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
               />
               <div
-                className={`absolute -bottom-2 -right-2 w-4 h-4 border-r border-b ${status === 'complete' ? 'border-status-success/30' : 'border-cyber/30'}`}
+                className={`absolute -bottom-2 -right-2 w-4 h-4 border-r border-b ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
               />
             </div>
           </div>
@@ -850,7 +830,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {showPicker && candidates && (
             <div
               ref={hitlRef}
-              className="mb-6 animate-fade-in-up rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-4 focus-visible:ring-offset-void"
+              className="mb-6 animate-fade-in-up rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-4 focus-visible:ring-offset-void"
               onKeyDown={handleHitlKeyDown}
               tabIndex={0}
               onMouseEnter={() => setHitlPaused(true)}
@@ -882,9 +862,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       setHitlSelectedIndex(index);
                       setHitlCountdown(null);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-all focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
                       index === hitlSelectedIndex
-                        ? 'bg-cyber/15 border border-cyber/30'
+                        ? 'bg-white/10 border border-white/30'
                         : 'bg-white/5 border border-transparent hover:bg-white/10'
                     }`}
                   >
@@ -902,7 +882,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       </span>
                     </div>
                     {index === hitlSelectedIndex && (
-                      <span className="text-cyber text-xs font-mono flex-shrink-0">▶</span>
+                      <span className="text-text-secondary text-xs font-mono flex-shrink-0">▶</span>
                     )}
                   </button>
                 ))}
@@ -912,7 +892,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <div className="mt-2">
                   <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-cyber rounded-full transition-all duration-1000 ease-linear"
+                      className="h-full bg-text-secondary rounded-full transition-all duration-1000 ease-linear"
                       style={{ width: `${(hitlCountdown / 5) * 100}%` }}
                     />
                   </div>
@@ -929,23 +909,28 @@ const Onboarding: React.FC<OnboardingProps> = ({
           )}
 
           {/* System Console */}
-          <SystemConsole logs={logs} isComplete={status === 'complete'} />
+          <SystemConsole
+            logs={logs}
+            isComplete={status === 'complete'}
+            isWaiting={status === 'disambiguation'}
+            isReplay={isReplay}
+          />
 
           {/* Progress Bar (P1:9 — ARIA progressbar, P2:16 — shimmer) */}
           <div
             className="w-full h-[3px] bg-white/5 mt-6 rounded-full overflow-hidden"
             role="progressbar"
-            aria-valuenow={getProgress()}
+            aria-valuenow={progress}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label="Analysis progress"
           >
             <div
               className={`h-full transition-all duration-700 ease-out relative rounded-full ${status === 'complete' ? 'bg-status-success' : 'bg-text-secondary'}`}
-              style={{ width: `${getProgress()}%` }}
+              style={{ width: `${progress}%` }}
             >
               {/* P2:16 Shimmer effect (only while loading, not on complete) */}
-              {status !== 'complete' && getProgress() > 0 && (
+              {status !== 'complete' && progress > 0 && (
                 <div
                   className="absolute inset-0 animate-progress-shimmer"
                   style={{
@@ -970,10 +955,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
           >
             {status === 'complete' ? (
               <span className="inline-block overflow-hidden whitespace-nowrap border-r-2 border-status-success animate-[typing-reveal_1s_steps(40)_forwards] max-w-0">
-                {statusMessage(status, isReplay)}
+                {statusMessage(status, isReplay, statusNote)}
               </span>
             ) : (
-              statusMessage(status, isReplay)
+              statusMessage(status, isReplay, statusNote)
             )}
           </div>
 
@@ -981,11 +966,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {status === 'complete' && showCompletionButton && (
             <div className="flex justify-center mt-4 animate-fade-in-up">
               <Button
-                variant="cyber"
+                variant="neutral"
                 size="md"
                 rightIcon={<ArrowRight size={16} />}
                 onClick={handleCompletionSkip}
-                className="animate-glow-breathe"
               >
                 Open the results
               </Button>

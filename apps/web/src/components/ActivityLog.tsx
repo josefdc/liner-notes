@@ -30,6 +30,10 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
   // The latest entries, newest first
   const displayLogs = useMemo(() => [...logs].slice(-SHOWN).reverse(), [logs]);
   const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
+  // The toggle's name says what its face shows: the run's state and the last event, with its label.
+  const lastEvent = lastLog
+    ? `, last event: ${logStyle(lastLog.code, lastLog.node, lastLog.message).label}: ${lastLog.message}`
+    : '';
 
   return (
     <div className="relative bg-surface border border-border rounded-md overflow-hidden hover:border-white/20 transition-colors ease-out-expo">
@@ -42,7 +46,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
         aria-label={
           isExpanded
             ? 'Collapse activity log'
-            : `Expand activity log${lastLog ? `, last event: ${lastLog.message}` : ''}`
+            : `Expand activity log, ${isComplete ? 'done' : 'running'}${lastEvent}`
         }
         className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
       >
@@ -101,7 +105,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             )}
 
             {displayLogs.map((log, idx) => {
-              const { label, Icon, tone } = logStyle(log.code, log.node);
+              const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
               const isLive = idx === 0 && !isComplete;
 
               return (

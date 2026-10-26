@@ -6,11 +6,15 @@ import { logStyle } from './console/logCodes';
 interface SystemConsoleProps {
   logs: AgentLog[];
   isComplete: boolean;
+  /** The run is paused at the track picker, waiting for the user's pick. */
+  isWaiting?: boolean;
+  /** The run replays a recorded run: nothing runs live. */
+  isReplay?: boolean;
 }
 
 // One log line: the time, the step in words (with its icon), and the message.
 const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ log, isLatest }) => {
-  const { label, Icon, tone } = logStyle(log.code, log.node);
+  const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
   const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
 
   return (
@@ -31,7 +35,21 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ lo
   );
 });
 
-const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
+const SystemConsole: React.FC<SystemConsoleProps> = ({
+  logs,
+  isComplete,
+  isWaiting = false,
+  isReplay = false,
+}) => {
+  // What the run is doing, in words: the header and the line under the log say it.
+  const state = isComplete
+    ? 'Finished'
+    : isWaiting
+      ? 'Waiting for your pick'
+      : isReplay
+        ? 'Replaying the recorded run'
+        : 'Running';
+
   const consoleRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +90,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
             <span className="text-chrome font-mono text-text-tertiary truncate">Analysis log</span>
           </div>
           <span className="text-chrome font-mono text-text-tertiary whitespace-nowrap shrink-0">
-            {isComplete ? 'Finished' : 'Running'}
+            {state}
           </span>
         </div>
 
@@ -100,10 +118,12 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
             {/* Still running */}
             {!isComplete && logs.length > 0 && (
               <div className="pt-3 flex items-center text-text-tertiary text-xs border-t border-white/5 mt-3">
-                <span className="mr-2 animate-spin-slow">
-                  <LoaderCircle size={14} aria-hidden="true" />
-                </span>
-                <span className="font-mono">Run in progress</span>
+                {!isWaiting && (
+                  <span className="mr-2 animate-spin-slow">
+                    <LoaderCircle size={14} aria-hidden="true" />
+                  </span>
+                )}
+                <span className="font-mono">{state === 'Running' ? 'Run in progress' : state}</span>
               </div>
             )}
 
@@ -127,7 +147,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
           <span>
             {logs.length} {logs.length === 1 ? 'event' : 'events'}
           </span>
-          <span>{elapsedSeconds} s elapsed</span>
+          <span>{elapsedSeconds} s since you started</span>
         </div>
       </div>
     </section>

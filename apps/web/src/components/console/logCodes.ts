@@ -42,6 +42,7 @@ const FAMILIES: Record<string, { label: string; Icon: LucideIcon }> = {
   SPOTIFY: { label: 'Spotify', Icon: Search },
   RESEARCH: { label: 'Sources', Icon: BookOpen },
   GRAPH: { label: 'Graph', Icon: Waypoints },
+  VERIFY: { label: 'Check', Icon: ListChecks },
   SYS: { label: 'System', Icon: Info },
 };
 
@@ -50,25 +51,45 @@ const OTHER = { label: 'Other', Icon: Activity };
 
 const MODEL_FAMILIES = new Set(['GEMINI', 'LLM']);
 
+// The family of a line without a code, by the graph node that sent it. The research subgraph
+// sends its planning and tool lines without one.
+const NODE_FAMILIES: Record<string, string> = {
+  scout: 'SPOTIFY',
+  engineer: 'AUDIO',
+  historian: 'RESEARCH',
+  research_manager: 'RESEARCH',
+  research_tool: 'RESEARCH',
+  composer: 'LLM',
+};
+
+// Runs recorded before the codes carried a warning in the text instead: "⚠️ MusicBrainz could
+// not be read".
+const LEGACY_WARNING = /^\s*⚠/u;
+
 /**
- * The label, icon and colour of a log line, from its code and the graph node that sent it.
- * A line without a code is the app's own (searching, resuming, connected): a system line.
+ * The label, icon and colour of a log line, from its code, the graph node that sent it and,
+ * for a line without a code, its text. A line without a code is labelled by its node; one
+ * without either is the app's own (searching, resuming, connected): a system line.
  */
-export function logStyle(code?: string, node?: string): LogStyle {
-  const prefix = code ? code.split('-')[0] : 'SYS';
+export function logStyle(code?: string, node?: string, message?: string): LogStyle {
+  const prefix = code ? code.split('-')[0] : ((node && NODE_FAMILIES[node]) ?? 'SYS');
   const suffix = code?.split('-').at(-1);
   const family = FAMILIES[prefix] ?? OTHER;
   const model = MODEL_FAMILIES.has(prefix);
 
-  // The verifier checks the notes against their sources: its lines say so, whatever their code.
+  // The verifier's model lines are its checks of the notes against their sources; its other
+  // lines (a cover-art lookup) keep their own family.
   let label = family.label;
   let Icon = family.Icon;
-  if (node === 'verifier') {
-    label = model ? 'Model check' : 'Check';
+  if (node === 'verifier' && model) {
+    label = 'Model check';
     Icon = ListChecks;
   }
 
-  if (suffix === 'ERROR') return { label: `${label} error`, Icon, tone: LOG_TONES.error };
-  if (suffix === 'WARN') return { label: `${label} warning`, Icon, tone: LOG_TONES.warning };
+  // A failed request (NET-400, NET-500) is an error too.
+  const failed = suffix === 'ERROR' || (prefix === 'NET' && Number(suffix) >= 400);
+  const warned = suffix === 'WARN' || (!code && LEGACY_WARNING.test(message ?? ''));
+  if (failed) return { label: `${label} error`, Icon, tone: LOG_TONES.error };
+  if (warned) return { label: `${label} warning`, Icon, tone: LOG_TONES.warning };
   return { label, Icon, tone: model ? LOG_TONES.model : LOG_TONES.neutral };
 }

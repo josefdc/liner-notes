@@ -256,26 +256,114 @@ describe('useAgent progress', () => {
     expect(result.current.status).toBe('complete');
   });
 
-  it('logs what happened in plain words: no emoji and no prototype copy', async () => {
-    const { hook, analysis } = openPicker();
-    await act(async () => {
-      await hook.result.current.selectCandidate('c2', 'click');
-    });
-    lastStream().send({ type: 'complete', data: track });
-    expect(analysis.closed).toBe(true);
+  it.each(['click', 'countdown'] as const)(
+    'logs what happened in plain words, for a row picked by %s: no emoji and no prototype copy',
+    async (pickedBy) => {
+      const { hook, analysis } = openPicker();
+      await act(async () => {
+        await hook.result.current.selectCandidate('c2', pickedBy);
+      });
+      lastStream().send({ type: 'complete', data: track });
+      expect(analysis.closed).toBe(true);
 
-    const messages = hook.result.current.logs.map((log) => log.message);
-    expect(messages).toEqual([
-      'Searching for "Hurt"',
-      'Connected to the analysis server',
-      'Several tracks match: waiting for you to pick one',
-      'Resuming the analysis with the track you picked',
-      'Analysis complete.',
-    ]);
-    for (const message of messages) {
-      expect(message).not.toMatch(/\p{Extended_Pictographic}/u);
-      expect(message).not.toMatch(/Ready for deployment|Connected to agent|Processing\.\.\./);
-    }
+      const messages = hook.result.current.logs.map((log) => log.message);
+      expect(messages).toEqual([
+        'Searching for "Hurt"',
+        'Connected to the analysis server',
+        'Multiple songs found. Please select the correct one.',
+        'Resuming the analysis with the selected track',
+        'Analysis complete.',
+      ]);
+      for (const message of messages) {
+        expect(message).not.toMatch(/\p{Extended_Pictographic}/u);
+        expect(message).not.toMatch(/Ready for deployment|Connected to agent|Processing\.\.\./);
+      }
+    },
+  );
+
+  it("logs the picker with the server's own words, as a Spotify step and not a warning", () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    const message = 'One possible track from Spotify; confirm it or search again';
+    analysis.send({ ...interrupt(candidates.slice(0, 1)), message });
+
+    expect(hook.result.current.status).toBe('disambiguation');
+    expect(hook.result.current.statusNote).toBe(message);
+    const last = hook.result.current.logs.at(-1);
+    expect(last).toMatchObject({ message, node: 'scout' });
+    expect(last?.code).toBeUndefined();
+    expect(hook.result.current.logs.map((log) => log.message).join('\n')).not.toMatch(
+      /Several tracks|Multiple matches/,
+    );
+  });
+
+  it('logs a neutral picker line when the server sends no words', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ ...interrupt(candidates.slice(0, 1)), message: '' });
+
+    expect(hook.result.current.logs.at(-1)?.message).toBe('Pick the track to analyse');
+    expect(hook.result.current.statusNote).toBe('Pick the track to analyse');
+  });
+
+  it('says it is measuring only while a measurement runs, and never moves back a step', () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    const engineer = (code: string, message: string) =>
+      analysis.send({ type: 'status', node: 'engineer', code, message });
+    analysis.send({ type: 'connected', threadId: 't1' });
+    engineer('AUDIO-COMPLETE', 'Measured in an earlier run: 123 BPM, A minor');
+    expect(result.current.status).toBe('analyzing');
+    engineer('AUDIO-INIT', 'Measuring tempo and key from the preview clip');
+    expect(result.current.status).toBe('measuring');
+    engineer('AUDIO-COMPLETE', 'Measured from the preview: 123 BPM, A minor');
+    expect(result.current.status).toBe('analyzing');
+    analysis.send({
+      type: 'status',
+      node: 'historian',
+      code: 'RESEARCH-START',
+      message: 'Sources',
+    });
+    expect(result.current.status).toBe('researching');
+    // The engineer runs beside the historian: its later lines do not move the run back.
+    engineer('AUDIO-INIT', 'Measuring tempo and key from the preview clip');
+    engineer('AUDIO-COMPLETE', 'Measured from the preview: 123 BPM, A minor');
+    expect(result.current.status).toBe('researching');
+  });
+
+  it('reads the audio after a resume, without saying it measures', async () => {
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'countdown');
+    });
+    expect(hook.result.current.status).toBe('analyzing');
+  });
+
+  it("checks only on the verifier's model lines, not on its cover-art lookup", () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    const verifier = (code: string, message: string) =>
+      analysis.send({ type: 'status', node: 'verifier', code, message });
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'composer', code: 'LLM-CONNECT', message: 'Writing' });
+    verifier('GRAPH-ENRICH', 'Looking up cover art on Spotify for the genealogy');
+    expect(result.current.status).toBe('composing');
+    verifier('LLM-CONNECT', 'Checking the notes against their sources');
+    expect(result.current.status).toBe('checking');
+  });
+
+  it("says the composer's fallback in the server's words, not that notes are being written", () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'composer', code: 'LLM-CONNECT', message: 'Writing' });
+    expect(result.current.statusNote).toBeNull();
+    const fallback = 'The model did not answer; showing source data only, with no written notes';
+    analysis.send({ type: 'status', node: 'composer', code: 'LLM-ERROR', message: fallback });
+    expect(result.current.status).toBe('composing');
+    expect(result.current.statusNote).toBe(fallback);
   });
 });
 

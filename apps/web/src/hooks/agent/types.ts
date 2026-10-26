@@ -15,7 +15,9 @@ export type AgentStatus =
   | 'idle'
   | 'connecting'
   | 'searching'
+  // The engineer's step; `measuring` only while a measurement of the preview runs.
   | 'analyzing'
+  | 'measuring'
   | 'researching'
   | 'composing'
   // The verifier checks the composed notes against their sources.
@@ -43,6 +45,12 @@ export interface AgentState {
    * notice, or a result whose run.mode is "replay"). The progress screens say so too.
    */
   isReplay: boolean;
+  /**
+   * The server's own words for the step under way, when they say more than the status: the
+   * picker's question ("One possible track…"), the composer's fallback. Cleared when the run
+   * moves to another step.
+   */
+  statusNote: string | null;
 }
 
 /** How a result was produced: computed live, or a recorded run replayed. */

@@ -52,9 +52,9 @@ describe('logStyle', () => {
     expect(logStyle('NEW-CODE-1')).toMatchObject({ label: 'Other', tone: LOG_TONES.neutral });
   });
 
-  it("labels the verifier's lines as a check", () => {
+  it("labels the verifier's model lines as a check, and its other lines by their code", () => {
     expect(logStyle('SYS-INIT', 'verifier')).toMatchObject({
-      label: 'Check',
+      label: 'System',
       tone: LOG_TONES.neutral,
     });
     expect(logStyle('LLM-RESPONSE', 'verifier')).toMatchObject({
@@ -66,5 +66,48 @@ describe('logStyle', () => {
 
   it('never uses the measured cyan or the sourced amber', () => {
     for (const tone of Object.values(LOG_TONES)) expect(tone).not.toMatch(/cyber|analog|amber/);
+  });
+  it.each([
+    ['research_manager', 'Sources'],
+    ['research_tool', 'Sources'],
+    ['scout', 'Spotify'],
+    ['engineer', 'Audio'],
+    ['composer', 'Model'],
+  ])('labels a line without a code from %s by its node: %s', (node, label) => {
+    expect(logStyle(undefined, node).label).toBe(label);
+  });
+
+  it("labels the app's own lines without a code or a node as system lines", () => {
+    expect(logStyle(undefined, undefined)).toMatchObject({
+      label: 'System',
+      tone: 'text-text-tertiary',
+    });
+  });
+
+  it('reads a legacy line without a code that starts with a warning sign as a warning', () => {
+    expect(logStyle(undefined, 'research_tool', '⚠️ MusicBrainz could not be read')).toMatchObject({
+      label: 'Sources warning',
+      tone: LOG_TONES.warning,
+    });
+    expect(logStyle(undefined, 'research_tool', 'Searching musicbrainz').tone).toBe(
+      LOG_TONES.neutral,
+    );
+  });
+
+  it("keeps the family of the verifier's lines that are not checks", () => {
+    expect(logStyle('GRAPH-ENRICH', 'verifier')).toMatchObject({
+      label: 'Graph',
+      tone: LOG_TONES.neutral,
+    });
+    expect(logStyle('GRAPH-ENRICH', 'verifier').Icon).toBe(logStyle('GRAPH-ENRICH').Icon);
+  });
+
+  it('labels the VERIFY codes as checks, whichever node sent them', () => {
+    expect(logStyle('VERIFY-START')).toMatchObject({ label: 'Check', tone: LOG_TONES.neutral });
+    expect(logStyle('VERIFY-COMPLETE').Icon).toBe(logStyle('LLM-RESPONSE', 'verifier').Icon);
+  });
+
+  it.each(['NET-400', 'NET-500'])('draws the failed request %s as a network error', (code) => {
+    expect(logStyle(code)).toMatchObject({ label: 'Network error', tone: LOG_TONES.error });
   });
 });

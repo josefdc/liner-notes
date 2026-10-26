@@ -22,6 +22,7 @@ import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
 import type {
   AgentState,
+  AgentStatus,
   AnalyzeOptions as RequestOptions,
   PickedBy,
   ResultMode,
@@ -82,7 +83,53 @@ const INITIAL_STATE: AgentState = {
   isLoading: false,
   isComplete: false,
   isReplay: false,
+  statusNote: null,
 };
+
+// The order of a run's steps. A step reported after a later one (the engineer runs beside the
+// historian) does not move the run back; `measuring` and `analyzing` are one step.
+const STEP_ORDER: Partial<Record<AgentStatus, number>> = {
+  connecting: 0,
+  searching: 1,
+  disambiguation: 1,
+  analyzing: 2,
+  measuring: 2,
+  researching: 3,
+  composing: 4,
+  checking: 5,
+};
+
+/** The state after the server reports `next`, with the server's words for it when given. */
+function toStep(prev: AgentState, next: AgentStatus, note: string | null = null): AgentState {
+  const from = STEP_ORDER[prev.status];
+  const to = STEP_ORDER[next];
+  if (from !== undefined && to !== undefined && to < from) return prev;
+  if (prev.status === next && note === null) return prev;
+  return { ...prev, status: next, statusNote: note };
+}
+
+/** The status a status event moves the run to, if any. */
+function stepOf(node: string | undefined, code: string | undefined): AgentStatus | null {
+  switch (node) {
+    case 'scout':
+      return 'searching';
+    case 'engineer':
+      // Measuring only while a measurement runs: a cache hit or a result line is not one.
+      return code === 'AUDIO-INIT' ? 'measuring' : 'analyzing';
+    case 'historian':
+      return 'researching';
+    case 'composer':
+      return 'composing';
+    case 'verifier':
+      // Its model lines are the check; its other lines (a cover-art lookup) are not.
+      return code?.startsWith('LLM-') || code?.startsWith('VERIFY-') ? 'checking' : null;
+    default:
+      return null;
+  }
+}
+
+// The picker line when the server sends no words of its own.
+const PICK_FALLBACK = 'Pick the track to analyse';
 
 interface Run {
   query: string;
@@ -217,6 +264,7 @@ export function useAgent(): UseAgentReturn {
       setState((prev) => ({
         ...prev,
         status: 'error',
+        statusNote: null,
         error: message,
         errorCode: code ?? null,
         candidates: null,
@@ -267,17 +315,14 @@ export function useAgent(): UseAgentReturn {
           }
           // The server's own words, with its code; a status without words adds no line.
           if (data.message) addLog(data.message, data.code as LogCode | undefined, data.node);
-          // Update status based on node
-          if (data.node === 'scout') {
-            setState((prev) => ({ ...prev, status: 'searching' }));
-          } else if (data.node === 'engineer') {
-            setState((prev) => ({ ...prev, status: 'analyzing' }));
-          } else if (data.node === 'historian') {
-            setState((prev) => ({ ...prev, status: 'researching' }));
-          } else if (data.node === 'composer') {
-            setState((prev) => ({ ...prev, status: 'composing' }));
-          } else if (data.node === 'verifier') {
-            setState((prev) => ({ ...prev, status: 'checking' }));
+          {
+            const next = stepOf(data.node, data.code);
+            // The composer's fallback says in its own words that no notes are written.
+            const note =
+              data.node === 'composer' && data.code?.endsWith('-ERROR') && data.message
+                ? data.message
+                : null;
+            if (next) setState((prev) => toStep(prev, next, note));
           }
           break;
 
@@ -294,14 +339,17 @@ export function useAgent(): UseAgentReturn {
           // Keep the same list object when nothing changed, so the picker is not reset.
           if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
           run.phase = 'awaiting-selection';
+          // The server counts the candidates ("One possible track…"): its words are the line.
+          const question = data.message || PICK_FALLBACK;
           setState((prev) => ({
             ...prev,
             status: 'disambiguation',
+            statusNote: question,
             threadId: run.threadId,
             candidates: run.candidates,
             isLoading: false,
           }));
-          addLog('Several tracks match: waiting for you to pick one', 'SYS-WARN');
+          addLog(question, undefined, 'scout');
           break;
         }
 
@@ -318,6 +366,7 @@ export function useAgent(): UseAgentReturn {
           setState((prev) => ({
             ...prev,
             status: 'complete',
+            statusNote: null,
             trackData: data.data,
             candidates: null,
             isLoading: false,
@@ -523,10 +572,12 @@ export function useAgent(): UseAgentReturn {
       }
 
       run.picked = candidate;
-      addLog('Resuming the analysis with the track you picked');
+      // True whether the user or the countdown picked it.
+      addLog('Resuming the analysis with the selected track');
       setState((prev) => ({
         ...prev,
         status: 'analyzing',
+        statusNote: null,
         isLoading: true,
         candidates: null,
       }));

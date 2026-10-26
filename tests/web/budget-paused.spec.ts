@@ -165,7 +165,7 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   // The status line on screen (a live region repeats it for screen readers, half a second later)
   await expect(page.getByText(replaying, { exact: true }).filter({ visible: true })).toBeVisible();
   await expect(page.locator('div.sr-only[aria-live="polite"]')).toHaveText(replaying);
-  await expect(page.getByText(/Scanning Spotify catalog/)).toHaveCount(0);
+  await expect(page.getByText(/Searching Spotify for your track/)).toHaveCount(0);
 
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   const sent = async () =>

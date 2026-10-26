@@ -19,11 +19,15 @@ const ACTIVITY_LOG = "apps/web/src/components/ActivityLog.tsx";
 const LOG_CODES = "apps/web/src/components/console/logCodes.ts";
 const AGENT_HOOK = "apps/web/src/hooks/useAgent.ts";
 const ONBOARDING = "apps/web/src/components/Onboarding.tsx";
+const STYLES = "apps/web/src/styles/index.css";
 
-/** The part of a file from the line holding `from` up to the line holding `to` (excluded). */
-function section(text, from, to) {
+/**
+ * The part of a file from the line holding `from` up to the line holding `to` (excluded), `to`
+ * searched for from `skip` characters after `from`.
+ */
+function section(text, from, to, skip = 0) {
   const start = text.indexOf(from);
-  const end = text.indexOf(to, start);
+  const end = text.indexOf(to, start + skip);
   expect(start, `"${from}" is in the file`).toBeGreaterThanOrEqual(0);
   expect(end, `"${to}" follows "${from}"`).toBeGreaterThan(start);
   return text.slice(text.lastIndexOf("\n", start) + 1, end);
@@ -51,6 +55,19 @@ describe("console copy", () => {
     }
     // Every status has a line: none falls back to the raw status name.
     expect(text).not.toMatch(/Status: \$\{status\}/);
+  });
+
+  it("the progress screen uses neither cyan nor amber: reticle, picker, countdown, bar, button", () => {
+    const screen = section(
+      read(ONBOARDING),
+      "{/* Central Node Graphic",
+      "export default Onboarding",
+    );
+    expect(screen).not.toMatch(/cyber|analog|-amber/);
+    // The reticle's completion glow, drawn by a keyframe in the stylesheet.
+    expect(screen).toContain("animate-completion-reveal");
+    const glow = section(read(STYLES), "@keyframes completion-reveal", "@keyframes", 1);
+    expect(glow).not.toMatch(/cyber|analog|amber/);
   });
 
   it("the run log has no mock window controls and no CRT scanlines", () => {

@@ -152,12 +152,16 @@ function stateFor(id: string, isrc: string | null = null): SonicAgentStateType {
 /** Runs the node and collects the status text it writes and returns. */
 async function run(id: string, isrc: string | null = null, signal?: AbortSignal) {
   const written: string[] = [];
+  const codes: string[] = [];
   const config = {
-    writer: (event: { message?: string }) => written.push(event.message ?? ""),
+    writer: (event: { message?: string; code?: string }) => {
+      written.push(event.message ?? "");
+      if (event.code) codes.push(event.code);
+    },
     signal,
   } as never;
   const out = await engineerNode(stateFor(id, isrc), config);
-  return { out, text: [...written, ...(out.statusMessages ?? [])].join("\n") };
+  return { out, codes, text: [...written, ...(out.statusMessages ?? [])].join("\n") };
 }
 
 /**
@@ -902,6 +906,24 @@ describe("engineerNode", () => {
       expect(text).toContain(
         "Tempo not given: the tempo does not hold across the preview; key not given: one pitch line without stable notes",
       );
+    });
+
+    // A run that measured one of the two is not an error: the line says what was withheld.
+    it.each([
+      ["a tempo without a key", signalOnlyV2({ key: null })],
+      ["a key without a tempo", signalOnlyV2({ tempo: null, beats: null })],
+    ])("reports %s as a completed measurement, with what is missing", async (_name, block) => {
+      stubNetwork("up", PREVIEW, serviceAnswer(block));
+      const { codes, text } = await run("P");
+      expect(codes.at(-1)).toBe("AUDIO-COMPLETE");
+      expect(codes).not.toContain("AUDIO-ERROR");
+      expect(text).toMatch(/not given: not detected/);
+    });
+
+    it("reports a run that measured neither tempo nor key as an error", async () => {
+      stubNetwork("up", PREVIEW, serviceAnswer(gatedV2("noise")));
+      const { codes } = await run("N");
+      expect(codes.at(-1)).toBe("AUDIO-ERROR");
     });
 
     it("names the gate's reason when the service measured nothing", async () => {

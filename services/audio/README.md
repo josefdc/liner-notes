@@ -181,10 +181,15 @@ times are seconds from the start of the preview. Every block is `null` when it w
   each part's median stays within 5 %). A beatless intro is no evidence either way: a band
   that starts 10 s in gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
   whose beats follow the change, and dropped with librosa, whose tracker keeps one period.
-  `beats.times` holds only the beats with sound under them (an RMS within 50 ms of the beat
-  no more than 60 dB under the loudest frame): trackers keep counting through silence
+  `beats.times` holds only the beats with sound under them (an RMS within 50 ms of the beat,
+  its mean removed, no more than 60 dB under the loudest frame and at least 3e-5, or
+  -90.5 dBFS, which is above 16-bit dither): trackers keep counting through silence
   (Essentia put 23 beats in 10 s of digital silence before a band), so the grid can have
-  gaps. The tempo and the sections are still measured from every tracked beat.
+  gaps. The tempo is still fitted to the tracked beats on onsets, and the steadiness check
+  and the sections still use every tracked beat. Known limits: beats a tracker counts
+  through an audible intro without onsets (a pad) or over a low noise floor (hum or hiss at
+  -70 to -50 dBFS) are still reported, since a level cannot tell that sound from a quiet
+  passage.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
 - **Key** is only estimated from musical pitch, on the harmonic part of the signal (a

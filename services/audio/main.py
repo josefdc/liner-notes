@@ -271,8 +271,12 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     trusted_beats = tempo is not None and (tempo.steady or tempo.beats_follow_changes)
     if trusted_beats:
         times = np.sort(np.clip(np.asarray(tempo.beats, dtype=float), 0.0, duration))
-        # Beats a tracker counted through silence are not reported; the tempo and the sections
-        # still use every tracked beat.
+        # Beats a tracker counted through silence are not reported; the tempo, the steadiness
+        # check and the sections are measured from the tracked beats as before. A reported
+        # tempo with every beat left out would give `times: []`. That cannot happen with the
+        # service's trackers today: a tempo needs onsets that repeat, and the trackers put
+        # beats on them (no probe or recording measured came close), so no reason is
+        # defined for it.
         times = signal_features.audible_beats(signals, times, loudness)
         v2["beats"] = _signal_block(
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]

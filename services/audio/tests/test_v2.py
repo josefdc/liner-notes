@@ -384,8 +384,8 @@ def test_no_beats_are_reported_in_digital_silence(estimator):
 def test_every_beat_is_reported_without_silence(probe, estimator):
     """
     With sound throughout, the reported grid is every beat tracked, as before. (Brown noise
-    with a kick 6 dB under it holds the quietest beats of the probes, about 20 dB under the
-    loudest frame.)
+    with a kick 6 dB under it holds the quietest beats of the probes, 26 dB under the loudest
+    frame.)
     """
     tracked = tracked_beats(PROBES[probe], estimator)
     _, v2 = analyse_array(PROBES[probe], estimator)
@@ -424,6 +424,81 @@ def test_beats_over_silence_or_a_dc_offset_are_left_out_for_any_tracker():
     left_out = [3.5, 4.0, 4.5, 6.5, 7.0, 7.5]
     assert v2["beats"]["times"] == [float(b) for b in beats if b not in left_out]
     assert v2["tempo"]["bpm"] == 120.0
+
+
+def reported_over(y: np.ndarray, beats) -> list[float]:
+    """The beat grid the service reports when a tracker gives `beats` over `y`."""
+    beats = np.asarray(beats, dtype=float)
+    estimate = estimators.TempoEstimate(120.0, 0.9, None, beats, "fake", steady=True)
+    result = main.analyze_signals(estimators.Signals(y, FIXTURE_SR), FakeEstimator(tempo=estimate))
+    return check_result(result)["beats"]["times"]
+
+
+def tpdf_dither(n: int, seed: int = 3) -> np.ndarray:
+    """16-bit TPDF dither (two uniform draws of half a bit each): about -98 dBFS RMS."""
+    rng = np.random.default_rng(seed)
+    return (rng.uniform(-0.5, 0.5, n) + rng.uniform(-0.5, 0.5, n)) / 32768
+
+
+@pytest.mark.parametrize(("noise_db", "kept"), [(-55.0, True), (-65.0, False)])
+def test_beats_over_noise_count_from_60_db_under_the_loudest_frame(noise_db, kept):
+    """
+    5 s of white noise, then a triad: the beats over the noise are reported when it is 55 dB
+    under the triad's frames and left out when it is 65 dB under (BEAT_BELOW_PEAK_DB is 60;
+    both noises are far above the absolute floor).
+    """
+    triad = a_major_triad()
+    peak = float(signal_features.levels(estimators.Signals(triad, FIXTURE_SR)).frames.max())
+    noise = np.random.default_rng(5).standard_normal(5 * FIXTURE_SR)
+    noise *= peak * 10 ** (noise_db / 20) / np.sqrt(np.mean(noise**2))
+    assert peak * 10 ** (noise_db / 20) > 1e-4
+    y = triad.copy()
+    y[: 5 * FIXTURE_SR] = noise
+    over_noise = [0.5, 1.5, 2.5, 3.5, 4.5]
+    reported = reported_over(y, [*over_noise, 6.0, 7.0, 8.0, 9.0])
+    assert reported == [*(over_noise if kept else []), 6.0, 7.0, 8.0, 9.0]
+
+
+def test_the_beat_window_reaches_50_ms_on_each_side():
+    """
+    A triad with 3 s of digital silence (3-6 s): a beat 35 ms into the silence still has sound
+    within 50 ms and is kept, one 100 ms into it is not. (A 20 ms window would drop the first,
+    a 0.2 s window keep the second.)
+    """
+    y = a_major_triad()
+    y[3 * FIXTURE_SR : 6 * FIXTURE_SR] = 0.0
+    beats = [1.0, 2.0, 3.035, 3.1, 4.5, 5.9, 5.965, 7.0, 8.0]
+    assert reported_over(y, beats) == [1.0, 2.0, 3.035, 5.965, 7.0, 8.0]
+
+
+def test_beats_over_dither_are_left_out_of_a_quiet_clip():
+    """
+    A triad peaking at -36 dBFS, with 16-bit dither throughout and nothing else from 3 to 6 s.
+    Its loudest frame is -43.6 dBFS, so 60 dB under it is below the dither: the absolute
+    floor (BEAT_MIN_RMS) leaves the beats over the dither out.
+    """
+    y = a_major_triad()
+    y = y / np.max(np.abs(y)) * 10 ** (-36 / 20)
+    y[3 * FIXTURE_SR : 6 * FIXTURE_SR] = 0.0
+    y = y + tpdf_dither(y.size)
+    beats = np.arange(0.5, 10.0, 0.5)
+    assert reported_over(y, beats) == [float(b) for b in beats if not 3.0 < b < 6.0]
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_beats_over_dithered_silence_before_a_quiet_band(estimator):
+    """
+    The band enters at 10 s after silence, the clip peaks at -36 dBFS (loudest frame -45.5
+    dBFS) and carries 16-bit dither throughout. Essentia counted every beat over the dither
+    (48 of 48, the dither 53 dB under the loudest frame) before the absolute floor.
+    """
+    y = signals.drum_pattern(97).copy()
+    y[: 10 * FIXTURE_SR] = 0.0
+    y = y / np.max(np.abs(y)) * 10 ** (-36 / 20) + tpdf_dither(y.size)
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    assert min(v2["beats"]["times"]) >= 10.0
+    assert v2["beats"]["times"] == [t for t in tracked if t >= 10.0]
 
 
 # Analysed first in a new process, this probe gave 97.0 BPM at 0.568 with 55 beats; after three

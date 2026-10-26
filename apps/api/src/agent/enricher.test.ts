@@ -1,10 +1,11 @@
 /**
  * Artwork enricher: it searches through the Spotify source (timeouts, typed errors), its
  * requests carry the run's signal, a run cancelled while an answer arrives caches no artwork,
- * no preview URL is cached or logged, and a node gets a preview only for a track that strictly
- * matches the title and artist the model named: Spotify's own clip, else the Deezer entry for
- * the track's ISRC when it passes the same checks as the analysed track's. The network (Spotify
- * and Deezer) and the cache are stubbed.
+ * no preview URL is cached or logged, and a node gets a cover, a Spotify id and a preview only
+ * for a track that strictly matches the title and artist the model named: the preview is
+ * Spotify's own clip, else the Deezer entry for the track's ISRC when it passes the same checks
+ * as the analysed track's. The answer holds one entry per node id and no links. The network
+ * (Spotify and Deezer) and the cache are stubbed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,7 +48,14 @@ const COVER = "https://i.scdn.co/image/x";
 const genealogy = {
   nodes: [
     { id: "current", group: 1, label: "Song", size: 40 },
-    { id: "n1", group: 4, label: "Other - Artist", size: 22 },
+    {
+      id: "n1",
+      group: 4,
+      label: "Other - Artist",
+      size: 22,
+      trackTitle: "Other",
+      trackArtist: "Artist",
+    },
   ],
   links: [],
 };
@@ -182,7 +190,7 @@ describe("enrichGenealogyWithArtwork's Spotify searches", () => {
     const node = await enrichOne(underPressure);
 
     expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
-    expect(node).toMatchObject({ id: "n1", label: "Under Pressure - Queen" });
+    expect(node).toEqual({ id: "n1" });
     expect(node.img).toBeUndefined();
     expect(cache.putArtwork).not.toHaveBeenCalled();
   }, 2000);
@@ -197,6 +205,597 @@ describe("enrichGenealogyWithArtwork's Spotify searches", () => {
   });
 });
 
+describe("enrichGenealogyWithArtwork's covers", () => {
+  it.each([
+    ["the same title by another artist", "Under Pressure", ["My Chemical Romance"], {}],
+    ["another song by the named artist", "Another One Bites the Dust", ["Queen"], {}],
+    ["a remix of the named recording", "Under Pressure (Rah Mix)", ["Queen"], {}],
+    [
+      "a credit naming an artist the track lacks",
+      "Under Pressure",
+      ["Queen"],
+      { trackArtist: "Queen & David Bowie" },
+    ],
+  ])("gives no cover, Spotify id or preview for %s", async (_label, title, artists, named) => {
+    spotifyAnswers(() => json(found(title, artists, PREVIEW)));
+
+    const node = await enrichOne({ ...underPressure, ...named });
+
+    expect(node.id).toBe("n1");
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
+    expect(node.previewUrl).toBeUndefined();
+  });
+
+  it.each([
+    ["accents", "Deja Vu", "Beyonce", "Déjà Vu", ["Beyoncé"]],
+    ["case", "crazy in love", "BEYONCÉ", "Crazy In Love", ["Beyoncé"]],
+    [
+      "featured artist",
+      "Crazy in Love (feat. Jay-Z)",
+      "Beyoncé",
+      "Crazy In Love",
+      ["Beyoncé", "JAY-Z"],
+    ],
+    ["credit", "Crazy In Love", "Beyoncé feat. JAY-Z", "Crazy In Love", ["Beyoncé", "JAY-Z"]],
+  ])(
+    "gives the cover of the named recording whatever its %s",
+    async (_label, trackTitle, trackArtist, title, artists) => {
+      spotifyAnswers(() => json(found(title, artists)));
+
+      const node = await enrichOne({ id: "n1", group: 4, label: "x", trackTitle, trackArtist });
+
+      expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+    },
+  );
+
+  it("searches nothing for a node that names no title or artist: no cover could be checked", async () => {
+    const net = spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const node = await enrichOne({ id: "n1", group: 4, label: "Under Pressure - Queen" });
+
+    expect(node.img).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+    expect(cache.getArtwork).not.toHaveBeenCalled();
+  });
+
+  it("gives the analysed track's node its cover and returns no other fields", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const out = await enrichGenealogyWithArtwork(
+      {
+        nodes: [
+          { id: "current", group: 1, label: "Song", size: 40 },
+          { size: 22, ...underPressure },
+        ],
+      },
+      "https://i.scdn.co/image/c",
+    );
+
+    expect(out.nodes).toEqual([
+      { id: "current", img: "https://i.scdn.co/image/c" },
+      { id: "n1", img: COVER, spotifyId: "x" },
+    ]);
+  });
+});
+
+describe("the recording a node names", () => {
+  const studio = { trackTitle: "Hotel California", trackArtist: "Eagles" };
+  const onAlbum = (album: string, title = "Hotel California", artistNames = ["Eagles"]) => ({
+    title,
+    artist: artistNames.join(", "),
+    artistNames,
+    album,
+  });
+
+  it.each([
+    "Eagles Live",
+    "Live",
+    "Live 1975-85",
+    "Live Aid",
+    "En Vivo",
+    "Ao Vivo",
+    "Concert in Central Park",
+    "BBC Sessions",
+    "The Demos",
+    "Instrumentals",
+    "Live Killers",
+  ])(
+    "is not a plain title on the album %j: a live, session, demo or instrumental release",
+    (album) => {
+      expect(strictlyMatches(studio, onAlbum(album))).toBe(false);
+    },
+  );
+
+  it.each([
+    "Hotel California (2013 Remaster)",
+    "Hotel California",
+    "Their Greatest Hits 1971-1975",
+  ])("is a plain title on the album %j", (album) => {
+    expect(strictlyMatches(studio, onAlbum(album))).toBe(true);
+  });
+
+  // Honest misses: studio albums whose names carry a live or session word give no cover.
+  it.each(["Live Through This", "Long Live the Kane", "The Sun Sessions"])(
+    "gives up the studio album %j rather than risk a live one",
+    (album) => {
+      expect(strictlyMatches(studio, onAlbum(album))).toBe(false);
+    },
+  );
+
+  it("gives no cover, id or preview for a plain title on an unmarked live album", async () => {
+    spotifyAnswers(() => {
+      const answer = found("Hotel California", ["Eagles"], PREVIEW);
+      answer.tracks.items[0].album = {
+        name: "Eagles Live",
+        release_date: "1980-11-07",
+        images: [{ url: COVER }],
+      };
+      return json(answer);
+    });
+
+    const node = await enrichOne({
+      id: "n1",
+      group: 4,
+      label: "Hotel California - Eagles",
+      ...studio,
+    });
+
+    expect(node).toEqual({ id: "n1" });
+  });
+
+  const stayWithMe = {
+    id: "n1",
+    group: 4,
+    label: "Stay With Me - Sam Smith (2014)",
+    trackTitle: "Stay With Me",
+    trackArtist: "Sam Smith",
+  };
+
+  it("gives no cover, id or preview for a later duet the node does not name", async () => {
+    spotifyAnswers(() => {
+      const answer = found(
+        "Stay With Me (feat. Mary J. Blige)",
+        ["Sam Smith", "Mary J. Blige"],
+        PREVIEW,
+      );
+      answer.tracks.items[0].album = {
+        name: "Stay With Me (feat. Mary J. Blige)",
+        release_date: "2015-02-08",
+        images: [{ url: COVER }],
+      };
+      return json(answer);
+    });
+
+    const node = await enrichOne(stayWithMe);
+
+    expect(node).toEqual({ id: "n1" });
+  });
+
+  it.each([
+    [
+      "the guest only in the title",
+      "Stay With Me (feat. Mary J. Blige)",
+      ["Sam Smith"],
+      stayWithMe,
+      false,
+    ],
+    ["a co-credit", "Under Pressure", ["Queen", "David Bowie"], underPressure, false],
+    [
+      "the guest named in the node's credit",
+      "Stay With Me (feat. Mary J. Blige)",
+      ["Sam Smith", "Mary J. Blige"],
+      { ...stayWithMe, trackArtist: "Sam Smith feat. Mary J. Blige" },
+      true,
+    ],
+    [
+      "the guest named in the node's title",
+      "Stay With Me (feat. Mary J. Blige)",
+      ["Sam Smith", "Mary J. Blige"],
+      { ...stayWithMe, trackTitle: "Stay With Me (feat. Mary J. Blige)" },
+      true,
+    ],
+  ])("judges a track that credits another artist, %s: %s", (_label, title, names, node, strict) => {
+    expect(strictlyMatches(node, onAlbum("In the Lonely Hour", title, names))).toBe(strict);
+  });
+
+  it.each([
+    ["Hotel California - Radio Edit", false],
+    ["Hotel California (Radio Edit)", false],
+    ["Hotel California - Single Edit", false],
+    ["Hotel California - Single Version", false],
+    ["Hotel California - Mono", false],
+    ["Hotel California - Mono Version", false],
+    ["Hotel California - Radio Mix", false],
+    ["Hotel California - Single Mix", false],
+    ["Hotel California - Stereo Mix", false],
+    ["Hotel California - Remastered 2013", true],
+    ["Hotel California - 2013 Remaster", true],
+  ])("takes %j as the named recording: %s", (title, strict) => {
+    expect(strictlyMatches(studio, onAlbum("Hotel California", title))).toBe(strict);
+  });
+
+  /** A cached row for `title` by `artistNames` on `album`, as this code caches it. */
+  const rowFor = (title: string, artistNames: string[], album: string) => ({
+    coverUrl: COVER,
+    spotifyUrl: "https://open.spotify.com/track/x",
+    spotifyId: "x",
+    trackTitle: title,
+    trackArtist: artistNames[0],
+    trackArtists: artistNames,
+    trackDetails: { isrc: null, durationMs: 200_000, album, releaseDate: "2014-05-26" },
+  });
+
+  // The node names a guest or an edit the record found lacks: another recording.
+  const lacking = [
+    [
+      "a duet against the solo record",
+      { trackTitle: "Stay With Me (feat. Mary J. Blige)", trackArtist: "Sam Smith" },
+      ["Stay With Me", ["Sam Smith"], "In the Lonely Hour"],
+    ],
+    [
+      "a remix with a guest against the solo record",
+      { trackTitle: "Old Town Road (feat. Billy Ray Cyrus)", trackArtist: "Lil Nas X" },
+      ["Old Town Road", ["Lil Nas X"], "7 EP"],
+    ],
+    [
+      "a radio edit against the album take",
+      { trackTitle: "Hotel California (Radio Edit)", trackArtist: "Eagles" },
+      ["Hotel California", ["Eagles"], "Hotel California"],
+    ],
+  ] as const;
+
+  it.each(lacking)("refuses %s", (_label, named, [title, artists, album]) => {
+    expect(strictlyMatches(named, onAlbum(album, title, [...artists]))).toBe(false);
+  });
+
+  it.each(lacking)(
+    "gives no cover, id or preview for %s, from a fresh search",
+    async (_label, named, [title, artists, album]) => {
+      spotifyAnswers(() => {
+        const answer = found(title, [...artists], PREVIEW);
+        answer.tracks.items[0].album = {
+          name: album,
+          release_date: "2014-05-26",
+          images: [{ url: COVER }],
+        };
+        return json(answer);
+      });
+
+      const node = await enrichOne({ id: "n1", group: 4, label: "x", ...named });
+
+      expect(node).toEqual({ id: "n1" });
+    },
+  );
+
+  it.each(lacking)(
+    "gives no cover, id or preview for %s, from the cache",
+    async (_label, named, [title, artists, album]) => {
+      const net = spotifyAnswers(() => json(hit));
+      cache.getArtwork.mockReturnValue(rowFor(title, [...artists], album));
+
+      const node = await enrichOne({ id: "n1", group: 4, label: "x", ...named });
+
+      expect(node).toEqual({ id: "n1" });
+      expect(net.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    ["the guest credited", "Crazy In Love", ["Beyoncé", "JAY-Z"]],
+    ["the guest in the record's title", "Crazy In Love (feat. JAY-Z)", ["Beyoncé"]],
+  ])("accepts a node naming its guest, %s", (_label, title, artists) => {
+    const node = { trackTitle: "Crazy in Love (feat. Jay-Z)", trackArtist: "Beyoncé" };
+    expect(strictlyMatches(node, onAlbum("Dangerously in Love", title, artists))).toBe(true);
+  });
+
+  it("accepts a credit read whole when it cannot be split into the record's artists", () => {
+    const node = {
+      trackTitle: "Boogie Wonderland",
+      trackArtist: "Earth, Wind & Fire, The Emotions",
+    };
+    const record = onAlbum("I Am", "Boogie Wonderland", ["Earth, Wind & Fire", "The Emotions"]);
+    expect(strictlyMatches(node, record)).toBe(true);
+  });
+
+  it.each([
+    "Acoustic",
+    "Jagged Little Pill Acoustic",
+    "Greatest Hits - Newly Recorded",
+    "Newly Recorded Versions",
+    "Newly Re-Recorded Hits",
+    "Re-Recordings",
+    "The Remixes",
+    "Remixed",
+    "Orchestral Hits",
+    "Symphonica",
+    "Piano Versions",
+  ])(
+    "is not a plain title on the album %j: an acoustic, remix, orchestral, piano or re-recorded release",
+    (album) => {
+      expect(strictlyMatches(studio, onAlbum(album))).toBe(false);
+    },
+  );
+
+  it.each([
+    ["Piano Man", "Billy Joel", "Piano Man"],
+    ["Remix to Ignition", "R. Kelly", "Chocolate Factory"],
+    ["Remix to Ignition", "R. Kelly", "Remix to Ignition"],
+  ])("still takes %j by %j on %j as the named recording", (title, artist, album) => {
+    const node = { trackTitle: title, trackArtist: artist };
+    expect(strictlyMatches(node, onAlbum(album, title, [artist]))).toBe(true);
+  });
+
+  it("takes an edit the node names itself as the named recording", () => {
+    const node = { ...studio, trackTitle: "Hotel California (Radio Edit)" };
+    expect(
+      strictlyMatches(node, onAlbum("Hotel California", "Hotel California - Radio Edit")),
+    ).toBe(true);
+  });
+
+  it('gives the analysed track\'s cover only to the node "current"', async () => {
+    const out = await enrichGenealogyWithArtwork(
+      {
+        nodes: [
+          { id: "current", group: 1, label: "Song", size: 40 },
+          { id: "other", group: 1, label: "Other", size: 40 },
+        ],
+      },
+      "https://i.scdn.co/image/c",
+    );
+
+    expect(out.nodes).toEqual([
+      { id: "current", img: "https://i.scdn.co/image/c" },
+      { id: "other" },
+    ]);
+  });
+});
+
+describe("enrichGenealogyWithArtwork's cache key", () => {
+  const row = (artist: string) => ({
+    coverUrl: COVER,
+    spotifyUrl: "https://open.spotify.com/track/x",
+    spotifyId: "x",
+    trackTitle: "Under Pressure",
+    trackArtist: artist,
+    trackArtists: [artist],
+    trackDetails: NO_ISRC_DETAILS,
+  });
+
+  it("keys the search by the node's label, title and artist", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    await enrichOne(underPressure);
+    await enrichOne({ ...underPressure, trackArtist: "David Bowie" });
+
+    const keys = cache.putArtwork.mock.calls.map(([key]) => key);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+    for (const key of keys) {
+      expect(key).toContain("under pressure");
+      expect(key).not.toBe("under pressure - queen");
+    }
+    expect(keys[0]).toContain("queen");
+    expect(keys[1]).toContain("david bowie");
+    expect(cache.getArtwork.mock.calls.map(([key]) => key)).toEqual(keys);
+  });
+
+  it("keys every row under the v2 prefix, never under the label alone", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    await enrichOne(underPressure);
+
+    const [key] = cache.putArtwork.mock.calls[0];
+    expect(key).toBe("v2|under pressure queen|under pressure|queen");
+    expect(cache.getArtwork).toHaveBeenCalledWith(key);
+  });
+
+  it("normalises the key: accents, case and spacing make no other row", async () => {
+    spotifyAnswers(() => json(found("Déjà Vu", ["Beyoncé"])));
+
+    await enrichOne({
+      id: "n1",
+      group: 4,
+      label: "Déjà Vu - Beyoncé",
+      trackTitle: "Déjà Vu",
+      trackArtist: "Beyoncé",
+    });
+    await enrichOne({
+      id: "n1",
+      group: 4,
+      label: " deja vu -  BEYONCE",
+      trackTitle: "DEJA VU",
+      trackArtist: "beyonce ",
+    });
+
+    const [[first], [second]] = cache.putArtwork.mock.calls;
+    expect(first).toBe(second);
+  });
+
+  it("never serves a row older code keyed by the label alone", async () => {
+    // Older code keyed the row by the label only, so a node of another artist could read it.
+    const net = spotifyAnswers(() => json({ tracks: { items: [], total: 0 } }));
+    cache.getArtwork.mockImplementation((key: string) =>
+      key === "under pressure - queen" ? row("Queen") : null,
+    );
+
+    const node = await enrichOne({ ...underPressure, trackArtist: "My Chemical Romance" });
+
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
+    expect(cache.getArtwork).not.toHaveBeenCalledWith("under pressure - queen");
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
+  });
+
+  it("gives no cover from a cached row whose track is another artist's", async () => {
+    const net = spotifyAnswers(() => json(hit));
+    cache.getArtwork.mockReturnValue(row("My Chemical Romance"));
+
+    const node = await enrichOne(underPressure);
+
+    expect(node.img).toBeUndefined();
+    expect(node.spotifyId).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+  });
+});
+
+describe("enrichGenealogyWithArtwork's answer", () => {
+  /** The analysed track, two nodes with one id, two without an id, and a link to no node. */
+  const messy = {
+    nodes: [
+      { id: "current", group: 1, label: "Song", size: 40 },
+      { size: 22, ...underPressure },
+      { size: 22, ...underPressure, label: "Under Pressure - Queen (again)" },
+      { id: "", group: 4, label: "No id A", size: 20 },
+      { id: "", group: 4, label: "No id B", size: 20 },
+    ],
+    links: [
+      { source: "n1", target: "current", value: 3 },
+      { source: "ghost", target: "current", value: 2 },
+    ],
+  } as Partial<Genealogy>;
+
+  it("returns one entry per node id, never an invented or repeated id", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const out = await enrichGenealogyWithArtwork(messy, "https://i.scdn.co/image/c");
+
+    const ids = out.nodes.map((node) => node.id);
+    expect(ids).toEqual(["current", "n1"]);
+  });
+
+  it("returns no links, so none can point to a node that is not there", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+
+    const out = await enrichGenealogyWithArtwork(messy, "https://i.scdn.co/image/c");
+
+    expect(out).not.toHaveProperty("links");
+  });
+
+  it("returns nothing for no nodes, never a node of its own", async () => {
+    const net = spotifyAnswers(() => json(hit));
+
+    for (const input of [undefined, {}, { nodes: [] }]) {
+      const out = await enrichGenealogyWithArtwork(
+        input as Partial<Genealogy> | undefined,
+        "https://i.scdn.co/image/c",
+      );
+      expect(out.nodes).toEqual([]);
+    }
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("keeps every other node's artwork when one node's lookup fails unexpectedly", async () => {
+    spotifyAnswers(() => json(found("Under Pressure", ["Queen"])));
+    const logs = captureLogsForTests();
+
+    const out = await enrichGenealogyWithArtwork(
+      {
+        nodes: [
+          { id: "current", group: 1, label: "Song", size: 40 },
+          // Malformed, as an untyped caller could send it: its lookup throws.
+          { id: "bad", group: 4, label: "Bad", size: 22, trackTitle: 42, trackArtist: "Queen" },
+          { size: 22, ...underPressure },
+        ],
+      } as unknown as Partial<Genealogy>,
+      "https://i.scdn.co/image/c",
+    ).finally(() => logs.restore());
+
+    expect(out.nodes.map((node) => node.id)).toEqual(["current", "bad", "n1"]);
+    expect(out.nodes.find((node) => node.id === "bad")?.img).toBeUndefined();
+    expect(out.nodes.find((node) => node.id === "n1")).toMatchObject({
+      img: COVER,
+      spotifyId: "x",
+    });
+    expect(JSON.stringify(out)).not.toContain("Current Track");
+    // A bug, not a source failure: logged as an error, with its stack.
+    const errors = logs.entries().filter((entry) => String(entry.msg).includes('"bad"'));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ level: "error", err: { type: "TypeError" } });
+    expect(errors[0].err).toHaveProperty("stack");
+  });
+});
+
+describe("enrichGenealogyWithArtwork's Spotify requests", () => {
+  /** `count` nodes "Song n - Queen", each named, none cached. */
+  const named = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `n${i + 1}`,
+      group: 4,
+      size: 22,
+      label: `Song ${i + 1} - Queen`,
+      trackTitle: `Song ${i + 1}`,
+      trackArtist: "Queen",
+    }));
+  const searches = (net: { calls: FetchCall[] }) =>
+    net.calls.filter((call) => call.url.startsWith(SEARCH_URL));
+
+  it("gives no batch slot to a node that makes no request", async () => {
+    let inFlight = 0;
+    let most = 0;
+    spotifyAnswers(async () => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      inFlight--;
+      return json({ tracks: { items: [], total: 0 } });
+    });
+    const unnamed = Array.from({ length: 6 }, (_, i) => ({
+      id: `u${i + 1}`,
+      group: 4,
+      size: 22,
+      label: `Unnamed ${i + 1}`,
+    }));
+
+    await enrichGenealogyWithArtwork(
+      { nodes: [{ id: "current", group: 1, label: "Song", size: 40 }, ...unnamed, ...named(5)] },
+      "https://i.scdn.co/image/c",
+    );
+
+    // The five searches go out together: the analysed track and the unnamed nodes take no turn.
+    expect(most).toBe(5);
+  });
+
+  it("says the pass is complete when every search was made, found or not", async () => {
+    spotifyAnswers(() => json({ error: { status: 503 } }, { status: 503 }));
+
+    const out = await enrichGenealogyWithArtwork({ nodes: named(3) }, "https://i.scdn.co/image/c");
+
+    expect(out.complete).toBe(true);
+  });
+
+  it.each([
+    [
+      "a rate limit",
+      () => json({ error: { status: 429 } }, { status: 429, headers: { "retry-after": "30" } }),
+    ],
+    ["a timeout", never],
+  ])(
+    "makes no more Spotify searches in the run after %s",
+    async (label, answer) => {
+      if (label === "a timeout") process.env.SOURCE_TIMEOUT_MS = "50";
+      const net = spotifyAnswers(answer);
+      const logs = captureLogsForTests();
+
+      const out = await enrichGenealogyWithArtwork(
+        { nodes: named(8) },
+        "https://i.scdn.co/image/c",
+      ).finally(() => logs.restore());
+
+      // The first batch was under way; the three nodes after it are not searched.
+      expect(searches(net)).toHaveLength(5);
+      expect(out.nodes.map((node) => node.id)).toEqual(named(8).map((node) => node.id));
+      expect(out.nodes.every((node) => node.img === undefined)).toBe(true);
+      // Cut short: the result is not to be kept for later runs.
+      expect(out.complete).toBe(false);
+      expect(
+        logs.messages().filter((msg) => msg.includes("no more Spotify searches")),
+      ).toHaveLength(1);
+    },
+    2000,
+  );
+});
+
 describe("enrichGenealogyWithArtwork's previews", () => {
   it("gives the preview of a track that is the title and artist the model named", async () => {
     spotifyAnswers(() => json(found("Under Pressure - Remastered 2011", ["Queen"], PREVIEW)));
@@ -207,44 +806,39 @@ describe("enrichGenealogyWithArtwork's previews", () => {
   });
 
   it.each([
-    ["the model named no title or artist", { trackTitle: undefined, trackArtist: undefined }],
+    ["the model named another title", { trackTitle: "Another One Bites the Dust" }],
     ["another artist's track (a cover)", { trackArtist: "David Bowie" }],
-  ])("keeps the cover but gives no Spotify id or preview when %s", async (_label, named) => {
+  ])("gives no cover, Spotify id or preview when %s", async (_label, named) => {
     spotifyAnswers(() => json(found("Under Pressure", ["My Chemical Romance"], PREVIEW)));
 
     const node = await enrichOne({ ...underPressure, ...named });
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
-    // The search's answer is still cached, so the next run does not search again.
-    expect(cache.putArtwork).toHaveBeenCalledTimes(1);
   });
 
   it.each([
     ["a strict match", "Under Pressure", "Queen", true],
     ["another artist's track", "Under Pressure", "My Chemical Romance", false],
     ["another version", "Under Pressure (Rah Mix)", "Queen", false],
-  ])(
-    "takes the cached cover always, its Spotify id only for %s",
-    async (_label, title, artist, strict) => {
-      const net = spotifyAnswers(() => json(hit));
-      cache.getArtwork.mockReturnValue({
-        coverUrl: COVER,
-        spotifyUrl: "https://open.spotify.com/track/x",
-        spotifyId: "x",
-        trackTitle: title,
-        trackArtist: artist,
-        trackDetails: NO_ISRC_DETAILS,
-      });
+  ])("takes the cached cover and Spotify id only for %s", async (_label, title, artist, strict) => {
+    const net = spotifyAnswers(() => json(hit));
+    cache.getArtwork.mockReturnValue({
+      coverUrl: COVER,
+      spotifyUrl: "https://open.spotify.com/track/x",
+      spotifyId: "x",
+      trackTitle: title,
+      trackArtist: artist,
+      trackDetails: NO_ISRC_DETAILS,
+    });
 
-      const node = await enrichOne(underPressure);
+    const node = await enrichOne(underPressure);
 
-      expect(node.img).toBe(COVER);
-      expect(node.spotifyId).toBe(strict ? "x" : undefined);
-      expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
-    },
-  );
+    expect(node.img).toBe(strict ? COVER : undefined);
+    expect(node.spotifyId).toBe(strict ? "x" : undefined);
+    expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
+  });
 
   it("judges a cached answer on the track's whole credit, as a fresh search does", async () => {
     const collaboration = { ...underPressure, trackArtist: "Queen, David Bowie" };
@@ -283,7 +877,7 @@ describe("enrichGenealogyWithArtwork's previews", () => {
     expect(JSON.stringify(cached)).not.toContain("mp3-preview");
   });
 
-  it("gives no preview from the cache, even a row older code wrote with one", async () => {
+  it("gives no preview from the cache, even from a row that holds one", async () => {
     const net = spotifyAnswers(() => json(hit));
     cache.getArtwork.mockReturnValue({
       coverUrl: COVER,
@@ -454,8 +1048,8 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(deezerCalls(net)).toHaveLength(1);
   });
 
-  it("searches again for a row older code cached with a Spotify id and no details, and rewrites it", async () => {
-    // Older code cached the id of a plain title on a live album: its release cannot be checked.
+  it("searches again for a row cached with a Spotify id and no details, and rewrites it", async () => {
+    // A row whose details are missing or not valid: its release cannot be checked.
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue({
       coverUrl: COVER,
@@ -471,7 +1065,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(node).toMatchObject({ img: COVER, spotifyId: "x", previewUrl: deezerClip(7) });
     expect(cache.putArtwork).toHaveBeenCalledTimes(1);
     const [key, rewritten] = cache.putArtwork.mock.calls[0];
-    expect(key).toBe("under pressure - queen");
+    expect(key).toBe(cache.getArtwork.mock.calls[0][0]);
     expect(rewritten).toMatchObject({
       spotifyId: "x",
       trackDetails: {
@@ -484,7 +1078,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     expect(JSON.stringify(rewritten)).not.toMatch(/dzcdn|hdnea|previewUrl|mp3-preview/);
   });
 
-  it("serves a row older code cached without a Spotify id (the cover only), with no search", async () => {
+  it("serves a row cached without a Spotify id as no cover, with no search", async () => {
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue({
       coverUrl: COVER,
@@ -496,14 +1090,15 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
 
     const node = await enrichOne(underPressure);
 
-    expect(node.img).toBe(COVER);
+    // A row without the track's identity cannot be checked against the node.
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
     expect(cache.putArtwork).not.toHaveBeenCalled();
   });
 
-  /** A row older code cached: the cover and the id of a track, no details. */
+  /** A row with the cover and the id of a track, and no details. */
   const oldRow = {
     coverUrl: COVER,
     spotifyUrl: "https://open.spotify.com/track/live",
@@ -516,7 +1111,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     ["fails", () => json({ error: { status: 503 } }, { status: 503 })],
     ["finds nothing", () => json({ tracks: { items: [], total: 0 } })],
   ])(
-    "keeps the cover of a row older code cached, without its id, when the search again %s",
+    "gives no cover from a row without details when the search again %s",
     async (_label, answer) => {
       const net = spotifyAnswers(answer);
       cache.getArtwork.mockReturnValue(oldRow);
@@ -524,7 +1119,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       const node = await enrichOne(underPressure);
 
       expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(1);
-      expect(node.img).toBe(COVER);
+      expect(node.img).toBeUndefined();
       expect(node.spotifyId).toBeUndefined();
       expect(node.previewUrl).toBeUndefined();
       // The row is kept as it is, not overwritten with nothing.
@@ -602,25 +1197,25 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     ["a live album", { album: "Live at Wembley '86", releaseDate: "1992-05-26" }],
     ["a karaoke album", { album: "Karaoke Hits", releaseDate: "2010" }],
     ["a re-recorded album", { album: "Greatest Hits (Re-Recorded Versions)", releaseDate: "2004" }],
-  ])("serves a row cached for a plain title on %s with the cover only", async (_label, details) => {
+  ])("gives no cover from a row cached for a plain title on %s", async (_label, details) => {
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue(cachedRow(details));
 
     const node = await enrichOne(underPressure);
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
   });
 
-  it("serves a row whose details keep no album with the cover only (its release cannot be checked)", async () => {
+  it("gives no cover from a row whose details keep no album (its release cannot be checked)", async () => {
     const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
     cache.getArtwork.mockReturnValue(cachedRow({ album: null }));
 
     const node = await enrichOne(underPressure);
 
-    expect(node.img).toBe(COVER);
+    expect(node.img).toBeUndefined();
     expect(node.spotifyId).toBeUndefined();
     expect(node.previewUrl).toBeUndefined();
     expect(net.calls).toHaveLength(0);
@@ -694,7 +1289,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       ["Rock the Boat", "The Hues Corporation", "Karaoke Hits", "2010"],
     ],
   ])(
-    "gives no Spotify id or preview for a plain title on %s, and keeps the cover",
+    "gives no cover, Spotify id or preview for a plain title on %s",
     async (_label, label, release) => {
       const [title, artist, album, released] = release;
       const net = stub({
@@ -710,7 +1305,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
         trackArtist: artist,
       });
 
-      expect(node.img).toBe(COVER);
+      expect(node.img).toBeUndefined();
       expect(node.spotifyId).toBeUndefined();
       expect(node.previewUrl).toBeUndefined();
       expect(deezerCalls(net)).toHaveLength(0);
@@ -730,11 +1325,6 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       "a greatest hits album",
       "Bohemian Rhapsody - Queen (1975)",
       ["Bohemian Rhapsody", "Queen", "Greatest Hits", "1981-10-26"],
-    ],
-    [
-      "a live album whose name has no live phrase",
-      "Bohemian Rhapsody - Queen (1975)",
-      ["Bohemian Rhapsody", "Queen", "Live Killers", "1979-06-22"],
     ],
     [
       "a live album whose name says nothing of it",
@@ -779,11 +1369,6 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       ],
     ],
     ["Alive - Pearl Jam (1991)", ["Alive", "Pearl Jam", "Ten", "1991-08-27"]],
-    [
-      "Ain't No Half-Steppin' - Big Daddy Kane (1988)",
-      ["Ain't No Half-Steppin'", "Big Daddy Kane", "Long Live the Kane", "1988-06-21"],
-    ],
-    ["Doll Parts - Hole (1994)", ["Doll Parts", "Hole", "Live Through This", "1994-04-12"]],
   ])("keeps the id and the preview of the studio recording for %j", async (label, release) => {
     const [title, artist, album, released] = release;
     stub({
@@ -802,6 +1387,84 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
 
     expect(node.spotifyId).toBe("x");
     expect(node.previewUrl).toBe(deezerClip(7));
+  });
+
+  it("takes the node's year for the preview when its label names none", async () => {
+    const net = stub({
+      spotify: onRelease("Respect", "Aretha Franklin", "Aretha Now", "1971-05-19"),
+      byIsrc: () => entryOn("Respect", "Aretha Franklin", "Aretha Now"),
+    });
+
+    const node = await enrichOne({
+      id: "n1",
+      group: 4,
+      label: "Respect - Aretha Franklin",
+      trackTitle: "Respect",
+      trackArtist: "Aretha Franklin",
+      year: "1967",
+    });
+
+    expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+    expect(node.previewUrl).toBeUndefined();
+    expect(deezerCalls(net)).toHaveLength(0);
+  });
+
+  it("takes the node's year for a cached node's preview when its label names none", async () => {
+    const net = stub({ spotify: spotifyTrack(), byIsrc: () => entry() });
+    cache.getArtwork.mockReturnValue(cachedRow());
+
+    const node = await enrichOne({ ...underPressure, year: "1975" });
+
+    expect(node).toMatchObject({ img: COVER, spotifyId: "x" });
+    expect(node.previewUrl).toBeUndefined();
+    expect(net.calls).toHaveLength(0);
+  });
+
+  it("rejects, and leaves no rejection unhandled, when the run is cancelled with cached and searched nodes under way", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const net = stubFetch((call: FetchCall) => {
+        if (call.url === TOKEN_URL) {
+          return json({ access_token: "t", token_type: "Bearer", expires_in: 3600 });
+        }
+        if (call.url.startsWith(SEARCH_URL) || call.url.startsWith(DEEZER)) return never(call);
+        return undefined;
+      });
+      cache.getArtwork.mockImplementation((key: string) =>
+        key.includes("queen") ? cachedRow() : null,
+      );
+      const controller = new AbortController();
+
+      const pending = enrichGenealogyWithArtwork(
+        {
+          nodes: [
+            { size: 22, ...underPressure },
+            {
+              id: "n2",
+              group: 4,
+              size: 22,
+              label: "Other - X",
+              trackTitle: "Other",
+              trackArtist: "X",
+            },
+          ],
+        },
+        "https://i.scdn.co/image/c",
+        controller.signal,
+      );
+      await vi.waitFor(() => {
+        expect(net.calls.some((call) => call.url.startsWith(SEARCH_URL))).toBe(true);
+        expect(deezerCalls(net)).toHaveLength(1);
+      });
+      controller.abort();
+
+      await expect(pending).rejects.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 
   /** Nodes "Song n - Queen" (n = 1..count), each strictly matched by a track with its own ISRC. */
@@ -835,7 +1498,7 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
     report?: (error: SourceError) => void,
   ) =>
     enrichGenealogyWithArtwork(
-      { nodes: nodes as Genealogy["nodes"], links: [] },
+      { nodes: nodes as Genealogy["nodes"] },
       "https://i.scdn.co/image/c",
       signal,
       report,
@@ -851,7 +1514,8 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       });
     });
 
-  const previews = (out: Genealogy) => out.nodes.filter((node) => node.previewUrl).length;
+  const previews = (out: { nodes: Array<{ previewUrl?: string }> }) =>
+    out.nodes.filter((node) => node.previewUrl).length;
 
   it("makes one lookup per node, at most two at once", async () => {
     const { nodes, spotify, isrcEntry } = strictNodes(7);
@@ -1086,7 +1750,9 @@ describe("enrichGenealogyWithArtwork's Deezer previews by ISRC", () => {
       expect(net.calls.filter((call) => call.url.startsWith(SEARCH_URL))).toHaveLength(0);
       expect(out.nodes.every((node) => node.img === COVER && node.spotifyId)).toBe(true);
       expect(previews(out)).toBe(4);
-      expect(deezerCalls(net)).toHaveLength(5);
+      // Cached nodes wait for no Spotify batch, so the third round starts two lookups (not one):
+      // the budget cuts both off.
+      expect(deezerCalls(net)).toHaveLength(6);
       expect(elapsed).toBeLessThan(PREVIEW_BUDGET_MS + 1_000);
       expect(report).not.toHaveBeenCalled();
     });
@@ -1563,8 +2229,12 @@ describe("marksOtherRecording", () => {
     ["Long Live Rock 'n' Roll", "Kill the King", false],
     ["The Sun Sessions", "That's All Right", false],
     ["Live Killers", "Bohemian Rhapsody", false],
-    // A phrase the title itself carries.
+    // A phrase the title itself carries, in an album named after the title.
     ["Live in the Moment", "Live in the Moment", false],
+    ["Live and Let Die", "Live and Let Die - 2018 Remaster", false],
+    // A title's word does not excuse another phrase of the album.
+    ["Live in Paris", "Live in the Moment", true],
+    ["Covers", "Cover Me", true],
     [undefined, "Respect", false],
   ])("%j for %j: %s", (album, title, marked) => {
     expect(marksOtherRecording(album, title)).toBe(marked);
@@ -1582,8 +2252,32 @@ describe("releaseYearFits", () => {
     ["a release date of zeros", "Respect - Aretha Franklin (1967)", "0000", false],
     ["the last of two years named", "1999 (1982) - Prince (1983)", "1983", true],
     ["not the first of two years named", "1999 (1982) - Prince (1990)", "1982", false],
+    ["a year in square brackets", "Hotel California - Eagles [1976]", "1994", false],
+    ["a year with a note", "Respect - Aretha Franklin (1967 single)", "1971", false],
+    ["a span of years", "Respect - Aretha Franklin (1967–68)", "1971", false],
   ])("for %s: %j released %j: %s", (_label, label, released, fits) => {
     expect(releaseYearFits(label, released)).toBe(fits);
+  });
+
+  it.each([
+    [
+      "the node's year when the label names none",
+      "Respect - Aretha Franklin",
+      "1967",
+      "1971",
+      false,
+    ],
+    ["the node's year, a release within a year", "Respect - Aretha Franklin", "1967", "1968", true],
+    [
+      "the label's year before the node's",
+      "Respect - Aretha Franklin (1971)",
+      "1967",
+      "1971",
+      true,
+    ],
+    ["no year at all", "Respect - Aretha Franklin", null, "1971", true],
+  ])("takes %s: %j, year %j, released %j: %s", (_label, label, year, released, fits) => {
+    expect(releaseYearFits(label, released, year)).toBe(fits);
   });
 });
 
@@ -1594,10 +2288,8 @@ describe("strictlyMatches", () => {
     artistNames,
   });
 
-  it("accepts the named title by the named lead artist, release labels aside", () => {
-    expect(strictlyMatches(underPressure, track("Under Pressure", ["Queen", "David Bowie"]))).toBe(
-      true,
-    );
+  it("accepts the named title by the named credit, release labels aside", () => {
+    expect(strictlyMatches(underPressure, track("Under Pressure", ["Queen"]))).toBe(true);
     expect(
       strictlyMatches(
         { trackTitle: "Under Pressure", trackArtist: "Queen, David Bowie" },
@@ -1610,10 +2302,17 @@ describe("strictlyMatches", () => {
     ["Queen & David Bowie", "Under Pressure", ["Queen", "David Bowie"], true],
     ["Queen and David Bowie", "Under Pressure", ["Queen", "David Bowie"], true],
     [
-      "Daft Punk feat. Pharrell Williams",
+      "Daft Punk feat. Pharrell Williams & Nile Rodgers",
       "Get Lucky (feat. Pharrell Williams & Nile Rodgers)",
       ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
       true,
+    ],
+    // A credited artist the node does not name: taken for another recording.
+    [
+      "Daft Punk feat. Pharrell Williams",
+      "Get Lucky (feat. Pharrell Williams & Nile Rodgers)",
+      ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
+      false,
     ],
     ["Earth, Wind & Fire", "September", ["Earth, Wind & Fire"], true],
     // The credit's first artist must be the lead, and every one of them credited.
@@ -1629,7 +2328,8 @@ describe("strictlyMatches", () => {
     const node = { trackTitle: "Bohemian Rhapsody", trackArtist: "Queen" };
     expect(strictlyMatches(node, found)).toBe(false);
     expect(strictlyMatches(node, { ...found, album: "A Night at the Opera" })).toBe(true);
-    expect(strictlyMatches(node, { ...found, album: "Long Live Queen" })).toBe(true);
+    // A studio album with a live word in its name: an honest miss.
+    expect(strictlyMatches(node, { ...found, album: "Long Live Queen" })).toBe(false);
   });
 
   it("refuses a featured artist's track, another version and a missing title or artist", () => {

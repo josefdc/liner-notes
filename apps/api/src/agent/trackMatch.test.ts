@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { SpotifyData } from "./state.js";
-import { matchTrack, needsChoice, rankTracks, words } from "./trackMatch.js";
+import { matchTrack, needsChoice, rankTracks, sameArtistName, words } from "./trackMatch.js";
 
 function track(title: string, ...artistNames: string[]): SpotifyData {
   return {
@@ -37,6 +37,19 @@ describe("words", () => {
     ["!!!", []],
   ])("%s", (text, expected) => {
     expect(words(text)).toEqual(expected);
+  });
+});
+
+describe("sameArtistName", () => {
+  it.each([
+    ["The Beatles", "Beatles", true],
+    ["The The", "The The", true],
+    ["the the", "THE THE", true],
+    // A leading "The" may be left out, but never down to a bare article.
+    ["The The", "The", false],
+    ["The", "The The", false],
+  ])("%j and %j: %s", (a, b, same) => {
+    expect(sameArtistName(a, b)).toBe(same);
   });
 });
 

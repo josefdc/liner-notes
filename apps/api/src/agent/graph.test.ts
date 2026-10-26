@@ -111,8 +111,9 @@ const hooks = vi.hoisted(() => ({
   /** Replaces the artwork enricher when set. */
   enrich: null as
     | null
-    | ((answer: { nodes: Array<{ id: string }> }) => Promise<{
+    | ((answer: { nodes: Array<{ id: string }>; complete: boolean }) => Promise<{
         nodes: Array<{ id: string }>;
+        complete: boolean;
       }>),
   putAudio: vi.fn(),
   putResearch: vi.fn(),
@@ -131,7 +132,10 @@ vi.mock(
   () =>
     ({
       enrichGenealogyWithArtwork: async (genealogy) => {
-        const answer = { nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })) };
+        const answer = {
+          nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })),
+          complete: true,
+        };
         return hooks.enrich ? hooks.enrich(answer) : answer;
       },
     }) satisfies Partial<typeof import("./enricher.js")>,

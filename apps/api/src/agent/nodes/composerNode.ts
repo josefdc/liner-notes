@@ -332,14 +332,15 @@ export function composeFromOutput(
  * artwork only: nodes, labels and links stay as composed, and an entry is merged into the node
  * with its id (an entry for no node is ignored). The enricher is given the model's year for a
  * node (`nodeYears`) for its release check; the result's nodes do not carry it. `sourceErrors`
- * holds a source the enricher could not read for the previews (Deezer).
+ * holds a source the enricher could not read for the previews (Deezer). `complete` is false when
+ * the artwork pass was cut short or failed: some nodes lack artwork a later run may find.
  */
 async function withArtwork(
   genealogy: Genealogy,
   coverUrl: string,
   signal: AbortSignal | undefined,
   nodeYears: ReadonlyMap<string, string> = new Map(),
-): Promise<{ genealogy: Genealogy; sourceErrors: SourceError[] }> {
+): Promise<{ genealogy: Genealogy; sourceErrors: SourceError[]; complete: boolean }> {
   const sourceErrors: SourceError[] = [];
   try {
     const dated = genealogy.nodes.map((node) => {
@@ -360,11 +361,12 @@ async function withArtwork(
         ...(found.spotifyId ? { spotifyId: found.spotifyId } : {}),
       };
     });
-    return { genealogy: { nodes, links: genealogy.links }, sourceErrors };
+    const { complete } = enriched;
+    return { genealogy: { nodes, links: genealogy.links }, sourceErrors, complete };
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
     log.warn("Could not enrich genealogy", { err: error });
-    return { genealogy, sourceErrors };
+    return { genealogy, sourceErrors, complete: false };
   }
 }
 
@@ -582,7 +584,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
 
     // Cache the result in long-term memory under its track (storedResults.ts), unless a later
     // run may do better: the audio may be measurable later, a source failed for a passing reason
-    // (an outage, a timeout, a rate limit, a rejected key), or a research planner call failed. A
+    // (an outage, a timeout, a rate limit, a rejected key), a research planner call failed, or
+    // the genealogy's artwork pass was cut short (enriched.complete). A
     // source that is only not configured does not block it: the key names the configured
     // sources. Nor does a source read only for the genealogy previews (enriched.sourceErrors):
     // a stored result never carries a preview. Nor does a lasting error of the evidence pack
@@ -618,7 +621,8 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       !transientSources &&
       !plannerFailed &&
       !spotifyUnread &&
-      !primaryNotAsked
+      !primaryNotAsked &&
+      enriched.complete
     ) {
       try {
         signal?.throwIfAborted();

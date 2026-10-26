@@ -7,11 +7,12 @@
  * The search goes through the Spotify source (sources/spotify.ts): every request has a timeout
  * and fails with a typed error, and a failed search leaves the node without artwork. A node gets
  * the cover and the Spotify id of the track found only when that track is strictly the one the
- * model named (see `strictlyMatches`: the same title and artist once case, accents and
- * featured-artist notes are set aside, and not on a release named as a live, unplugged,
- * re-recorded, karaoke, tribute or covers one). A cover, a remix, a live album or another song
- * gives nothing, so no node shows the art of another record; a node that names no title or no
- * artist is not searched, since nothing could be checked. A preview needs more: the release must
+ * model named (see `strictlyMatches`: the same title, case and accents aside; the same
+ * artists, every one the track credits named by the node and every guest the node names
+ * credited on the track; the same edit labels; and not on a release named as a live, acoustic,
+ * remix, orchestral, re-recorded, karaoke, tribute or covers one). A cover, a remix, a live
+ * album, a duet or another song gives nothing, so no node shows the art of another record; a
+ * node that names no title or no artist is not searched, since nothing could be checked. A preview needs more: the release must
  * also date from within a year of the year the node's label (or else the model) names, if any (see
  * `releaseYearFits`). The search's answer is cached for a week under the node's label, title and
  * artist (see `artworkCacheKey`; without the track's identity when its release names another
@@ -411,11 +412,15 @@ function featuredIn(title: string): string[] {
 }
 
 /**
- * Whether the node names every artist the found track credits, in its artist credit or in a
- * featured-artist note of its title. A track that credits someone the node does not name is
- * taken for another recording: a later duet single ("Stay With Me (feat. Mary J. Blige)" for
- * Sam Smith's "Stay With Me"), or a credit the model left short. Either way the node gets no
- * cover; a missed cover is better than another record's.
+ * Whether the node and the found track name the same artists, both ways:
+ * - the node names every artist the track credits (its credits and a featured-artist note of
+ *   its title), in its artist credit or in a featured-artist note of its own title. A track that
+ *   credits someone the node does not name is taken for another recording: a later duet single
+ *   ("Stay With Me (feat. Mary J. Blige)" for Sam Smith's "Stay With Me"), or a credit the model
+ *   left short;
+ * - every guest the node's title names ("Old Town Road (feat. Billy Ray Cyrus)") is credited on
+ *   the track: the solo record is another recording.
+ * Either way the node gets no cover; a missed cover is better than another record's.
  */
 function namesEveryCredit(
   artist: string,
@@ -426,15 +431,21 @@ function namesEveryCredit(
   const names = [artist, ...creditParts(artist), ...featuredIn(title)];
   const named = (name: string) => names.some((own) => sameArtistName(own, name));
   const wholeCredit = credited.length > 1 && sameArtistName(artist, credited.join(", "));
-  return (wholeCredit || credited.every(named)) && featuredIn(foundTitle).every(named);
+  const onRecord = [...credited, ...featuredIn(foundTitle)];
+  const guestCredited = (guest: string) => onRecord.some((name) => sameArtistName(guest, name));
+  return (
+    (wholeCredit || credited.every(named)) &&
+    featuredIn(foundTitle).every(named) &&
+    featuredIn(title).every(guestCredited)
+  );
 }
 
 /**
  * Labels of a title that name another mix or edit than the album recording: a radio or single
- * edit or version, a mono mix. trackMatch.ts reads them as labels of the same release; a node's
- * cover is held to more, since an edit or mono mix may sit on a release of its own.
+ * edit, version or mix, a stereo mix, a mono mix. trackMatch.ts reads them as labels of the same
+ * release; a node's cover is held to more, since an edit or mix may sit on a release of its own.
  */
-const EDIT_LABEL = /\b(?:radio|single)\s+(?:edit|version)\b|\bmono\b/gi;
+const EDIT_LABEL = /\b(?:radio|single)\s+(?:edit|version|mix)\b|\bstereo\s+mix\b|\bmono\b/gi;
 
 /** The edit labels (EDIT_LABEL) of a title's bracketed and " - " parts, normalised. */
 function editLabels(title: string): Set<string> {
@@ -449,6 +460,9 @@ function editLabels(title: string): Set<string> {
   return new Set(labels);
 }
 
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
+  a.size === b.size && [...a].every((item) => b.has(item));
+
 /**
  * Whether the track found is strictly the one the model named:
  * - the node names both a title and an artist;
@@ -459,8 +473,9 @@ function editLabels(title: string): Set<string> {
  *   re-recorded and the like; see trackMatch.ts recordingTitleDifference). A studio album whose
  *   name carries such a word ("Live Through This", "The Sun Sessions") is refused too: a missed
  *   cover is honest, another recording's is not;
- * - the track carries no edit label the node's title lacks (editLabels: radio or single edit or
- *   version, mono);
+ * - the track and the node's title carry the same edit labels (editLabels: radio or single
+ *   edit, version or mix, stereo mix, mono): an edit the node names is not the album take, and
+ *   the reverse;
  * - its album, when known, is not named as another recording (marksOtherRecording).
  * A label alone is never enough: a search for it can find a cover, a remix or another song.
  */
@@ -478,7 +493,7 @@ export function strictlyMatches(
     sameCredit(artist, lead, credited) &&
     namesEveryCredit(artist, title, credited, found.title) &&
     recordingTitleDifference({ title }, { title: found.title, album: found.album }) === null &&
-    [...editLabels(found.title)].every((label) => ownEdits.has(label)) &&
+    sameSet(editLabels(found.title), ownEdits) &&
     !marksOtherRecording(found.album, found.title)
   );
 }
@@ -500,6 +515,49 @@ const OTHER_RECORDING_PHRASES = [
   /\bcovers?\b/,
 ];
 
+/**
+ * Words that name an album as one of other recordings, read by this module only (the Deezer
+ * comparison in trackMatch.ts has its own list): acoustic, remixed, orchestral, piano and
+ * re-recorded releases. A word sequence, compared as trackMatch.ts `words` normalises it.
+ */
+const OTHER_RECORDING_WORDS = [
+  ["acoustic"],
+  ["remix"],
+  ["remixes"],
+  ["remixed"],
+  ["orchestral"],
+  ["symphonic"],
+  ["symphonica"],
+  ["piano", "version"],
+  ["piano", "versions"],
+  ["piano", "renditions"],
+  ["piano", "covers"],
+  ["solo", "piano"],
+  ["newly", "recorded"],
+  ["newly", "re", "recorded"],
+  ["newly", "rerecorded"],
+  ["re", "recordings"],
+  ["rerecordings"],
+];
+
+/** Where `phrase` starts in `text`, or -1. */
+function phraseAt(text: readonly string[], phrase: readonly string[]): number {
+  for (let at = 0; at + phrase.length <= text.length; at++) {
+    if (phrase.every((word, i) => text[at + i] === word)) return at;
+  }
+  return -1;
+}
+
+/** `text` without any occurrence of `phrase`. */
+function withoutPhrase(text: readonly string[], phrase: readonly string[]): string[] {
+  let rest = [...text];
+  if (phrase.length === 0) return rest;
+  for (let at = phraseAt(rest, phrase); at >= 0; at = phraseAt(rest, phrase)) {
+    rest = [...rest.slice(0, at), ...rest.slice(at + phrase.length)];
+  }
+  return rest;
+}
+
 /** A title or album name without its bracketed and " - " parts, lower case. */
 const nameProper = (text: string) =>
   text
@@ -511,15 +569,18 @@ const nameProper = (text: string) =>
 
 /**
  * Whether an album's name says its tracks are other recordings than the studio one (see
- * OTHER_RECORDING_PHRASES). An album named after the track ("Live and Let Die") is read without
- * that name, so the title's own words are not taken for a phrase; a title's words never excuse
+ * OTHER_RECORDING_PHRASES and OTHER_RECORDING_WORDS). An album named after the track ("Live and
+ * Let Die") is read without that name, and the words are read without the title's own ("Piano
+ * Man", "Remix to Ignition"), so a title is not taken for a phrase; a title's words never excuse
  * any other part of the album's name ("Covers" for "Cover Me").
  */
 export function marksOtherRecording(album: string | undefined, title: string): boolean {
   let name = (album ?? "").toLowerCase().replace(/\s+/g, " ");
   const own = nameProper(title);
   if (own && nameProper(album ?? "") === own) name = name.replace(own, " ");
-  return OTHER_RECORDING_PHRASES.some((phrase) => phrase.test(name));
+  if (OTHER_RECORDING_PHRASES.some((phrase) => phrase.test(name))) return true;
+  const rest = withoutPhrase(words(album ?? ""), words(own));
+  return OTHER_RECORDING_WORDS.some((phrase) => phraseAt(rest, phrase) >= 0);
 }
 
 /** A year from 1900 to 2100 in a text, the first one. */
@@ -623,13 +684,14 @@ function fromCache(node: NamedNode, cached: SpotifySearchResult): NodeLookup {
 }
 
 /**
- * The Spotify searches of one run. After a rate limit or a timeout of Spotify's (`stops`) no
- * more are made: the next would most likely be refused or wait as long, and the run has a
- * deadline. A node not searched gets no artwork.
+ * The Spotify searches of one run. After a rate limit, a timeout or a request a replay has no
+ * answer for (`stops`), no more are made: the next would most likely be refused or wait as long,
+ * and the run has a deadline. A node not searched gets no artwork, and the pass is cut short
+ * (`cutShort`): its answer says it is not complete, so the result is not stored for later runs.
  */
 function spotifySearches(signal: AbortSignal | undefined) {
   let stopped = false;
-  return async (label: string): Promise<SpotifyTrackSummary | undefined | "failed"> => {
+  const search = async (label: string): Promise<SpotifyTrackSummary | undefined | "failed"> => {
     if (stopped) return "failed";
     try {
       const [found] = await searchTracks(label, 1, signal);
@@ -646,6 +708,7 @@ function spotifySearches(signal: AbortSignal | undefined) {
       return "failed";
     }
   };
+  return { search, cutShort: () => stopped };
 }
 
 /**
@@ -660,7 +723,7 @@ function spotifySearches(signal: AbortSignal | undefined) {
 async function searchNode(
   node: NamedNode,
   cached: SpotifySearchResult | undefined,
-  search: ReturnType<typeof spotifySearches>,
+  search: ReturnType<typeof spotifySearches>["search"],
   signal?: AbortSignal,
 ): Promise<NodeLookup> {
   const found = await search(node.label);
@@ -709,6 +772,12 @@ export interface NodeArtwork {
   spotifyId?: string;
 }
 
+/** The artwork of a genealogy: an entry per node id, and whether every search was made. */
+export interface GenealogyArtwork {
+  nodes: NodeArtwork[];
+  complete: boolean;
+}
+
 /** Spotify searches made at once; a short pause between batches keeps clear of its limits. */
 const BATCH_SIZE = 5;
 const BATCH_PAUSE_MS = 100;
@@ -722,7 +791,8 @@ const BATCH_PAUSE_MS = 100;
  * batches (a node served from the cache or naming no title or artist makes none). A node without
  * an id, or with an id an earlier node has, gets no entry: the answer is merged by id, so it could
  * not be told apart. A node whose lookup fails gets an entry without artwork; the other nodes keep
- * theirs. The answer holds no links and no node of its own.
+ * theirs. The answer holds no links and no node of its own. `complete` is false when the pass was
+ * cut short (see spotifySearches): some nodes were not searched, so a later run may do better.
  *
  * @param genealogy - The composed genealogy, its nodes with the model's year when it gave one;
  *   only its nodes are read
@@ -737,18 +807,18 @@ export async function enrichGenealogyWithArtwork(
   currentTrackCoverUrl: string,
   signal?: AbortSignal,
   report?: (error: SourceError) => void,
-): Promise<{ nodes: NodeArtwork[] }> {
+): Promise<GenealogyArtwork> {
   const seen = new Set<string>();
   const nodes = (Array.isArray(genealogy?.nodes) ? genealogy.nodes : []).filter((node) => {
     if (!node?.id || seen.has(node.id)) return false;
     seen.add(node.id);
     return true;
   });
-  if (nodes.length === 0) return { nodes: [] };
+  if (nodes.length === 0) return { nodes: [], complete: true };
 
   log.info(`Looking up artwork for ${nodes.length} genealogy nodes`);
   const deezer = deezerPreviews(signal, report);
-  const search = spotifySearches(signal);
+  const searches = spotifySearches(signal);
 
   /** The node's entry: what `lookup` found, with the Deezer preview when it names one. */
   const entryOf = async (id: string, lookup: NodeLookup): Promise<NodeArtwork> => {
@@ -813,7 +883,7 @@ export async function enrichGenealogyWithArtwork(
     for (let i = 0; i < toSearch.length; i += BATCH_SIZE) {
       const batch = toSearch.slice(i, i + BATCH_SIZE).map(({ at, node, cached }) => {
         entries[at] = guarded(node.id, async () =>
-          entryOf(node.id, await searchNode(node, cached, search, signal)),
+          entryOf(node.id, await searchNode(node, cached, searches.search, signal)),
         );
         return entries[at];
       });
@@ -825,7 +895,7 @@ export async function enrichGenealogyWithArtwork(
     await servedFirst;
     const answer = await Promise.all(entries);
     log.info(`Found artwork for ${answer.filter((n) => n.img).length}/${answer.length} nodes`);
-    return { nodes: answer };
+    return { nodes: answer, complete: !searches.cutShort() };
   } finally {
     deezer.done();
   }

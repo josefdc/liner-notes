@@ -32,6 +32,8 @@ const enrich = vi.hoisted(() => ({
   }>,
   /** The nodes the enricher was given, last call. */
   given: null as null | ReadonlyArray<Record<string, unknown>>,
+  /** Whether the enricher's pass made every search it meant to (true unless set). */
+  complete: true,
 }));
 const mb = vi.hoisted(() => ({ lookupIsrc: vi.fn() }));
 vi.mock(
@@ -43,9 +45,13 @@ vi.mock(
         if (enrich.reports) report?.(enrich.reports as never);
         const nodes = genealogy?.nodes ?? [];
         enrich.given = nodes;
-        if (enrich.answer) return { nodes: enrich.answer };
+        const complete = enrich.complete;
+        if (enrich.answer) return { nodes: enrich.answer, complete };
         const previewUrl = enrich.nodePreview;
-        return { nodes: nodes.map(({ id }) => ({ id, ...(previewUrl ? { previewUrl } : {}) })) };
+        return {
+          nodes: nodes.map(({ id }) => ({ id, ...(previewUrl ? { previewUrl } : {}) })),
+          complete,
+        };
       },
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
@@ -205,6 +211,7 @@ describe("composerNode", () => {
     enrich.reports = null;
     enrich.answer = null;
     enrich.given = null;
+    enrich.complete = true;
     mb.lookupIsrc.mockReset();
     for (const method of ["log", "warn", "error"] as const) {
       vi.spyOn(console, method).mockImplementation(() => {});
@@ -531,6 +538,21 @@ describe("composerNode", () => {
     // Nodes the enricher had nothing for keep what they had: no artwork.
     expect(genealogy?.nodes.find((node) => node.id === "n2")?.img).toBeUndefined();
     expect(JSON.stringify(genealogy)).not.toMatch(/ghost|sp9/);
+  });
+
+  it("sends but does not store a result whose artwork pass was cut short", async () => {
+    enrich.complete = false;
+    const writer = vi.fn();
+
+    const out = await createComposerNode(testRuntime(succeeding()))(stateWith(measured), {
+      writer,
+      configurable: { thread_id: "run-1" },
+    } as never);
+
+    expect(out.trackData).toBeTruthy();
+    expect(writer.mock.calls.some(([event]) => event.type === "complete")).toBe(true);
+    // A later run searches again for the artwork this one could not look up.
+    expect(store.put).not.toHaveBeenCalled();
   });
 
   it("hands the enricher each model node's year, for the preview's release check", async () => {

@@ -63,6 +63,7 @@ vi.mock(
     ({
       enrichGenealogyWithArtwork: async (genealogy) => ({
         nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })),
+        complete: true,
       }),
     }) satisfies Partial<typeof import("../enricher.js")>,
 );

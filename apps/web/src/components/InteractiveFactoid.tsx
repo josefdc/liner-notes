@@ -1,5 +1,21 @@
 import React, { useMemo } from 'react';
-import { Info, ChevronRight, MicVocal, Music, Users, Lightbulb, Link2 } from 'lucide-react';
+import {
+  Info,
+  ChevronRight,
+  MicVocal,
+  Music,
+  Users,
+  Lightbulb,
+  Link2,
+  type LucideIcon,
+  KeyboardMusic,
+  SlidersHorizontal,
+  Disc3,
+  Wrench,
+  User,
+  Disc,
+  CalendarDays,
+} from 'lucide-react';
 import type { Reading } from '../constants';
 import type { Factoid, FactoidEntity } from '../types';
 import type { ShownClaim } from './provenance/claims';
@@ -26,17 +42,17 @@ interface InteractiveFactoidProps {
   audio?: MeasuredAudio | null;
 }
 
-// Color mapping for entity types (search chips, not provenance). Violet means model inference
-// only (ProvenanceChip), so no entity is violet.
-const ENTITY_COLORS: Record<FactoidEntity['type'], string> = {
-  synth: 'text-cyber hover:bg-cyber/20 border-cyber/30',
-  producer: 'text-analog hover:bg-analog/20 border-analog/30',
-  sample: 'text-analog hover:bg-analog/20 border-analog/30',
-  technique: 'text-accent-pink hover:bg-accent-pink/20 border-accent-pink/30',
-  artist: 'text-accent-green hover:bg-accent-green/20 border-accent-green/30',
-  // Neutral: a light blue reads as the inferred violet with red-green colour deficiencies
-  album: 'text-text-secondary hover:bg-white/10 border-white/30',
-  year: 'text-text-tertiary hover:bg-white/10 border-white/20',
+// Entity chips (search links, not provenance) are neutral: the cyan, amber and violet that say how
+// a statement is known belong to its provenance chip alone. An icon and a word say the type.
+const ENTITY_CHROME = 'text-text-secondary hover:bg-white/10 border-white/30';
+const ENTITY_TYPES: Record<FactoidEntity['type'], { word: string; Icon: LucideIcon }> = {
+  synth: { word: 'synth', Icon: KeyboardMusic },
+  producer: { word: 'producer', Icon: SlidersHorizontal },
+  sample: { word: 'sample', Icon: Disc3 },
+  technique: { word: 'technique', Icon: Wrench },
+  artist: { word: 'artist', Icon: User },
+  album: { word: 'album', Icon: Disc },
+  year: { word: 'year', Icon: CalendarDays },
 };
 
 // A card's category (production, credits, sample...) is drawn in neutral greys: the colours
@@ -103,19 +119,25 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
         );
       }
 
-      // Add clickable entity
+      // Add clickable entity: its type as an icon on screen and as a word in its name
+      const kind = ENTITY_TYPES[entity.type] as
+        | (typeof ENTITY_TYPES)[FactoidEntity['type']]
+        | undefined;
       elements.push(
         <button
           type="button"
           key={entity.id}
           onClick={() => onEntityClick?.(entity)}
+          data-entity-type={entity.type}
+          aria-label={kind ? `${entity.text} (${kind.word})` : undefined}
           className={`
             inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-sm
             border transition-all cursor-pointer
-            ${ENTITY_COLORS[entity.type]}
+            ${ENTITY_CHROME}
           `}
           title={`Search: ${entity.searchQuery || entity.text}`}
         >
+          {kind && <kind.Icon size={12} aria-hidden="true" className="mr-1 opacity-70 shrink-0" />}
           {entity.text}
           <ChevronRight size={12} className="ml-0.5 opacity-60" />
         </button>,
@@ -183,8 +205,11 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
 
       {/* Entities count indicator */}
       {factoid.entities && factoid.entities.length > 0 && (
-        <div className="relative mt-3 pt-2 border-t border-white/5 text-chrome font-mono text-cyber/80 flex items-center gap-1.5">
-          <span className="inline-block w-1 h-1 rounded-full bg-cyber/40" />
+        <div
+          data-entity-count
+          className="relative mt-3 pt-2 border-t border-white/5 text-chrome font-mono text-text-tertiary flex items-center gap-1.5"
+        >
+          <span className="inline-block w-1 h-1 rounded-full bg-white/30" />
           {factoid.entities.length} CLICKABLE{' '}
           {factoid.entities.length === 1 ? 'ENTITY' : 'ENTITIES'}
         </div>

@@ -109,7 +109,7 @@ test("a recorded cover the archive does not hold (404) is not available, with no
   await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
   // The analysis screen's cover of the track: nothing drawn for it, never a broken image. The
   // screen moves on to the Dashboard by itself a few seconds after the result: checked before.
-  const proceed = page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" });
+  const proceed = page.getByRole("button", { name: "Open the results" });
   await expect(proceed).toBeVisible();
   await expect.poll(() => requests.length).toBeGreaterThan(0);
   const quick = { timeout: 1500 };

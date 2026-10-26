@@ -13,7 +13,7 @@ import {
 // broken stream leads to, and results that are missing or arrive twice.
 const ANALYZE = "/api/analyze/stream";
 const RESUME = "/api/analyze/stream/resume";
-const COMPLETE_LOG = "Analysis complete. Ready for deployment.";
+const COMPLETE_LOG = "Analysis complete.";
 
 const hitl = loadFixture("hitl");
 const candidates = hitl.streams[ANALYZE].find(
@@ -77,11 +77,11 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
   await expect.poll(async () => finished(await streamLog(page), ANALYZE)).toBe(true);
   await releaseStream(page, "resume-result");
 
-  await expect.soft(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect.soft(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   const log = await apiRequests(page);
   expect.soft(resumes(log)).toHaveLength(1);
   expect.soft(posts(log)).toEqual([]);
-  await expect.soft(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await expect.soft(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
   await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
 });
 
@@ -119,7 +119,7 @@ test("a stream that fails shows an error with a retry instead of starting a seco
   expect(await streamLog(page)).not.toContain(`${ANALYZE} reconnect`);
 
   await page.getByRole("button", { name: "RETRY ANALYSIS" }).click();
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   const log = await apiRequests(page);
   expect(analyses(log)).toHaveLength(2);
   expect(posts(log)).toEqual([]);
@@ -142,7 +142,7 @@ test("a complete event without a result shows an error with a retry", async ({ p
 
   await expect(page.getByText("SIGNAL LOST")).toBeVisible();
   await expect(page.getByRole("button", { name: "RETRY ANALYSIS" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);
   expect(posts(await apiRequests(page))).toEqual([]);
 });
 
@@ -168,7 +168,7 @@ test("a duplicate complete for the thread is ignored when the picker times out",
 
   // Nobody picks: the countdown chooses the highlighted (first) candidate.
   await expect
-    .soft(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }))
+    .soft(page.getByRole("button", { name: "Open the results" }))
     .toBeVisible({ timeout: 10_000 });
   await expect.poll(async () => finished(await streamLog(page), RESUME)).toBe(true);
   await page.waitForTimeout(300);
@@ -181,7 +181,7 @@ test("a duplicate complete for the thread is ignored when the picker times out",
     ]);
   expect.soft(posts(log)).toEqual([]);
   expect((await streamLog(page)).filter((entry) => entry === `${RESUME} complete`)).toHaveLength(2);
-  await expect.soft(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await expect.soft(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
   expect(problems).toEqual([]);
 });
 

@@ -358,9 +358,13 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * 6: the relations the primary records state are kept beside the items (`relations`), for the
  * result's code-built claims and links (a row of 5 has none). 7: web text leaves out more forum
  * sites and the thread layouts of XenForo, vBulletin, Stack Exchange and MetaFilter (a row of 6
- * may hold them, or research text written from them).
+ * may hold them, or research text written from them). 8: web text leaves out TalkBass, the WATMM
+ * forums, Rate Your Music, Disqus and Wayback Machine copies of excluded pages, and the comment
+ * layouts of Discourse, phpBB, Reddit, Gearspace, YouTube, Disqus, Songfacts and Amazon, with
+ * more of XenForo's and MetaFilter's (a row of 7 may hold them, or research text written from
+ * them).
  */
-export const CACHED_EVIDENCE_FORMAT = 7;
+export const CACHED_EVIDENCE_FORMAT = 8;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the

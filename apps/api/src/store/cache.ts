@@ -28,6 +28,7 @@ import { PrimaryRelation } from "../agent/research/relations.js";
 import type { ResearchData } from "../agent/state.js";
 import { logger } from "../logger.js";
 import type { IdentifiedRecording } from "../sources/identity.js";
+import { RELEASE_DATE } from "../sources/musicbrainz.js";
 import {
   audioConfidence,
   type CachedAudio,
@@ -154,7 +155,6 @@ const stringList = z.array(z.string());
 /** Text that holds a link; a track's details never do. */
 const LINK = /https?:\/\//i;
 const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
-const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
 /**
  * Track details, field by field: a field that is not valid (an album name that holds a link, a

@@ -5,8 +5,10 @@
 
 import { InMemoryStore } from "@langchain/langgraph";
 import { describe, expect, it } from "vitest";
+import { FORUM_THREADS } from "../sources/testing/forumThreads.js";
 import { createEmptyTrackData } from "./schema.js";
 import {
+  heldTextIssue,
   readStoredResult,
   STORED_UNCHECKED_LINE,
   storedStatus,
@@ -85,5 +87,74 @@ describe("stored results", () => {
     const checked = await readStoredResult(store, "checked", later(1));
     expect(checked?.verifier).toBeNull();
     expect(storedStatus(checked!)).toEqual([]);
+  });
+});
+
+describe("held text", () => {
+  const page = (url: string, excerpt: string, title = "A page about the track") => ({
+    sourceTier: "web",
+    url,
+    title,
+    excerpt,
+  });
+  const clean = page("https://www.example.org/news", "Released in 2000 on Virgin.");
+  const forum = FORUM_THREADS[0][1];
+
+  it("passes web pages the web tier keeps, source errors in words, and other tiers' text", () => {
+    expect(heldTextIssue({})).toBeNull();
+    expect(
+      heldTextIssue(
+        {
+          evidence: [
+            clean,
+            // A primary record may name an account: the web tier's check is not run on it.
+            { ...clean, sourceTier: "primary-record", excerpt: "Producer (@producer)" },
+          ],
+          run: { sourceErrors: [{ message: "the source refused the request" }, {}] },
+        },
+        [{ message: "not found" }],
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      "a social platform page",
+      { evidence: [clean, page("https://m.facebook.com/somepage/posts/1", "A post.")] },
+      "evidence[1]: a social platform page",
+    ],
+    [
+      "a forum thread",
+      { evidence: [page("https://www.example.org/thread", forum)] },
+      "evidence[0]: a comment thread",
+    ],
+    [
+      "a forum thread as a title",
+      { evidence: [page("https://www.example.org/thread", "A page.", forum)] },
+      "evidence[0]: a comment thread",
+    ],
+    [
+      "a handle that was not masked",
+      { evidence: [page("https://www.example.org/news", "Thomas (@thomasbangalter) made it.")] },
+      "evidence[0]: a private @handle",
+    ],
+    [
+      "markup in the run's source errors",
+      { run: { sourceErrors: [{ message: "fine" }, { message: "<html>Bad gateway</html>" }] } },
+      "run.sourceErrors[1].message: markup",
+    ],
+    [
+      "entity-escaped markup in the run's source errors",
+      { run: { sourceErrors: [{ message: "&amp;lt;h1&amp;gt;Bad gateway" }] } },
+      "run.sourceErrors[0].message: markup",
+    ],
+  ])("names where %s is held, never the text", (_name, result, reason) => {
+    expect(heldTextIssue(result)).toBe(reason);
+  });
+
+  it("checks source errors stored beside the result", () => {
+    expect(heldTextIssue({}, [{ message: "<body>Bad gateway</body>" }])).toBe(
+      "sourceErrors[0].message: markup",
+    );
   });
 });

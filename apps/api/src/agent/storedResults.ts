@@ -16,7 +16,7 @@
  * A result whose web evidence holds a page the web tier now leaves out (a social platform page,
  * a handle, profile boilerplate or a comment thread: webPageIssue), or whose source errors hold
  * markup (a page a source answered with), stored by older code, is not served: it is composed
- * again.
+ * again (heldTextIssue, which the run routes also apply).
  */
 
 import type { BaseStore } from "@langchain/langgraph";
@@ -115,13 +115,10 @@ export async function readStoredResult(
       log.warn(`Stored result for ${trackId} is about another track; ignored`);
       return null;
     }
-    if ((checked.data.evidence ?? []).some(leftOutWebPage)) {
-      log.warn("Stored result holds a web page the web tier now leaves out; composing again");
-      return null;
-    }
     const sourceErrors = storedErrors(value.sourceErrors);
-    if (sourceErrors.some((e) => MARKUP.test(e.message ?? ""))) {
-      log.warn("Stored result's source errors hold markup; composing again");
+    const issue = heldTextIssue(checked.data, sourceErrors);
+    if (issue) {
+      log.warn(`Stored result holds text the readers now refuse (${issue}); composing again`);
       return null;
     }
     const verifier = VerifierSummary.safeParse(value.verifier);
@@ -136,15 +133,48 @@ export async function readStoredResult(
   }
 }
 
-/** A web-tier item the web tier no longer keeps, by what is stored of it (webPageIssue). */
-function leftOutWebPage(item: {
-  sourceTier: string;
-  url?: string | null;
-  title: string;
-  excerpt: string;
-}) {
-  if (item.sourceTier !== "web") return false;
-  return webPageIssue({ url: item.url, title: item.title, text: item.excerpt }) !== null;
+/** What heldTextIssue reads of a result: its evidence and its run's source errors. */
+export interface HeldText {
+  evidence?: ReadonlyArray<{
+    sourceTier: string;
+    url?: string | null;
+    title: string;
+    excerpt: string;
+  }> | null;
+  run?: { sourceErrors?: ReadonlyArray<{ message?: string }> | null } | null;
+}
+
+/**
+ * Why a stored result holds text the readers of stored evidence now refuse, or null. The reason
+ * names where (e.g. "evidence[2]: a comment thread"), never the text:
+ * - a web-tier evidence item the web tier no longer keeps, by what is stored of it: a social
+ *   platform page, or a title or excerpt with a private @handle, profile boilerplate or a comment
+ *   thread (webPageIssue);
+ * - markup, also entity-escaped, in the message of a source error (a page a source answered
+ *   with): in the result's run information, or in `sourceErrors` stored beside it.
+ * Code older than these checks stored such text. Other text (model prose, primary records) is
+ * not the web tier's and is not checked here. Run by every reader that serves a stored result:
+ * the stored results here, and the run routes (GET /api/runs/:id and /api/runs/by-track).
+ */
+export function heldTextIssue(
+  result: HeldText,
+  sourceErrors: ReadonlyArray<{ message?: string }> = [],
+): string | null {
+  for (const [i, item] of (result.evidence ?? []).entries()) {
+    if (item.sourceTier !== "web") continue;
+    const issue = webPageIssue({ url: item.url, title: item.title, text: item.excerpt });
+    if (issue) return `evidence[${i}]: ${issue}`;
+  }
+  const errors: Array<[string, ReadonlyArray<{ message?: string }>]> = [
+    ["run.sourceErrors", result.run?.sourceErrors ?? []],
+    ["sourceErrors", sourceErrors],
+  ];
+  for (const [where, list] of errors) {
+    for (const [i, error] of list.entries()) {
+      if (MARKUP.test(error.message ?? "")) return `${where}[${i}].message: markup`;
+    }
+  }
+  return null;
 }
 
 /**

@@ -28,6 +28,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../../agent/cacheKeys.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../../config/settings.js";
+import { captureLogsForTests } from "../../logger.js";
+import { FORUM_THREADS } from "../../sources/testing/forumThreads.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
 import { getRun, listRunEvents, withoutPreviewUrls } from "../../store/runs.js";
@@ -229,6 +231,58 @@ async function withFailingWrite(trigger: string, body: () => Promise<void>): Pro
     errors.mockRestore();
     getDb().exec("DROP TRIGGER IF EXISTS fail_write");
   }
+}
+
+/** A web-tier evidence item as the web tier stores one. */
+const webItem = (url: string, excerpt: string, title = "A page about the track") => ({
+  id: `tavily:${url}`,
+  source: "tavily",
+  sourceTier: "web",
+  url,
+  title,
+  retrievedAt: "2026-10-20T12:00:00.000Z",
+  excerpt,
+  recordRef: null,
+});
+
+/** A page the web tier keeps. */
+const CLEAN_PAGE = webItem(
+  "https://www.example.org/news/one-more-time",
+  "One More Time was released in November 2000 on Virgin.",
+);
+/** A forum thread, stored by code older than the forum check. */
+const FORUM_TEXT = FORUM_THREADS[0][1];
+const FORUM_PAGE = webItem("https://www.example.org/thread/one-more-time", FORUM_TEXT);
+/** A social platform page, stored by code older than the social-site check. */
+const SOCIAL_TEXT = "Zephyrine Quillfeather shared a memory of One More Time.";
+const SOCIAL_PAGE = webItem("https://m.facebook.com/somepage/posts/1", SOCIAL_TEXT);
+/** A page whose @handle was not masked, stored by code older than the handle check. */
+const HANDLE_PAGE = webItem(
+  "https://www.example.org/news/interview",
+  "Thomas Bangalter (@thomasbangalter) produced it.",
+);
+/** A source error whose message is the page the source answered with. */
+const MARKUP_ERROR = {
+  source: "discogs",
+  code: "invalid_response",
+  message: "<html><body>Bad gateway</body></html>",
+};
+
+/**
+ * Rewrites a run's stored result with `evidence` and, in its run information, `sourceErrors`, as
+ * code older than the web tier's checks could have stored it.
+ */
+function storeHeld(
+  runId: string,
+  { evidence = [], sourceErrors }: { evidence?: object[]; sourceErrors?: object[] },
+): void {
+  const analysis = getRun(getDb(), runId)?.analysis as { run: object };
+  const held = {
+    ...analysis,
+    evidence,
+    run: { ...analysis.run, ...(sourceErrors ? { sourceErrors } : {}) },
+  };
+  getDb().prepare("UPDATE runs SET analysis = ? WHERE run_id = ?").run(JSON.stringify(held), runId);
 }
 
 const RUN_EVENTS_DDL = `CREATE TABLE IF NOT EXISTS run_events (
@@ -564,6 +618,108 @@ describe("runs routes", () => {
     const none = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
     expect(none.status).toBe(500);
     expect(none.body).toMatchObject({ success: false, code: "failed" });
+  });
+
+  it("serves neither a stored forum thread nor a social page, by id or by track", async () => {
+    const older = await analyze("plain query");
+    const latest = await analyze("plain query again");
+    getDb()
+      .prepare("UPDATE runs SET finished_at = finished_at - 60 WHERE run_id = ?")
+      .run(older.runId);
+    storeHeld(older.runId, { evidence: [CLEAN_PAGE] });
+    storeHeld(latest.runId, { evidence: [CLEAN_PAGE, FORUM_PAGE, SOCIAL_PAGE] });
+    const logs = captureLogsForTests();
+
+    try {
+      const byId = await request(app).get(`/api/runs/${latest.runId}`);
+      expect(byId.status).toBe(404);
+      expect(byId.body).toMatchObject({ success: false, code: "not_found" });
+
+      // The track's older run, whose evidence passes, is served instead.
+      const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+      expect(byTrack.status).toBe(200);
+      expect(byTrack.body.run.id).toBe(older.runId);
+      expect(byTrack.body.analysis.evidence).toEqual([CLEAN_PAGE]);
+
+      for (const res of [byId, byTrack]) {
+        expect(res.text).not.toContain("RecordFan");
+        expect(res.text).not.toContain("Zephyrine");
+        expect(res.text).not.toContain("facebook");
+        expect(res.text).not.toContain("thread/one-more-time");
+      }
+      // The log names the run and why, never the text.
+      const warnings = logs.lines().filter((line) => line.includes(latest.runId));
+      expect(warnings.length).toBeGreaterThan(0);
+      for (const line of [...warnings]) {
+        expect(line).not.toContain("RecordFan");
+        expect(line).not.toContain("Zephyrine");
+      }
+    } finally {
+      logs.restore();
+    }
+
+    // With no run of the track left to serve, the web can offer a fresh analysis.
+    storeHeld(older.runId, { evidence: [SOCIAL_PAGE] });
+    const none = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(none.status).toBe(404);
+    expect(none.body).toMatchObject({ success: false, code: "not_found" });
+    expect(none.text).not.toContain("Zephyrine");
+  });
+
+  it.each([
+    ["a forum thread", { evidence: [FORUM_PAGE] }, "RecordFan"],
+    ["a social platform page", { evidence: [SOCIAL_PAGE] }, "Zephyrine"],
+    ["a handle that was not masked", { evidence: [HANDLE_PAGE] }, "@thomasbangalter"],
+    [
+      "a forum thread as a page's title",
+      { evidence: [{ ...CLEAN_PAGE, title: FORUM_TEXT }] },
+      "RecordFan",
+    ],
+    ["markup in a source error", { sourceErrors: [MARKUP_ERROR] }, "Bad gateway"],
+    [
+      "entity-escaped markup in a source error",
+      { sourceErrors: [{ ...MARKUP_ERROR, message: "&lt;h1&gt;Bad gateway&lt;/h1&gt;" }] },
+      "Bad gateway",
+    ],
+  ])("does not serve a stored run that holds %s", async (_name, held, text) => {
+    const { runId } = await analyze("plain query");
+    storeHeld(runId, held);
+
+    const byId = await request(app).get(`/api/runs/${runId}`);
+    expect(byId.status).toBe(404);
+    expect(byId.body).toMatchObject({ success: false, code: "not_found" });
+    const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(byTrack.status).toBe(404);
+    expect(byTrack.body).toMatchObject({ success: false, code: "not_found" });
+    for (const res of [byId, byTrack]) expect(res.text).not.toContain(text);
+  });
+
+  it("serves a stored run whose evidence and source errors pass, unchanged", async () => {
+    const { runId } = await analyze("plain query");
+    const sourceErrors = [
+      { source: "discogs", code: "unavailable", message: "the source refused the request" },
+    ];
+    storeHeld(runId, { evidence: [CLEAN_PAGE], sourceErrors });
+    const stored = getRun(getDb(), runId);
+
+    const byId = await request(app).get(`/api/runs/${runId}`);
+    expect(byId.status).toBe(200);
+    expect(byId.body).toEqual({
+      success: true,
+      run: {
+        id: runId,
+        status: "completed",
+        mode: "live",
+        spotifyId: TRACK_ID,
+        createdAt: new Date((stored?.createdAt ?? 0) * 1000).toISOString(),
+        finishedAt: new Date((stored?.finishedAt ?? 0) * 1000).toISOString(),
+      },
+      analysis: stored?.analysis,
+    });
+    expect(byId.body.analysis.evidence).toEqual([CLEAN_PAGE]);
+    expect(byId.body.analysis.run.sourceErrors).toEqual(sourceErrors);
+    const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(byTrack.body).toEqual(byId.body);
   });
 
   it("removes a run's events when retention removes the run", async () => {

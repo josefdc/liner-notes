@@ -144,7 +144,7 @@ function baseWithExtraField(): string {
   return base;
 }
 
-/** The breaking lines the code reports against a base with the extra field. */
+/** The breaking lines the code reports as unacknowledged against a base with the extra field. */
 function breakingLines(base: string): string[] {
   return [...check(base).out.matchAll(/^\[contract\] breaking: (.*)$/gm)].map((m) => m[1]);
 }
@@ -192,7 +192,7 @@ describe("contract-check", { timeout: 30_000 }, () => {
     const base = baseWithExtraField();
     rmSync(snapshotsDir(), { recursive: true });
     expect(check(base).status).toBe(1);
-    cpSync(join(packageDir, "snapshots"), snapshotsDir(), { recursive: true });
+    seedSnapshots();
     expect(check(base).status).toBe(1);
   });
 
@@ -218,10 +218,14 @@ describe("contract-check", { timeout: 30_000 }, () => {
 
   it("lets a later change acknowledge the same line again by adding it once more", () => {
     const base = acknowledgedBase();
+    // The lines the base already has excuse nothing in this change.
+    expect(check(base).status).toBe(1);
     const acknowledged = readFileSync(ackFile(), "utf8");
     const lines = acknowledged.split("\n").filter((line) => line.includes("legacyField"));
     writeFileSync(ackFile(), `${acknowledged}${lines.join("\n")}\n`);
-    expect(check(base).status).toBe(0);
+    const result = check(base);
+    expect(result.out).toContain(`: 0 breaking, ${lines.length} acknowledged`);
+    expect(result.status).toBe(0);
   });
 
   it("needs an engine-change line when the comparison code or its CI step changed", () => {

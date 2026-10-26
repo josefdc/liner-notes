@@ -79,17 +79,40 @@ import {
 const log = logger("Historian");
 
 /**
- * The status line of a research-cache hit while the primary sources are read: the ones that
- * will be asked (a source without its credential is reported as not configured instead).
+ * The primary sources a read asks (a source without its credential is reported as not
+ * configured instead).
  */
-function readingPrimary(): string {
-  const asked = [
+function primaryNames(): string[] {
+  return [
     "MusicBrainz",
     ...(discogsConfigured() ? ["Discogs"] : []),
     "SecondHandSongs",
     ...(geniusConfigured() ? ["Genius"] : []),
   ];
-  return `Reading the primary sources again (${asked.join(", ")})`;
+}
+
+/** The status line of a research-cache hit while the primary sources are read again. */
+function readingPrimary(): string {
+  return `Reading the primary sources again (${primaryNames().join(", ")})`;
+}
+
+/** "A", "A and B", "A, B and C". */
+const listed = (names: readonly string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/**
+ * The research's first status line: the sources it starts with, only those that will be asked
+ * (Last.fm and the web search when they have a key, the primary sources when the track has an
+ * ISRC). The researcher's own lines say the rest.
+ */
+function startLine(isrc: string | null): string {
+  const configured = configuredSources();
+  const asked = [
+    ...(configured.lastfm ? ["Last.fm"] : []),
+    ...(isrc ? primaryNames() : []),
+    ...(configured.tavily ? ["a web search"] : []),
+  ];
+  return asked.length > 0 ? `Starting the research: ${listed(asked)}` : "Starting the research";
 }
 
 /** The status line of a research-cache hit. */
@@ -121,13 +144,15 @@ export async function historianNode(
     if (hit) return hit;
   }
 
-  // The primary sources are read from the track's ISRC while the research runs.
-  const primary = startPrimarySources(state.spotifyData, isrc, config.signal, runtime);
+  // The primary sources are read from the track's ISRC while the research runs. Without the
+  // track's Spotify details (a Spotify error in the run) its ISRC is unknown, not absent.
+  const detailed = !(state.sourceErrors ?? []).some((e) => e.source === "spotify");
+  const primary = startPrimarySources(state.spotifyData, isrc, config.signal, runtime, !detailed);
 
   writer?.({
     type: "status",
     code: "RESEARCH-START",
-    message: "Reading Last.fm, the primary sources and web search results for the track",
+    message: startLine(isrc),
     node: "historian",
     timestamp: timestampOf(runtime),
   });
@@ -310,7 +335,6 @@ export async function historianNode(
   // the row says so, and a hit reads the primary sources again.
   config.signal?.throwIfAborted();
   const notConfigured = sourceErrors.filter((e) => e.code === "not_configured");
-  const detailed = !(state.sourceErrors ?? []).some((e) => e.source === "spotify");
   const complete =
     detailed &&
     !failure &&
@@ -344,7 +368,7 @@ export async function historianNode(
   const steps = finalState.stepsRun ?? 0;
   const summary = failure
     ? "Research stopped early; showing what was found"
-    : `Research finished: ${steps} ${steps === 1 ? "step" : "steps"} run`;
+    : `Research finished: ${steps} ${steps === 1 ? "step" : "steps"} run in all`;
   writer?.({
     type: "status",
     code: failure ? "SYS-WARN" : "RESEARCH-FOUND",

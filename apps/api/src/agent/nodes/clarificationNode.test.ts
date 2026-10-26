@@ -296,8 +296,7 @@ describe("clarificationNode's stored results", () => {
     const update = node.update as Partial<SonicAgentStateType>;
     expect(update.trackData).toMatchObject({ id: "track-b" });
     expect(update.sourceErrors).toEqual(expect.arrayContaining([lasting]));
-    const line =
-      "Stored analysis: SecondHandSongs could not be read when it was made (invalid_response)";
+    const line = "Stored analysis: SecondHandSongs answered in a form the reader does not know";
     expect(update.statusMessages).toContain(line);
     const warned = events.findIndex((e) => e.code === "SYS-WARN" && e.message === line);
     expect(warned).toBeGreaterThan(-1);

@@ -205,7 +205,7 @@ describe("engineerNode", () => {
     expect(cache.putAudio).toHaveBeenCalledTimes(1);
     // Matched by search: filed under the Spotify id, not under an ISRC.
     expect(cache.putAudio).toHaveBeenCalledWith("spotify:C", "C", searchMeasured(SIGNAL_ONLY));
-    expect(text).toContain("Measuring tempo and key from the 30 s preview");
+    expect(text).toContain("Measuring tempo and key from the preview clip");
     expect(text).toContain(
       "Measured from the preview: 116 BPM, D Minor (some perceptual features not measured)",
     );
@@ -313,8 +313,25 @@ describe("engineerNode", () => {
       expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
       expect(healthCalls(stub)).toHaveLength(1);
       expect(text).toContain(
-        "The audio service is unavailable. Showing the measurement by analyzer 2.1.0+essentia from 2026-10-20: 116 BPM, D Minor",
+        "The audio service is unavailable. Showing an earlier measurement by analyzer 2.1.0 from 2026-10-20: 116 BPM, D Minor",
       );
+    });
+
+    it("names no build or model ids, and no date it does not know, for an earlier measurement", async () => {
+      stubNetwork("down");
+      cache.getNewestAudio.mockImplementation((key) =>
+        key === "spotify:OLD"
+          ? {
+              measurement: { audio: audioV2(), previewMatch: SEARCH_MATCH },
+              measuredAt: new Date(0),
+            }
+          : null,
+      );
+      const { text } = await run("OLD");
+      expect(text).toContain(
+        "The audio service is unavailable. Showing an earlier measurement by analyzer 2.1.0: 116 BPM, D Minor",
+      );
+      expect(text).not.toMatch(/essentia|models-|1970/);
     });
 
     it("serves the newest measurement when the service names no analyzer version, and says so", async () => {
@@ -327,7 +344,7 @@ describe("engineerNode", () => {
       expect(out.audioFeatures).toEqual({ ...ownRow, servedUnversioned: true });
       expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
       expect(text).toContain(
-        "The audio service did not name its analyzer version. Showing the measurement by analyzer 2.1.0+essentia from 2026-10-21",
+        "The audio service did not name its analyzer version. Showing an earlier measurement by analyzer 2.1.0 from 2026-10-21",
       );
     });
 
@@ -609,7 +626,12 @@ describe("engineerNode", () => {
     it("reports a Deezer outage as a source error, apart from the missing clip", async () => {
       const stub = stubNetwork("up");
       deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };
-      const { out } = await run("Q", "USSB29000129");
+      const { out, text } = await run("Q", "USSB29000129");
+      // Deezer could not be read: that is why there is no clip, not that none was found.
+      expect(text).toContain(
+        "Tempo and key not measured: Deezer could not be read to find a preview clip",
+      );
+      expect(text).not.toContain("no preview clip of this recording was found");
       expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
       expect(out.sourceErrors).toEqual([
         { source: "deezer", code: "rate_limited", message: expect.stringContaining("Quota") },
@@ -660,12 +682,11 @@ describe("engineerNode", () => {
       expect(text).not.toMatch(/\d+ BPM/);
     });
 
-    it("names the service's reason for a withheld key in the status line", async () => {
+    it("names the reason for a withheld key in its own words, not the service's text", async () => {
       stubNetwork("up", PREVIEW, serviceAnswer(keyWithheldV2()));
       const { text } = await run("KW");
-      expect(text).toContain(
-        "Measured 116 BPM; key not given: the partials hold still, rise and fall together and spell no chord",
-      );
+      expect(text).toContain("Measured 116 BPM; key not given: one pitched source, not a key");
+      expect(text).not.toContain("the partials hold still");
       expect(text).not.toMatch(/not detected|not_detected/);
     });
 
@@ -686,7 +707,7 @@ describe("engineerNode", () => {
       stubNetwork("up", PREVIEW, serviceAnswer(block));
       const { text } = await run("TKW");
       expect(text).toContain(
-        "Tempo not given: the tempo does not hold over the window; key not given: one pitch line without stable notes",
+        "Tempo not given: the tempo does not hold across the preview; key not given: one pitch line without stable notes",
       );
     });
 
@@ -694,7 +715,9 @@ describe("engineerNode", () => {
       const block = {
         ...gatedV2("silence"),
         analyzerVersion: "2.3.0+essentia",
-        withheld: { tempo: { code: "gate_silence" as const, reason: "the preview is silent" } },
+        withheld: {
+          tempo: { code: "gate_silence" as const, reason: "silent window (rms 0.0001)" },
+        },
       };
       stubNetwork("up", PREVIEW, serviceAnswer(block));
       const { text } = await run("GS");
@@ -755,9 +778,18 @@ describe("engineerNode", () => {
     expect(cache.putAudio).not.toHaveBeenCalled();
   });
 
+  it("says it measures only when it asks the service: not while the service is down", async () => {
+    const stub = stubNetwork("down");
+    const { text } = await run("DOWN2");
+    expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+    expect(text).not.toContain("Measuring tempo and key");
+    expect(text).toContain("Tempo and key not measured: the audio service is unavailable");
+  });
+
   it("reports preview_rejected for a preview the service would refuse", async () => {
     const stub = stubNetwork("up", "http://cdnt-preview.dzcdn.net/api/1/x.mp3");
-    const { out } = await run("G");
+    const { out, text } = await run("G");
+    expect(text).not.toContain("Measuring tempo and key");
     expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "preview_rejected" });
     expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
   });

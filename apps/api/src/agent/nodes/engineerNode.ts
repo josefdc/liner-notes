@@ -26,9 +26,12 @@
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import type {
-  AudioGateReason,
-  AudioUnavailableReason as ResultUnavailableReason,
+import {
+  AUDIO_TEMPO_RANGE_BPM,
+  type AudioGateReason,
+  type AudioUnavailableReason as ResultUnavailableReason,
+  type AudioWithheldCode,
+  type SourceId,
 } from "@liner-notes/contract";
 import {
   analyzeAudioPreview,
@@ -55,6 +58,7 @@ import { isAbortError } from "../errors.js";
 import { measuredAudioFields } from "../finalize.js";
 import { type AgentRuntime, defaultAgentRuntime, timestampOf } from "../runtime.js";
 import { logger } from "../../logger.js";
+import { SOURCE_NAMES } from "../prompts.js";
 
 const log = logger("Engineer");
 
@@ -103,11 +107,52 @@ const GATE_TEXT: Record<AudioGateReason, string> = {
 };
 
 /**
- * What a measurement says, for status lines: "116 BPM, D Minor", or what is missing and why.
- * A tempo or key the service withheld is named with the service's own reason for that field
- * (`audio.withheld`); "not detected" only when the block gives no reason.
+ * Why the service withheld a value, in this app's words for its code (the contract's
+ * AudioWithheldCode): the check that fired, never the value. The service's own `reason` text
+ * is for logs and tools, and is not shown.
  */
-function measuredSummary(measurement: AudioMeasurement): {
+const WITHHELD_TEXT: Record<AudioWithheldCode, string> = {
+  gate_silence: GATE_TEXT.silence,
+  gate_noise: GATE_TEXT.noise,
+  gate_too_short: GATE_TEXT.too_short,
+  no_beat: "no repeating beat",
+  tempo_out_of_range: `outside the ${AUDIO_TEMPO_RANGE_BPM[0]}–${AUDIO_TEMPO_RANGE_BPM[1]} BPM the analysis accepts`,
+  too_few_beats: "too few beats to measure a steady tempo",
+  low_confidence: "the estimate was below the confidence needed",
+  unsteady_tempo: "the tempo does not hold across the preview",
+  no_tempo_estimate: "the tempo estimator gave no tempo",
+  no_sustained_pitch: "too little sustained pitch",
+  speech_like: "one pitch line without stable notes",
+  one_harmonic_series: "one harmonic series dominates",
+  one_held_pitch: "one held pitch dominates",
+  no_pitch_track: "the pitch could not be tracked",
+  few_pitch_classes: "fewer than three pitch classes",
+  one_pitched_source: "one pitched source, not a key",
+  low_key_strength: "the key estimate was too weak",
+  no_key_estimate: "the key estimator named no key",
+  models_not_loaded: "the audio models are not loaded",
+  not_music: "the preview does not read as music",
+  model_failed: "the audio model gave no usable output",
+  out_of_range: "outside the range its model produces",
+  non_music_style: "the strongest style is a non-music one",
+  estimate_failed: "the estimator failed on this preview",
+};
+
+/** A withheld reason in words; "not detected" when the block gives none for the field. */
+const withheldText = (reason: { code: AudioWithheldCode } | undefined) =>
+  reason ? (WITHHELD_TEXT[reason.code] ?? "the analysis withheld it") : "not detected";
+
+/**
+ * What a measurement says, for status lines: "116 BPM, D Minor", or what is missing and why.
+ * A tempo or key the service withheld is named with the reason for that field
+ * (`audio.withheld`), in this app's words; "not detected" only when the block gives no reason.
+ * `lookupFailed` names the source that could not be read while the clip was looked up: without
+ * a clip, that is why, not "no clip was found".
+ */
+function measuredSummary(
+  measurement: AudioMeasurement,
+  lookupFailed: SourceId | null = null,
+): {
   measured: boolean;
   text: string;
   complete: boolean;
@@ -122,13 +167,15 @@ function measuredSummary(measurement: AudioMeasurement): {
   }
   const audio = fields.audio;
   if (audio && !audio.gate.passed) {
-    const why =
-      audio.withheld?.tempo?.reason ??
-      (audio.gate.reason ? GATE_TEXT[audio.gate.reason] : "the preview did not pass the checks");
+    const why = audio.withheld?.tempo
+      ? withheldText(audio.withheld.tempo)
+      : audio.gate.reason
+        ? GATE_TEXT[audio.gate.reason]
+        : "the preview did not pass the checks";
     return { measured: false, text: `Nothing measured on the preview: ${why}`, complete: false };
   }
   if (audio) {
-    const why = (field: "tempo" | "key") => audio.withheld?.[field]?.reason ?? "not detected";
+    const why = (field: "tempo" | "key") => withheldText(audio.withheld?.[field]);
     const parts = [
       fields.bpm !== null ? `Measured ${fields.bpm} BPM` : `Tempo not given: ${why("tempo")}`,
       fields.key !== null ? `measured ${fields.key}` : `key not given: ${why("key")}`,
@@ -136,11 +183,11 @@ function measuredSummary(measurement: AudioMeasurement): {
     return { measured: false, text: parts.join("; "), complete: false };
   }
   const reason = fields.audioUnavailableReason ?? "not_run";
-  return {
-    measured: false,
-    text: `Tempo and key not measured: ${UNMEASURED_TEXT[reason]}`,
-    complete: false,
-  };
+  const text =
+    reason === "no_preview" && lookupFailed
+      ? `${SOURCE_NAMES[lookupFailed]} could not be read to find a preview clip`
+      : UNMEASURED_TEXT[reason];
+  return { measured: false, text: `Tempo and key not measured: ${text}`, complete: false };
 }
 
 /**
@@ -181,6 +228,16 @@ function previewRequest(state: SonicAgentStateType): TrackPreviewRequest {
     durationMs: track?.durationMs ?? null,
     spotifyPreviewUrl: track?.previewUrl ?? null,
   };
+}
+
+/**
+ * " by analyzer 2.1.0 from 2026-10-20": the analyzer's version without its build and model ids,
+ * and the date only when it is known.
+ */
+function unversionedFrom(analyzerVersion: string, measuredAt: Date): string {
+  const version = analyzerVersion.split("+")[0];
+  const known = Number.isFinite(measuredAt.getTime()) && measuredAt.getTime() > 0;
+  return ` by analyzer ${version}${known ? ` from ${measuredAt.toISOString().slice(0, 10)}` : ""}`;
 }
 
 /** A cached measurement the run serves. */
@@ -268,7 +325,7 @@ export async function engineerNode(
     // says which analyzer made it and when.
     const old = hit.unversioned;
     const served = old
-      ? `${old.reason} Showing the measurement by analyzer ${hit.measurement.audio.analyzerVersion} from ${old.measuredAt.toISOString().slice(0, 10)}: ${summary}`
+      ? `${old.reason} Showing an earlier measurement${unversionedFrom(hit.measurement.audio.analyzerVersion, old.measuredAt)}: ${summary}`
       : `Measured in an earlier run: ${summary}`;
     log.info(`Cache hit for: ${track.title}${old ? " (service version unknown)" : ""}`);
     writer?.({
@@ -291,12 +348,13 @@ export async function engineerNode(
     };
   }
 
-  // Said only when there is a clip to measure: without one, the next line says so.
-  if (fresh.previewUrl) {
+  // Said only when a measurement is attempted: a clip the service accepts, and a service that
+  // answered its health probe. Otherwise the next line says why nothing was measured.
+  if (health !== null && fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl)) {
     writer?.({
       type: "status",
       code: "AUDIO-INIT",
-      message: "Measuring tempo and key from the 30 s preview",
+      message: "Measuring tempo and key from the preview clip",
       node: "engineer",
       timestamp: timestampOf(runtime),
     });
@@ -331,7 +389,8 @@ export async function engineerNode(
     ...lookupErrors(analysis?.previewSourceError),
   };
 
-  const summary = measuredSummary(measurement);
+  const lookupFailed = analysis?.previewSourceError ?? fresh.sourceError;
+  const summary = measuredSummary(measurement, lookupFailed?.source ?? null);
   if (!summary.measured) {
     writer?.({
       type: "status",

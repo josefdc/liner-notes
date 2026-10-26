@@ -136,14 +136,16 @@ graph.scripts = {
   },
   async *plain() {
     yield status("scout", "Found the track on Spotify", { code: "SPOTIFY-FOUND" });
-    yield status("engineer", "Measuring tempo and key from the 30 s preview", {
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
       code: "AUDIO-INIT",
     });
     yield* result("composer", COMPOSED);
   },
   async *fallback() {
     yield status("scout", "Found the track on Spotify", { code: "SPOTIFY-FOUND" });
-    yield status("composer", "Model unavailable; showing source data only", { code: "SYS-WARN" });
+    yield status("composer", "The model request failed; showing source data only", {
+      code: "SYS-WARN",
+    });
     yield* result("composer", FALLBACK);
   },
   async *ambiguous(_signal, threadId) {
@@ -187,13 +189,13 @@ graph.scripts = {
     throw new Error("secret-graph-failure");
   },
   async *stall(signal) {
-    yield status("engineer", "Measuring tempo and key from the 30 s preview", {
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
       code: "AUDIO-INIT",
     });
     await untilAborted(signal);
   },
   async *slow() {
-    yield status("engineer", "Measuring tempo and key from the 30 s preview", {
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
       code: "AUDIO-INIT",
     });
     const waited = new Promise((resolve) => setTimeout(resolve, 40_000));
@@ -203,7 +205,7 @@ graph.scripts = {
   },
   /** Ignores the abort: keeps reporting progress and finally a result after the client left. */
   async *deaf() {
-    yield status("engineer", "Measuring tempo and key from the 30 s preview", {
+    yield status("engineer", "Measuring tempo and key from the preview clip", {
       code: "AUDIO-INIT",
     });
     hold?.entered();

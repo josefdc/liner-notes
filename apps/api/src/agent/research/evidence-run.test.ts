@@ -453,7 +453,7 @@ describe("a run whose primary sources fail", () => {
       ]),
     );
     expect(statusLines(served.events)).toContain(
-      "Stored analysis: SecondHandSongs could not be read when it was made (invalid_response)",
+      "Stored analysis: SecondHandSongs answered in a form the reader does not know",
     );
   });
 
@@ -471,6 +471,10 @@ describe("a run whose primary sources fail", () => {
     expect(lost).toMatchObject({ source: "musicbrainz", code: "rate_limited" });
     expect(statusLines(events).some((m) => /MusicBrainz records are incomplete/.test(m))).toBe(
       true,
+    );
+    // In words, without the error's code.
+    expect(statusLines(events).some((m) => /records are incomplete \(rate_limited\)/.test(m))).toBe(
+      false,
     );
     // MusicBrainz lists no cover of the work, and the run does not pass that off as complete.
     const covers = (e: { source: string; recordRef: string | null }) =>
@@ -508,9 +512,7 @@ describe("a run whose primary sources fail", () => {
     expect(error).toMatchObject({ code: "unavailable" });
     expect(error?.message).toMatch(/^internal error: /);
     // The status blames our reader, not the source.
-    expect(statusLines(events)).toContain(
-      "SecondHandSongs: our reader failed on its answer (internal error)",
-    );
+    expect(statusLines(events)).toContain("SecondHandSongs: our reader failed on its answer");
     expect(stored).toBe(0);
   });
 

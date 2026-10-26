@@ -33,6 +33,7 @@ import { ResearchPlanOutput } from "@liner-notes/contract";
 import { answeredCall, failedCall } from "./callRecords.js";
 import type { WebFinding } from "./research/evidencePack.js";
 import { PLANNER_LINES, plannerLine } from "./research/plannerLines.js";
+import { MODEL_FAILURE_TEXT, modelErrorCategory, sourceErrorLine } from "./statusText.js";
 import {
   FIRST_STEP,
   FOLLOW_UP_TIER,
@@ -72,11 +73,7 @@ import {
 } from "../sources/lastfm.js";
 import { getListenBrainzSimilarArtists } from "../sources/listenbrainz.js";
 import { errorRecord } from "../sources/records.js";
-import {
-  INTERNAL_ERROR_PREFIX,
-  type NotAskedReason,
-  readToolResult,
-} from "../sources/toolResult.js";
+import { type NotAskedReason, readToolResult } from "../sources/toolResult.js";
 import type { SourceError, SourceId } from "@liner-notes/contract";
 import {
   emptyResearch,
@@ -293,25 +290,24 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       return {
         researchComplete: true,
         usage: [failed],
-        statusMessages: [plannerLine(PLANNER_LINES.ended, { status: failed.status })],
+        statusMessages: [
+          plannerLine(PLANNER_LINES.ended, {
+            reason: MODEL_FAILURE_TEXT[modelErrorCategory(error)],
+          }),
+        ],
       };
     }
 
     // The planner's reasoning is model text: written at debug level only.
     log.info(`Plan: ${plan.nextAction}`);
     log.debug("Planner reasoning", { reasoning: plan.reasoning });
+    // Its own lines carry the progress; the reasoning is never a status line.
     if (plan.nextAction === "done") {
       status(PLANNER_LINES.finished);
-      return { researchComplete: true, usage: [call], statusMessages: [plan.reasoning] };
+      return { researchComplete: true, usage: [call], statusMessages: [PLANNER_LINES.finished] };
     }
 
-    status(plan.reasoning);
-    return {
-      researchPlan: plan,
-      researchIteration: iteration + 1,
-      usage: [call],
-      statusMessages: [plan.reasoning],
-    };
+    return { researchPlan: plan, researchIteration: iteration + 1, usage: [call] };
   };
 }
 
@@ -539,21 +535,15 @@ export class StepReader {
 }
 
 /**
- * One status line per source that could not be read: "Last.fm could not be read (…)",
- * "Last.fm key rejected (…)" for a key the source refused, or, for a bug in our own reader
- * (an internal error), that the reader failed: the source is not to blame.
+ * One status line per source that could not be read, or was not asked for want of a key, in
+ * words (statusText.ts sourceErrorLine): "Last.fm could not be read: it did not answer in time",
+ * "Genius not asked: no key is configured for it", "Last.fm refused the configured key".
  */
 export function unreadableStatus(
   errors: readonly SourceError[],
   rejected: ReadonlySet<SourceId> = new Set(),
 ): string[] {
-  return uniqueErrors(errors).map((e) =>
-    rejected.has(e.source)
-      ? `${SOURCE_NAMES[e.source]} key rejected: fix the key (${e.code})`
-      : e.message?.startsWith(INTERNAL_ERROR_PREFIX)
-        ? `${SOURCE_NAMES[e.source]}: our reader failed on its answer (internal error)`
-        : `${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
-  );
+  return uniqueErrors(errors).map((e) => sourceErrorLine(e, rejected.has(e.source)));
 }
 
 /** Source errors without repeats: one per source and code, the first message kept. */
@@ -585,8 +575,24 @@ const ACTION_SOURCE: Record<Exclude<ResearchPlan["nextAction"], "done">, SourceI
   search_listenbrainz_similar: "listenbrainz",
 };
 
-/** "search_lastfm_similar_tracks" → "lastfm similar tracks". */
-export const actionLabel = (action: string) => action.replace(/^search_/, "").replaceAll("_", " ");
+/** What each step searches, in the status lines' words. */
+const ACTION_LABEL: Record<Exclude<ResearchPlan["nextAction"], "done">, string> = {
+  search_samples: "sample history on the web",
+  search_production: "production history on the web",
+  search_general: "the planner's lead on the web",
+  search_musicbrainz: "MusicBrainz relationships of the recording",
+  search_artist_collaborators: "MusicBrainz collaborators of the artist",
+  search_lastfm_tags: "Last.fm tags",
+  search_lastfm_similar_tracks: "Last.fm similar tracks",
+  search_lastfm_similar_artists: "Last.fm similar artists",
+  search_lastfm_artist_info: "Last.fm artist info",
+  search_listenbrainz_similar: "ListenBrainz similar artists",
+};
+
+/** "search_lastfm_similar_tracks" → "Last.fm similar tracks". */
+export const actionLabel = (action: string): string =>
+  ACTION_LABEL[action as keyof typeof ACTION_LABEL] ??
+  action.replace(/^search_/, "").replaceAll("_", " ");
 
 function createResearchToolNode(runtime: AgentRuntime) {
   return (state: ResearcherStateType, config: LangGraphRunnableConfig) =>
@@ -716,7 +722,7 @@ async function researchStep(
 
   writer?.({
     type: "status",
-    message: `Searching ${label}`,
+    message: `Searching: ${label}`,
     node: "research_tool",
     timestamp: timestampOf(runtime),
   });
@@ -1030,7 +1036,13 @@ async function researchStep(
       (message) => !warned.has(message) && Boolean(warned.add(message)),
     );
     for (const message of warnings) {
-      writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
+      writer?.({
+        type: "status",
+        code: "SYS-WARN",
+        message,
+        node: "research_tool",
+        timestamp: timestampOf(runtime),
+      });
     }
     // A step whose source was not asked, or could not identify the track, did not find
     // "nothing": it has its own status, which says why when Last.fm was not asked by name.
@@ -1047,11 +1059,7 @@ async function researchStep(
         : "";
     const status = [
       ...warnings,
-      ...(holdsData(step.data)
-        ? [`Found ${label} information${kept}`]
-        : errors.length === 0
-          ? [empty]
-          : []),
+      ...(holdsData(step.data) ? [`Found: ${label}${kept}`] : errors.length === 0 ? [empty] : []),
     ];
     return {
       researchData: step.data,
@@ -1074,11 +1082,7 @@ async function researchStep(
       stepsRun: 1,
       sourceErrors: [record],
       // A bug in our own reader says so: the source is not to blame.
-      statusMessages: [
-        record.message?.startsWith(INTERNAL_ERROR_PREFIX)
-          ? `Search failed: ${label} (internal error in our reader)`
-          : `Search failed: ${label} (${record.code})`,
-      ],
+      statusMessages: [`Search failed: ${label}; ${sourceErrorLine(record)}`],
     };
   }
 }

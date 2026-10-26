@@ -21,7 +21,7 @@ import {
   STORED_LINE,
   storedErrorStatus,
 } from "../storedResults.js";
-import { matchTrack } from "../trackMatch.js";
+import { choiceMessage, matchTrack } from "../trackMatch.js";
 import { logger } from "../../logger.js";
 
 const log = logger("Clarification");
@@ -64,7 +64,7 @@ export async function clarificationNode(
   const resumed = interrupt<DisambiguationInterrupt, PickResume | string>({
     type: "disambiguation",
     candidates: state.candidates!, // non-null: routing guarantees candidates exist here
-    message: "Multiple songs found. Please select the correct one.",
+    message: choiceMessage(state.candidates!.length),
   });
 
   // Keep the runtime guard — Command({ resume }) could pass any value at runtime

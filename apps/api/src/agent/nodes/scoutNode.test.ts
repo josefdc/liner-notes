@@ -463,7 +463,7 @@ describe("scoutNode's Spotify failures", () => {
       },
     } as never);
 
-    expect(statuses).toContain("Spotify is rate limiting requests; trying again in 1 s...");
+    expect(statuses).toContain("Spotify is limiting requests; trying again in 1 s");
   });
 
   it("says nothing matched when Spotify finds nothing", async () => {
@@ -486,6 +486,18 @@ describe("scoutNode's Spotify failures", () => {
 
     expect(spotify.calls).toBe(1);
     expect(out.scoutFailure).toEqual({ kind: "upstream_unavailable" });
+  });
+});
+
+describe("scoutNode when it cannot use what Spotify sent", () => {
+  it("says the results could not be processed, not that Spotify failed", async () => {
+    spotify.answer = async () => "[null]";
+    const { graph } = scoutGraph();
+
+    const out = await graph.invoke({ songQuery: "Song A" });
+
+    expect(out.error).toMatch(/^Scout error: /);
+    expect(out.statusMessages).toEqual(["The search results could not be processed"]);
   });
 });
 
@@ -590,18 +602,27 @@ describe("scoutNode for a request by track id", () => {
       "Spotify has no such track",
       new SourceError("spotify", "http", "HTTP 404", { status: 404 }),
       "no_match",
+      "Spotify has no track with this id",
     ],
     [
       "Spotify does not know the id",
       new SourceError("spotify", "http", "HTTP 400", { status: 400 }),
       "no_match",
+      "Spotify has no track with this id",
+    ],
+    [
+      "the id is not a Spotify track id",
+      new SourceError("spotify", "invalid_input", "not a Spotify track id"),
+      "no_match",
+      "This is not a Spotify track id",
     ],
     [
       "Spotify fails",
       new SourceError("spotify", "http", "HTTP 401", { status: 401 }),
       "upstream_unavailable",
+      "Spotify could not be read",
     ],
-  ])("says why no track was read when %s", async (_label, error, kind) => {
+  ])("says why no track was read when %s", async (_label, error, kind, said) => {
     spotify.track = async () => {
       throw error;
     };
@@ -609,6 +630,7 @@ describe("scoutNode for a request by track id", () => {
 
     const out = await graph.invoke({ songQuery: "midnight city", requestedTrackId: ID });
 
+    expect(out.statusMessages).toEqual([said]);
     expect(out.scoutFailure).toEqual({ kind });
     expect(spotify.calls).toBe(0);
   });

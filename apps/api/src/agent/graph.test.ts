@@ -975,29 +975,40 @@ describe("the analysis graph's progress messages", () => {
       expect.arrayContaining([
         "Searching Spotify",
         "Found the track on Spotify: Ice Ice Baby by Vanilla Ice",
-        "Measured 116 BPM; key not given: the partials hold still, rise and fall together and spell no chord",
+        "Measured 116 BPM; key not given: one pitched source, not a key",
+        // Only the sources it will ask: no ISRC, so no primary source, and no web search key.
+        "Starting the research: Last.fm",
         "Primary sources not asked: the track has no ISRC",
-        "Planning research step 1 of 2",
+        "Choosing follow-up step 1 of at most 2",
+        "Writing the liner notes",
+        "Looking up cover art on Spotify for the genealogy",
         "Analysis complete",
       ]),
     );
     expect(served).toContain("Serving the analysis stored for this track");
     expect(fallback).toEqual(
       expect.arrayContaining([
-        "Web search (Tavily) could not be read (unavailable)",
-        "Model unavailable (rate limited); showing source data only",
+        "Web search (Tavily) could not be read: it gave no usable answer",
+        "The model is unavailable: it is limiting requests; showing source data only, with a template song structure and no written notes",
       ]),
     );
-    expect(asked).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/^Found \d+ possible tracks; waiting for a choice$/),
-        "Multiple songs found. Please select the correct one.",
-      ]),
-    );
+    // One candidate: the choice line says one, in the candidates event, the state and the
+    // interrupt alike.
+    const one = "Spotify found one possible track; confirm it or search again";
+    expect(asked.filter((message) => message === one)).toHaveLength(3);
+    expect(asked.join("\n")).not.toMatch(/Multiple|songs found|matching songs/);
     expect(picked).toContain("Selected: Ice Ice Baby (its Spotify details could not be read)");
+    // Its ISRC is unknown, not absent: the details could not be read.
+    expect(picked).toContain(
+      "Primary sources not asked: the track's ISRC could not be read from Spotify",
+    );
+    expect(picked).not.toContain("Primary sources not asked: the track has no ISRC");
 
     const all = [...measured, ...served, ...fallback, ...asked, ...picked];
     expect(all.filter((message) => flagged(message).length > 0)).toEqual([]);
+    expect(all.filter((message) => message.endsWith("..."))).toEqual([]);
+    // The planner's reasoning ("planned …", model text) is never a status line.
+    expect(all.filter((message) => message.startsWith("planned "))).toEqual([]);
   });
 
   it("flag a message the guard counts (the check above can fail)", () => {

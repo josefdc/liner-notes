@@ -4,6 +4,7 @@ import { type Request, type Response, Router } from "express";
 import { Command } from "@langchain/langgraph";
 import { createSonicAgentGraph } from "../../agent/graph.js";
 import type { PickResume } from "../../agent/nodes/clarificationNode.js";
+import { choiceMessage } from "../../agent/trackMatch.js";
 import type { SearchCandidate, TrackData } from "../../agent/schema.js";
 import type { PickedBy, ScoutFailure } from "../../agent/state.js";
 import { runningCommit } from "../../config/checkoutCommit.js";
@@ -93,8 +94,6 @@ const ERRORS = {
 
 type ErrorCode = keyof typeof ERRORS;
 type FailureCode = "no_match" | "upstream_unavailable" | "timeout" | "failed";
-
-const DISAMBIGUATION_MESSAGE = "Multiple songs found. Please select the correct one.";
 
 // =============================================================================
 // Input validation
@@ -715,7 +714,7 @@ function sendStreamOutcome(
       reason: "disambiguation",
       threadId,
       candidates: outcome.candidates,
-      message: DISAMBIGUATION_MESSAGE,
+      message: choiceMessage(outcome.candidates.length),
     });
   } else if (outcome.kind === "failed") {
     if (outcome.rateLimit) error(outcome.code, rateLimitMessage(outcome.rateLimit.retryAfterMs));
@@ -773,7 +772,7 @@ function sendJsonOutcome(
         interrupt: {
           reason: "disambiguation",
           candidates: outcome.candidates,
-          message: DISAMBIGUATION_MESSAGE,
+          message: choiceMessage(outcome.candidates.length),
         },
       });
       return;

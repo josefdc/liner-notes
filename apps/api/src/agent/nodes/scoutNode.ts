@@ -32,7 +32,7 @@ import {
   STORED_LINE,
   storedErrorStatus,
 } from "../storedResults.js";
-import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
+import { choiceMessage, matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
 import { logger } from "../../logger.js";
 
 const log = logger("Scout");
@@ -61,8 +61,8 @@ function withSpotifyRetry<T>(
         type: "status",
         code: "SYS-WARN",
         message: isSourceError(error, "rate_limited")
-          ? `Spotify is rate limiting requests; trying again in ${seconds} s...`
-          : `Spotify did not answer; trying again in ${seconds} s...`,
+          ? `Spotify is limiting requests; trying again in ${seconds} s`
+          : `Spotify did not answer; trying again in ${seconds} s`,
         node: "scout",
         timestamp: timestampOf(runtime),
       });
@@ -159,9 +159,15 @@ async function requestedTrack(
     track = await withSpotifyRetry(() => fetchTrack(trackId, config.signal), config, runtime);
   } catch (error) {
     if (config.signal?.aborted || isAbortError(error)) throw error;
-    const missing =
-      isSourceError(error, "invalid_input") ||
-      (isSourceError(error, "http") && (error.status === 404 || error.status === 400));
+    // An id that is not a Spotify track id is refused before any request.
+    if (isSourceError(error, "invalid_input")) {
+      return failed(
+        { kind: "no_match" },
+        `Not a Spotify track id: ${trackId}`,
+        "This is not a Spotify track id",
+      );
+    }
+    const missing = isSourceError(error, "http") && (error.status === 404 || error.status === 400);
     return missing
       ? failed(
           { kind: "no_match" },
@@ -282,7 +288,7 @@ export async function scoutNode(
       writer?.({
         type: "candidates",
         candidates,
-        message: `Found ${candidates.length} matching songs. Please select one.`,
+        message: choiceMessage(candidates.length),
       });
 
       log.info("Returning candidates for user disambiguation");
@@ -290,7 +296,7 @@ export async function scoutNode(
       return {
         candidates,
         queryMatch,
-        statusMessages: [`Found ${candidates.length} possible tracks; waiting for a choice`],
+        statusMessages: [choiceMessage(candidates.length)],
       };
     }
 
@@ -314,7 +320,7 @@ export async function scoutNode(
     log.error(`Error: ${message}`);
     return {
       error: `Scout error: ${message}`,
-      statusMessages: ["Spotify search failed"],
+      statusMessages: ["The search results could not be processed"],
     };
   }
 }

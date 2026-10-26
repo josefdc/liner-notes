@@ -177,10 +177,12 @@ describe("research is cached with the run's evidence only when the run is comple
     const records = (fresh.out.evidence ?? []).filter((e) => e.sourceTier === "primary-record");
     const mb = records.filter((e) => e.source === "musicbrainz").length;
     expect(statusOf(hit.events)).toContain(
-      `Read ${records.length} records from the primary sources (MusicBrainz ${mb}, SecondHandSongs ${
+      `Using ${records.length} records from the research cache (MusicBrainz ${mb}, SecondHandSongs ${
         records.length - mb
-      }), from the research cache (read 2026-10-20; not asked again)`,
+      }; read 2026-10-20); the primary sources were not asked again`,
     );
+    // None of them was read in this run.
+    expect(statusOf(hit.events).filter((line) => line.startsWith("Read "))).toEqual([]);
     expect(statusOf(hit.events)).not.toContain(
       "Reading the primary sources again (MusicBrainz, SecondHandSongs)",
     );
@@ -254,7 +256,9 @@ describe("research is cached with the run's evidence only when the run is comple
     expect(hit.out.evidence).toEqual(fresh.out.evidence);
     expect(hit.out.sourceErrors).toEqual(expect.arrayContaining([shape]));
     expect(hit.out.lastingSourceErrors).toEqual([shape]);
-    expect(statusOf(hit.events)).toContain("SecondHandSongs could not be read (invalid_response)");
+    expect(statusOf(hit.events)).toContain(
+      "SecondHandSongs answered in a form the reader does not know",
+    );
   });
 });
 
@@ -564,9 +568,14 @@ describe("a row left for a later run", () => {
     const hit = await historian(LATER);
     expect(ids(hit.out.evidence)).toEqual(expect.arrayContaining(shsIds));
     expect(hit.out.primaryNotAsked ?? []).toEqual([]);
+    const kept = `${shsIds.length} ${shsIds.length === 1 ? "record" : "records"}`;
     expect(statusOf(hit.events)).toContain(
-      `SecondHandSongs not asked again: its ${shsIds.length} records come from the research cache (read 2026-10-20)`,
+      `SecondHandSongs not asked again: its ${kept} come from the research cache (read 2026-10-20)`,
     );
+    // The records read in this run are counted apart from the ones kept from the cache.
+    const read = statusOf(hit.events).filter((line) => line.startsWith("Read "));
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatch(/^Read \d+ records? from the primary sources \(MusicBrainz \d+\)$/);
     const row = cache.getResearch(key());
     expect(row?.evidence?.items.map((e) => e.id)).toEqual(expect.arrayContaining(shsIds));
     expect(row?.evidence?.incomplete).toEqual([]);

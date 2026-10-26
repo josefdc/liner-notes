@@ -4,8 +4,10 @@
  * repository root). They are written by the recorder (recorder.ts) from a stored live run.
  *
  * The files are read once, at first use, and each is checked strictly: the record's schema and
- * refinements, and the run rules of a replay (`runIssues`: it says when and from which commit
- * it was recorded). A file that fails is logged and left out; it is never served in part. The
+ * refinements, the run rules of a replay (`runIssues`: it says when and from which commit it was
+ * recorded), and what the recorder refuses (recorder.ts `recordIssues`: the run routes' text
+ * checks, its own, the events it never writes and a commit hash). A file that
+ * fails is logged and left out (not listed, never replayed); it is never served in part. The
  * result's other producer rules (`analysisIssues`) are logged for each record that breaks them,
  * so a recording made before a producer fix stays visible until it is recorded again.
  *
@@ -29,6 +31,10 @@ import {
 import { API_ROOT } from "../config/apiPackage.js";
 import { logger } from "../logger.js";
 import { archiveCoverOf } from "./cover.js";
+import { normalizeQuery } from "./query.js";
+import { recordIssues } from "./recorder.js";
+
+export { normalizeQuery } from "./query.js";
 
 const log = logger("Replay");
 
@@ -40,16 +46,6 @@ export function replayDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.REPLAY_DIR?.trim();
   if (!configured) return DEFAULT_REPLAY_DIR;
   return isAbsolute(configured) ? configured : resolve(API_ROOT, configured);
-}
-
-/** Lower case, without accents, with every run of punctuation and spaces as one space. */
-export function normalizeQuery(text: string): string {
-  return text
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
 }
 
 /** The queries that name a record's track exactly, normalised. */
@@ -133,7 +129,8 @@ export function loadReplays(dir: string): ReplaySet {
     try {
       raw = JSON.parse(readFileSync(path, "utf8"));
     } catch (err) {
-      problems.push(`${file}: not JSON (${(err as Error).message})`);
+      // The reason only: a parse error quotes the file, which may hold anything.
+      problems.push(`${file}: ${err instanceof SyntaxError ? "not JSON" : "cannot be read"}`);
       continue;
     }
     const parsed = ReplayRecord.safeParse(raw);
@@ -158,6 +155,22 @@ export function loadReplays(dir: string): ReplaySet {
       : ["analysis.run: missing"];
     if (issues.length > 0) {
       problems.push(`${file}: the recorded run information is wrong (${issues.join("; ")})`);
+      continue;
+    }
+    // Held to the recorder's checks again (recordIssues), as far as a file can tell: the file
+    // may not be the recorder's. The configured credentials, the query the user typed and the
+    // ids of the database's runs are checked when it is recorded. Where and why only; the text
+    // itself is not logged.
+    const held = recordIssues(record, {
+      secrets: [],
+      typedQuery: "",
+      // No typed query is known here, so there are no public texts to weigh it against.
+      publicTexts: [],
+      track: record.analysis,
+      allowedCover: cover,
+    });
+    if (held.length > 0) {
+      problems.push(`${file}: holds text a recording must not (${held.slice(0, 5).join("; ")})`);
       continue;
     }
     if (record.slug !== basename(file, ".json")) {

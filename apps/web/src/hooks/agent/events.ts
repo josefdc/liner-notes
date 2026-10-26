@@ -128,8 +128,11 @@ function readCandidate(value: unknown): SearchCandidate | null {
   };
 }
 
-/** The contract's reading of a measurement: the block it parsed, or null when it cannot. */
-function readContractAudio(audio: unknown): unknown {
+/**
+ * The contract's reading of a measurement: the block it parsed, or null when it cannot. Needs
+ * the schemas loaded (loadEventSchemas).
+ */
+export function readContractAudio(audio: unknown): unknown {
   if (!schemas) throw new Error('The event schemas are not loaded yet (loadEventSchemas)');
   const parsed = schemas.AudioFeatures.safeParse(audio);
   return parsed.success ? parsed.data : null;

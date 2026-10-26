@@ -1,5 +1,15 @@
 import type React from 'react';
-import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from 'react';
+import {
+  Component,
+  createRef,
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useRef,
+  useCallback,
+} from 'react';
 import type { TrackData, AgentLog } from '../types';
 import { Network, Search, CircleAlert, RotateCcw, ArrowLeft } from 'lucide-react';
 import type { AgentStatus, AnalyzeOptions, PickedBy, SearchCandidate } from '../hooks/agent/types';
@@ -29,9 +39,20 @@ class BannerBoundary extends Component<
   { failed: boolean }
 > {
   state = { failed: false };
+  // The explanation's heading takes the focus, as the banner's does: the view that had it is
+  // gone.
+  private headingRef = createRef<HTMLHeadingElement>();
 
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+
+  componentDidMount() {
+    if (this.state.failed) this.headingRef.current?.focus();
+  }
+
+  componentDidUpdate(_props: unknown, previous: { failed: boolean }) {
+    if (this.state.failed && !previous.failed) this.headingRef.current?.focus();
   }
 
   render() {
@@ -43,7 +64,11 @@ class BannerBoundary extends Component<
         className="bg-status-warning/5 border border-status-warning/30 rounded-md p-6 space-y-4 text-left"
       >
         <div role="alert" className="space-y-4">
-          <h2 className="text-status-warning text-sm font-mono uppercase tracking-widest text-center">
+          <h2
+            ref={this.headingRef}
+            tabIndex={-1}
+            className="text-status-warning text-sm font-mono uppercase tracking-widest text-center outline-none"
+          >
             {title}
           </h2>
           <p className="text-text-secondary text-xs font-mono leading-relaxed">{text}</p>
@@ -64,6 +89,28 @@ class BannerBoundary extends Component<
       </section>
     );
   }
+}
+
+/**
+ * Stands in for the paused-analysis banner while its code loads, and holds the focus meanwhile:
+ * the view that had it (the picker, the progress screen) is gone, and the banner's heading takes
+ * it once the banner is in.
+ */
+function BannerLoading({ code }: { code: LiveUnavailableCode }) {
+  const lineRef = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    lineRef.current?.focus({ preventScroll: true });
+  }, []);
+  return (
+    <p
+      ref={lineRef}
+      tabIndex={-1}
+      role="status"
+      className="text-text-tertiary text-xs font-mono outline-none"
+    >
+      {LIVE_UNAVAILABLE_COPY[code].title}. Loading the recorded tracks...
+    </p>
+  );
 }
 
 /** The heading of the error block. */
@@ -229,9 +276,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   // The progress screen's status line takes the focus when a run starts or moves on from the
   // user's hand (a search, a pick, a retry): the box, row or button that had it is gone, and the
-  // focus would fall to the page. The picker and the error block take it themselves.
+  // focus would fall to the page. The picker and the error block take it themselves. A run
+  // started from another screen (a connected track, a link's Analyze) is under way when this
+  // screen mounts: the status line takes the focus then too.
   const statusRef = useRef<HTMLDivElement>(null);
-  const focusStatusNext = useRef(false);
+  const focusStatusNext = useRef(isLoading || ANALYZING_STATUSES.has(status));
 
   // UX: Completion skip button (Item 9)
   const [showCompletionButton, setShowCompletionButton] = useState(false);
@@ -310,10 +359,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
   }, [showsErrorBlock, failureId, error, errorCode]);
   // The block replaces the view that had the focus (the progress screen, the picker): its
   // heading takes the focus for each failure, so it is announced with what happened (its
-  // description) and focus never falls to the page.
+  // description) and focus never falls to the page: in the commit that shows it (a layout
+  // effect), not after a paint with the focused view gone.
   const errorHeadingRef = useRef<HTMLHeadingElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per failure (failureId)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (showsErrorBlock) errorHeadingRef.current?.focus();
   }, [showsErrorBlock, failureId]);
   const shownError = showsErrorBlock ? errorView(error, errorCode) : null;
@@ -412,7 +462,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   return (
     <div
-      className={`h-[100dvh] w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? 'justify-center' : 'justify-start pt-[min(8vh,4rem)]'}`}
+      className={`h-full w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? '' : 'pt-[min(8vh,4rem)]'}`}
     >
       {/* Background ambience: decorative, barely above the page (about 1.04:1 at its centre) */}
       <div
@@ -422,7 +472,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
       ></div>
 
       {!isAnalyzing && status !== 'complete' ? (
-        <div className="z-10 text-center space-y-12 animate-fade-in-up max-w-md mx-auto px-4">
+        // Centred while it fits (the auto margins), and from the top when it does not: centring
+        // with justify-content would push the top out of reach of the scroll on a short window.
+        // On a phone it starts near the top, leaving the room below to the suggestions (and the
+        // on-screen keyboard).
+        <div className="z-10 text-center space-y-12 animate-fade-in-up max-w-md mx-auto mt-(--space-lg) mb-auto sm:my-auto py-(--space-lg) px-4">
           <div className="relative inline-block">
             <div className="absolute -inset-4 bg-cyber blur-3xl opacity-20 animate-pulse"></div>
             <Network size={64} className="text-cyber relative z-10 mx-auto" />
@@ -451,13 +505,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {status === 'error' && isLiveUnavailable(errorCode) && (
             <div className="space-y-3">
               <BannerBoundary key={errorCode} code={errorCode}>
-                <Suspense
-                  fallback={
-                    <p role="status" className="text-text-tertiary text-xs font-mono">
-                      {LIVE_UNAVAILABLE_COPY[errorCode].title}. Loading the recorded tracks...
-                    </p>
-                  }
-                >
+                <Suspense fallback={<BannerLoading code={errorCode} />}>
                   <BudgetBanner code={errorCode} onPick={handleAnalyzeRecorded} />
                 </Suspense>
               </BannerBoundary>

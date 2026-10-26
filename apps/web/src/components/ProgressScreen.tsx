@@ -102,10 +102,10 @@ export function ProgressScreen({
 
   return (
     <div className="z-10 w-full max-w-2xl p-6">
-      {/* Central Node Graphic (P1:11 — completion reveal animation) */}
-      <div
-        className={`flex justify-center ${status === 'disambiguation' ? 'mb-4' : 'mb-8'} transition-all duration-300`}
-      >
+      {/* Central Node Graphic (P1:11 — completion reveal animation). Its margin changes at
+          once, not in a transition: the picker scrolls into view as it opens, and a margin
+          still shrinking would move it after that (its question off the top of a short window). */}
+      <div className={`flex justify-center ${status === 'disambiguation' ? 'mb-4' : 'mb-8'}`}>
         <div
           className={`relative ${status === 'complete' ? 'animate-completion-reveal' : ''} ${status === 'disambiguation' ? 'scale-75' : ''} transition-transform duration-300`}
         >

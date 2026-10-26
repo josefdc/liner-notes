@@ -22,6 +22,15 @@ function rowFor(key: string, current: number, count: number): number | null {
   }
 }
 
+/** The visible height of the nearest box that scrolls `element`, or of the window. */
+function scrollAreaHeight(element: HTMLElement): number {
+  for (let around = element.parentElement; around; around = around.parentElement) {
+    const { overflowY } = getComputedStyle(around);
+    if (overflowY === 'auto' || overflowY === 'scroll') return around.clientHeight;
+  }
+  return window.innerHeight;
+}
+
 interface TrackPickerProps {
   /** The tracks the server offers for the search; never empty. */
   candidates: SearchCandidate[];
@@ -66,10 +75,16 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // When a list appears, the picker is brought into view and its first row takes the focus, so
-  // the keys work at once.
+  // the keys work at once. Scrolled no further than it takes to show it whole; when it is taller
+  // than the area it scrolls in (a phone on its side), its top, the question, is aligned with
+  // the area's top, never scrolled past.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new list is the trigger
   useEffect(() => {
-    pickerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    const picker = pickerRef.current;
+    if (picker) {
+      const fits = picker.getBoundingClientRect().height <= scrollAreaHeight(picker);
+      picker.scrollIntoView?.({ behavior: 'smooth', block: fits ? 'nearest' : 'start' });
+    }
     rowRefs.current[0]?.focus({ preventScroll: true });
   }, [rows]);
 
@@ -104,7 +119,7 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
     // biome-ignore lint/a11y/noStaticElementInteractions: only listens for Escape
     <div
       ref={pickerRef}
-      className="mb-6 animate-fade-in-up"
+      className="mb-6"
       onKeyDown={(event) => {
         if (event.key === 'Escape' && onSearchAgain) {
           event.preventDefault();
@@ -112,76 +127,81 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
         }
       }}
     >
-      <div className="text-center mb-3">
-        <h2 id={headingId} className="text-sm font-mono font-normal text-text-secondary">
-          {PICKER_QUESTION}
-        </h2>
-        <p id={hintId} className="text-chrome font-mono text-text-muted mt-1">
-          {onSearchAgain
-            ? 'Arrow keys to move, Enter to analyze, Esc to search again'
-            : 'Arrow keys to move, Enter to analyze'}
-        </p>
-      </div>
-      <div
-        role="listbox"
-        aria-labelledby={headingId}
-        aria-describedby={hintId}
-        onKeyDown={handleListKeyDown}
-        className="space-y-1"
-      >
-        {rows.map((candidate, index) => (
-          // Chosen with Enter (the list's keys) or a click.
-          // biome-ignore lint/a11y/useKeyWithClickEvents: the list's own keys choose it
-          <div
-            key={candidate.id}
-            ref={(element) => {
-              rowRefs.current[index] = element;
-            }}
-            role="option"
-            // Selection follows focus, as a single-select listbox allows: the row the arrows
-            // reach is the selected one. Choosing it, which starts the analysis, takes Enter or
-            // a click.
-            aria-selected={index === current}
-            tabIndex={index === current ? 0 : -1}
-            onFocus={() => setHighlighted(index)}
-            onClick={() => onPick(candidate)}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left cursor-pointer transition-all focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
-              index === current
-                ? 'bg-white/10 border border-white/30'
-                : 'bg-white/5 border border-transparent hover:bg-white/10'
-            }`}
-          >
-            <CoverThumb url={candidate.coverUrl} className="w-8 h-8 rounded" iconSize={12} />
-            <div className="flex-1 min-w-0">
-              <span className="text-white text-sm font-mono truncate block">{candidate.title}</span>
-              <span className="text-text-tertiary text-xs truncate block">
-                {candidate.artist} • {candidate.releaseYear || candidate.album}
+      {/* Animated inside the scrolled box: its entrance offset does not move where it scrolls */}
+      <div className="animate-fade-in-up">
+        <div className="text-center mb-3">
+          <h2 id={headingId} className="text-sm font-mono font-normal text-text-secondary">
+            {PICKER_QUESTION}
+          </h2>
+          <p id={hintId} className="text-chrome font-mono text-text-muted mt-1">
+            {onSearchAgain
+              ? 'Arrow keys to move, Enter to analyze, Esc to search again'
+              : 'Arrow keys to move, Enter to analyze'}
+          </p>
+        </div>
+        <div
+          role="listbox"
+          aria-labelledby={headingId}
+          aria-describedby={hintId}
+          onKeyDown={handleListKeyDown}
+          className="space-y-1"
+        >
+          {rows.map((candidate, index) => (
+            // Chosen with Enter (the list's keys) or a click.
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the list's own keys choose it
+            <div
+              key={candidate.id}
+              ref={(element) => {
+                rowRefs.current[index] = element;
+              }}
+              role="option"
+              // Selection follows focus, as a single-select listbox allows: the row the arrows
+              // reach is the selected one. Choosing it, which starts the analysis, takes Enter or
+              // a click.
+              aria-selected={index === current}
+              tabIndex={index === current ? 0 : -1}
+              onFocus={() => setHighlighted(index)}
+              onClick={() => onPick(candidate)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left cursor-pointer transition-all focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
+                index === current
+                  ? 'bg-white/10 border border-white/30'
+                  : 'bg-white/5 border border-transparent hover:bg-white/10'
+              }`}
+            >
+              <CoverThumb url={candidate.coverUrl} className="w-8 h-8 rounded" iconSize={12} />
+              <div className="flex-1 min-w-0">
+                <span className="text-white text-sm font-mono truncate block">
+                  {candidate.title}
+                </span>
+                <span className="text-text-tertiary text-xs truncate block">
+                  {candidate.artist} • {candidate.releaseYear || candidate.album}
+                </span>
+              </div>
+              {/* Kept in the layout on every row, so moving the highlight moves nothing */}
+              <span
+                aria-hidden="true"
+                className={`text-text-secondary text-xs font-mono flex-shrink-0 ${index === current ? '' : 'invisible'}`}
+              >
+                ▶
               </span>
             </div>
-            {/* Kept in the layout on every row, so moving the highlight moves nothing */}
-            <span
-              aria-hidden="true"
-              className={`text-text-secondary text-xs font-mono flex-shrink-0 ${index === current ? '' : 'invisible'}`}
-            >
-              ▶
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs font-mono text-text-tertiary mt-3 text-center">
-        Nothing is analyzed until you choose a track.
-      </p>
-      {onSearchAgain && (
-        <div className="mt-2 flex justify-center">
-          <button
-            type="button"
-            onClick={onSearchAgain}
-            className="px-2 py-1 text-xs font-mono text-text-secondary hover:text-text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-          >
-            Search again
-          </button>
+          ))}
         </div>
-      )}
+        <p className="text-xs font-mono text-text-tertiary mt-3 text-center">
+          Nothing is analyzed until you choose a track.
+        </p>
+        {onSearchAgain && (
+          <div className="mt-2 flex justify-center">
+            <button
+              type="button"
+              onClick={onSearchAgain}
+              className="px-2 py-1 text-xs font-mono text-text-secondary hover:text-text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              Search again
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

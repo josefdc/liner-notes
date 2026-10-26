@@ -32,6 +32,9 @@ COPY apps/web apps/web
 # Build for production
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
+# Empty: the footer's "Source" link points to the public repository.
+ARG VITE_SOURCE_URL=
+ENV VITE_SOURCE_URL=$VITE_SOURCE_URL
 RUN npm run build -w packages/contract && npm run build -w apps/web
 
 # Stage 2: Nginx Production

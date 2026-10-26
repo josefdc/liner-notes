@@ -11,6 +11,17 @@ import { isLlmError } from "../llm/errors.js";
 import { INTERNAL_ERROR_PREFIX } from "../sources/toolResult.js";
 import { SOURCE_NAMES } from "./prompts.js";
 
+/**
+ * The scout's status line of the track the run found, in Spotify's own words for its title and
+ * artist (which may hold "<" or ">": "<3", "->").
+ */
+export const foundLine = (track: { title: string; artist: string }) =>
+  `Found the track on Spotify: ${track.title} by ${track.artist}`;
+
+/** The clarification's status line of the track the user picked, in Spotify's own words. */
+export const selectedLine = (track: { title: string; artist: string }) =>
+  `Selected: ${track.title} by ${track.artist}`;
+
 /** What happened to a source, by its error code, after the source's name. */
 const SOURCE_ERROR_TEXT: Record<SourceError["code"], string> = {
   not_configured: "not asked: no key is configured for it",

@@ -21,6 +21,7 @@ import {
   STORED_LINE,
   storedStatus,
 } from "../storedResults.js";
+import { selectedLine } from "../statusText.js";
 import { choiceMessage, matchTrack } from "../trackMatch.js";
 import { logger } from "../../logger.js";
 
@@ -91,7 +92,7 @@ export async function clarificationNode(
   writer?.({
     type: "status",
     code: "SPOTIFY-FOUND",
-    message: `Selected: ${selected.title} by ${selected.artist}`,
+    message: selectedLine(selected),
     node: "clarification",
     timestamp: timestampOf(runtime),
   });
@@ -192,7 +193,7 @@ export async function clarificationNode(
     ...picked,
     statusMessages: [
       detailed
-        ? `Selected: ${spotifyData.title} by ${spotifyData.artist}`
+        ? selectedLine(spotifyData)
         : `Selected: ${selected.title} (its Spotify details could not be read)`,
     ],
   };

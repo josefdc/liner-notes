@@ -37,7 +37,7 @@ test("the Dashboard names what is missing and shows no placeholder content", asy
   await expect(notices).toContainText("(quota or rate limit reached)");
   await expect(notices).toContainText("genre profile");
   await expect(notices).toContainText("song structure");
-  await expect(notices).toContainText("Audio not analysed");
+  await expect(notices).toContainText("Audio not analyzed");
   await expect(notices).toContainText("No audio preview is available for this track");
   await expect(notices).toContainText("BPM, key, energy");
 
@@ -69,7 +69,7 @@ test("the Player shows not-measured and template states instead of numbers", asy
   await expect(page.getByRole("list", { name: "Audio values" })).toContainText("BPM not measured");
 
   const timeline = page.getByRole("group", { name: "Song structure" });
-  await expect(timeline).toContainText("Template — not analysed");
+  await expect(timeline).toContainText("Template — not analyzed");
   await expect(timeline).toContainText("Duration unknown");
   await expect(timeline).not.toContainText("3:45");
   // No fake marker: nothing was detected, so nothing is drawn on the timeline.

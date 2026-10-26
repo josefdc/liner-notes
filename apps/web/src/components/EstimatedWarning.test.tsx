@@ -86,7 +86,7 @@ describe('ResultNotices', () => {
         />,
       );
       const notice = screen.getByRole('region', { name: 'Missing data' }).textContent;
-      expect(notice).toContain('Audio not analysed');
+      expect(notice).toContain('Audio not analyzed');
       expect(notice).toContain(text);
       expect(notice).not.toContain(reason);
     },
@@ -263,7 +263,7 @@ describe('RecordedRunNotice', () => {
     const notice = screen.getByRole('region', { name: 'Recorded run' });
     expect(notice.textContent).toContain('Recorded run · 22 Oct 2026 · replayed');
     expect(notice.textContent).toContain('recorded on 22 Oct 2026 (commit abc1234)');
-    expect(notice.textContent).toContain('Nothing was analysed live for it.');
+    expect(notice.textContent).toContain('Nothing was analyzed live for it.');
   });
 
   it('says the date is missing rather than inventing one', () => {
@@ -287,7 +287,7 @@ describe('RecordedRunNotice', () => {
     expect(notice.textContent).toContain('Model answers replayed · recording date not stored');
     expect(notice.textContent).toContain('at a time that was not stored');
     expect(notice.textContent).toContain('The rest of it may have run live');
-    expect(notice.textContent).not.toContain('Nothing was analysed live');
+    expect(notice.textContent).not.toContain('Nothing was analyzed live');
   });
 
   it('shows when and from which commit replayed model answers were recorded', () => {
@@ -310,7 +310,7 @@ describe('RecordedRunNotice', () => {
       'replayed from answers recorded on 1 Mar 2026 (commit abc123def456)',
     );
     expect(notice.textContent).not.toContain('Recorded run ·');
-    expect(notice.textContent).not.toContain('Nothing was analysed live');
+    expect(notice.textContent).not.toContain('Nothing was analyzed live');
   });
 
   it('says a run that replayed only its model answers measured its audio live', () => {

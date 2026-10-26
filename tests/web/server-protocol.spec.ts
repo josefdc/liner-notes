@@ -159,20 +159,23 @@ for (const { code, error, lines, action } of [
     lines: ["The request could not be read. Search again."],
     action: "Search again",
   },
-  // A code this page does not know: the server's message, then the next step.
-  {
-    code: "some_new_code",
+  // Codes this page does not know: the server's message, then the next step. The names of an
+  // object's own built-in members are codes like any other.
+  ...["some_new_code", "toString", "constructor"].map((code) => ({
+    code,
     error: "A new kind of failure.",
     lines: ["A new kind of failure.", "Try again, or search for a different song."],
     action: "Try again",
-  },
+  })),
 ]) {
   test(`a failure with code ${code} says what happened and offers ${action}`, async ({ page }) => {
     await useMockApi(page, {
       suggestions: [],
       streams: {
         [ANALYZE]: failure(code, error).map((event) =>
-          event.type === "error" && code === "some_new_code" ? { $unchecked: event } : event,
+          event.type === "error" && error === "A new kind of failure."
+            ? { $unchecked: event }
+            : event,
         ),
       },
     });

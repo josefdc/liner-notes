@@ -25,8 +25,7 @@ async function search(page: Page, query: string) {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
   await page.getByPlaceholder(/Song title/).press("Enter");
-  // The error block is up: its "or try a different song" link is there before and after.
-  await expect(page.getByRole("button", { name: "or try a different song" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: ERROR_HEADING })).toBeVisible();
 }
 
 const ACTIONS = ["Try again", "Search again", "Reload the page"] as const;
@@ -44,6 +43,10 @@ async function expectErrorBlock(page: Page, lines: string[], action: (typeof ACT
       name === action ? 1 : 0,
     );
   }
+  // "Search again" is already the way to a different song: no second link beside it.
+  await expect(block.getByRole("button", { name: "or try a different song" })).toHaveCount(
+    action === "Search again" ? 0 : 1,
+  );
   await expect(heading).toBeFocused();
   await expect(heading).toHaveAccessibleDescription(lines.join(" "));
 }
@@ -238,4 +241,38 @@ test("a page that cannot read the result offers to reload", async ({ page }) => 
   await page.getByRole("button", { name: "Reload the page" }).click();
   await expect(page.getByRole("heading", { name: ERROR_HEADING })).toHaveCount(0);
   await expect(page.getByPlaceholder(/Song title/)).toHaveValue("");
+});
+
+test("a failed search clears the note that suggestions are unavailable", async ({ page }) => {
+  // The API is down: the suggestions fail first, then the analysis stream.
+  await page.route("**/api/search/suggest**", (route) => route.abort("internetdisconnected"));
+  await page.route("**/api/analyze/stream?**", (route) => route.abort("internetdisconnected"));
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  const unavailable = page.getByText(
+    "Suggestions are unavailable right now. You can still search.",
+  );
+  await expect(unavailable).toBeVisible();
+  await page.getByPlaceholder(/Song title/).press("Enter");
+
+  await expectErrorBlock(page, [CONNECTION_LOST], "Try again");
+  // It said the search would still work; the block now says why it did not.
+  await expect(unavailable).toHaveCount(0);
+});
+
+test("a retry that fails again at once takes the focus back to the heading", async ({ page }) => {
+  await useMockApi(page, { suggestions: [], streams: {} });
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() {
+        throw new TypeError("Failed to fetch");
+      }
+    } as unknown as typeof EventSource;
+  });
+  await search(page, "Hurt");
+  await expectErrorBlock(page, [STREAM_OPEN_FAILED], "Try again");
+
+  // The retry fails inside the click, so the block stays up: the new failure is announced too.
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("heading", { name: ERROR_HEADING })).toBeFocused();
 });

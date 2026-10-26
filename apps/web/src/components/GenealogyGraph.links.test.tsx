@@ -208,7 +208,7 @@ describe('GenealogyGraph links', () => {
       '-1',
       '-1',
     ]);
-    expect(items[0].getAttribute('aria-label')).toBe('Bright Lines (2011), the analysed track');
+    expect(items[0].getAttribute('aria-label')).toBe('Bright Lines (2011), the analyzed track');
     expect(items[1].getAttribute('role')).toBe('button');
 
     await act(async () => items[0].focus());
@@ -222,7 +222,7 @@ describe('GenealogyGraph links', () => {
     expect(items[1].querySelector('.focus-ring')?.getAttribute('opacity')).toBe('1');
     expect(screen.getByTestId('link-detail').textContent).toBe(
       'Older Record - Someone (1984)Bright Lines (2011) samples Older Record - Someone (1984)' +
-        `Sourced · cites ${MB_SOURCED}Enter: analyse this track`,
+        `Sourced · cites ${MB_SOURCED}Enter: analyze this track`,
     );
     await act(async () => {
       fireEvent.keyDown(items[1], { key: 'Enter' });
@@ -240,7 +240,7 @@ describe('GenealogyGraph links', () => {
       '0.15',
       '1',
     ]);
-    // Enter on a link does nothing; Enter on the analysed track does nothing either.
+    // Enter on a link does nothing; Enter on the analyzed track does nothing either.
     await act(async () => {
       fireEvent.keyDown(items[7], { key: 'Enter' });
     });

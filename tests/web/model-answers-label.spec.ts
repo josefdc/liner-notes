@@ -39,7 +39,7 @@ test("replayed model answers are labelled with when and where they were recorded
   const label = page.getByRole("region", { name: "Replayed model answers" });
   await expect(label).toContainText("Model answers replayed · recorded 1 Mar 2026");
   await expect(label).toContainText("(commit abc123def456)");
-  await expect(label).not.toContainText("Nothing was analysed live");
+  await expect(label).not.toContainText("Nothing was analyzed live");
   await expect(label).not.toContainText("Recorded run ·");
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
   // Its audio was measured in this run, not when the answers were recorded.

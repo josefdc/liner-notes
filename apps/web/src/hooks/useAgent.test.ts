@@ -348,8 +348,8 @@ describe('useAgent progress', () => {
     analysis.send({ type: 'connected', threadId: 't1' });
     analysis.send({ ...interrupt(candidates.slice(0, 1)), message: '' });
 
-    expect(hook.result.current.logs.at(-1)?.message).toBe('Pick the track to analyse');
-    expect(hook.result.current.statusNote).toBe('Pick the track to analyse');
+    expect(hook.result.current.logs.at(-1)?.message).toBe('Pick the track to analyze');
+    expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
   });
 
   // The API's order, from the recorded demo run: the historian reports before any await, the
@@ -642,7 +642,7 @@ describe('useAgent track picker', () => {
     });
     expect(result.current.isReplay).toBe(true);
     expect(result.current.logs.at(-1)?.message).toBe(
-      'Recorded analysis replayed. Nothing was analysed live.',
+      'Recorded analysis replayed. Nothing was analyzed live.',
     );
     expect(completeLogs(result.current.logs)).toBe(0);
     act(() => {

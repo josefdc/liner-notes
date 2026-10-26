@@ -83,7 +83,7 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   const dashboardLabel = page.getByRole("region", { name: "Recorded run" });
   await expect(dashboardLabel).toContainText("Recorded run · 22 Oct 2026 · replayed");
   await expect(dashboardLabel).toContainText("commit abc1234");
-  await expect(dashboardLabel).toContainText("Nothing was analysed live for it.");
+  await expect(dashboardLabel).toContainText("Nothing was analyzed live for it.");
 
   await openPlayer(page);
   const playerLabel = page.getByRole("region", { name: "Recorded run" });
@@ -122,7 +122,7 @@ test("live_disabled is explained, and a live result carries no recording label",
 
   const banner = page.getByRole("region", { name: "Live analysis is off here" });
   await expect(banner).toContainText(
-    "does not analyse songs live right now: it only replays recorded runs",
+    "does not analyze songs live right now: it only replays recorded runs",
   );
   await expect(banner.getByRole("list", { name: "Recorded tracks" })).toContainText("Bright Lines");
 
@@ -182,7 +182,7 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   await expect(ready).toBeAttached();
   await expect(page.getByText("Analysis complete. Opening the results")).toHaveCount(0);
   await expect(page.getByRole("log")).toContainText(
-    "Recorded analysis replayed. Nothing was analysed live.",
+    "Recorded analysis replayed. Nothing was analyzed live.",
   );
   await expect(page.getByRole("log")).not.toContainText("Analysis complete");
   // Revealed whole: the line fits the 40ch the reveal animation stops at.
@@ -206,6 +206,12 @@ test("the paused state still explains itself when the banner's code cannot be lo
   await expect(paused).toContainText("The budget for live analysis is spent");
   await expect(paused).toContainText("The recorded tracks could not be loaded. Reload the page");
   await expect(page.getByRole("button", { name: "or try a different song" })).toBeVisible();
+
+  // The text asks for a reload: the button for it is there, and it brings back a fresh page.
+  await page.unroute(/BudgetBanner/);
+  await paused.getByRole("button", { name: "Reload the page" }).click();
+  await expect(paused).toHaveCount(0);
+  await expect(page.getByPlaceholder(/Song title/)).toHaveValue("");
 });
 
 test("on a phone, the recording label stays visible on every Player tab", async ({ page }) => {

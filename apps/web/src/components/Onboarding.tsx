@@ -50,7 +50,7 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
   composing: 'Writing the liner notes...',
   checking: 'Checking the notes against their sources...',
   // Used only when the server's own question is missing.
-  disambiguation: 'Pick the track to analyse...',
+  disambiguation: 'Pick the track to analyze...',
   complete: 'Analysis complete. Opening the results',
   // Nothing here: an error replaces this view with the error block, which says what happened.
   error: '',
@@ -104,6 +104,16 @@ class BannerBoundary extends Component<
         <p className="text-text-tertiary text-xs font-mono">
           The recorded tracks could not be loaded. Reload the page to see them.
         </p>
+        <div className="flex justify-center">
+          <Button
+            variant="neutral"
+            size="md"
+            leftIcon={<RotateCcw size={14} />}
+            onClick={() => window.location.reload()}
+          >
+            Reload the page
+          </Button>
+        </div>
       </section>
     );
   }
@@ -271,12 +281,14 @@ const ERROR_VIEW_BY_CODE: Record<string, ErrorView> = {
 /**
  * What the error block says, and its primary button. A code with the page's own words gets
  * them. Any other code shows the server's message (written for people, by the contract), with
- * the next step only when the message gives none. An error without a code is an exception's own
- * text ("Failed to fetch"): it is never shown, only read for the kind of failure.
+ * the next step only when the message gives none. Every failure useAgent raises carries a code,
+ * so an error without one is a server `error` event with an empty code: its text is not shown
+ * (it could be anything), only read for the kind of failure.
  */
 function errorView(error: string | null, code: string | null): ErrorView {
   if (code) {
-    const known = ERROR_VIEW_BY_CODE[code];
+    // Own keys only: a code such as "toString" or "constructor" is not one of these.
+    const known = Object.hasOwn(ERROR_VIEW_BY_CODE, code) ? ERROR_VIEW_BY_CODE[code] : undefined;
     if (known) return known;
     if (!error) return view(GENERIC_ERROR, 'retry');
     return { lines: /try again/i.test(error) ? [error] : [error, NEXT_STEP], action: 'retry' };
@@ -300,7 +312,10 @@ interface OnboardingProps {
   logs: AgentLog[];
   trackData: TrackData | null;
   error: string | null;
-  /** The failure code of the error, when the server sent one. */
+  /**
+   * The failure code of the error: the server's, or the app's own for a failure useAgent
+   * raised itself (see agent/types.ts).
+   */
   errorCode: string | null;
   isLoading: boolean;
   /** The run replays a recorded run (the status line says so instead of the live steps). */
@@ -526,6 +541,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
     e.preventDefault();
     if (searchQuery.trim()) {
       setEmptySubmits(0);
+      // The suggestions and their state ("Suggestions are unavailable… You can still search")
+      // are for the search being typed: once it is submitted, the run says how it went.
+      sugDispatch({ type: 'CLEAR' });
       analyze(searchQuery.trim());
     } else {
       setEmptySubmits((count) => count + 1);
@@ -536,17 +554,30 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   // The error block shows plain words; the error's own text goes to the console.
   const showsErrorBlock = status === 'error' && !isLiveUnavailable(errorCode);
+  // Each failure, told apart by the log line useAgent's `fail()` writes for it: a retry that
+  // fails at once leaves the block up (no new mount), and is still a new failure.
+  let failureId: string | null = null;
+  if (showsErrorBlock) {
+    for (let index = logs.length - 1; index >= 0; index--) {
+      if (logs[index].code === 'SYS-ERROR') {
+        failureId = logs[index].id;
+        break;
+      }
+    }
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logged once per failure (failureId)
   useEffect(() => {
     if (showsErrorBlock)
       console.warn('[Onboarding] The analysis failed:', errorCode ?? '(no code)', error);
-  }, [showsErrorBlock, error, errorCode]);
+  }, [showsErrorBlock, failureId, error, errorCode]);
   // The block replaces the view that had the focus (the progress screen, the picker): its
-  // heading takes the focus, so it is announced with what happened (its description) and
-  // focus never falls to the page.
+  // heading takes the focus for each failure, so it is announced with what happened (its
+  // description) and focus never falls to the page.
   const errorHeadingRef = useRef<HTMLHeadingElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per failure (failureId)
   useEffect(() => {
     if (showsErrorBlock) errorHeadingRef.current?.focus();
-  }, [showsErrorBlock]);
+  }, [showsErrorBlock, failureId]);
   const shownError = showsErrorBlock ? errorView(error, errorCode) : null;
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
@@ -749,7 +780,6 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 // description, which would read it twice once focus lands there.
                 <p
                   key={emptySubmits}
-                  id="search-empty-hint"
                   role="alert"
                   className="mt-2 text-xs font-mono text-text-secondary text-left"
                 >
@@ -881,13 +911,16 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 >
                   {ERROR_ACTION_LABEL[shownError.action]}
                 </Button>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
-                >
-                  or try a different song
-                </button>
+                {/* "Search again" already leads to a different song: no second link beside it */}
+                {shownError.action !== 'search' && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                  >
+                    or try a different song
+                  </button>
+                )}
               </div>
             </div>
           )}

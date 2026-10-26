@@ -200,7 +200,7 @@ function stepOf(
 const RESUME_NOTE = 'Reading the track you selected...';
 
 // The picker line when the server sends no words of its own.
-const PICK_FALLBACK = 'Pick the track to analyse';
+const PICK_FALLBACK = 'Pick the track to analyze';
 
 interface Run {
   query: string;
@@ -448,7 +448,7 @@ export function useAgent(): UseAgentReturn {
           }));
           addLog(
             replay
-              ? 'Recorded analysis replayed. Nothing was analysed live.'
+              ? 'Recorded analysis replayed. Nothing was analyzed live.'
               : 'Analysis complete.',
             'SYS-READY',
           );

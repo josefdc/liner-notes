@@ -48,8 +48,9 @@ export function provenanceText(
   return parts.join(' · ');
 }
 
-// The provenance lines carry the meaning of the value: text-chip keeps them at WCAG AA.
-const LINE = 'max-w-60 text-chrome font-mono text-text-chip text-left';
+// The provenance lines carry the meaning of the value: text-chip keeps them at WCAG AA. They wrap
+// anywhere, so an analyser name wider than a narrow column breaks instead of being cut off.
+const LINE = 'max-w-60 wrap-anywhere text-chrome font-mono text-text-chip text-left';
 
 export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   label,

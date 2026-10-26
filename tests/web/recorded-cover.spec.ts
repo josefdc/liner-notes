@@ -250,8 +250,8 @@ test("a long release title wraps under the cover and never squeezes or overflows
       overflow: false,
       outside: [],
     });
-    // At most three lines of 14 px.
-    expect(dashboard.caption, title).toBeLessThanOrEqual(42);
+    // At most three lines of chrome text (16 px each).
+    expect(dashboard.caption, title).toBeLessThanOrEqual(48);
     // The whole credit stays in the link's title.
     await expect(credit(page)).toHaveAttribute("title", `Cover: ${title} · Cover Art Archive`);
 
@@ -259,6 +259,6 @@ test("a long release title wraps under the cover and never squeezes or overflows
     const player = await coverLayout(page);
     // lg (1024 px): a 320 px cover, the credit within it.
     expect(player, title).toMatchObject({ figure: 320, frame: 320, overflow: false, outside: [] });
-    expect(player.caption, title).toBeLessThanOrEqual(42);
+    expect(player.caption, title).toBeLessThanOrEqual(48);
   }
 });

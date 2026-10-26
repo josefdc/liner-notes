@@ -152,7 +152,7 @@ const PlaceholderCover: React.FC<{ title: string; group: number }> = ({ title, g
         background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
       }}
     >
-      <Music size={48} className="text-white/40" />
+      <Music size={48} className="text-text-tertiary" />
     </div>
   );
 };
@@ -334,7 +334,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Track Info */}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="text-[10px] font-mono text-cyber/60 uppercase tracking-widest">
+                <span className="text-[10px] font-mono text-cyber/80 uppercase tracking-widest">
                   NOW PLAYING
                 </span>
                 <div className="w-1.5 h-1.5 rounded-full bg-cyber/60"></div>

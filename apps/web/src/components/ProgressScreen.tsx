@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useRef } from 'react';
-import { ArrowRight, Check, Cpu } from 'lucide-react';
+import { ArrowRight, Check, Cpu, Square } from 'lucide-react';
 import type { AgentLog } from '../types';
 import type { AgentStatus } from '../hooks/agent/types';
 import SystemConsole from './SystemConsole';
@@ -67,6 +67,12 @@ interface ProgressScreenProps {
   onOpenResults: () => void;
   /** The status line: the focus goes there after a pick or a retry. */
   statusRef?: React.Ref<HTMLDivElement>;
+  /**
+   * Stops the run: its stream is closed, which makes the server stop the analysis, and the
+   * search comes back. Offered until the run completes, except while the picker is open (it has
+   * its own way back to the search).
+   */
+  onStop?: () => void;
 }
 
 /**
@@ -94,6 +100,7 @@ export function ProgressScreen({
   showCompletionButton,
   onOpenResults,
   statusRef,
+  onStop,
 }: ProgressScreenProps) {
   // The bar's place: it never moves back within a run (console/progress.ts).
   const shownProgress = useRef(0);
@@ -206,12 +213,13 @@ export function ProgressScreen({
       </p>
 
       {/* Status Text (P0:1 — human-readable messages). Not a live region: the run log
-          announces the progress. */}
+          announces the progress. Scrolled into view with a little room around it (its scroll
+          margin): the scroll stops on a whole pixel, which could leave a fraction of it out. */}
       <div
         ref={statusRef}
         tabIndex={-1}
         data-progress-status
-        className={`text-center mt-4 text-sm font-mono focus:outline-none ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}
+        className={`text-center mt-4 text-sm font-mono scroll-my-2 focus:outline-none ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}
       >
         {status === 'complete' ? (
           <span className="inline-block overflow-hidden whitespace-nowrap border-r-2 border-status-success animate-[typing-reveal_1s_steps(40)_forwards] max-w-0">
@@ -221,6 +229,14 @@ export function ProgressScreen({
           statusMessage(status, isReplay, statusNote)
         )}
       </div>
+
+      {onStop && status !== 'complete' && !picker && (
+        <div className="flex justify-center mt-4">
+          <Button variant="ghost" size="sm" leftIcon={<Square size={12} />} onClick={onStop}>
+            Stop
+          </Button>
+        </div>
+      )}
 
       {/* UX: Completion skip button (Item 9) */}
       {status === 'complete' && showCompletionButton && (

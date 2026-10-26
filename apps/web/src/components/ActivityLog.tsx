@@ -1,8 +1,9 @@
 import type React from 'react';
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Activity, CircleCheck, ChevronDown, LoaderCircle } from 'lucide-react';
 import type { AgentLog } from '../types';
 import { logStyle } from './console/logCodes';
+import { writtenLines } from '../hooks/agent/runLog';
 
 interface ActivityLogProps {
   logs: AgentLog[];
@@ -12,20 +13,47 @@ interface ActivityLogProps {
 // The number of latest entries the log shows.
 const SHOWN = 6;
 
-// Format relative time
-function formatRelativeTime(timestamp: string): string {
-  const now = Date.now();
-  const then = new Date(timestamp).getTime();
-  const diff = Math.floor((now - then) / 1000);
+/** How often the times are brought up to date while an entry is under a minute old. */
+export const FRESH_TICK_MS = 10_000;
+/** How often they are brought up to date once every entry is a minute old or more. */
+export const SETTLED_TICK_MS = 30_000;
 
-  if (diff < 5) return 'Just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
+/**
+ * How long before `now` an entry was logged, in words, in steps no finer than the clock that
+ * updates them: "Just now" under 10 s, then tens of seconds, minutes and hours.
+ */
+export function formatRelativeTime(timestamp: string, now: number): string {
+  const diff = Math.floor((now - new Date(timestamp).getTime()) / 1000);
+  // A time this page cannot read, or one ahead of its clock, reads as just now too.
+  if (!Number.isFinite(diff) || diff < 10) return 'Just now';
+  if (diff < 60) return `${Math.floor(diff / 10) * 10} s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  return `${Math.floor(diff / 3600)} h ago`;
+}
+
+/**
+ * The time the entries are measured from: read when the log opens, then on one timer while it
+ * stays open, every FRESH_TICK_MS while the newest entry (logged at `newest`) is under a minute
+ * old and every SETTLED_TICK_MS after that. None per entry.
+ */
+function useClock(running: boolean, newest: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  const fresh = now - newest < 60_000;
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), fresh ? FRESH_TICK_MS : SETTLED_TICK_MS);
+    return () => clearInterval(timer);
+  }, [running, fresh]);
+  return now;
 }
 
 const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const newest = logs.length > 0 ? new Date(logs[logs.length - 1].timestamp).getTime() : 0;
+  const now = useClock(isExpanded, newest);
+  // The run's lines, those the log no longer keeps included.
+  const written = writtenLines(logs);
 
   // The latest entries, newest first
   const displayLogs = useMemo(() => [...logs].slice(-SHOWN).reverse(), [logs]);
@@ -54,7 +82,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           <h3 className="text-xs font-mono text-text-tertiary flex items-center gap-2 flex-shrink-0">
             <Activity size={12} aria-hidden="true" className="text-text-tertiary" />
             Activity log
-            <span className="text-chrome text-text-muted">({logs.length})</span>
+            <span className="text-chrome text-text-muted">({written})</span>
           </h3>
           {/* P3:27 — Collapsed preview snippet */}
           {!isExpanded && logs.length > 0 && (
@@ -142,7 +170,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
                         {label}
                       </span>
                       <span className="text-chrome text-text-muted font-mono">
-                        {formatRelativeTime(log.timestamp)}
+                        {formatRelativeTime(log.timestamp, now)}
                       </span>
                     </div>
 
@@ -158,9 +186,9 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
           {/* Footer: how much of the log is shown */}
           <div className="relative z-10 bg-white/[0.02] border-t border-white/5 px-3 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary">
             <span>
-              {logs.length > SHOWN
-                ? `The latest ${SHOWN} of ${logs.length} events`
-                : `${logs.length} ${logs.length === 1 ? 'event' : 'events'}`}
+              {written > SHOWN
+                ? `The latest ${SHOWN} of ${written} events`
+                : `${written} ${written === 1 ? 'event' : 'events'}`}
             </span>
           </div>
         </div>

@@ -250,4 +250,9 @@ export interface AgentLog {
   timestamp: string;
   code?: LogCode;
   node?: string;
+  /**
+   * The line's place in its run, from 0 (hooks/agent/runLog.ts). The run's log keeps its latest
+   * lines only: a first line above 0 says how many were dropped before it.
+   */
+  index?: number;
 }

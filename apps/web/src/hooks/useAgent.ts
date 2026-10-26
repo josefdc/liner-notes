@@ -19,7 +19,6 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
-import type { AgentLog } from '../types';
 import type {
   AgentState,
   AgentStatus,
@@ -44,6 +43,7 @@ import {
   type RunEvents,
   streamGuard,
 } from './agent/events';
+import { appendLog, type NewLog } from './agent/runLog';
 
 // Re-export types for consumers that import from this file
 export type { SearchCandidate, UseAgentReturn } from './agent/types';
@@ -174,8 +174,9 @@ function stepOf(
       }
       const ended = branches.measuring;
       branches.measuring = false;
-      // The measurement is over: back to the research when it has started.
-      return branches.researched
+      // The measurement is over: what is left is the research beside it, which has started
+      // with the measurement even when it has not reported yet. Never back to reading the audio.
+      return branches.researched || ended
         ? { status: 'researching', note: branches.researchNote, ended }
         : { status: 'analyzing', note: null, ended };
     }
@@ -317,17 +318,18 @@ export function useAgent(): UseAgentReturn {
    * Add a log entry with optional code and node
    */
   const addLog = useCallback((message: string, code?: LogCode, node?: string) => {
-    const log: AgentLog = {
+    const log: NewLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       message,
       timestamp: new Date().toISOString(),
       code,
       node,
     };
-    setState((prev) => ({
-      ...prev,
-      logs: [...prev.logs, log],
-    }));
+    // Bounded, and a repeat of the last line changes nothing (agent/runLog.ts).
+    setState((prev) => {
+      const logs = appendLog(prev.logs, log);
+      return logs === prev.logs ? prev : { ...prev, logs };
+    });
   }, []);
 
   /** Ends the run with an error the user can retry. */

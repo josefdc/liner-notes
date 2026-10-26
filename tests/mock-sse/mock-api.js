@@ -24,6 +24,7 @@
 //                stream ends like a server response does (onerror unless the app closed it).
 //                `{ "<path>": { opens: [[event, ...], [event, ...]] } }` gives each opening of
 //                the path its own events (the last list repeats for later openings).
+//   eventGapMs:  milliseconds between two events of a stream (default 50)
 // The events are replayed as given: tests install the mock with useMockApi (tests/web/mock.ts),
 // which first adds the run id and `seq` the API sends and checks every event against the
 // contract (tests/mock-sse/envelope.ts).
@@ -194,6 +195,8 @@
 
   // How long a real EventSource waits before it reconnects (shortened).
   const RECONNECT_DELAY_MS = 100;
+  // How long a stream waits between two of its events.
+  const gapMs = config.eventGapMs ?? 50;
 
   class MockEventSource {
     static CONNECTING = 0;
@@ -264,9 +267,9 @@
             config.streamLog.push(`${path} ${event.type}`);
             this.dispatch("message", new MessageEvent("message", { data: JSON.stringify(event) }));
           }
-          setTimeout(next, 50);
+          setTimeout(next, gapMs);
         };
-        setTimeout(next, 50);
+        setTimeout(next, gapMs);
       }, 20);
     }
 

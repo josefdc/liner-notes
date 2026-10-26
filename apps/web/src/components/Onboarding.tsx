@@ -392,8 +392,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
     }
   }, [status, showPicker]);
 
-  // "Search again" in the picker, or Escape: the run is dropped and the search box gets the
-  // keyboard once it is back.
+  // "Search again" in the picker, Escape, or Stop on the progress screen: the run is dropped
+  // (its stream closed, so the server stops it) and the search box gets the keyboard once it is
+  // back.
   const focusSearchOnIdle = useRef(false);
   const handleSearchAgain = useCallback(() => {
     focusSearchOnIdle.current = true;
@@ -607,6 +608,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           showCompletionButton={showCompletionButton}
           onOpenResults={handleCompletionSkip}
           statusRef={statusRef}
+          onStop={onSearchAgain ? handleSearchAgain : undefined}
         />
       )}
     </div>

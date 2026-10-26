@@ -1,7 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AgentLog } from '../types';
 import { Terminal, LoaderCircle, CircleCheck } from 'lucide-react';
 import { logStyle } from './console/logCodes';
+import { droppedLines, writtenLines } from '../hooks/agent/runLog';
+
+// How close to its end, in pixels, the log counts as read to the end: new lines keep it there.
+const AT_END_PX = 24;
 
 interface SystemConsoleProps {
   logs: AgentLog[];
@@ -12,6 +16,38 @@ interface SystemConsoleProps {
   isReplay?: boolean;
 }
 
+/** How far below the top of the log's view `row` starts, in pixels. */
+function topInView(box: HTMLElement, row: HTMLElement): number {
+  return row.getBoundingClientRect().top - box.getBoundingClientRect().top;
+}
+
+/** The log line with this id. */
+function lineById(box: HTMLElement, id: string): HTMLElement | null {
+  for (const row of box.querySelectorAll<HTMLElement>('[data-log-id]')) {
+    if (row.dataset.logId === id) return row;
+  }
+  return null;
+}
+
+/**
+ * The reader's line: the first one that starts inside the log's view (a line that starts above
+ * it may wrap anew and change height), or the line that fills the whole view; and where it
+ * starts in the view, in pixels.
+ */
+function lineAtTop(box: HTMLElement): { id: string; offset: number } | null {
+  const view = box.getBoundingClientRect();
+  let covering: { id: string; offset: number } | null = null;
+  for (const row of box.querySelectorAll<HTMLElement>('[data-log-id]')) {
+    const { top, bottom } = row.getBoundingClientRect();
+    const id = row.dataset.logId;
+    if (!id || bottom <= view.top) continue;
+    if (top >= view.top - 0.5 && top < view.bottom) return { id, offset: top - view.top };
+    if (top < view.top) covering = { id, offset: top - view.top };
+    else break;
+  }
+  return covering;
+}
+
 // One log line: the time, the step in words (with its icon), and the message.
 const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ log, isLatest }) => {
   const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
@@ -19,8 +55,9 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ lo
 
   return (
     <div
+      data-log-id={log.id}
       data-log-code={log.code}
-      className={`flex items-start font-mono text-xs leading-relaxed py-0.5 content-auto ${isLatest ? 'animate-fade-in-right' : ''}`}
+      className={`flex items-start font-mono text-xs leading-relaxed py-0.5 ${isLatest ? 'animate-fade-in-right' : ''}`}
     >
       <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums">{time}</span>
       <span
@@ -51,7 +88,14 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
         : 'Running';
 
   const consoleRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // The reader is at the end of the log (or has not scrolled it): new lines keep them there.
+  const atEndRef = useRef(true);
+  const linesRef = useRef<HTMLDivElement>(null);
+  // The line a reader who has scrolled up is on (the first one at the top of the view), and how
+  // far below the view's top it starts, in pixels; null at the end.
+  const anchorRef = useRef<{ id: string; offset: number } | null>(null);
+  // The scroll position the log set itself last: its own scrolls do not move the anchor.
+  const ownScrollRef = useRef<number | null>(null);
 
   // P3:26 — Track elapsed time from first log
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -72,13 +116,55 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
     return () => clearInterval(interval);
   }, [logs.length, isComplete]);
 
-  // Keep the newest log line in view
-  // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+  // Keeps the reader's place by scrolling the log itself, at once: never the page or the views
+  // around it. A reader at the end sees the newest line. A reader who has scrolled up to an
+  // earlier line stays on it: when the lines above it change (older ones dropped, the note
+  // about them appearing, lines wrapping anew), the log is scrolled so that line is where it
+  // was. The log does this itself rather than leave it to the browser's scroll anchoring, which
+  // not every browser has (overflow-anchor is off on the log, so the two never both move it).
+  const keepPlace = useCallback(() => {
+    const box = consoleRef.current;
+    if (!box) return;
+    const anchor = anchorRef.current;
+    const row = anchor ? lineById(box, anchor.id) : null;
+    if (atEndRef.current) {
+      box.scrollTop = box.scrollHeight;
+    } else if (anchor && row) {
+      box.scrollTop += topInView(box, row) - anchor.offset;
+    } else {
+      // The reader's line was dropped: they stay on the first line at the top of the view.
+      anchorRef.current = lineAtTop(box);
     }
-  }, [logs]);
+    ownScrollRef.current = box.scrollTop;
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
+  useLayoutEffect(keepPlace, [logs, isComplete]);
+
+  // Lines can change height after they are drawn, with no line added (a font loads, the window
+  // narrows and they wrap): the reader's place is kept then too.
+  useEffect(() => {
+    const box = consoleRef.current;
+    const lines = linesRef.current;
+    if (!box || !lines || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(keepPlace);
+    observer.observe(lines);
+    return () => observer.disconnect();
+  }, [keepPlace]);
+
+  const handleScroll = () => {
+    const box = consoleRef.current;
+    if (!box) return;
+    atEndRef.current = box.scrollHeight - box.scrollTop - box.clientHeight <= AT_END_PX;
+    // The reader's own scroll: the line now at the top is theirs.
+    if (box.scrollTop !== ownScrollRef.current) {
+      ownScrollRef.current = null;
+      anchorRef.current = atEndRef.current ? null : lineAtTop(box);
+    }
+  };
+
+  const dropped = droppedLines(logs);
+  const written = writtenLines(logs);
 
   return (
     <section className="relative w-full max-w-3xl mx-auto" aria-label="Analysis log">
@@ -100,7 +186,8 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
           role="log"
           aria-live="polite"
           aria-relevant="additions"
-          className="relative h-72 overflow-y-auto scrollbar-hide p-4 font-mono overscroll-contain"
+          onScroll={handleScroll}
+          className="relative h-72 overflow-y-auto scrollbar-hide p-4 font-mono overscroll-contain [overflow-anchor:none]"
         >
           {/* Empty state */}
           {logs.length === 0 && (
@@ -110,7 +197,13 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
           )}
 
           {/* Log entries */}
-          <div className="space-y-0.5 relative z-0">
+          <div ref={linesRef} className="space-y-0.5 relative z-0">
+            {/* The log keeps the latest lines only */}
+            {dropped > 0 && (
+              <p data-log-dropped className="text-xs font-mono text-text-tertiary pb-1">
+                {dropped} earlier {dropped === 1 ? 'line' : 'lines'} not shown
+              </p>
+            )}
             {logs.map((log, idx) => (
               <LogLine key={log.id} log={log} isLatest={idx === logs.length - 1 && !isComplete} />
             ))}
@@ -136,16 +229,13 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Scrolled into view to keep the newest line visible */}
-            <div ref={bottomRef} className="h-1" />
           </div>
         </div>
 
         {/* Footer: how many events and how long since the first one */}
         <div className="bg-white/5 border-t border-white/5 px-4 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary">
           <span>
-            {logs.length} {logs.length === 1 ? 'event' : 'events'}
+            {written} {written === 1 ? 'event' : 'events'}
           </span>
           <span>{elapsedSeconds} s since you started</span>
         </div>

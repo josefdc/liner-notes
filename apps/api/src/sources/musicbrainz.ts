@@ -1041,6 +1041,12 @@ export const ARTIST_REASON = {
 
 const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 
+/**
+ * A release date as MusicBrainz and Spotify write it: a year ("2011"), a year and month
+ * ("2011-10") or a day ("2011-10-18"). Spotify writes "0000" for a date it does not know.
+ */
+export const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
+
 /** An ISRC in its canonical form (upper case, no hyphens, dashes or spaces), or null. */
 export function normalizeIsrc(value: unknown): string | null {
   if (typeof value !== "string") return null;

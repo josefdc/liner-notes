@@ -73,7 +73,11 @@
                 "coverUrl": { "type": "string" },
                 "releaseYear": { "type": "string" },
                 "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                "isrc": { "type": ["string", "null"] }
+                "isrc": { "type": ["string", "null"] },
+                "releaseDate": {
+                  "description": "Spotify's album release date as sent: a year (\"2011\"), a month (\"2011-10\") or a day (\"2011-10-18\"); \"0000\" means unknown. Null or absent when not known",
+                  "type": ["string", "null"]
+                }
               },
               "required": ["id", "title", "artist", "album", "coverUrl"]
             }
@@ -252,7 +256,11 @@
                 "coverUrl": { "type": "string" },
                 "releaseYear": { "type": "string" },
                 "popularity": { "type": "number", "minimum": 0, "maximum": 100 },
-                "isrc": { "type": ["string", "null"] }
+                "isrc": { "type": ["string", "null"] },
+                "releaseDate": {
+                  "description": "Spotify's album release date as sent: a year (\"2011\"), a month (\"2011-10\") or a day (\"2011-10-18\"); \"0000\" means unknown. Null or absent when not known",
+                  "type": ["string", "null"]
+                }
               },
               "required": ["id", "title", "artist", "album", "coverUrl"],
               "additionalProperties": false

@@ -5,7 +5,7 @@
  */
 
 import { credential, fetchJson, isSourceError, type Shape, SourceError } from "./http.js";
-import { normalizeIsrc } from "./musicbrainz.js";
+import { normalizeIsrc, RELEASE_DATE } from "./musicbrainz.js";
 import { pacingClock } from "./pacing.js";
 import { logger } from "../logger.js";
 
@@ -83,7 +83,11 @@ export interface SpotifyTrackSummary {
   artistNames: string[];
   artistIds: string[];
   album: string;
-  releaseDate: string;
+  /**
+   * The album's release date as Spotify sent it ("2011", "2011-10", "2011-10-18"; "0000" when
+   * Spotify does not know it), or null when it sent none or something else.
+   */
+  releaseDate: string | null;
   coverUrl: string;
   /** The recording's ISRC, or null when Spotify gave no valid one. */
   isrc: string | null;
@@ -288,7 +292,10 @@ function summarize(track: SpotifyTrack): SpotifyTrackSummary {
     artistNames: track.artists.map((a) => a.name),
     artistIds: track.artists.map((a) => a.id),
     album: track.album.name,
-    releaseDate: track.album.release_date,
+    releaseDate:
+      typeof track.album.release_date === "string" && RELEASE_DATE.test(track.album.release_date)
+        ? track.album.release_date
+        : null,
     coverUrl: track.album.images?.[0]?.url || "",
     isrc: normalizeIsrc(track.external_ids?.isrc),
     duration: formatDuration(track.duration_ms),

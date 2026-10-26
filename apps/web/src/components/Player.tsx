@@ -28,7 +28,13 @@ import SmartTimeline from './SmartTimeline';
 import GenealogyGraph from './GenealogyGraph';
 import { kindLabel, linkContext, shownLinks } from './genealogy/links';
 import InteractiveFactoid from './InteractiveFactoid';
-import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
+import {
+  AudioStats,
+  InferenceLabel,
+  RecordedRunNotice,
+  ResultNotices,
+  ResultOriginLabel,
+} from './EstimatedWarning';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -36,6 +42,7 @@ import { resultClaims, type ShownClaim, withoutHiddenRelations } from './provena
 import { ClaimList } from './provenance/ClaimList';
 import { CreditsList } from './provenance/CreditsList';
 import { RejectedClaims } from './provenance/RejectedClaims';
+import { ProvenanceChip } from './provenance/ProvenanceChip';
 import type { ResultMode } from '../hooks/agent/types';
 import type {
   TrackData,
@@ -137,7 +144,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
   const noMomentsReason = useMemo(() => noKeyMomentsReason(track), [track]);
   const keyMoments = useMemo(() => measuredKeyMoments(track), [track]);
   // Written by the model, or taken from source data when the model was unavailable.
-  const provenance = track.modelUnavailable ? 'From source data' : 'Model inference';
+  const fromSourceData = Boolean(track.modelUnavailable);
   // The result's claims, each with how it is shown; the ones the verifier rejected are listed
   // apart and leave the main view, with the factoid cards, samples and genealogy relations that
   // state them (and those whose claim this page cannot read).
@@ -447,7 +454,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Agent Analysis
             </h3>
-            {unclaimedFactoids && !claimedFactoids && <InferenceLabel>{provenance}</InferenceLabel>}
+            {unclaimedFactoids && !claimedFactoids && (
+              <ResultOriginLabel fromSourceData={fromSourceData} />
+            )}
           </div>
           {/* Facts built without the model name no record they were taken from */}
           {fallbackNote && (
@@ -479,7 +488,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                     factoid={fact}
                     onEntityClick={handleEntityClick}
                     claim={claimOf(fact)}
-                    label={claimedFactoids ? provenance : undefined}
+                    origin={claimedFactoids ? (fromSourceData ? 'record' : 'inferred') : undefined}
                     readings={readings}
                     audio={measurement}
                   />
@@ -515,7 +524,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                                border border-dashed border-cyber/30 rounded-md
                                text-xs font-mono text-cyber/70 uppercase tracking-wider
                                hover:border-cyber hover:text-cyber hover:bg-cyber/5
-                               focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none
+                               focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none
                                disabled:opacity-50 disabled:cursor-wait
                                transition-all duration-(--duration-fast)"
                 >
@@ -551,7 +560,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                   <button
                     type="button"
                     onClick={() => setShowAllFactoids(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none transition-colors"
+                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none transition-colors"
                   >
                     <ChevronDown size={14} />
                     Reveal {hiddenCount} hidden insights
@@ -562,7 +571,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 <button
                   type="button"
                   onClick={() => setShowAllFactoids(false)}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none"
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-text-tertiary hover:text-cyber transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
                 >
                   <ChevronDown size={14} className="rotate-180" />
                   Show less
@@ -721,19 +730,24 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
               Genealogy Network
             </h3>
-            {genealogy.nodes.length > 1 &&
-              (linkKinds.sourced ? (
-                <Badge variant="gray" data-testid="genealogy-kinds">
-                  {linkKinds.inferred ? 'Sourced and inferred links' : 'Sourced links'}
-                </Badge>
-              ) : linkKinds.notSourced ? (
-                // Not the model's: built from records whose evidence does not hold.
-                <Badge variant="gray" data-testid="genealogy-kinds">
-                  Not sourced
-                </Badge>
-              ) : (
-                <InferenceLabel>{provenance}</InferenceLabel>
-              ))}
+            {/* How the shown links are known, in the words and chips the legend, the list and
+                the connected-track cards use: sourced, not sourced, or (every link) the model's */}
+            {genealogy.nodes.length > 1 && (
+              <span data-testid="genealogy-kinds" className="inline-flex max-w-full">
+                {linkKinds.sourced ? (
+                  linkKinds.inferred ? (
+                    <Badge variant="neutral">Sourced and not sourced links</Badge>
+                  ) : (
+                    <ProvenanceChip kind="sourced">Sourced links</ProvenanceChip>
+                  )
+                ) : linkKinds.notSourced ? (
+                  // Not the model's: built from records whose evidence does not hold.
+                  <ProvenanceChip kind="unconfirmed">Not sourced</ProvenanceChip>
+                ) : (
+                  <ResultOriginLabel fromSourceData={fromSourceData} />
+                )}
+              </span>
+            )}
           </div>
           {genealogy.nodes.length > 1 ? (
             <GenealogyGraph

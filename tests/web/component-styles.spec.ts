@@ -640,6 +640,361 @@ for (const cover of ["no cover", "a white cover"]) {
   });
 }
 
+// Every badge says what it is by meaning (data-variant): the chips of how a value or a claim is
+// known (measured, sourced, inferred, not confirmed, missing) and the warnings beside them. Their
+// coloured words are measured too: on the Dashboard, the hero's value chips (with a white cover
+// behind them, at rest and hovered) and the Fingerprint's estimate chips; in the Player, the
+// claim, credit and warning chips.
+for (const cover of ["no cover", "a white cover"]) {
+  test(`the Dashboard's provenance chips meet 4.5:1, at rest and hovered (${cover})`, async ({
+    page,
+  }) => {
+    const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
+    const data = loadFixture("measured-v2");
+    await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    if (cover !== "no cover") await whiteCoverShown();
+    const atRest = await neutralBadgeContrast(page, "[data-variant]", { coloured: true });
+    // A chip that opens its provenance brightens under the pointer.
+    await page.getByRole("button", { name: /^Measured: how BPM/ }).hover();
+    const hovered = await neutralBadgeContrast(page, "button:hover [data-variant]", {
+      keepHover: true,
+      coloured: true,
+    });
+    const texts = atRest.map(({ text }) => text);
+    for (const words of ["Measured", "Model estimate"]) {
+      expect(texts, words).toContain(words);
+    }
+    expect(hovered.map(({ text }) => text)).toContain("Measured");
+    for (const { text, ratio } of [...atRest, ...hovered]) {
+      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test(`the Player's claim chips and warning badges meet 4.5:1 (${cover})`, async ({ page }) => {
+    test.slow();
+    const whiteCoverShown = await serveWhiteCover(page, "https://i.scdn.co/");
+    const data = loadFixture("provenance");
+    await useMockApi(page, cover === "no cover" ? data : withWhiteCover(data));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    await openPlayer(page);
+    if (cover !== "no cover") await whiteCoverShown();
+    const measured = await neutralBadgeContrast(page, "#panel-context [data-variant]", {
+      coloured: true,
+    });
+    const texts = measured.map(({ text }) => text);
+    for (const words of ["Sourced", "Model inference", "Conflict", "Not supported"]) {
+      expect(texts, words).toContain(words);
+    }
+    for (const { text, ratio } of measured) {
+      expect(ratio, `"${text}"`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
+/**
+ * The contrast of a focus ring, drawn as the keyboard shows it: the element is reached with Tab
+ * (so :focus-visible applies), its ring (the widest unblurred box-shadow) and the ring offset
+ * inside it are read, then the ring is hidden and the pixels under its band are screenshotted.
+ * The ring is composited over each of those pixels and compared with that pixel (what lies
+ * beside the ring) and with the offset colour when there is an offset. Returns the lowest ratio.
+ */
+async function focusRingContrast(page: Page, target: ReturnType<Page["locator"]>) {
+  for (let presses = 0; !(await target.evaluate((el) => el === document.activeElement)); ) {
+    presses += 1;
+    if (presses > 60) throw new Error("Tab does not reach the element");
+    await page.keyboard.press("Tab");
+  }
+  // Focused by the page itself (a picker takes the focus when it opens): away and back by Tab,
+  // as a keyboard user would see it.
+  if (!(await target.evaluate((el) => el.matches(":focus-visible")))) {
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+  }
+  expect(await target.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+  await target.scrollIntoViewIfNeeded();
+  await animationsSettled(page);
+  const read = await target.evaluate((element) => {
+    const asRgba = (color: string) => {
+      const context = new OffscreenCanvas(1, 1).getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.fillStyle = "rgb(1, 2, 3)";
+      context.fillStyle = color;
+      if (context.fillStyle === "#010203") throw new Error(`cannot read the colour ${color}`);
+      context.clearRect(0, 0, 1, 1);
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+      return { r, g, b, a: a / 255 };
+    };
+    // Splits the computed box-shadow at its top-level commas (colours have commas of their own).
+    const value = getComputedStyle(element).boxShadow;
+    const parts: string[] = [];
+    let depth = 0;
+    let current = "";
+    for (const char of value) {
+      if (char === "(") depth += 1;
+      if (char === ")") depth -= 1;
+      if (char === "," && depth === 0) {
+        parts.push(current.trim());
+        current = "";
+      } else current += char;
+    }
+    if (current.trim()) parts.push(current.trim());
+    const shadows = parts
+      .filter((part) => part !== "none")
+      .map((part) => {
+        const color = /^(rgba?|oklab|oklch|color|lab|lch)\([^)]*\)/.exec(part)?.[0] ?? "";
+        const lengths = part
+          .replace(color, "")
+          .trim()
+          .split(/\s+/)
+          .filter((token) => token.endsWith("px"))
+          .map(Number.parseFloat);
+        return {
+          color: asRgba(color),
+          blur: lengths[2] ?? 0,
+          spread: lengths[3] ?? 0,
+          inset: part.includes("inset"),
+        };
+      })
+      .filter((shadow) => !shadow.inset && shadow.blur === 0 && shadow.color.a > 0);
+    const box = element.getBoundingClientRect();
+    return { shadows, box: { x: box.x, y: box.y, width: box.width, height: box.height } };
+  });
+  const rings = [...read.shadows].sort((a, b) => b.spread - a.spread);
+  const ring = rings[0];
+  if (!ring) throw new Error("no focus ring");
+  const offset = rings.find((shadow) => shadow.spread < ring.spread && shadow.color.a === 1);
+  const inner = offset?.spread ?? 0;
+  // The band the ring covers, outside the element's border box.
+  await target.evaluate((element) => {
+    (element as HTMLElement).style.setProperty("box-shadow", "none", "important");
+  });
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("no viewport");
+  const { x, y, width, height } = read.box;
+  const clip = {
+    x: Math.max(0, Math.floor(x - ring.spread)),
+    y: Math.max(0, Math.floor(y - ring.spread)),
+    width: Math.ceil(width + 2 * ring.spread),
+    height: Math.ceil(height + 2 * ring.spread),
+  };
+  clip.width = Math.min(clip.width, viewport.width - clip.x);
+  clip.height = Math.min(clip.height, viewport.height - clip.y);
+  const png = await page.screenshot({ clip, animations: "disabled" });
+  await target.evaluate((element) => (element as HTMLElement).style.removeProperty("box-shadow"));
+  const band: Rgba[] = await page.evaluate(
+    async ({ base64, box, clip, inner, outer }) => {
+      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.drawImage(bitmap, 0, 0);
+      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+      const scale = bitmap.width / clip.width;
+      const found: Array<{ r: number; g: number; b: number; a: number }> = [];
+      for (let py = 0; py < bitmap.height; py += 1) {
+        for (let px = 0; px < bitmap.width; px += 1) {
+          // Distance outside the border box, in CSS pixels, of this pixel's centre.
+          const cx = clip.x + (px + 0.5) / scale;
+          const cy = clip.y + (py + 0.5) / scale;
+          const dx = Math.max(box.x - cx, cx - (box.x + box.width), 0);
+          const dy = Math.max(box.y - cy, cy - (box.y + box.height), 0);
+          const distance = Math.max(dx, dy);
+          if (distance <= inner || distance >= outer) continue;
+          const j = (py * bitmap.width + px) * 4;
+          found.push({ r: data[j], g: data[j + 1], b: data[j + 2], a: 1 });
+        }
+      }
+      return found;
+    },
+    { base64: png.toString("base64"), box: read.box, clip, inner, outer: ring.spread },
+  );
+  if (band.length === 0) throw new Error("no pixels under the focus ring");
+  const ratio = (a: Rgba, b: Rgba) => {
+    const [light, dark] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+    return (light + 0.05) / (dark + 0.05);
+  };
+  let lowest = Number.POSITIVE_INFINITY;
+  for (const pixel of band) {
+    const drawn = over(ring.color, pixel);
+    lowest = Math.min(lowest, ratio(drawn, pixel));
+    if (offset) lowest = Math.min(lowest, ratio(drawn, offset.color));
+  }
+  return Math.round(lowest * 100) / 100;
+}
+
+test("the Dashboard's focus rings reach 3:1 against what is beside them", async ({ page }) => {
+  test.slow();
+  await useMockApi(page, loadFixture("full-result"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  const rings: Array<[string, number]> = [];
+  // In the order Tab reaches them.
+  rings.push([
+    "the hero's BPM chip",
+    await focusRingContrast(page, page.getByRole("button", { name: /^Measured.*: how BPM/ })),
+  ]);
+  rings.push([
+    "VIEW FULL ANALYSIS",
+    await focusRingContrast(page, page.getByRole("button", { name: "VIEW FULL ANALYSIS" })),
+  ]);
+  rings.push([
+    "the hero's Spotify link",
+    await focusRingContrast(page, page.getByRole("link", { name: "SPOTIFY" })),
+  ]);
+  rings.push([
+    "a connected track",
+    await focusRingContrast(page, page.getByRole("button", { name: /Older Record/ })),
+  ]);
+  rings.push([
+    "the activity log's toggle",
+    await focusRingContrast(page, page.getByRole("button", { name: /^Expand activity log/ })),
+  ]);
+  for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
+});
+
+test("the Player's focus rings reach 3:1 against what is beside them", async ({ page }) => {
+  test.slow();
+  const rings: Array<[string, number]> = [];
+  await useMockApi(page, loadFixture("decrypt-after-model-unavailable"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await analyzeAndOpenDashboard(page, "Track");
+  await openPlayer(page);
+  rings.push([
+    "DECRYPT MORE",
+    await focusRingContrast(page, page.getByRole("button", { name: /DECRYPT MORE/ })),
+  ]);
+  for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
+});
+
+test("the track picker's focus rings reach 3:1 against what is beside them", async ({ page }) => {
+  await useMockApi(page, loadFixture("hitl"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  const picker = page.locator('div[tabindex="0"]', { hasText: "Is this the right track?" });
+  await expect(picker).toBeVisible();
+  // Held still: the picker's countdown would pick a track while the rings are measured.
+  await picker.hover();
+  const rings: Array<[string, number]> = [];
+  rings.push(["the picker", await focusRingContrast(page, picker)]);
+  rings.push(["a candidate", await focusRingContrast(page, picker.getByRole("button").first())]);
+  for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
+});
+
+test("the paused banner's focus rings reach 3:1 against what is beside them", async ({ page }) => {
+  // Its recorded track, and "or try a different song" below it.
+  await useMockApi(page, loadFixture("budget-paused"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const rings: Array<[string, number]> = [];
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Some Other Song");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  const banner = page.getByRole("region", { name: "Live analysis paused" });
+  await expect(banner).toBeVisible();
+  rings.push([
+    "the paused banner's recorded track",
+    await focusRingContrast(page, banner.getByRole("button", { name: /Bright Lines/ })),
+  ]);
+  rings.push([
+    "or try a different song",
+    await focusRingContrast(page, page.getByRole("button", { name: "or try a different song" })),
+  ]);
+  for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
+});
+
+/**
+ * The contrast of each song section's boundary against what is drawn behind the bar: its border
+ * (when it has one) or its fill, whichever stands out more, composited over the brightest pixel
+ * behind the section (the bar hidden). Sections are focusable, so WCAG 1.4.11 asks 3:1.
+ */
+async function sectionBoundaries(page: Page) {
+  const bar = page.getByRole("group", { name: "Song structure" }).getByRole("list").first();
+  await bar.scrollIntoViewIfNeeded();
+  await backgroundSettled(page);
+  const sections = await bar.getByRole("listitem").evaluateAll((items) => {
+    const asRgba = (color: string) => {
+      const context = new OffscreenCanvas(1, 1).getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+      return { r, g, b, a: a / 255 };
+    };
+    return items.map((item) => {
+      const style = getComputedStyle(item);
+      const box = item.getBoundingClientRect();
+      return {
+        label: item.getAttribute("aria-label") ?? "",
+        border: Number.parseFloat(style.borderTopWidth) >= 1 ? asRgba(style.borderTopColor) : null,
+        fill: asRgba(style.backgroundColor),
+        box: { x: box.x, y: box.y, width: box.width, height: box.height },
+      };
+    });
+  });
+  // A handle: once hidden, the bar is no longer found by its role.
+  const handle = await bar.elementHandle();
+  if (!handle) throw new Error("no song structure bar");
+  await handle.evaluate((element) => {
+    (element as HTMLElement).style.visibility = "hidden";
+  });
+  const result: Array<{ label: string; ratio: number }> = [];
+  for (const section of sections) {
+    const { x, y, width, height } = section.box;
+    const clip = {
+      x: Math.floor(x),
+      y: Math.floor(y),
+      width: Math.max(1, Math.ceil(width)),
+      height: Math.max(1, Math.ceil(height)),
+    };
+    const png = await page.screenshot({ clip, animations: "disabled" });
+    const behind: Rgba = await page.evaluate(async (base64) => {
+      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.drawImage(bitmap, 0, 0);
+      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+      let best = { r: 0, g: 0, b: 0, a: 1 };
+      for (let j = 0; j < data.length; j += 4) {
+        if (data[j] + data[j + 1] + data[j + 2] > best.r + best.g + best.b) {
+          best = { r: data[j], g: data[j + 1], b: data[j + 2], a: 1 };
+        }
+      }
+      return best;
+    }, png.toString("base64"));
+    const ratio = (colour: Rgba) => {
+      const drawn = over(colour, behind);
+      const [light, dark] = [luminance(drawn), luminance(behind)].sort((p, q) => q - p);
+      return (light + 0.05) / (dark + 0.05);
+    };
+    const best = Math.max(ratio(section.fill), section.border ? ratio(section.border) : 0);
+    result.push({ label: section.label, ratio: Math.round(best * 100) / 100 });
+  }
+  await handle.evaluate((element) => {
+    (element as HTMLElement).style.removeProperty("visibility");
+  });
+  return result;
+}
+
+for (const fixture of ["full-result", "missing-states"]) {
+  test(`song sections stand out 3:1 against the page (${fixture})`, async ({ page }) => {
+    await useMockApi(page, loadFixture(fixture));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await analyzeAndOpenDashboard(page, "Track");
+    await openPlayer(page);
+    const sections = await sectionBoundaries(page);
+    expect(sections.length).toBeGreaterThan(1);
+    for (const { label, ratio } of sections) expect(ratio, label).toBeGreaterThanOrEqual(3);
+  });
+}
+
 /** The provenance fixture with a "sample" fact whose text names an entity of every colour. */
 function withEntities() {
   const fixture = loadFixture("provenance");

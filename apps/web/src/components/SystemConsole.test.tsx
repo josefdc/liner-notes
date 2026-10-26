@@ -15,7 +15,7 @@ describe('SystemConsole', () => {
     'colours the model code %s as a model step',
     (code) => {
       render(<SystemConsole logs={[log(code)]} isComplete />);
-      expect(screen.getByText(`[${code}]`).className).toContain('text-accent-purple');
+      expect(screen.getByText(`[${code}]`).className).toContain('text-prov-inferred');
     },
   );
 });

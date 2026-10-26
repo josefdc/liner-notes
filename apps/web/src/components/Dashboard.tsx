@@ -7,6 +7,7 @@ import TargetScanOverlay from './TargetScanOverlay';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
@@ -47,6 +48,8 @@ interface RelatedTrack {
   sentence: string | null;
   /** Where the relation comes from (null when no link joins them). */
   provenance: string | null;
+  /** The chip of the link's kind, in the words and colours the graph's list uses (null: no link). */
+  chip: 'sourced' | 'inferred' | 'unconfirmed' | null;
   img: string | null;
 }
 
@@ -102,9 +105,47 @@ function getRelatedTracks(
       relation,
       sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
       provenance: relation.link ? reader.provenanceText(relation.link) : null,
+      chip: relation.link ? reader.linkProvenanceKind(relation.link) : null,
       img: isValidImageUrl(node.img) ? node.img : null,
     }));
 }
+
+/**
+ * A connected track's relation, as the badge of its card. A documented relation is named only
+ * for a sourced link. The badge is the link's provenance chip (sourced: amber and a book; a
+ * model inference: violet and sparkles; not sourced: neutral), as in the graph's list; without a
+ * link it is a neutral badge. A neutral chip's text is raised to secondary: on a hovered card its
+ * chip grey is under 4.5:1.
+ */
+const RelationBadge: React.FC<{ rec: RelatedTrack }> = ({ rec }) => {
+  const relation = (
+    <span
+      className={
+        rec.chip === 'sourced' || rec.chip === 'inferred' ? undefined : 'text-text-secondary'
+      }
+    >
+      {rec.relation.text}
+    </span>
+  );
+  // The label stays outside the chip, so the chip (icon and relation) fits the card on one line.
+  return (
+    <span
+      data-link-kind={rec.relation.link?.kind ?? 'none'}
+      className="flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-1"
+    >
+      <span className="text-chrome font-mono font-bold uppercase tracking-widest text-text-secondary">
+        LOGIC:
+      </span>{' '}
+      {rec.chip ? (
+        <ProvenanceChip kind={rec.chip} glow={rec.chip === 'sourced'}>
+          {relation}
+        </ProvenanceChip>
+      ) : (
+        <Badge variant="neutral">{relation}</Badge>
+      )}
+    </span>
+  );
+};
 
 const EMPTY_LOGS: AgentLog[] = [];
 
@@ -315,14 +356,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <span>{trackData.releaseYear}</span>
                     </>
                   )}
-                  {trackData.explicit && <Badge variant="gray">EXPLICIT</Badge>}
+                  {trackData.explicit && <Badge variant="neutral">EXPLICIT</Badge>}
                 </div>
               )}
 
-              {/* Audio values: measured, model scores, or "not measured" */}
+              {/* Audio values: measured, model scores, or "not measured". Compact: each value
+                  with a chip of its kind, its provenance behind the chip (the Player has the
+                  full lines) */}
               <AudioStats
                 track={trackData}
                 size="md"
+                compact
                 rowClassName="justify-center md:justify-start"
                 className="mb-6"
               />
@@ -342,7 +386,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     href={trackData.spotifyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/50 focus-visible:outline-none"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-spotify/10 border border-spotify/30 text-spotify font-mono text-sm tracking-widest uppercase hover:bg-spotify/20 hover:border-spotify/50 hover:shadow-glow-spotify-subtle active:scale-[0.97] transition-all duration-(--duration-fast) ease-out-expo rounded-sm focus-visible:ring-2 focus-visible:ring-spotify/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                   >
                     <ExternalLink size={14} />
                     SPOTIFY
@@ -368,12 +412,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             </SectionLabel>
             <div className="flex flex-col items-end gap-1">
               {hasModelScores && (
-                <Badge
-                  variant="analog"
+                <ProvenanceChip
+                  kind="inferred"
                   title="Scores from audio models run on the preview: estimates, not measurements and not probabilities"
                 >
                   Model estimate
-                </Badge>
+                </ProvenanceChip>
               )}
               {hasGenreProfile && <InferenceLabel />}
             </div>
@@ -406,7 +450,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-chrome font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
-                  : 'From the genealogy graph — each card says whether its link is sourced or a model inference'}
+                  : 'From the genealogy graph — each card says whether its link is sourced, not sourced or a model inference'}
               </p>
             </div>
             {relatedTracks !== null && relatedTracks.length > 0 && (
@@ -456,7 +500,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
                 data-hovered={hoveredCardId === rec.id || undefined}
-                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
+                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${index * 80}ms`,
                   animationFillMode: 'forwards',
@@ -487,22 +531,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/5 flex flex-col items-start gap-1.5">
-                    {/* A documented relation is named only for a sourced link; an inferred one
-                        says so in words, not by colour alone. The neutral badge's text is raised
-                        to secondary: on a hovered card its chip grey is under 4.5:1. */}
-                    <Badge
-                      variant={rec.relation.link?.kind === 'sourced' ? 'analog' : 'gray'}
-                      glow={rec.relation.link?.kind === 'sourced'}
-                      data-link-kind={rec.relation.link?.kind ?? 'none'}
-                    >
-                      <span
-                        className={
-                          rec.relation.link?.kind === 'sourced' ? undefined : 'text-text-secondary'
-                        }
-                      >
-                        <span className="font-bold">LOGIC:</span> {rec.relation.text}
-                      </span>
-                    </Badge>
+                    <RelationBadge rec={rec} />
                     {rec.sentence && (
                       <p data-link-relation className="text-chrome font-mono text-text-secondary">
                         {rec.sentence}
@@ -541,7 +570,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <button
             type="button"
             onClick={handleUndo}
-            className="text-xs font-mono font-bold text-cyber uppercase tracking-widest hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none px-2 py-1"
+            className="text-xs font-mono font-bold text-cyber uppercase tracking-widest hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none px-2 py-1"
           >
             UNDO
           </button>

@@ -52,6 +52,78 @@ describe('SmartTimeline', () => {
     expect(error.mock.calls.flat().join(' ')).not.toMatch(/same key/);
   });
 
+  it('says where the structure comes from with a chip of its kind: violet only for the model', () => {
+    const chipOf = (source?: 'template' | 'inferred') => {
+      render(<SmartTimeline segments={template} segmentsSource={source} />);
+      const chip = screen
+        .getByRole('group', { name: 'Song structure' })
+        .querySelector('[data-provenance]') as HTMLElement;
+      const found = { kind: chip.dataset.provenance, text: chip.textContent };
+      cleanup();
+      return found;
+    };
+    expect(chipOf('template')).toEqual({ kind: 'missing', text: 'Template — not analysed' });
+    expect(chipOf(undefined)).toEqual({ kind: 'unconfirmed', text: 'Not measured' });
+    expect(chipOf('inferred')).toEqual({ kind: 'inferred', text: 'Model inference' });
+  });
+
+  it("draws the model's sections in the inferred colour, never in the colour the result sends", () => {
+    render(
+      <SmartTimeline
+        segments={[
+          { label: 'Verse', start: 0, end: 40, color: '#FFB000' },
+          { label: 'Chorus', start: 40, end: 100, color: '#00F0FF' },
+        ]}
+        segmentsSource="inferred"
+      />,
+    );
+    const sections = screen.getAllByRole('listitem');
+    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual([
+      'Verse, 40% of track',
+      'Chorus, 60% of track',
+    ]);
+    for (const section of sections) {
+      expect(section.style.backgroundColor).toBe('');
+      expect(section.className).toContain('bg-prov-inferred/');
+    }
+    cleanup();
+    render(<SmartTimeline segments={template} segmentsSource="template" />);
+    for (const section of screen.getAllByRole('listitem')) {
+      expect(section.style.backgroundColor).toBe('');
+      expect(section.className).not.toContain('prov-inferred');
+    }
+  });
+
+  it('draws sample times in the inferred colour and measured moments in the measured colour, apart by shape', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        durationSeconds={240}
+        samples={[{ time: 60, description: 'Old record' }]}
+        keyMoments={[
+          { time: 4, type: 'onset', intensity: 1, description: 'Beat transition' },
+          { time: 8, type: 'harmonic_change', intensity: 1, description: 'Key change' },
+          { time: 12, type: 'energy_peak', intensity: 1, description: 'Peak' },
+        ]}
+      />,
+    );
+    const markers = screen.getAllByRole('img');
+    const drawn = markers.map((marker) => {
+      const shape = marker.querySelector('svg') as SVGElement;
+      return [marker.getAttribute('aria-label'), shape.style.color, shape.dataset.shape];
+    });
+    expect(drawn).toEqual([
+      ['Sample: Old record (time inferred by the model)', '#c4a4fc', 'diamond'],
+      ['Beat transition (measured at 0:04 in the preview)', '#00f0ff', 'diamond'],
+      ['Key change (measured at 0:08 in the preview)', '#00f0ff', 'circle'],
+      ['Peak (measured at 0:12 in the preview)', '#00f0ff', 'up'],
+    ]);
+    // Their words are in a text colour, not the marker's.
+    for (const marker of markers) {
+      expect((marker.lastElementChild as HTMLElement).className).toContain('text-text-secondary');
+    }
+  });
+
   it('draws key moments on a preview lane, never on the song timeline', () => {
     render(
       <SmartTimeline

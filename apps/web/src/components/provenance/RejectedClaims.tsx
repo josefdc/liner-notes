@@ -1,10 +1,10 @@
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, TriangleAlert } from 'lucide-react';
 import type React from 'react';
 import { useId, useState } from 'react';
 import type { ShownClaim } from './claims';
 import type { MeasuredAudio } from '../measured/audio';
 import { comparisonText, LINE } from './ClaimChip';
-import { SourceLink } from './SourceLink';
+import { SourceNote } from './SourceNote';
 
 // The claims the verifier rejected, kept out of the main view: a claim its judge found
 // contradicted by its sources, or whose number the measurement contradicts, whatever its kind.
@@ -57,7 +57,17 @@ export const RejectedClaims: React.FC<RejectedClaimsProps> = ({
         onClick={() => setOpen((value) => !value)}
         className="w-full flex items-center justify-between gap-2 py-2 text-xs font-mono uppercase tracking-widest text-text-secondary hover:text-white px-2 focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none rounded-sm"
       >
-        <span>{`Rejected by the verifier (${count})`}</span>
+        {/* Rejected claims carry the warning colour and triangle, as "Not supported" and
+            "Conflict" do beside a claim */}
+        <span className="flex min-w-0 items-center gap-2">
+          <TriangleAlert
+            size={14}
+            aria-hidden="true"
+            data-warning-icon
+            className="flex-shrink-0 text-status-warning"
+          />
+          <span>{`Rejected by the verifier (${count})`}</span>
+        </span>
         <ChevronDown
           size={14}
           aria-hidden="true"
@@ -74,7 +84,7 @@ export const RejectedClaims: React.FC<RejectedClaimsProps> = ({
               <li
                 key={shown.key}
                 data-claim-id={shown.claim.id}
-                className="border-l-2 border-white/15 pl-3 space-y-1"
+                className="border-l-2 border-status-warning/50 pl-3 space-y-1"
               >
                 <p className="text-sm text-text-secondary">{shown.claim.text}</p>
                 {rejectionReasons(shown, audio).map((reason) => (
@@ -86,7 +96,7 @@ export const RejectedClaims: React.FC<RejectedClaimsProps> = ({
                   <p className={`${LINE} flex flex-wrap items-center gap-x-2 gap-y-1`}>
                     <span>{shown.claim.verdict !== null ? 'Checked against:' : 'Cites:'}</span>
                     {shown.cited.map((evidence) => (
-                      <SourceLink
+                      <SourceNote
                         key={evidence.id}
                         evidence={evidence}
                         showTier={shown.kind === 'sourced'}

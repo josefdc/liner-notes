@@ -47,15 +47,16 @@ function getColorForCode(code?: LogCode): { text: string; border: string; bg: st
   const colorMap: Record<string, { text: string; border: string; bg: string }> = {
     NET: { text: 'text-cyber', border: 'border-cyber/20', bg: 'bg-cyber/5' },
     AUDIO: { text: 'text-analog', border: 'border-analog/20', bg: 'bg-analog/5' },
+    // Model steps: the inferred violet, the colour of what a model writes (the code says which)
     GEMINI: {
-      text: 'text-accent-purple',
-      border: 'border-accent-purple/20',
-      bg: 'bg-accent-purple/5',
+      text: 'text-prov-inferred',
+      border: 'border-prov-inferred/20',
+      bg: 'bg-prov-inferred/5',
     },
     LLM: {
-      text: 'text-accent-purple',
-      border: 'border-accent-purple/20',
-      bg: 'bg-accent-purple/5',
+      text: 'text-prov-inferred',
+      border: 'border-prov-inferred/20',
+      bg: 'bg-prov-inferred/5',
     },
     SPOTIFY: {
       text: 'text-accent-green',
@@ -115,7 +116,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete }) => {
             ? 'Collapse activity log'
             : `Expand activity log${lastLog ? `, last event: ${lastLog.message}` : ''}`
         }
-        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none"
+        className="relative z-10 w-full px-4 py-3 flex justify-between items-center bg-surface-subtle hover:bg-surface transition-colors duration-(--duration-fast) cursor-pointer focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none"
       >
         <div className="flex items-center gap-2 min-w-0">
           <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest flex items-center gap-2 flex-shrink-0">

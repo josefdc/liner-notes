@@ -246,10 +246,24 @@ describe('Dashboard connected tracks', () => {
       'Model inference · stated as a sample, shown as an influence; no evidence cited',
     );
     expect(lonely.textContent).not.toMatch(/Sourced|Model inference/);
-    // Kind in words and in the badge's colour: amber for sourced, neutral otherwise.
-    expect(older.querySelector('[data-link-kind]')?.className).toContain('text-analog');
-    expect(guess.querySelector('[data-link-kind]')?.className).toContain('border-white/15');
-    expect(guess.querySelector('[data-link-kind] > span')?.className).toBe('text-text-secondary');
+    // The heading names every kind a card can show.
+    expect(
+      screen.getByText(
+        'From the genealogy graph — each card says whether its link is sourced, not sourced or a model inference',
+      ),
+    ).toBeTruthy();
+    // Kind in words, and the provenance chip the graph's list uses: amber and a book for
+    // sourced, violet and sparkles for a model inference, neutral without a link.
+    const badge = (card: Element) =>
+      card.querySelector('[data-link-kind] > span.border') as HTMLElement;
+    expect(badge(older).dataset.provenance).toBe('sourced');
+    expect(badge(older).className).toContain('text-prov-sourced');
+    expect(badge(older).querySelector('svg.lucide-book-open')).not.toBeNull();
+    expect(badge(guess).dataset.provenance).toBe('inferred');
+    expect(badge(guess).className).toContain('text-prov-inferred');
+    expect(badge(guess).querySelector('svg.lucide-sparkles')).not.toBeNull();
+    expect(badge(lonely).dataset.provenance).toBeUndefined();
+    expect(badge(lonely).dataset.variant).toBe('neutral');
   });
 
   it('labels every relation as inferred when the result has no evidence pack', async () => {

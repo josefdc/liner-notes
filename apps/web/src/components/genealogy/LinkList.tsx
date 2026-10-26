@@ -14,7 +14,7 @@ export const LinkList: React.FC<{
   if (links.length === 0) return null;
   return (
     <details className="text-chrome font-mono text-text-chip">
-      <summary className="cursor-pointer select-none text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/50 rounded-sm">
+      <summary className="cursor-pointer select-none text-text-secondary hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber/70 rounded-sm">
         Links as a list ({links.length})
       </summary>
       <ul

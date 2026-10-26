@@ -315,6 +315,46 @@ describe("Spotify client", () => {
     expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
   });
 
+  it("keeps a token no longer than its lifetime by either clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    try {
+      const net = spotify((call) =>
+        call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined,
+      );
+      const tokens = () => net.calls.filter((c) => c.url === TOKEN_URL).length;
+
+      await fetchTrack(TRACK_ID);
+      expect(tokens()).toBe(1);
+      // A step back of the wall clock does not keep the token past its lifetime (3600 s)...
+      vi.setSystemTime(Date.now() - 60 * 60_000);
+      vi.advanceTimersByTime(3_600_000);
+      await fetchTrack(TRACK_ID);
+      expect(tokens()).toBe(2);
+      // ...nor does a suspend, during which only the wall clock moves on.
+      vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+      await fetchTrack(TRACK_ID);
+      expect(tokens()).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes a token when the monotonic clock reads earlier than when it was fetched", async () => {
+    const net = spotify((call) =>
+      call.url.startsWith(`${API}/tracks/`) ? json(track()) : undefined,
+    );
+    await fetchTrack(TRACK_ID);
+    // A fake monotonic clock starts near 0: earlier than the fetch just made.
+    vi.useFakeTimers({ toFake: ["performance"] });
+    try {
+      await fetchTrack(TRACK_ID);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(net.calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
+  });
+
   it.each([
     [50, "10"],
     [0, "1"],

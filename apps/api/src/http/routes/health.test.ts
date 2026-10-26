@@ -21,6 +21,8 @@ import { captureLogsForTests } from "../../logger.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { LATEST_SCHEMA_VERSION } from "../../store/migrations.js";
 import {
+  AUDIO_PROBE_TTL_MS,
+  audioCheck,
   databaseCheck,
   MAX_HEALTH_BYTES,
   readiness,
@@ -290,6 +292,42 @@ describe("GET /api/ready", () => {
     await ready();
 
     expect(audio.requests()).toBe(1);
+  });
+
+  it("keeps the audio probe's answer for its TTL on the monotonic clock, whatever the wall clock does", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const audio = await audioStub(healthy);
+    const env = { AUDIO_ANALYSIS_URL: audio.url };
+
+    await audioCheck(env);
+    expect(audio.requests()).toBe(1);
+    // A step back does not keep the answer past its TTL...
+    vi.setSystemTime(Date.now() - 60 * 60_000);
+    vi.advanceTimersByTime(AUDIO_PROBE_TTL_MS);
+    await audioCheck(env);
+    expect(audio.requests()).toBe(2);
+    // ...nor does a step forward drop it before.
+    vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+    await audioCheck(env);
+    expect(audio.requests()).toBe(2);
+  });
+
+  it("probes the audio service again when the clock reads earlier than the last probe", async () => {
+    const audio = await audioStub(healthy);
+    const env = { AUDIO_ANALYSIS_URL: audio.url };
+    await audioCheck(env);
+    // A fake monotonic clock starts near 0: earlier than the probe just made.
+    vi.useFakeTimers({ toFake: ["performance"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+
+    await audioCheck(env);
+
+    expect(audio.requests()).toBe(2);
   });
 
   it("answers 503 when no model provider is configured, naming the variables in the log only", async () => {

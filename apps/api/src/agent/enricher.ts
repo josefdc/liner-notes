@@ -227,7 +227,8 @@ function deadline(ms: number) {
 
 /**
  * A time budget that runs only while a lookup is under way (`begin` and `end` around each
- * one): its signal aborts as a deadline once `ms` of such time is spent.
+ * one): its signal aborts as a deadline once `ms` of such time is spent. Time is read from
+ * `pacingClock`, as `deadline` and the pacers read it, so a step of the wall clock spends none.
  */
 function lookupBudget(ms: number) {
   const controller = new AbortController();
@@ -241,18 +242,18 @@ function lookupBudget(ms: number) {
     signal: controller.signal,
     begin() {
       if (active++ > 0) return;
-      since = Date.now();
+      since = pacingClock();
       timer = setTimeout(spend, Math.max(0, left));
       timer.unref?.();
     },
     end() {
       if (--active > 0) return;
       clearTimeout(timer);
-      left -= Date.now() - since;
+      left -= pacingClock() - since;
       if (left <= 0 && !controller.signal.aborted) spend();
     },
     /** The budget's time left now. */
-    remaining: () => (active > 0 ? left - (Date.now() - since) : left),
+    remaining: () => (active > 0 ? left - (pacingClock() - since) : left),
     clear: () => clearTimeout(timer),
   };
 }

@@ -4,7 +4,17 @@
  * and a request that never answers times out instead of stalling the queue.
  */
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { type FetchCall, json, never, stubFetch } from "./testing/fetchStub.js";
 import { queueOnFakeClock, settleOnFakeClock } from "./testing/fakeClock.js";
 
@@ -763,6 +773,75 @@ describe("MusicBrainz client", () => {
     expect(maxInFlight).toBe(1);
     const gaps = starts.slice(1).map((start, i) => start - starts[i]);
     for (const gap of gaps) expect(gap, `gaps ${gaps}`).toBeGreaterThanOrEqual(60);
+  });
+
+  it.each([
+    ["back", -60 * 60_000],
+    ["forward", 60 * 60_000],
+  ])("keeps the spacing when the wall clock steps %s between requests", async (_label, step) => {
+    queueOnFakeClock(60);
+    const starts: number[] = [];
+    stubFetch((call) => {
+      if (!call.url.startsWith(`${MB}/`)) return undefined;
+      starts.push(performance.now());
+      if (starts.length === 1) vi.setSystemTime(Date.now() + step);
+      return json({ count: 0, artists: [] });
+    });
+    await settleOnFakeClock(Promise.all([findArtist("Vanilla Ice"), findArtist("Queen")]));
+
+    expect(starts).toHaveLength(2);
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(60);
+  });
+
+  it("waits the full spacing, not none, when the clock reads earlier than the last request", async () => {
+    const limiter = MusicBrainzRateLimiter.getInstance();
+    const restoreInterval = limiter.setIntervalForTests(60);
+    onTestFinished(() => {
+      vi.useRealTimers();
+      restoreInterval();
+      limiter.resetForTests();
+    });
+    const starts: number[] = [];
+    stubFetch((call) => {
+      if (!call.url.startsWith(`${MB}/`)) return undefined;
+      starts.push(performance.now());
+      return json({ count: 0, artists: [] });
+    });
+    await findArtist("Vanilla Ice");
+    // A fake monotonic clock starts near 0: earlier than the request just sent.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    const asked = performance.now();
+    expect(asked).toBeLessThan(starts[0]);
+
+    await settleOnFakeClock(findArtist("Queen"));
+
+    expect(starts).toHaveLength(2);
+    expect(starts[1] - asked).toBeGreaterThanOrEqual(60);
+  });
+
+  it("reads the clock again after a wait, so a timer that fires early still leaves the spacing", async () => {
+    queueOnFakeClock(60);
+    const limiter = MusicBrainzRateLimiter.getInstance() as unknown as {
+      delay(ms: number): Promise<void>;
+    };
+    // The first wait ends halfway through.
+    let early = true;
+    vi.spyOn(limiter, "delay").mockImplementation((ms) => {
+      const wait = early ? ms / 2 : ms;
+      early = false;
+      return new Promise((resolve) => setTimeout(resolve, wait));
+    });
+    const starts: number[] = [];
+    stubFetch((call) => {
+      if (!call.url.startsWith(`${MB}/`)) return undefined;
+      starts.push(performance.now());
+      return json({ count: 0, artists: [] });
+    });
+
+    await settleOnFakeClock(Promise.all([findArtist("Vanilla Ice"), findArtist("Queen")]));
+
+    expect(starts).toHaveLength(2);
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(60);
   });
 
   describe("choosing among exact matches (real search answers)", () => {

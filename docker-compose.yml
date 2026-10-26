@@ -67,7 +67,8 @@ services:
       - sonic-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3001/api/health"]
+      # The images have no wget; this is the API image's own check (Node's fetch).
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health', { signal: AbortSignal.timeout(5000) }).then((res) => process.exit(res.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -98,7 +99,8 @@ services:
           cpus: '0.5'
           memory: 512M
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3002/health"]
+      # The images have no wget; this is the audio image's own check (Python).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3002/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3

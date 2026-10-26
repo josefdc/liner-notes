@@ -14,6 +14,7 @@
 !apps/api
 !services/audio/package.json
 !packages/contract
+!fixtures/replays
 
 **/node_modules
 **/dist

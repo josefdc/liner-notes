@@ -152,7 +152,7 @@ def load() -> bool:
     if unverified:
         logger.warning(
             "Perceptual features disabled; missing or invalid models: %s "
-            "(run 'uv run python download_models.py')",
+            "(fetch them with download_models.py, which the container runs at start)",
             ", ".join(unverified),
         )
         return False

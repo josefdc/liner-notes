@@ -1,6 +1,7 @@
 # =============================================================================
 # Docker Ignore - API build (context: repository root, Dockerfile: apps/api/Dockerfile)
-# Allowlist: only the root manifests and .npmrc, the workspace manifests and the API.
+# Allowlist: only the root manifests and .npmrc, the workspace manifests, the API and the
+# recorded replays (fixtures/replays).
 # =============================================================================
 
 **
@@ -12,6 +13,7 @@
 !apps/web/package.json
 !services/audio/package.json
 !packages/contract
+!fixtures/replays
 
 # Never send these, even inside allowed directories (env comes from compose env_file)
 **/node_modules

@@ -127,19 +127,37 @@ export const LinkKind = z.enum(["sourced", "inferred"]);
 export type LinkKind = z.infer<typeof LinkKind>;
 
 /**
- * A relation between two genealogy nodes. A link may name a node that is not in the graph
- * (older results do): readers drop such links instead of failing.
+ * A relation between two genealogy nodes, pointing from the earlier work to the later one:
+ * `source` is the earlier record (the one sampled, interpolated, covered, remixed or that
+ * influenced), `target` the record that uses it. A `producer` link has no direction. A link may
+ * name a node that is not in the graph (older results do): readers drop such links instead of
+ * failing.
  */
 export const GenealogyLink = z.object({
-  source: z.string(),
-  target: z.string(),
+  source: z
+    .string()
+    .describe(
+      "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed " +
+        "or that influenced the target",
+    ),
+  target: z
+    .string()
+    .describe("Node id of the later work: the record that uses or follows the source"),
   value: z.number().describe("Strength 1-3: 1 = weak influence, 3 = direct sample"),
   type: LinkType.optional(),
   kind: LinkKind.optional().describe(
-    "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+    "sourced only when every id it cites is in the pack and, for a model link or one that " +
+      "states a claim, that claim is supported and states this relation; a sample link that is " +
+      "not sourced is an inferred influence",
   ),
   origin: ClaimOrigin.optional().describe("code: from a source record; model: proposed by it"),
-  claimId: z.string().optional().describe("The claim that states this relation"),
+  claimId: z
+    .string()
+    .optional()
+    .describe(
+      "The claim that states this relation: it cites every id the link cites and is about the " +
+        "link's type",
+    ),
   evidenceIds: z.array(z.string()).optional(),
 });
 export type GenealogyLink = z.infer<typeof GenealogyLink>;

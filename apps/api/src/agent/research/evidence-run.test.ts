@@ -175,6 +175,7 @@ const answer = (call: StubCall) => {
         about: "track",
         evidenceIds: [RECORDING_ID],
         field: null,
+        scope: "recording",
       },
     ],
     factoids: [
@@ -184,6 +185,7 @@ const answer = (call: StubCall) => {
         type: "sample",
         entities: [{ text: "Queen", type: "artist" }],
         evidenceIds: [WEB_ID],
+        scope: "recording",
       },
     ],
     genealogyNodes: [

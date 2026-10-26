@@ -167,8 +167,14 @@
             "items": {
               "type": "object",
               "properties": {
-                "source": { "type": "string" },
-                "target": { "type": "string" },
+                "source": {
+                  "type": "string",
+                  "description": "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed or that influenced the target"
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Node id of the later work: the record that uses or follows the source"
+                },
                 "value": {
                   "type": "number",
                   "description": "Strength 1-3: 1 = weak influence, 3 = direct sample"
@@ -178,7 +184,7 @@
                   "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
                 },
                 "kind": {
-                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+                  "description": "sourced only when every id it cites is in the pack and, for a model link or one that states a claim, that claim is supported and states this relation; a sample link that is not sourced is an inferred influence",
                   "type": "string",
                   "enum": ["sourced", "inferred"]
                 },
@@ -188,7 +194,7 @@
                   "enum": ["code", "model"]
                 },
                 "claimId": {
-                  "description": "The claim that states this relation",
+                  "description": "The claim that states this relation: it cites every id the link cites and is about the link's type",
                   "type": "string"
                 },
                 "evidenceIds": { "type": "array", "items": { "type": "string" } }
@@ -552,8 +558,14 @@
             "items": {
               "type": "object",
               "properties": {
-                "source": { "type": "string" },
-                "target": { "type": "string" },
+                "source": {
+                  "type": "string",
+                  "description": "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed or that influenced the target"
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Node id of the later work: the record that uses or follows the source"
+                },
                 "value": {
                   "type": "number",
                   "description": "Strength 1-3: 1 = weak influence, 3 = direct sample"
@@ -563,7 +575,7 @@
                   "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
                 },
                 "kind": {
-                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+                  "description": "sourced only when every id it cites is in the pack and, for a model link or one that states a claim, that claim is supported and states this relation; a sample link that is not sourced is an inferred influence",
                   "type": "string",
                   "enum": ["sourced", "inferred"]
                 },
@@ -573,7 +585,7 @@
                   "enum": ["code", "model"]
                 },
                 "claimId": {
-                  "description": "The claim that states this relation",
+                  "description": "The claim that states this relation: it cites every id the link cites and is about the link's type",
                   "type": "string"
                 },
                 "evidenceIds": { "type": "array", "items": { "type": "string" } }

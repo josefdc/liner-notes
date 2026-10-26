@@ -34,6 +34,13 @@ describe('readClaims and readEvidence', () => {
     ]);
   });
 
+  it('read a scope they do not know as no scope, as the contract does', () => {
+    const [read] = readClaims([{ ...claim({ id: 'newer' }), scope: 'song' }]);
+    expect(read?.id).toBe('newer');
+    expect(read?.scope).toBeUndefined();
+    expect(readClaims([claim({ id: 'work', scope: 'work' })])[0]?.scope).toBe('work');
+  });
+
   it('read a result without claims or evidence as having none', () => {
     expect(readClaims(undefined)).toEqual([]);
     expect(readClaims({ claims: [] })).toEqual([]);

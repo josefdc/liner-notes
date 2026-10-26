@@ -253,6 +253,7 @@ const factoidAnswer = (title: string) => ({
         type: "production",
         entities: [{ text: "Roland Juno-106", type: "synth" }],
         evidenceIds: [],
+        scope: "recording",
       },
     ],
   },

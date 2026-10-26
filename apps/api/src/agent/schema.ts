@@ -205,8 +205,15 @@ export const GenealogyNodeSchema = z.object({
 });
 
 export const GenealogyLinkSchema = z.object({
-  source: z.string().describe("Source node ID"),
-  target: z.string().describe("Target node ID"),
+  source: z
+    .string()
+    .describe(
+      "Node ID of the earlier work: the record that is sampled, interpolated, covered, remixed " +
+        "or that influenced the target",
+    ),
+  target: z
+    .string()
+    .describe("Node ID of the later work: the record that uses or follows the source"),
   value: z
     .number()
     .describe("Connection strength (1-3): 1=weak influence, 2=moderate, 3=direct sample"),
@@ -220,7 +227,11 @@ export const GenealogyLinkSchema = z.object({
   kind: z
     .enum(["sourced", "inferred"])
     .optional()
-    .describe("sourced only when it cites evidence in the pack; otherwise a model inference"),
+    .describe(
+      "sourced only when every id it cites is in the pack and, for a model link or one that " +
+        "states a claim, that claim is supported and states this relation; otherwise a model " +
+        "inference",
+    ),
   origin: z.enum(["code", "model"]).optional(),
   claimId: z.string().optional(),
   evidenceIds: z.array(z.string()).optional(),

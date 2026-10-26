@@ -14,6 +14,7 @@ import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants
 import type { TrackRelation } from './genealogy/links';
 import { resultClaims, withoutHiddenRelations } from './provenance/claims';
 import { useLinkReader } from './genealogy/useLinkReader';
+import { PLACEHOLDER_NOTE, placeholderBackground } from '../styles/placeholder';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -29,38 +30,6 @@ interface DashboardProps {
   onUndoAnalysis?: () => void;
   // UX: Hide activity log when restoring a previous session (logs are cleared)
   isRestoredSession?: boolean;
-}
-
-/**
- * Generate a consistent gradient color based on the label
- * Creates a deterministic color for nodes without images
- */
-function generateGradientColors(label: string, group: number): { from: string; to: string } {
-  // Generate a hash from the label
-  let hash = 0;
-  for (let i = 0; i < label.length; i++) {
-    const char = label.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-
-  const hue = Math.abs(hash) % 360;
-
-  // Different color schemes based on group
-  const groupHueOffset: Record<number, number> = {
-    1: 180, // Current: cyan family
-    2: 30, // Sampled: amber family
-    3: 270, // Sampler: purple family
-    4: 120, // Influence: green family
-  };
-
-  const offset = groupHueOffset[group] || 0;
-  const finalHue = (hue + offset) % 360;
-
-  return {
-    from: `hsl(${finalHue}, 70%, 35%)`,
-    to: `hsl(${(finalHue + 40) % 360}, 60%, 25%)`,
-  };
 }
 
 type LinkReader = typeof import('./genealogy/links');
@@ -79,7 +48,6 @@ interface RelatedTrack {
   /** Where the relation comes from (null when no link joins them). */
   provenance: string | null;
   img: string | null;
-  group: number;
 }
 
 /**
@@ -135,27 +103,20 @@ function getRelatedTracks(
       sentence: relation.link ? reader.relationSentence(relation.link, nameOf) : null,
       provenance: relation.link ? reader.provenanceText(relation.link) : null,
       img: isValidImageUrl(node.img) ? node.img : null,
-      group: node.group,
     }));
 }
 
 const EMPTY_LOGS: AgentLog[] = [];
 
-// Placeholder component with gradient background
-const PlaceholderCover: React.FC<{ title: string; group: number }> = ({ title, group }) => {
-  const colors = generateGradientColors(title, group);
-
-  return (
-    <div
-      className="w-full h-full flex items-center justify-center"
-      style={{
-        background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
-      }}
-    >
-      <Music size={48} className="text-text-tertiary" />
-    </div>
-  );
-};
+// A connected track without cover art
+const PlaceholderCover: React.FC = () => (
+  <div
+    className="w-full h-full flex items-center justify-center"
+    style={{ background: placeholderBackground }}
+  >
+    <Music size={48} data-placeholder-note style={{ color: PLACEHOLDER_NOTE.color }} />
+  </div>
+);
 
 const Dashboard: React.FC<DashboardProps> = ({
   trackData: rawTrackData,
@@ -334,7 +295,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Track Info */}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="text-[10px] font-mono text-cyber/80 uppercase tracking-widest">
+                <span className="text-chrome font-mono text-cyber/80 uppercase tracking-widest">
                   NOW PLAYING
                 </span>
                 <div className="w-1.5 h-1.5 rounded-full bg-cyber/60"></div>
@@ -437,17 +398,18 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Connected tracks from the genealogy (P2:17 — stagger) */}
         <div className="lg:col-span-2 flex flex-col gap-6 animate-stagger-in stagger-4">
-          <div className="flex items-center justify-between">
+          {/* The count moves below the heading when the two do not fit side by side */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>
               <h3 className="text-lg font-medium tracking-tight text-white">Connected Tracks</h3>
-              <p className="text-[10px] font-mono text-text-muted mt-0.5">
+              <p className="text-chrome font-mono text-text-muted mt-0.5">
                 {trackData?.modelUnavailable
                   ? 'From source data'
                   : 'From the genealogy graph — each card says whether its link is sourced or a model inference'}
               </p>
             </div>
             {relatedTracks !== null && relatedTracks.length > 0 && (
-              <span className="text-xs font-mono text-analog">
+              <span className="text-xs font-mono text-analog whitespace-nowrap">
                 {/* What the cards show, out of how many connected tracks there are */}
                 {relatedTracks.length < relatedCount
                   ? `${relatedTracks.length} OF ${relatedCount} RELATED TRACKS`
@@ -502,7 +464,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {/* The card lifts inside a box that stays put, so a pointer near its bottom edge
                     does not drop the hover the lift itself causes. */}
                 <div className="h-full bg-void border border-border p-4 rounded-md group-hover:border-cyber/30 group-hover:bg-surface-hover group-hover:-translate-y-1 group-hover:shadow-glow-cyber-subtle transition-[translate,box-shadow,border-color,background-color] duration-(--duration-normal) ease-out-expo">
-                  <div className="relative aspect-square rounded-md overflow-hidden mb-4 bg-gray-900">
+                  <div className="relative aspect-square rounded-md overflow-hidden mb-4 bg-void-lighter">
                     {rec.img ? (
                       <img
                         src={rec.img}
@@ -510,7 +472,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-(--duration-slow)"
                       />
                     ) : (
-                      <PlaceholderCover title={rec.title} group={rec.group} />
+                      <PlaceholderCover />
                     )}
                     {/* Target Scan Overlay on hover */}
                     <TargetScanOverlay isHovered={hoveredCardId === rec.id} />

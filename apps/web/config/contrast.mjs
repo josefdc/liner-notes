@@ -50,13 +50,7 @@ export const INVERSE = {
  * Text below 4.5:1 whose fix is planned elsewhere: { name (as reported), file (under src), issue }.
  * Only the app's own source is matched against it.
  */
-export const KNOWN = [
-  {
-    name: '--color-text-tertiary/60',
-    file: 'components/SystemConsole.tsx',
-    issue: 'the console timestamp is opacity-60; the #30 sweep removes it',
-  },
-];
+export const KNOWN = [];
 const isBase = (name) => /^--color-void(-|$)/.test(name);
 const isTranslucentSurface = (name) => /^--color-surface(-|$)/.test(name);
 const isState = (name) => /^--color-surface-(hover|active)$/.test(name);
@@ -336,8 +330,11 @@ export function contrastReport(css, srcDir = null, known = srcDir === SRC_DIR ? 
 
 const ratio = (value) => `${(Math.floor(value * 100) / 100).toFixed(2)}:1`;
 
-/** Runs the check; returns the exit code. */
-export function main(args, log = console.log, error = console.error) {
+/**
+ * Runs the check; returns the exit code. `knownList` replaces KNOWN (for the tests); by default the
+ * app's own source is matched against KNOWN.
+ */
+export function main(args, log = console.log, error = console.error, knownList = undefined) {
   const files = [];
   let srcDir = SRC_DIR;
   for (let i = 0; i < args.length; i += 1) {
@@ -352,7 +349,7 @@ export function main(args, log = console.log, error = console.error) {
   }
   let report;
   try {
-    report = contrastReport(readFileSync(files[0], 'utf8'), srcDir);
+    report = contrastReport(readFileSync(files[0], 'utf8'), srcDir, knownList);
   } catch (problem) {
     error(`contrast: ${problem.message}`);
     return 2;

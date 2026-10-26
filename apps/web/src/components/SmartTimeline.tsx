@@ -106,7 +106,7 @@ const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, 
         />
         {/* Tooltip */}
         <div
-          className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-[10px] font-mono transition-opacity z-20 pointer-events-none"
+          className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-chrome font-mono transition-opacity z-20 pointer-events-none"
           style={{ color: marker.color }}
         >
           {marker.description}
@@ -175,7 +175,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
   return (
     <div className="w-full mt-8" role="group" aria-label="Song structure">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+        <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
           Structure
         </span>
         {segments.length > 0 && (
@@ -208,7 +208,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               }}
             >
               {/* Tooltip */}
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-void border border-white/20 px-2 py-1 text-[10px] font-mono whitespace-nowrap z-10 transition-opacity">
+              <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-void border border-white/20 px-2 py-1 text-chrome font-mono whitespace-nowrap z-10 transition-opacity">
                 {seg.label}
               </div>
             </div>
@@ -216,7 +216,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       ) : (
         <div className="h-3 w-full rounded-xs bg-white/5 flex items-center justify-center">
-          <span className="text-[8px] font-mono text-text-tertiary uppercase tracking-widest">
+          <span className="text-chrome leading-none font-mono text-text-tertiary uppercase tracking-widest">
             STRUCTURE DATA UNAVAILABLE
           </span>
         </div>

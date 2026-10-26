@@ -19,6 +19,10 @@
  * uses the old name.
  */
 @theme {
+  /* Tailwind's default palette is cleared: only the colours below exist, so a class such as
+     bg-red-500 builds nothing instead of a colour outside the design */
+  --color-*: initial;
+
   /* ===== Surfaces ===== */
   --color-void: #050505; /* the page */
   --color-void-light: #0a0a0a;
@@ -97,8 +101,9 @@
   /* ===== Spotify brand ===== */
   --color-spotify: #1ed760; /* Spotify's current brand green */
 
-  /* ===== Opaque grey scale (backgrounds, borders, chart grids; a grey used as text is checked
-     as text) ===== */
+  /* ===== Opaque grey scale, for code that draws with values (styles/theme.ts: D3, Recharts, the
+     genealogy placeholder) and the scrollbar. Classes use the surface, border and text tokens
+     instead: the honesty guard fails on a gray-* class ===== */
   --color-gray-300: #d1d5db;
   --color-gray-400: #9ca3af;
   --color-gray-500: #6b7280;

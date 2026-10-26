@@ -57,13 +57,13 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
   return (
     <section
       aria-label={title}
-      className="bg-analog/5 border border-analog/30 rounded-md p-6 space-y-4 text-left"
+      className="bg-status-warning/5 border border-status-warning/30 rounded-md p-6 space-y-4 text-left"
     >
       <div role="alert" className="space-y-4">
         <h2
           ref={headingRef}
           tabIndex={-1}
-          className="text-analog text-sm font-mono uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
+          className="text-status-warning text-sm font-mono uppercase tracking-widest flex items-center justify-center gap-2 outline-none"
         >
           <CirclePause size={16} aria-hidden="true" />
           {title}
@@ -95,9 +95,13 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
                 <button
                   type="button"
                   onClick={() => onPick(track)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left bg-white/5 border border-transparent hover:bg-white/10 hover:border-analog/30 transition-colors focus-visible:ring-2 focus-visible:ring-analog/30 focus-visible:outline-none"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/20 transition-colors focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
                 >
-                  <Disc3 size={16} className="text-analog flex-shrink-0" aria-hidden="true" />
+                  <Disc3
+                    size={16}
+                    className="text-text-tertiary flex-shrink-0"
+                    aria-hidden="true"
+                  />
                   <span className="flex-1 min-w-0">
                     <span className="block text-white text-sm font-mono truncate">
                       {track.title}

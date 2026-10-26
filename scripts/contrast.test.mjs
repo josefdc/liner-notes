@@ -415,9 +415,13 @@ describe("class strings", () => {
   });
 
   it("reports a listed known failure without failing, and fails a listed one that is gone", () => {
-    const { code, out } = run([tokensPath]);
-    expect(code).toBe(0);
-    expect(out).toMatch(/^KNOWN --color-text-tertiary\/60 .*components\/SystemConsole\.tsx:\d+/m);
+    const faint = source("const a = 'text-text-tertiary opacity-60';");
+    const listed = contrastReport(tokens, faint, [
+      { name: "--color-text-tertiary/60", file: "components/Thing.tsx", issue: "fixed elsewhere" },
+    ]);
+    const known = listed.find((item) => item.name === "--color-text-tertiary/60");
+    expect(known.passes).toBe(false);
+    expect(known.known).toBe("fixed elsewhere");
     const src = source("const a = 'text-text-secondary';");
     const stale = contrastReport(tokens, src, [
       { name: "--color-white/40", file: "components/Thing.tsx", issue: "fixed elsewhere" },
@@ -425,5 +429,35 @@ describe("class strings", () => {
     const entry = stale.find((item) => item.name === "--color-white/40");
     expect(entry.passes).toBe(false);
     expect(entry.lowest.surface).toContain("no longer fails");
+  });
+
+  it("prints a listed known failure as KNOWN, says how many there are, and exits 0", () => {
+    const out = [];
+    const err = [];
+    const faint = source("const a = 'text-text-tertiary opacity-60';");
+    const known = [
+      { name: "--color-text-tertiary/60", file: "components/Thing.tsx", issue: "fixed elsewhere" },
+    ];
+    const code = main(
+      [tokensPath, "--src", faint],
+      (line) => out.push(line),
+      (line) => err.push(line),
+      known,
+    );
+    expect(code).toBe(0);
+    expect(err).toEqual([]);
+    const text = out.join("\n");
+    expect(text).toMatch(
+      /^KNOWN --color-text-tertiary\/60 .*text at components\/Thing\.tsx:1 \[known: fixed elsewhere\]$/m,
+    );
+    expect(text).toMatch(/\(1 known, listed in KNOWN with the issue that fixes it\)$/m);
+    expect(text).not.toMatch(/^FAIL /m);
+  });
+
+  it("passes the app's own source with nothing listed as known", () => {
+    const { code, out } = run([tokensPath]);
+    expect(code).toBe(0);
+    expect(out).not.toMatch(/^(KNOWN|FAIL) /m);
+    expect(out).not.toContain("known");
   });
 });

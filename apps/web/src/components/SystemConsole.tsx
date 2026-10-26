@@ -43,7 +43,7 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ lo
     <div
       className={`flex items-start font-mono text-xs leading-relaxed py-0.5 content-auto ${isLatest ? 'animate-fade-in-right' : ''}`}
     >
-      <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums opacity-60">{time}</span>
+      <span className="text-text-tertiary mr-3 shrink-0 w-16 tabular-nums">{time}</span>
       <span className={`${colorClass} mr-2 shrink-0 font-bold tracking-wider`}>{codePrefix}</span>
       <span className="text-text-secondary tracking-tight">
         {log.message}
@@ -94,18 +94,18 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
 
       <div className="relative rounded-md overflow-hidden border border-border bg-black/90 shadow-2xl backdrop-blur-xl">
         {/* Terminal Header */}
-        <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <Terminal size={14} className="text-cyber" />
-            <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-white/5 border-b border-white/5">
+          <div className="flex items-center gap-3 min-w-0">
+            <Terminal size={14} className="text-cyber shrink-0" />
+            <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest truncate">
               sonic-agent://analysis.log
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest whitespace-nowrap">
               {isComplete ? '[ COMPLETE ]' : '[ ACTIVE ]'}
             </span>
-            <div className="flex gap-1.5">
+            <div className="hidden sm:flex gap-1.5">
               <div
                 className="w-2 h-2 rounded-full bg-status-error/50"
                 title="Close (just kidding)"
@@ -134,7 +134,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
           <div
             className="absolute inset-0 pointer-events-none opacity-[0.03]"
             style={{
-              backgroundImage: 'linear-gradient(rgba(0,240,255,0.1) 1px, transparent 1px)',
+              backgroundImage: 'linear-gradient(var(--color-cyber-dim) 1px, transparent 1px)',
               backgroundSize: '100% 20px',
             }}
           />
@@ -190,7 +190,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
         </div>
 
         {/* Footer Status Bar — P3:26 real derived values */}
-        <div className="bg-white/5 border-t border-white/5 px-4 py-1.5 flex justify-between items-center text-[9px] font-mono text-text-tertiary uppercase">
+        <div className="bg-white/5 border-t border-white/5 px-4 py-1.5 flex justify-between items-center text-chrome font-mono text-text-tertiary uppercase">
           <span>EVENTS: {logs.length}</span>
           <span>UPLINK: {elapsedSeconds}s</span>
           <span className={isComplete ? 'text-status-success' : 'text-cyber animate-pulse'}>

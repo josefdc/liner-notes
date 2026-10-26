@@ -350,6 +350,11 @@ describe("the research key and what a hit trusts", () => {
     ["of the format before relations were kept", (row) => withEvidence(row, { format: 5 })],
     // Written before other forums' thread layouts were left out: read again, for the same reason.
     ["of the format before forum layouts were left out", (row) => withEvidence(row, { format: 6 })],
+    // Written before comment widgets' and more forums' layouts were left out: read again too.
+    [
+      "of the format before comment layouts were left out",
+      (row) => withEvidence(row, { format: 7 }),
+    ],
     [
       "holding a timeout as lasting",
       (row) =>

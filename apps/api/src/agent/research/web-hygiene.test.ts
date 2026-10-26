@@ -121,10 +121,18 @@ const FORUM_PIECES = [
   (n: number) => `sure? – Fan${n} Feb 22 '21 at 16:01`,
   (n: number) => `posted by Fan${n} at 6:47 AM on February 22, 2021`,
   (n: number) => `[${n} favorites]`,
+  (n: number) => `Fan${n} February 22, 2021, 3:15pm #${n}`,
+  (n: number) => `Post by Fan${n} » Mon Feb 22, 2021 3:${String(n % 60).padStart(2, "0")} pm`,
+  (n: number) => `Fan${n} • ${(n % 9) + 1}y ago`,
+  () => "Reply Share",
+  (n: number) => `${n} Reply`,
+  (n: number) => `#${n} 22nd February 2021`,
+  (n: number) => `Fan from Ohio Oct ${(n % 28) + 1}, 2009:`,
+  (n: number) => `Reviewed in the United States on February ${(n % 28) + 1}, 2021`,
 ];
 /** A forum piece in a kept excerpt: forumThread decided on it, and the readers must agree. */
 const FORUM_PIECE =
-  /said:|Click to expand|\d #\d|Joined Mar|Messages: |Originally Posted by|Reply With Quote|Posts: |improve this answer|answered Feb|'21 at|posted by Fan|favorites\]/;
+  /said:|Click to expand|\d #\d|Joined Mar|Messages: |Originally Posted by|Reply With Quote|Posts: |improve this answer|answered Feb|'21 at|posted by Fan|favorites\]|pm #|» Mon|y ago|Reply Share|\d Reply|22nd February|from Ohio|Reviewed in/;
 
 const URLS = [
   "https://www.example.org/news/one-more-time",
@@ -570,6 +578,64 @@ const MUSIC_PROSE: Array<[string, string]> = [
   [
     "a band's line-up",
     "Line-up. Thomas Bangalter Joined: 1993. Guy-Manuel de Homem-Christo Joined: 1993. Posts: drums, keys. Quote: 'We are robots.' Join Date: 1993.",
+  ],
+  // Bylines, ages, reviews and quoted comments, which read like a comment widget's or a forum's.
+  [
+    "an interview with its age in the byline",
+    "Interview by Jane Smith • 3y ago. Thomas Bangalter on One More Time: 'We wanted it to feel like a party.' Share this interview with a friend.",
+  ],
+  [
+    "a list of articles with their ages",
+    "Daft Punk's Thomas Bangalter: the interview · 3y ago · 8 min read. Read next: Nile Rodgers on Get Lucky • 2y ago. Romanthony remembered • 4y ago.",
+  ],
+  [
+    "a review site's editorial review",
+    "Daft Punk – Discovery review. Rating: 4.5 out of 5 stars. Reviewed by Jane Smith on February 22, 2021. One More Time opens the album with Romanthony's vocal. Verified by our editors.",
+  ],
+  [
+    "liner notes with Posted by",
+    "Liner notes. Posted by Virgin Records at 9:00 AM. Written by T. Bangalter and G-M. de Homem-Christo. Posted by Virgin Records at 4:30 PM: the remaster notes.",
+  ],
+  [
+    "a group blog's capitalised bylines",
+    "Posted by Jane Doe at 9:00 AM on February 22, 2021. Daft Punk split. Posted by John Roe at 3:15 PM on February 23, 2021. The Romanthony story.",
+  ],
+  [
+    "an article quoting a YouTube comment once",
+    "One fan wrote under the video 3 years ago: 'This song never gets old.' The comment has 1.2K likes and 45 replies, more than the label's own post.",
+  ],
+  [
+    "an article quoting a YouTube comment with its button",
+    "A YouTube comment from 3 years ago, 'This song never gets old', shows 1.2K Reply. In 2015 Reply 1988, the Korean series, used the song.",
+  ],
+  [
+    "a blog's bylines with an arrow and no time",
+    "Daft Punk split: the story by Jane Doe » February 22, 2021. One More Time and the Romanthony vocal, by John Roe » February 23, 2021.",
+  ],
+  ["a breadcrumb", "Home » News » Daft Punk » Feb 22, 2021 Daft Punk have split after 28 years."],
+  [
+    "a chart run that falls one place a week",
+    "UK Singles Chart run. Week of Feb 24, 2001 #1 One More Time. Week of Mar 3, 2001 #2 One More Time. Week of Mar 10, 2001 #3 One More Time.",
+  ],
+  [
+    "a magazine issue's number and date",
+    "Sound On Sound, #1 22nd February 2021 issue: how Daft Punk made Discovery. #2 1st March 2021 issue: the vocoder.",
+  ],
+  [
+    "a mention of a forum's member title",
+    "Fans on the Gearspace forum, where one Gear Addict asked about the vocoder, guessed a DigiTech Talker. A Forum Resident at another board agreed.",
+  ],
+  [
+    "a Songfacts page's facts above an undated comment",
+    "One More Time by Daft Punk. Songfacts: The vocal is Romanthony's, heavily processed with Auto-Tune. Comments: 1 Jane from Ohio This is the best.",
+  ],
+  [
+    "a dateline",
+    "News from Paris Feb 22, 2021: Daft Punk have split after 28 years, with a video.",
+  ],
+  [
+    "a podcast's episode ages",
+    "Episode 12 • 3 years ago: the making of Discovery. Episode 13 • 2 years ago: Romanthony. Listen and Share.",
   ],
 ];
 

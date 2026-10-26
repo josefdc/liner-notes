@@ -370,6 +370,97 @@ describe("web research searches", () => {
     expect(performance.now() - start).toBeLessThan(50);
   });
 
+  it.each([
+    ["ages without a Reply", "1 year ago x ".repeat(3_077)],
+    ["glued ages", "3y ".repeat(13_334)],
+    ["an age, a long comment, then a Reply", `3 years ago ${"a ".repeat(20_000)} 12 Reply`],
+    ["dotted digits", "1.".repeat(20_000)],
+    ["dotted capitals", "A.".repeat(20_000)],
+    ["digits and commas", "1,".repeat(20_000)],
+    ["bylines without a date", "by x ".repeat(8_000)],
+    ["bylines with an arrow", "by x » ".repeat(5_715)],
+    ["a byline's long name", `by ${"x".repeat(40_000)}`],
+    ["names from places", "Jane from ".repeat(4_000)],
+    ["a place's long name", `Jane from ${"x".repeat(40_000)}`],
+    ["bullets", "• ".repeat(20_000)],
+    ["bullets before numbers", "· 3 ".repeat(10_000)],
+    ["post numbers before ordinal days", "#1 22nd ".repeat(5_000)],
+    ["lowercase bylines", "posted by a ".repeat(3_334)],
+    ["a topic's created", "created ".repeat(5_000)],
+    ["comment depths", "level 1 ".repeat(5_000)],
+    ["Replies", "Reply · ".repeat(5_000)],
+    ["quotes before an arrow", `Originally Posted by ${"x".repeat(40_000)}`],
+    ["points", "1 points ".repeat(4_445)],
+    ["weekdays", "Sunday at ".repeat(4_000)],
+  ])("checks a stored text of 40,000 characters of %s in linear time", (_name, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(40_000);
+    const start = performance.now();
+    webTextIssue(text);
+    expect(performance.now() - start).toBeLessThan(50);
+  });
+
+  it("excludes TalkBass, the WATMM forums, Rate Your Music and Disqus, and forum copies on the Wayback Machine", async () => {
+    const pages = [
+      "https://www.talkbass.com/threads/daft-punk-bass-lines.1234567/",
+      "https://talkbass-com.translate.goog/threads/daft-punk.1234567/",
+      "https://forums.watmm.com/topic/12345-daft-punk-discovery/",
+      "https://rateyourmusic.com/release/album/daft-punk/discovery/reviews/1/",
+      "https://disqus.com/home/discussion/channel-music/daft_punk_one_more_time/",
+      "https://web.archive.org/web/20200101000000/https://www.gearslutz.com/board/123-daft-punk.html",
+      "https://web.archive.org/web/2020id_/http://forums.stevehoffman.tv/threads/daft-punk.123/",
+      "https://web.archive.org/web/2019/http:/www.reddit.com/r/DaftPunk/comments/abc/",
+      "https://web.archive.org/web/*/news.ycombinator.com/item?id=26214151",
+      "https://web.archive.org/web/https://www.kvraudio.com/forum/viewtopic.php?t=12345",
+      "https://web.archive.org/web/2021/https://www.talkbass.com/threads/x.1/",
+    ];
+    const ARCHIVED = {
+      ...WHOSAMPLED,
+      url: "https://web.archive.org/web/2020/https://www.whosampled.com/Vanilla-Ice/Ice-Ice-Baby/",
+    };
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), ARCHIVED, WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([
+      ARCHIVED.url,
+      WHOSAMPLED.url,
+    ]);
+    const excluded: string[] = JSON.parse(net.calls[0].body ?? "{}").exclude_domains;
+    expect(excluded).toEqual(
+      expect.arrayContaining([
+        "talkbass.com",
+        "forums.watmm.com",
+        "rateyourmusic.com",
+        "disqus.com",
+        "talkbass-com.translate.goog",
+        "rateyourmusic-com.translate.goog",
+      ]),
+    );
+    // Copies of other pages are kept: the archive is judged by the page it holds, not its host.
+    expect(excluded).not.toContain("web.archive.org");
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    for (const url of [
+      "https://watmm.com/news/daft-punk",
+      "https://www.songfacts.com/facts/daft-punk/one-more-time",
+      "https://web.archive.org/web/2020/https://www.discogs.com/release/1289-Daft-Punk",
+      "https://web.archive.org/web/2020/",
+      "https://archive.org/details/daft-punk-discovery",
+      "https://www.example.org/web/2020/https://www.reddit.com/r/music",
+    ]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+    expect(
+      isLyricPage("https://web.archive.org/web/2019/https://genius.com/Daft-punk-one-more-time"),
+    ).toBe(true);
+  });
+
   it("counts a forum quote only when its expander follows the quote closely", () => {
     const story = " One More Time opened Discovery and topped the French chart.".repeat(7);
     // An interview: a quote, a long story, a panel, then a quote right before another panel.

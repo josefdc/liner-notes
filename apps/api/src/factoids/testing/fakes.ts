@@ -64,11 +64,29 @@ export function storedFact(index: number, text: string): { factoid: Factoid; cla
   return { factoid, claim };
 }
 
+/** A stored statement that is not a card (a credit, as the code-built claims state one). */
+export const storedCredit = (text: string): Claim => ({
+  id: "stored-credit-1",
+  text,
+  about: "credit",
+  kind: "sourced",
+  origin: "code",
+  evidenceIds: [],
+  verdict: null,
+  verdictReason: null,
+  numericCheck: "n/a",
+  scope: "recording",
+});
+
 /**
- * The demo recording's result as a stored run (`RUN_ID`) with this evidence pack and these
- * stored facts in place of its own.
+ * The demo recording's result as a stored run (`RUN_ID`) with this evidence pack, these stored
+ * facts and these other statements in place of its own.
  */
-export function storedRun(evidence: Evidence[], facts: string[] = []): TrackAnalysis {
+export function storedRun(
+  evidence: Evidence[],
+  facts: string[] = [],
+  otherClaims: Claim[] = [],
+): TrackAnalysis {
   const { analysis } = demoRecord();
   const stored = facts.map((text, index) => storedFact(index + 1, text));
   return {
@@ -76,7 +94,7 @@ export function storedRun(evidence: Evidence[], facts: string[] = []): TrackAnal
     run: analysis.run ? { ...analysis.run, id: RUN_ID } : analysis.run,
     evidence,
     factoids: stored.map((fact) => fact.factoid),
-    claims: stored.map((fact) => fact.claim),
+    claims: [...stored.map((fact) => fact.claim), ...otherClaims],
   };
 }
 
@@ -87,21 +105,33 @@ export const DEMO_TRACK = {
   trackArtist: demoRecord().analysis.artist,
 };
 
-/** A card as the model writes it (ComposerFactoid). */
-export const card = (text: string, evidenceIds: string[] = []): ComposerFactoid => ({
+/** A card as the model writes it (ComposerFactoid), naming `entities` (artists). */
+export const card = (
+  text: string,
+  evidenceIds: string[] = [],
+  entities?: string[],
+): ComposerFactoid => ({
   title: `About ${text.slice(0, 20)}`,
   text,
   type: "production",
-  entities: [{ text: "Roland Juno-106", type: "synth" }],
+  entities: entities
+    ? entities.map((name) => ({ text: name, type: "artist" as const }))
+    : [{ text: "Roland Juno-106", type: "synth" }],
   evidenceIds,
   scope: "recording",
 });
 
-/** The routes' focuses, in the order their facts are sent (FACTOID_FOCUSES). */
+/**
+ * The routes' focuses (FACTOID_FOCUSES): a first click asks about the first three, the next
+ * click about the next three.
+ */
 export const FOCUSES = [
   "hidden production techniques or studio secrets",
   "obscure samples, influences, or interpolations",
   "little-known collaborators, session musicians, or equipment used",
+  "how the song was written or first put together",
+  "the track's release and what became of it later (remixes, covers, uses on screen)",
+  "the other records and artists it is tied to",
 ];
 
 /** The focus a factoid call asks about (its index in FOCUSES), or null when it asks for several. */
@@ -121,7 +151,7 @@ export function statementsOf(
 }
 
 export interface FakeModel {
-  /** The card each focus gets (by index): a card, nothing, or a failure of the call. */
+  /** The card each focus gets (by its index in FOCUSES): a card, nothing, or a failed call. */
   cards: Array<ComposerFactoid | null | Error>;
   /** The verdict on a statement, by its text; or a failure of the judge call. */
   judge?: ((text: string) => Verdict) | Error;
@@ -146,7 +176,7 @@ export function fakeModel(model: FakeModel): StubLlm {
       return output;
     }
     const focus = focusOf(call);
-    const chosen = focus === null ? model.cards : [model.cards[focus]];
+    const chosen = focus === null ? model.cards : [model.cards[focus] ?? null];
     const failed = chosen.find((entry) => entry instanceof Error);
     if (failed) throw failed;
     return { factoids: chosen.filter((entry): entry is ComposerFactoid => entry !== null) };

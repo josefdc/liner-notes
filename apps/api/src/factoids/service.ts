@@ -5,14 +5,18 @@
  * 1. Run context. When the request names the analysis run the facts add to (`runId`), its stored
  *    result is read (storedAnalysis: the run's own result, or the recording a replayed run was
  *    sent): its evidence pack, its claims and factoids, and its measured audio. A run that is not
- *    stored, has no result, or is about another track gives no context: the pack is empty and
- *    every new fact reads as inferred.
- * 2. One model call per focus (tier `main`, schema `FactoidsOutput`), all at once. The provider
- *    layer runs at most LLM_CONCURRENCY of them at a time. The calls and the judge's share one
- *    request run id, so a request makes at most MAX_LLM_CALLS_PER_RUN calls, and each is held to
- *    the budget. A focus whose call fails is reported as failed; the others are kept.
- * 3. No repeats. A fact whose text is a near-duplicate (nearDuplicate) of one the run already has,
- *    or of one written earlier in the batch, is dropped.
+ *    stored or has no result gives no context, and neither does one whose track is not the one the
+ *    request names (sameTrack: another Spotify id, or another title or artist): the pack is then
+ *    empty and every new fact reads as inferred.
+ * 2. One model call per focus (tier `main`, schema `FactoidsOutput`), all at once: three angles of
+ *    FACTOID_FOCUSES, the next three on each later click (focusesFor). The provider layer runs at
+ *    most LLM_CONCURRENCY of them at a time. The calls and the judge's share one request run id,
+ *    so a request makes at most MAX_LLM_CALLS_PER_RUN calls, and each is held to the budget. A
+ *    focus whose call fails is reported as failed; the others are kept.
+ * 3. No repeats. A fact the client already shows (its first id, under any focus, is one the
+ *    client sent) is dropped, and so is one that is a near-duplicate (nearDuplicate) of a fact the
+ *    run already has or of one written earlier in the batch. When every fact is dropped, the
+ *    answer has no facts: nothing shown before is sent again.
  * 4. Claims. Each fact is a model claim (the composer's builder: inferred, no verdict), with the
  *    facts' claim id as its `claimId`. Cited ids that the prompt did not show are dropped. The
  *    claims then go through the verifier's own steps: checkClaims (citations against the pack and
@@ -21,9 +25,9 @@
  *    the judge found its cited excerpts supporting it; never measured. When the judge fails or the
  *    budget refuses it, the facts are kept with no verdict, read as inferred, and say they were
  *    not checked.
- * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id, the focus and
- *    the text, never a count, and it is unique against the ids the client and the run already
- *    have and the rest of the batch.
+ * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
+ *    names, the focus and the text, never a count, and it is unique against the ids the client
+ *    and the run already have and the rest of the batch.
  *
  * The facts are handed back in focus order once all of them have been checked.
  */
@@ -61,12 +65,39 @@ export const FACTOIDS_CALL_SITE = "factoids";
 /** Output budget of a call, reasoning included (main tier: low effort). */
 export const FACTOIDS_MAX_OUTPUT_TOKENS = 2500;
 
-/** The focus of each fact, in the order the facts are sent. */
+/** Facts one request asks for: one per focus. */
+export const FACTOIDS_PER_REQUEST = 3;
+
+/** The angles a fact is asked from, FACTOIDS_PER_REQUEST of them per request (focusesFor). */
 export const FACTOID_FOCUSES = [
   "hidden production techniques or studio secrets",
   "obscure samples, influences, or interpolations",
   "little-known collaborators, session musicians, or equipment used",
+  "how the song was written or first put together",
+  "the track's release and what became of it later (remixes, covers, uses on screen)",
+  "the other records and artists it is tied to",
 ] as const;
+
+/** An id factId gives. */
+const FACT_ID = /^fc-[0-9a-f]{12}$/;
+
+/**
+ * The focuses of one request, in the order its facts are sent: FACTOIDS_PER_REQUEST consecutive
+ * angles of FACTOID_FOCUSES, after those earlier requests asked about. Earlier requests are
+ * counted from the ids they gave (factId) that the client sends back: none on the first click,
+ * which asks about the first three angles; the next click asks about the next three, and so on
+ * round the list. The same request always asks about the same angles, so its prompts replay from
+ * the same cassettes.
+ */
+export function focusesFor(existingIds: readonly string[]): string[] {
+  const written = existingIds.filter((id) => FACT_ID.test(id)).length;
+  const start =
+    (Math.ceil(written / FACTOIDS_PER_REQUEST) * FACTOIDS_PER_REQUEST) % FACTOID_FOCUSES.length;
+  return Array.from(
+    { length: FACTOIDS_PER_REQUEST },
+    (_, i) => FACTOID_FOCUSES[(start + i) % FACTOID_FOCUSES.length],
+  );
+}
 
 /** Why a fact that cites evidence has no verdict when the judge gave none. */
 export const NOT_CHECKED_REASON = "Not checked: the check against its sources could not run.";
@@ -78,7 +109,7 @@ const TOO_LONG_REASON = "Not judged: longer than the judge reads whole.";
 
 /** What a request's facts add to: the analysis run's stored result, or nothing. */
 export interface RunContext {
-  /** The analysis run, when the request named one (whether or not it was found). */
+  /** The analysis run whose stored result this is; null when there is none. */
   runId: string | null;
   analysis: TrackAnalysis | null;
   evidence: readonly Evidence[];
@@ -125,12 +156,18 @@ const codePoints = (text: string, max: number) => [...text].slice(0, max).join("
 
 /**
  * Whether a stored result is about the track the request names: the same Spotify id when the
- * request gives one, else the same title (compared as the routes truncate it).
+ * request gives one (the POST may), else the same title and the same artist, both normalised
+ * (normalisedFact) and compared as the routes truncate them. A request without an artist names
+ * no track to compare with.
  */
-function sameTrack(analysis: TrackAnalysis, track: FactoidTrack): boolean {
+export function sameTrack(analysis: TrackAnalysis, track: FactoidTrack): boolean {
   if (track.trackId && SPOTIFY_ID_PATTERN.test(track.trackId)) return analysis.id === track.trackId;
-  const title = (text: string) => normalisedFact(codePoints(text, 200));
-  return title(analysis.title) === title(track.title);
+  const key = (text: string) => normalisedFact(codePoints(text, 200));
+  return (
+    track.artist !== undefined &&
+    key(analysis.title) === key(track.title) &&
+    key(analysis.artist) === key(track.artist)
+  );
 }
 
 /** The context of `runId` for the track the request names (see RunContext). */
@@ -140,7 +177,7 @@ export function runContext(
   load: LoadRun = storedAnalysis,
 ): RunContext {
   const none: RunContext = {
-    runId: runId ?? null,
+    runId: null,
     analysis: null,
     evidence: [],
     claims: [],
@@ -174,16 +211,28 @@ export function runContext(
 /** Below this share of shared words, two facts are different facts. */
 const NEAR_DUPLICATE_OVERLAP = 0.8;
 
+/** A fact as the repeat check reads it: its text and the names it marks as entities. */
+export interface FactText {
+  text: string;
+  entities: readonly string[];
+}
+
+/** The entity names of a fact as a key: normalised, without repeats, sorted. */
+const entityKey = (fact: FactText) =>
+  [...new Set(fact.entities.map(normalisedFact).filter((name) => name !== ""))].sort().join("\n");
+
 /**
- * Whether two fact texts state the same thing in nearly the same words: the same normalised
- * text, or word sets that overlap by NEAR_DUPLICATE_OVERLAP or more (shared words over all the
- * words of both).
+ * Whether two facts state the same thing: the same normalised text, or the same entities and
+ * word sets that overlap by NEAR_DUPLICATE_OVERLAP or more (shared words over all the words of
+ * both). Two facts that name different entities (another sampled record, another player) are
+ * different facts, however alike the rest of their words.
  */
-export function nearDuplicate(a: string, b: string): boolean {
-  const left = normalisedFact(a);
-  const right = normalisedFact(b);
+export function nearDuplicate(a: FactText, b: FactText): boolean {
+  const left = normalisedFact(a.text);
+  const right = normalisedFact(b.text);
   if (left === "" || right === "") return false;
   if (left === right) return true;
+  if (entityKey(a) !== entityKey(b)) return false;
   const words = (text: string) => new Set(text.split(" "));
   const one = words(left);
   const other = words(right);
@@ -191,9 +240,17 @@ export function nearDuplicate(a: string, b: string): boolean {
   return shared / (one.size + other.size - shared) >= NEAR_DUPLICATE_OVERLAP;
 }
 
+/** The id `fact` gets first, before any clash: see factId. */
+function firstFactId(runId: string | null, focus: string, text: string): string {
+  return hashedId([runId, focus, text]);
+}
+
+const hashedId = (key: unknown[]) =>
+  `fc-${createHash("sha256").update(JSON.stringify(key)).digest("hex").slice(0, 12)}`;
+
 /**
- * The fact's id: `fc-` and a short hash of the analysis run id, the focus and the text; a taken
- * id is hashed again with a counter until it is free. Adds it to `taken`.
+ * The fact's id: `fc-` and a short hash of the run id the request names, the focus and the text;
+ * a taken id is hashed again with a counter until it is free. Adds it to `taken`.
  */
 export function factId(
   runId: string | null,
@@ -202,13 +259,26 @@ export function factId(
   taken: Set<string>,
 ): string {
   for (let attempt = 0; ; attempt++) {
-    const key = attempt === 0 ? [runId, focus, text] : [runId, focus, text, attempt];
-    const id = `fc-${createHash("sha256").update(JSON.stringify(key)).digest("hex").slice(0, 12)}`;
+    const id =
+      attempt === 0 ? firstFactId(runId, focus, text) : hashedId([runId, focus, text, attempt]);
     if (!taken.has(id)) {
       taken.add(id);
       return id;
     }
   }
+}
+
+/**
+ * Whether the client already shows this very fact: the id it would get first, under any focus,
+ * is one the client sent (the same run, the same text). A fact sent on an earlier click comes
+ * back that way, under the id it was sent with.
+ */
+export function shownBefore(
+  runId: string | null,
+  text: string,
+  existingIds: ReadonlySet<string>,
+): boolean {
+  return FACTOID_FOCUSES.some((focus) => existingIds.has(firstFactId(runId, focus, text)));
 }
 
 // =============================================================================
@@ -237,6 +307,8 @@ export interface FactoidServiceOptions {
   signal: AbortSignal;
   /** Reads a run's stored result (default: storedAnalysis). */
   loadRun?: LoadRun;
+  /** The request's run context, when the caller has read it already (runContext). */
+  context?: RunContext;
 }
 
 /** What became of one focus. */
@@ -249,7 +321,7 @@ export type FocusOutcome =
 export interface FactoidsResult {
   /** One per focus, in focus order. */
   outcomes: FocusOutcome[];
-  /** The analysis run the facts add to, when the request named one. */
+  /** The analysis run whose stored result the facts used; null when they used none. */
   runId: string | null;
   /** The deployment of the first answered call; null when none answered. */
   model: string | null;
@@ -325,21 +397,33 @@ function masked(factoid: Factoid, claim: Claim): { factoid: Factoid; claim: Clai
  */
 export async function writeFactoids(
   request: FactoidRequest,
-  { llm, purpose, signal, loadRun = storedAnalysis }: FactoidServiceOptions,
+  { llm, purpose, signal, loadRun = storedAnalysis, context: given }: FactoidServiceOptions,
 ): Promise<FactoidsResult> {
-  const context = runContext(request.runId, request.track, loadRun);
+  const context = given ?? runContext(request.runId, request.track, loadRun);
   const callRunId = `factoids-${randomUUID()}`;
   const shown = shownFactoidEvidence(context.evidence);
   const citable = new Set(shown.map((item) => item.id));
+  const focuses = focusesFor(request.existingIds);
+  // Ids hash the run the request names, found or not, so a fact keeps its id from click to click.
+  const idRun = request.runId ?? null;
+  const existing = new Set(request.existingIds);
 
   // What the reader has seen: the run's cards, then its other statements.
-  const seen: string[] = [];
-  for (const text of [
-    ...context.factoids.map((factoid) => factoid.content),
-    ...context.claims.map((claim) => claim.text),
+  const seen: FactText[] = [];
+  for (const fact of [
+    ...context.factoids.map((factoid) => ({
+      text: factoid.content,
+      entities: (factoid.entities ?? []).map((entity) => entity.text),
+    })),
+    ...context.claims.map((claim) => ({
+      text: claim.text,
+      entities: (claim.factoid?.entities ?? []).map((entity) => entity.text),
+    })),
   ]) {
-    if (!seen.some((other) => normalisedFact(other) === normalisedFact(text))) seen.push(text);
+    const key = normalisedFact(fact.text);
+    if (!seen.some((other) => normalisedFact(other.text) === key)) seen.push(fact);
   }
+  const seenTexts = seen.map((fact) => fact.text);
 
   // The run ends with the request, or as soon as the client leaves (calls may still be settling).
   const end = () => llm.endRun(callRunId);
@@ -347,12 +431,14 @@ export async function writeFactoids(
   try {
     // 2. One call per focus, all at once (the provider layer bounds how many run together).
     const answers = await Promise.all(
-      FACTOID_FOCUSES.map(async (focus) => {
+      focuses.map(async (focus) => {
         try {
           const result = await llm.invoke(
             FACTOIDS_CALL_SITE,
             "main",
-            factoidMessages({ track: request.track, evidence: shown, existing: seen }, [focus]),
+            factoidMessages({ track: request.track, evidence: shown, existing: seenTexts }, [
+              focus,
+            ]),
             FactoidsOutput,
             { purpose, runId: callRunId, maxOutputTokens: FACTOIDS_MAX_OUTPUT_TOKENS, signal },
           );
@@ -370,7 +456,7 @@ export async function writeFactoids(
       ...context.factoids.map((factoid) => factoid.id),
       ...context.claims.map((claim) => claim.id),
     ]);
-    const written: string[] = [];
+    const written: FactText[] = [];
     const outcomes: FocusOutcome[] = [];
     // The written facts by focus index, until their claims are checked.
     const drafts = new Map<number, { factoid: Factoid; claim: Claim }>();
@@ -386,13 +472,17 @@ export async function writeFactoids(
         outcomes.push({ index, status: "none", reason: "nothing" });
         continue;
       }
-      if ([...seen, ...written].some((text) => nearDuplicate(text, card.text))) {
+      const fact = { text: card.text, entities: card.entities.map((entity) => entity.text) };
+      if (
+        shownBefore(idRun, card.text, existing) ||
+        [...seen, ...written].some((other) => nearDuplicate(other, fact))
+      ) {
         log.info(`Factoid ${index + 1}: repeats a fact the reader has seen; dropped`);
         outcomes.push({ index, status: "none", reason: "repeat" });
         continue;
       }
-      written.push(card.text);
-      const id = factId(context.runId, FACTOID_FOCUSES[index], card.text, taken);
+      written.push(fact);
+      const id = factId(idRun, focuses[index], card.text, taken);
       drafts.set(index, cardAndClaim(card, id, citable));
     }
 

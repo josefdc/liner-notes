@@ -27,10 +27,11 @@ import { type Response, Router } from "express";
 import { z } from "zod";
 import { defaultAgentRuntime } from "../../agent/runtime.js";
 import {
-  FACTOID_FOCUSES,
+  FACTOIDS_PER_REQUEST,
   type FactoidsResult,
   failure,
   type LoadRun,
+  runContext,
   writeFactoids,
 } from "../../factoids/service.js";
 import { isLlmError } from "../../llm/errors.js";
@@ -123,10 +124,12 @@ export function failureCode(error: unknown): "rate_limited" | "budget_exhausted"
 /**
  * The factoids of a recording that the client does not have yet (by id), at most `count`, with
  * their recorded ids and claim links: asking again with them as existing ids gives nothing new,
- * so a client never shows a recorded fact twice.
+ * so a client never shows a recorded fact twice. A card links its claim only when the recording
+ * has that claim: a link to a claim that is not sent would point at nothing.
  */
 export function recordedFactoids(record: ReplayRecord, existingIds: string[], count: number) {
   const known = new Set(existingIds);
+  const claims = new Set((record.analysis.claims ?? []).map((claim) => claim.id));
   return record.analysis.factoids
     .filter((factoid) => !known.has(factoid.id))
     .slice(0, count)
@@ -136,7 +139,8 @@ export function recordedFactoids(record: ReplayRecord, existingIds: string[], co
       content: factoid.content,
       type: factoid.type,
       entities: factoid.entities ?? [],
-      ...(factoid.claimId !== undefined && { claimId: factoid.claimId }),
+      ...(factoid.claimId !== undefined &&
+        claims.has(factoid.claimId) && { claimId: factoid.claimId }),
     }));
 }
 
@@ -225,7 +229,14 @@ export function createFactoidsRouter({
    * `budget_exhausted`; any other failure a 500 `failed`. A track with no recording while live
    * calls may not be made (REPLAY_MODE) is a 503 `live_disabled` (or `budget_exhausted` when
    * fallback paused them because the budget is spent).
-   * An empty list is a valid answer (nothing documented the model is sure of).
+   * An empty list is a valid answer: nothing documented the model is sure of, or nothing new (a
+   * fact the client already shows, or one the run already has, is never sent again).
+   *
+   * Cost: a request makes one main-tier call per focus (three, at once) and, when a new fact
+   * cites the run's evidence, one judge-tier call: at most four calls, where this route made one
+   * call for three facts before the facts were checked. Each call reserves its worst case against
+   * the budget; the rate limits count requests, not calls. See factoids/prompt.ts for the input
+   * each call sends.
    */
   router.post(
     "/api/factoids/decrypt",
@@ -256,11 +267,7 @@ export function createFactoidsRouter({
       if (replay.kind === "replay") {
         log.info(`Recorded facts (${replay.record.slug})`);
         logTrack("Recorded facts", track);
-        const factoids = recordedFactoids(
-          replay.record,
-          existingFactoidIds,
-          FACTOID_FOCUSES.length,
-        );
+        const factoids = recordedFactoids(replay.record, existingFactoidIds, FACTOIDS_PER_REQUEST);
         res.json({
           success: true,
           factoids,
@@ -332,7 +339,9 @@ export function createFactoidsRouter({
    *
    * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...
    * Messages (all on the default `message` event), each one FactoidStreamEvent of
-   * @liner-notes/contract with `runId` (the analysis run the request names, else null) and `seq`:
+   * @liner-notes/contract with `seq` and `runId`: the analysis run the request names when its
+   * stored result is what the facts add to (found, and about this track), else null, so a client
+   * never ties the facts to a run they did not use:
    * - { type: "connected" }
    * - { type: "factoid", data: Factoid, claim?: Claim }: one per focus, in focus order, sent
    *   once all of them have been written and checked; `data.claimId` is `claim.id`
@@ -344,7 +353,10 @@ export function createFactoidsRouter({
    * - { type: "done" }: always last
    *
    * `runId` (optional) names the analysis run the facts add to: its evidence is what they may
-   * cite, and its facts are not repeated. Without it every fact reads as inferred.
+   * cite, and its facts are not repeated. Without it, or when the run has no stored result or is
+   * about another track (title and artist), every fact reads as inferred. A fact the client
+   * already shows (by id) is not sent again, and a later click asks about other angles. Costs as
+   * the POST route's.
    *
    * Under REPLAY_MODE the recorded factoids are sent instead, each with its recorded claim, or
    * one error live_disabled (or budget_exhausted, see above). `mode` (optional: the run.mode of
@@ -359,10 +371,15 @@ export function createFactoidsRouter({
     "/api/factoids/decrypt/stream",
     asyncRoute(async (req, res) => {
       const parsed = StreamQuerySchema.safeParse(req.query);
-      const { stream, untilClosed, error } = openEventStream(
-        res,
-        parsed.success ? (parsed.data.runId ?? null) : null,
-      );
+      // Read before the stream opens: its envelope names the run only when the facts use it.
+      const context = parsed.success
+        ? runContext(
+            parsed.data.runId,
+            { title: parsed.data.trackTitle, artist: parsed.data.trackArtist },
+            loadRun,
+          )
+        : null;
+      const { stream, untilClosed, error } = openEventStream(res, context?.runId ?? null);
 
       if (!parsed.success) {
         markFailed(res);
@@ -398,7 +415,7 @@ export function createFactoidsRouter({
       stream.send({ type: "connected", timestamp: new Date().toISOString() });
 
       if (replay.kind === "replay") {
-        const cards = recordedFactoids(replay.record, existingIds, FACTOID_FOCUSES.length);
+        const cards = recordedFactoids(replay.record, existingIds, FACTOIDS_PER_REQUEST);
         for (const [index, card] of cards.entries()) {
           const claim = recordedClaim(replay.record, card);
           stream.send({ type: "factoid", data: card, ...(claim ? { claim } : {}) }, { index });
@@ -418,7 +435,7 @@ export function createFactoidsRouter({
               runId: parsed.data.runId,
               existingIds,
             },
-            { llm: layer, purpose, signal: stream.signal, loadRun },
+            { llm: layer, purpose, signal: stream.signal, context: context ?? undefined },
           ),
         );
       } catch (failed) {

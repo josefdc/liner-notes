@@ -25,7 +25,9 @@ import {
   type SourceError,
   SourceError as SourceErrorSchema,
   TrackAnalysis,
+  VerifierSummary,
 } from "@liner-notes/contract";
+import type { z } from "zod";
 import { sourceErrorLine } from "./statusText.js";
 import { MARKUP } from "../sources/http.js";
 import { webPageIssue } from "../sources/search.js";
@@ -54,12 +56,21 @@ interface StoredValue {
   sourceErrors?: unknown;
   /** How long it is served, when shorter than STORED_RESULT_TTL_MS. */
   ttlMs?: unknown;
+  /** What the verifier did, kept when its check did not complete (the run info is not). */
+  verifier?: unknown;
 }
+
+type Verifier = z.infer<typeof VerifierSummary>;
 
 /** A stored result, with the sources its run could not read. */
 export interface StoredResult {
   trackData: TrackData;
   sourceErrors: SourceError[];
+  /**
+   * What the verifier did, when its check did not complete (`failed`): the result is provisional
+   * and the run that serves it says so. null for a checked result.
+   */
+  verifier: Verifier | null;
 }
 
 /** The stored source errors the contract reads; an unreadable entry is dropped. */
@@ -113,9 +124,11 @@ export async function readStoredResult(
       log.warn("Stored result's source errors hold markup; composing again");
       return null;
     }
+    const verifier = VerifierSummary.safeParse(value.verifier);
     return {
       trackData: checked.data as TrackData,
       sourceErrors,
+      verifier: verifier.success ? verifier.data : null,
     };
   } catch (error) {
     log.warn("Stored result could not be read", { err: error });
@@ -162,7 +175,8 @@ export function storableResult(trackData: TrackData): unknown {
 /**
  * Stores a result under its track for the sources configured now, with the sources its run
  * could not read (none of them blocked storing it), served for `ttlMs` when that is shorter than
- * STORED_RESULT_TTL_MS. Throws on a store error.
+ * STORED_RESULT_TTL_MS. A result whose verifier check did not complete (`run.verifier.failed`)
+ * keeps that summary, so the copy served says it is provisional. Throws on a store error.
  */
 export async function storeResult(
   store: BaseStore,
@@ -171,20 +185,37 @@ export async function storeResult(
   sourceErrors: readonly SourceError[] = [],
   ttlMs?: number,
 ): Promise<void> {
+  const verifier = trackData.run?.verifier;
   await store.put(TRACKS_NAMESPACE, resultCacheKey(trackData.id, configuredSources()), {
     trackData: storableResult(trackData),
     timestamp: now.getTime(),
     ...(sourceErrors.length > 0 ? { sourceErrors: [...sourceErrors] } : {}),
     ...(ttlMs !== undefined && ttlMs < STORED_RESULT_TTL_MS ? { ttlMs } : {}),
+    ...(verifier?.failed ? { verifier } : {}),
   });
 }
 
 /** The status line of a result served from the store instead of composed again. */
 export const STORED_LINE = "Serving the analysis stored for this track";
 
+/** The status line of a served result whose notes the verifier could not check. */
+export const STORED_UNCHECKED_LINE =
+  "Stored analysis: the notes were not checked against their sources; they are shown as model inference";
+
 /**
  * The status lines of a served result: one per source its run could not read, so the reader
- * knows that data is missing, not empty.
+ * knows that data is missing, not empty, and one when its notes were not checked.
+ */
+export function storedStatus(stored: StoredResult): string[] {
+  return [
+    ...storedErrorStatus(stored.sourceErrors),
+    ...(stored.verifier?.failed ? [STORED_UNCHECKED_LINE] : []),
+  ];
+}
+
+/**
+ * The status lines of the sources a served result's run could not read, so the reader knows
+ * that data is missing, not empty.
  */
 export function storedErrorStatus(errors: readonly SourceError[]): string[] {
   const seen = new Set<string>();

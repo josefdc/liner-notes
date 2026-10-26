@@ -30,7 +30,7 @@ import {
   servedResult,
   shownQueryMatch,
   STORED_LINE,
-  storedErrorStatus,
+  storedStatus,
 } from "../storedResults.js";
 import { choiceMessage, matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
 import { logger } from "../../logger.js";
@@ -103,8 +103,9 @@ async function selectedTrack(
       node: "scout",
       timestamp: timestampOf(runtime),
     });
-    // The sources its run could not read are reported again: missing, not empty.
-    const unread = storedErrorStatus(stored.sourceErrors);
+    // The sources its run could not read are reported again (missing, not empty), and notes
+    // its verifier could not check are said to be unchecked.
+    const unread = storedStatus(stored);
     for (const message of unread) {
       config.writer?.({
         type: "status",

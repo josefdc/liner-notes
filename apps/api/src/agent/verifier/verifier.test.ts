@@ -204,7 +204,8 @@ describe("the judge's prompt", () => {
 
     const [call] = llm.calls;
     expect(call).toMatchObject({ callSite: "verifier", tier: "judge" });
-    expect(call.options.maxOutputTokens).toBeGreaterThanOrEqual(4000);
+    // The largest answer (20 verdicts, under 1000 tokens) plus the medium-effort minimum.
+    expect(call.options.maxOutputTokens).toBeGreaterThanOrEqual(5000);
     const { system, user } = messagesOf(call);
     expect(system).toBe(JUDGE_SYSTEM_PROMPT);
     expect(system).toMatch(/Judge support, not truth/);
@@ -365,29 +366,69 @@ describe("the numeric check in the verifier", () => {
   });
 
   it("never rejects a sample-history card over another record's tempo or key", async () => {
-    const card = (id: string, text: string) =>
+    // The measurement: 115.8 BPM (confident), D minor (strong). The judge supports every card.
+    const card = (id: string, text: string, records: string[] = []) =>
       modelClaim(id, {
         text,
         about: "sample",
         evidenceIds: ["ev-track"],
-        factoid: { title: "Sample", type: "sample", entities: [] },
+        factoid: {
+          title: "Sample",
+          type: "sample",
+          entities: records.map((record) => ({ text: record, type: "sample" as const })),
+        },
       });
-    const { result } = await verify([
-      card("break", "The Funky Drummer break, originally about 100 BPM, is sped up here."),
-      card("both", "The 1972 break ran at 90 BPM; the track runs at 115.8 BPM."),
-      card("other", "Under Pressure is in D major; this track is in D minor."),
-      card("moved", "The sample was in G minor, transposed down to D minor."),
-    ]);
+    const cards: Array<[Claim, string]> = [
+      [card("a", "The Funky Drummer break, originally about 100 BPM, is sped up here."), "n/a"],
+      [
+        card("b", "The Funky Drummer break, originally about 100 BPM, is sped up in the track."),
+        "n/a",
+      ],
+      [card("c", "The track samples a 1972 break at 90 BPM."), "n/a"],
+      [card("d", "The track samples a 1972 break that ran at 90 BPM."), "n/a"],
+      [card("e", "The 1972 break ran at 90 BPM and the track runs at 115.8 BPM."), "consistent"],
+      [card("f", "The 1972 break ran at 90 BPM; the track runs at 115.8 BPM."), "consistent"],
+      [card("g", "Unlike the original in F# major, the song is in D minor."), "consistent"],
+      [
+        card("h", "Under Pressure is in D major; this track is in D minor.", ["Under Pressure"]),
+        "consistent",
+      ],
+      [card("i", "The sample was in G minor, transposed down to D minor."), "n/a"],
+      [card("j", "It samples James Brown's Funky Drummer, recorded at 100 BPM."), "n/a"],
+      [card("k", "The song it samples ran at 100 BPM."), "n/a"],
+      [
+        card(
+          "l",
+          "Ice Ice Baby lifts the riff of an older record; it was cut in F# major in 1981.",
+        ),
+        "conflict",
+      ],
+      [card("m", "The track runs between 110 and 125 BPM."), "consistent"],
+      [card("n", "The track sits in the 112-125 BPM range."), "consistent"],
+      [card("o", "At the time, the Funky Drummer break ran at 100 BPM."), "n/a"],
+    ];
+    const { result } = await verify(cards.map(([claim]) => claim));
 
-    expect(result.claims?.map((c) => [c.id, c.numericCheck, c.kind])).toEqual([
-      ["break", "n/a", "sourced"],
-      ["both", "consistent", "sourced"],
-      ["other", "consistent", "sourced"],
-      ["moved", "n/a", "sourced"],
-    ]);
+    expect(result.claims?.map((c) => [c.id, c.numericCheck, c.kind])).toEqual(
+      cards.map(([claim, check]) => [claim.id, check, "sourced"]),
+    );
     expect(result.claims?.some(claimIsRejected)).toBe(false);
     // No field is written on a claim whose numbers are another record's.
     expect(result.claims?.[0].field).toBeUndefined();
+  });
+
+  it("marks an uncited restatement of this track's value in ordinary phrasing", async () => {
+    const { result } = await verify([
+      modelClaim("a", { text: "This track has a tempo that sits at 95 BPM.", about: "sound" }),
+      modelClaim("b", { text: "Ice Ice Baby, which runs at 95 BPM, topped the charts." }),
+      modelClaim("c", { text: "Vanilla Ice raps over a 95 BPM beat.", about: "sound" }),
+    ]);
+    expect(result.claims?.map((c) => [c.id, c.numericCheck, c.field])).toEqual([
+      ["a", "contradicted", "tempo"],
+      ["b", "contradicted", "tempo"],
+      // Nobody is named for it: compared and shown, never rejected.
+      ["c", "conflict", "tempo"],
+    ]);
   });
 
   it("keeps a factoid card's claim and checks its text, and never parses a link's claim", async () => {
@@ -547,6 +588,8 @@ describe("a slow judge", () => {
     expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);
     expect(out.trackData?.run?.verifier).toEqual({ judged: 0, unjudged: 1, failed: true });
     expect(out.usage).toEqual([]);
+    expect(out.statusMessages?.[0]).toMatch(/there was no time left in the run to check them/);
+    expect(out.statusMessages?.[0]).not.toMatch(/did not finish/);
   });
 
   it("looks up the artwork while the judge works", async () => {

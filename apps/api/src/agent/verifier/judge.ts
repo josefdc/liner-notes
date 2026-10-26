@@ -15,10 +15,13 @@
  * shown as model inference. An answer that leaves some sent claims without a verdict keeps the
  * verdicts it gave; the others stay unjudged, and the result says the check was not complete.
  *
- * The call gets `timeoutMs` when the run's deadline is known: its share of the run's time,
- * across both of the provider layer's attempts (0: no time, the judge is not asked). Past it
- * the call is stopped and counts as a judge timeout, so a slow judge never costs the run its
- * result. A cancel of the run itself stops it and is rethrown.
+ * The call gets `timeoutMs` when the run's deadline is known: its share of the run's time
+ * (0: no time, the judge is not asked). Past it the call is stopped and counts as a judge
+ * timeout, so a slow judge never costs the run its result. The provider layer's one retry of a
+ * transient failure (a 429, a 5xx, a dropped connection) is kept on purpose: it runs inside the
+ * same share, so it can only turn a lost check into a done one, never delay the result past the
+ * share; a first attempt that is merely slow is cut at the share and not retried after it. A
+ * cancel of the run itself stops it and is rethrown.
  */
 
 import {
@@ -30,7 +33,7 @@ import {
   type Verdict,
 } from "@liner-notes/contract";
 import { LlmError } from "../../llm/errors.js";
-import type { InvokeResult } from "../../llm/invoke.js";
+import { type InvokeResult, RECOMMENDED_MIN_OUTPUT_TOKENS } from "../../llm/invoke.js";
 import { maskHandles } from "../../sources/search.js";
 import { answeredCall, failedCall, refusedAnswer } from "../callRecords.js";
 import { isAbortError } from "../errors.js";
@@ -40,11 +43,12 @@ import type { LlmCallRecord } from "../state.js";
 
 export const JUDGE_CALL_SITE = "verifier";
 /**
- * Output budget of the judge call, reasoning included. Twenty verdicts of one short sentence
- * take about 1000 tokens of JSON; the rest is room for the judge tier's medium-effort reasoning,
- * whose recommended minimum budget is this (llm/invoke.ts RECOMMENDED_MIN_OUTPUT_TOKENS).
+ * Output budget of the judge call, reasoning included, sized as llm/invoke.ts says: the largest
+ * JSON the call can answer plus RECOMMENDED_MIN_OUTPUT_TOKENS for its effort. Twenty verdicts of
+ * one short sentence (at most fifteen words) take under 1000 tokens of JSON; the judge tier runs
+ * at medium effort, whose minimum for reasoning is 4000.
  */
-export const JUDGE_MAX_OUTPUT_TOKENS = 4000;
+export const JUDGE_MAX_OUTPUT_TOKENS = 1000 + RECOMMENDED_MIN_OUTPUT_TOKENS.medium;
 /** Longest verdict reason kept, in characters. */
 export const VERDICT_REASON_MAX = 200;
 
@@ -60,6 +64,8 @@ export interface JudgeResult {
   call: LlmCallRecord | null;
   /** The call's error when it failed, was refused or was not made for want of time; else null. */
   failure: unknown;
+  /** True when the judge was not asked for want of time (no call was made). */
+  notAsked?: boolean;
   /** Claims sent whose verdict the answer left out (0 when the call failed). */
   omitted: number;
   /** Claims not sent because they are longer than the judge reads whole. */
@@ -96,7 +102,7 @@ export async function judgeClaims(
   if (fits.length === 0) return { ...nothing, call: null, failure: null };
   if (options.timeoutMs !== undefined && options.timeoutMs <= 0) {
     const failure = new LlmError("timeout", `${JUDGE_CALL_SITE}: no time left in the run to judge`);
-    return { ...nothing, call: null, failure };
+    return { ...nothing, call: null, failure, notAsked: true };
   }
   const batch = fits.slice(0, JUDGE_BATCH_MAX);
   const sentIds = batch.map((_, index) => `c${index + 1}`);

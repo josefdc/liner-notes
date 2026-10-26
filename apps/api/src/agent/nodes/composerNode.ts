@@ -154,11 +154,12 @@ export function directedEnds(
 }
 
 /**
- * What a link's claim states a fact about. A relation with the analysed track is about this
- * recording (it samples, interpolates or remixes a record, a record samples it, a producer or an
- * influence it shares), except a cover, which is about the song: the model's scope is not taken
- * there, so a release-wide or song-level item can never source a sample of this recording. A
- * link between two other records keeps the scope the model gave it.
+ * What a link's claim states a fact about, set by code from the link's type wherever the type
+ * says it: a sample, interpolation or remix ties one recording to another (recording), a cover
+ * is another recording of the song (work), whichever two records it joins. So a release-wide or
+ * song-level item never sources a recording-level relation, between any two records. A producer
+ * or an influence link with the analysed track is about this recording; between two other
+ * records only it keeps the scope the model gave it.
  */
 export function relationScope(
   type: LinkType,
@@ -166,8 +167,9 @@ export function relationScope(
   target: string,
   stated: ClaimScope,
 ): ClaimScope {
-  if (source !== "current" && target !== "current") return stated;
-  return type === "cover" ? "work" : "recording";
+  if (type === "cover") return "work";
+  if (type === "sample" || type === "interpolation" || type === "remix") return "recording";
+  return source === "current" || target === "current" ? "recording" : stated;
 }
 
 interface Composed {

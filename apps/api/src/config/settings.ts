@@ -393,6 +393,13 @@ export function readLlmSettings(env: NodeJS.ProcessEnv): {
   if (isLiveProvider(settings) && settings.spendLog === null) {
     warnings.push("LLM_SPEND_LOG is not set: every live model call will be refused");
   }
+  // The verifier's judge grades what the main tier wrote: the same model would grade itself.
+  if (isLiveProvider(settings) && deployments.judge === deployments.main) {
+    warnings.push(
+      "The judge and main tiers use the same deployment (AZURE_OPENAI_DEPLOYMENT_JUDGE, " +
+        "AZURE_OPENAI_DEPLOYMENT_MAIN): the model that writes the notes would also check them",
+    );
+  }
   return { settings, errors, warnings };
 }
 

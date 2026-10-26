@@ -308,6 +308,27 @@ describe("scoutNode's stored results", () => {
     expect(out.sourceErrors).toEqual([plain]);
   });
 
+  it("says a served result is provisional when its notes were not checked", async () => {
+    const store = new InMemoryStore();
+    await store.put(TRACKS_NAMESPACE, keyOf(track.id), {
+      ...stored,
+      ttlMs: 60 * 60 * 1000,
+      verifier: { judged: 0, unjudged: 3, failed: true },
+    });
+
+    const out = await scoutGraph(store).graph.invoke({ songQuery: "Song A" });
+
+    expect(out.trackData).toMatchObject({ id: track.id });
+    expect(out.statusMessages).toContain(
+      "Stored analysis: the notes were not checked against their sources; they are shown as model inference",
+    );
+    // A checked result says nothing of the kind.
+    const checked = new InMemoryStore();
+    await checked.put(TRACKS_NAMESPACE, keyOf(track.id), stored);
+    const plain = await scoutGraph(checked).graph.invoke({ songQuery: "Song A" });
+    expect(plain.statusMessages.join(" ")).not.toMatch(/not checked/);
+  });
+
   it("serves this run's search match, never one stored with the result", async () => {
     const store = new InMemoryStore();
     await store.put(TRACKS_NAMESPACE, keyOf(track.id), {

@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { createEmptyTrackData } from "./schema.js";
 import {
   readStoredResult,
+  STORED_UNCHECKED_LINE,
+  storedStatus,
   STORED_RESULT_TTL_MS,
   storeResult,
   UNCHECKED_RESULT_TTL_MS,
@@ -47,5 +49,41 @@ describe("stored results", () => {
       7 * STORED_RESULT_TTL_MS,
     );
     expect(await readStoredResult(store, "long", later(STORED_RESULT_TTL_MS))).toBeNull();
+  });
+
+  it("keep what the verifier did on a copy whose check did not complete, and say so when served", async () => {
+    const store = new InMemoryStore();
+    const run = {
+      id: "run-1",
+      mode: "live" as const,
+      recordedAt: null,
+      commit: null,
+      analyzerVersion: null,
+      verifier: { judged: 0, unjudged: 2, failed: true },
+    };
+    await storeResult(
+      store,
+      { ...createEmptyTrackData("unchecked", "T", "A"), run },
+      at,
+      [],
+      UNCHECKED_RESULT_TTL_MS,
+    );
+    await storeResult(
+      store,
+      {
+        ...createEmptyTrackData("checked", "T", "A"),
+        run: { ...run, verifier: { judged: 2, unjudged: 0 } },
+      },
+      at,
+    );
+
+    const unchecked = await readStoredResult(store, "unchecked", later(1));
+    expect(unchecked?.verifier).toEqual({ judged: 0, unjudged: 2, failed: true });
+    expect(storedStatus(unchecked!)).toEqual([STORED_UNCHECKED_LINE]);
+    // The run information itself belongs to the run that composed it and is not served.
+    expect(unchecked?.trackData).not.toHaveProperty("run");
+    const checked = await readStoredResult(store, "checked", later(1));
+    expect(checked?.verifier).toBeNull();
+    expect(storedStatus(checked!)).toEqual([]);
   });
 });

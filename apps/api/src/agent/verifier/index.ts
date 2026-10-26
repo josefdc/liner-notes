@@ -10,12 +10,14 @@
  *      song never supports a claim about this recording). A link cites what its claim still
  *      cites. A claim left citing nothing cannot be sourced; why is kept in `verdictReason`;
  *    - every claim that is not a link's relation claim gets the numeric check (numeric.ts):
- *      the tempo and key it states about this track against the measured ones, in
- *      `numericCheck`, apart from the judge's verdict. No claim is dropped: one that restates a
- *      measured value is kept and marked by the check (consistent: the web shows that it agrees
- *      with the measurement, beside the measured value; conflict: both values; contradicted: the
- *      rejected panel), so nothing the model wrote is lost and nothing reads as its own
- *      measurement.
+ *      the tempo and key it states, unless said of another record, against the measured ones,
+ *      in `numericCheck`, apart from the judge's verdict. Only a claim that points at the field
+ *      itself (its `field`, or an uncited model claim restating the track's value) can be
+ *      contradicted; any other mismatch is a conflict, both values shown. No claim is
+ *      dropped: one that restates a measured value is kept and marked by the check (consistent:
+ *      the web shows that it agrees with the measurement, beside the measured value; conflict:
+ *      both values; contradicted: the rejected panel), so nothing the model wrote is lost and
+ *      nothing reads as its own measurement.
  * 2. Model-written genealogy text (node labels, titles, artists) has its @handles masked.
  * 3. One judge call (judge.ts) on the model claims that still cite evidence: the links' claims
  *    first, then the others in result order, at most JUDGE_BATCH_MAX; the rest get no verdict.
@@ -149,6 +151,10 @@ export function checkClaims(
 ): CheckedDraft {
   const pack = new Map(evidence.map((item) => [item.id, item]));
   const stated = linkClaimIds(draft.genealogy);
+  // The other records the result names, so a number said of one is not taken for this track's.
+  const nodeTitles = draft.genealogy.nodes
+    .filter((node) => node.id !== "current")
+    .flatMap((node) => [node.trackTitle ?? node.label.split(" - ")[0]].filter(Boolean));
   const claims: Claim[] = [];
   for (const claim of draft.claims) {
     const inPack = claim.evidenceIds.filter((id) => pack.has(id));
@@ -167,7 +173,17 @@ export function checkClaims(
         : {}),
     };
     if (!stated.has(claim.id)) {
-      const numbers = checkNumbers(claim, audio, title);
+      const cardRecords = (claim.factoid?.entities ?? [])
+        .filter((entity) => entity.type === "sample" || entity.type === "album")
+        .map((entity) => entity.text.split(" - ")[0]);
+      const numbers = checkNumbers(claim, audio, {
+        title,
+        others: [...nodeTitles, ...cardRecords],
+        // A claim of the model's own that cites nothing and is no card restates what it states
+        // of the track as its own finding: that may be contradicted, as with its own `field`.
+        restatement:
+          claim.origin === "model" && claim.factoid === undefined && supporting.length === 0,
+      });
       checked = {
         ...checked,
         numericCheck: numbers.numericCheck,
@@ -506,7 +522,9 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const statusMessages: string[] = [];
     const checkFailed = judged.failure !== null || judged.omitted > 0;
     if (judged.failure !== null) {
-      const why = CHECK_FAILURE_TEXT[modelErrorCategory(judged.failure)];
+      const why = judged.notAsked
+        ? "there was no time left in the run to check them"
+        : CHECK_FAILURE_TEXT[modelErrorCategory(judged.failure)];
       const line = `The notes could not be checked against their sources: ${why}; ${UNCHECKED_SHOWN}`;
       log.warn(
         `Run ${runId}: the judge gave no verdicts (${judged.call?.status ?? "not asked"}): ${judged.failure instanceof Error ? judged.failure.message : String(judged.failure)}`,

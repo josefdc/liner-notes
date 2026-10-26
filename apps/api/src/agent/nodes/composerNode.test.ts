@@ -1294,7 +1294,7 @@ describe("composerNode", () => {
       });
     });
 
-    it("sets the scope of a link's claim with this track by code, never the model's", async () => {
+    it("sets the scope of a link's claim by its type, between any two records", async () => {
       const node = (id: string) => ({
         id,
         role: "influence" as const,
@@ -1314,14 +1314,15 @@ describe("composerNode", () => {
               evidenceIds: ["ev-mb-1"],
               scope: "release" as const,
             })),
-            // Between two other records, the model's scope stands.
-            {
+            // Between two other records, the type decides too; only a producer or an
+            // influence link keeps the model's scope there.
+            ...types.map((type) => ({
               source: "o1",
               target: "o2",
-              type: "sample" as const,
+              type,
               evidenceIds: [],
               scope: "release" as const,
-            },
+            })),
           ],
           [...output.genealogyNodes, node("o1"), node("o2")],
         ),
@@ -1331,13 +1332,8 @@ describe("composerNode", () => {
         (link) => draft.claims.find((c) => c.id === link.claimId)?.scope,
       );
       expect(scopes).toEqual([
-        "recording",
-        "recording",
-        "recording",
-        "work",
-        "recording",
-        "recording",
-        "release",
+        ...["recording", "recording", "recording", "work", "recording", "recording"],
+        ...["recording", "recording", "recording", "work", "release", "release"],
       ]);
     });
 

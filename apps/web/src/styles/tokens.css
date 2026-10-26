@@ -221,7 +221,6 @@
   --animate-spin-reverse: spin-reverse 3s linear infinite;
   --animate-completion-reveal: completion-reveal 600ms ease-out both;
   --animate-progress-shimmer: progress-shimmer 1.5s linear infinite;
-  --animate-glow-breathe: glow-breathe 3s ease-in-out infinite;
   --animate-scale-in: scale-in 200ms var(--ease-out-expo) both;
   --animate-slide-up-fade: slide-up-fade 400ms var(--ease-out-expo) both;
 }

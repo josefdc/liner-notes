@@ -14,6 +14,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Player = lazy(() => import('./components/Player'));
 import { AppPhase, type TrackData, type AgentLog } from './types';
 import { useAgent } from './hooks/useAgent';
+import { preloadsResults } from './components/console/progress';
 import { isSpotifyTrackId } from './utils/spotify';
 import type { AgentStatus, AnalyzeOptions, ResultMode, SearchCandidate } from './hooks/agent/types';
 import type { Factoid, FactoidUnavailableCode } from './types';
@@ -83,6 +84,8 @@ interface PhaseViewProps {
   isLoading: boolean;
   isComplete: boolean;
   isReplay: boolean;
+  /** The server's own words for the step under way. */
+  statusNote: string | null;
   candidates: SearchCandidate[] | null;
   analyze: (query: string) => Promise<void>;
   selectCandidate: (candidateId: string) => Promise<void>;
@@ -127,6 +130,7 @@ const PhaseView = React.memo<PhaseViewProps>(
     isLoading,
     isComplete,
     isReplay,
+    statusNote,
     candidates,
     analyze,
     selectCandidate,
@@ -156,6 +160,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             errorCode={errorCode}
             isLoading={isLoading}
             isReplay={isReplay}
+            statusNote={statusNote}
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
@@ -164,6 +169,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
             onRestorePrevious={onRestorePrevious ?? undefined}
+            onSearchAgain={onNewSearch}
           />
         );
       case AppPhase.DASHBOARD:
@@ -201,6 +207,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             errorCode={errorCode}
             isLoading={isLoading}
             isReplay={isReplay}
+            statusNote={statusNote}
             candidates={candidates}
             analyze={analyze}
             selectCandidate={selectCandidate}
@@ -209,6 +216,7 @@ const PhaseView = React.memo<PhaseViewProps>(
             onComplete={onAnalysisComplete}
             searchInputRef={searchInputRef}
             onRestorePrevious={onRestorePrevious ?? undefined}
+            onSearchAgain={onNewSearch}
           />
         );
     }
@@ -236,6 +244,7 @@ const App: React.FC = () => {
     isLoading,
     isComplete,
     isReplay,
+    statusNote,
     analyze,
     selectCandidate,
     retry,
@@ -300,7 +309,7 @@ const App: React.FC = () => {
 
   // Preload lazy chunks when analysis nears completion
   useEffect(() => {
-    if (status === 'composing') {
+    if (preloadsResults(status)) {
       import('./components/Dashboard');
       import('./components/Player');
     }
@@ -498,6 +507,7 @@ const App: React.FC = () => {
             isLoading={isLoading}
             isComplete={isComplete}
             isReplay={isReplay}
+            statusNote={statusNote}
             candidates={candidates}
             analyze={startSearch}
             selectCandidate={selectCandidate}

@@ -44,4 +44,28 @@ describe('InteractiveFactoid', () => {
     expect(chip.dataset.provenance).toBe('record');
     expect(chip.textContent).toBe('From source data');
   });
+
+  it('draws entity chips in neutral greys, each with its type as an icon and a word', () => {
+    const types = ['synth', 'producer', 'sample', 'technique', 'artist', 'album', 'year'] as const;
+    const factoid = {
+      id: 'f',
+      title: 'Title',
+      content: types.map((type) => `${type}-name`).join(', '),
+      type: 'sample',
+      entities: types.map((type, i) => ({ id: `e${i}`, text: `${type}-name`, type })),
+    } as Factoid;
+    const { container } = render(<InteractiveFactoid factoid={factoid} origin="inferred" />);
+    const chips = [...container.querySelectorAll<HTMLElement>('button[title^="Search: "]')];
+    expect(chips).toHaveLength(types.length);
+    for (const [i, type] of types.entries()) {
+      const chip = chips[i];
+      expect(chip.className, type).not.toMatch(PROVENANCE_HUES);
+      expect(chip.className, type).not.toMatch(/pink/);
+      expect(chip.getAttribute('aria-label'), type).toBe(`${type}-name (${type})`);
+      expect(chip.querySelectorAll('svg').length, type).toBe(2);
+    }
+    // The count of chips under the card is neutral too.
+    const count = container.querySelector('[data-entity-count]') as HTMLElement;
+    expect(count.outerHTML).not.toMatch(PROVENANCE_HUES);
+  });
 });

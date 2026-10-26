@@ -1,14 +1,5 @@
 import type React from 'react';
-import {
-  Component,
-  lazy,
-  Suspense,
-  useEffect,
-  useState,
-  useReducer,
-  useRef,
-  useCallback,
-} from 'react';
+import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import type { TrackData, AgentLog } from '../types';
 import {
   Network,
@@ -30,7 +21,8 @@ import {
 } from '../liveUnavailable';
 import type { ReplayTrack } from '../hooks/agent/apiClient';
 import { Button } from './ui/Button';
-import { inputVisualStyles } from './ui/Input';
+import { SearchBox } from './search/SearchBox';
+import type { SuggestionFetcher } from './search/useSuggestions';
 import { ANALYZING_STATUSES, nextProgress } from './console/progress';
 
 // Loaded only when live analysis turns out to be unavailable.
@@ -116,85 +108,6 @@ class BannerBoundary extends Component<
         </div>
       </section>
     );
-  }
-}
-
-// Debounce hook for search suggestions
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
-// Suggestion state reducer
-interface SuggestionState {
-  suggestions: SearchCandidate[];
-  showSuggestions: boolean;
-  selectedIndex: number;
-  isLoading: boolean;
-  /** The last request for suggestions failed. */
-  error: boolean;
-}
-
-type SuggestionAction =
-  | { type: 'FETCH_START' }
-  | { type: 'FETCH_SUCCESS'; results: SearchCandidate[] }
-  | { type: 'FETCH_ERROR' }
-  | { type: 'CLEAR' }
-  | { type: 'SET_SELECTED'; index: number }
-  | { type: 'SET_SHOW'; show: boolean };
-
-const initialSuggestionState: SuggestionState = {
-  suggestions: [],
-  showSuggestions: false,
-  selectedIndex: -1,
-  isLoading: false,
-  error: false,
-};
-
-function suggestionReducer(state: SuggestionState, action: SuggestionAction): SuggestionState {
-  switch (action.type) {
-    case 'FETCH_START':
-      return { ...state, isLoading: true };
-    case 'FETCH_SUCCESS':
-      return {
-        ...state,
-        suggestions: action.results,
-        showSuggestions: action.results.length > 0,
-        selectedIndex: -1,
-        isLoading: false,
-        error: false,
-      };
-    case 'FETCH_ERROR':
-      return {
-        ...state,
-        suggestions: [],
-        showSuggestions: false,
-        selectedIndex: -1,
-        isLoading: false,
-        error: true,
-      };
-    case 'CLEAR':
-      return {
-        ...state,
-        suggestions: [],
-        showSuggestions: false,
-        selectedIndex: -1,
-        isLoading: false,
-        error: false,
-      };
-    case 'SET_SELECTED':
-      return { ...state, selectedIndex: action.index };
-    case 'SET_SHOW':
-      return { ...state, showSuggestions: action.show };
   }
 }
 
@@ -327,7 +240,7 @@ interface OnboardingProps {
   selectCandidate: (candidateId: string, pickedBy?: PickedBy) => Promise<void>;
   /** Runs the failed analysis again. */
   retry: () => void;
-  searchSuggest: (query: string, limit?: number) => Promise<SearchCandidate[]>;
+  searchSuggest: SuggestionFetcher;
   onComplete: (trackData: TrackData) => void;
   // UX: Focus management
   searchInputRef?: React.Ref<HTMLInputElement>;
@@ -356,22 +269,21 @@ const Onboarding: React.FC<OnboardingProps> = ({
   onRestorePrevious,
   onSearchAgain,
 }) => {
+  // Kept here, not in the search box: the box is gone while a run is under way, and "Search
+  // again" brings it back with the same text.
   const [searchQuery, setSearchQuery] = useState('');
-  // Empty searches submitted since the query last changed: the box says what to type until it
-  // changes. Each submit renders a new alert, so a repeat is announced again.
-  const [emptySubmits, setEmptySubmits] = useState(0);
-  const [sugState, sugDispatch] = useReducer(suggestionReducer, initialSuggestionState);
-  const {
-    suggestions,
-    showSuggestions,
-    selectedIndex,
-    isLoading: isLoadingSuggestions,
-    error: suggestionsFailed,
-  } = sugState;
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const debouncedQuery = useDebounce(searchQuery, 300);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  // One ref function for the component's life, giving the search box to this component and to
+  // the app (which focuses it when the search comes back).
+  const setSearchInput = useCallback(
+    (element: HTMLInputElement | null) => {
+      inputRef.current = element;
+      if (typeof searchInputRef === 'function') searchInputRef(element);
+      else if (searchInputRef) searchInputRef.current = element;
+    },
+    [searchInputRef],
+  );
 
   // ─── P1:10 Track preview state ────────────────────────────────────────────
   const [previewTrack, setPreviewTrack] = useState<{
@@ -403,61 +315,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const [showCompletionButton, setShowCompletionButton] = useState(false);
   const completionAutoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch suggestions when debounced query changes
-  useEffect(() => {
-    // A response for an older query must not replace the current one.
-    let current = true;
-    const fetchSuggestions = async () => {
-      if (debouncedQuery.length < 2) {
-        sugDispatch({ type: 'CLEAR' });
-        return;
-      }
-
-      sugDispatch({ type: 'FETCH_START' });
-      try {
-        const results = await searchSuggest(debouncedQuery, 5);
-        if (current) sugDispatch({ type: 'FETCH_SUCCESS', results });
-      } catch {
-        if (current) sugDispatch({ type: 'FETCH_ERROR' });
-      }
-    };
-
-    fetchSuggestions();
-    return () => {
-      current = false;
-    };
-  }, [debouncedQuery, searchSuggest]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        sugDispatch({ type: 'SET_SHOW', show: false });
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside, { passive: true });
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Handle selecting a suggestion (single click - fill only)
-  const handleSelectSuggestion = useCallback((candidate: SearchCandidate) => {
-    setSearchQuery(`${candidate.title} ${candidate.artist}`);
-    sugDispatch({ type: 'CLEAR' });
-    inputRef.current?.focus();
-  }, []);
-
-  // Handle double-click or Enter - fill and analyze (P1:10 — set preview)
-  const handleSelectAndAnalyze = useCallback(
+  // A suggestion chosen with Enter or a click (P1:10 — set preview).
+  const handlePickSuggestion = useCallback(
     (candidate: SearchCandidate) => {
-      const query = `${candidate.title} ${candidate.artist}`;
-      setSearchQuery(query);
-      sugDispatch({ type: 'CLEAR' });
       setPreviewTrack({
         title: candidate.title,
         artist: candidate.artist,
@@ -467,52 +327,12 @@ const Onboarding: React.FC<OnboardingProps> = ({
       // re-recording or a cover with the same title). It is a deliberate click on that track,
       // so the result does not warn that the text matched it loosely (a self-titled song, such
       // as "Black Sabbath" by Black Sabbath, reads as a partial match of its own text).
-      analyze(query, { trackId: candidate.id, pickedBy: 'click' });
+      analyze(`${candidate.title} ${candidate.artist}`, {
+        trackId: candidate.id,
+        pickedBy: 'click',
+      });
     },
     [analyze],
-  );
-
-  // Keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!showSuggestions || suggestions.length === 0) {
-        return;
-      }
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          sugDispatch({
-            type: 'SET_SELECTED',
-            index: selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : 0,
-          });
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          sugDispatch({
-            type: 'SET_SELECTED',
-            index: selectedIndex > 0 ? selectedIndex - 1 : suggestions.length - 1,
-          });
-          break;
-        case 'Enter':
-          if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-            e.preventDefault();
-            handleSelectAndAnalyze(suggestions[selectedIndex]);
-          }
-          break;
-        case 'Escape':
-          sugDispatch({ type: 'SET_SHOW', show: false });
-          sugDispatch({ type: 'SET_SELECTED', index: -1 });
-          break;
-        case 'Tab':
-          if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-            e.preventDefault();
-            handleSelectSuggestion(suggestions[selectedIndex]);
-          }
-          break;
-      }
-    },
-    [showSuggestions, suggestions, selectedIndex, handleSelectAndAnalyze, handleSelectSuggestion],
   );
 
   // Handle completion (Item 9 — skip button + silent auto-proceed)
@@ -537,20 +357,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
     if (trackData) onComplete(trackData);
   }, [trackData, onComplete]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      setEmptySubmits(0);
-      // The suggestions and their state ("Suggestions are unavailable… You can still search")
-      // are for the search being typed: once it is submitted, the run says how it went.
-      sugDispatch({ type: 'CLEAR' });
-      analyze(searchQuery.trim());
-    } else {
-      setEmptySubmits((count) => count + 1);
-      inputRef.current?.focus();
-    }
-  };
-  const showEmptyHint = emptySubmits > 0 && !searchQuery.trim();
+  // A typed search: whatever track an earlier pick showed is not this search's.
+  const handleSearch = useCallback(
+    (query: string) => {
+      setPreviewTrack(null);
+      analyze(query);
+    },
+    [analyze],
+  );
 
   // The error block shows plain words; the error's own text goes to the console.
   const showsErrorBlock = status === 'error' && !isLiveUnavailable(errorCode);
@@ -731,118 +545,15 @@ const Onboarding: React.FC<OnboardingProps> = ({
             sound, and shows which claims are measured, sourced or inferred.
           </p>
 
-          {/* Search Form */}
-          <form onSubmit={handleSearch} className="space-y-4">
-            <div className="relative">
-              <div className="relative group">
-                <Search
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-cyber transition-colors z-10"
-                  size={20}
-                />
-                {isLoadingSuggestions && (
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10">
-                    <div className="w-4 h-4 border-2 border-cyber/30 border-t-cyber rounded-full animate-spin" />
-                  </div>
-                )}
-                <input
-                  ref={(el) => {
-                    // Merge internal ref and external searchInputRef
-                    (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
-                    if (typeof searchInputRef === 'function') searchInputRef(el);
-                    else if (searchInputRef)
-                      (searchInputRef as React.MutableRefObject<HTMLInputElement | null>).current =
-                        el;
-                  }}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setEmptySubmits(0);
-                  }}
-                  onKeyDown={handleKeyDown}
-                  onFocus={() =>
-                    suggestions.length > 0 && sugDispatch({ type: 'SET_SHOW', show: true })
-                  }
-                  placeholder="Song title and artist"
-                  maxLength={200}
-                  className={`${inputVisualStyles} pl-12 pr-10`}
-                  autoComplete="off"
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-expanded={showSuggestions}
-                  aria-controls="search-suggestions"
-                  aria-invalid={showEmptyHint || undefined}
-                />
-              </div>
-
-              {showEmptyHint && (
-                // The alert speaks the sentence; the field does not also take it as its
-                // description, which would read it twice once focus lands there.
-                <p
-                  key={emptySubmits}
-                  role="alert"
-                  className="mt-2 text-xs font-mono text-text-secondary text-left"
-                >
-                  Type a song title and its artist first, for example: Midnight City M83.
-                </p>
-              )}
-
-              {suggestionsFailed && (
-                <p role="status" className="mt-2 text-xs font-mono text-text-tertiary text-left">
-                  Suggestions are unavailable right now. You can still search.
-                </p>
-              )}
-
-              {/* Suggestions Dropdown */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div
-                  ref={dropdownRef}
-                  id="search-suggestions"
-                  role="listbox"
-                  className="absolute z-50 w-full mt-2 bg-surface-overlay backdrop-blur-lg border border-border rounded-lg shadow-elevated-lg max-h-[320px] overflow-y-auto animate-scale-in"
-                >
-                  {suggestions.map((candidate, index) => (
-                    <button
-                      key={candidate.id}
-                      type="button"
-                      role="option"
-                      aria-selected={index === selectedIndex}
-                      onClick={() => handleSelectAndAnalyze(candidate)}
-                      className={`w-full flex items-center gap-3 p-3 text-left transition-all animate-fade-in-up opacity-0 focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
-                        index === selectedIndex
-                          ? 'bg-cyber/20 border-l-2 border-cyber'
-                          : 'hover:bg-white/5 border-l-2 border-transparent'
-                      }`}
-                      style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
-                    >
-                      <CoverThumb url={candidate.coverUrl} className="w-10 h-10 rounded" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-mono text-sm truncate">
-                          {candidate.title}
-                        </div>
-                        <div className="text-text-tertiary text-xs truncate">
-                          {candidate.artist} • {candidate.album}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                  <div className="px-3 py-2 text-xs text-text-tertiary border-t border-white/5 font-mono">
-                    Arrow keys to move, Enter to analyze, Esc to close
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Button
-              type="submit"
-              variant="cyber"
-              size="lg"
-              isLoading={isAnalyzing}
-              className="w-full"
-            >
-              Analyze
-            </Button>
-          </form>
+          <SearchBox
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            onSearch={handleSearch}
+            onPick={handlePickSuggestion}
+            fetchSuggestions={searchSuggest}
+            isBusy={isAnalyzing}
+            inputRef={setSearchInput}
+          />
 
           {/* Live analysis paused (budget) or off (recordings only): say so and offer the
               recorded tracks; never a result in place of the analysis */}

@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
 // The reader's "reduce motion" setting, for the motion the page drives from script: smooth
-// scrolls, D3 transitions and layouts, chart animations. The stylesheet stops CSS animations
-// and transitions by itself (styles/index.css).
+// scrolls, D3 transitions and layouts. The stylesheet stops CSS animations and transitions by
+// itself (styles/index.css), and Recharts its own chart animations (its default
+// `isAnimationActive: 'auto'` reads the same setting).
 
 const REDUCE = '(prefers-reduced-motion: reduce)';
 

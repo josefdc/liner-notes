@@ -19,21 +19,27 @@ const MODEL_ID =
 // mock's 10 ms between two of them.
 const ALL_LINES_MS = 30_000;
 
+const COVER_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500"><rect width="100%" height="100%" fill="#336699"/></svg>';
+
 const tool = (message: string) => ({ type: "status", node: "research_tool", message });
+
+const extra = (n: number) => tool(`Reading source ${n} of ${EXTRA}`);
 
 /**
  * The recorded run with its research line repeated by the server, a pause (`more`) after its
- * opening, EXTRA more lines after the pause, and a pause (`finish`) before its result.
+ * opening, EXTRA more lines after the pause, and a pause (`finish`) before its result. With
+ * `half`, a pause (`half`) after the first `half` of the EXTRA lines too.
  */
-function replayStream() {
+function replayStream(half?: number) {
   const { events, recordedAt } = replayedRecording();
   const out: Array<Record<string, unknown>> = [];
   for (const event of events) {
     if (event.type === "complete") {
-      out.push(
-        ...Array.from({ length: EXTRA }, (_, n) => tool(`Reading source ${n + 1} of ${EXTRA}`)),
-        { $wait: "finish" },
-      );
+      const lines = Array.from({ length: EXTRA }, (_, n) => extra(n + 1));
+      if (half) out.push(...lines.slice(0, half), { $wait: "half" }, ...lines.slice(half));
+      else out.push(...lines);
+      out.push({ $wait: "finish" });
     }
     out.push(event);
     if (event.message === REPEATED) out.push(tool(REPEATED), { $wait: "more" });
@@ -63,6 +69,10 @@ for (const [width, height] of [
     const problems = collectProblems(page);
     await page.setViewportSize({ width, height });
     const { events, recordedAt } = replayStream();
+    // The recording's cover is the Cover Art Archive's: answered here, never from the network.
+    await page.route("https://coverartarchive.org/**", (route) =>
+      route.fulfill({ contentType: "image/svg+xml", body: COVER_SVG }),
+    );
     await useMockApi(page, { suggestions: [], eventGapMs: 10, streams: { [ANALYZE]: events } });
     await page.goto("/");
     await page.getByPlaceholder(/Song title/).fill("One More Time Daft Punk");
@@ -151,38 +161,89 @@ for (const [width, height] of [
   });
 }
 
-test("a reader who scrolled up in the log stays at the line they read while lines arrive", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 820, height: 900 });
-  const { events } = replayStream();
+/** Opens the progress screen on the recorded run, paused after the first 60 extra lines. */
+async function logAtHalf(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 900 });
+  const { events } = replayStream(60);
   await useMockApi(page, { suggestions: [], eventGapMs: 10, streams: { [ANALYZE]: events } });
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("One More Time Daft Punk");
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
-
   const log = page.getByRole("log");
   await expect(log).toContainText(REPEATED);
-  // The reader scrolls the log up, as a wheel or a finger would.
-  await log.hover();
-  await page.mouse.wheel(0, -2000);
-  await expect.poll(() => log.evaluate((box) => box.scrollTop)).toBe(0);
   await releaseStream(page, "more");
+  await expect(log).toContainText(`Reading source 60 of ${EXTRA}`, { timeout: ALL_LINES_MS });
+  return log;
+}
+
+/** How far the log is from its end, in pixels. */
+const fromEnd = (log: ReturnType<Page["getByRole"]>) =>
+  log.evaluate((box) => box.scrollHeight - box.scrollTop - box.clientHeight);
+
+/**
+ * A line of the log and how far below the top of the log's view it starts: the line with `text`,
+ * or else the first line wholly in view.
+ */
+const lineInView = (log: ReturnType<Page["getByRole"]>, text?: string) =>
+  log.evaluate((box, wanted) => {
+    const top = box.getBoundingClientRect().top;
+    const row = [...box.querySelectorAll<HTMLElement>("[data-log-id]")].find((line) =>
+      wanted
+        ? line.lastElementChild?.textContent === wanted
+        : line.getBoundingClientRect().top >= top + 2,
+    );
+    return {
+      text: row?.lastElementChild?.textContent ?? "",
+      offset: row ? row.getBoundingClientRect().top - top : Number.NaN,
+    };
+  }, text);
+
+test("a reader scrolled up mid-log stays on the line they read while older lines are dropped", async ({
+  page,
+}) => {
+  const log = await logAtHalf(page, 820);
+  // The browser's own scroll anchoring is off, as in a browser without it: the log alone keeps
+  // the reader's place.
+  await log.evaluate((box) => {
+    box.style.overflowAnchor = "none";
+  });
+  // The reader scrolls up a few lines, as a wheel would, to the middle of the log.
+  await log.hover();
+  await page.mouse.wheel(0, -300);
+  await expect.poll(() => fromEnd(log)).toBeGreaterThan(200);
+  const before = await lineInView(log);
+  // Still kept once the rest arrives: lines up to "Reading source 20" are dropped then.
+  expect(Number(/Reading source (\d+)/.exec(before.text)?.[1])).toBeGreaterThan(25);
+
+  await releaseStream(page, "half");
   await expect(log).toContainText(`Reading source ${EXTRA} of ${EXTRA}`, {
     timeout: ALL_LINES_MS,
   });
-  expect(await log.evaluate((box) => box.scrollTop)).toBe(0);
+  await expect(log.locator("[data-log-dropped]")).toBeVisible();
+  const after = await lineInView(log, before.text);
+  expect(after.text).toBe(before.text);
+  expect(Math.abs(after.offset - before.offset)).toBeLessThanOrEqual(1);
 
   // Back at the end, the newest lines are followed again.
   await page.mouse.wheel(0, 100_000);
-  await expect
-    .poll(() => log.evaluate((box) => box.scrollHeight - box.scrollTop - box.clientHeight))
-    .toBeLessThanOrEqual(2);
+  await expect.poll(() => fromEnd(log)).toBeLessThanOrEqual(2);
   await releaseStream(page, "finish");
   await expect(log).toContainText("Recorded analysis replayed");
-  await expect
-    .poll(() => log.evaluate((box) => box.scrollHeight - box.scrollTop - box.clientHeight))
-    .toBeLessThanOrEqual(2);
+  await expect.poll(() => fromEnd(log)).toBeLessThanOrEqual(2);
+});
+
+test("a reader at the end stays there when the window narrows and the lines wrap", async ({
+  page,
+}) => {
+  const log = await logAtHalf(page, 1440);
+  await expect.poll(() => fromEnd(log)).toBeLessThanOrEqual(2);
+  const tall = await log.evaluate((box) => box.scrollHeight);
+  // No new line arrives: only the lines' own height changes.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect.poll(() => log.evaluate((box) => box.scrollHeight)).toBeGreaterThan(tall + 100);
+  await expect.poll(() => fromEnd(log)).toBeLessThanOrEqual(2);
+  await releaseStream(page, "half");
+  await releaseStream(page, "finish");
 });
 
 test("log labels and their icons keep off the measured cyan and the sourced amber", async ({

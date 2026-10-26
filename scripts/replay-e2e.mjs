@@ -17,6 +17,10 @@
 //   and "more facts" for the recorded track come from the recording (POST and stream); another
 //   track's are refused with live_disabled; POST /api/analyze replays or refuses the same way;
 //   both resume routes are refused; HEAD on the stream answers.
+//   A5  Stop: a replay whose client closes its stream after its first events (as the web
+//       page's Stop does: EventSource.close() closes the connection; here the fetch is aborted,
+//       which closes it the same way, since this script cannot drive the page) is recorded as
+//       cancelled with no result, well before the replay would have ended.
 //
 // Last, it stops the API (scripts/stop-server.mjs: SIGTERM to the server process, then a wait
 // until the API's output closes, that is until every process holding it has exited) and requires
@@ -247,12 +251,53 @@ async function json(path, init) {
   return { status: res.status, text: await res.clone().text(), body: await res.json() };
 }
 
+/**
+ * Opens an analysis stream, reads it until `count` events have come (heartbeats left out), then
+ * closes it as the web page's Stop does: the connection is closed. Returns the events read.
+ */
+async function streamThenClose(query, count) {
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const events = [];
+  try {
+    const res = await fetch(`${base}/api/analyze/stream?query=${encodeURIComponent(query)}`, {
+      signal: controller.signal,
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    while (events.length < count) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+      for (let end = text.indexOf("\n\n"); end !== -1; end = text.indexOf("\n\n")) {
+        for (const line of text.slice(0, end).split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          const event = JSON.parse(line.slice(5));
+          if (event.type !== "heartbeat") events.push(event);
+        }
+        text = text.slice(end + 2);
+      }
+    }
+  } finally {
+    clearTimeout(deadline);
+    controller.abort();
+  }
+  return events;
+}
+
 /** The A1 run's id, for the log checks after the API stopped. */
 let replayRunId;
+/** The A5 run's id (the replay stopped by its client), for the log checks. */
+let stoppedRunId;
+/** How long the A1 replay took from request to its last event, in milliseconds. */
+let replayMs = 0;
 
 try {
   // A1: a full replay of the recorded track.
+  const replayStarted = performance.now();
   const replay = await stream(SHOWCASE_QUERY);
+  replayMs = performance.now() - replayStarted;
   const types = replay.events.map((event) => event.type);
   console.log(`A1 events with "type": ${(replay.text.match(/"type"/g) ?? []).length}`);
   console.log(`A1 stream: ${types.join(" ")}`);
@@ -398,6 +443,37 @@ try {
     `/api/analyze/stream/resume?threadId=some-thread&selectedTrackId=${TRACK_ID}`,
   );
   check(resumeStream === "error:live_disabled done", "the resume stream is refused");
+
+  // A5: Stop. The replay is closed after connected, the replay notice and its first step.
+  const read = await streamThenClose(SHOWCASE_QUERY, 3);
+  const closedAt = performance.now();
+  stoppedRunId = read[0]?.runId;
+  console.log(`A5 read before the close: ${read.map((event) => event.type).join(" ")}`);
+  check(
+    read.length === 3 && read.every((event) => event.type !== "complete"),
+    "A5 the stream is closed before its result",
+  );
+  let stopped = null;
+  while (performance.now() - closedAt < 10_000) {
+    stopped = await json(`/api/runs/${encodeURIComponent(stoppedRunId ?? "none")}`);
+    if (stopped.body.run?.status && stopped.body.run.status !== "running") break;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  const stopMs = performance.now() - closedAt;
+  console.log(
+    `A5 run ${stopped?.status} status ${stopped?.body.run?.status} after ${Math.round(stopMs)} ms ` +
+      `(the whole replay took ${Math.round(replayMs)} ms)`,
+  );
+  check(
+    stopped?.body.run?.status === "cancelled" && stopped.body.analysis === null,
+    "A5 the server records the closed replay as cancelled, with no result",
+    `status ${stopped?.body.run?.status}`,
+  );
+  check(
+    stopMs < replayMs / 2,
+    "A5 it stops at the close: the rest of the replay is not played out",
+    `${Math.round(stopMs)} ms after the close, the whole replay ${Math.round(replayMs)} ms`,
+  );
   const head = await fetch(
     `${base}/api/analyze/stream?query=${encodeURIComponent(SHOWCASE_QUERY)}`,
     { method: "HEAD", signal: timeout() },
@@ -472,6 +548,15 @@ check(
   logEntries.some((entry) => entry.runId === replayRunId && entry.component === "Run") &&
     logEntries.some((entry) => entry.runId === replayRunId && entry.path === "/api/analyze/stream"),
   "log: the A1 run's route and request lines carry its run id",
+);
+check(
+  logEntries.some(
+    (entry) => entry.runId === stoppedRunId && /^Replay cancelled/.test(entry.msg ?? ""),
+  ) &&
+    !logEntries.some(
+      (entry) => entry.runId === stoppedRunId && /^Replay (complete|failed)/.test(entry.msg ?? ""),
+    ),
+  "log: the A5 replay stopped by its client is logged as cancelled",
 );
 check(!/\b(?:\d{1,3}\.){3}\d{1,3}\b|::1\b|::ffff:/i.test(logText), "log: no IP address");
 check(!logText.includes("query="), "log: no query string");

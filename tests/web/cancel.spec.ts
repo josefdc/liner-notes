@@ -46,10 +46,10 @@ async function search(page: Page, query: string) {
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
-/** What the analysis stream did after the app closed it. */
-async function afterClose(page: Page) {
-  const entries = (await streamLog(page)).filter((entry) => entry.startsWith(ANALYZE));
-  const closed = entries.indexOf(`${ANALYZE} closed`);
+/** What the stream on `path` did after the app closed it. */
+async function afterClose(page: Page, path = ANALYZE) {
+  const entries = (await streamLog(page)).filter((entry) => entry.startsWith(`${path} `));
+  const closed = entries.indexOf(`${path} closed`);
   expect(closed, entries.join("\n")).toBeGreaterThan(-1);
   return entries.slice(closed + 1);
 }
@@ -174,4 +174,67 @@ test("Stop is not offered once the run has completed, nor beside the picker", as
   await search(page, "One More Time");
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+});
+
+test("Stop while the picked track is being analysed closes the resume stream", async ({ page }) => {
+  const problems = collectProblems(page);
+  const RESUME = "/api/analyze/stream/resume";
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: "t-resume" },
+        {
+          type: "interrupt",
+          reason: "disambiguation",
+          threadId: "t-resume",
+          candidates: [
+            {
+              id: "4iV5W9uYEdYUVa79Axb7Rh",
+              title: "Hurt",
+              artist: "Johnny Cash",
+              album: "A",
+              coverUrl: "",
+            },
+            {
+              id: "5iV5W9uYEdYUVa79Axb7Rh",
+              title: "Hurt",
+              artist: "Nine Inch Nails",
+              album: "B",
+              coverUrl: "",
+            },
+          ],
+          message: "Two possible tracks from Spotify; pick one",
+        },
+        { type: "done" },
+      ],
+      [RESUME]: [
+        { type: "resuming", threadId: "t-resume" },
+        status("engineer", "Measuring tempo and key from the preview clip", "AUDIO-INIT"),
+        { $wait: "resumed" },
+        status("historian", "A line after the stop", "RESEARCH-FOUND"),
+        { type: "complete", data: fullResultData() },
+        { type: "done" },
+      ],
+    },
+  });
+  await page.goto("/");
+  await search(page, "Hurt");
+  await page.getByRole("option", { name: /Nine Inch Nails/ }).click();
+  await expect(page.getByRole("log")).toContainText("Measuring tempo and key");
+
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  const input = page.getByPlaceholder(/Song title/);
+  await expect(input).toBeFocused();
+  expect(await afterClose(page, RESUME)).toEqual([]);
+  await releaseStream(page, "resumed");
+  await page.waitForTimeout(600);
+  expect(await afterClose(page, RESUME)).toEqual([]);
+  await expect(page.getByRole("log")).toHaveCount(0);
+  await expect(page.getByText("A line after the stop")).toHaveCount(0);
+  // One resume: the stopped one is not opened again.
+  expect(
+    (await apiRequests(page)).filter((entry) => entry.startsWith(`stream ${RESUME}`)),
+  ).toHaveLength(1);
+  expect(problems).toEqual([]);
 });

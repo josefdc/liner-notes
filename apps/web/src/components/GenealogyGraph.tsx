@@ -210,6 +210,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let transform: ZoomTransform = zoomIdentity;
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 4])
+      // A double click zooms in a glide, or at once under reduced motion.
+      .duration(reducedMotion ? 0 : 250)
       .on('zoom', (event) => {
         transform = event.transform;
         g.attr('transform', event.transform);
@@ -860,7 +862,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       }
 
       function dragended(event: any) {
-        if (reducedMotion) return;
+        // The labels are placed again for where the track was left, as the layout's end does.
+        if (reducedMotion) {
+          fitText();
+          return;
+        }
         if (!event.active) simulation.alphaTarget(0);
         event.subject.fx = null;
         event.subject.fy = null;

@@ -69,9 +69,10 @@ describe('appendLog', () => {
     expect(writtenLines(logs)).toBe(LOG_LIMIT * 3);
   });
 
-  it('keeps the recorded demo run whole: the limit is well above what a run writes', () => {
-    // 20 status lines in fixtures/replays/one-more-time-daft-punk.json, and the page's own 3.
-    expect(LOG_LIMIT).toBeGreaterThanOrEqual(4 * 23);
+  it('keeps 100 lines: the recorded demo run whole, and no more than a log needs', () => {
+    // 20 status lines in fixtures/replays/one-more-time-daft-punk.json, and the page's own 3:
+    // about four times that. A different limit is a choice to make here, with its evidence.
+    expect(LOG_LIMIT).toBe(100);
   });
 
   it('counts a log whose lines carry no place (written before the places) by its length', () => {

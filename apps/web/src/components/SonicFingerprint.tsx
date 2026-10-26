@@ -6,7 +6,6 @@ import type { AudioReadings, ScoreListReading } from '../constants';
 import { colors } from '../styles/theme';
 import { MeasuredValue } from './measured/MeasuredValue';
 import { MissingValue } from './measured/MissingValue';
-import { useReducedMotion } from '../utils/motion';
 
 interface SonicFingerprintProps {
   genreProfile?: GenreProfileItem[];
@@ -92,7 +91,6 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
   fingerprint,
 }) => {
   const radarData = useMemo(() => toRadarData(genreProfile), [genreProfile]);
-  const reducedMotion = useReducedMotion();
 
   // A result with a measurement shows its audio-model scores; the model-written genre profile
   // (results of older APIs) only when it has one.
@@ -136,8 +134,6 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
               strokeWidth={2}
               fill={colors.prov.inferred}
               fillOpacity={0.3}
-              // Drawn at once when the reader asked for reduced motion
-              isAnimationActive={!reducedMotion}
               animationDuration={800}
               animationEasing="ease-out"
             />

@@ -16,6 +16,30 @@ interface SystemConsoleProps {
   isReplay?: boolean;
 }
 
+/** How far below the top of the log's view `row` starts, in pixels. */
+function topInView(box: HTMLElement, row: HTMLElement): number {
+  return row.getBoundingClientRect().top - box.getBoundingClientRect().top;
+}
+
+/** The log line with this id. */
+function lineById(box: HTMLElement, id: string): HTMLElement | null {
+  for (const row of box.querySelectorAll<HTMLElement>('[data-log-id]')) {
+    if (row.dataset.logId === id) return row;
+  }
+  return null;
+}
+
+/** The first line whose bottom is inside the log's view, and where it starts in it. */
+function lineAtTop(box: HTMLElement): { id: string; offset: number } | null {
+  const top = box.getBoundingClientRect().top;
+  for (const row of box.querySelectorAll<HTMLElement>('[data-log-id]')) {
+    if (row.getBoundingClientRect().bottom > top && row.dataset.logId) {
+      return { id: row.dataset.logId, offset: row.getBoundingClientRect().top - top };
+    }
+  }
+  return null;
+}
+
 // One log line: the time, the step in words (with its icon), and the message.
 const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ log, isLatest }) => {
   const { label, Icon, tone } = logStyle(log.code, log.node, log.message);
@@ -23,6 +47,7 @@ const LogLine: React.FC<{ log: AgentLog; isLatest: boolean }> = React.memo(({ lo
 
   return (
     <div
+      data-log-id={log.id}
       data-log-code={log.code}
       className={`flex items-start font-mono text-xs leading-relaxed py-0.5 ${isLatest ? 'animate-fade-in-right' : ''}`}
     >
@@ -58,6 +83,11 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
   // The reader is at the end of the log (or has not scrolled it): new lines keep them there.
   const atEndRef = useRef(true);
   const linesRef = useRef<HTMLDivElement>(null);
+  // The line a reader who has scrolled up is on (the first one at the top of the view), and how
+  // far below the view's top it starts, in pixels; null at the end.
+  const anchorRef = useRef<{ id: string; offset: number } | null>(null);
+  // The scroll position the log set itself last: its own scrolls do not move the anchor.
+  const ownScrollRef = useRef<number | null>(null);
 
   // P3:26 — Track elapsed time from first log
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -79,11 +109,26 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
   }, [logs.length, isComplete]);
 
   // Keep the newest line in view by scrolling the log itself, at once: never the page or the
-  // views around it, and never a reader who has scrolled up to read an earlier line.
+  // views around it. A reader who has scrolled up to an earlier line stays on it: when older
+  // lines are dropped above it (or the note about them appears), the log is scrolled so that
+  // line is where it was. The log does this itself rather than leave it to the browser's scroll
+  // anchoring, which not every browser has (overflow-anchor is off on the log, so the two never
+  // both move it).
   // biome-ignore lint/correctness/useExhaustiveDependencies: logs is the trigger, not a value read in the effect
   useLayoutEffect(() => {
     const box = consoleRef.current;
-    if (box && atEndRef.current) box.scrollTop = box.scrollHeight;
+    if (!box) return;
+    const anchor = anchorRef.current;
+    const row = anchor ? lineById(box, anchor.id) : null;
+    if (atEndRef.current) {
+      box.scrollTop = box.scrollHeight;
+    } else if (anchor && row) {
+      box.scrollTop += topInView(box, row) - anchor.offset;
+    } else {
+      // The reader's line was dropped: they stay on the first line at the top of the view.
+      anchorRef.current = lineAtTop(box);
+    }
+    ownScrollRef.current = box.scrollTop;
   }, [logs, isComplete]);
 
   // Lines can change height after they are drawn (a font loads, the window narrows and they
@@ -101,7 +146,13 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
 
   const handleScroll = () => {
     const box = consoleRef.current;
-    if (box) atEndRef.current = box.scrollHeight - box.scrollTop - box.clientHeight <= AT_END_PX;
+    if (!box) return;
+    atEndRef.current = box.scrollHeight - box.scrollTop - box.clientHeight <= AT_END_PX;
+    // The reader's own scroll: the line now at the top is theirs.
+    if (box.scrollTop !== ownScrollRef.current) {
+      ownScrollRef.current = null;
+      anchorRef.current = atEndRef.current ? null : lineAtTop(box);
+    }
   };
 
   const dropped = droppedLines(logs);
@@ -128,7 +179,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({
           aria-live="polite"
           aria-relevant="additions"
           onScroll={handleScroll}
-          className="relative h-72 overflow-y-auto scrollbar-hide p-4 font-mono overscroll-contain"
+          className="relative h-72 overflow-y-auto scrollbar-hide p-4 font-mono overscroll-contain [overflow-anchor:none]"
         >
           {/* Empty state */}
           {logs.length === 0 && (

@@ -2,7 +2,8 @@
 AudioFeatures v2 (the `v2` block of /analyze) on generated audio, through the real analysis.
 
 Every result is checked by tests/checks.py: the v2 block validates against the contract's
-JSON Schema after a strict JSON round trip, and the v1 fields agree with it.
+JSON Schema after a strict JSON round trip, and every value it leaves null has its reason in
+`withheld` (and no measured value has one).
 
 Tempo and key tests run with both estimators; the Essentia cases are skipped (and reported as
 skipped) without the "models" extra. Tests marked `needs_models` run the real Essentia models
@@ -120,7 +121,8 @@ def test_analyze_endpoint_returns_a_valid_v2_block(monkeypatch, tmp_path):
     body = response.json()
     v2 = check_result(body)
     assert v2["gate"] == {"passed": True, "reason": None}
-    assert body["analyzer_version"] == v2["analyzerVersion"] == health["analyzer_version"]
+    assert list(body) == ["v2"]  # the v1 fields are gone (tests/test_v1_removed.py)
+    assert v2["analyzerVersion"] == health["analyzer_version"]
     assert not path.exists()
 
 
@@ -132,11 +134,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.2.0+librosa"
-    assert main.analyzer_version("essentia") == "2.2.0+essentia"
+    assert main.analyzer_version("librosa") == "2.3.0+librosa"
+    assert main.analyzer_version("essentia") == "2.3.0+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.2.0+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.0+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -148,7 +150,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.2.0+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.0+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -258,7 +260,7 @@ def test_tempo_of_click_tracks_is_within_one_bpm(analyse, bpm, fmt, estimator):
         raw = tempo["rawConfidence"]
         assert raw["range"] == [0.0, 5.32]
         assert tempo["confidence"] == pytest.approx(min(raw["value"] / 5.32, 1.0), abs=1e-3)
-    assert result["bpm"] == bpm
+    assert round(tempo["bpm"]) == bpm and "tempo" not in v2["withheld"]
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -302,7 +304,7 @@ def test_no_tempo_when_the_tempo_changes(estimator):
     one period (half its beats were off in the 130 BPM half), so it gives none.
     """
     result, v2 = analyse_array(PROBES["tempo-change-90-130"], estimator)
-    assert v2["tempo"] is None and result["bpm"] is None
+    assert v2["tempo"] is None and v2["withheld"]["tempo"]["code"] == "unsteady_tempo"
     assert (v2["key"]["tonic"], v2["key"]["mode"]) == ("C", "major")
     if estimator == "librosa":
         assert v2["beats"] is None
@@ -348,7 +350,7 @@ def test_a_tempo_that_starts_late_is_reported(probe, bpm, estimator, request):
         )
     result, v2 = analyse_array(PROBES[probe], estimator)
     assert v2["tempo"]["bpm"] == pytest.approx(bpm, abs=1.0)
-    assert result["bpm"] == bpm
+    assert round(v2["tempo"]["bpm"]) == bpm
 
 
 def test_no_steady_tempo_without_a_beat_anywhere():
@@ -465,22 +467,27 @@ def test_tempo_beat_grid_follows_the_clicks(analyse, estimator):
 
 
 class FakeEstimator:
-    """An estimator returning fixed estimates (or raising), for the analysis around it."""
+    """
+    An estimator returning fixed estimates (or raising), for the analysis around it; without
+    one it gives a fixed reason.
+    """
 
     name = "fake"
+    NO_TEMPO = estimators.Withheld("no tempo here", code="no_beat")
+    NO_KEY = estimators.Withheld("no key here", code="no_key_estimate")
 
     def __init__(self, tempo=None, key=None):
         self._tempo, self._key = tempo, key
 
-    def tempo(self, signals):
+    def measure_tempo(self, signals):
         if isinstance(self._tempo, Exception):
             raise self._tempo
-        return self._tempo
+        return self.NO_TEMPO if self._tempo is None else self._tempo
 
-    def key(self, signals):
+    def measure_key(self, signals):
         if isinstance(self._key, Exception):
             raise self._key
-        return self._key
+        return self.NO_KEY if self._key is None else self._key
 
 
 A_MAJOR = estimators.KeyEstimate("A", "major", 0.8, "x", "fake")
@@ -490,10 +497,33 @@ def test_an_estimator_failure_only_loses_its_own_measurement():
     tempo_fails = FakeEstimator(tempo=RuntimeError("boom"), key=A_MAJOR)
     result = main.analyze_signals(estimators.Signals(a_major_triad(), FIXTURE_SR), tempo_fails)
     v2 = check_result(result)
-    assert v2["tempo"] is None and (v2["key"]["tonic"], result["key"]) == ("A", "A")
+    assert v2["tempo"] is None and v2["key"]["tonic"] == "A"
+    assert v2["withheld"]["tempo"] == v2["withheld"]["beats"] == main.ESTIMATE_FAILED.entry()
     key_fails = FakeEstimator(tempo=None, key=RuntimeError("boom"))
     v2 = check_result(main.analyze_signals(estimators.Signals(a_major_triad(), 22050), key_fails))
     assert v2["key"] is None and v2["loudness"] is not None
+    assert v2["withheld"]["key"]["code"] == "estimate_failed"
+    assert v2["withheld"]["tempo"] == {"code": "no_beat", "reason": "no tempo here"}
+
+
+class AnswersOnly:
+    """An estimator with only tempo() and key(), as the evals' beat-this one: no reasons."""
+
+    name = "answers-only"
+
+    def tempo(self, signals):
+        return None
+
+    def key(self, signals):
+        return "not an estimate"
+
+
+def test_an_estimator_that_gives_no_reason_gets_a_generic_one():
+    signals_ = estimators.Signals(a_major_triad(), FIXTURE_SR)
+    v2 = check_result(main.analyze_signals(signals_, AnswersOnly()))
+    assert v2["tempo"] is None and v2["key"] is None
+    assert v2["withheld"]["tempo"] == main.NO_TEMPO_ESTIMATE.entry()
+    assert v2["withheld"]["key"] == estimators.NO_KEY_ESTIMATE.entry()
 
 
 def test_beats_are_clipped_to_the_window():
@@ -585,6 +615,44 @@ def test_a_tempo_needs_four_beats(monkeypatch, ticks, expected):
 
 
 @pytest.mark.parametrize(
+    ("bpm", "ticks", "raw", "code"),
+    [
+        (120.0, 60, 1.49, "low_confidence"),
+        (120.0, 3, 4.0, "too_few_beats"),
+        (220.0, 60, 4.0, "tempo_out_of_range"),
+        (39.0, 60, 4.0, "tempo_out_of_range"),
+        (float("nan"), 60, 4.0, "estimate_failed"),
+    ],
+)
+def test_essentia_says_which_rule_withheld_the_tempo(monkeypatch, bpm, ticks, raw, code):
+    rhythm = FakeAlgorithm((bpm, np.arange(ticks) * 0.5, raw, [], []))
+    with_essentia_algorithms(monkeypatch, rhythm=rhythm)
+    estimator = estimators.EssentiaEstimator()
+    withheld = estimator.measure_tempo(steady_signals())
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == code
+    assert estimator.tempo(steady_signals()) is None
+    assert f"{bpm:g}" not in withheld.reason  # the reason never shows the withheld tempo
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_repeating_onsets_is_no_beat_for_both_estimators(estimator):
+    signals_ = steady_signals()
+    signals_.__dict__["onset_periodicity"] = 0.19
+    assert estimators.select_estimator(estimator).measure_tempo(signals_) == estimators.NO_BEAT
+
+
+@pytest.mark.parametrize(
+    ("output", "code"),
+    [(("C", "major", 0.39), "low_key_strength"), (("H", "major", 0.9), "no_key_estimate")],
+)
+def test_essentia_says_which_rule_withheld_the_key(monkeypatch, output, code):
+    with_essentia_algorithms(monkeypatch, key=FakeAlgorithm(output))
+    signals_ = estimators.Signals(a_major_triad(), 22050)
+    withheld = estimators.EssentiaEstimator().measure_key(signals_)
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == code
+
+
+@pytest.mark.parametrize(
     ("name", "tonic"), [("Ab", "G#"), ("Bb", "A#"), ("Db", "C#"), ("Eb", "D#"), ("Gb", "F#")]
 )
 def test_essentia_flat_names_become_sharps(monkeypatch, name, tonic):
@@ -670,6 +738,67 @@ def test_librosa_tempo_is_withheld_at_low_confidence(monkeypatch, confidence, ke
     assert (estimate is not None) == kept
 
 
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_a_tempo_under_the_confidence_minimum_says_so_for_both_estimators(monkeypatch, estimator):
+    """The reason is the confidence rule's, whichever estimator withheld the tempo."""
+    monkeypatch.setattr(estimators, "periodicity_at_lag", lambda envelope, lag: 0.29)
+    ticks = np.arange(60) * 0.5
+    with_essentia_algorithms(monkeypatch, rhythm=FakeAlgorithm((120.0, ticks, 1.49, [], [])))
+    withheld = estimators.select_estimator(estimator).measure_tempo(steady_signals())
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == "low_confidence"
+    assert withheld.reason.startswith("the tempo estimator's confidence")
+
+
+def test_a_steady_clip_too_short_to_check_is_not_called_unsteady():
+    """
+    Six seconds at 60 BPM: five beats, a steady tempo, but too few beat intervals for the
+    steadiness check. The tempo is withheld as before; the reason is the beat count, not a change.
+    """
+    v2 = check_result(
+        main.analyze_signals(
+            estimators.Signals(click_track(60, seconds=6.0), FIXTURE_SR),
+            estimators.select_estimator("librosa"),
+        )
+    )
+    assert v2["tempo"] is None and v2["beats"] is None
+    assert v2["withheld"]["tempo"] == v2["withheld"]["beats"] == main.UNCHECKED_TEMPO.entry()
+
+
+# Each key rule says which rule it is: the probes where it decides (values pinned here).
+KEY_RULE_PROBES = {
+    "no_sustained_pitch": lambda: PROBES["drums-only-120"],
+    "one_harmonic_series": lambda: PROBES["hum-50Hz-gentle"],
+    "one_held_pitch": lambda: PROBES["A4-vibrato-80c"],
+    "few_pitch_classes": lambda: PROBES["drone-with-drums"],
+    "speech_like": lambda: music.speech(4),
+    "one_pitched_source": lambda: signals.seeded_cowbell(500),
+}
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("code", KEY_RULE_PROBES)
+def test_each_key_rule_names_itself(code, estimator):
+    signals_ = estimators.Signals(KEY_RULE_PROBES[code](), FIXTURE_SR)
+    withheld = estimators.select_estimator(estimator).measure_key(signals_)
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == code, withheld
+
+
+def test_without_a_pitch_track_the_key_rule_is_no_pitch_track(monkeypatch):
+    monkeypatch.setattr(estimators, "voice", raises)
+    signals_ = estimators.Signals(PROBES["chords-D"], FIXTURE_SR)
+    for name in KEY_ESTIMATORS:
+        assert estimators.select_estimator(name).measure_key(signals_).code == "no_pitch_track"
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_a_weak_key_says_its_strength_was_under_the_minimum(monkeypatch, estimator):
+    monkeypatch.setattr(estimators, "krumhansl_key", lambda chroma: ("C", "major", 0.39))
+    with_essentia_algorithms(monkeypatch, key=FakeAlgorithm(("C", "major", 0.39)))
+    signals_ = estimators.Signals(a_major_triad(), 22050)
+    withheld = estimators.select_estimator(estimator).measure_key(signals_)
+    assert isinstance(withheld, estimators.Withheld) and withheld.code == "low_key_strength"
+
+
 def test_essentia_algorithms_are_per_thread_and_reused():
     made = []
 
@@ -701,7 +830,7 @@ def test_key_of_the_a_major_triad(analyse, fmt, estimator):
     assert (key["tonic"], key["mode"]) == ("A", "major")
     assert key["strength"] >= 0.7
     assert key["method"].startswith(estimator)
-    assert (result["key"], result["mode"]) == ("A", "Major")
+    assert "key" not in v2["withheld"]
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -746,7 +875,7 @@ def test_key_of_tonal_music(probe, expected, estimator):
     result, v2 = analyse_array(PROBES[probe], estimator)
     assert v2["gate"]["passed"]
     assert (v2["key"]["tonic"], v2["key"]["mode"]) == expected
-    assert result["key"] == expected[0]
+    assert "key" not in v2["withheld"]
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -780,7 +909,7 @@ def test_no_key_for_pitchless_rhythm(probe, estimator):
     """Drums, clicks, a square wave and noise with a beat pass the gate but have no key."""
     result, v2 = analyse_array(PROBES[probe], estimator)
     assert v2["gate"]["passed"]
-    assert v2["key"] is None and result["key"] is None
+    assert v2["key"] is None and v2["withheld"]["key"]["code"] == "no_sustained_pitch"
     assert v2["beats"] is not None
 
 
@@ -1101,7 +1230,7 @@ def test_source_evidence_needs_partials_that_share_one_struck_envelope():
 @pytest.mark.parametrize("bpm", [85, 120, 174])
 def test_no_key_for_click_tracks(analyse, bpm, estimator):
     result, v2 = analyse(click_track(bpm), "MP3", estimator=estimator)
-    assert v2["key"] is None and result["key"] is None
+    assert v2["key"] is None and v2["withheld"]["key"]["code"] == "no_sustained_pitch"
 
 
 @pytest.mark.parametrize("estimator", ESTIMATORS)
@@ -1176,7 +1305,7 @@ def a_voice(**changes):
 
 
 HELD = "one held pitch (vibrato or a bend)"
-SPEECH_LIKE = "one voice without stable notes (speech-like)"
+SPEECH_LIKE = "one pitch line without stable notes"
 
 
 # One voice and the chromagram's movement at their thresholds, for input without a beat. An
@@ -1274,6 +1403,7 @@ def test_a_pitch_tracker_failure_only_loses_the_key_without_a_beat(monkeypatch, 
     assert signals_.voice is None and "pitch track failed" in caplog.text
     assert why(signals_.key_withheld()) == "no pitch track"
     assert result["gate"]["passed"] and result["key"] is None
+    assert result["withheld"]["key"] == {"code": "no_pitch_track", "reason": "no pitch track"}
     assert result["loudness"] is not None and result["sections"] is not None
     # A test tone still reads as one harmonic series, and is still not music.
     tone = estimators.Signals(tones((440.0,)), FIXTURE_SR)
@@ -1560,17 +1690,16 @@ def test_gated_input_measures_nothing(analyse, make, reason, fmt):
     assert v2["gate"] == {"passed": False, "reason": reason}
     assert all(v2[block] is None for block in MEASURED_BLOCKS)
     assert v2["keyMoments"] == []
-    # The v1 fields: no tempo, no key ("C Major" for silence before the gate), nothing derived.
-    assert (result["bpm"], result["key"], result["mode"], result["energy"]) == (None,) * 4
-    for field in ("valence", "danceability", "acousticness", "instrumentalness"):
-        assert result[field] is None
+    # Each block says the gate withheld it, and nothing else.
+    assert set(v2["withheld"]) == set(MEASURED_BLOCKS)
+    assert {entry["code"] for entry in v2["withheld"].values()} == {f"gate_{reason}"}
 
 
 def test_zero_length_file_is_gated(analyse):
     result, v2 = analyse(np.zeros(0, dtype=np.float32), "WAV")
     assert v2["gate"] == {"passed": False, "reason": "too_short"}
     assert v2["window"]["durationSeconds"] == 0
-    assert result["energy"] is None
+    assert v2["loudness"] is None and v2["withheld"]["loudness"]["code"] == "gate_too_short"
 
 
 @pytest.mark.parametrize(
@@ -1664,7 +1793,7 @@ def test_the_gate_withholds_models_on_silence(analyse, monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     monkeypatch.setattr(fingerprint, "fingerprint", fail)
     result, v2 = analyse(np.zeros(10 * FIXTURE_SR, dtype=np.float32), "WAV")
-    assert v2["fingerprint"] is None and result["danceability"] is None
+    assert v2["fingerprint"] is None and v2["withheld"]["fingerprint"]["code"] == "gate_silence"
 
 
 # --- loudness and the energy contour -----------------------------------------------------
@@ -1701,26 +1830,6 @@ def test_loudness_ignores_dc(analyse):
 def test_louder_input_measures_louder(analyse):
     levels = [analyse(a_major_triad(gain=g), "WAV")[1]["loudness"]["rmsMean"] for g in (0.1, 1)]
     assert levels[1] == pytest.approx(10 * levels[0], rel=0.01)
-
-
-@pytest.mark.parametrize(
-    ("dbfs", "energy"),
-    [
-        # As before v2: (mean RMS - 0.02) / 0.25, clipped.
-        (-10, 1.0),
-        (-14, 0.718),
-        (-20, 0.32),
-        (-24, 0.172),
-        (-30, 0.046),
-        # Below the old scale's zero (-34 dBFS): the floor, from 0.005 at -86 dBFS (the
-        # quietest mean the gate passes) to 0.02 at -34 dBFS.
-        (-42, 0.018),
-        (-48, 0.016),
-        (-86, 0.005),
-    ],
-)
-def test_v1_energy_scale(dbfs, energy):
-    assert main.v1_energy(10 ** (dbfs / 20)) == pytest.approx(energy, abs=0.001)
 
 
 # --- key moments and sections -------------------------------------------------------------
@@ -1941,7 +2050,7 @@ def test_fingerprint_maps_outputs_to_labels_columns_and_ranges(monkeypatch):
     assert fp["moods"]["valence"]["range"] == [1.0, 9.0]
     assert fp["moods"]["arousal"]["model"]["id"] == "deam-msd-musicnn-2"
     assert fp["moods"]["acoustic"]["model"]["id"] == "mood_acoustic-discogs-effnet-1"
-    assert result["valence"] == pytest.approx(0.375) and result["danceability"] == 0.7
+    assert not {"fingerprint", "styles", "tags", "moods"} & set(result["v2"]["withheld"])
 
 
 def nan_head(embeddings):
@@ -1993,8 +2102,12 @@ def test_a_failing_model_part_is_null_on_its_own(monkeypatch, overrides, missing
     result, fp = stand_in_fingerprint()
     parts = {"styles": fp["styles"], "tags": fp["tags"], **fp["moods"]}
     assert {name for name, part in parts.items() if part is None} == missing
-    if "valence" in missing:
-        assert result["valence"] is None
+    reasons = result["v2"]["withheld"]
+    codes = {part: reasons[part]["code"] for part in ("styles", "tags") if part in reasons}
+    codes.update({head: reason["code"] for head, reason in reasons.get("moods", {}).items()})
+    assert set(codes) == missing
+    # Only DEAM's 9.5 is a value outside its range; the rest failed or gave unusable output.
+    assert set(codes.values()) == {"out_of_range" if missing == {"valence"} else "model_failed"}
 
 
 @pytest.mark.parametrize(
@@ -2017,7 +2130,7 @@ def test_no_fingerprint_for_input_that_is_not_music(monkeypatch, make):
     result, v2 = analyse_array(make())
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert (result["danceability"], result["valence"]) == (None, None)
+    assert v2["withheld"]["fingerprint"]["code"] == "not_music"
 
 
 @pytest.mark.parametrize(
@@ -2035,7 +2148,7 @@ def test_music_without_a_beat_has_a_fingerprint(monkeypatch, make):
     stand_in_models(monkeypatch)
     result, v2 = analyse_array(make())
     assert v2["gate"]["passed"] and v2["tempo"] is None
-    assert v2["fingerprint"] is not None and result["danceability"] == 0.7
+    assert v2["fingerprint"]["moods"]["danceability"]["value"] == 0.7
 
 
 @pytest.mark.skipif(not os.path.exists(SPEECH), reason="no speech recording on this machine")
@@ -2043,7 +2156,8 @@ def test_no_fingerprint_for_speech(monkeypatch):
     stand_in_models(monkeypatch)
     y, sr = sf.read(SPEECH, dtype="float32")
     result = main.analyze_signals(estimators.Signals(y if y.ndim == 1 else y.mean(axis=1), sr))
-    assert check_result(result)["fingerprint"] is None and result["danceability"] is None
+    v2 = check_result(result)
+    assert v2["fingerprint"] is None and v2["withheld"]["fingerprint"]["code"] == "not_music"
 
 
 def test_a_drone_with_a_beat_is_music(monkeypatch):
@@ -2051,7 +2165,7 @@ def test_a_drone_with_a_beat_is_music(monkeypatch):
     stand_in_models(monkeypatch)
     result, v2 = analyse_array(PROBES["drone-with-drums"])
     assert v2["key"] is None and v2["tempo"]["bpm"] == pytest.approx(120, abs=1)
-    assert v2["fingerprint"] is not None and result["danceability"] == 0.7
+    assert v2["fingerprint"]["moods"]["danceability"]["value"] == 0.7
 
 
 def test_no_moods_when_the_strongest_style_is_not_music(monkeypatch):
@@ -2065,13 +2179,16 @@ def test_no_moods_when_the_strongest_style_is_not_music(monkeypatch):
     result, fp = stand_in_fingerprint()
     assert fp["styles"]["top"][0]["label"] == "Non-Music---Spoken Word"
     assert all(score is None for score in fp["moods"].values())
-    assert result["danceability"] is None and result["valence"] is None
+    reasons = result["v2"]["withheld"]["moods"]
+    assert set(reasons) == set(fp["moods"])
+    assert {reason["code"] for reason in reasons.values()} == {"non_music_style"}
+    assert reasons["valence"]["reason"].startswith("the strongest style score is a Non-Music")
 
 
 def test_no_fingerprint_when_no_model_part_works(monkeypatch):
     stand_in_models(monkeypatch, effnet=raises, musicnn=raises)
     result, fp = stand_in_fingerprint()
-    assert fp is None and result["danceability"] is None
+    assert fp is None and result["v2"]["withheld"]["fingerprint"]["code"] == "model_failed"
 
 
 def test_a_non_finite_head_is_not_a_server_error(monkeypatch, tmp_path):
@@ -2088,8 +2205,14 @@ def test_a_non_finite_head_is_not_a_server_error(monkeypatch, tmp_path):
         response = client.post("/analyze", json={"preview_url": "https://p.scdn.co/a.mp3"})
     assert response.status_code == 200, response.text
     body = response.json()
-    check_result(body)
-    assert body["danceability"] is None and body["valence"] is None
+    v2 = check_result(body)
+    assert v2["fingerprint"]["moods"]["danceability"] is None
+    assert v2["fingerprint"]["moods"]["valence"] is None
+    reasons = v2["withheld"]["moods"]
+    assert (reasons["danceability"]["code"], reasons["valence"]["code"]) == (
+        "model_failed",
+        "out_of_range",
+    )
 
 
 def test_model_label_counts():
@@ -2103,26 +2226,11 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.2.0+{main.ESTIMATOR.name}"
-    assert result["valence"] is None and result["danceability"] is None
-
-
-def test_valence_mapping_is_continuous():
-    """DEAM valence (1-9) maps linearly onto v1's 0-1; the old mapping jumped at 1.5."""
-
-    def v1_valence(raw):
-        v2 = {
-            "tempo": None,
-            "key": None,
-            "loudness": None,
-            "keyMoments": [],
-            "window": {"durationSeconds": 30},
-            "fingerprint": {"moods": {"valence": {"value": raw}}},
-        }
-        return main.v1_fields(v2)["valence"]
-
-    assert v1_valence(1.49) == pytest.approx(v1_valence(1.51), abs=0.01)
-    assert (v1_valence(1.0), v1_valence(5.0), v1_valence(9.0)) == (0.0, 0.5, 1.0)
+    assert v2["analyzerVersion"] == f"2.3.0+{main.ESTIMATOR.name}"
+    assert v2["withheld"]["fingerprint"] == {
+        "code": "models_not_loaded",
+        "reason": "the audio models are not loaded",
+    }
 
 
 # --- fingerprint, with the real models ----------------------------------------------------
@@ -2208,8 +2316,6 @@ def test_moods_match_the_mtg_reference_pipeline(fmt, tmp_path):
     }
     for name, value in expected.items():
         assert moods[name]["value"] == pytest.approx(value, abs=0.002), name
-    assert result["instrumentalness"] == pytest.approx(expected["instrumental"], abs=0.002)
-    assert result["danceability"] == pytest.approx(expected["danceability"], abs=0.002)
 
 
 @needs_models

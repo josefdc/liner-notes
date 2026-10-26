@@ -18,6 +18,7 @@ import {
 const measured = loadFixture("measured-v2");
 const partly = loadFixture("partly-measured-v2");
 const gated = loadFixture("gated-v2");
+const withheldKey = loadFixture("withheld-key-v2");
 const ANALYZER = "analyzer 2.1.0+essentia.models-5c5c0c7f";
 
 type Event = { type: string; data?: Record<string, unknown> };
@@ -54,7 +55,7 @@ const valueItem = (list: Locator, label: string) =>
   list.getByRole("listitem").filter({ hasText: new RegExp(`^${label}\\b`) });
 
 test("the mock results are results the API may send", () => {
-  for (const fixture of [measured, partly, gated]) {
+  for (const fixture of [measured, partly, gated, withheldKey]) {
     const data = resultOf(fixture);
     // TrackAnalysis reads an unreadable `audio` as null, so the block is checked on its own too.
     expect(AudioFeatures.safeParse(data?.audio).success).toBe(true);
@@ -157,7 +158,8 @@ test("a partly measured result says what was not measured and why", async ({ pag
   const values = page.getByRole("list", { name: "Audio values" });
   // Its audioSource is "unavailable", but the tempo is in the measurement: it is shown.
   await expect(valueItem(values, "BPM")).toHaveText(
-    `BPM 123Measured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · ${ANALYZER}`,
+    // Its service ran without the models: the analyzer version names no model set.
+    "BPM 123Measured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · analyzer 2.1.0+essentia",
   );
   await expect(valueItem(values, "Key")).toHaveText(
     "Key not measured— not detected in the preview",
@@ -196,6 +198,34 @@ test("a partly measured result says what was not measured and why", async ({ pag
   );
   await screenshot(page, testInfo, "partly-player");
   await screenshot(page, testInfo, "partly-timeline", lane);
+});
+
+test("a withheld key says which check withheld it, and a withheld mood head says why", async ({
+  page,
+}, testInfo) => {
+  await useMockApi(page, withheldKey);
+  await analyzeAndOpenDashboard(page, "Cowbell Loop");
+
+  const values = page.getByRole("list", { name: "Audio values" });
+  // The audio service's reason, in this page's words (the check that fired, never a cause it did
+  // not test): never "not detected" alone.
+  await expect(valueItem(values, "Key")).toHaveText(
+    "Key not measured— its partials held still and moved together, so no key",
+  );
+  await expect(valueItem(values, "BPM")).toContainText("BPM 105.2Measured");
+  const estimates = page.getByRole("list", { name: "Audio-model estimates" });
+  await expect(valueItem(estimates, "Mood")).toHaveText(
+    "Mood not available— outside the range its model produces",
+  );
+  await expect(valueItem(estimates, "Arousal")).toContainText("6.10 on 1–9");
+  const notices = page.getByRole("region", { name: "Missing data" });
+  await expect(notices).toHaveText(
+    "Audio partly measured" +
+      "Not measured: key (its partials held still and moved together, so no key)." +
+      "Audio-model estimates not available: mood (outside the range its model produces).",
+  );
+  await expect(notices).not.toContainText("did not detect");
+  await screenshot(page, testInfo, "withheld-key-dashboard");
 });
 
 test("a preview the gate stopped measures nothing, and every view says why", async ({

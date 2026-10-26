@@ -5,11 +5,11 @@ Checks every analysis result in the tests goes through:
   checks accept NaN and infinity), validates against the contract's committed JSON Schema
   (packages/contract/schemas/audio-features.schema.json), which states the gate with if/then,
   plus the producer-side checks of the contract (finite numbers, scores within their range);
-- the v1 fields say nothing that v2 withholds or contradicts: they are derived from it.
+- the response holds the v2 block only (no v1 fields), and every value the block leaves null
+  has its reason in `withheld`, while no measured value has one.
 """
 
 import json
-import math
 import os
 
 import jsonschema
@@ -21,11 +21,6 @@ with open(os.path.join(SCHEMA_PATH, "audio-features.schema.json")) as f:
     SCHEMA = json.load(f)
 VALIDATOR = jsonschema.Draft202012Validator(SCHEMA)
 MEASURED_BLOCKS = ["tempo", "key", "loudness", "beats", "energyContour", "sections", "fingerprint"]
-PERCEPTUAL = {
-    "danceability": "danceability",
-    "acousticness": "acoustic",
-    "instrumentalness": "instrumental",
-}
 
 
 def check_v2(v2: dict) -> dict:
@@ -49,33 +44,40 @@ def check_v2(v2: dict) -> dict:
     return data
 
 
-def check_v1_follows_v2(result: dict) -> None:
-    """The v1 fields are what v2 measured, and null wherever v2 is null."""
-    v2 = result["v2"]
-    tempo, key, loudness = v2["tempo"], v2["key"], v2["loudness"]
-    assert result["bpm"] == (None if tempo is None else round(tempo["bpm"])), (result["bpm"], tempo)
-    if key is None:
-        assert (result["key"], result["mode"]) == (None, None)
-    else:
-        assert (result["key"], result["mode"]) == (key["tonic"], key["mode"].capitalize())
-    assert (result["energy"] is None) == (loudness is None)
-    assert result["keyMoments"] == v2["keyMoments"]
-    assert result["duration"] == round(v2["window"]["durationSeconds"], 2)
-    moods = ((v2["fingerprint"] or {}).get("moods")) or {}
-    for v1_name, v2_name in PERCEPTUAL.items():
-        score = moods.get(v2_name)
-        expected = None if score is None else score["value"]
-        assert (result[v1_name] is None) == (expected is None)
-        if expected is not None:
-            assert math.isclose(result[v1_name], expected, abs_tol=0.001)
-    valence = moods.get("valence")
-    assert (result["valence"] is None) == (valence is None)
-    if valence is not None:
-        assert math.isclose(result["valence"], (valence["value"] - 1) / 8, abs_tol=0.001)
+MOOD_HEADS = ["danceability", "acoustic", "instrumental", "valence", "arousal"]
+GATE_CODES = {"silence": "gate_silence", "noise": "gate_noise", "too_short": "gate_too_short"}
+
+
+def check_withheld(v2: dict) -> None:
+    """
+    Every null value has its reason and no measured value has one: each measured block, and
+    within a fingerprint the styles, the tags and each mood head (a null fingerprint's reason
+    covers its parts). When the gate did not pass, every reason is the gate's.
+    """
+    withheld = v2["withheld"]
+    for block in MEASURED_BLOCKS:
+        if v2[block] is None:
+            assert block in withheld, (block, withheld)
+        else:
+            assert block not in withheld, (block, withheld[block])
+    if not v2["gate"]["passed"]:
+        code = GATE_CODES[v2["gate"]["reason"]]
+        assert {entry["code"] for entry in withheld.values()} == {code}, withheld
+    fingerprint = v2["fingerprint"]
+    if fingerprint is None:
+        assert not {"styles", "tags", "moods"} & set(withheld), withheld
+        return
+    for part in ("styles", "tags"):
+        assert (fingerprint[part] is None) == (part in withheld), (part, withheld)
+    moods, reasons = fingerprint["moods"] or {}, withheld.get("moods", {})
+    for head in MOOD_HEADS:
+        assert (moods.get(head) is None) == (head in reasons), (head, reasons)
+    assert set(reasons) <= set(MOOD_HEADS) and (reasons or "moods" not in withheld)
 
 
 def check_result(result: dict) -> dict:
-    """Both checks; returns the round-tripped v2 block."""
+    """The response is the v2 block only; checks it and its reasons, returns it round-tripped."""
+    assert set(result) == {"v2"}, sorted(result)
     data = check_v2(result["v2"])
-    check_v1_follows_v2(result)
+    check_withheld(data)
     return data

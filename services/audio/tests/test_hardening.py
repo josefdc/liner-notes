@@ -63,15 +63,16 @@ def test_decoding_stops_at_the_preview_length(tmp_path):
     # Two minutes of audio: only the first MAX_DECODE_SECONDS are decoded.
     path = tmp_path / "long.wav"
     sf.write(path, np.zeros(22050 * 120, dtype=np.float32), 22050)
-    result = main.analyze_audio_file(str(path))
-    assert result["duration"] <= main.MAX_DECODE_SECONDS + 0.1
+    v2 = main.analyze_audio_file(str(path))["v2"]
+    assert v2["window"]["durationSeconds"] <= main.MAX_DECODE_SECONDS + 0.1
 
 
 def test_no_tempo_is_reported_as_null_not_a_default(tmp_path):
     path = tmp_path / "silence.wav"
     sf.write(path, np.zeros(22050 * 5, dtype=np.float32), 22050)
-    result = main.analyze_audio_file(str(path))
-    assert result["bpm"] is None
+    v2 = main.analyze_audio_file(str(path))["v2"]
+    assert v2["tempo"] is None
+    assert v2["withheld"]["tempo"]["code"] == "gate_silence"
 
 
 def test_docs_and_schema_are_off_by_default(client):
@@ -82,9 +83,9 @@ def test_docs_and_schema_are_off_by_default(client):
 def test_silence_has_no_key_rather_than_a_default(tmp_path):
     path = tmp_path / "silence.wav"
     sf.write(path, np.zeros(22050 * 5, dtype=np.float32), 22050)
-    result = main.analyze_audio_file(str(path))
-    assert result["key"] is None
-    assert result["mode"] is None
+    v2 = main.analyze_audio_file(str(path))["v2"]
+    assert v2["key"] is None
+    assert v2["withheld"]["key"]["code"] == "gate_silence"
 
 
 def test_a_tone_still_gets_a_key(tmp_path):
@@ -93,5 +94,5 @@ def test_a_tone_still_gets_a_key(tmp_path):
     chord = sum(np.sin(2 * np.pi * f * t) for f in (220.0, 277.18, 329.63)) / 3
     path = tmp_path / "chord.wav"
     sf.write(path, chord.astype(np.float32), 22050)
-    result = main.analyze_audio_file(str(path))
-    assert result["key"] is not None
+    v2 = main.analyze_audio_file(str(path))["v2"]
+    assert v2["key"] is not None and "key" not in v2["withheld"]

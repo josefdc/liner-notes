@@ -400,15 +400,16 @@ const REVIEW_COUNTRY =
 
 /**
  * The first words of a dateline, never a commenter's name: "Live from the Barrowland, Glasgow,
- * March 3, 2024:", "Postcard from Glasgow …", "Dispatch from Dublin …".
+ * March 3, 2024:", "Demos from Kinfauns, Esher, May 28, 1968: … Session from Abbey Road …:".
+ * Needed where one page writes datelines by two such words.
  */
 const DATELINE_WORD =
   "(?:Live|Letters?|Notes|News|Dispatch(?:es)?|Postcards?|Sessions?|Demos?|From|Report|Greetings|Highlights|Scenes|Songs|Music|Recorded|Messages?)\\b";
 
-/** A name's word in a Songfacts comment: capitalised, not a dateline's word, not ending in ".". */
-const COMMENTER_WORD = `(?!${DATELINE_WORD})\\p{Lu}[\\p{L}'’.-]*(?<!\\.)`;
-
-/** How many different names `byline` finds (its first group): one mark per poster. */
+/**
+ * How many different names `byline` finds (its first group): one mark per poster, so a layout
+ * whose only mark it is makes a thread from the second poster.
+ */
 function distinctNames(byline: RegExp): (text: string) => number {
   return (text) => new Set(Array.from(text.matchAll(byline), (m) => m[1].toLowerCase())).size;
 }
@@ -436,87 +437,93 @@ interface ForumMark {
 }
 
 /**
- * The marks of each forum software's or comment widget's layout, as a search returns a page (on
- * one line). Two marks of one layout make a comment thread (forumThread), and one of them must
- * be a mark only that software writes: a reply or quote button, a vote widget, a user card, a
- * thread's header. Supporting marks are listed after the others. `once` marks are those a page
- * may repeat; an `alone` mark is one no music page writes.
- * - XenForo (the Steve Hoffman forums): a quote with XenForo's arrow ("<name> said: ↑", alone),
- *   a quote closed by its expander within QUOTE_REACH characters ("<name> said: … Click to
- *   expand…"), a poster's "Joined: Mar 3, 2010" (or "3 Mar 2010") and "Messages: 4,512" (a
- *   CARD_COUNT; or reaction score, likes, trophy points; with or without the colon, as XenForo
- *   2's user cards read), XenForo 2's "Thread starter <name> Start date" (alone) and "Discussion
- *   in '…' started by <name>"; supporting, a post's date and number ("Feb 22, 2021 #12", "22 Feb
- *   2021 #12", "Sunday at 10:15 AM #3") and a poster's title ("Thread Starter", "Forum
- *   Resident", "Well-Known Member").
+ * The marks of each forum software's or comment widget's layout, as a search returns a page (on one
+ * line). Two marks of one layout make a comment thread (forumThread), and one of them must be a
+ * mark only that software writes: a reply or quote button, a vote widget, a user card, a thread's
+ * header. Supporting marks are listed after the others. `once` marks are those a page may repeat;
+ * an `alone` mark is one no music page writes.
+ * - XenForo (the Steve Hoffman forums): a quote with XenForo's arrow ("<name> said: ↑", alone), a
+ *   quote closed by its expander within QUOTE_REACH characters ("<name> said: … Click to expand…"),
+ *   a poster's "Joined: Mar 3, 2010" (or "3 Mar 2010") and "Messages: 4,512" (a CARD_COUNT; or
+ *   reaction score, likes, trophy points; with or without the colon, as XenForo 2's user cards
+ *   read), XenForo 2's "Thread starter <name> Start date" and "Discussion in '…' started by
+ *   <name>"; supporting, a post's date and number ("Feb 22, 2021 #12", "22 Feb 2021 #12", "Sunday
+ *   at 10:15 AM #3") and a poster's title ("Thread Starter", "Forum Resident", "Well-Known
+ *   Member").
  * - vBulletin: a quote ("Quote: Originally Posted by <name>"), "Reply With Quote", a post's date
  *   ("02-22-2021, 03:15 PM"), a poster's "Join Date: Mar 2005" and "Posts: 1,234".
  * - Gearspace (vBulletin, copied onto other hosts): "Report Post" and a quote with Gearspace's
- *   arrow ("Originally Posted by <name> ►"); supporting, a post's number and day ("#3 22nd
- *   February 2021") and a poster's title ("Lives for gear", "Gear Addict").
- * - Stack Exchange: "share | improve this answer | follow" and "Show 3 more comments";
- *   supporting, "asked" or "answered" with a time ("answered Feb 21, 2021 at 10:12"), a comment's
- *   signature after its sentence ("… sample? – <name> Feb 22 '21 at 16:01", the name with no
- *   comma or weekday) and "add a comment" or "Add a comment".
+ *   arrow ("Originally Posted by <name> ►"); supporting, a post's number and day ("#3 22nd February
+ *   2021") and a poster's title ("Lives for gear", "Gear Addict").
+ * - Stack Exchange: "share | improve this answer | follow" and "Show 3 more comments"; supporting,
+ *   "asked" or "answered" with a time ("answered Feb 21, 2021 at 10:12"), a comment's signature
+ *   after its sentence ("… sample? – <name> Feb 22 '21 at 16:01", the name with no comma or
+ *   weekday) and "add a comment" or "Add a comment".
  * - MetaFilter: a comment's byline ("posted by <name> at 6:47 AM on February 22, 2021") and its
  *   favourites ("[3 favorites]"), each once; supporting, a post's "(42 comments total)".
- * - Discourse: the topic's "created <date> last reply" and a post's "1 Reply 5 Likes";
- *   supporting, a post's date, time and number ("February 22, 2021, 3:15pm #1", "22 Feb 2021,
- *   15:15 #1").
+ * - Discourse: post headers, as its pages read, of two different posters or more ("<user> (<Full
+ *   Name>) October 22, 2026, 2:38pm 2", with or without "#" before the number).
  * - phpBB: a post's byline, once per poster ("Post by <name> » Mon Feb 22, 2021 3:15 pm") and
  *   subsilver's "Post subject:"; supporting, a byline without "Post" ("by <name> » 22 Feb 2021,
- *   15:15", as a radio log or a critics' roundup writes it), "Posted: Mon Feb 22, 2021 3:15 pm"
- *   and a poster's "Joined: Mon Mar 03, 2010" and "Posts: 1234" (an author box writes them).
+ *   15:15", as a radio log or a critics' roundup writes it), "Posted: Mon Feb 22, 2021 3:15 pm" and
+ *   a poster's "Joined: Mon Mar 03, 2010" and "Posts: 1234" (an author box writes them).
  * - Reddit, as its text reads on other hosts: "245 Reply Share", "Upvote 245 Downvote" and
- *   comments' depths ("level 1 <name> · 3 yr. ago", from the second: one depth never counts, so
- *   its own age cannot pair with it); supporting, an age after a bullet ("<name> • 3y ago"). Old
+ *   comments' depths ("level 1 <name> · 3 yr. ago", from the second: one depth never counts, so its
+ *   own age cannot pair with it); supporting, an age after a bullet ("<name> • 3y ago"). Old
  *   Reddit: "permalink embed save"; supporting, "245 points 3 years ago".
  * - Disqus: "12 • Reply • Share"; supporting, an age after a bullet or a minus ("<name> − 3 years
  *   ago").
- * - YouTube comments: an age, then the comment, then within COMMENT_REACH characters, with no
- *   other age or "Reply" between, a like count and "Reply" ("3 years ago This song … 1.2K Reply";
- *   not "Reply 1988", a TV series), and "Reply · 45 replies"; supporting, "2 years ago (edited)".
- * - Songfacts comments: a comment's name, place and date ("Jane from Ohio Oct 2, 2009:"; never a
- *   dateline's "Live from …", "Postcard from …"); supporting, the comments' heading ("Comments:
- *   390").
+ * - YouTube comments: an age, then the comment, then within COMMENT_REACH characters, with no other
+ *   age or "Reply" between, a like count and "Reply" ("3 years ago This song … 1.2K Reply"; not
+ *   "Reply 1988", a TV series), and "Reply · 45 replies"; supporting, "2 years ago (edited)".
+ * - Songfacts comments: a comment's name, place and date ("Jane from Ohio Oct 2, 2009:"), of two
+ *   different commenters or more, never a dateline's word (DATELINE_WORD). A page's datelines
+ *   mostly start with one word each time ("Updates from …:", "Letter from …:"), so they count once.
  * - Amazon reviews: "12 people found this helpful"; supporting, "Reviewed in the United States on
  *   February 22, 2021" (also with a flag before "on").
  * Kept, so: a writer quoted with "said:" (no arrow, or no expander right after); signed articles,
  * dated stamps, set times and tour dates after a dash ("– Updated Feb 22, 2021 at 10:00", "– Daft
- * Punk Jul 14 at 22:00"), also beside "Add a comment"; chart runs and chart rows, peaks by
- * country, numbered live updates and a two-show night ("Fillmore East Feb 13, 1970 #1 … #2"), in
- * any order and with any word before the date; journalism that cites a forum post by its date and
- * number and names the member's title; a member's "Joined: 1993"; a song named "Messages" beside
- * its chart run; Wikipedia's tour infobox ("Start date March 17, 2023 End date …"); blog bylines
- * ("Posted by <name> at 9:00 AM", "posted by <name> at 9:00 AM on February 22, 2021" on each
- * post, "by <name> » <date> <time>"), a CMS's "Posted: <date> <time>" and an author box; a
- * news byline's "· 6 months ago" beside a contest's "583 points a year ago"; related lists'
- * "3y Like" or "1y Follow"; datelines ("Live from …:", "Letter from …:"), also beside "Comments:
- * 14"; editorial and quoted reviews ("4.0 out of 5 stars", "Reviewed in the United Kingdom on
- * …"); and YouTube comments quoted in an article, which put the comment before its age
- * ("'Romanthony forever' 3 years ago 1.2K Reply"), where a comment section puts it after.
+ * Punk Jul 14 at 22:00"), also beside "Add a comment"; chart runs and chart rows, peaks by country,
+ * numbered live updates and a two-show night ("Fillmore East Feb 13, 1970 #1 … #2"), in any order
+ * and with any word before the date; journalism that cites a forum post by its date and number and
+ * names the member's title; a member's "Joined: 1993"; a song named "Messages" beside its chart
+ * run; Wikipedia's tour infobox ("Start date March 17, 2023 End date …"); blog bylines ("Posted by
+ * <name> at 9:00 AM", "posted by <name> at 9:00 AM on February 22, 2021" on each post, "by <name> »
+ * <date> <time>"), a CMS's "Posted: <date> <time>" and an author box; a news byline's "· 6 months
+ * ago" beside a contest's "583 points a year ago"; related lists' "3y Like" or "1y Follow"; a
+ * page's datelines ("Live from …:", "Updates from …:", "R.E.M. from Athens, Georgia, April 5,
+ * 1980:"), also beside "Comments: 14"; editorial and quoted reviews ("4.0 out of 5 stars",
+ * "Reviewed in the United Kingdom on …"); and YouTube comments quoted in an article, which put the
+ * comment before its age ("'Romanthony forever' 3 years ago 1.2K Reply"), where a comment section
+ * puts it after.
  * Known limits:
  * - Missed, names included: a layout with supporting marks only, so XenForo or Gearspace post
- *   headers (alone, with consecutive numbers, or with a member's title), a chain of Stack
- *   Exchange comment signatures with "Add a comment", Discourse posts without their topic map or
- *   reply counts, phpBB bylines without "Post by" ("by <name> » 22 Feb 2021, 15:15"), Reddit or
- *   Disqus headers with no buttons ("<name> • 3y ago …"), and Amazon reviews without their
- *   helpful count; one mark alone (a quote without XenForo's arrow, one "Originally Posted by",
- *   one answer card, one Reddit depth); MetaFilter bylines without favourites; "More replies" and
- *   "Continue this thread"; Discourse posts without "#"; phpBB in other languages ("Beitrag von
- *   <name> » Mo 22. Feb 2021") or with ISO dates; Disqus with votes and no "Share"; YouTube
- *   comments with no like count before "Reply", or no "Reply"; Songfacts comments without their
- *   date ("<name> from <place>", as the site writes them now, which reads like prose) or with a
- *   commenter named like a dateline ("Notes from …"); and Rate Your Music reviews on other hosts
+ *   headers (alone, with consecutive numbers, or with a member's title), a chain of Stack Exchange
+ *   comment signatures with "Add a comment", phpBB bylines without "Post by" ("by <name> » 22 Feb
+ *   2021, 15:15"), Reddit or Disqus headers with no buttons ("<name> • 3y ago …"), and Amazon
+ *   reviews without their helpful count; one mark alone (a quote without XenForo's arrow, one
+ *   "Originally Posted by", one answer card, one Reddit depth); MetaFilter bylines without
+ *   favourites; "More replies" and "Continue this thread"; one Discourse post, Discourse's script
+ *   view (a topic map and relative dates) and its posts dated day first ("22 Feb 2021, 15:15");
+ *   phpBB in other languages ("Beitrag von <name> » Mo 22. Feb 2021") or with ISO dates; Disqus
+ *   with votes and no "Share"; YouTube comments with no like count before "Reply", or no "Reply";
+ *   Songfacts comments without their date ("<name> from <place>", as the site writes them now,
+ *   which reads like prose), and one dated comment; and Rate Your Music reviews on other hosts
  *   ("<name> Feb 22 2021 4.50 stars …"), which read like a metareview's dated ratings ("AllMusic
- *   Mar 12 2001 4.50 stars"). Songfacts' comments sit on the same page as its facts, so they
- *   cannot be left out by path either; Rate Your Music is left out by site.
+ *   Mar 12 2001 4.50 stars"). Songfacts' comments sit on the same page as its facts, so they cannot
+ *   be left out by path either; Rate Your Music is left out by site.
  * - Dropped, although music writing: two quotes each right before an expander (an interview or
  *   lecture with collapsed answers); a lowercase blog byline ("posted by <name> at 9:00 AM on
- *   February 22, 2021") with "[3 favorites]" or "(2 comments total)"; "Originally Posted by"
- *   twice, or with "Posts: 245"; an article that quotes "Upvote 4.5K Downvote" beside a post's
- *   age after a bullet; and `once` marks of one software in unrelated fields ("Joined: Feb 1,
- *   1999" beside "Messages: 2 hidden tracks").
+ *   February 22, 2021") with "[3 favorites]" or "(2 comments total)"; "Originally Posted by" twice,
+ *   or with "Posts: 245"; an article that quotes "Upvote 4.5K Downvote" beside a post's age after a
+ *   bullet; journalism that quotes a XenForo 2 header ("Thread starter <name> Start date …"), or
+ *   names "Report Post" beside a rank ("Lives for gear"); a buying guide that quotes Amazon's
+ *   "Reviewed in … on …" with its "people found this helpful"; a live blog that stamps updates by
+ *   two different words in Discourse's form ("Updated February 22, 2021, 2:38pm 2"); two datelines
+ *   by different words before "from", neither of them a DATELINE_WORD ("Updates from …: … Photos
+ *   from …:"); an article that quotes Reddit's "245 Reply Share" beside a byline's "· 3 hours ago";
+ *   and `once` marks of one software in unrelated fields ("Joined: Feb 1, 1999" beside "Messages: 2
+ *   hidden tracks", "Joined: 3 March 2010" beside "Saturday at 9:00 PM #1").
  */
 const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   xenforo: [
@@ -541,7 +548,7 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
       ),
       counts: "once",
     },
-    { mark: /\bThread starter\s+[^\s]{1,64}\s+Start date\b/gu, counts: "alone" },
+    { mark: /\bThread starter\s+[^\s]{1,64}\s+Start date\b/gu, counts: "once" },
     { mark: /Discussion in ['‘][^'’]{1,80}['’] started by \S/gu, counts: "once" },
     {
       mark: new RegExp(`${POST_DATE}\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`, "gu"),
@@ -615,20 +622,12 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   ],
   discourse: [
     {
-      mark: new RegExp(
-        `\\bcreated\\s+(?:${MONTH}\\s+(?:['’]\\d{2}|\\d{1,2}(?:,\\s*\\d{4})?)|\\d{1,2}\\s*(?:m|h|d|w|mo|y)|\\d{1,2}\\s+${MONTH}(?:\\s+\\d{4})?)\\s+last reply\\b`,
-        "gu",
+      mark: distinctNames(
+        new RegExp(
+          `(?<!\\S)(\\S{1,40})\\s+(?:\\([^()]{1,40}\\)\\s+)?${MONTH}\\s+\\d{1,2},\\s+\\d{4},\\s+\\d{1,2}:\\d{2}\\s*[ap]m\\s+#?\\d{1,5}(?![\\d:])`,
+          "gu",
+        ),
       ),
-      counts: "once",
-    },
-    { mark: /\b\d{1,4}\s+Repl(?:y|ies)\s+\d{1,4}\s+Likes?\b/gu, counts: "once" },
-    {
-      mark: new RegExp(
-        `(?:${MONTH}\\s+\\d{1,2},\\s+\\d{4},\\s+\\d{1,2}:\\d{2}\\s*[ap]m|\\d{1,2}\\s+${MONTH}\\s+\\d{4},\\s+\\d{1,2}:\\d{2})\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`,
-        "gu",
-      ),
-      counts: "once",
-      supporting: true,
     },
   ],
   phpbb: [
@@ -708,16 +707,12 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   ],
   songfacts: [
     {
-      mark: new RegExp(
-        `(?<![\\p{L}\\p{N}'’.-])${COMMENTER_WORD}(?:\\s+${COMMENTER_WORD})?\\s+from\\s+[^\\s:]+(?:\\s+[^\\s:]+){0,3}?\\s+${MONTH}\\s+\\d{1,2},?\\s+\\d{4}:`,
-        "gu",
+      mark: distinctNames(
+        new RegExp(
+          `(?<![\\p{L}\\p{N}'’.-])((?!${DATELINE_WORD})\\p{Lu}[\\p{L}'’.-]*)\\s+from\\s+[^\\s:]+(?:\\s+[^\\s:]+){0,3}?\\s+${MONTH}\\s+\\d{1,2},?\\s+\\d{4}:`,
+          "gu",
+        ),
       ),
-      counts: "once",
-    },
-    {
-      mark: /\bComments:\s*\d{1,6}(?![\p{L}\p{N}])/gu,
-      counts: "once",
-      supporting: true,
     },
   ],
   amazon: [

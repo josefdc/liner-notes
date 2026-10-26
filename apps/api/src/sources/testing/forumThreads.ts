@@ -66,12 +66,16 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "Daft Punk split Thread starter RecordFan Start date Feb 22, 2021 The vocal is Romanthony.",
   ],
   [
-    "a Discourse thread",
-    "RecordFan February 22, 2021, 3:15pm #1 Daft Punk split today. DiscoHead February 22, 2021, 3:20pm #2 One More Time still holds up. 1 Reply 5 Likes",
+    "a Discourse thread, as its page reads",
+    "Synth Community The One More Time vocoder Gear & Production recordfan (Record Fan) February 22, 2021, 3:15pm 1 Which vocoder is on One More Time? I hear a talk box too. discohead (Disco Head) February 22, 2021, 3:20pm 2 A DigiTech Talker, I think. beathead February 22, 2021, 4:02pm 3 RIP Romanthony.",
   ],
   [
-    "a Discourse post with its topic map",
-    "Daft Punk split today. created Feb '21 last reply Mar '21 12 replies RecordFan February 22, 2021, 3:15pm #1 The vocal is Romanthony.",
+    "Discourse replies by two posters with one surname",
+    "recordfan (Jane Doe) February 22, 2021, 3:15pm 2 The vocal is Romanthony. discohead (John Doe) February 22, 2021, 3:20pm 3 And the sample is More Spell on You.",
+  ],
+  [
+    "Discourse replies without full names, numbered with #",
+    "recordfan February 22, 2021, 3:15pm #2 The vocal is Romanthony. discohead February 22, 2021, 3:20pm #3 And the sample is More Spell on You.",
   ],
   [
     "a phpBB post with its poster's join date",
@@ -195,7 +199,7 @@ export const FORUM_LIMITS: Array<[string, string, string]> = [
   ],
   [
     "a Discourse thread with day-first dates",
-    "a post's date, time and number is supporting: a live setlist tracker reads the same",
+    "Discourse's day-first dates are not read: a live setlist tracker writes them the same way",
     "RecordFan 22 Feb 2021, 15:15 #1 Daft Punk split today. DiscoHead 22 Feb 2021, 15:20 #2 One More Time still holds up.",
   ],
   [
@@ -217,6 +221,16 @@ export const FORUM_LIMITS: Array<[string, string, string]> = [
     "Amazon reviews, one with a flag",
     '"Reviewed in … on …" is supporting: a listicle quoting reviews reads the same',
     "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States 🇺🇸 on February 22, 2021 The vocal is great. DiscoHead 4.0 out of 5 stars Good. Reviewed in the United Kingdom on 3 March 2021 Romanthony shines.",
+  ],
+  [
+    "one Discourse post",
+    "a post header counts from the second poster: one reads like a stamped update",
+    "recordfan (Record Fan) February 22, 2021, 3:15pm 1 Which vocoder is on One More Time? I hear a talk box too.",
+  ],
+  [
+    "one dated Songfacts comment",
+    "a comment's name, place and date count from the second commenter: one reads like a dateline",
+    "Comments: 1 Jane from Ohio Oct 2, 2009: This song got me through college.",
   ],
   [
     "YouTube comments, the first without a like count",

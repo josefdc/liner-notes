@@ -413,6 +413,10 @@ describe("web research searches", () => {
     ["post subjects", repeated("Posted: Mon ")],
     ["comment headings", repeated("Comments: 1 ")],
     ["reviews with flags", repeated("Reviewed in the United States 🇺🇸 ")],
+    ["Discourse headers", repeated("x (y) February 22, 2021, 3:15pm 1 ")],
+    ["open brackets after names", repeated("x (")],
+    ["dateline words", repeated("Live from ")],
+    ["commenters from places", repeated("Jane from Ohio Oct 2, 2009: ")],
   ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(LONG);
     const start = performance.now();

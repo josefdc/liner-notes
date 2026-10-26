@@ -1023,6 +1023,163 @@ const MUSIC_PROSE: Array<[string, string]> = [
     "an advice column's question with a comment prompt",
     "Q. How did Daft Punk get the One More Time vocal? asked Feb 22, 2021 at 10:00 by a reader. A. Through a vocoder and Auto-Tune. Add a comment",
   ],
+  // Datelines, page chrome and quoted chrome beside a forum's or a review site's own words.
+  [
+    "live blog 'Updates from' + Comments",
+    "Glastonbury 2024 live: SZA, Coldplay and Dua Lipa. Updates from Glastonbury, June 28, 2024: Dua Lipa opened her Pyramid Stage headline set with Training Season, then brought out Kevin Parker for a cover of Tame Impala's The Less I Know the Better. Coldplay play tomorrow. Comments: 128",
+  ],
+  [
+    "band statement 'Statement from'",
+    "Daft Punk announce split after 28 years. Statement from Daft Punk, February 22, 2021: the duo shared an eight-minute video titled Epilogue, cut from their 2006 film Electroma, with no further comment. Their publicist Kathryn Frazier confirmed the news to Pitchfork. Comments: 46",
+  ],
+  [
+    "gig photos 'Photos from'",
+    "Gallery: LCD Soundsystem at Brixton. Photos from the pit, Brixton Academy, April 12, 2024: James Murphy at the mirror ball, Nancy Whang on keys, and the crowd during All My Friends. All photos by Jane Doe for the magazine. Comments: 7",
+  ],
+  [
+    "setlist page 'Setlist from'",
+    "Blur at the Barrowland. Setlist from the Barrowland, Glasgow, March 3, 2024: St. Charles Square, There's No Other Way, Popscene, Beetlebum, Out of Time, Tender, Song 2, The Universal. Encore: This Is a Low. Comments: 3",
+  ],
+  [
+    "radio playlist 'Tracks from'",
+    "6 Music Recommends with Jane Doe. Tracks from tonight's show, March 3, 2024: Fontaines D.C. – Starburster; Jayda G – Circle Back Around; Overmono – Good Lies; Daft Punk – Veridis Quo. Listen again for 30 days on BBC Sounds. Comments: 0",
+  ],
+  [
+    "festival coverage 'Reports from'",
+    "SXSW 2024, day three. Reports from SXSW, Austin, March 14, 2024: Bob Vylan played the Mohawk twice, Brittany Howard previewed What Now at Stubb's, and several UK acts withdrew in protest at the festival's army sponsorship. Comments: 12",
+  ],
+  [
+    "newsletter 'Hello from'",
+    "Liner notes newsletter, issue 112. Hello from Paris, February 22, 2021: the city woke up to Epilogue. This week: why Discovery still sounds new, and where Romanthony's vocal on One More Time came from. Comments: 2",
+  ],
+  [
+    "bootleg blog 'Soundboard from'",
+    "Grateful Dead bootleg of the week. Soundboard from the Fillmore East, February 13, 1970: the late show, with Dark Star into That's It for the Other One, mixed by Owsley Stanley and later issued as Dick's Picks Volume 4. Comments: 5",
+  ],
+  [
+    "reissue post 'Outtakes from'",
+    "Homework 25th anniversary. Outtakes from the Homework sessions, March 3, 1996: early takes of Da Funk and Revolution 909 recorded in Thomas Bangalter's bedroom on a Roland TR-909 and a Juno-106. Comments: 9",
+  ],
+  [
+    "concert film 'Footage from'",
+    "Daft Punk Alive 2007. Footage from Wembley Arena, June 16, 2007: the pyramid show filmed by fans, later the basis of the Alive 2007 album recorded in Paris on June 14. Comments: 31",
+  ],
+  [
+    "statement 'Note from'",
+    "Radiohead postpone tour. Note from the band, July 1, 2012: after the stage collapse at Downsview Park that killed drum technician Scott Johnson, the band rescheduled their European dates. Comments: 64",
+  ],
+  [
+    "tour diary 'Diary from'",
+    "On the road with Wet Leg. Diary from the tour bus, Austin, March 14, 2024: two shows a day, tacos at 2 a.m., and Chaise Longue played to a crowd that knew every word. Comments: 4",
+  ],
+  [
+    "dateline, no Comments heading",
+    "Updates from Glastonbury, June 28, 2024: Dua Lipa opened her Pyramid Stage headline set with Training Season, then brought out Kevin Parker for The Less I Know the Better.",
+  ],
+  [
+    "'Thread Starter' badge in an essay",
+    "On the Steve Hoffman forums the person who opens a discussion is marked Thread Starter under the avatar. In the Discovery remaster thread that badge sat beside the most quoted post of 2021, a needle-drop comparison.",
+  ],
+  [
+    "moderation story, Report Post only",
+    "Moderators of the Gearspace forum say Report Post is the fastest way to flag leaked stems. After the Discovery multitracks surfaced in 2021, more than 300 reports reached the team within an hour.",
+  ],
+  [
+    "magazine column 'Ask the Gear Guru' beside a UK chart #",
+    "Ask the Gear Guru: how was the vocal on Pure Shores recorded? The Official Chart of #1 26th February 2000 was All Saints' Pure Shores, produced by William Orbit on a Mac running Logic.",
+  ],
+  [
+    "Reddit-culture article, natural vote talk",
+    "How r/indieheads crowned the album of the year. The top post, by a moderator · 3 hours ago, reached 4.5K upvotes; Fontaines D.C.'s Romance won the community vote with 1,204 of the 5,000 ballots.",
+  ],
+  [
+    "blog footer with permalink",
+    "Posted by Jane at 9:00 AM. Discovery at 20: a track-by-track listen, from One More Time to Too Long. permalink · 12 comments · Labels: Daft Punk, French house",
+  ],
+  [
+    "mixtape blog 'permalink save'",
+    "Mixtape 41: Paris 1997, an hour of French house from Cassius, Motorbass and Daft Punk. Tracklist below. Download permalink save to your library 583 points from listeners 3 years ago.",
+  ],
+  [
+    "guide with a helpful count only",
+    "Best headphones for vinyl listening. Sony MDR-7506, 4.6 out of 5 stars from 12,345 ratings; its top review, which 1,204 people found this helpful, praises the flat mids.",
+  ],
+  [
+    "guide with 'Reviewed in' only",
+    "Our pick for a first turntable is the Fluance RT81. One owner wrote, Reviewed in Canada on March 3, 2021, that the built-in preamp is quiet enough for a first system.",
+  ],
+  [
+    "Bandcamp album page with fan notes",
+    "Discovery by Daft Punk. Digital Album Streaming + Download. Buy Digital Album €9.99 EUR or more. Send as Gift. Share / Embed. released March 12, 2001. supported by 1,204 fans who also own “Homework”. RoboFan the album that made me buy a sampler. Favorite track: Digital Love. DiscoHead pure joy Favorite track: Veridis Quo.",
+  ],
+  [
+    "Bandcamp page, tags and credits",
+    "Romance by Fontaines D.C. released August 23, 2024. Credits: produced by James Ford, recorded at La Frette Studios. Tags: post-punk, rock, Dublin. 1,204 supporters. Share / Embed. Wishlist. Favorite track: Starburster.",
+  ],
+  [
+    "Bandcamp Daily feature quoting fans",
+    "Bandcamp Daily: Album of the Day. Jayda G's Guy is a love letter to her late father. Fans agree: 'the most moving dance record of the year', reads one note on the album page, beside Favorite track: Circle Back Around.",
+  ],
+  [
+    "SoundCloud track page text",
+    "One More Time (Romanthony a cappella) by Daft Punk Archive. Published 3 years ago. 1.2M plays, 245 comments, 4,512 likes. Genre: French house. Description: the isolated vocal from the 2000 single, as heard on the Discovery promo.",
+  ],
+  [
+    "article quoting SoundCloud timed comments",
+    "The leak of Get Lucky's demo drew thousands of timed comments on SoundCloud. At 1:23 one listener wrote 'this is the drop', and at 2:01 another asked whether Nile Rodgers had recorded the guitar in one take.",
+  ],
+  [
+    "article quoting a Genius annotation",
+    "Genius annotation (verified, +245): Bangalter told the site the vocoder on Digital Love was a DigiTech Talker. The line 'why don't you play the game' is the album's only direct address to the listener.",
+  ],
+  [
+    "lyrics page with annotation chrome",
+    "One More Time Lyrics. [Chorus] One more time, we're gonna celebrate. Genius Annotation 3 contributors. Romanthony recorded the vocal in 1996; Daft Punk later processed it with Auto-Tune. +245 Share Embed.",
+  ],
+  [
+    "YouTube video page description",
+    "Daft Punk - One More Time (Official Video). 245M views 14 years ago. Directed by Kazuhisa Takenouchi, from Interstella 5555. Remastered in 4K. Show less. Music: One More Time, Daft Punk, Discovery.",
+  ],
+  [
+    "article on the top YouTube comment",
+    "Under the One More Time video, the top comment, posted 3 years ago, reads 'Romanthony's voice is pure joy', with 1.2K likes; the second, from a 2021 visitor, simply says goodbye.",
+  ],
+  [
+    "premiere page with chapters",
+    "Fontaines D.C. – Romance (Live at the Olympia). Premiered 3 years ago. Chapters: 0:00 Romance, 4:12 Starburster, 8:30 Favourite. 12 Reply guy cover versions are linked in the description.",
+  ],
+  [
+    "news with comment widget header",
+    "Daft Punk's Thomas Bangalter scores the ballet Mythologies · 3 hours ago. The 90-minute score was recorded by the Orchestre National Bordeaux Aquitaine. 12 Comments Login Recommend Tweet Share Sort by Best.",
+  ],
+  [
+    "Substack music newsletter",
+    "The Honest Broker. Why Discovery still sounds new. Ted Gioia Feb 22, 2021 245 12 Share. Daft Punk's second album turned the sampler into an instrument of nostalgia.",
+  ],
+  [
+    "Medium essay header",
+    "The Robots Who Loved Disco. Jane Doe · Follow 6 min read · 3 days ago 245 12 Listen Share. Discovery took 1970s disco and 1980s soft rock and made them feel like the future.",
+  ],
+  [
+    "Instagram embed in news",
+    "View this post on Instagram. A post shared by Daft Punk. 1.2M likes. View all 24,512 comments. Add a comment… Daft Punk's farewell post, February 22, 2021 · 3 hours ago.",
+  ],
+  [
+    "LinkedIn-like press repost",
+    "Ed Banger Records · 2y · Justice return with Generator, their first single in five years. Like · Comment · Share. 245 reactions, 12 comments.",
+  ],
+  [
+    "Wikipedia-like discography with 'B-sides from'",
+    "B-sides from Discovery, March 12, 2001: The Prime Time of Your Life (Live), Aerodynamite. Comments: 4. See also Daft Club (2003), a remix album.",
+  ],
+  [
+    "peak dates by country with weeks",
+    "One More Time peaks. France December 2, 2000, 1 week at number one; Belgium December 9, 2000, 2 weeks in the top ten.",
+  ],
+  [
+    "a dateline whose band's name ends with a dot",
+    "R.E.M. from Athens, Georgia, April 5, 1980: their first show, at a converted church on Oconee Street, with a set of covers and early originals. Comments: 12",
+  ],
   [
     "a podcast's episode ages",
     "Episode 12 • 3 years ago: the making of Discovery. Episode 13 • 2 years ago: Romanthony. Listen and Share.",

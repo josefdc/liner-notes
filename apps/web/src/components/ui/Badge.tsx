@@ -1,7 +1,16 @@
 import type React from 'react';
 import { forwardRef } from 'react';
 
-type BadgeVariant = 'cyber' | 'analog' | 'purple' | 'green' | 'pink' | 'gray' | 'indigo' | 'amber';
+type BadgeVariant =
+  | 'cyber'
+  | 'analog'
+  | 'purple'
+  | 'green'
+  | 'pink'
+  | 'gray'
+  | 'indigo'
+  | 'amber'
+  | 'warning';
 type BadgeSize = 'sm' | 'md';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
@@ -20,6 +29,8 @@ const variantStyles: Record<BadgeVariant, string> = {
   gray: 'bg-white/5 border-white/15 text-text-chip',
   indigo: 'bg-accent-indigo/10 border-accent-indigo/30 text-accent-indigo',
   amber: 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber',
+  // A claim its evidence contradicts: orange, apart from the amber of sources
+  warning: 'bg-status-warning/10 border-status-warning/30 text-status-warning',
 };
 
 const glowStyles: Record<BadgeVariant, string> = {
@@ -31,6 +42,7 @@ const glowStyles: Record<BadgeVariant, string> = {
   gray: '',
   indigo: 'shadow-glow-indigo-subtle',
   amber: 'shadow-glow-amber-subtle',
+  warning: '',
 };
 
 const sizeStyles: Record<BadgeSize, string> = {
@@ -38,8 +50,9 @@ const sizeStyles: Record<BadgeSize, string> = {
   md: 'px-3 py-1.5 text-xs gap-1.5',
 };
 
+// max-w-full: in a column narrower than the badge, its text wraps instead of running past the edge.
 const baseStyles =
-  'inline-flex items-center rounded-sm border font-mono uppercase tracking-widest transition-all duration-(--duration-fast)';
+  'inline-flex max-w-full items-center rounded-sm border font-mono uppercase tracking-widest wrap-break-word transition-all duration-(--duration-fast)';
 
 export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
   (

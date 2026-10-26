@@ -313,11 +313,11 @@ export const rules = [
     id: "hex-colours-outside-tokens",
     owner: "#30",
     description:
-      "Hex colours in web code outside the design tokens (styles/index.css, styles/theme.ts)",
+      "Hex colours in web code outside the design tokens (styles/tokens.css, styles/theme.ts)",
     files: (p) =>
       ((p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p)) ||
         p === "apps/web/index.html") &&
-      p !== "apps/web/src/styles/index.css" &&
+      p !== "apps/web/src/styles/tokens.css" &&
       p !== "apps/web/src/styles/theme.ts" &&
       !isTest(p),
     pattern: /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g,

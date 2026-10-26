@@ -88,7 +88,8 @@ test("small badges have one height wherever they sit", async ({ page }) => {
   await analyzeAndOpenDashboard(page, "Bright Lines");
   const badges = await smallBadges(page);
   expect(badges.map((badge) => badge.text)).toContain("EXPLICIT");
-  for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 24 });
+  // 16 px of chrome text (12 px type), 4 px padding above and below, a 1 px border.
+  for (const badge of badges) expect(badge, badge.text).toMatchObject({ height: 26 });
 });
 
 // An all-white album cover, the worst case behind the translucent hero and Player backgrounds.
@@ -193,8 +194,8 @@ const MEASURE_GAP = 8;
  * WCAG contrast of the grey text in each neutral badge, against what the page actually draws
  * behind it: the badge's text and icons are hidden, the area inside its border is screenshotted
  * (cover image, blur and every translucent layer included), and its brightest pixel is the
- * background. Coloured values inside a badge (cyan, amber, pink) are not measured here; a
- * colour that cannot be read is an error.
+ * background. Coloured values inside a badge (cyan, amber, pink) are not measured here unless
+ * `coloured` is set; a colour that cannot be read is an error.
  *
  * The pointer is first moved off the page's content and focus is dropped, so every badge is
  * measured at rest: a test that hovers or focuses on purpose says so with `keepHover` or
@@ -210,7 +211,7 @@ const MEASURE_GAP = 8;
 async function neutralBadgeContrast(
   page: Page,
   selector = "span.border-white\\/15",
-  { keepHover = false, keepFocus = false } = {},
+  { keepHover = false, keepFocus = false, coloured = false } = {},
 ) {
   if (!keepHover) await page.mouse.move(0, 0);
   if (!keepFocus) {
@@ -374,7 +375,7 @@ async function neutralBadgeContrast(
         .map(Number);
       // Coloured text (cyan, amber, green, pink) is not measured here; grey, even a slightly
       // tinted one (Tailwind's gray-400 is rgb(156, 163, 175)), is.
-      if (Math.max(r, g, b) - Math.min(r, g, b) > NEUTRAL_SPREAD) continue;
+      if (!coloured && Math.max(r, g, b) - Math.min(r, g, b) > NEUTRAL_SPREAD) continue;
       const foreground = over({ r, g, b, a }, background);
       const [light, dark] = [luminance(foreground), luminance(background)].sort((x, y) => y - x);
       result.push({ text, ratio: Math.round(((light + 0.05) / (dark + 0.05)) * 100) / 100 });
@@ -627,6 +628,57 @@ for (const cover of ["no cover", "a white cover"]) {
     }
   });
 }
+
+/** The provenance fixture with a "sample" fact whose text names an entity of every colour. */
+function withEntities() {
+  const fixture = loadFixture("provenance");
+  const complete = fixture.streams["/api/analyze/stream"].find(
+    (event: { type: string }) => event.type === "complete",
+  );
+  const entities = [
+    ["Old Record", "sample"],
+    ["tape echo", "technique"],
+    ["Some Album", "album"],
+    ["Ada Example", "artist"],
+    ["Juno", "synth"],
+    ["Ben Example", "producer"],
+    ["1999", "year"],
+  ];
+  complete.data.factoids[0] = {
+    ...complete.data.factoids[0],
+    type: "sample",
+    content: `Old Record, tape echo, Some Album, Ada Example, Juno, Ben Example, 1999.`,
+    entities: entities.map(([text, type], i) => ({ id: `e${i}`, text, type })),
+  };
+  return { fixture, entities: entities.map(([text]) => text) };
+}
+
+test("a fact's entity chips and type label meet 4.5:1, at rest and hovered", async ({ page }) => {
+  const { fixture, entities } = withEntities();
+  await useMockApi(page, fixture);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await analyzeAndOpenDashboard(page, "Track");
+  await openPlayer(page);
+  const chip = (text: string) => `#panel-context button[title="Search: ${text}"]`;
+  const atRest = await neutralBadgeContrast(
+    page,
+    [...entities.map(chip), "#panel-context span.ml-auto.rounded-full"].join(", "),
+    { coloured: true },
+  );
+  expect(atRest.map(({ text }) => text)).toEqual(expect.arrayContaining([...entities, "SAMPLE"]));
+  const hovered = [];
+  for (const text of entities) {
+    await page.locator(chip(text)).hover();
+    hovered.push(
+      ...(await neutralBadgeContrast(page, chip(text), { keepHover: true, coloured: true })),
+    );
+  }
+  expect(hovered.map(({ text }) => text)).toEqual(entities);
+  for (const { text, ratio } of atRest)
+    expect(ratio, `"${text}" at rest`).toBeGreaterThanOrEqual(4.5);
+  for (const { text, ratio } of hovered)
+    expect(ratio, `"${text}" hovered`).toBeGreaterThanOrEqual(4.5);
+});
 
 // The album cover's words: "Cover not available" in its frame, or the Cover Art Archive credit
 // under a cover from the archive (a white one, the worst case behind the translucent layers).

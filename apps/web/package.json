@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "npm run build -w @liner-notes/contract",
+    "theme": "node config/theme.mjs",
+    "predev": "npm run theme && npm run build -w @liner-notes/contract",
     "dev": "vite",
-    "prebuild": "npm run build -w @liner-notes/contract",
+    "prebuild": "npm run theme && node config/contrast.mjs src/styles/tokens.css && npm run build -w @liner-notes/contract",
     "build": "vite build",
     "prepreview": "npm run build -w @liner-notes/contract",
     "preview": "vite preview",

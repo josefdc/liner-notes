@@ -341,6 +341,66 @@ describe("the text of a web page", () => {
   });
 });
 
+/**
+ * Forum threads as a search returns them (each page's text on one line), one layout per forum
+ * software, with the users' names made up: plain words, as many forums show them.
+ */
+const FORUM_THREADS: Array<[string, string]> = [
+  [
+    "a XenForo thread (the Steve Hoffman forums)",
+    "Discussion in 'Music Corner' started by RecordFan, Feb 22, 2021. RecordFan Forum Resident Thread Starter Joined: Mar 3, 2010 Messages: 4,512 Daft Punk split today. Feb 22, 2021 #1 DiscoHead Forum Resident Joined: Jun 1, 2012 Messages: 1,203 RecordFan said: ↑ Daft Punk split today. Click to expand... One More Time still holds up.",
+  ],
+  [
+    "XenForo quotes",
+    "RecordFan said: ↑ The vocal is Romanthony. Click to expand... Yes, and the sample is More Spell on You. DiscoHead said: The drop is the best part. Click to expand… Agreed.",
+  ],
+  [
+    "a XenForo post header",
+    "One More Time still holds up. Feb 22, 2021 #12 DiscoHead Joined: Jun 1, 2012 The sample is More Spell on You.",
+  ],
+  [
+    "a vBulletin thread",
+    "Quote: Originally Posted by RecordFan The vocal is Romanthony. Yes, and the sample is More Spell on You. Reply With Quote 02-22-2021, 03:15 PM #3 DiscoHead Join Date: Mar 2005 Posts: 1,234 Still a classic.",
+  ],
+  [
+    "vBulletin quotes",
+    "Quote: Originally Posted by RecordFan The vocal is Romanthony. True. Quote: Originally Posted by DiscoHead The drop is great. Agreed.",
+  ],
+  [
+    "a Stack Exchange answer",
+    "It samples More Spell on You by Eddie Johns. share | improve this answer | follow edited Feb 22, 2021 at 15:00 answered Feb 21, 2021 at 10:12 Jane Q 1,234 5 12",
+  ],
+  [
+    "a Stack Exchange comment chain",
+    "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20",
+  ],
+  [
+    "a MetaFilter thread",
+    "Daft Punk have split. posted by member at 6:47 AM on February 22, 2021 [3 favorites] One More Time still sounds like the future. posted by MusicLover at 7:02 AM on February 22, 2021 [12 favorites]",
+  ],
+];
+
+describe("forum thread layouts", () => {
+  it.each(FORUM_THREADS)("leaves out %s on any site, as text or title", (_name, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toEqual([]);
+    expect(webSearchEvidence([web("https://www.example.org/thread", "A page.", text)])).toEqual([]);
+  });
+
+  it("refuses a forum thread when read back (written by older code)", async () => {
+    const [item] = webSearchEvidence([
+      web("https://www.example.org/news/one-more-time", "A page about the song."),
+    ]);
+    for (const [, text] of FORUM_THREADS) {
+      const older = { ...item, excerpt: text } as SourcedEvidence;
+      expect(restores([older]), text).toBe(false);
+      expect(await served([older]), text).toBe(false);
+      expect(recorderRefuses([older]), text).toEqual([
+        "analysis.evidence[0].excerpt: a comment thread",
+      ]);
+    }
+  });
+});
+
 /** Ordinary music writing, which reads in places like a comment thread but is not one. */
 const MUSIC_PROSE: Array<[string, string]> = [
   [
@@ -408,6 +468,35 @@ const MUSIC_PROSE: Array<[string, string]> = [
   [
     "a K-pop song",
     "Like OOH-AHH by TWICE (2015) 4 min. Like Ooh-Ahh debut; Following in 2016 Cheer Up 3 min.",
+  ],
+  // Quoting prose: "said:", "Joined:" or a dash before a name and a date read like a forum's.
+  [
+    "an article quoting the artists",
+    "As Thomas Bangalter said: 'We wanted it to feel like a party.' Pharrell said: 'we jammed for days, and Nile Rodgers said: keep it simple.' Click to expand the full interview.",
+  ],
+  [
+    "an interview",
+    "Q: How did One More Time come together? Thomas Bangalter: We met Romanthony in Chicago. Q: And the sample? Guy-Manuel de Homem-Christo said: we never talk about samples. Interview by Jane Smith, posted by Mixmag at 9:00 AM on Feb 22, 2021.",
+  ],
+  [
+    "liner notes",
+    "Written by T. Bangalter, G-M. de Homem-Christo and A. Moore. Produced by Daft Punk. Recorded at Daft House, Paris. Vocals: Romanthony. Mastered at Translab. Messages: thanks to everyone at Virgin. Joined: Romanthony on vocals. Originally released 2000.",
+  ],
+  [
+    "a press release",
+    "PARIS, Nov 13, 2000 /PRNewswire/ -- Virgin Records today released One More Time. 'It is a celebration,' Thomas Bangalter said. Originally posted by Virgin Records. Posted by Virgin Records at 9:00 AM. Posted by Virgin Records at 4:30 PM. Share | Improve your playlist.",
+  ],
+  [
+    "a chart history",
+    "Billboard Dance Club Songs. Week of Feb 24, 2001 #1 One More Time. Week of Mar 3, 2001 #1 One More Time. Week of Mar 10, 2001 #2 One More Time.",
+  ],
+  [
+    "a tour's dates",
+    "Alive 2007 – Bercy Jun 14, 2007 at 20:00 Alive 2007 – Wembley Jun 16, 2007 at 19:30. When asked Feb 22, 2021 about the split, the label said: no comment.",
+  ],
+  [
+    "a band's line-up",
+    "Line-up. Thomas Bangalter Joined: 1993. Guy-Manuel de Homem-Christo Joined: 1993. Posts: drums, keys. Quote: 'We are robots.' Join Date: 1993.",
   ],
 ];
 

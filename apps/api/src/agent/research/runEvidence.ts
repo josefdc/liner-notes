@@ -327,8 +327,10 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * its @handles masked and leaves out social platform pages and comment threads (a row of 3 may
  * hold them, also in the research text the composer reads). 5: web text leaves out forum pages
  * and forum comment bylines (a row of 4 may hold them, or research text written from them).
+ * 6: web text leaves out more forum sites and the thread layouts of XenForo, vBulletin, Stack
+ * Exchange and MetaFilter (a row of 5 may hold them, or research text written from them).
  */
-export const CACHED_EVIDENCE_FORMAT = 5;
+export const CACHED_EVIDENCE_FORMAT = 6;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the

@@ -65,13 +65,16 @@ export const LYRIC_SITES = [
 ] as const;
 
 /**
- * Social platforms and their short-link hosts, and forums (Hacker News and its search, Quora,
- * Gearspace under both its names): their pages are page chrome, comments and the names or
- * handles of private people, and weak evidence of a song's history. Filtered from the answer by
- * exact host or subdomain (m.facebook.com, old.reddit.com) and through a translate proxy, and
- * excluded in the request except for SHORT_SITES. YouTube is not one of them: a video page
- * carries a title, a channel (its publisher) and a description. Discogs' forum is left out by
- * path (FORUM_PATHS).
+ * Social platforms and their short-link hosts, and sites whose pages are forum threads (Hacker
+ * News and its search, Quora, Gearspace under both its names, the Steve Hoffman Music Forums,
+ * MetaFilter and its Ask, Music and FanFare boards, Stack Exchange's sites such as Music:
+ * Practice & Theory, I Love Music (ilxor.com), Elektronauts and ModWiggler under both its names):
+ * their pages are page chrome, comments and the names or handles of private people, and weak
+ * evidence of a song's history. Filtered from the answer by exact host or subdomain
+ * (m.facebook.com, old.reddit.com) and through a translate proxy, and excluded in the request
+ * except for SHORT_SITES. YouTube is not one of them: a video page carries a title, a channel
+ * (its publisher) and a description. The forums of Discogs and KVR Audio, and Steve Hoffman's
+ * former forum path, are left out by path (FORUM_PATHS).
  */
 export const SOCIAL_SITES = [
   "instagram.com",
@@ -96,17 +99,28 @@ export const SOCIAL_SITES = [
   "gearspace.com",
   "gearslutz.com",
   "hn.algolia.com",
+  "forums.stevehoffman.tv",
+  "metafilter.com",
+  "stackexchange.com",
+  "ilxor.com",
+  "elektronauts.com",
+  "modwiggler.com",
+  "muffwiggler.com",
 ] as const;
 
 /**
- * Forum pages on a site whose other pages are primary sources: Discogs' forum and groups
+ * Forum pages on a site whose other pages are not threads: Discogs' forum and groups
  * (discogs.com/forum/…, /group/…, also after a doubled slash or a language prefix such as /de/,
- * /pt-BR/ or /pt_BR/). Left out of the
- * answer by host and path in isSocialPage, never sent in `exclude_domains`: the request's list
- * names whole domains, and excluding discogs.com would drop its release and artist pages.
+ * /pt-BR/ or /pt_BR/), KVR Audio's forum (kvraudio.com/forum/…, beside its product and news
+ * pages) and the Steve Hoffman forums' former path (stevehoffman.tv/forums/…; their host,
+ * forums.stevehoffman.tv, is in SOCIAL_SITES). Left out of the answer by host and path in
+ * isSocialPage, never sent in `exclude_domains`: the request's list names whole domains, and
+ * excluding discogs.com would drop its release and artist pages.
  */
 const FORUM_PATHS: ReadonlyArray<readonly [site: string, path: RegExp]> = [
   ["discogs.com", /^\/+(?:[a-z]{2}(?:[-_][a-z]{2})?\/+)?(?:forum|group)s?(?:\/|$)/i],
+  ["kvraudio.com", /^\/+forums?(?:\/|$)/i],
+  ["stevehoffman.tv", /^\/+forums?(?:\/|$)/i],
 ];
 
 /**
@@ -286,6 +300,99 @@ const FORUM_BYLINE = new RegExp(
   "u",
 );
 
+/** A post's date as a forum writes it: "Feb 22, 2021", "3 hours ago", "Yesterday at 9:12 PM". */
+const POST_DATE = `(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago|(?:Yesterday|Today)\\s+at\\s+\\d{1,2}:\\d{2}(?:\\s*[AP]M)?)`;
+/** A Stack Exchange post's or comment's time: "Feb 22, 2021", "Feb 22 '21" or "Feb 22", at "15:00". */
+const SE_WHEN = `${MONTH}\\s+\\d{1,2}(?:,\\s*\\d{4}|\\s+['’]\\d{2})?\\s+at\\s+\\d{1,2}:\\d{2}`;
+
+/** One mark of a forum's layout; a `once` mark counts once however often it is found. */
+interface ForumMark {
+  readonly mark: RegExp;
+  readonly once?: boolean;
+}
+
+/**
+ * The marks of each forum software's thread layout, as a search returns a page (on one line).
+ * Two marks of one software make a comment thread (forumThread); `once` marks are those a music
+ * page may repeat (a chart's "Feb 24, 2001 #1" week by week).
+ * - XenForo (the Steve Hoffman forums): a quote ("<name> said: … Click to expand…"), a post's
+ *   date and number ("Feb 22, 2021 #12"), a poster's "Joined: Mar 3, 2010" and "Messages: 4,512"
+ *   (or reaction score, likes, trophy points), and "Discussion in '…' started by <name>".
+ * - vBulletin: a quote ("Quote: Originally Posted by <name>"), "Reply With Quote", a post's date
+ *   ("02-22-2021, 03:15 PM"), a poster's "Join Date: Mar 2005" and "Posts: 1,234".
+ * - Stack Exchange: "share | improve this answer | follow", "asked", "answered" or "edited" with
+ *   a time ("answered Feb 21, 2021 at 10:12"), a comment's signature after its sentence ("… sample?
+ *   – <name> Feb 22 '21 at 16:01"), "Show 3 more comments" and "add a comment".
+ * - MetaFilter: a comment's byline ("posted by <name> at 6:47 AM on February 22, 2021") and its
+ *   favourites ("[3 favorites]").
+ * A writer quoted with "said:", "posted by Mixmag at 9:00 AM" over an interview, a tour's dates
+ * ("Alive 2007 – Bercy Jun 14, 2007 at 20:00", no sentence before the dash), a member's "Joined:
+ * 1993" and a blog's "Posted by <name> at 9:00 AM" are not marks, or one mark only.
+ */
+const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
+  xenforo: [
+    { mark: /\S\s+said:\s[\s\S]*?Click to expand\s*(?:\.{3}|…)/gu },
+    { mark: new RegExp(`${POST_DATE}\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`, "gu"), once: true },
+    {
+      mark: new RegExp(
+        `Joined:\\s*(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}/\\d{1,2}/\\d{2,4})`,
+        "gu",
+      ),
+      once: true,
+    },
+    {
+      mark: /(?:Messages|Reaction score|Likes Received|Trophy Points):\s*\d[\d,.]*k?(?![\p{L}\p{N}])/gu,
+      once: true,
+    },
+    { mark: /Discussion in ['‘][^'’]{1,80}['’] started by \S/gu, once: true },
+  ],
+  vbulletin: [
+    { mark: /Originally Posted by\s+\S/gu },
+    { mark: /Reply With Quote/gu },
+    { mark: /\d{2}-\d{2}-\d{4},\s*\d{1,2}:\d{2}\s*[AP]M/gu, once: true },
+    {
+      mark: new RegExp(
+        `Join Date:\\s*(?:${MONTH}\\s+\\d{4}|\\d{4}-\\d{2}|\\d{2}-\\d{2}-\\d{4})`,
+        "gu",
+      ),
+      once: true,
+    },
+    { mark: /Posts:\s*\d[\d,.]*(?![\p{L}\p{N}])/gu, once: true },
+  ],
+  stackExchange: [
+    {
+      mark: /\bshare\s*[|｜]?\s*(?:cite\s*[|｜]?\s*)?improve this (?:answer|question)\b/giu,
+    },
+    { mark: new RegExp(`\\b(?:asked|answered|edited)\\s+${SE_WHEN}`, "gu") },
+    {
+      mark: new RegExp(`[.!?)]\\s+[–—]\\s+[^\\s–—]+(?:\\s+[^\\s–—]+){0,2}?\\s+${SE_WHEN}`, "gu"),
+    },
+    { mark: /Show \d+ more comments?/gu },
+    { mark: /\badd a comment\b/gu, once: true },
+  ],
+  metafilter: [
+    {
+      mark: new RegExp(
+        `posted by \\S+(?:\\s+\\S+){0,3}?\\s+at\\s+\\d{1,2}:\\d{2}\\s*[AP]M\\s+on\\s+${MONTH}\\s+\\d{1,2}`,
+        "gu",
+      ),
+    },
+    { mark: /\[\d+ favorites?\]/gu },
+  ],
+};
+
+/** True when `text` holds two or more marks of one forum's thread layout (FORUM_LAYOUTS). */
+function forumThread(text: string): boolean {
+  return Object.values(FORUM_LAYOUTS).some((marks) => {
+    let found = 0;
+    for (const { mark, once } of marks) {
+      const count = text.match(mark)?.length ?? 0;
+      found += once ? Math.min(count, 1) : count;
+    }
+    return found >= 2;
+  });
+}
+
 /** A token without the punctuation around it. */
 const bare = (token: string) => token.replace(/^[^\p{L}\p{N}@…]+|[^\p{L}\p{N}…]+$/gu, "");
 
@@ -316,11 +423,13 @@ function labelledAges(words: readonly string[]): number {
  *   more handles in a row or that make up a fifth of the words;
  * - "a comment thread": two comments' ages ("3w") each next to a thread button ("Reply",
  *   "Like", "Follow"), three "name: comment" lines whose names are user names, or a forum
- *   comment's byline (FORUM_BYLINE: "some_user on Feb 22, 2021 | parent | next [–]").
+ *   comment's byline (FORUM_BYLINE: "some_user on Feb 22, 2021 | parent | next [–]"), or two
+ *   marks of one forum's thread layout (FORUM_LAYOUTS: XenForo, vBulletin, Stack Exchange,
+ *   MetaFilter).
  * One handle in a sentence ("Thomas Bangalter (@…)"), "Following the success of …", "the '90s",
  * a tracklist ("A1: …"), "R.E.M.: …", a "|"-separated title, and a date followed by no thread
  * links, by a blog's "| prev | next" or by a link word that reads on ("Posted on Feb 22, 2021 |
- * next article") are kept. The web tier runs this on the text it stores, and every reader of
+ * next article"), and a writer quoted with "said:" are kept. The web tier runs this on the text it stores, and every reader of
  * stored evidence runs it again on the same text.
  */
 export function webTextIssue(text: string): string | null {
@@ -345,7 +454,7 @@ export function webTextIssue(text: string): string | null {
   let names = 0;
   for (const [, name] of text.matchAll(NAME_LINE)) if (isUserName(name)) names++;
   if (names >= 3) return "a comment thread";
-  if (FORUM_BYLINE.test(text)) return "a comment thread";
+  if (FORUM_BYLINE.test(text) || forumThread(text)) return "a comment thread";
   return null;
 }
 

@@ -358,6 +358,66 @@ describe("web research searches", () => {
     }
   });
 
+  it("excludes forums whose pages are threads, on any subdomain or translate proxy, and KVR's and Steve Hoffman's forums by path", async () => {
+    const pages = [
+      "https://forums.stevehoffman.tv/threads/daft-punk-discovery.123456/",
+      "https://forums-stevehoffman-tv.translate.goog/threads/daft-punk.123456/",
+      "https://www.stevehoffman.tv/forums/threads/daft-punk-discovery.123456/",
+      "https://www.metafilter.com/190000/Daft-Punk-split",
+      "https://music.metafilter.com/1234/One-More-Time-cover",
+      "https://ask.metafilter.com/350000/What-does-One-More-Time-sample",
+      "https://www-metafilter-com.translate.goog/190000/Daft-Punk-split",
+      "https://music.stackexchange.com/questions/12345/what-does-one-more-time-sample",
+      "https://music-stackexchange-com.translate.goog/questions/12345/",
+      "https://translate.google.com/translate?u=https://music.stackexchange.com/questions/12345",
+      "https://www.ilxor.com/ILX/ThreadSelectedControllerServlet?boardid=41&threadid=12345",
+      "https://www.elektronauts.com/t/daft-punk-vocoder/12345",
+      "https://www.modwiggler.com/forum/viewtopic.php?t=12345",
+      "https://www.muffwiggler.com/forum/viewtopic.php?t=12345",
+      "https://www.kvraudio.com/forum/viewtopic.php?t=12345",
+      "https://www-kvraudio-com.translate.goog/forum/viewtopic.php?t=12345",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(answer([...pages.map((url) => ({ ...WHOSAMPLED, url })), WHOSAMPLED]))
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    const excluded: string[] = JSON.parse(net.calls[0].body ?? "{}").exclude_domains;
+    expect(excluded).toEqual(
+      expect.arrayContaining([
+        "forums.stevehoffman.tv",
+        "metafilter.com",
+        "stackexchange.com",
+        "ilxor.com",
+        "elektronauts.com",
+        "modwiggler.com",
+        "muffwiggler.com",
+        "forums-stevehoffman-tv.translate.goog",
+        "metafilter-com.translate.goog",
+        "stackexchange-com.translate.goog",
+      ]),
+    );
+    // KVR's product pages and the rest of stevehoffman.tv are not forums: left out by path only.
+    for (const name of ["kvraudio.com", "stevehoffman.tv"]) expect(excluded).not.toContain(name);
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    for (const url of [
+      "https://www.kvraudio.com/product/vocoder-by-some-company",
+      "https://www.kvraudio.com/news/daft-punk-vocoder-12345",
+      "https://www.stevehoffman.tv/",
+      "https://www.notmetafilter.com/daft-punk",
+      "https://www.mystackexchange.com/music",
+    ]) {
+      expect(isSocialPage(url), url).toBe(false);
+    }
+  });
+
   it("masks every @handle in a result's text and title", async () => {
     const page = {
       ...WHOSAMPLED,

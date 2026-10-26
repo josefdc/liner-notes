@@ -342,6 +342,8 @@ describe("the research key and what a hit trusts", () => {
     ["of the format before handles were masked", (row) => withEvidence(row, { format: 3 })],
     // Written before forum threads were left out: read again, so its research text read none.
     ["of the format before forum threads were left out", (row) => withEvidence(row, { format: 4 })],
+    // Written before other forums' thread layouts were left out: read again, for the same reason.
+    ["of the format before forum layouts were left out", (row) => withEvidence(row, { format: 5 })],
     [
       "holding a timeout as lasting",
       (row) =>

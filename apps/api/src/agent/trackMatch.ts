@@ -318,7 +318,9 @@ function nameForms(artist: string): string[][] {
   const name = words(artist);
   if (name.length === 0) return [];
   const forms = [name];
-  if (name[0] === "the" && name.length > 1) forms.push(name.slice(1));
+  // "The Beatles" may be "Beatles", but "The The" is never "The".
+  const rest = name.slice(1);
+  if (name[0] === "the" && rest.length > 0 && rest.join(" ") !== "the") forms.push(rest);
   if (name.length > 1) forms.push([name.join("")]);
   return forms;
 }

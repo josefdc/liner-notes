@@ -17,7 +17,7 @@
 import type { Evidence } from "@liner-notes/contract";
 import { z } from "zod";
 import type { PrimarySources } from "../../sources/identity.js";
-import { evidenceScope } from "../../sources/records.js";
+import { evidenceScope, quoted } from "../../sources/records.js";
 
 const RelationKind = z.enum([
   "samples",
@@ -39,6 +39,11 @@ export const RecordingRelation = z.object({
   scope: z.enum(["track", "work"]),
   /** Read from this recording's side: "samples" means this recording samples the other. */
   kind: RelationKind,
+  /**
+   * MusicBrainz's attributes of the relationship, as filed: "partial" (part of the other work),
+   * "medley", "live", "instrumental" and so on. A partial or medley cover is not a whole cover.
+   */
+  attributes: z.array(z.string()),
   other: z.object({
     entity: z.enum(["recording", "work"]),
     mbid: z.string().min(1),
@@ -55,7 +60,10 @@ export const CreditRelation = z.object({
   source: z.literal("discogs"),
   evidenceId: z.string().min(1),
   scope: z.enum(["track", "release"]),
+  /** The name as Discogs credits it, with its disambiguation number ("Nirvana (2)"). */
   name: z.string().min(1),
+  /** Discogs' id of the credited artist: two artists of one name are two credits. */
+  artistId: z.number().int().nullable(),
   roles: z.array(z.string()),
 });
 export type CreditRelation = z.infer<typeof CreditRelation>;
@@ -79,14 +87,21 @@ export type PrimaryRelation = z.infer<typeof PrimaryRelation>;
 
 /**
  * The relations the primary sources' records state, in source order, each with the item that
- * states it (one the source module built from the same record). A record without such an item
- * gives none.
+ * states it (one the source module built from the same record). A record without such an item,
+ * or whose item does not state it in full (`statedBy`: an excerpt cut at the contract's length),
+ * gives none: what is written is what a cache hit restores.
  */
 export function primaryRelations(sources: PrimarySources): PrimaryRelation[] {
   const relations: PrimaryRelation[] = [];
+  const all = new Map(sources.evidence.map((item) => [item.id, item]));
+  const push = (relation: PrimaryRelation) => {
+    const item = all.get(relation.evidenceId);
+    if (item && statedBy(relation, item)) relations.push(relation);
+  };
   const { musicbrainz, discogs } = sources;
   if (musicbrainz.status === "found") {
     const items = new Map(musicbrainz.evidence.map((item) => [item.id, item]));
+    for (const item of musicbrainz.evidence) all.set(item.id, item);
     for (const record of musicbrainz.records) {
       const item = items.get(record.evidenceId);
       const scope = item ? evidenceScope(item) : null;
@@ -107,19 +122,20 @@ export function primaryRelations(sources: PrimarySources): PrimaryRelation[] {
             }
           : null;
       if (!other?.title) continue;
-      relations.push({
+      push({
         type: "relation",
         source: "musicbrainz",
         evidenceId: item.id,
         scope,
         kind: record.kind,
+        attributes: [...record.attributes],
         other,
       });
     }
     const release = sources.identity?.coverRelease;
     const releaseItem = release ? items.get(`musicbrainz:release/${release.mbid}`) : undefined;
     if (release && releaseItem) {
-      relations.push({
+      push({
         type: "release",
         source: "musicbrainz",
         evidenceId: releaseItem.id,
@@ -129,15 +145,16 @@ export function primaryRelations(sources: PrimarySources): PrimaryRelation[] {
     }
   }
   if (discogs.status === "found") {
-    const ids = new Set(discogs.evidence.map((item) => item.id));
+    for (const item of discogs.evidence) all.set(item.id, item);
     for (const credit of discogs.records) {
-      if (!ids.has(credit.evidenceId) || !credit.name.trim()) continue;
-      relations.push({
+      if (!credit.name.trim()) continue;
+      push({
         type: "credit",
         source: "discogs",
         evidenceId: credit.evidenceId,
         scope: credit.scope,
         name: credit.name,
+        artistId: credit.artistId,
         roles: [...credit.roles],
       });
     }
@@ -145,24 +162,41 @@ export function primaryRelations(sources: PrimarySources): PrimaryRelation[] {
   return relations;
 }
 
-/** The recordRef of the item that states a relation, as its source module writes it. */
+/**
+ * True when `item` states `relation` as its source module writes it: of its source and scope,
+ * a recordRef naming the same kind of relation to the same record (or the same release, or a
+ * Discogs credit), and an excerpt naming the same other record (title and artist credit), the
+ * same credited name and roles, or the same release title.
+ */
 function statedBy(relation: PrimaryRelation, item: Evidence): boolean {
   if (item.source !== relation.source || evidenceScope(item) !== relation.scope) return false;
   const ref = item.recordRef ?? "";
+  const { excerpt } = item;
   switch (relation.type) {
-    case "relation":
-      return ref.endsWith(`/${relation.kind}/${relation.other.entity}/${relation.other.mbid}`);
+    case "relation": {
+      const { entity, mbid, title, artist } = relation.other;
+      return (
+        ref.endsWith(`/${relation.kind}/${entity}/${mbid}`) &&
+        excerpt.endsWith(` ${quoted(title, artist)}.`)
+      );
+    }
     case "release":
-      return ref === `release/${relation.release.mbid}`;
+      return (
+        ref === `release/${relation.release.mbid}` &&
+        excerpt.includes(` ${quoted(relation.release.title)}`)
+      );
     case "credit":
-      return /^(?:track\/release\/\d+|release\/\d+)\/credit\/\d+$/.test(ref);
+      return (
+        /^(?:track\/release\/\d+|release\/\d+)\/credit\/\d+$/.test(ref) &&
+        excerpt.includes(` credits ${relation.name} as ${relation.roles.join(", ")} on `)
+      );
   }
 }
 
 /**
  * Why cached relations are not ones this module would have read with `items`, or null: each
- * names an item among them, of its source and scope, whose recordRef states the same kind of
- * relation to the same other end, and no two name one item.
+ * names an item among them that states it (`statedBy`: the same kind of relation to the same
+ * record, with the same names), and no two name one item.
  */
 export function relationsIssue(
   relations: readonly PrimaryRelation[],

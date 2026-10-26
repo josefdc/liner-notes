@@ -23,6 +23,7 @@ import {
   never,
   stubFetch,
 } from "../../sources/testing/fetchStub.js";
+import { discogsTrackCredits } from "../../sources/discogs.js";
 import { shsRelationships } from "../../sources/shs.js";
 import { ICE_TRACK, runRoute } from "../../sources/testing/iceIceBaby.js";
 import {
@@ -165,6 +166,9 @@ describe("research is cached with the run's evidence only when the run is comple
     expect(hit.out.isrcRecording).toEqual(fresh.out.isrcRecording);
     expect(hit.out.isrcRecording?.mbid).toBe("875c24bc-fe9e-4ac6-80d3-beaacb70ee43");
     expect(hit.out.researchData?.samples).toEqual(fresh.out.researchData?.samples);
+    // And the relations the records state, for the result's code-built claims and links.
+    expect(fresh.out.relations?.length).toBeGreaterThan(0);
+    expect(hit.out.relations).toEqual(fresh.out.relations);
     // Discogs and Genius were not configured then, and still are not: reported again.
     expect(hit.out.sourceErrors).toEqual(fresh.out.sourceErrors);
     expect(hit.out.sourceErrors).toEqual(
@@ -392,6 +396,27 @@ function withEvidence(row: CachedResearch, patch: Partial<CachedEvidence>): Cach
   if (!evidence) throw new Error("no cached evidence");
   return { ...row, evidence: { ...evidence, ...patch } };
 }
+
+describe("research cached before its relations were kept (format 5)", () => {
+  it("is read as a row of an older format: a miss, without an unexpected-shape warning", async () => {
+    await historian();
+    const row = cache.getResearch(key()) as CachedResearch;
+    const evidence = row.evidence;
+    if (!evidence) throw new Error("no cached evidence");
+    const { relations: _relations, ...older } = evidence;
+    cache.putResearch(key(), { ...row, evidence: { ...older, format: 5 } as CachedEvidence });
+
+    const logs = captureLogsForTests();
+    let again: Awaited<ReturnType<typeof historian>>;
+    try {
+      again = await historian(LATER);
+    } finally {
+      logs.restore();
+    }
+    expect(again.llm.calls.length).toBeGreaterThan(0);
+    expect(logs.messages("warn").filter((m) => m.includes("unexpected shape"))).toEqual([]);
+  });
+});
 
 describe("what is not cached, or cached for a later run to complete", () => {
   it("does not cache research from a run that could not read the track's details", async () => {
@@ -658,6 +683,52 @@ describe("a row left for a later run", () => {
 
 describe("a source our pacing did not ask", () => {
   afterEach(() => setUnpacedForTests(true));
+
+  it("keeps the relations of the cached records a refresh hit does not ask again", async () => {
+    vi.stubEnv("DISCOGS_TOKEN", "discogs-test-token-0123456789");
+    const DISCOGS = "https://api.discogs.com/releases/599648";
+    const release = {
+      id: 599648,
+      title: "To the Extreme",
+      year: 1990,
+      artists: [{ id: 1, name: "Vanilla Ice", anv: "", join: "" }],
+      extraartists: [{ id: 4, name: "Test Designer", anv: "", role: "Design", tracks: "" }],
+      tracklist: [
+        {
+          position: "1",
+          type_: "track",
+          title: "Ice Ice Baby",
+          duration: "4:31",
+          extraartists: [{ id: 3, name: "Test Producer", anv: "", role: "Producer", tracks: "" }],
+        },
+      ],
+    };
+    const withDiscogs = (call: FetchCall) => (call.url === DISCOGS ? json(release) : route(call));
+    net = stubFetch(withDiscogs);
+    const first = await historian();
+    const credits = (first.out.relations ?? []).filter((r) => r.type === "credit");
+    expect(credits).toHaveLength(2);
+    // Left for a later run: a hit reads the primary sources again.
+    const row = cache.getResearch(key()) as CachedResearch;
+    cache.putResearch(
+      key(),
+      withEvidence(row, { incomplete: [{ source: "secondhandsongs", part: "not_asked" }] }),
+    );
+
+    // Discogs held by our own pacing: the re-read does not ask it, and keeps its records.
+    setUnpacedForTests(false);
+    stubFetch((call) =>
+      call.url === DISCOGS
+        ? new Response("slow down", { status: 429, headers: { "retry-after": "120" } })
+        : undefined,
+    );
+    await discogsTrackCredits(ICE_TRACK, [599648]);
+    net = stubFetch(withDiscogs);
+    const hit = await historian(LATER);
+    expect(hit.requests.some((c) => c.url === DISCOGS)).toBe(false);
+    expect(ids(hit.out.evidence)).toEqual(expect.arrayContaining(credits.map((r) => r.evidenceId)));
+    expect(hit.out.relations).toEqual(expect.arrayContaining(credits));
+  });
 
   it("is reported as not asked by a fresh run, and the research is cached incomplete", async () => {
     await holdSecondHandSongs();

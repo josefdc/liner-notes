@@ -197,7 +197,9 @@ const CachedEvidenceSchema = z.object({
   items: z.array(Evidence),
   omitted: z.number().int().nonnegative(),
   samples: stringList,
-  relations: z.array(PrimaryRelation),
+  // A row of an older format has none: it parses, and its format makes it a miss
+  // (agent/research/runEvidence.ts), not a row of an unexpected shape.
+  relations: z.array(PrimaryRelation).default([]),
   recording: RecordingSchema.nullable(),
   trackIsOriginal: z.boolean(),
   errors: z.array(SourceError),

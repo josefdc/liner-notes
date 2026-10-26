@@ -8,6 +8,7 @@
 import { InMemoryStore, MemorySaver } from "@langchain/langgraph";
 import {
   analysisIssues,
+  claimIsRejected,
   linkDisplayKind,
   resultContext,
   TrackAnalysis,
@@ -108,8 +109,11 @@ const UNDER_PRESSURE = "32c7e292-14f1-4080-bddf-ef852e0a4c59";
 const SAMPLES_ID = `musicbrainz:track/recording/${ICE}/samples/recording/${UNDER_PRESSURE}`;
 const MODEL_CLAIM = "Ice Ice Baby is built on the bass line of Under Pressure.";
 
-/** The composition: a claim and the sample, as a link of the model's own, on its own node. */
-function compose() {
+/**
+ * The composition: a claim and the sample, as a link of the model's own, on its own node for
+ * Under Pressure. `role` "derived" states it the other way round: Under Pressure samples the track.
+ */
+function compose(role: "source" | "derived" = "source") {
   return {
     claims: [
       {
@@ -132,10 +136,10 @@ function compose() {
       },
       {
         id: "up",
-        role: "source",
+        role,
         label: "Under Pressure - Queen & David Bowie (1981)",
         trackTitle: "Under Pressure",
-        trackArtist: "Queen",
+        trackArtist: "Queen & David Bowie",
         year: "1981",
       },
     ],
@@ -159,12 +163,13 @@ function model(composer: () => unknown = compose) {
     if (call.callSite === "verifier") {
       const sent = sentStatements(call);
       judged.push(...sent);
+      // A statement that Under Pressure samples the track is contradicted by its record.
       return {
-        verdicts: sent.map(({ claimId }) => ({
-          claimId,
-          verdict: "supported",
-          reason: "The record names the sample.",
-        })),
+        verdicts: sent.map(({ claimId, text }) =>
+          text.startsWith('"Under Pressure')
+            ? { claimId, verdict: "contradicted", reason: "The record says the reverse." }
+            : { claimId, verdict: "supported", reason: "The record names the sample." },
+        ),
       };
     }
     return { nextAction: "done", query: null, reasoning: "enough for this track" };
@@ -257,6 +262,27 @@ describe("code-built claims and links in the analysis graph", () => {
     for (const each of code) expect(linkDisplayKind(each, resultContext(result))).toBe("sourced");
     expect(analysisIssues(result)).toEqual([]);
     expect(stored).toBe(1);
+  });
+
+  it("judges a model link stated the other way round, and rejects it", async () => {
+    const llm = model(() => compose("derived"));
+    const { result } = await analyse(llm, "code-claims-reversed");
+
+    const reversed = result.genealogy.links.find((l) => l.origin === "model");
+    expect(reversed).toMatchObject({
+      source: "current",
+      target: `mb-${UNDER_PRESSURE}`,
+      type: "sample",
+      kind: "inferred",
+    });
+    const claim = result.claims?.find((c) => c.id === reversed?.claimId);
+    expect(claim).toMatchObject({ origin: "model", verdict: "contradicted" });
+    expect(claimIsRejected(claim!)).toBe(true);
+    expect(judged.map((statement) => statement.text)).toContain(claim?.text);
+    // The code link stays sourced beside it.
+    const code = result.genealogy.links.find((l) => l.source === `mb-${UNDER_PRESSURE}`);
+    expect(linkDisplayKind(code!, resultContext(result))).toBe("sourced");
+    expect(analysisIssues(result)).toEqual([]);
   });
 
   it("keeps the code-built claims and links in the fallback, with no model text", async () => {

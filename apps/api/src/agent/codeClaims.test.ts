@@ -32,6 +32,15 @@ vi.mock("@langchain/langgraph", async (importOriginal) => ({
   getStore: () => undefined,
 }));
 
+import loveStoryTvDetails from "../sources/fixtures/musicbrainz-recording-details-love-story-taylors-version.json" with {
+  type: "json",
+};
+import loveStoryTvIsrc from "../sources/fixtures/musicbrainz-isrc-love-story-taylors-version.json" with {
+  type: "json",
+};
+import loveStoryWork from "../sources/fixtures/musicbrainz-work-love-story.json" with {
+  type: "json",
+};
 import { LlmError } from "../llm/errors.js";
 import { collectPrimarySources, type IdentifiedRecording } from "../sources/identity.js";
 import { MusicBrainzRateLimiter } from "../sources/musicbrainz.js";
@@ -39,9 +48,9 @@ import { json, stubFetch } from "../sources/testing/fetchStub.js";
 import { ICE_TRACK, primaryRoute } from "../sources/testing/iceIceBaby.js";
 import {
   buildCodeClaims,
-  CODE_LINKS_PER_TYPE,
   type CodeBuilt,
   curatedRelations,
+  sameRecord,
   withCodeClaims,
 } from "./codeClaims.js";
 import { createComposerNode } from "./nodes/composerNode.js";
@@ -53,8 +62,9 @@ import {
   restoredItems,
   runEvidence,
 } from "./research/runEvidence.js";
-import type { GenealogyLink } from "./schema.js";
+import type { GenealogyLink, GenealogyNode } from "./schema.js";
 import type { ComposedDraft, SonicAgentStateType } from "./state.js";
+import { audioV2 } from "./testing/measuredAudio.js";
 import { stubLlm, testRuntime } from "./testing/stubLlm.js";
 import { applyVerdicts, checkClaims, createVerifierNode } from "./verifier/index.js";
 import { draftOf, modelClaim, stateFor } from "./verifier/testing.js";
@@ -150,6 +160,49 @@ const counter = () => {
 const claimCiting = (claims: readonly Claim[], id: string) =>
   claims.find((claim) => claim.evidenceIds.includes(id));
 
+/** A MusicBrainz relationship of the recording "Own" by Artist to record `n`. */
+function relation(
+  n: number,
+  kind: Extract<PrimaryRelation, { type: "relation" }>["kind"],
+  scope: "track" | "work",
+  attributes: string[] = [],
+): PrimaryRelation {
+  return {
+    type: "relation",
+    source: "musicbrainz",
+    evidenceId: `musicbrainz:${scope}/recording/own/${kind}/recording/rec-${n}`,
+    scope,
+    kind,
+    attributes,
+    other: { entity: "recording", mbid: `rec-${n}`, title: `Song ${n}`, artist: `Band ${n}` },
+  };
+}
+
+const PHRASE: Record<string, string> = {
+  samples: "samples",
+  "sampled-by": "is sampled in",
+  "remix-of": "is a remix of",
+  "remixed-by": "is remixed in",
+  "cover-of": "is a cover of",
+  "covered-by": "is covered by",
+};
+
+/** The item that states a relation of `relation()`, as the MusicBrainz module writes it. */
+function itemOf(relation: PrimaryRelation): Evidence {
+  if (relation.type !== "relation") throw new Error("not a relation");
+  const { title, artist } = relation.other;
+  return {
+    id: relation.evidenceId,
+    source: "musicbrainz",
+    sourceTier: "primary-record",
+    url: "https://musicbrainz.org/recording/own",
+    title: "Own — MusicBrainz relationships",
+    retrievedAt: AT,
+    excerpt: `MusicBrainz: "Own" by Artist ${PHRASE[relation.kind]} "${title}" by ${artist}.`,
+    recordRef: relation.evidenceId.replace(/^musicbrainz:/, ""),
+  };
+}
+
 /** What the contract's readers check a result's links and claims against. */
 function contextOf(claims: readonly Claim[], links: GenealogyLink[], evidence: Evidence[]) {
   return {
@@ -210,8 +263,10 @@ describe("code-built claims and links from the primary records", () => {
     expect(sharedClaimIds(code.links).size).toBe(0);
   });
 
-  it("states a cover of the song as a claim about the work, the cover the later record", async () => {
-    const { evidence, relations } = await readIce();
+  it("states a cover of the song as a claim about the work, and draws no link from this recording", async () => {
+    // The recording is not shown to be the song's original: its covers are the work's.
+    const { sources, evidence, relations } = await readIce();
+    expect(sources.identity?.original.original).toBe(false);
     const code = buildCodeClaims(relations, evidence, counter());
     const claim = claimCiting(code.claims, COVER_ID);
     expect(claim).toMatchObject({
@@ -221,11 +276,60 @@ describe("code-built claims and links from the primary records", () => {
       origin: "code",
       kind: "sourced",
     });
-    expect(code.links.find((l) => l.claimId === claim?.id)).toMatchObject({
-      source: "current",
-      target: `mb-${FAITH_NO_MORE}`,
-      type: "cover",
+    // Nothing says this recording is the one covered, or the earlier one.
+    expect(claim?.text).not.toContain("Vanilla Ice");
+    expect(code.links.filter((l) => l.type === "cover")).toEqual([]);
+    expect(code.nodes.some((node) => node.id === `mb-${FAITH_NO_MORE}`)).toBe(false);
+  });
+
+  it("draws no link from a re-recording to the covers of its song", async () => {
+    // "Love Story (Taylor's Version)" (2021), ruled out as the original by its title.
+    const MB = "https://musicbrainz.org/ws/2";
+    stubFetch((call) => {
+      if (call.url.startsWith(`${MB}/isrc/USUG12100342?`)) return json(loveStoryTvIsrc);
+      if (call.url.startsWith(`${MB}/recording/93484aa2-0ce6-4356-9ff4-9db61e07acd5?`)) {
+        return json(loveStoryTvDetails);
+      }
+      if (call.url.startsWith(`${MB}/release?`)) return json({ "release-count": 0, releases: [] });
+      if (call.url.startsWith(`${MB}/work/c8975007-ba64-3e81-9a3c-69a3ba2fab95?`)) {
+        return json(loveStoryWork);
+      }
+      return undefined;
     });
+    const sources = await collectPrimarySources(
+      {
+        isrc: "USUG12100342",
+        title: "Love Story (Taylor’s Version)",
+        artists: ["Taylor Swift"],
+        durationMs: 235_766,
+      },
+      { now },
+    );
+    expect(sources.identity?.original.original).toBe(false);
+    const code = buildCodeClaims(
+      primaryRelations(sources),
+      primaryRecordEvidence(sources),
+      counter(),
+    );
+    const covers = code.claims.filter((claim) => claim.about === "cover");
+    expect(covers.length).toBeGreaterThan(0);
+    for (const claim of covers) {
+      expect(claim.scope).toBe("work");
+      expect(claim.text).toMatch(
+        /^The work "Love Story" is (?:partly )?covered by |covers part of the work "Love Story"/,
+      );
+    }
+    expect(code.links.filter((l) => l.type === "cover")).toEqual([]);
+  });
+
+  it("says a medley takes part of the song, and draws no link for it", async () => {
+    const { evidence, relations } = await readIce();
+    const code = buildCodeClaims(relations, evidence, counter());
+    const id = `musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/d03e2f99-0248-4cc2-ace4-3e0abbcbf386`;
+    expect(claimCiting(code.claims, id)?.text).toBe(
+      '"Anniversary Medley Part 1" by FORK covers part of the work "Ice Ice Baby" in a medley.',
+    );
+    expect(code.links.some((l) => l.evidenceIds?.includes(id))).toBe(false);
   });
 
   it("scopes a Discogs credit by what it names: the track, or the whole release", async () => {
@@ -280,29 +384,127 @@ describe("code-built claims and links from the primary records", () => {
     expect(code.nodes.some((node) => node.id === `mb-${UNDER_PRESSURE}`)).toBe(false);
   });
 
-  it(`draws at most ${CODE_LINKS_PER_TYPE} links of a type, the recording's own relations first`, () => {
-    const cover = (n: number, scope: "track" | "work"): PrimaryRelation => ({
-      type: "relation",
-      source: "musicbrainz",
-      evidenceId: `musicbrainz:${scope}/x/covered-by/recording/${n}`,
-      scope,
-      kind: "covered-by",
-      other: { entity: "recording", mbid: `rec-${n}`, title: "Ice Ice Baby", artist: `Band ${n}` },
-    });
+  it("keeps at most 6 relations of each kind, the recording's own and the full ones first", () => {
     const relations = [
-      ...Array.from({ length: 12 }, (_, i) => cover(i, "work")),
-      cover(20, "track"),
-      // The same record again under another kind of the same type: one link.
-      { ...cover(20, "track"), evidenceId: "musicbrainz:dup", kind: "cover-of" as const },
+      ...Array.from({ length: 12 }, (_, i) => relation(i, "covered-by", "work")),
+      relation(20, "covered-by", "track", ["cover", "partial"]),
+      relation(21, "covered-by", "track"),
+      // The same record again under the same kind: once.
+      { ...relation(21, "covered-by", "track"), evidenceId: "musicbrainz:dup" },
     ];
-    const kept = curatedRelations(relations);
-    expect(kept.map((r) => r.other.mbid)).toEqual([
+    expect(curatedRelations(relations).map((r) => r.other.mbid)).toEqual([
+      "rec-21",
       "rec-20",
       "rec-0",
       "rec-1",
       "rec-2",
       "rec-3",
-      "rec-4",
+    ]);
+  });
+
+  it("never lets what draws on the track push out what the track draws on", () => {
+    const sampledBy = Array.from({ length: 7 }, (_, i) => relation(i, "sampled-by", "track"));
+    const remixedBy = Array.from({ length: 6 }, (_, i) => relation(10 + i, "remixed-by", "track"));
+    const kept = curatedRelations([
+      ...sampledBy,
+      relation(99, "samples", "track"),
+      ...remixedBy,
+      relation(98, "remix-of", "track"),
+    ]);
+    expect(kept.filter((r) => r.kind === "samples").map((r) => r.other.mbid)).toEqual(["rec-99"]);
+    expect(kept.filter((r) => r.kind === "remix-of").map((r) => r.other.mbid)).toEqual(["rec-98"]);
+    expect(kept.filter((r) => r.kind === "sampled-by")).toHaveLength(6);
+    expect(kept.filter((r) => r.kind === "remixed-by")).toHaveLength(6);
+  });
+
+  it("spends no place of the cap on a relation whose item is not in the evidence", () => {
+    const relations = Array.from({ length: 7 }, (_, i) => relation(i, "samples", "track"));
+    const evidence = relations.slice(1).map((r) => itemOf(r));
+    const code = buildCodeClaims(relations, evidence, counter());
+    expect(code.links.map((l) => l.source)).toEqual(
+      relations.slice(1).map((r) => `mb-${r.type === "relation" ? r.other.mbid : ""}`),
+    );
+  });
+
+  it("draws no link for a partial cover, and says it is partial", () => {
+    const partial = relation(1, "covered-by", "track", ["cover", "partial"]);
+    const code = buildCodeClaims([partial], [itemOf(partial)], counter());
+    expect(code.links).toEqual([]);
+    expect(code.claims.map((claim) => claim.text)).toEqual([
+      '"Song 1" by Band 1 partly covers "Own" by Artist.',
+    ]);
+  });
+});
+
+describe("credits", () => {
+  const credit = (
+    n: number,
+    name: string,
+    artistId: number | null,
+    scope: "track" | "release" = "track",
+  ): PrimaryRelation => ({
+    type: "credit",
+    source: "discogs",
+    evidenceId: scope === "track" ? TRACK_CREDIT(n) : RELEASE_CREDIT(n),
+    scope,
+    name,
+    artistId,
+    roles: ["Producer"],
+  });
+  const creditItem = (relation: PrimaryRelation): Evidence => {
+    if (relation.type !== "credit") throw new Error("not a credit");
+    const where =
+      relation.scope === "track"
+        ? 'track 1 "Ice Ice Baby"'
+        : 'the whole release (which includes "Ice Ice Baby")';
+    return {
+      id: relation.evidenceId,
+      source: "discogs",
+      sourceTier: "primary-record",
+      url: "https://www.discogs.com/release/599648",
+      title: "To the Extreme — Discogs release 599648",
+      retrievedAt: AT,
+      excerpt: `Discogs release 599648 ("To the Extreme", 1990) credits ${relation.name} as ${relation.roles.join(", ")} on ${where}.`,
+      recordRef: relation.evidenceId.replace(/^discogs:/, ""),
+    };
+  };
+
+  it("names a credited artist without Discogs' disambiguation, and keeps two artists of one name", () => {
+    const relations = [credit(0, "Nirvana (2)", 100), credit(1, "Nirvana", 200)];
+    const code = buildCodeClaims(relations, relations.map(creditItem), counter());
+    expect(code.claims.map((claim) => claim.text)).toEqual([
+      'Discogs release 599648 ("To the Extreme", 1990) credits Nirvana as Producer on track 1 "Ice Ice Baby".',
+      'Discogs release 599648 ("To the Extreme", 1990) credits Nirvana as Producer on track 1 "Ice Ice Baby".',
+    ]);
+  });
+
+  it("keeps at most 12 credits, the track's before the whole release's", () => {
+    const relations = [
+      ...Array.from({ length: 10 }, (_, i) => credit(i, `Release Person ${i}`, i, "release")),
+      ...Array.from({ length: 5 }, (_, i) => credit(10 + i, `Track Person ${i}`, 10 + i)),
+    ];
+    const code = buildCodeClaims(relations, relations.map(creditItem), counter());
+    expect(code.claims).toHaveLength(12);
+    expect(code.claims.slice(0, 5).every((claim) => claim.scope === "recording")).toBe(true);
+    expect(code.claims.slice(5).every((claim) => claim.scope === "release")).toBe(true);
+  });
+
+  it("folds the model's claim of a credit into the code claim citing the same Discogs item", () => {
+    const relations = [credit(0, "Test Producer", 3)];
+    const code = buildCodeClaims(relations, relations.map(creditItem), counter());
+    const draft = draftOf([
+      modelClaim("m-credit", { about: "credit", evidenceIds: [TRACK_CREDIT(0)] }),
+      modelClaim("m-other", { about: "credit", evidenceIds: [TRACK_CREDIT(7)] }),
+      {
+        ...modelClaim("m-card", { about: "credit", evidenceIds: [TRACK_CREDIT(0)] }),
+        factoid: { title: "Credits", type: "credits", entities: [] },
+      },
+    ]);
+    const merged = withCodeClaims(draft, code);
+    expect(merged.claims.map((claim) => claim.id)).toEqual([
+      "m-other",
+      "m-card",
+      code.claims[0].id,
     ]);
   });
 });
@@ -341,6 +543,91 @@ describe("the research cache keeps the relations with their items", () => {
     sample.other.mbid = FAITH_NO_MORE;
     expect(restoredItems(tampered)).toBeNull();
   });
+
+  /** A relation of the cached row changed by `change`, or one more relation added. */
+  const tampers: Array<[string, (relations: PrimaryRelation[]) => void]> = [
+    [
+      "names another record than its item",
+      (relations) => {
+        const sample = relations.find((r) => r.evidenceId === SAMPLES_ID);
+        if (sample?.type === "relation") sample.other.title = "Some Other Song";
+      },
+    ],
+    [
+      "names another artist than its item",
+      (relations) => {
+        const sample = relations.find((r) => r.evidenceId === SAMPLES_ID);
+        if (sample?.type === "relation") sample.other.artist = "Someone Else";
+      },
+    ],
+    [
+      "credits another name than its item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === TRACK_CREDIT(0));
+        if (found?.type === "credit") found.name = "Someone Else";
+      },
+    ],
+    [
+      "credits other roles than its item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === TRACK_CREDIT(0));
+        if (found?.type === "credit") found.roles = ["Mixed By"];
+      },
+    ],
+    [
+      "names another release than its item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === RELEASE_ID);
+        if (found?.type === "release") found.release.title = "Another Album";
+      },
+    ],
+    [
+      "names another release id than its item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === RELEASE_ID);
+        if (found?.type === "release") found.release.mbid = "00000000-0000-4000-8000-000000000000";
+      },
+    ],
+    [
+      "gives a credit another scope than its item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === TRACK_CREDIT(0));
+        if (found) found.scope = "release";
+      },
+    ],
+    [
+      "says a credit is stated by a MusicBrainz item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === TRACK_CREDIT(0));
+        if (found) found.evidenceId = RELEASE_ID;
+      },
+    ],
+    [
+      "says two relations are stated by one item",
+      (relations) => {
+        const found = relations.find((r) => r.evidenceId === TRACK_CREDIT(0));
+        if (found) relations.push(structuredClone(found));
+      },
+    ],
+  ];
+  for (const [what, tamper] of tampers) {
+    it(`does not restore a cached relation that ${what}`, async () => {
+      const { sources, recording } = await readIce();
+      const pack = await runEvidence(
+        Promise.resolve({ status: "read", sources }),
+        [],
+        { writer: () => {} } as never,
+        testRuntime(
+          stubLlm(() => ({})),
+          AT,
+        ),
+      );
+      const row = JSON.parse(JSON.stringify(cachedEvidenceOf(pack, ICE_TRACK.isrc, recording, AT)));
+      expect(restoredItems(row)).not.toBeNull();
+      tamper(row.relations);
+      expect(restoredItems(row)).toBeNull();
+    });
+  }
 });
 
 describe("a model link that duplicates a code link", () => {
@@ -392,21 +679,29 @@ describe("a model link that duplicates a code link", () => {
       evidenceIds: [],
     }) as GenealogyLink;
 
-  it("folds into the code link, which keeps its own claim", () => {
-    const draft = draftOf(
-      [modelClaim("m-sample"), modelClaim("m-influence"), modelClaim("m-other")],
-      [
-        // The model's sample, written the other way round, on its own node for the record.
-        modelLink("current", "up", "sample", "m-sample"),
-        modelLink("up", "current", "influence", "m-influence"),
-        modelLink(`mb-${UNDER_PRESSURE}`, "current", "influence", "m-other"),
-      ],
-      { nodeYears: { up: "1981", [`mb-${UNDER_PRESSURE}`]: "1990" } },
-    );
+  /** The model's node for Under Pressure, named with the record's full artist credit. */
+  const withUp = (
+    draft: ReturnType<typeof draftOf>,
+    label = "Under Pressure - Queen & David Bowie (1981)",
+  ) => {
     draft.genealogy.nodes = draft.genealogy.nodes.map((node) =>
-      node.id === "up"
-        ? { ...node, label: "Under Pressure - Queen (1981)", trackTitle: "Under Pressure" }
-        : node,
+      node.id === "up" ? { ...node, label, trackTitle: "Under Pressure" } : node,
+    );
+    return draft;
+  };
+
+  it("folds into the code link, which keeps its own claim", () => {
+    const draft = withUp(
+      draftOf(
+        [modelClaim("m-sample"), modelClaim("m-influence"), modelClaim("m-other")],
+        [
+          // The model's sample, on its own node for the record.
+          modelLink("up", "current", "sample", "m-sample"),
+          modelLink("up", "current", "influence", "m-influence"),
+          modelLink(`mb-${UNDER_PRESSURE}`, "current", "influence", "m-other"),
+        ],
+        { nodeYears: { up: "1981", [`mb-${UNDER_PRESSURE}`]: "1990" } },
+      ),
     );
 
     const merged = withCodeClaims(draft, code);
@@ -428,6 +723,89 @@ describe("a model link that duplicates a code link", () => {
     expect(merged.claims.map((claim) => claim.id)).toEqual(["m-influence", "m-other", "code-1"]);
     // The model's year is never put on a node made from a record.
     expect(merged.nodeYears).toEqual({ [`mb-${UNDER_PRESSURE}-related`]: "1990" });
+  });
+
+  it("does not fold a model link that states the relation the other way round", () => {
+    // "Under Pressure samples Ice Ice Baby": the verifier judges it, and may reject it.
+    const draft = withUp(
+      draftOf([modelClaim("m-reversed")], [modelLink("current", "up", "sample", "m-reversed")]),
+    );
+    const merged = withCodeClaims(draft, code);
+    expect(merged.genealogy.links.map((l) => [l.source, l.target, l.type, l.claimId])).toEqual([
+      ["current", `mb-${UNDER_PRESSURE}`, "sample", "m-reversed"],
+      [`mb-${UNDER_PRESSURE}`, "current", "sample", "code-1"],
+    ]);
+    expect(merged.claims.map((claim) => claim.id)).toEqual(["m-reversed", "code-1"]);
+  });
+
+  it("keeps the link between two model nodes for one record, and its claim", () => {
+    const draft = draftOf([modelClaim("m-remaster")], [modelLink("a", "b", "remix", "m-remaster")]);
+    draft.genealogy.nodes = draft.genealogy.nodes.map((node) =>
+      node.id === "a"
+        ? { ...node, label: "Under Pressure - Queen & David Bowie" }
+        : node.id === "b"
+          ? { ...node, label: "Under Pressure (Remastered 2011) - Queen & David Bowie" }
+          : node,
+    );
+    const merged = withCodeClaims(draft, code);
+    // One model node becomes the record's node; the other stays its own.
+    expect(merged.genealogy.nodes.map((node) => node.id)).toEqual([
+      "current",
+      "b",
+      `mb-${UNDER_PRESSURE}`,
+    ]);
+    expect(merged.genealogy.links.map((l) => [l.source, l.target, l.type, l.claimId])).toEqual([
+      [`mb-${UNDER_PRESSURE}`, "b", "remix", "m-remaster"],
+      [`mb-${UNDER_PRESSURE}`, "current", "sample", "code-1"],
+    ]);
+    expect(merged.claims.map((claim) => claim.id)).toEqual(["m-remaster", "code-1"]);
+  });
+});
+
+describe("a model node names a record's node only with the record's whole credit", () => {
+  const record = (title: string, artist: string): GenealogyNode => ({
+    id: "mb-x",
+    group: 4,
+    label: `${title} - ${artist}`,
+    size: 22,
+    trackTitle: title,
+    trackArtist: artist,
+  });
+  const model = (label: string): GenealogyNode => ({ id: "m", group: 4, label, size: 22 });
+
+  it.each([
+    ["one artist more", "Intro - The xx & Someone", record("Intro", "The xx")],
+    [
+      "the generic artist Various Artists",
+      "Megamix - Various Artists",
+      record("Megamix", "Various Artists"),
+    ],
+    ["one word of a band's name", "September - Fire", record("September", "Earth, Wind & Fire")],
+    [
+      "another performance with one artist in common",
+      "Under Pressure - David Bowie & Annie Lennox (1992)",
+      record("Under Pressure", "Queen & David Bowie"),
+    ],
+    [
+      "a cover by another artist",
+      "Ice Ice Baby - Vanilla Ice",
+      record("Ice Ice Baby", "Glee Cast"),
+    ],
+    ["a generic title", "Intro - The xx", record("Intro", "The xx")],
+  ])("not on %s", (_what, label, code) => {
+    expect(sameRecord(model(label), code)).toBe(false);
+  });
+
+  it("on the same title and the same credited artists, in any order", () => {
+    const code = record("Under Pressure", "Queen & David Bowie");
+    expect(sameRecord(model("Under Pressure - Queen & David Bowie (1981)"), code)).toBe(true);
+    expect(sameRecord(model("Under Pressure - David Bowie & Queen"), code)).toBe(true);
+    expect(
+      sameRecord(
+        model("September - Earth, Wind & Fire"),
+        record("September", "Earth, Wind & Fire"),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -451,6 +829,31 @@ describe("through the verifier", () => {
     const lostClaim = lost.claims.find((claim) => claim.id === sample?.id);
     expect(lostClaim).toMatchObject({ kind: "inferred", evidenceIds: [] });
     expect(lost.genealogy.links.find((l) => l.claimId === sample?.id)?.kind).toBe("inferred");
+  });
+
+  it("does not compare a code claim's numbers with the measurement", () => {
+    // A release titled with a tempo and a key, against a measured 115.8 BPM in D minor.
+    const release: PrimaryRelation = {
+      type: "release",
+      source: "musicbrainz",
+      evidenceId: RELEASE_ID,
+      scope: "release",
+      release: { mbid: "ae103b0a-b932-4009-acb6-388db1cf890b", title: "140 BPM in C major" },
+    };
+    const item: Evidence = {
+      id: RELEASE_ID,
+      source: "musicbrainz",
+      sourceTier: "primary-record",
+      url: "https://musicbrainz.org/release/ae103b0a-b932-4009-acb6-388db1cf890b",
+      title: "140 BPM in C major — MusicBrainz release",
+      retrievedAt: AT,
+      excerpt: 'MusicBrainz: "Own" by Artist appears on the official album "140 BPM in C major".',
+      recordRef: "release/ae103b0a-b932-4009-acb6-388db1cf890b",
+    };
+    const code = buildCodeClaims([release], [item], counter());
+    const checked = checkClaims(withCodeClaims(draftOf([]), code), [item], audioV2(), "Own");
+    expect(checked.claims[0]).toMatchObject({ origin: "code", numericCheck: "n/a" });
+    expect(checked.claims[0]).not.toHaveProperty("field");
   });
 });
 

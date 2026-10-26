@@ -121,7 +121,8 @@ jobs:
           v2 = result["v2"]
           print({key: v2[key] for key in ("analyzerVersion", "gate", "tempo", "key")})
           assert v2["tempo"]["method"].startswith("essentia.RhythmExtractor2013"), v2["tempo"]
-          assert abs(v2["tempo"]["bpm"] - 120) <= 1 and result["bpm"] == 120, v2["tempo"]
+          assert set(result) == {"v2"}, sorted(result)
+          assert abs(v2["tempo"]["bpm"] - 120) <= 1, v2["tempo"]
           assert v2["key"]["method"] == "essentia.KeyExtractor", v2["key"]
           PY
 

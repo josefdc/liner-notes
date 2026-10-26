@@ -279,7 +279,7 @@
             "withheld": {
               "key": {
                 "code": "one_pitched_source",
-                "reason": "one pitched source (its partials hold still and rise and fall together)"
+                "reason": "the partials hold still, rise and fall together and spell no chord"
               },
               "moods": {
                 "valence": {

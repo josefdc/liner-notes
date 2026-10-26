@@ -633,7 +633,7 @@
             "required": ["code", "reason"]
           },
           "beats": {
-            "description": "Null with the tempo's reason when no tempo was estimated; when the tempo is withheld as unsteady, a tracker that follows tempo changes keeps its grid (no reason), one that keeps one period has none",
+            "description": "When no tempo was estimated, the grid is null with the tempo's reason. When a tempo was estimated but withheld (unsteady_tempo, or too_few_beats on a short clip), a tracker that follows tempo changes (Essentia) keeps its grid, with no reason; a tracker that keeps one period (librosa) has a null grid, with the tempo's reason",
             "type": "object",
             "properties": {
               "code": {
@@ -1762,7 +1762,7 @@
             "additionalProperties": false
           },
           "beats": {
-            "description": "Null with the tempo's reason when no tempo was estimated; when the tempo is withheld as unsteady, a tracker that follows tempo changes keeps its grid (no reason), one that keeps one period has none",
+            "description": "When no tempo was estimated, the grid is null with the tempo's reason. When a tempo was estimated but withheld (unsteady_tempo, or too_few_beats on a short clip), a tracker that follows tempo changes (Essentia) keeps its grid, with no reason; a tracker that keeps one period (librosa) has a null grid, with the tempo's reason",
             "type": "object",
             "properties": {
               "code": {

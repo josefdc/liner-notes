@@ -197,7 +197,7 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
     expect(data.audio.withheld).toEqual({
       key: {
         code: "one_pitched_source",
-        reason: "one pitched source (its partials hold still and rise and fall together)",
+        reason: "the partials hold still, rise and fall together and spell no chord",
       },
     });
     expect(Object.keys(data).sort()).toEqual(["audio", "previewMatch", "previewUrl", "source"]);

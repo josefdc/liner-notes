@@ -93,7 +93,7 @@ export function gatedV2(reason: "silence" | "noise" | "too_short" = "silence"): 
 }
 
 /**
- * A block of analyzer 2.3.0 whose key was withheld, with the reason: one pitched source (the
+ * A block of analyzer 2.3.0 whose key was withheld, with the reason: the single-source rule (the
  * service's words), the rest measured.
  */
 export function keyWithheldV2(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
@@ -103,7 +103,7 @@ export function keyWithheldV2(overrides: Partial<AudioFeatures> = {}): AudioFeat
     withheld: {
       key: {
         code: "one_pitched_source",
-        reason: "one pitched source (its partials hold still and rise and fall together)",
+        reason: "the partials hold still, rise and fall together and spell no chord",
       },
     },
     ...overrides,

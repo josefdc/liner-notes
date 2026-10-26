@@ -354,8 +354,7 @@ def fingerprint(
             moods = dict.fromkeys(moods)
             not_music = _reason(
                 "non_music_style",
-                f"the strongest style is {top_style.removeprefix(NON_MUSIC_PREFIX)} (not music), "
-                "and the mood models describe music",
+                "the strongest style score is a Non-Music style, and the mood heads describe music",
             )
             mood_reasons = dict.fromkeys(moods, not_music)
     if style_mean is None:

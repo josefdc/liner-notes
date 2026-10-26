@@ -171,7 +171,7 @@ export const Fingerprint = z.object({
  * - the gate (every measured block): `gate_silence`, `gate_noise`, `gate_too_short`;
  * - tempo (and the beat grid, see AudioWithheld.beats): `no_beat` (the onsets do not repeat
  *   enough), `tempo_out_of_range` (the estimate is outside AUDIO_TEMPO_RANGE_BPM, the range the
- *   estimators search), `too_few_beats` (too few beats tracked to fit a tempo, or too few beat
+ *   service accepts), `too_few_beats` (too few beats tracked to fit a tempo, or too few beat
  *   intervals to check that it holds), `low_confidence` (under the estimator's minimum; the
  *   confidence does not rank half- or double-tempo errors, and no check here does),
  *   `unsteady_tempo` (a part of the window disagrees with the tempo), `no_tempo_estimate` (an
@@ -219,7 +219,7 @@ export const AudioWithheldCode = z.enum([
 ]);
 export type AudioWithheldCode = z.infer<typeof AudioWithheldCode>;
 
-/** The tempo range both estimators search, in BPM. */
+/** The tempo range, in BPM, the service accepts from either estimator. */
 export const AUDIO_TEMPO_RANGE_BPM = [40, 208] as const;
 
 /** One withheld value: the code and the service's reason in words (no withheld value in it). */
@@ -246,9 +246,10 @@ export const AudioWithheld = z.object({
   key: reasonFor(),
   loudness: reasonFor(),
   beats: reasonFor().describe(
-    "Null with the tempo's reason when no tempo was estimated; when the tempo is withheld as " +
-      "unsteady, a tracker that follows tempo changes keeps its grid (no reason), one that " +
-      "keeps one period has none",
+    "When no tempo was estimated, the grid is null with the tempo's reason. When a tempo was " +
+      "estimated but withheld (unsteady_tempo, or too_few_beats on a short clip), a tracker " +
+      "that follows tempo changes (Essentia) keeps its grid, with no reason; a tracker that " +
+      "keeps one period (librosa) has a null grid, with the tempo's reason",
   ),
   energyContour: reasonFor(),
   sections: reasonFor(),

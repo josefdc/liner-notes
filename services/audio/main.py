@@ -315,7 +315,7 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     v2["keyMoments"] = signal_features.key_moments(signals, loudness, harmonic)
     if MODELS_LOADED and (reason := signals.not_music()):
         logger.info("No fingerprint: %s", reason)
-        withheld["fingerprint"] = {"code": "not_music", "reason": f"not music: {reason}"}
+        withheld["fingerprint"] = {"code": "not_music", "reason": reason}
     else:
         # Reasons for a null fingerprint, or for its null parts, go into `withheld`.
         v2["fingerprint"] = fingerprint.fingerprint(

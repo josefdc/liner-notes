@@ -283,7 +283,8 @@ SOURCE_OCTAVE_TOLERANCE = 0.01
 SOURCE_OVERTONE_RATIO = 0.5
 SOURCE_NOTE_MAX_HARMONIC = 16
 SOURCE_THIRD_CENTS = 30.0
-ONE_SOURCE = "one pitched source (its partials hold still and rise and fall together)"
+# The reasons name the check that fired, never a cause it does not test (tests/test_withheld_codes.py).
+ONE_SOURCE = "the partials hold still, rise and fall together and spell no chord"
 
 # The harmonic part is separated below this frequency (see Signals.harmonic).
 HARMONIC_MAX_HZ = 5000.0
@@ -402,7 +403,8 @@ class Withheld:
         return {"code": self.code, "reason": self.reason}
 
 
-SPEECH_LIKE = "one voice without stable notes (speech-like)"
+SPEECH_LIKE = "one pitch line without stable notes"
+ONE_HELD_PITCH_OVER_BEAT = "one held pitch over the beat, whose harmonics explain the lines"
 
 
 @dataclass(frozen=True)
@@ -681,11 +683,7 @@ class Signals:
                 return Withheld(SPEECH_LIKE, one_source=True, code="speech_like")
             explained = self.harmonic_tonality.explained_by(voice.f0_hz, *voice.held_tolerance)
             if voice.one_pitch and explained >= ONE_PITCH_MIN_EXPLAINED:
-                return Withheld(
-                    "one held pitch over the beat (a drone or one bass note)",
-                    True,
-                    code="one_held_pitch",
-                )
+                return Withheld(ONE_HELD_PITCH_OVER_BEAT, True, code="one_held_pitch")
             return None
         if self.voice is None:
             # Without a pitch track, one held pitch cannot be told from music: no key.
@@ -1243,7 +1241,7 @@ def krumhansl_key(chroma_mean: np.ndarray) -> tuple[str, str, float] | None:
 # the steadiness check (main.py). The texts name the check, never the value it withheld.
 NO_BEAT = Withheld("the onsets do not repeat enough to count a beat", code="no_beat")
 TEMPO_OUT_OF_RANGE = Withheld(
-    f"the tempo found is outside the {MIN_BPM:.0f}-{MAX_BPM:.0f} BPM searched",
+    f"the tempo found is outside the {MIN_BPM:.0f}-{MAX_BPM:.0f} BPM accepted",
     code="tempo_out_of_range",
 )
 TOO_FEW_BEATS = Withheld(f"fewer than {MIN_BEATS} beats were tracked", code="too_few_beats")

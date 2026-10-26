@@ -280,12 +280,16 @@ def test_audible_click_track_has_a_loudness(analyse):
 
 
 def test_quiet_music_has_a_loudness_above_silence(analyse):
-    """The drum pattern peaking at -48 dBFS passes the gate, and its loudness is measured."""
+    """
+    The drum pattern peaking at -48 dBFS passes the gate, and its loudness is measured: mean
+    frame RMS 0.000498 (-66.1 dBFS), the level the first service version's energy floor read as
+    0.011.
+    """
     from tests.signals import drum_pattern
 
     result = analyse(drum_pattern(97) * 10 ** (-48 / 20) / 0.8, "WAV")
     assert result["bpm"] == 97
-    assert 0.0 < result["rms"] < 10 ** (-48 / 20)
+    assert result["rms"] == pytest.approx(0.000498, rel=0.02)
 
 
 def test_dc_offset_has_no_loudness(analyse):

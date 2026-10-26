@@ -1305,7 +1305,7 @@ def a_voice(**changes):
 
 
 HELD = "one held pitch (vibrato or a bend)"
-SPEECH_LIKE = "one voice without stable notes (speech-like)"
+SPEECH_LIKE = "one pitch line without stable notes"
 
 
 # One voice and the chromagram's movement at their thresholds, for input without a beat. An
@@ -2182,7 +2182,7 @@ def test_no_moods_when_the_strongest_style_is_not_music(monkeypatch):
     reasons = result["v2"]["withheld"]["moods"]
     assert set(reasons) == set(fp["moods"])
     assert {reason["code"] for reason in reasons.values()} == {"non_music_style"}
-    assert "Spoken Word" in reasons["valence"]["reason"]
+    assert reasons["valence"]["reason"].startswith("the strongest style score is a Non-Music")
 
 
 def test_no_fingerprint_when_no_model_part_works(monkeypatch):

@@ -210,7 +210,7 @@ test("a withheld key says which check withheld it, and a withheld mood head says
   // The audio service's reason, in this page's words (the check that fired, never a cause it did
   // not test): never "not detected" alone.
   await expect(valueItem(values, "Key")).toHaveText(
-    "Key not measured— one pitched source whose partials hold still, so no key",
+    "Key not measured— its partials held still and moved together, so no key",
   );
   await expect(valueItem(values, "BPM")).toContainText("BPM 105.2Measured");
   const estimates = page.getByRole("list", { name: "Audio-model estimates" });
@@ -221,7 +221,7 @@ test("a withheld key says which check withheld it, and a withheld mood head says
   const notices = page.getByRole("region", { name: "Missing data" });
   await expect(notices).toHaveText(
     "Audio partly measured" +
-      "Not measured: key (one pitched source whose partials hold still, so no key)." +
+      "Not measured: key (its partials held still and moved together, so no key)." +
       "Audio-model estimates not available: mood (outside the range its model produces).",
   );
   await expect(notices).not.toContainText("did not detect");

@@ -302,7 +302,7 @@ describe('audioReadings', () => {
       withheld: {
         key: {
           code: 'one_pitched_source',
-          reason: 'one pitched source (its partials hold still and rise and fall together)',
+          reason: 'the partials hold still, rise and fall together and spell no chord',
         },
       },
     });
@@ -318,7 +318,7 @@ describe('audioReadings', () => {
     expect(values.bpm).toMatchObject({ state: 'shown', value: '123.1' });
     expect(audioNoticeOf(track)).toEqual({
       title: 'Audio partly measured',
-      lines: ['Not measured: key (one pitched source whose partials hold still, so no key).'],
+      lines: ['Not measured: key (its partials held still and moved together, so no key).'],
     });
   });
 
@@ -408,7 +408,7 @@ describe('audioReadings', () => {
     // The checks test the signal, not what made it: the same rule withholds a key on a drum
     // loop and on a dense mix with a labelled key, so no text may say which it was.
     const sources =
-      /\b(drums?|percussion|noise|speech|spoken|talk\w*|voices?|vocals?|sing\w*|cowbells?|bells?|hum|bass|guitars?|piano|synth\w*|instruments?|tones?|whine)\b/i;
+      /\b(drums?|percussion|noise|speech|spoken|talk\w*|voices?|vocals?|sing\w*|cowbells?|bells?|hum|bass|guitars?|piano|synth\w*|instruments?|tones?|whine|drones?|sources?)\b/i;
     const texts = [
       ...AudioWithheldCode.options.map((code) => AUDIO_WITHHELD_TEXT[code]),
       ...Object.values(AUDIO_GATE_TEXT),

@@ -74,12 +74,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.0+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.1+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.0+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.1+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -102,7 +102,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.0+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.1+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {

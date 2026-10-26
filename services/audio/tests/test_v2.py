@@ -10,9 +10,13 @@ skipped) without the "models" extra. Tests marked `needs_models` run the real Es
 and are skipped without them; the fingerprint logic is also covered with stand-in models.
 """
 
+import json
 import os
 import re
+import subprocess
+import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import librosa
@@ -134,11 +138,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.3.0+librosa"
-    assert main.analyzer_version("essentia") == "2.3.0+essentia"
+    assert main.analyzer_version("librosa") == "2.3.1+librosa"
+    assert main.analyzer_version("essentia") == "2.3.1+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.3.0+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.1+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -150,7 +154,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.3.0+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.1+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -351,6 +355,58 @@ def test_a_tempo_that_starts_late_is_reported(probe, bpm, estimator, request):
     result, v2 = analyse_array(PROBES[probe], estimator)
     assert v2["tempo"]["bpm"] == pytest.approx(bpm, abs=1.0)
     assert round(v2["tempo"]["bpm"]) == bpm
+
+
+# Analysed first in a new process, this probe gave 97.0 BPM at 0.568 with 55 beats; after three
+# other probes in the same process, 96.99 BPM at 0.570 with 47 beats.
+HISTORY_PROBE = "band-97-after-10s-silence"
+EARLIER_PROBES = ["noise-bursts", "drums-only-97", "drums-only-120"]
+FIRST_ANALYSIS = """
+import json, sys
+import estimators, main
+from tests import signals
+from tests.checks import check_result
+signal = signals.probes()[sys.argv[2]]
+chosen = estimators.select_estimator(sys.argv[1])
+result = main.analyze_signals(estimators.Signals(signal, signals.SR), chosen)
+print("V2 " + json.dumps(check_result(result)))
+"""
+
+
+def first_analysis_in_a_new_process(probe: str, estimator: str) -> dict:
+    """The v2 block of `probe` analysed by a new Python process that analyses nothing else."""
+    service = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    run = subprocess.run(
+        [sys.executable, "-c", FIRST_ANALYSIS, estimator, probe],
+        cwd=service,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert run.returncode == 0, run.stderr[-3000:]
+    lines = [line for line in run.stdout.splitlines() if line.startswith("V2 ")]
+    assert len(lines) == 1, run.stdout[-3000:]
+    return json.loads(lines[0].removeprefix("V2 "))
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_an_analysis_does_not_depend_on_what_the_process_analysed_before(estimator):
+    """
+    The same signal gives the same v2 block whatever the process analysed before it, one
+    after another or at the same time in other worker threads. (Essentia's tempo tracker adds
+    noise from the C library's rand(), whose state the whole process shares.)
+    """
+    first = first_analysis_in_a_new_process(HISTORY_PROBE, estimator)
+    for probe in EARLIER_PROBES:
+        analyse_array(PROBES[probe], estimator)
+    _, after = analyse_array(PROBES[HISTORY_PROBE], estimator)
+    assert after == first
+    probes = [*EARLIER_PROBES, HISTORY_PROBE] * 2
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        blocks = list(pool.map(lambda p: analyse_array(PROBES[p], estimator)[1], probes))
+    for probe, block in zip(probes, blocks, strict=True):
+        if probe == HISTORY_PROBE:
+            assert block == first, "analysed while other threads analysed"
 
 
 def test_no_steady_tempo_without_a_beat_anywhere():
@@ -2226,7 +2282,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.3.0+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.3.1+{main.ESTIMATOR.name}"
     assert v2["withheld"]["fingerprint"] == {
         "code": "models_not_loaded",
         "reason": "the audio models are not loaded",

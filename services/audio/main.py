@@ -75,7 +75,9 @@ for _client_logger in ("httpx", "httpcore"):
 # so while the service names it, cached blocks without reasons are measured again; results the
 # API already stored, and cache rows it serves while the service is down, keep their older
 # blocks (without reasons) until they expire.
-ANALYZER_VERSION = "2.3.0"
+# 2.3.1: an Essentia tempo, its confidence and its beats no longer depend on what the process
+# analysed before (estimators._rand_lock); each is what a new process measures first.
+ANALYZER_VERSION = "2.3.1"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -123,7 +125,7 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.3.0+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    "2.3.1+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
     cache is keyed by track and this version, so a version change measures again; a row of
     another version is served, labelled with its analyzer, only when the service cannot say its
     version.)

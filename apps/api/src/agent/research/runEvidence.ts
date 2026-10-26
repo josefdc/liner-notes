@@ -360,9 +360,9 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * sites and the thread layouts of XenForo, vBulletin, Stack Exchange and MetaFilter (a row of 6
  * may hold them, or research text written from them). 8: web text leaves out TalkBass, the WATMM
  * forums, Rate Your Music, Disqus and Wayback Machine copies of excluded pages, and the comment
- * layouts of Discourse, phpBB, Reddit, Gearspace, YouTube, Disqus, Songfacts, Rate Your Music and
- * Amazon, with more of XenForo's, Stack Exchange's and MetaFilter's (a row of 7 may hold them, or
- * research text written from them).
+ * layouts of Discourse, phpBB, Reddit, Gearspace, YouTube, Disqus, Songfacts and Amazon, with
+ * more of XenForo's and MetaFilter's (a row of 7 may hold them, or research text written from
+ * them).
  */
 export const CACHED_EVIDENCE_FORMAT = 8;
 

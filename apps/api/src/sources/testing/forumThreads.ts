@@ -58,20 +58,8 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "Daft Punk have split. (42 comments total) posted by member at 6:47 AM on February 22, 2021 One More Time still sounds like the future.",
   ],
   [
-    "a Stack Exchange comment chain with a capitalised Add a comment",
-    "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20 Add a comment",
-  ],
-  [
-    "XenForo post headers only",
-    "RecordFan Feb 22, 2021 #1 The vocal is Romanthony. DiscoHead Feb 22, 2021 #2 RIP. ThirdFan Feb 23, 2021 #3 Classic.",
-  ],
-  [
     "a XenForo post header dated by weekday, with its user card",
     "RecordFan Sunday at 10:15 AM #3 The vocal is Romanthony. Joined: Mar 3, 2010",
-  ],
-  [
-    "a XenForo post header with its poster's title",
-    "RecordFan Forum Resident Feb 22, 2021 #3 The vocal is Romanthony, and the sample is More Spell on You.",
   ],
   [
     "a XenForo 2 thread's header",
@@ -80,10 +68,6 @@ export const FORUM_THREADS: Array<[string, string]> = [
   [
     "a Discourse thread",
     "RecordFan February 22, 2021, 3:15pm #1 Daft Punk split today. DiscoHead February 22, 2021, 3:20pm #2 One More Time still holds up. 1 Reply 5 Likes",
-  ],
-  [
-    "a Discourse thread with day-first dates",
-    "RecordFan 22 Feb 2021, 15:15 #1 Daft Punk split today. DiscoHead 22 Feb 2021, 15:20 #2 One More Time still holds up.",
   ],
   [
     "a Discourse post with its topic map",
@@ -106,10 +90,6 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "Post by RecordFan » Mon Feb 22, 2021 3:15 pm The vocal is Romanthony. Post by DiscoHead » Mon Feb 22, 2021 3:20 pm RIP.",
   ],
   [
-    "phpBB bylines with day-first dates",
-    "by RecordFan » 22 Feb 2021, 15:15 The vocal is Romanthony. by DiscoHead » 22 Feb 2021, 15:20 RIP.",
-  ],
-  [
     "Reddit's text on another host",
     "RecordFan • 3y ago The vocal is Romanthony. 245 Reply Share DiscoHead • 3y ago RIP, and the sample is More Spell on You.",
   ],
@@ -130,20 +110,24 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "RecordFan Lives for gear #1 22nd February 2021 Which vocoder is on One More Time? DiscoHead #2 22nd February 2021 Quote: Originally Posted by RecordFan ► Which vocoder? A DigiTech Talker, I think.",
   ],
   [
-    "a Gearspace post card on another host",
-    "#3 22nd February 2021 RecordFan Gear Addict 15 years The vocal is Romanthony.",
+    "a Gearspace post with its poster's title",
+    "RecordFan Gear Addict 15 years The vocal is Romanthony, through a DigiTech Talker. Quote Reply Report Post",
+  ],
+  [
+    "a Gearspace post header with its quote",
+    "#3 22nd February 2021 Quote: Originally Posted by RecordFan ► Which vocoder? A DigiTech Talker, I think.",
   ],
   [
     "a Gearspace reply with its quote on another host",
     "Quote: Originally Posted by RecordFan ► Which vocoder? A DigiTech Talker, I think. Quote Reply Report Post",
   ],
   [
-    "Gearspace post headers only",
-    "#3 22nd February 2021 RecordFan The vocal is Romanthony. #4 22nd February 2021 DiscoHead RIP.",
-  ],
-  [
     "YouTube comments with plain names",
     "Record Fan 3 years ago This song never gets old 1.2K Reply Disco Head 2 years ago RIP Romanthony 300 Reply",
+  ],
+  [
+    "YouTube comments longer than a line",
+    "RecordFan 3 years ago I saw them at Coachella in 2006 and the pyramid changed electronic music forever, honestly 1.2K Reply DiscoHead 2 years ago My dad played this in the car every single morning on the way to school 300 Reply",
   ],
   [
     "YouTube comments with replies and an edit",
@@ -174,11 +158,74 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "Comments: 2 Jane from Ohio Oct 2, 2009: This song got me through college. Mark from Leeds, England Nov 3, 2010: Still a classic.",
   ],
   [
-    "Amazon reviews, one with a flag",
-    "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States 🇺🇸 on February 22, 2021 The vocal is great. DiscoHead 4.0 out of 5 stars Good. Reviewed in the United Kingdom on 3 March 2021 Romanthony shines.",
+    "an Amazon review with a flag and its helpful count",
+    "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States 🇺🇸 on February 22, 2021 The vocal is great. 12 people found this helpful",
+  ],
+  [
+    "an Amazon review that one person found helpful",
+    "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United Kingdom on 3 March 2021 The vocal is great. One person found this helpful",
   ],
   [
     "an Amazon review with its helpful count",
     "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States on February 22, 2021 Verified Purchase The vocal is great. 12 people found this helpful",
+  ],
+];
+
+/**
+ * Comment threads the web tier keeps, by design: each holds only marks that music writing also
+ * writes (the known limits of FORUM_LAYOUTS in search.ts), so leaving it out would leave out
+ * music writing too. Each entry is a layout, why it is kept, and its text. Pinned, so a rule
+ * that changes them is seen.
+ */
+export const FORUM_LIMITS: Array<[string, string, string]> = [
+  [
+    "a Stack Exchange comment chain with a capitalised Add a comment",
+    'signatures and "Add a comment" are supporting: a festival guide\'s dash stamps beside a comment prompt read the same',
+    "Are you sure? The credits list no sample. – Listener Feb 22 '21 at 16:01 Yes, it was cleared in 2001. – Jane Q Feb 22 '21 at 16:20 Add a comment",
+  ],
+  [
+    "XenForo post headers only",
+    "a post's date and number is supporting: chart rows, peaks by country and numbered live updates read the same",
+    "RecordFan Feb 22, 2021 #1 The vocal is Romanthony. DiscoHead Feb 22, 2021 #2 RIP. ThirdFan Feb 23, 2021 #3 Classic.",
+  ],
+  [
+    "a XenForo post header with its poster's title",
+    "a member's title is supporting: journalism citing a forum post by its date, number and member title reads the same",
+    "RecordFan Forum Resident Feb 22, 2021 #3 The vocal is Romanthony, and the sample is More Spell on You.",
+  ],
+  [
+    "a Discourse thread with day-first dates",
+    "a post's date, time and number is supporting: a live setlist tracker reads the same",
+    "RecordFan 22 Feb 2021, 15:15 #1 Daft Punk split today. DiscoHead 22 Feb 2021, 15:20 #2 One More Time still holds up.",
+  ],
+  [
+    "phpBB bylines with day-first dates",
+    'a byline without "Post by" is supporting: a radio log or a critics\' roundup reads the same',
+    "by RecordFan » 22 Feb 2021, 15:15 The vocal is Romanthony. by DiscoHead » 22 Feb 2021, 15:20 RIP.",
+  ],
+  [
+    "a Gearspace post card on another host",
+    "a post's number and day and a member's title are supporting: chart rows read the same",
+    "#3 22nd February 2021 RecordFan Gear Addict 15 years The vocal is Romanthony.",
+  ],
+  [
+    "Gearspace post headers only",
+    "a post's number and day is supporting: chart rows read the same",
+    "#3 22nd February 2021 RecordFan The vocal is Romanthony. #4 22nd February 2021 DiscoHead RIP.",
+  ],
+  [
+    "Amazon reviews, one with a flag",
+    '"Reviewed in … on …" is supporting: a listicle quoting reviews reads the same',
+    "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States 🇺🇸 on February 22, 2021 The vocal is great. DiscoHead 4.0 out of 5 stars Good. Reviewed in the United Kingdom on 3 March 2021 Romanthony shines.",
+  ],
+  [
+    "YouTube comments, the first without a like count",
+    "a comment's like count before \"Reply\" is its only mark, and a comment without one is not read, nor is the next comment's count taken for it",
+    "RecordFan 3 years ago This song never gets old Reply DiscoHead loved the remaster 12 Reply BeatHead 2 years ago RIP Romanthony 300 Reply",
+  ],
+  [
+    "YouTube comments, the second without its text",
+    "a comment's age is read only with its own text and like count, never with the next comment's",
+    "RecordFan 3 years ago First! DiscoHead 2 years ago 12 Reply BeatHead 1 year ago RIP Romanthony 300 Reply",
   ],
 ];

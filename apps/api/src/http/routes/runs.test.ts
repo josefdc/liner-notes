@@ -11,6 +11,8 @@
  *   "direct <id>"  matches track <id>
  *   "invalid …"    also writes a progress event that fails the contract
  *   "dropdb …"     also runs the test's `dropTable` hook
+ *   "fresh …"      matches TRACK_ID with its full Spotify details; the historian reports the
+ *                  test's `sourceErrors` hook, and the composer hands the real verifier a draft
  *   anything else  matches TRACK_ID
  * The stub composer reports a result for the matched track, stamped with the run's id. It
  * carries a preview URL (under `previewUrl` and as a genealogy image) and the typed query in a
@@ -28,6 +30,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../../agent/cacheKeys.js";
 import type { SonicAgentStateType } from "../../agent/state.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../../config/settings.js";
+import { heldTextIssue } from "../../agent/storedResults.js";
+import { captureLogsForTests } from "../../logger.js";
+import { fetchJson, SourceError } from "../../sources/http.js";
+import { errorRecord, notConfigured } from "../../sources/records.js";
+import { type FetchRoute, html, json, stubFetch } from "../../sources/testing/fetchStub.js";
+import { FORUM_THREADS } from "../../sources/testing/forumThreads.js";
 import { closeDatabase, getDb, initializeDatabase } from "../../store/database.js";
 import { DEFAULT_RETENTION, pruneDatabase } from "../../store/retention.js";
 import { getRun, listRunEvents, withoutPreviewUrls } from "../../store/runs.js";
@@ -39,7 +47,10 @@ const TRACK_ID = "0RunsRouteTestTrack001";
 const CHOICE_A = "0RunsRouteTestTrackA01";
 const CHOICE_B = "0RunsRouteTestTrackB01";
 
-const hooks = vi.hoisted(() => ({ dropTable: null as null | (() => void) }));
+const hooks = vi.hoisted(() => ({
+  dropTable: null as null | (() => void),
+  sourceErrors: [] as unknown[],
+}));
 
 vi.mock("../../sources/spotify.js", () => ({
   // The real scout's search ("cachehit …" queries): it finds TRACK_ID, by the artist and title
@@ -85,6 +96,9 @@ vi.mock("../../agent/nodes/index.js", async () => {
   const { scoutNode: realScout } = await vi.importActual<
     typeof import("../../agent/nodes/scoutNode.js")
   >("../../agent/nodes/scoutNode.js");
+  const { draftOf } = await vi.importActual<typeof import("../../agent/verifier/testing.js")>(
+    "../../agent/verifier/testing.js",
+  );
 
   type State = SonicAgentStateType;
   type Config = LangGraphRunnableConfig;
@@ -111,14 +125,28 @@ vi.mock("../../agent/nodes/index.js", async () => {
         return { candidates };
       }
       const id = query.startsWith("direct ") ? query.split(" ")[1] : "0RunsRouteTestTrack001";
+      if (query.startsWith("fresh")) {
+        const spotifyData = {
+          id,
+          title: "Title",
+          artist: "Artist",
+          album: "Album",
+          coverUrl: "",
+          releaseDate: "1994",
+          durationMs: 218000,
+        };
+        return { spotifyData, selectedBy: "match" };
+      }
       return { spotifyData: { id, title: "Title", artist: "Artist" } };
     },
     engineerNode: async (_state: State, config: Config) => {
       status(config, "engineer", "measuring");
       return {};
     },
-    historianNode: async () => ({}),
+    historianNode: async (state: State) =>
+      state.songQuery.startsWith("fresh") ? { sourceErrors: hooks.sourceErrors } : {},
     composerNode: async (state: State, config: Config) => {
+      if (state.songQuery.startsWith("fresh")) return { draft: draftOf([]) };
       const preview = "https://cdnt-preview.dzcdn.net/stream/c-abc?hdnea=exp=1~hmac=secret";
       const trackData: Record<string, unknown> = {
         id: state.spotifyData?.id,
@@ -229,6 +257,66 @@ async function withFailingWrite(trigger: string, body: () => Promise<void>): Pro
     errors.mockRestore();
     getDb().exec("DROP TRIGGER IF EXISTS fail_write");
   }
+}
+
+/** A web-tier evidence item as the web tier stores one. */
+const webItem = (url: string, excerpt: string, title = "A page about the track") => ({
+  id: `tavily:${url}`,
+  source: "tavily",
+  sourceTier: "web",
+  url,
+  title,
+  retrievedAt: "2026-10-20T12:00:00.000Z",
+  excerpt,
+  recordRef: null,
+});
+
+/** A page the web tier keeps. */
+const CLEAN_PAGE = webItem(
+  "https://www.example.org/news/one-more-time",
+  "One More Time was released in November 2000 on Virgin.",
+);
+/** A forum thread, stored by code older than the forum check. */
+const FORUM_TEXT = FORUM_THREADS[0][1];
+const FORUM_PAGE = webItem("https://www.example.org/thread/one-more-time", FORUM_TEXT);
+/** A social platform page, stored by code older than the social-site check. */
+const SOCIAL_TEXT = "Zephyrine Quillfeather shared a memory of One More Time.";
+const SOCIAL_PAGE = webItem("https://m.facebook.com/somepage/posts/1", SOCIAL_TEXT);
+/** A page whose @handle was not masked, stored by code older than the handle check. */
+const HANDLE_PAGE = webItem(
+  "https://www.example.org/news/interview",
+  "Thomas Bangalter (@thomasbangalter) produced it.",
+);
+/** A source error whose message is the page the source answered with. */
+const MARKUP_ERROR = {
+  source: "discogs",
+  code: "invalid_response",
+  message: "<html><body>Bad gateway</body></html>",
+};
+
+/** The answer to a run whose stored result is refused: it says no more than that. */
+const REFUSED_BODY = {
+  success: false,
+  code: "not_found",
+  error: "Not found.",
+  detail: "The run's stored result is no longer served",
+};
+
+/**
+ * Rewrites a run's stored result with `evidence` and, in its run information, `sourceErrors`, as
+ * code older than the web tier's checks could have stored it.
+ */
+function storeHeld(
+  runId: string,
+  { evidence = [], sourceErrors }: { evidence?: object[]; sourceErrors?: object[] },
+): void {
+  const analysis = getRun(getDb(), runId)?.analysis as { run: object };
+  const held = {
+    ...analysis,
+    evidence,
+    run: { ...analysis.run, ...(sourceErrors ? { sourceErrors } : {}) },
+  };
+  getDb().prepare("UPDATE runs SET analysis = ? WHERE run_id = ?").run(JSON.stringify(held), runId);
 }
 
 const RUN_EVENTS_DDL = `CREATE TABLE IF NOT EXISTS run_events (
@@ -564,6 +652,258 @@ describe("runs routes", () => {
     const none = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
     expect(none.status).toBe(500);
     expect(none.body).toMatchObject({ success: false, code: "failed" });
+  });
+
+  it("serves neither a stored forum thread nor a social page, by id or by track", async () => {
+    const older = await analyze("plain query");
+    const latest = await analyze("plain query again");
+    getDb()
+      .prepare("UPDATE runs SET finished_at = finished_at - 60 WHERE run_id = ?")
+      .run(older.runId);
+    storeHeld(older.runId, { evidence: [CLEAN_PAGE] });
+    storeHeld(latest.runId, { evidence: [CLEAN_PAGE, FORUM_PAGE, SOCIAL_PAGE] });
+    const logs = captureLogsForTests();
+
+    try {
+      const byId = await request(app).get(`/api/runs/${latest.runId}`);
+      expect(byId.status).toBe(404);
+      // The detail says the result is no longer served, never why.
+      expect(byId.body).toEqual(REFUSED_BODY);
+
+      // The track's older run, whose evidence passes, is served instead.
+      const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+      expect(byTrack.status).toBe(200);
+      expect(byTrack.body.run.id).toBe(older.runId);
+      expect(byTrack.body.analysis.evidence).toEqual([CLEAN_PAGE]);
+
+      for (const res of [byId, byTrack]) {
+        expect(res.text).not.toContain("RecordFan");
+        expect(res.text).not.toContain("Zephyrine");
+        expect(res.text).not.toContain("facebook");
+        expect(res.text).not.toContain("thread/one-more-time");
+      }
+      // The log names the run and why; no line holds the text.
+      expect(logs.lines().some((line) => line.includes(latest.runId))).toBe(true);
+      for (const line of logs.lines()) {
+        expect(line).not.toContain("RecordFan");
+        expect(line).not.toContain("Zephyrine");
+        expect(line).not.toContain("facebook");
+      }
+    } finally {
+      logs.restore();
+    }
+
+    // With no run of the track left to serve, the web can offer a fresh analysis.
+    storeHeld(older.runId, { evidence: [SOCIAL_PAGE] });
+    const none = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(none.status).toBe(404);
+    expect(none.body).toMatchObject({ success: false, code: "not_found" });
+    expect(none.text).not.toContain("Zephyrine");
+  });
+
+  it.each([
+    ["a forum thread", { evidence: [FORUM_PAGE] }, "RecordFan"],
+    ["a social platform page", { evidence: [SOCIAL_PAGE] }, "Zephyrine"],
+    ["a handle that was not masked", { evidence: [HANDLE_PAGE] }, "@thomasbangalter"],
+    [
+      "a forum thread as a page's title",
+      { evidence: [{ ...CLEAN_PAGE, title: FORUM_TEXT }] },
+      "RecordFan",
+    ],
+    ["markup in a source error", { sourceErrors: [MARKUP_ERROR] }, "Bad gateway"],
+    [
+      "entity-escaped markup in a source error",
+      { sourceErrors: [{ ...MARKUP_ERROR, message: "&lt;h1&gt;Bad gateway&lt;/h1&gt;" }] },
+      "Bad gateway",
+    ],
+    // The messages older code stored verbatim, which a source error's message no longer keeps.
+    [
+      "a JavaScript stack trace in a source error",
+      {
+        sourceErrors: [
+          {
+            ...MARKUP_ERROR,
+            message: "HTTP 500 — TypeError: x is undefined at handler (/srv/app/index.js:10:5)",
+          },
+        ],
+      },
+      "/srv/app/index.js",
+    ],
+    [
+      "a token link in a source error",
+      {
+        sourceErrors: [
+          { ...MARKUP_ERROR, message: "HTTP 403 — https://api.example.com/v1?token=abc123 denied" },
+        ],
+      },
+      "abc123",
+    ],
+    [
+      "a Python traceback in a source error",
+      {
+        sourceErrors: [
+          {
+            ...MARKUP_ERROR,
+            message: 'Traceback (most recent call last): File "/app/main.py", line 3',
+          },
+        ],
+      },
+      "/app/main.py",
+    ],
+    [
+      "a raw link in a source error",
+      {
+        sourceErrors: [
+          { ...MARKUP_ERROR, message: "HTTP 404 — see https://api.example.com/v1/private-path" },
+        ],
+      },
+      "private-path",
+    ],
+  ])("does not serve a stored run that holds %s", async (_name, held, text) => {
+    const { runId } = await analyze("plain query");
+    storeHeld(runId, held);
+    const logs = captureLogsForTests();
+
+    try {
+      const byId = await request(app).get(`/api/runs/${runId}`);
+      expect(byId.status).toBe(404);
+      expect(byId.body).toEqual(REFUSED_BODY);
+      const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+      expect(byTrack.status).toBe(404);
+      expect(byTrack.body).toMatchObject({ success: false, code: "not_found" });
+      for (const res of [byId, byTrack]) expect(res.text).not.toContain(text);
+      // The log names the run and why; no line holds the text.
+      expect(logs.lines().some((line) => line.includes(runId))).toBe(true);
+      for (const line of logs.lines()) expect(line).not.toContain(text);
+    } finally {
+      logs.restore();
+    }
+  });
+
+  it.each([
+    ["the latest run no longer fits and the older one is refused", "latest", "older"],
+    ["the latest run is refused and the older one no longer fits", "older", "latest"],
+  ])("answers failed for a track when %s", async (_name, unfitRun, refusedRun) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const runs = {
+      older: (await analyze("plain query")).runId,
+      latest: (await analyze("plain query again")).runId,
+    };
+    getDb()
+      .prepare("UPDATE runs SET finished_at = finished_at - 60 WHERE run_id = ?")
+      .run(runs.older);
+    storeHeld(runs[refusedRun as keyof typeof runs], { evidence: [FORUM_PAGE] });
+    getDb()
+      .prepare("UPDATE runs SET analysis = '{\"id\":1}' WHERE run_id = ?")
+      .run(runs[unfitRun as keyof typeof runs]);
+
+    // Something is broken (a result that no longer fits), so the answer is not "no run".
+    const res = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ success: false, code: "failed" });
+    expect(res.text).not.toContain("RecordFan");
+  });
+
+  it("serves a run stored now whatever its sources' errors said", async () => {
+    // Each kind of source error the code writes, made by the code that writes it.
+    const failure = async (route: FetchRoute) => {
+      stubFetch(route);
+      try {
+        await fetchJson({
+          source: "musicbrainz",
+          url: "https://musicbrainz.org/ws/2/recording/x",
+          cassette: false,
+        });
+      } catch (error) {
+        return error;
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      throw new Error("the request did not fail");
+    };
+    hooks.sourceErrors = [
+      notConfigured("genius", "GENIUS_ACCESS_TOKEN").error,
+      errorRecord(
+        "musicbrainz",
+        await failure(() => html("<html><h1>Bad gateway</h1></html>", 502)),
+      ),
+      errorRecord(
+        "musicbrainz",
+        await failure(() => json({ message: "<b>Bad</b> request" }, { status: 400 })),
+      ),
+      errorRecord(
+        "musicbrainz",
+        await failure(() =>
+          json({ error: "see https://api.example.com/docs?token=abc123" }, { status: 400 }),
+        ),
+      ),
+      errorRecord(
+        "musicbrainz",
+        await failure(() =>
+          json({ detail: "TypeError at handler (/srv/app/index.js:10:5)" }, { status: 500 }),
+        ),
+      ),
+      errorRecord("musicbrainz", await failure(() => json({}, { status: 429 }))),
+      // A network error echoes the address it could not reach.
+      errorRecord(
+        "musicbrainz",
+        await failure(() => {
+          throw new Error("connect ECONNREFUSED https://musicbrainz.org/ws/2/private-path");
+        }),
+      ),
+      errorRecord("discogs", new SourceError("discogs", "timeout", "no answer within 10000 ms")),
+      // Our own reader failing, on a link and on a name with angle brackets.
+      errorRecord("lastfm", new TypeError("Failed to parse URL from https://example.org/a path")),
+      errorRecord("lastfm", new TypeError("Cannot read properties of Map<string> (reading 'x')")),
+    ];
+    const raw = JSON.stringify(hooks.sourceErrors);
+    // Some of them hold what a stored message no longer keeps.
+    expect(raw).toMatch(/private-path|example\.org|Map<string>/);
+
+    const { runId, events } = await analyze("fresh query");
+    expect(events.map((e) => e.type)).toContain("complete");
+
+    const res = await request(app).get(`/api/runs/${runId}`);
+    expect(res.status).toBe(200);
+    const sourceErrors = res.body.analysis.run.sourceErrors as Array<{ message?: string }>;
+    expect(sourceErrors).toHaveLength(hooks.sourceErrors.length);
+    expect(heldTextIssue(res.body.analysis)).toBeNull();
+    expect(res.text).not.toMatch(/private-path|example\.org|Map<string>|abc123|index\.js/);
+    // The result sent is the one served.
+    const complete = events.find((e) => e.type === "complete") as unknown as {
+      data: { run: object };
+    };
+    expect(complete.data.run).toMatchObject({ sourceErrors });
+    const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(byTrack.body.run.id).toBe(runId);
+  });
+
+  it("serves a stored run whose evidence and source errors pass, unchanged", async () => {
+    const { runId } = await analyze("plain query");
+    const sourceErrors = [
+      { source: "discogs", code: "unavailable", message: "the source refused the request" },
+    ];
+    storeHeld(runId, { evidence: [CLEAN_PAGE], sourceErrors });
+    const stored = getRun(getDb(), runId);
+
+    const byId = await request(app).get(`/api/runs/${runId}`);
+    expect(byId.status).toBe(200);
+    expect(byId.body).toEqual({
+      success: true,
+      run: {
+        id: runId,
+        status: "completed",
+        mode: "live",
+        spotifyId: TRACK_ID,
+        createdAt: new Date((stored?.createdAt ?? 0) * 1000).toISOString(),
+        finishedAt: new Date((stored?.finishedAt ?? 0) * 1000).toISOString(),
+      },
+      analysis: stored?.analysis,
+    });
+    expect(byId.body.analysis.evidence).toEqual([CLEAN_PAGE]);
+    expect(byId.body.analysis.run.sourceErrors).toEqual(sourceErrors);
+    const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(byTrack.body).toEqual(byId.body);
   });
 
   it("removes a run's events when retention removes the run", async () => {

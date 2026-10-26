@@ -17,7 +17,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmError, type LlmErrorKind } from "../../llm/errors.js";
 
 const store = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn() }));
-const enrich = vi.hoisted(() => ({ during: null as null | (() => void), called: 0 }));
+const enrich = vi.hoisted(() => ({
+  during: null as null | (() => void),
+  called: 0,
+  /** Source errors the enricher reports. */
+  errors: [] as Array<{ source: "deezer"; code: "unavailable"; message?: string }>,
+}));
 vi.mock("@langchain/langgraph", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@langchain/langgraph")>()),
   getStore: () => store,
@@ -26,16 +31,17 @@ vi.mock(
   "../enricher.js",
   () =>
     ({
-      enrichGenealogyWithArtwork: async (genealogy) => {
+      enrichGenealogyWithArtwork: async (genealogy, _coverUrl, _signal, report) => {
         enrich.called++;
         enrich.during?.();
+        for (const error of enrich.errors) report?.(error);
         return { nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })), complete: true };
       },
     }) satisfies Partial<typeof import("../enricher.js")>,
 );
 
 import { JUDGE_STATEMENT_MAX, JUDGE_SYSTEM_PROMPT } from "../prompts.js";
-import { UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
+import { heldTextIssue, UNCHECKED_RESULT_TTL_MS } from "../storedResults.js";
 import type { GenealogyLink } from "../schema.js";
 import type { SonicAgentStateType } from "../state.js";
 import { messagesOf, stubLlm, testRuntime } from "../testing/stubLlm.js";
@@ -111,6 +117,7 @@ beforeEach(() => {
   store.put.mockReset();
   enrich.during = null;
   enrich.called = 0;
+  enrich.errors = [];
   for (const method of ["log", "warn", "error"] as const) {
     vi.spyOn(console, method).mockImplementation(() => {});
   }
@@ -611,6 +618,28 @@ describe("a slow judge", () => {
 });
 
 describe("the result", () => {
+  it("writes the enricher's source errors as plain lines, so the run is served when read back", async () => {
+    const error = (message: string) => ({
+      source: "deezer" as const,
+      code: "unavailable" as const,
+      message,
+    });
+    enrich.errors = [
+      error("Genealogy previews: deezer: connect ECONNREFUSED //api.deezer.com/2.0/track/x"),
+      error("Genealogy previews: deezer: <html>Bad gateway</html>"),
+      error("Genealogy previews: deezer: rate limited (HTTP 429)"),
+    ];
+
+    const { result } = await verify([]);
+
+    expect(result.run?.sourceErrors).toEqual([
+      error("Genealogy previews: deezer: connect ECONNREFUSED [link]"),
+      { source: "deezer", code: "unavailable" },
+      error("Genealogy previews: deezer: rate limited (HTTP 429)"),
+    ]);
+    expect(heldTextIssue(result)).toBeNull();
+  });
+
   it("is sent once and stored after a judged run", async () => {
     const { out, writer, result } = await verify([modelClaim("a", { evidenceIds: ["ev-track"] })]);
     expect(writer.mock.calls.filter(([event]) => event.type === "complete")).toHaveLength(1);

@@ -619,18 +619,39 @@ const STACK_TRACE =
 const SIGNED_PARAM = /(?:^|[?&;~\s])(?:sig|signature|token|hdnts|hdnea)=|X-Amz-/i;
 
 /**
- * A source's own reason for an error, as a short line of plain text: undefined when it is not a
- * string, is empty, or holds markup (an HTML page in a JSON field, also entity-escaped), a
- * stack trace or a signature or token parameter (a link without a scheme can carry one); links
- * become "[link]"; cut to MAX_DETAIL. Error
- * messages are stored with the result and sent to the client, so a page never reaches them.
+ * Why a line is not one an error message keeps, or null: markup (an HTML page in a JSON field,
+ * also entity-escaped), a stack trace, a signature or token parameter (a link without a scheme
+ * can carry one), or a link (plainMessage writes "[link]" in its place). The readers of stored
+ * results refuse a source error whose message has one (heldTextIssue).
+ */
+export function reasonIssue(text: string): string | null {
+  if (MARKUP.test(text)) return "markup";
+  if (STACK_TRACE.test(text)) return "a stack trace";
+  if (SIGNED_PARAM.test(text)) return "a signature or token parameter";
+  if (text.search(URL_IN_TEXT) !== -1) return "a link";
+  return null;
+}
+
+/**
+ * An error message as one line of plain text: whitespace runs become one space, links become
+ * "[link]"; undefined when it is empty or still has an issue (reasonIssue: markup, a stack trace,
+ * a signature or token parameter). What it returns never has one.
+ */
+export function plainMessage(text: string): string | undefined {
+  const line = text.replace(/\s+/g, " ").trim().replace(URL_IN_TEXT, "[link]");
+  return line && reasonIssue(line) === null ? line : undefined;
+}
+
+/**
+ * A source's own reason for an error, as a short line of plain text (plainMessage), cut to
+ * MAX_DETAIL: undefined when it is not a string, is empty, or holds markup, a stack trace or a
+ * signature or token parameter. Error messages are stored with the result and sent to the
+ * client, so a page never reaches them.
  */
 export function plainReason(text: unknown): string | undefined {
   if (typeof text !== "string") return undefined;
-  const line = text.replace(/\s+/g, " ").trim().replace(URL_IN_TEXT, "[link]");
-  if (!line || MARKUP.test(line) || STACK_TRACE.test(line) || SIGNED_PARAM.test(line)) {
-    return undefined;
-  }
+  const line = plainMessage(text);
+  if (line === undefined) return undefined;
   return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
 }
 

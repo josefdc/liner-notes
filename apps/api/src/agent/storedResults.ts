@@ -15,8 +15,10 @@
  *
  * A result whose web evidence holds a page the web tier now leaves out (a social platform page,
  * a handle, profile boilerplate or a comment thread: webPageIssue), or whose source errors hold
- * markup (a page a source answered with), stored by older code, is not served: it is composed
- * again.
+ * text an error message no longer keeps (markup, a stack trace, a token parameter or a link:
+ * reasonIssue), stored by older code, is not served: it is composed again (heldTextIssue, which
+ * the run routes also apply). A result is stored with its source errors' messages as plain lines
+ * (plainSourceError), so one stored now is never refused.
  */
 
 import type { BaseStore } from "@langchain/langgraph";
@@ -29,8 +31,9 @@ import {
 } from "@liner-notes/contract";
 import type { z } from "zod";
 import { sourceErrorLine } from "./statusText.js";
-import { MARKUP } from "../sources/http.js";
+import { reasonIssue } from "../sources/http.js";
 import { webPageIssue } from "../sources/search.js";
+import { plainSourceError } from "../sources/toolResult.js";
 import { withoutPreviewUrls } from "../store/runs.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "./cacheKeys.js";
 import type { TrackData } from "./schema.js";
@@ -115,13 +118,10 @@ export async function readStoredResult(
       log.warn(`Stored result for ${trackId} is about another track; ignored`);
       return null;
     }
-    if ((checked.data.evidence ?? []).some(leftOutWebPage)) {
-      log.warn("Stored result holds a web page the web tier now leaves out; composing again");
-      return null;
-    }
     const sourceErrors = storedErrors(value.sourceErrors);
-    if (sourceErrors.some((e) => MARKUP.test(e.message ?? ""))) {
-      log.warn("Stored result's source errors hold markup; composing again");
+    const issue = heldTextIssue(checked.data, sourceErrors);
+    if (issue) {
+      log.warn(`Stored result holds text the readers now refuse (${issue}); composing again`);
       return null;
     }
     const verifier = VerifierSummary.safeParse(value.verifier);
@@ -136,15 +136,52 @@ export async function readStoredResult(
   }
 }
 
-/** A web-tier item the web tier no longer keeps, by what is stored of it (webPageIssue). */
-function leftOutWebPage(item: {
-  sourceTier: string;
-  url?: string | null;
-  title: string;
-  excerpt: string;
-}) {
-  if (item.sourceTier !== "web") return false;
-  return webPageIssue({ url: item.url, title: item.title, text: item.excerpt }) !== null;
+/** What heldTextIssue reads of a result: its evidence and its run's source errors. */
+export interface HeldText {
+  evidence?: ReadonlyArray<{
+    sourceTier: string;
+    url?: string | null;
+    title: string;
+    excerpt: string;
+  }> | null;
+  run?: { sourceErrors?: ReadonlyArray<{ message?: string }> | null } | null;
+}
+
+/**
+ * Why a stored result holds text the readers of stored evidence now refuse, or null. The reason
+ * names where (e.g. "evidence[2]: a comment thread"), never the text:
+ * - a web-tier evidence item the web tier no longer keeps, by what is stored of it: a social
+ *   platform page, or a title or excerpt with a private @handle, profile boilerplate or a comment
+ *   thread (webPageIssue);
+ * - a source error's message that an error message no longer keeps (reasonIssue: markup, also
+ *   entity-escaped, a stack trace, a signature or token parameter, or a link), in the result's
+ *   run information or in `sourceErrors` stored beside it. Results composed now write their
+ *   messages as plain lines (plainSourceError), so they never fail this.
+ * Code older than these checks stored such text. Other text (model prose, claims, primary
+ * records) is not the web tier's and is not checked here, as the research cache and the recorder
+ * do not check it either; a claim's cited ids are not checked against the evidence. Run by the
+ * stored results here and by the run routes (GET /api/runs/:id and /api/runs/by-track).
+ */
+export function heldTextIssue(
+  result: HeldText,
+  sourceErrors: ReadonlyArray<{ message?: string }> = [],
+): string | null {
+  for (const [i, item] of (result.evidence ?? []).entries()) {
+    if (item.sourceTier !== "web") continue;
+    const issue = webPageIssue({ url: item.url, title: item.title, text: item.excerpt });
+    if (issue) return `evidence[${i}]: ${issue}`;
+  }
+  const errors: Array<[string, ReadonlyArray<{ message?: string }>]> = [
+    ["run.sourceErrors", result.run?.sourceErrors ?? []],
+    ["sourceErrors", sourceErrors],
+  ];
+  for (const [where, list] of errors) {
+    for (const [i, error] of list.entries()) {
+      const issue = reasonIssue(error.message ?? "");
+      if (issue) return `${where}[${i}].message: ${issue}`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -176,7 +213,8 @@ export function storableResult(trackData: TrackData): unknown {
  * Stores a result under its track for the sources configured now, with the sources its run
  * could not read (none of them blocked storing it), served for `ttlMs` when that is shorter than
  * STORED_RESULT_TTL_MS. A result whose verifier check did not complete (`run.verifier.failed`)
- * keeps that summary, so the copy served says it is provisional. Throws on a store error.
+ * keeps that summary, so the copy served says it is provisional. The source errors' messages
+ * are stored as plain lines (plainSourceError). Throws on a store error.
  */
 export async function storeResult(
   store: BaseStore,
@@ -189,7 +227,7 @@ export async function storeResult(
   await store.put(TRACKS_NAMESPACE, resultCacheKey(trackData.id, configuredSources()), {
     trackData: storableResult(trackData),
     timestamp: now.getTime(),
-    ...(sourceErrors.length > 0 ? { sourceErrors: [...sourceErrors] } : {}),
+    ...(sourceErrors.length > 0 ? { sourceErrors: sourceErrors.map(plainSourceError) } : {}),
     ...(ttlMs !== undefined && ttlMs < STORED_RESULT_TTL_MS ? { ttlMs } : {}),
     ...(verifier?.failed ? { verifier } : {}),
   });

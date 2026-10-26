@@ -657,7 +657,8 @@ export function useAgent(): UseAgentReturn {
       }
 
       run.picked = candidate;
-      // True whether the user or the countdown picked it.
+      // The user picked it: the picker waits for the user ("countdown" picks exist only in older
+      // recordings).
       addLog('Resuming the analysis with the selected track');
       setState((prev) => ({
         ...prev,

@@ -32,7 +32,7 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
 // messages above, so the screen does not describe a live analysis.
 const REPLAY_PROGRESS_MESSAGE = 'Replaying a recorded analysis — nothing runs live...';
 // At most 40 characters: the completion line is revealed up to 40ch (typing-reveal).
-export const REPLAY_COMPLETE_MESSAGE = 'Replay complete. Opening the results';
+const REPLAY_COMPLETE_MESSAGE = 'Replay complete. Opening the results';
 
 /**
  * The status line for a run, live or replayed. The server's own words for the step (`note`:

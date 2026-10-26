@@ -377,6 +377,99 @@ test("a recorded track picked while live analysis is paused moves the focus to t
   await expect(progressStatus(page)).toBeFocused();
 });
 
+test("after a refused pick, Try again shows no card for the refused track", async ({ page }) => {
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: {
+        opens: [
+          pickerStream(three),
+          [
+            { type: "connected", threadId: "thread-hitl" },
+            {
+              type: "status",
+              node: "scout",
+              message: "Searching for the track",
+              code: "SPOTIFY-SEARCH",
+            },
+            { $wait: "again" },
+            ...pickerStream(three).slice(2),
+          ],
+        ],
+      },
+      [RESUME]: [
+        {
+          type: "error",
+          code: "choice_expired",
+          error: "This choice has expired or was not found. Please search again.",
+        },
+        { type: "done" },
+      ],
+    },
+  });
+  await openPicker(page);
+  await option(page, three[2]).click();
+  await page.getByRole("button", { name: "Try again" }).click();
+
+  // The card under the reticle names the track being analysed: none is chosen yet.
+  const card = page.getByText(three[2].artist, { exact: true });
+  await expect(page.getByRole("log")).toContainText("Searching for the track");
+  await expect(card).toHaveCount(0);
+  await releaseStream(page, "again");
+  await expect(option(page, three[0])).toBeFocused();
+  await expect(card).toHaveCount(0);
+});
+
+test("a picker that opens after a recorded track was chosen shows no card for that track", async ({
+  page,
+}) => {
+  const fixture = loadFixture("budget-paused");
+  const [refusal] = fixture.streams[ANALYZE].opens;
+  const takes = [
+    {
+      ...three[0],
+      id: "t-full",
+      title: "Bright Lines",
+      artist: "Test Artist",
+      releaseYear: "2001",
+    },
+    {
+      ...three[0],
+      id: "t-live",
+      title: "Bright Lines",
+      artist: "Test Artist",
+      releaseYear: "2004",
+    },
+  ];
+  await useMockApi(page, {
+    ...fixture,
+    streams: { ...fixture.streams, [ANALYZE]: { opens: [refusal, pickerStream(takes)] } },
+  });
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Song title and artist" }).fill("Some Other Song");
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await page.getByRole("button", { name: /Bright Lines/ }).click();
+  // Both takes share a title and an artist: the first row, by place.
+  await expect(picker(page).getByRole("option").first()).toBeFocused();
+  // The rows name the takes; no card above them claims one is being analysed.
+  await expect(page.getByText("Test Artist", { exact: true })).toHaveCount(0);
+});
+
+test("Space on a row neither scrolls the page nor picks", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: pickerStream(five) } });
+  await openPicker(page);
+  await expect.poll(() => clippedRows(page)).toEqual([]);
+  const scrollTop = () =>
+    picker(page).evaluate((list) => list.closest(".overflow-y-auto")?.scrollTop ?? -1);
+  const before = await scrollTop();
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(500);
+  expect(await scrollTop()).toBe(before);
+  await expect(option(page, five[0])).toBeFocused();
+  expect(resumes(await apiRequests(page))).toEqual([]);
+});
+
 test("a choice the server no longer holds: the picker waits, then says so when the pick is refused", async ({
   page,
 }) => {

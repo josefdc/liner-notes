@@ -108,6 +108,15 @@ describe('TrackPicker', () => {
     expect(onPick).toHaveBeenCalledWith(FIVE[1]);
   });
 
+  it('takes Space on a row without picking it, so the page does not scroll', () => {
+    const { onPick } = renderPicker();
+    press('ArrowDown');
+    // fireEvent returns false when a handler prevented the default action.
+    expect(fireEvent.keyDown(options()[1], { key: ' ' })).toBe(false);
+    expect(onPick).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(options()[1]);
+  });
+
   it('never picks a row by itself, however long it stays open', () => {
     vi.useFakeTimers();
     const { onPick } = renderPicker();

@@ -4,7 +4,7 @@ import type { SearchCandidate } from '../../hooks/agent/types';
 import { CoverThumb } from '../AlbumCover';
 
 /** The picker's question: its heading and the name of its list. */
-export const PICKER_QUESTION = 'Is this the right track?';
+const PICKER_QUESTION = 'Is this the right track?';
 
 /** The row a navigation key moves to, or null for other keys. The arrows wrap around. */
 function rowFor(key: string, current: number, count: number): number | null {
@@ -83,6 +83,12 @@ export function TrackPicker({ candidates, onPick, onSearchAgain }: TrackPickerPr
       event.preventDefault();
       const row = rows[current];
       if (row) onPick(row);
+      return;
+    }
+    // Space would scroll the page. It picks nothing: the arrows already select the row they
+    // reach, and the analysis starts only with Enter or a click.
+    if (event.key === ' ') {
+      event.preventDefault();
       return;
     }
     const next = rowFor(event.key, current, rows.length);

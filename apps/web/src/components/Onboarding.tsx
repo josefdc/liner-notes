@@ -371,10 +371,17 @@ const Onboarding: React.FC<OnboardingProps> = ({
     [selectCandidate],
   );
 
+  // A retry is a new attempt: the track an earlier pick showed may not be this one's.
   const handleRetry = useCallback(() => {
+    setPreviewTrack(null);
     focusStatusNext.current = true;
     retry();
   }, [retry]);
+
+  // An open picker means no track is chosen yet: the card shows none until one is picked.
+  useEffect(() => {
+    if (showPicker) setPreviewTrack(null);
+  }, [showPicker]);
 
   // A recorded track offered while live analysis is unavailable: its title and artist name its
   // recording, which the API replays (labelled as a recording).

@@ -58,8 +58,9 @@ export interface AgentState {
 export type ResultMode = 'live' | 'replay';
 
 /**
- * How a row of the track picker was chosen: a click (or Enter) on it, or the picker's
- * countdown. A deliberate click is not warned about a loose search match.
+ * How a row of the track picker was chosen: a click (or Enter) on it. "countdown" is found only
+ * in older recordings, from when the picker chose the highlighted row after a few seconds; the
+ * picker now waits for the user. A deliberate click is not warned about a loose search match.
  */
 export type PickedBy = 'click' | 'countdown';
 

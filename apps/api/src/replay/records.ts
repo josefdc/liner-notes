@@ -32,7 +32,7 @@ import { API_ROOT } from "../config/apiPackage.js";
 import { logger } from "../logger.js";
 import { archiveCoverOf } from "./cover.js";
 import { normalizeQuery } from "./query.js";
-import { publicTextsOf, recordIssues } from "./recorder.js";
+import { recordIssues } from "./recorder.js";
 
 export { normalizeQuery } from "./query.js";
 
@@ -164,7 +164,9 @@ export function loadReplays(dir: string): ReplaySet {
     const held = recordIssues(record, {
       secrets: [],
       typedQuery: "",
-      publicTexts: publicTextsOf(record.analysis),
+      // No typed query is known here, so there are no public texts to weigh it against.
+      publicTexts: [],
+      track: record.analysis,
       allowedCover: cover,
     });
     if (held.length > 0) {

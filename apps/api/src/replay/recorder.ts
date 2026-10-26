@@ -32,13 +32,13 @@
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
  * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), a link
  * with a signature or token parameter (on any site), a source error's message or a status line
- * (without the track's own title, artist and album) the run routes would refuse as an error
- * message (reasonIssue: markup, also entity-escaped, a stack trace, a signature or token
- * parameter, or a link), a social platform page, a web evidence title or excerpt with a private
- * @handle, profile boilerplate or a comment thread (webTextIssue), web evidence the run routes
- * refuse (heldTextIssue, which also reads a page written without its scheme), an `error` or
- * `interrupt` event, a commit that is not a commit hash, or that fails the record's schema or
- * says less than a replay must (`runIssues`). The result's other producer checks
+ * (whole; the markup rule aside for the lines that name the track in Spotify's words) the run
+ * routes would refuse as an error message (reasonIssue: markup, also entity-escaped, a stack
+ * trace, a signature or token parameter, or a link), a social platform page, a web evidence
+ * title or excerpt with a private @handle, profile boilerplate or a comment thread
+ * (webTextIssue), web evidence the run routes refuse (heldTextIssue, which also reads a page
+ * written without its scheme), an `error` or `interrupt` event, a commit that is not a commit
+ * hash, or that fails the record's schema or says less than a replay must (`runIssues`). The result's other producer checks
  * (`analysisIssues`) are reported as warnings: a run stored by older code may not pass them all,
  * and the record replays what was sent. The loader (records.ts) runs the same checks
  * (`recordIssues`) again on every file it reads, as far as a file can tell, so it never leaves
@@ -52,6 +52,7 @@ import {
   runIssues,
   TrackAnalysis,
 } from "@liner-notes/contract";
+import { foundLine, selectedLine } from "../agent/statusText.js";
 import { heldTextIssue } from "../agent/storedResults.js";
 import { isMediaUrl, reasonIssue } from "../sources/http.js";
 import { isSocialPage, webTextIssue } from "../sources/search.js";
@@ -328,16 +329,11 @@ export interface LeakCheck {
    * (`events[n].event.data.coverUrl`), and nowhere else.
    */
   allowedCover?: string;
-}
-
-/** The non-blank texts, longest first (a text that holds another is taken out whole). */
-function longestFirst(texts: readonly string[]): string[] {
-  return texts.filter((text) => text.trim() !== "").sort((a, b) => b.length - a.length);
-}
-
-/** `text` with each of `texts` (longest first) replaced by a space. */
-function withoutTexts(text: string, texts: readonly string[]): string {
-  return texts.reduce((out, own) => out.split(own).join(" "), text);
+  /**
+   * The recorded track's title and artist, as its result gives them: the status lines that name
+   * it in Spotify's words (statusText.ts foundLine and selectedLine) are its own.
+   */
+  track?: { title: string; artist: string };
 }
 
 /** The paths of `field` in a record's events of `type`. */
@@ -373,6 +369,7 @@ export function leaks(
     ownRunIds = [],
     otherRunIds = [],
     allowedCover = "",
+    track,
   }: LeakCheck,
 ): string[] {
   const found: string[] = [];
@@ -386,7 +383,7 @@ export function leaks(
   const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
   const coverPaths = resultCoverPaths(record);
   const statusLines = eventPaths(record, "status", "message");
-  const ownTexts = longestFirst(publicTexts);
+  const ownLines = new Set(track ? [foundLine(track), selectedLine(track)] : []);
   const webTexts = webEvidenceTexts(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
@@ -410,15 +407,19 @@ export function leaks(
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     // A source error says what failed in words, as the run routes read it (reasonIssue): markup
     // is an answer's page that slipped in, and a stack trace, a token parameter or a link is not
-    // what an error message keeps. A status line is held to the same, once the track's own
-    // title, artist and album are taken out of it: the run writes its lines from fixed words,
-    // error codes (agent/statusText.ts), numbers, dates and the audio service's analyzer
-    // version, plus the track's title and artist as Spotify gives them (the scout's "Found the
-    // track on Spotify: <title> by <artist>"), which may hold "<" or ">" ("<3", "->").
+    // what an error message keeps. A status line is held to the same, whole: the run writes its
+    // lines from fixed words, error codes (agent/statusText.ts), numbers, dates and the audio
+    // service's analyzer version. Two lines name the track in Spotify's words, which may hold
+    // "<", ">" or "&" ("<3", "->"): the scout's "Found the track on Spotify: <title> by
+    // <artist>" (foundLine) and the clarification's "Selected: <title> by <artist>"
+    // (selectedLine; the recorder leaves the clarification's lines out, but a file may hold
+    // one). A line that is exactly one of these for the recorded track is not held to
+    // the markup rule (its "<", ">" and "&" are not read); its other rules, and the scans above
+    // and below, still apply.
     const reason = SOURCE_ERROR_MESSAGE.test(path)
       ? reasonIssue(text)
       : statusLines.has(path)
-        ? reasonIssue(withoutTexts(text, ownTexts))
+        ? reasonIssue(ownLines.has(text) ? text.replace(/[<>&]/g, " ") : text)
         : null;
     if (reason) {
       const where = statusLines.has(path) ? "a status line" : "a source error";
@@ -700,6 +701,7 @@ export function buildRecord(
     secrets,
     typedQuery: run.query,
     publicTexts: publicTextsOf(analysis),
+    track: analysis,
     ownRunIds: [run.runId, run.threadId],
     otherRunIds,
     allowedCover: cover,

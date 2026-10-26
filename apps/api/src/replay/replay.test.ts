@@ -39,7 +39,13 @@ import {
   STORED_UNCHECKED_LINE,
   storedErrorStatus,
 } from "../agent/storedResults.js";
-import { lostRecordsLine, MODEL_FAILURE_TEXT, sourceErrorLine } from "../agent/statusText.js";
+import {
+  foundLine,
+  lostRecordsLine,
+  MODEL_FAILURE_TEXT,
+  selectedLine,
+  sourceErrorLine,
+} from "../agent/statusText.js";
 import {
   cachedLine,
   MEASURING_LINE,
@@ -47,7 +53,6 @@ import {
   measuredSummary,
   UNVERSIONED_REASON,
 } from "../agent/nodes/engineerNode.js";
-import { foundLine } from "../agent/nodes/scoutNode.js";
 import { PLANNER_LINES, plannerLine } from "../agent/research/plannerLines.js";
 import { reasonIssue } from "../sources/http.js";
 import { INTERNAL_ERROR_PREFIX } from "../sources/toolResult.js";
@@ -995,9 +1000,10 @@ describe("the recorder", () => {
 
   it("passes every kind of status line today's code writes, with the track's own text", async () => {
     const codes = SourceError.shape.code.options;
-    // The scout's and the engineer's lines carry the track's title and artist, and the
-    // analyzer's version and a date.
+    // The scout's and the clarification's lines carry the track's title and artist as Spotify
+    // gives them; the engineer's, the analyzer's version and a date.
     const track = { title: "One More Time <3 -> Edit", artist: "Daft Punk", album: "Discovery" };
+    const ownLines = [foundLine(track), selectedLine(track)];
     const measurements = [
       measurementOf(audioV2()),
       measurementOf(signalOnlyV2()),
@@ -1022,7 +1028,7 @@ describe("the recorder", () => {
       }),
     ];
     const lines = [
-      foundLine(track),
+      ...ownLines,
       ...engineerLines,
       ...SourceId.options.flatMap((source) => [
         ...codes.flatMap((code) => [
@@ -1052,13 +1058,95 @@ describe("the recorder", () => {
     );
     expect(sent.length).toBeGreaterThan(10);
     const all = [...lines, ...sent];
-    const check = { secrets: [], typedQuery: "", publicTexts: publicTextsOf(track) };
+    const check = { secrets: [], typedQuery: "", publicTexts: publicTextsOf(track), track };
     const statusEvents = all.map((message) => ({ event: { type: "status", message } }));
     expect(leaks({ events: statusEvents }, check)).toEqual([]);
-    // Without the track's own text, each line passes what an error message is held to.
-    for (const message of [...engineerLines, ...lines.slice(1 + engineerLines.length), ...sent]) {
+    // Every line but the track's own two passes, whole, what an error message is held to.
+    for (const message of all.filter((line) => !ownLines.includes(line))) {
       expect(reasonIssue(message), message).toBeNull();
     }
+  });
+
+  it("lets no text of the track's own hide a stack trace or markup in another status line", () => {
+    const stack = "Error: boom at fetchJson (/srv/app/dist/sources/http.js:120:15)";
+    const entity = "upstream said &lt;html&gt;&lt;body&gt;Bad gateway&lt;/body&gt;&lt;/html&gt;";
+    const page = "<html><body>Bad gateway</body></html>";
+    const cases: Array<[string, string, string, string, string]> = [
+      // title, artist, album, a status line, why it is refused
+      [".", "Daft Punk", "Discovery", stack, "a stack trace"],
+      [":", "Daft Punk", "Discovery", stack, "a stack trace"],
+      ["/", "Daft Punk", "Discovery", stack, "a stack trace"],
+      ["a", "Daft Punk", "Discovery", stack, "a stack trace"],
+      ["at", "Daft Punk", "Discovery", stack, "a stack trace"],
+      ["One More Time", "Daft Punk", "", stack, "a stack trace"],
+      ["&", "Daft Punk", "Discovery", entity, "markup"],
+      ["<", ">", "Discovery", page, "markup"],
+      ["One More Time", "Daft Punk", page, page, "markup"],
+    ];
+    const fixture = loadReplays(DEFAULT_REPLAY_DIR).records[0];
+    const at = (prefix: string) =>
+      fixture.events.findIndex(
+        ({ event }) => event.type === "status" && event.message.startsWith(prefix),
+      );
+    const found = at("Found the track");
+    const other = at("Measuring tempo");
+    expect(found).toBeGreaterThan(0);
+    expect(other).toBeGreaterThan(0);
+    for (const [title, artist, album, line, why] of cases) {
+      const own = { title, artist, album };
+      const label = JSON.stringify(own);
+      const check = { secrets: [], typedQuery: "", publicTexts: publicTextsOf(own), track: own };
+      const status = (message: string) => ({ event: { type: "status", message } });
+      // The track's own line passes; the other line, and the own line with more after it, do not.
+      expect(
+        leaks(
+          { events: [status(foundLine(own)), status(line), status(`${foundLine(own)} ${line}`)] },
+          check,
+        ),
+        label,
+      ).toEqual([
+        `events[1].event.message: ${why} in a status line`,
+        `events[2].event.message: ${why} in a status line`,
+      ]);
+      // And a file of that track holding the line is left out when loaded.
+      const out = join(dir, "own-texts");
+      rmSync(out, { recursive: true, force: true });
+      mkdirSync(out);
+      const file: ReplayRecord = {
+        ...fixture,
+        analysis: { ...fixture.analysis, ...own },
+        events: fixture.events.map((item, i) =>
+          item.event.type === "status" && (i === found || i === other)
+            ? {
+                ...item,
+                event: { ...item.event, message: i === found ? foundLine(own) : line },
+              }
+            : item,
+        ),
+      };
+      writeFileSync(join(out, `${fixture.slug}.json`), JSON.stringify(file));
+      const set = loadReplays(out);
+      expect(set.records, label).toEqual([]);
+      expect(set.problems, label).toEqual([
+        `${fixture.slug}.json: holds text a recording must not (events[${other}].event.message: ${why} in a status line)`,
+      ]);
+    }
+    // The track's own line is spared the markup rule only: a stack trace in it is refused.
+    const traced = { title: "Boom at fetchJson (/srv/app/http.js:120:15)", artist: "Daft Punk" };
+    expect(
+      leaks(
+        { events: [{ event: { type: "status", message: foundLine(traced) } }] },
+        { secrets: [], typedQuery: "", publicTexts: [], track: traced },
+      ),
+    ).toEqual(["events[0].event.message: a stack trace in a status line"]);
+    // A title that holds the artist's text, or the other way round, is still the track's own.
+    const overlap = { title: "A", artist: "A <3 B" };
+    expect(
+      leaks(
+        { events: [{ event: { type: "status", message: foundLine(overlap) } }] },
+        { secrets: [], typedQuery: "", publicTexts: [], track: overlap },
+      ),
+    ).toEqual([]);
   });
 
   it("records and loads a track whose title or artist holds < or >, and still refuses markup in a status line", () => {

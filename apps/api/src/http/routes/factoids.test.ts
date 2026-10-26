@@ -33,6 +33,7 @@ const factoid = (title: string) => ({
   type: "production",
   entities: [{ text: "Roland Juno-106", type: "synth" }],
   evidenceIds: [],
+  scope: "recording",
 });
 
 /** A provider-layer answer with these factoids. */

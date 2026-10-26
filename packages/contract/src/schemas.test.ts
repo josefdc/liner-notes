@@ -12,6 +12,8 @@ import { Timestamp } from "./common.js";
 import { AnalyzeStreamEvent, decodeSseStream, encodeSseEvent } from "./events.js";
 import { Claim, Evidence, Measured } from "./evidence.js";
 import {
+  ComposerClaim,
+  ComposerFactoid,
   type ComposerOutput,
   composerOutputIssues,
   JUDGE_BATCH_MAX,
@@ -145,6 +147,14 @@ describe("Evidence and Claim (reader)", () => {
     };
     expect(Claim.parse(claim)).toEqual(claim);
     expect(ok(Claim, { ...sampleClaim(), numericCheck: "unknown" })).toBe(false);
+  });
+
+  it("may say what they are about: this recording, the song or a whole release", () => {
+    for (const scope of ["recording", "work", "release"]) {
+      expect(Claim.parse({ ...sampleClaim(), scope }).scope).toBe(scope);
+    }
+    expect(Claim.parse(sampleClaim()).scope).toBeUndefined();
+    expect(ok(Claim, { ...sampleClaim(), scope: "song" })).toBe(false);
   });
 
   it("can be a factoid card, never with the removed lyrics type", () => {
@@ -404,6 +414,22 @@ describe("ReplayRecord", () => {
   });
 });
 
+describe("composer claims and factoids", () => {
+  const claim = { text: "T", about: "credit", evidenceIds: [], field: null };
+  const card = { title: "T", text: "C", type: "trivia", entities: [], evidenceIds: [] };
+
+  it("always state their scope: the model must fill it", () => {
+    expect(ok(ComposerClaim, claim)).toBe(false);
+    expect(ok(ComposerFactoid, card)).toBe(false);
+    expect(ok(ComposerClaim, { ...claim, scope: null })).toBe(false);
+    for (const scope of ["recording", "work", "release"]) {
+      expect(ok(ComposerClaim, { ...claim, scope })).toBe(true);
+      expect(ok(ComposerFactoid, { ...card, scope })).toBe(true);
+    }
+    expect(ok(ComposerClaim, { ...claim, scope: "album" })).toBe(false);
+  });
+});
+
 describe("composerOutputIssues", () => {
   const node = (id: string, role: "current" | "source") => ({
     id,
@@ -419,6 +445,7 @@ describe("composerOutputIssues", () => {
     type: "trivia" as const,
     entities: [],
     evidenceIds: [],
+    scope: "recording" as const,
   };
   const valid: ComposerOutput = {
     claims: [],

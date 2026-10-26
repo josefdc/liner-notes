@@ -96,8 +96,15 @@ const output: ComposerOutput = {
       about: "sample",
       evidenceIds: ["ev-mb-1", "ev-made-up"],
       field: null,
+      scope: "recording",
     },
-    { text: "It runs at 116 BPM.", about: "sound", evidenceIds: [], field: "tempo" },
+    {
+      text: "It runs at 116 BPM.",
+      about: "sound",
+      evidenceIds: [],
+      field: "tempo",
+      scope: "recording",
+    },
   ],
   factoids: [
     {
@@ -106,6 +113,7 @@ const output: ComposerOutput = {
       type: "sample",
       entities: [{ text: "Queen", type: "artist" }],
       evidenceIds: ["ev-mb-1"],
+      scope: "recording",
     },
   ],
   genealogyNodes: [

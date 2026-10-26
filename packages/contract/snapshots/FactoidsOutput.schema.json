@@ -35,9 +35,14 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Ids of evidence items from the evidence pack that support this; [] when none"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["recording", "work", "release"],
+              "description": "What the statement is about: 'recording' this recording of the track, 'work' the song whatever the recording (its writers, other artists' versions), 'release' a whole release the track is on (an album credit, the album it appears on)"
             }
           },
-          "required": ["title", "text", "type", "entities", "evidenceIds"],
+          "required": ["title", "text", "type", "entities", "evidenceIds", "scope"],
           "additionalProperties": false
         }
       }
@@ -81,9 +86,14 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Ids of evidence items from the evidence pack that support this; [] when none"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["recording", "work", "release"],
+              "description": "What the statement is about: 'recording' this recording of the track, 'work' the song whatever the recording (its writers, other artists' versions), 'release' a whole release the track is on (an album credit, the album it appears on)"
             }
           },
-          "required": ["title", "text", "type", "entities", "evidenceIds"],
+          "required": ["title", "text", "type", "entities", "evidenceIds", "scope"],
           "additionalProperties": false
         }
       }

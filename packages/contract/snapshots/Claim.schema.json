@@ -63,6 +63,11 @@
         ]
       },
       "field": { "type": "string", "enum": ["tempo", "key"] },
+      "scope": {
+        "description": "What the claim states a fact about: this recording, the song (work) or a whole release; absent on older claims",
+        "type": "string",
+        "enum": ["recording", "work", "release"]
+      },
       "factoid": {
         "type": "object",
         "properties": {
@@ -166,6 +171,11 @@
         ]
       },
       "field": { "type": "string", "enum": ["tempo", "key"] },
+      "scope": {
+        "description": "What the claim states a fact about: this recording, the song (work) or a whole release; absent on older claims",
+        "type": "string",
+        "enum": ["recording", "work", "release"]
+      },
       "factoid": {
         "type": "object",
         "properties": {

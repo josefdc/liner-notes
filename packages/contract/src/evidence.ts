@@ -47,8 +47,8 @@ export const Evidence = z.object({
    * about. `track/` the matched recording (e.g. `track/recording/<mbid>`), `release/` a whole
    * release the track is on (e.g. a release-wide Discogs credit), `work/` the song, not this
    * recording (e.g. another artist's cover of it). A claim about the recording must not rest
-   * on a `work/` or `release/` item alone; for now that is a rule of the composer's prompt, not
-   * checked by code (claims built by code will check it). Web results have none (null).
+   * on a `work/` or `release/` item alone: `scopeSupports()` says which items may support a
+   * claim of a given scope (`ClaimScope`). Web results have none (null).
    */
   recordRef: z
     .string()
@@ -112,6 +112,16 @@ export type NumericCheck = z.infer<typeof NumericCheck>;
 export const ClaimOrigin = z.enum(["code", "model"]);
 export type ClaimOrigin = z.infer<typeof ClaimOrigin>;
 
+/**
+ * What a claim states a fact about, matching the scope of the primary records that may support
+ * it (`Evidence.recordRef`): `recording` this recording (`track/` records), `work` the song
+ * whatever the recording, such as its writers or another artist's cover (`work/` records),
+ * `release` a whole release the track is on, such as an album credit or the album it appears
+ * on (`release/` records). See `scopeSupports()`.
+ */
+export const ClaimScope = z.enum(["recording", "work", "release"]);
+export type ClaimScope = z.infer<typeof ClaimScope>;
+
 /** The fields a claim can point at for the numeric and key checks. */
 export const ClaimField = z.enum(["tempo", "key"]);
 export type ClaimField = z.infer<typeof ClaimField>;
@@ -155,9 +165,12 @@ export const NumericComparison = z.object({
  * One statement shown to the user. A cross-reference violation or an unknown value never
  * rejects a result: readers accept every claim they can read and decide how to show it with
  * `claimDisplayKind()`: a sourced claim citing evidence that is not in the pack, or a model
- * claim the judge did not support, reads as model inference. A code-built claim keeps its
- * kind whatever the judge said; the judge's verdict is kept for the record. Producers check
- * claims with `claimIssues()`.
+ * claim the judge did not support, reads as model inference. A code-built claim is supported
+ * by construction: a verdict of `unsupported` or `partial` does not change its kind, and the
+ * verdict is kept for the record. A contradicted claim (a `contradicted` verdict or numeric
+ * check, `claimIsRejected()`) is shown only in the rejected panel, whatever its kind and
+ * whoever wrote it; it stays in the result so readers can say why it was rejected. Producers
+ * check claims with `claimIssues()`.
  */
 export const Claim = z.object({
   id: z.string().min(1),
@@ -176,6 +189,10 @@ export const Claim = z.object({
     .describe("Why the numeric check gave its result; separate from the judge's reason"),
   numericComparison: NumericComparison.nullable().optional(),
   field: ClaimField.optional(),
+  scope: ClaimScope.optional().describe(
+    "What the claim states a fact about: this recording, the song (work) or a whole release; " +
+      "absent on older claims",
+  ),
   factoid: FactoidPresentation.optional(),
 });
 export type Claim = z.infer<typeof Claim>;

@@ -1,6 +1,7 @@
 import {
   Evidence,
   Genealogy,
+  type GenealogyLink as GenealogyLinkValue,
   type LinkType,
   linkDisplayKind as contractDisplayKind,
   resultContext,
@@ -13,6 +14,7 @@ import { sourceLabel } from '../provenance/SourceLink';
 import {
   evidencePack,
   linkContext,
+  linkDisplayKind,
   LINK_TYPE_LABEL,
   LINK_TYPES,
   type NamedNode,
@@ -305,7 +307,17 @@ describe('readLink', () => {
     });
   });
 
-  it('is never more generous than the contract', () => {
+  it('is never more generous than the contract, given the same claims', () => {
+    const supported = claim('cl-s', {
+      kind: 'sourced',
+      verdict: 'supported',
+      evidenceIds: ['ev-mb-1'],
+    });
+    const unsupported = claim('cl-u', {
+      kind: 'sourced',
+      verdict: 'unsupported',
+      evidenceIds: ['ev-mb-1'],
+    });
     const links = [
       sourced({ origin: 'code' }),
       sourced({ evidenceIds: ['ev-ghost'] }),
@@ -314,17 +326,26 @@ describe('readLink', () => {
       link('a', 'b', { type: 'remix', kind: 'inferred', evidenceIds: ['ev-mb-1'] }),
       link('a', 'b', { type: 'producer' }),
       link('a', 'b'),
+      sourced({ origin: 'model', claimId: 'cl-s' }),
+      sourced({ origin: 'model', claimId: 'cl-u' }),
+      // The contract leaves a code link to its evidence; the app follows its claim too.
+      sourced({ origin: 'code', claimId: 'cl-u' }),
     ];
+    const claims = [supported, unsupported];
     const genealogy = Genealogy.parse({ nodes: [node('a', 1), node('b', 4)], links });
     const ctx = resultContext({
       evidence: PACK.map((item) => Evidence.parse(item)),
+      claims,
       audio: null,
     } as unknown as TrackAnalysis);
     expect(genealogy.links).toHaveLength(links.length);
     const contract = genealogy.links.map((value) => contractDisplayKind(value, ctx));
-    const ours = links.map((value) => read(value).kind);
-    // Sourced only where the contract says sourced; stricter for the model's link.
-    expect(contract[3]).toBe('sourced');
+    const ours = links.map((value) => read(value, context(claims)).kind);
+    // The model's link without a supported claim is an inference by the contract's own rule.
+    expect(contract[3]).toBe('inferred');
+    expect(contract[7]).toBe('sourced');
+    expect(contract[8]).toBe('inferred');
+    expect(contract[9]).toBe('sourced');
     expect(ours).toEqual([
       'sourced',
       'inferred',
@@ -333,10 +354,28 @@ describe('readLink', () => {
       'inferred',
       'inferred',
       'inferred',
+      'sourced',
+      'inferred',
+      'inferred',
     ]);
     ours.forEach((kind, i) => {
       if (kind === 'sourced') expect(contract[i]).toBe('sourced');
     });
+  });
+
+  it("passes the result's claims to the contract's rule, so a supported model link stays sourced", () => {
+    const supported = claim('cl-1', {
+      kind: 'sourced',
+      verdict: 'supported',
+      evidenceIds: ['ev-mb-1'],
+    });
+    const ctx = context([supported]);
+    expect([...ctx.claims.keys()]).toEqual(['cl-1']);
+    const modelLink = sourced({ origin: 'model', claimId: 'cl-1' }) as GenealogyLinkValue;
+    expect(linkDisplayKind(modelLink, ctx.evidence, ctx.claims)).toBe('sourced');
+    // Without the claims, the contract cannot see the support: the link reads as inference.
+    expect(linkDisplayKind(modelLink, ctx.evidence)).toBe('inferred');
+    expect(linkContext(PACK, null).claims.size).toBe(0);
   });
 });
 

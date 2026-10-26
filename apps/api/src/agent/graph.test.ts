@@ -209,6 +209,7 @@ const answering: ProviderRoute = (call) => {
             about: "sample",
             evidenceIds: [],
             field: null,
+            scope: "recording",
           },
         ],
         factoids: [
@@ -218,6 +219,7 @@ const answering: ProviderRoute = (call) => {
             type: "sample",
             entities: [{ text: "Queen", type: "artist" }],
             evidenceIds: [],
+            scope: "recording",
           },
         ],
         genealogyNodes: [
@@ -500,6 +502,7 @@ const COMPOSITION = {
       type: "sample",
       entities: [],
       evidenceIds: [],
+      scope: "recording",
     },
   ],
   genealogyNodes: [

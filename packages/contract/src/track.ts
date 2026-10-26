@@ -127,12 +127,22 @@ export const LinkKind = z.enum(["sourced", "inferred"]);
 export type LinkKind = z.infer<typeof LinkKind>;
 
 /**
- * A relation between two genealogy nodes. A link may name a node that is not in the graph
- * (older results do): readers drop such links instead of failing.
+ * A relation between two genealogy nodes, pointing from the earlier work to the later one:
+ * `source` is the earlier record (the one sampled, interpolated, covered, remixed or that
+ * influenced), `target` the record that uses it. A `producer` link has no direction. A link may
+ * name a node that is not in the graph (older results do): readers drop such links instead of
+ * failing.
  */
 export const GenealogyLink = z.object({
-  source: z.string(),
-  target: z.string(),
+  source: z
+    .string()
+    .describe(
+      "Node id of the earlier work: the record that is sampled, interpolated, covered, remixed " +
+        "or that influenced the target",
+    ),
+  target: z
+    .string()
+    .describe("Node id of the later work: the record that uses or follows the source"),
   value: z.number().describe("Strength 1-3: 1 = weak influence, 3 = direct sample"),
   type: LinkType.optional(),
   kind: LinkKind.optional().describe(

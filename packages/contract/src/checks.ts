@@ -19,6 +19,7 @@ import {
   type Claim,
   type ClaimField,
   type ClaimKind,
+  type ClaimScope,
   EVIDENCE_EXCERPT_MAX,
   type Evidence,
 } from "./evidence.js";
@@ -32,17 +33,25 @@ import {
 
 const at = (path: string, message: string) => (path ? `${path}: ${message}` : message);
 
-/** What a claim or link is checked and shown against: the evidence pack and the measurement. */
+/**
+ * What a claim or link is checked and shown against: the evidence pack, the measurement and
+ * the result's claims (by id; the first claim with each id). Without `claims`, no model link
+ * can read as sourced.
+ */
 export interface ResultContext {
   evidenceIds: ReadonlySet<string>;
   audio: AudioFeatures | null | undefined;
+  claims?: ReadonlyMap<string, Claim>;
 }
 
 /** The context of a result, for `claimDisplayKind` and `linkDisplayKind`. */
 export function resultContext(analysis: TrackAnalysis): ResultContext {
+  const claims = new Map<string, Claim>();
+  for (const claim of analysis.claims ?? []) if (!claims.has(claim.id)) claims.set(claim.id, claim);
   return {
     evidenceIds: new Set((analysis.evidence ?? []).map((item) => item.id)),
     audio: analysis.audio,
+    claims,
   };
 }
 
@@ -145,6 +154,46 @@ export function audioFeaturesIssues(audio: AudioFeatures, path = "audio"): strin
 // =============================================================================
 
 /**
+ * True for a claim the verifier rejected: the judge found it contradicted by its cited
+ * excerpts (`verdict`), or the numeric check found its number contradicted by the measurement
+ * (`numericCheck`). A rejected claim is shown only in the rejected panel, with why, whatever
+ * its kind and whoever wrote it (code or model), and a model link that states it never reads
+ * as sourced (`linkDisplayKind`). A numeric `conflict` is not a rejection. It takes any object, read by the contract
+ * or not, so a reader can keep a rejected claim it cannot read out of the main view too.
+ */
+export function claimIsRejected(claim: { verdict?: unknown; numericCheck?: unknown }): boolean {
+  return claim.verdict === "contradicted" || claim.numericCheck === "contradicted";
+}
+
+/** The claim scope a primary record's recordRef carries (its first path segment), or null. */
+const RECORD_SCOPES: Readonly<Record<string, ClaimScope>> = {
+  track: "recording",
+  work: "work",
+  release: "release",
+};
+
+/**
+ * Whether an evidence item may support a claim of the given scope (a claim without one is
+ * read as a claim about this recording). A primary record supports only claims of its own
+ * scope: a `track/` record a recording claim, a `work/` record a claim about the song, a
+ * `release/` record a claim about a whole release. So a release-wide credit or the album a
+ * recording appears on never supports a claim about this recording, and another artist's cover
+ * of the song never does either. A primary record without a scope the contract knows supports
+ * nothing. An item that is not a primary record (a web page, an article) names no record and
+ * so no scope: it may support a claim of any scope, and whether its excerpt does is the judge's
+ * call.
+ */
+export function scopeSupports(
+  claimScope: ClaimScope | null | undefined,
+  evidence: Pick<Evidence, "sourceTier" | "recordRef">,
+): boolean {
+  if (evidence.sourceTier !== "primary-record") return true;
+  const prefix = evidence.recordRef?.split("/", 1)[0] ?? "";
+  const recordScope = Object.hasOwn(RECORD_SCOPES, prefix) ? RECORD_SCOPES[prefix] : null;
+  return recordScope === (claimScope ?? "recording");
+}
+
+/**
  * A measured claim comes from code, names its field, and that field was measured (a passed
  * gate and a non-null block). A sourced claim cites at least one item of the evidence pack,
  * and every id it cites is in the pack; a model-written sourced claim also needs a supported
@@ -183,7 +232,8 @@ const citesOnlyKnown = (ids: readonly string[], context: ResultContext) =>
  * How a reader shows a claim. A measured claim reads as measured only when code wrote it and
  * its field was measured. A sourced claim that cites nothing, cites evidence missing from the
  * pack, or is a model claim the judge did not support reads as model inference. Everything
- * else keeps its kind.
+ * else keeps its kind. Where it is shown is a separate rule: a rejected claim
+ * (`claimIsRejected`) appears only in the rejected panel, with the kind this function gives.
  */
 export function claimDisplayKind(claim: Claim, context: ResultContext): ClaimKind {
   if (claim.kind === "measured") {
@@ -196,12 +246,30 @@ export function claimDisplayKind(claim: Claim, context: ResultContext): ClaimKin
   return citesOnlyKnown(claim.evidenceIds, context) && judged ? "sourced" : "inferred";
 }
 
-/** A sourced link cites at least one evidence item, and every id a link cites is in the pack. */
+/**
+ * True when a model-written link has a claim (`claimId`) in the context that is not rejected
+ * and reads as sourced: only the verifier's support makes a model link sourced, never citing.
+ */
+function modelLinkSupported(link: GenealogyLink, context: ResultContext): boolean {
+  const claim = link.claimId === undefined ? undefined : context.claims?.get(link.claimId);
+  return (
+    claim !== undefined && !claimIsRejected(claim) && claimDisplayKind(claim, context) === "sourced"
+  );
+}
+
+/**
+ * A sourced link cites at least one evidence item, and every id a link cites is in the pack. A
+ * sourced link the model wrote also states a claim (`claimId`) that is not rejected and reads
+ * as sourced (`claimDisplayKind`).
+ */
 export function linkIssues(link: GenealogyLink, context: ResultContext, path = ""): string[] {
   const issues: string[] = [];
   const ids = link.evidenceIds ?? [];
   if (link.kind === "sourced" && ids.length === 0) {
     issues.push(at(`${path}.evidenceIds`, "a sourced link cites nothing"));
+  }
+  if (link.kind === "sourced" && link.origin === "model" && !modelLinkSupported(link, context)) {
+    issues.push(at(`${path}.kind`, "model link marked sourced without a supported claim"));
   }
   for (const id of ids) {
     if (!context.evidenceIds.has(id)) {
@@ -213,13 +281,18 @@ export function linkIssues(link: GenealogyLink, context: ResultContext, path = "
 
 /**
  * How a reader shows a link: sourced only when it says so and cites evidence that is all in
- * the pack; otherwise (no kind, no citation, an unknown citation) a model inference. A sample
- * link shown as inferred is an inferred influence, not a documented sample.
+ * the pack, and, when the model wrote it (`origin: "model"`), its claim (`claimId`) is in the
+ * context's claims, is not rejected (`claimIsRejected`) and reads as sourced
+ * (`claimDisplayKind`): citing is not support, the verifier's verdict is. Otherwise (no kind,
+ * no citation, an unknown citation, no supported claim) a model inference. A sample link shown
+ * as inferred is an inferred influence, not a documented sample.
  */
 export function linkDisplayKind(link: GenealogyLink, context: ResultContext): LinkKind {
-  return link.kind === "sourced" && citesOnlyKnown(link.evidenceIds ?? [], context)
-    ? "sourced"
-    : "inferred";
+  if (link.kind !== "sourced" || !citesOnlyKnown(link.evidenceIds ?? [], context)) {
+    return "inferred";
+  }
+  if (link.origin === "model" && !modelLinkSupported(link, context)) return "inferred";
+  return "sourced";
 }
 
 // =============================================================================

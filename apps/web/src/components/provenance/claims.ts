@@ -1,4 +1,11 @@
-import type { Claim, ClaimKind, Evidence, SourceId, SourceTier } from '@liner-notes/contract';
+import {
+  type Claim,
+  type ClaimKind,
+  claimIsRejected,
+  type Evidence,
+  type SourceId,
+  type SourceTier,
+} from '@liner-notes/contract';
 import { measuredAudioOf } from '../../constants';
 import type { TrackData } from '../../types';
 import type { MeasuredAudio } from '../measured/audio';
@@ -15,7 +22,9 @@ import type { MeasuredAudio } from '../measured/audio';
 // How a claim is shown is the contract's rule (`claimDisplayKind`, checks.ts), taken here over
 // the page's reading of the measurement. A claim the verifier contradicted, or whose number the
 // measurement contradicts, leaves the main view whatever its kind: it is listed with the
-// rejected claims only (`claimIsRejected`).
+// rejected claims only (the contract's `claimIsRejected`, re-exported here).
+
+export { claimIsRejected };
 
 // The contract's enums, mirrored so the page loads no schema; claims.property.test.ts checks
 // that each equals the contract's own.
@@ -57,6 +66,7 @@ export const NUMERIC_CHECKS: ReadonlySet<string> = new Set([
 ]);
 export const CLAIM_ORIGINS: ReadonlySet<string> = new Set(['code', 'model']);
 export const CLAIM_FIELDS: ReadonlySet<string> = new Set(['tempo', 'key']);
+export const CLAIM_SCOPES: ReadonlySet<string> = new Set(['recording', 'work', 'release']);
 export const FACTOID_TYPES: ReadonlySet<string> = new Set([
   'production',
   'trivia',
@@ -132,7 +142,7 @@ function isFactoidPresentation(value: unknown): boolean {
 /** True when the contract's `Claim` schema accepts the claim. */
 export function isClaim(value: unknown): value is Claim {
   if (!isObject(value)) return false;
-  const { numericReason, numericComparison, field, factoid } = value;
+  const { numericReason, numericComparison, field, scope, factoid } = value;
   return (
     isId(value.id) &&
     isString(value.text) &&
@@ -149,6 +159,7 @@ export function isClaim(value: unknown): value is Claim {
       numericComparison === null ||
       isNumericComparison(numericComparison)) &&
     (field === undefined || oneOf(CLAIM_FIELDS)(field)) &&
+    (scope === undefined || oneOf(CLAIM_SCOPES)(scope)) &&
     (factoid === undefined || isFactoidPresentation(factoid))
   );
 }
@@ -205,16 +216,6 @@ export function claimDisplayKind(claim: Claim, context: ClaimContext): ClaimKind
   const judged =
     claim.origin === 'code' || claim.verdict === 'supported' || claim.verdict === 'partial';
   return citesOnlyKnown(claim.evidenceIds, context) && judged ? 'sourced' : 'inferred';
-}
-
-/**
- * A claim rejected by the verifier: its judge found it contradicted by its cited excerpts, or
- * the numeric check found its number contradicted by the measurement. Whatever its kind, it is
- * shown only in the rejected claims, with why. It takes any item, read or not, so a claim this
- * page cannot read is still kept out of the main view when it was rejected.
- */
-export function claimIsRejected(claim: { verdict?: unknown; numericCheck?: unknown }): boolean {
-  return claim.verdict === 'contradicted' || claim.numericCheck === 'contradicted';
 }
 
 // =============================================================================

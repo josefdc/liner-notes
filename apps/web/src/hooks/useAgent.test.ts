@@ -485,6 +485,7 @@ describe('useAgent track picker', () => {
     expect(streams()).toHaveLength(opened);
     expect(hook.result.current.status).toBe('error');
     expect(hook.result.current.error).toContain('could not be found again');
+    expect(hook.result.current.errorCode).toBe('choice_lost');
   });
 
   it('opens one resume per picker and closes the analysis stream', async () => {
@@ -708,6 +709,7 @@ describe('useAgent inactivity watchdog', () => {
 
     expect(result.current.status).toBe('error');
     expect(result.current.error).toMatch(/stopped responding/);
+    expect(result.current.errorCode).toBe('stream_stalled');
     expect(analysis.closed).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
   });

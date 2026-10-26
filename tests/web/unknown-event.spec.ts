@@ -22,7 +22,7 @@ const candidates = hitl.streams[ANALYZE].find(
 async function search(page: Page, query: string) {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
 async function openDashboard(page: Page) {
@@ -58,7 +58,7 @@ test("an unknown event type is ignored, logged once, and the run goes on to its 
   await search(page, "Hurt");
 
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
-  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
   await expect(page.getByText("Searching for the track")).toHaveCount(1);
   // A status without a message is not shown as a placeholder line.
   await expect(page.getByText("Processing...")).toHaveCount(0);
@@ -160,7 +160,7 @@ test("a result from a newer API that this page reads leniently is shown", async 
   await search(page, "Hurt");
 
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
-  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
   expect(problems).toEqual([
     expect.stringMatching(/^warning: .*\(complete\): does not fit the contract; read leniently/),
   ]);
@@ -182,9 +182,8 @@ test("a result this page cannot read asks for a reload", async ({ page }) => {
   });
   await search(page, "Hurt");
 
-  await expect(page.getByText("SIGNAL LOST")).toBeVisible();
-  await expect(page.getByText(/This page is out of date/)).toBeVisible();
-  await expect(page.getByText("Reload the page to get it.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
+  await expect(page.getByText(/This page is out of date. Reload the page/)).toBeVisible();
   await expect(page.getByText("The analysis ended without a result.")).toHaveCount(0);
 });
 

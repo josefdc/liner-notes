@@ -29,7 +29,7 @@ const liveDisabled = [
 
 async function search(page: Page, query: string) {
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
 test("a spent budget pauses live analysis, offers the recorded tracks and labels the replay", async ({
@@ -45,8 +45,8 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   await expect(banner).toContainText("The budget for live analysis is spent");
   await expect(banner).toContainText("not a live analysis");
   // Not an error to retry, and no result: only the recorded tracks are offered.
-  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "RETRY ANALYSIS" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);
   const tracks = banner.getByRole("list", { name: "Recorded tracks" });
   await expect(tracks.getByRole("button")).toHaveCount(1);

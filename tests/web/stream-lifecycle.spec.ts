@@ -42,7 +42,7 @@ const finished = (log: string[], path: string) =>
 async function search(page: Page, query: string) {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
 test("a candidate picked before the analysis stream ends opens one resume and shows the result once", async ({
@@ -82,7 +82,7 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
   expect.soft(resumes(log)).toHaveLength(1);
   expect.soft(posts(log)).toEqual([]);
   await expect.soft(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
-  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
 });
 
 test("a stream that fails shows an error with a retry instead of starting a second analysis", async ({
@@ -109,7 +109,7 @@ test("a stream that fails shows an error with a retry instead of starting a seco
   });
   await search(page, "Bright Lines");
 
-  await expect(page.getByText("SIGNAL LOST")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
   await expect.poll(async () => finished(await streamLog(page), ANALYZE)).toBe(true);
   // Leave time for anything the error might still set off.
   await page.waitForTimeout(300);
@@ -118,7 +118,7 @@ test("a stream that fails shows an error with a retry instead of starting a seco
   // The broken stream was closed, so it did not reconnect (a new run on the server).
   expect(await streamLog(page)).not.toContain(`${ANALYZE} reconnect`);
 
-  await page.getByRole("button", { name: "RETRY ANALYSIS" }).click();
+  await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   const log = await apiRequests(page);
   expect(analyses(log)).toHaveLength(2);
@@ -140,8 +140,8 @@ test("a complete event without a result shows an error with a retry", async ({ p
   });
   await search(page, "Bright Lines");
 
-  await expect(page.getByText("SIGNAL LOST")).toBeVisible();
-  await expect(page.getByRole("button", { name: "RETRY ANALYSIS" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);
   expect(posts(await apiRequests(page))).toEqual([]);
 });
@@ -227,7 +227,9 @@ test.describe("with the browser's EventSource", () => {
     );
     await search(page, "Hurt");
 
-    await expect(page.getByText("The analysis took too long.")).toBeVisible();
+    await expect(
+      page.getByText("A music service is not answering right now. Try again in a few minutes."),
+    ).toBeVisible();
     await page.waitForTimeout(1_000);
     expect(opened).toHaveLength(1);
   });
@@ -242,7 +244,7 @@ test.describe("with the browser's EventSource", () => {
     );
     await search(page, "Hurt");
 
-    await expect(page.getByText("Lost the connection to the analysis.")).toBeVisible();
+    await expect(page.getByText(/Lost the connection to the analysis\./)).toBeVisible();
     await page.waitForTimeout(1_000);
     expect(opened).toHaveLength(1);
   });

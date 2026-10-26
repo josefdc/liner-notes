@@ -21,7 +21,7 @@ test("a failing suggestion request shows that suggestions are unavailable", asyn
   await expect(page.getByText(unavailable)).toBeVisible();
   expect(await apiRequests(page)).toContain("fetch /api/search/suggest");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "ANALYZE_SONG" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Analyze", exact: true })).toBeEnabled();
 });
 
 test("suggestions that load show the list and no error", async ({ page }) => {

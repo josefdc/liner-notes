@@ -17,7 +17,7 @@ const candidate = {
 async function search(page: Page, query: string) {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
 // The visible status line follows the live region that repeats it for screen readers.

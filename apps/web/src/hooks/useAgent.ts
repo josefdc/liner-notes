@@ -67,6 +67,19 @@ export const OUTDATED_ERROR = {
     'This page is out of date and cannot show the analysis. Reload the page, then search again.',
 } as const;
 
+/**
+ * Codes for the failures this hook raises itself, so the page can explain each one. They are the
+ * app's own, not codes the API sends (`no_match` has the same meaning as the API's).
+ */
+export const CLIENT_ERROR_CODES = {
+  noMatch: 'no_match',
+  wrongTrack: 'wrong_track',
+  noResult: 'no_result',
+  streamStalled: 'stream_stalled',
+  connectionLost: 'connection_lost',
+  choiceLost: 'choice_lost',
+} as const;
+
 /** Loads the code that reads the streams, unless it is loaded already. */
 function readersReady(): Promise<void> | null {
   return eventSchemasLoaded() ? null : loadEventSchemas();
@@ -385,7 +398,7 @@ export function useAgent(): UseAgentReturn {
           const { candidates } = data;
           if (candidates.length === 0) {
             close();
-            fail(run, 'No matching songs were found.');
+            fail(run, 'No matching songs were found.', CLIENT_ERROR_CODES.noMatch);
             break;
           }
           run.threadId = data.threadId || run.threadId;
@@ -409,7 +422,11 @@ export function useAgent(): UseAgentReturn {
         case 'complete': {
           if (run.expectedTrackId !== null && data.data?.id !== run.expectedTrackId) {
             close();
-            fail(run, 'The recording found is not the track you picked, so it is not shown.');
+            fail(
+              run,
+              'The recording found is not the track you picked, so it is not shown.',
+              CLIENT_ERROR_CODES.wrongTrack,
+            );
             break;
           }
           run.phase = 'complete';
@@ -477,7 +494,8 @@ export function useAgent(): UseAgentReturn {
         case 'done':
           close();
           // A stream that ends without a result, an error or a picker has nothing to show.
-          if (run.phase === 'running') fail(run, 'The analysis ended without a result.');
+          if (run.phase === 'running')
+            fail(run, 'The analysis ended without a result.', CLIENT_ERROR_CODES.noResult);
           break;
       }
     },
@@ -501,12 +519,14 @@ export function useAgent(): UseAgentReturn {
         if (streamRef.current?.source === source) streamRef.current = null;
       };
       // The connection is gone: an error unless the run already has what it needs.
-      const lose = (message: string) => {
+      const lose = (message: string, code: string) => {
         const current = isCurrent();
         close();
-        if (current && run.phase === 'running') fail(run, message);
+        if (current && run.phase === 'running') fail(run, message, code);
       };
-      const watchdog = inactivityWatchdog(() => lose('The analysis stopped responding.'));
+      const watchdog = inactivityWatchdog(() =>
+        lose('The analysis stopped responding.', CLIENT_ERROR_CODES.streamStalled),
+      );
 
       run.controller.signal.addEventListener('abort', close, { once: true });
       streamRef.current = { source, close };
@@ -535,7 +555,8 @@ export function useAgent(): UseAgentReturn {
       };
       // EventSource reconnects by itself, which would start the analysis again on the
       // server: close instead and let the user retry.
-      source.onerror = () => lose('Lost the connection to the analysis.');
+      source.onerror = () =>
+        lose('Lost the connection to the analysis.', CLIENT_ERROR_CODES.connectionLost);
     },
     [fail, handleStreamEvent],
   );
@@ -614,7 +635,11 @@ export function useAgent(): UseAgentReturn {
         // picked, as a resume would. A row without a Spotify id cannot be asked for: searching
         // the text again would only bring the same picker back.
         if (!isSpotifyTrackId(candidate.id)) {
-          fail(run, 'The track you picked could not be found again. Please search again.');
+          fail(
+            run,
+            'The track you picked could not be found again. Please search again.',
+            CLIENT_ERROR_CODES.choiceLost,
+          );
           return;
         }
         await analyze(run.query || `${candidate.title} ${candidate.artist}`, {

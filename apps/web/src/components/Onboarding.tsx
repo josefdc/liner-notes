@@ -203,35 +203,63 @@ function pickerTarget(key: string, current: number, count: number): number | nul
   }
 }
 
-const GENERIC_ERROR_HINT = 'Unexpected interference. The system is ready to retry.';
+/** The heading of the error block. */
+const ERROR_TITLE = 'The analysis did not finish';
 
-// What to do next for each failure code the API sends with an error.
-const ERROR_HINTS_BY_CODE: Record<string, string> = {
-  no_match: 'No signal detected. Verify track name and artist.',
-  choice_expired: 'That choice is no longer open. Search again.',
-  run_interrupted: 'That choice is no longer open. Search again.',
-  upstream_unavailable: 'An upstream service is not answering. Try again later.',
-  timeout: 'An upstream service is not answering. Try again later.',
-  // The app's own code: a newer version was deployed since this page loaded.
-  outdated_client: 'A newer version is out. Reload the page to get it.',
+const NEXT_STEP = 'Try again, or search for a different song.';
+const GENERIC_ERROR = `Something went wrong. ${NEXT_STEP}`;
+const NO_MATCH = 'No song matched your search. Check the title and artist, then try again.';
+const CHOICE_CLOSED = 'That choice is no longer open. Search again.';
+const SERVICE_DOWN = 'A music service is not answering right now. Try again in a few minutes.';
+const UNREADABLE_SEARCH = 'The search could not be read. Check what you typed, then try again.';
+const OFFLINE_ERROR =
+  'The connection to the analysis server failed. Check your internet connection, then try again.';
+
+// What happened and what to do next, for each failure code the API (or the app) sends with an
+// error.
+const ERROR_COPY_BY_CODE: Record<string, string> = {
+  no_match: NO_MATCH,
+  choice_expired: CHOICE_CLOSED,
+  run_interrupted: CHOICE_CLOSED,
+  not_waiting: CHOICE_CLOSED,
+  invalid_selection: CHOICE_CLOSED,
+  upstream_unavailable: SERVICE_DOWN,
+  timeout: SERVICE_DOWN,
+  rate_limited: 'Too many requests. Wait a minute, then try again.',
+  forbidden_origin:
+    'The analysis server does not accept requests from this page. Open Liner Notes at its usual address and try again.',
+  invalid_input: UNREADABLE_SEARCH,
+  invalid_json: UNREADABLE_SEARCH,
+  bad_request: UNREADABLE_SEARCH,
+  // The app's own codes (useAgent's CLIENT_ERROR_CODES and OUTDATED_ERROR).
+  wrong_track: `The recording found is not the track you picked, so it is not shown. ${NEXT_STEP}`,
+  no_result: `The analysis ended without a result. ${NEXT_STEP}`,
+  stream_stalled:
+    'The analysis stopped responding. Check your internet connection, then try again.',
+  connection_lost:
+    'Lost the connection to the analysis. Check your internet connection, then try again.',
+  choice_lost: 'The track you picked could not be found again. Search again.',
+  // A newer version was deployed since this page loaded.
+  outdated_client:
+    'This page is out of date. Reload the page to get the new version, then search again.',
 };
 
-// UX: Error hint helper (Item 10 - in-character error copy). A failure code decides; only an
-// error without one (connection errors, older servers) is matched on its text.
-function getErrorHint(error: string | null, code: string | null): string {
-  if (code) return ERROR_HINTS_BY_CODE[code] ?? GENERIC_ERROR_HINT;
-  if (!error) return GENERIC_ERROR_HINT;
-  const lower = error.toLowerCase();
-  if (
-    lower.includes('timeout') ||
-    lower.includes('connection') ||
-    lower.includes('network') ||
-    lower.includes('fetch')
-  )
-    return 'Uplink unstable. Check your connection and retry.';
-  if (lower.includes('not found') || lower.includes('no results') || lower.includes('404'))
-    return 'No signal detected. Verify track name and artist.';
-  return GENERIC_ERROR_HINT;
+/**
+ * The lines the error block shows. A failure code this page knows (the API's or the app's own)
+ * gets its own words. Any other code shows the server's message (short and written for people,
+ * by the contract) and the next step. An error without a code is a thrown exception's own text
+ * ("Failed to fetch"): it is never shown, only read for the kind of failure.
+ */
+function errorCopy(error: string | null, code: string | null): string[] {
+  if (code) {
+    const known = ERROR_COPY_BY_CODE[code];
+    if (known) return [known];
+    return error ? [error, NEXT_STEP] : [GENERIC_ERROR];
+  }
+  const text = error ?? '';
+  if (/connection|network|fetch|offline|responding|timed? ?out/i.test(text)) return [OFFLINE_ERROR];
+  if (/not (?:be )?found|no match|no results|\b404\b/i.test(text)) return [NO_MATCH];
+  return [GENERIC_ERROR];
 }
 
 interface OnboardingProps {
@@ -281,6 +309,8 @@ const Onboarding: React.FC<OnboardingProps> = ({
   onSearchAgain,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  // An empty search was submitted: the box says what to type until the query changes.
+  const [emptySubmit, setEmptySubmit] = useState(false);
   const [sugState, sugDispatch] = useReducer(suggestionReducer, initialSuggestionState);
   const {
     suggestions,
@@ -461,9 +491,21 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      setEmptySubmit(false);
       analyze(searchQuery.trim());
+    } else {
+      setEmptySubmit(true);
+      inputRef.current?.focus();
     }
   };
+  const showEmptyHint = emptySubmit && !searchQuery.trim();
+
+  // The error block shows plain words; the error's own text goes to the console.
+  const showsErrorBlock = status === 'error' && !isLiveUnavailable(errorCode);
+  useEffect(() => {
+    if (showsErrorBlock)
+      console.warn('[Onboarding] The analysis failed:', errorCode ?? '(no code)', error);
+  }, [showsErrorBlock, error, errorCode]);
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
@@ -609,10 +651,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
           </div>
 
           <h1 className="text-4xl md:text-5xl font-sans font-light tracking-wide leading-tight text-shadow-glow-cyber">
-            The Sonic Agent
+            Liner Notes
           </h1>
           <p className="text-text-secondary font-sans text-base max-w-md mx-auto leading-relaxed">
-            Enter a song to analyze its DNA — BPM, samples, production history, and more.
+            Type a song and its artist. Liner Notes traces its samples, credits, history and sound,
+            and shows which claims are measured, sourced or inferred.
           </p>
 
           {/* Search Form */}
@@ -639,12 +682,15 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   }}
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setEmptySubmit(false);
+                  }}
                   onKeyDown={handleKeyDown}
                   onFocus={() =>
                     suggestions.length > 0 && sugDispatch({ type: 'SET_SHOW', show: true })
                   }
-                  placeholder="Song title + artist (e.g., Midnight City M83)"
+                  placeholder="Song title and artist"
                   maxLength={200}
                   className={`${inputVisualStyles} pl-12 pr-10`}
                   autoComplete="off"
@@ -652,8 +698,20 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   aria-autocomplete="list"
                   aria-expanded={showSuggestions}
                   aria-controls="search-suggestions"
+                  aria-invalid={showEmptyHint || undefined}
+                  aria-describedby={showEmptyHint ? 'search-empty-hint' : undefined}
                 />
               </div>
+
+              {showEmptyHint && (
+                <p
+                  id="search-empty-hint"
+                  role="alert"
+                  className="mt-2 text-xs font-mono text-text-secondary text-left"
+                >
+                  Type a song title and its artist first, for example: Midnight City M83.
+                </p>
+              )}
 
               {suggestionsFailed && (
                 <p role="status" className="mt-2 text-xs font-mono text-text-tertiary text-left">
@@ -695,7 +753,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                     </button>
                   ))}
                   <div className="px-3 py-2 text-xs text-text-tertiary border-t border-white/5 font-mono">
-                    ↑↓ navigate • Click/Enter analyze • Esc close
+                    Arrow keys to move, Enter to analyze, Esc to close
                   </div>
                 </div>
               )}
@@ -705,11 +763,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
               type="submit"
               variant="cyber"
               size="lg"
-              disabled={!searchQuery.trim()}
               isLoading={isAnalyzing}
               className="w-full"
             >
-              ANALYZE_SONG
+              Analyze
             </Button>
           </form>
 
@@ -738,19 +795,21 @@ const Onboarding: React.FC<OnboardingProps> = ({
             </div>
           )}
 
-          {/* Error State (Item 10 — in-character error copy) */}
-          {status === 'error' && !isLiveUnavailable(errorCode) && (
+          {/* Error state: what happened and what to do next, in plain words */}
+          {showsErrorBlock && (
             <div className="bg-status-error/5 border border-status-error/20 rounded-md p-6 space-y-4">
-              <div className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
-                <CircleAlert size={16} />
-                SIGNAL LOST
-              </div>
-              {error && (
-                <p className="text-text-secondary text-xs font-mono text-center">{error}</p>
-              )}
-              <p className="text-text-tertiary text-xs font-mono text-center">
-                {getErrorHint(error, errorCode)}
-              </p>
+              <h2 className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
+                <CircleAlert size={16} aria-hidden="true" />
+                {ERROR_TITLE}
+              </h2>
+              {errorCopy(error, errorCode).map((line, index) => (
+                <p
+                  key={line}
+                  className={`text-xs font-mono text-center ${index === 0 ? 'text-text-secondary' : 'text-text-tertiary'}`}
+                >
+                  {line}
+                </p>
+              ))}
               <div className="flex flex-col items-center gap-3">
                 <Button
                   variant="cyber"
@@ -758,7 +817,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   leftIcon={<RotateCcw size={14} />}
                   onClick={retry}
                 >
-                  RETRY ANALYSIS
+                  Try again
                 </Button>
                 <button
                   type="button"
@@ -779,7 +838,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               className="text-text-tertiary hover:text-cyber text-xs font-mono animate-fade-in transition-colors focus-visible:outline-none focus-visible:underline flex items-center gap-1.5"
             >
               <ArrowLeft size={12} />
-              RESTORE PREVIOUS SESSION
+              Back to the last result
             </button>
           )}
         </div>

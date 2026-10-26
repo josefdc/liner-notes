@@ -74,12 +74,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.3.1+essentia.models-5c5c0c7f`. Every successful
+model set as semver build metadata, e.g. `2.3.2+essentia.models-5c5c0c7f`. Every successful
 (`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.3.1+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.2+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -102,7 +102,7 @@ and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `
 {
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.3.1+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.2+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -181,6 +181,15 @@ times are seconds from the start of the preview. Every block is `null` when it w
   each part's median stays within 5 %). A beatless intro is no evidence either way: a band
   that starts 10 s in gets its tempo. When the tempo is withheld as unsteady, `beats` are kept with Essentia,
   whose beats follow the change, and dropped with librosa, whose tracker keeps one period.
+  `beats.times` holds only the beats with sound under them (an RMS within 50 ms of the beat,
+  its mean removed, no more than 60 dB under the loudest frame and at least 3e-5, or
+  -90.5 dBFS, which is above 16-bit dither): trackers keep counting through silence
+  (Essentia put 23 beats in 10 s of digital silence before a band), so the grid can have
+  gaps. The tempo is still fitted to the tracked beats on onsets, and the steadiness check
+  and the sections still use every tracked beat. Known limits: beats a tracker counts
+  through an audible intro without onsets (a pad) or over a low noise floor (hum or hiss at
+  -70 to -50 dBFS) are still reported, since a level cannot tell that sound from a quiet
+  passage.
   `confidence` is on 0-1; Essentia reports 0-5.32, which is divided by 5.32 and kept in
   `rawConfidence`.
 - **Key** is only estimated from musical pitch, on the harmonic part of the signal (a

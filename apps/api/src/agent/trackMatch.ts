@@ -584,14 +584,14 @@ function sameTake(a: SpotifyData, b: SpotifyData): boolean {
 }
 
 /**
- * The line that asks the user to choose among `count` candidates, true for one candidate as
- * for several: "Spotify found one possible track; confirm it or search again", "Spotify found 3
- * possible tracks; choose one".
+ * The line that asks the user to choose among the `count` candidates offered: "One possible
+ * track from Spotify; confirm it or search again", "5 possible tracks from Spotify; choose one".
+ * It counts what is offered, never what Spotify returned (the offer is capped).
  */
 export function choiceMessage(count: number): string {
   return count === 1
-    ? "Spotify found one possible track; confirm it or search again"
-    : `Spotify found ${count} possible tracks; choose one`;
+    ? "One possible track from Spotify; confirm it or search again"
+    : `${count} possible tracks from Spotify; choose one`;
 }
 
 /**

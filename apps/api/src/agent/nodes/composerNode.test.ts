@@ -592,9 +592,10 @@ describe("composerNode", () => {
     ])(
       "%s: returns the flagged fallback without model text and records the error",
       async (kind, reason, said) => {
+        const writer = vi.fn();
         const out = await createComposerNode(testRuntime(failing(kind)))(
           stateWith(measured),
-          config(),
+          config({ writer }),
         );
 
         expect(out.trackData).toMatchObject({
@@ -611,9 +612,12 @@ describe("composerNode", () => {
           expect.objectContaining({ callSite: "composer", status: kind }),
         ]);
         // "Unavailable" only where the model could not be reached; the line names what it shows.
-        expect(out.statusMessages).toEqual([
-          `${said}; showing source data only, with a template song structure and no written notes`,
-        ]);
+        const line = `${said}; showing source data only, with a template song structure and no written notes`;
+        expect(out.statusMessages).toEqual([line]);
+        // The client is told the same as the state says.
+        expect(writer).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "status", code: "LLM-ERROR", message: line }),
+        );
       },
     );
 

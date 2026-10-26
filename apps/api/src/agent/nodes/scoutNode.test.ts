@@ -381,6 +381,25 @@ describe("scoutNode's track picker", () => {
     expect(out.candidates?.map((candidate: { id: string }) => candidate.id)).toEqual(["a", "c"]);
   });
 
+  it("counts the candidates it offers, not the results Spotify returned", async () => {
+    const ten = "abcdefghij".split("").map((id) => ({ ...track, id, artist: id.toUpperCase() }));
+    spotify.answer = async () => JSON.stringify(ten);
+    const { graph } = scoutGraph();
+
+    const messages: string[] = [];
+    let state: { candidates?: unknown[]; statusMessages?: string[] } = {};
+    const stream = await graph.stream({ songQuery: "Song" }, { streamMode: ["custom", "values"] });
+    for await (const [mode, data] of stream as AsyncIterable<[string, Record<string, unknown>]>) {
+      if (mode === "custom") messages.push(String(data.message));
+      else state = data;
+    }
+
+    // Spotify returned ten; five are offered, and the lines say five, from Spotify.
+    expect(state.candidates).toHaveLength(5);
+    expect(messages).toEqual(["Searching Spotify", "5 possible tracks from Spotify; choose one"]);
+    expect(state.statusMessages).toEqual(["5 possible tracks from Spotify; choose one"]);
+  });
+
   it("fails the search when no candidate fits the contract", async () => {
     spotify.answer = async () =>
       JSON.stringify(ambiguous.map((candidate) => ({ ...candidate, coverUrl: null })));

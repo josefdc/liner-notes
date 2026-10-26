@@ -639,7 +639,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       log.warn(
         `Model unavailable (${failed.status}); building the result from source data: ${error instanceof Error ? error.message : String(error)}`,
       );
-      status("LLM-ERROR", modelLine(reason, "building the result from source data only"));
+      status("LLM-ERROR", modelLine(reason, FALLBACK_SHOWS));
 
       const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
       const enriched = await withArtwork(fallback.genealogy, spotify!.coverUrl, signal);

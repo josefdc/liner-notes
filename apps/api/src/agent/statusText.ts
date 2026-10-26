@@ -32,6 +32,23 @@ export function sourceErrorLine(error: SourceError, keyRejected = false): string
   return `${name} ${SOURCE_ERROR_TEXT[error.code]}`;
 }
 
+/** What happened to the request that lost records, by its error code. */
+const LOST_REQUEST_TEXT: Record<SourceError["code"], string> = {
+  not_configured: "was not sent: no key is configured",
+  unavailable: "got no usable answer",
+  timeout: "got no answer in time",
+  rate_limited: "was refused: the source is limiting requests",
+  invalid_response: "got an answer the reader does not know",
+};
+
+/**
+ * The status line of a source that answered but lost records to a failed request: what
+ * happened, in words, never the request's error text (it can hold URLs or response bodies).
+ */
+export function lostRecordsLine(error: SourceError): string {
+  return `${SOURCE_NAMES[error.source]} records are incomplete: a request ${LOST_REQUEST_TEXT[error.code]}; a later run reads them again`;
+}
+
 /** Why the language model gave the run nothing it could use, as a category. */
 export type ModelUnavailableReason =
   | "no_output"

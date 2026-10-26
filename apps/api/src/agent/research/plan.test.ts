@@ -376,7 +376,7 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.planner).toHaveLength(1);
     expect(run.planner[0].tier).toBe("fast");
     // The status counts the steps that ran: the four fixed ones.
-    expect(run.status).toContain("Research finished: 4 steps run in all");
+    expect(run.status).toContain("Research finished");
     // The research holds what they found.
     expect(run.research?.collaborators).toEqual(["Earthquake (supporting musician)"]);
     expect(run.research?.listenbrainzSimilarArtists?.[0]).toMatch(/^1\. MC Hammer \(similar to /);
@@ -419,7 +419,7 @@ describe("the research plan of a track with an ISRC", () => {
       "Not asked again: ListenBrainz similar artists (already ran in this research)",
     );
     // Skipped picks are not counted as steps that ran.
-    expect(run.status).toContain("Research finished: 4 steps run in all");
+    expect(run.status).toContain("Research finished");
   });
 
   it("does not run a step the research itself ran again", async () => {
@@ -430,7 +430,7 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.status).toContain(
       "Not asked again: the planner's lead on the web (already ran in this research)",
     );
-    expect(run.status).toContain("Research finished: 5 steps run in all");
+    expect(run.status).toContain("Research finished");
   });
 
   it("keeps no placeholder or error page as research or evidence", async () => {
@@ -580,6 +580,8 @@ describe("the research plan of a track with an ISRC", () => {
         node: "research_tool",
       }),
     ]);
+    // A step whose source has no key is not announced as searched.
+    expect(run.status.filter((l) => l.startsWith("Searching: sample history"))).toEqual([]);
     // The research's first line names only the sources it asks: no web search without a key.
     const start = run.status.filter((l) => l.startsWith("Starting the research"));
     expect(start).toHaveLength(2);

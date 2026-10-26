@@ -980,6 +980,8 @@ describe("the analysis graph's progress messages", () => {
         "Starting the research: Last.fm",
         "Primary sources not asked: the track has no ISRC",
         "Choosing follow-up step 1 of at most 2",
+        // A finish with no count: each step said what it did.
+        "Research finished",
         "Writing the liner notes",
         "Looking up cover art on Spotify for the genealogy",
         "Analysis complete",
@@ -990,11 +992,23 @@ describe("the analysis graph's progress messages", () => {
       expect.arrayContaining([
         "Web search (Tavily) could not be read: it gave no usable answer",
         "The model is unavailable: it is limiting requests; showing source data only, with a template song structure and no written notes",
+        // The planner's 429 ended the research early: said, and never followed by a normal finish.
+        "Research ended early: the model is unavailable: it is limiting requests",
+        "Research stopped early; showing what was found",
       ]),
     );
+    expect(fallback).not.toContain("Research finished");
+    // The streamed fallback line and the state's are the same line.
+    expect(
+      fallback.filter(
+        (line) =>
+          line ===
+          "The model is unavailable: it is limiting requests; showing source data only, with a template song structure and no written notes",
+      ),
+    ).toHaveLength(2);
     // One candidate: the choice line says one, in the candidates event, the state and the
     // interrupt alike.
-    const one = "Spotify found one possible track; confirm it or search again";
+    const one = "One possible track from Spotify; confirm it or search again";
     expect(asked.filter((message) => message === one)).toHaveLength(3);
     expect(asked.join("\n")).not.toMatch(/Multiple|songs found|matching songs/);
     expect(picked).toContain("Selected: Ice Ice Baby (its Spotify details could not be read)");
@@ -1007,6 +1021,9 @@ describe("the analysis graph's progress messages", () => {
     const all = [...measured, ...served, ...fallback, ...asked, ...picked];
     expect(all.filter((message) => flagged(message).length > 0)).toEqual([]);
     expect(all.filter((message) => message.endsWith("..."))).toEqual([]);
+    expect(all.filter((message) => /steps? run/.test(message))).toEqual([]);
+    // No web search key in these runs: no line says the web is being searched.
+    expect(all.filter((message) => message.startsWith("Searching: sample history"))).toEqual([]);
     // The planner's reasoning ("planned …", model text) is never a status line.
     expect(all.filter((message) => message.startsWith("planned "))).toEqual([]);
   });

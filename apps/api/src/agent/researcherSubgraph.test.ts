@@ -5,7 +5,7 @@
  * source error. The search tools are stubs.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const tools = vi.hoisted(() => {
   // A web search finds one result named after the tool; every other source finds nothing.
@@ -48,6 +48,7 @@ vi.mock("../sources/musicbrainz.js", async (importOriginal) => ({
   getMusicBrainzArtist: tools.getMusicBrainzArtist,
 }));
 vi.mock("../sources/lastfm.js", () => ({
+  lastfmConfigured: () => true,
   getLastfmTrackTags: tools.getLastfmTrackTags,
   getLastfmArtistTags: tools.getLastfmArtistTags,
   getLastfmSimilarTracks: tools.getLastfmSimilarTracks,
@@ -179,6 +180,23 @@ describe("researcher subgraph", () => {
     expect(final.statusMessages.join("\n")).not.toMatch(/budget_exceeded|unavailable/);
   });
 
+  it("tells the client, as a warning, that the research ended early when the planner fails", async () => {
+    const llm = planner(new LlmError("rate_limited", "research_planner: 429"));
+    const events: Array<Record<string, unknown>> = [];
+    const stream = await createResearcherSubgraph(testRuntime(llm)).stream(
+      { spotifyData },
+      { streamMode: "custom" },
+    );
+    for await (const event of stream) events.push(event as Record<string, unknown>);
+
+    expect(events.filter((event) => event.node === "research_manager").at(-1)).toMatchObject({
+      type: "status",
+      code: "SYS-WARN",
+      message: "Research ended early: the model is unavailable: it is limiting requests",
+    });
+    expect(events.map((event) => event.message)).not.toContain("Research steps finished");
+  });
+
   it("says an unusable planner answer was not used, not that the planner was unavailable", async () => {
     const llm = planner(new LlmError("invalid_output", "research_planner: bad answer"));
     const final = await createResearcherSubgraph(testRuntime(llm)).invoke({ spotifyData });
@@ -248,7 +266,12 @@ describe("researcher subgraph", () => {
   it("starts no search once the run is cancelled", async () => {
     const controller = new AbortController();
     let reads = 0;
-    // The clock is read for each status event; the second one announces the first search.
+    // The clock is read for each status event; the second one announces the first search, a
+    // web search, which is announced only when the web search has a key.
+    vi.stubEnv("TAVILY_API_KEY", "test-key");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
     const runtime = {
       ...testRuntime(planner(plan("search_musicbrainz"))),
       now: () => {

@@ -365,13 +365,17 @@ export async function historianNode(
     });
   }
 
-  const steps = finalState.stepsRun ?? 0;
-  const summary = failure
+  // A planner call that failed ended the research early too (the researcher said why): the
+  // summary never reads as a normal finish then. Each step said what it did; the summary does
+  // not count them (no one count matches what the run asked).
+  const plannerFailed = (finalState.usage ?? []).some((call) => call.status !== "ok");
+  const stoppedEarly = Boolean(failure) || plannerFailed;
+  const summary = stoppedEarly
     ? "Research stopped early; showing what was found"
-    : `Research finished: ${steps} ${steps === 1 ? "step" : "steps"} run in all`;
+    : "Research finished";
   writer?.({
     type: "status",
-    code: failure ? "SYS-WARN" : "RESEARCH-FOUND",
+    code: stoppedEarly ? "SYS-WARN" : "RESEARCH-FOUND",
     message: summary,
     node: "historian",
     timestamp: timestampOf(runtime),
@@ -392,7 +396,7 @@ export async function historianNode(
       ...prefetchStatus,
       ...(finalState.statusMessages ?? []),
       ...pack.status,
-      ...(failure ? [summary] : []),
+      ...(stoppedEarly ? [summary] : []),
     ],
   };
 }

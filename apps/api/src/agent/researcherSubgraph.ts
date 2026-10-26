@@ -33,6 +33,7 @@ import { ResearchPlanOutput } from "@liner-notes/contract";
 import { answeredCall, failedCall } from "./callRecords.js";
 import type { WebFinding } from "./research/evidencePack.js";
 import { PLANNER_LINES, plannerLine } from "./research/plannerLines.js";
+import { configuredSources } from "./cacheKeys.js";
 import { MODEL_FAILURE_TEXT, modelErrorCategory, sourceErrorLine } from "./statusText.js";
 import {
   FIRST_STEP,
@@ -220,9 +221,10 @@ function createResearchManagerNode(runtime: AgentRuntime) {
   ): Promise<Partial<ResearcherStateType>> {
     const writer = config.writer;
     const iteration = state.researchIteration;
-    const status = (message: string) =>
+    const status = (message: string, code?: "SYS-WARN") =>
       writer?.({
         type: "status",
+        ...(code ? { code } : {}),
         message,
         node: "research_manager",
         timestamp: timestampOf(runtime),
@@ -287,15 +289,12 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       const failed = failedCall(PLANNER_CALL_SITE, FOLLOW_UP_TIER, error);
       if (failed.status === "unexpected") throw error;
       log.warn(`Planner unavailable (${failed.status})`);
-      return {
-        researchComplete: true,
-        usage: [failed],
-        statusMessages: [
-          plannerLine(PLANNER_LINES.ended, {
-            reason: MODEL_FAILURE_TEXT[modelErrorCategory(error)],
-          }),
-        ],
-      };
+      // Said to the client as it happens, as a warning: the research ends here.
+      const ended = plannerLine(PLANNER_LINES.ended, {
+        reason: MODEL_FAILURE_TEXT[modelErrorCategory(error)],
+      });
+      status(ended, "SYS-WARN");
+      return { researchComplete: true, usage: [failed], statusMessages: [ended] };
     }
 
     // The planner's reasoning is model text: written at debug level only.
@@ -575,6 +574,14 @@ const ACTION_SOURCE: Record<Exclude<ResearchPlan["nextAction"], "done">, SourceI
   search_listenbrainz_similar: "listenbrainz",
 };
 
+/** False for a source that needs a key and has none configured now (Last.fm, the web search). */
+function hasKey(source: SourceId): boolean {
+  const configured = configuredSources();
+  if (source === "lastfm") return configured.lastfm;
+  if (source === "tavily") return configured.tavily;
+  return true;
+}
+
 /** What each step searches, in the status lines' words. */
 const ACTION_LABEL: Record<Exclude<ResearchPlan["nextAction"], "done">, string> = {
   search_samples: "sample history on the web",
@@ -720,12 +727,15 @@ async function researchStep(
 
   log.debug(`Executing: ${plan.nextAction}`);
 
-  writer?.({
-    type: "status",
-    message: `Searching: ${label}`,
-    node: "research_tool",
-    timestamp: timestampOf(runtime),
-  });
+  // Said only for a source that will be asked: one without its key is not, and its step says so.
+  if (hasKey(ACTION_SOURCE[action])) {
+    writer?.({
+      type: "status",
+      message: `Searching: ${label}`,
+      node: "research_tool",
+      timestamp: timestampOf(runtime),
+    });
+  }
 
   interface Step {
     data: ResearchData;

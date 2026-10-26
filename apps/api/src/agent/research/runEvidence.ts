@@ -27,6 +27,7 @@ import {
 } from "../../sources/identity.js";
 import { SOURCE_NAMES } from "../prompts.js";
 import { trackQuery, uniqueErrors, unreadableStatus } from "../researcherSubgraph.js";
+import { lostRecordsLine } from "../statusText.js";
 import { type AgentRuntime, timestampOf } from "../runtime.js";
 import type { SpotifyData } from "../state.js";
 import { discogsConfigured } from "../../sources/discogs.js";
@@ -237,13 +238,8 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   const losses = lostRecords(read.sources);
   const lost = losses.map(({ error }) => error);
   const warnings: string[] = [];
-  for (const { error, note } of losses) {
-    warnings.push(
-      `${SOURCE_NAMES[error.source]} records are incomplete: ${
-        note ?? error.message ?? "a request failed"
-      }`,
-    );
-  }
+  // In words: the note and the error's message can hold the request's error text.
+  for (const { error } of losses) warnings.push(lostRecordsLine(error));
   warnings.push(...unreadableStatus(errors.filter((e) => !lost.includes(e))));
   const incomplete: Incomplete[] = [];
   // Nothing was lost, but the covers are less specific than a later run may give: said once.

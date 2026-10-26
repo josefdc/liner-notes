@@ -357,13 +357,13 @@ describe("analyze routes", () => {
       const threadId = interrupts[0].threadId as string;
       expect(threadId).toMatch(/^[0-9a-f-]{36}$/);
       expect(interrupts[0].candidates).toHaveLength(2);
-      expect(interrupts[0].message).toBe("Spotify found 2 possible tracks; choose one");
+      expect(interrupts[0].message).toBe("2 possible tracks from Spotify; choose one");
       expect(ofType(res.events, "complete")).toHaveLength(0);
       expect(runStatus(threadId)).toBe("interrupted");
     });
 
     it("asks about one candidate as one, in the stream and in the POST answer", async () => {
-      const one = "Spotify found one possible track; confirm it or search again";
+      const one = "One possible track from Spotify; confirm it or search again";
       const streamed = ofType((await sse(streamPath("ambiguous-one hurt"))).events, "interrupt");
       expect(streamed.map((event) => event.message)).toEqual([one]);
       const posted = await request(app).post("/api/analyze").send({ query: "ambiguous-one hurt" });

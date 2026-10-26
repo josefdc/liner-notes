@@ -472,10 +472,11 @@ describe("a run whose primary sources fail", () => {
     expect(statusLines(events).some((m) => /MusicBrainz records are incomplete/.test(m))).toBe(
       true,
     );
-    // In words, without the error's code.
-    expect(statusLines(events).some((m) => /records are incomplete \(rate_limited\)/.test(m))).toBe(
-      false,
-    );
+    // In words: never the request's error text (its URL, status or body) nor the code.
+    const incomplete = statusLines(events).filter((m) => /records are incomplete/.test(m));
+    expect(incomplete).toEqual([
+      "MusicBrainz records are incomplete: a request was refused: the source is limiting requests; a later run reads them again",
+    ]);
     // MusicBrainz lists no cover of the work, and the run does not pass that off as complete.
     const covers = (e: { source: string; recordRef: string | null }) =>
       e.source === "musicbrainz" && /covered-by/.test(e.recordRef ?? "");

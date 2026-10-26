@@ -16,14 +16,16 @@ import {
 } from "@liner-notes/contract";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+/** The node ids the artwork lookup was given, last call. */
+const artwork = vi.hoisted(() => ({ given: [] as string[] }));
 vi.mock(
   "./enricher.js",
   () =>
     ({
-      enrichGenealogyWithArtwork: async (genealogy) => ({
-        nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })),
-        complete: true,
-      }),
+      enrichGenealogyWithArtwork: async (genealogy) => {
+        artwork.given = (genealogy?.nodes ?? []).map(({ id }) => id);
+        return { nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })), complete: true };
+      },
     }) satisfies Partial<typeof import("./enricher.js")>,
 );
 // The verifier's long-term store, outside a graph: none (the fallback is never stored).
@@ -166,7 +168,7 @@ function relation(
   kind: Extract<PrimaryRelation, { type: "relation" }>["kind"],
   scope: "track" | "work",
   attributes: string[] = [],
-): PrimaryRelation {
+): Extract<PrimaryRelation, { type: "relation" }> {
   return {
     type: "relation",
     source: "musicbrainz",
@@ -322,14 +324,15 @@ describe("code-built claims and links from the primary records", () => {
     expect(code.links.filter((l) => l.type === "cover")).toEqual([]);
   });
 
-  it("says a medley takes part of the song, and draws no link for it", async () => {
+  it("draws no link for a medley of the song, and leaves it last among the covers", async () => {
+    // FORK's "Anniversary Medley Part 1": partial, in a medley; whole covers come first, and the
+    // covers of this recording's song are capped at 4.
     const { evidence, relations } = await readIce();
     const code = buildCodeClaims(relations, evidence, counter());
     const id = `musicbrainz:work/e0ebb61d-7f69-3667-a2b1-dcd447d80f3d/covered-by/recording/d03e2f99-0248-4cc2-ace4-3e0abbcbf386`;
-    expect(claimCiting(code.claims, id)?.text).toBe(
-      '"Anniversary Medley Part 1" by FORK covers part of the work "Ice Ice Baby" in a medley.',
-    );
     expect(code.links.some((l) => l.evidenceIds?.includes(id))).toBe(false);
+    expect(claimCiting(code.claims, id)).toBeUndefined();
+    expect(code.claims.filter((claim) => claim.about === "cover")).toHaveLength(4);
   });
 
   it("scopes a Discogs credit by what it names: the track, or the whole release", async () => {
@@ -384,12 +387,12 @@ describe("code-built claims and links from the primary records", () => {
     expect(code.nodes.some((node) => node.id === `mb-${UNDER_PRESSURE}`)).toBe(false);
   });
 
-  it("keeps at most 6 relations of each kind, the recording's own and the full ones first", () => {
+  it("keeps at most 4 relations of a kind that draws on the recording, its own and the whole ones first", () => {
     const relations = [
       ...Array.from({ length: 12 }, (_, i) => relation(i, "covered-by", "work")),
       relation(20, "covered-by", "track", ["cover", "partial"]),
       relation(21, "covered-by", "track"),
-      // The same record again under the same kind: once.
+      // The same record filed again under the same kind: once.
       { ...relation(21, "covered-by", "track"), evidenceId: "musicbrainz:dup" },
     ];
     expect(curatedRelations(relations).map((r) => r.other.mbid)).toEqual([
@@ -397,8 +400,6 @@ describe("code-built claims and links from the primary records", () => {
       "rec-20",
       "rec-0",
       "rec-1",
-      "rec-2",
-      "rec-3",
     ]);
   });
 
@@ -413,8 +414,10 @@ describe("code-built claims and links from the primary records", () => {
     ]);
     expect(kept.filter((r) => r.kind === "samples").map((r) => r.other.mbid)).toEqual(["rec-99"]);
     expect(kept.filter((r) => r.kind === "remix-of").map((r) => r.other.mbid)).toEqual(["rec-98"]);
-    expect(kept.filter((r) => r.kind === "sampled-by")).toHaveLength(6);
-    expect(kept.filter((r) => r.kind === "remixed-by")).toHaveLength(6);
+    // What draws on it is capped lower, and comes after.
+    expect(kept.filter((r) => r.kind === "sampled-by")).toHaveLength(4);
+    expect(kept.filter((r) => r.kind === "remixed-by")).toHaveLength(4);
+    expect(kept.slice(0, 2).map((r) => r.kind)).toEqual(["samples", "remix-of"]);
   });
 
   it("spends no place of the cap on a relation whose item is not in the evidence", () => {
@@ -489,20 +492,28 @@ describe("credits", () => {
     expect(code.claims.slice(5).every((claim) => claim.scope === "release")).toBe(true);
   });
 
-  it("folds the model's claim of a credit into the code claim citing the same Discogs item", () => {
+  it("folds the model's claim of a credit only when it says no more than the code claim", () => {
     const relations = [credit(0, "Test Producer", 3)];
     const code = buildCodeClaims(relations, relations.map(creditItem), counter());
+    const cites = { about: "credit" as const, evidenceIds: [TRACK_CREDIT(0)] };
     const draft = draftOf([
-      modelClaim("m-credit", { about: "credit", evidenceIds: [TRACK_CREDIT(0)] }),
-      modelClaim("m-other", { about: "credit", evidenceIds: [TRACK_CREDIT(7)] }),
+      modelClaim("m-same", {
+        ...cites,
+        text: 'Test Producer is credited as producer on "Ice Ice Baby".',
+      }),
+      modelClaim("m-more", { ...cites, text: "Test Producer produced it at Hit Factory in 1989." }),
+      modelClaim("m-other-role", { ...cites, text: "Test Producer wrote the lyrics." }),
+      modelClaim("m-uncited", { about: "credit", evidenceIds: [TRACK_CREDIT(7)] }),
       {
-        ...modelClaim("m-card", { about: "credit", evidenceIds: [TRACK_CREDIT(0)] }),
+        ...modelClaim("m-card", { ...cites, text: "Test Producer is credited as producer." }),
         factoid: { title: "Credits", type: "credits", entities: [] },
       },
     ]);
     const merged = withCodeClaims(draft, code);
     expect(merged.claims.map((claim) => claim.id)).toEqual([
-      "m-other",
+      "m-more",
+      "m-other-role",
+      "m-uncited",
       "m-card",
       code.claims[0].id,
     ]);
@@ -661,6 +672,8 @@ describe("a model link that duplicates a code link", () => {
         evidenceIds: [SAMPLES_ID],
       },
     ],
+    noArtwork: [],
+    works: {},
   };
   const modelLink = (
     source: string,
@@ -900,5 +913,289 @@ describe("the fallback", () => {
     });
     expect(analysisIssues(result)).toEqual([]);
     expect(result.claims?.every((claim) => claim.origin === "code")).toBe(true);
+  });
+});
+
+describe("a song this track covers", () => {
+  const coverOfSong = (artist: string | null = null): PrimaryRelation => ({
+    type: "relation",
+    source: "musicbrainz",
+    evidenceId: "musicbrainz:track/recording/jb/cover-of/work/hw",
+    scope: "track",
+    kind: "cover-of",
+    attributes: ["cover", "live"],
+    other: { entity: "work", mbid: "hw", title: "Hallelujah", artist },
+  });
+  const item: Evidence = {
+    id: "musicbrainz:track/recording/jb/cover-of/work/hw",
+    source: "musicbrainz",
+    sourceTier: "primary-record",
+    url: "https://musicbrainz.org/recording/jb",
+    title: "Hallelujah — MusicBrainz relationships",
+    retrievedAt: AT,
+    excerpt: 'MusicBrainz: "Hallelujah" by Jeff Buckley is a cover of "Hallelujah".',
+    recordRef: "track/recording/jb/cover-of/work/hw",
+  };
+  const cohen = (draft: ReturnType<typeof draftOf>) => {
+    draft.genealogy.nodes = draft.genealogy.nodes.map((node) =>
+      node.id === "orig" ? { ...node, label: "Hallelujah - Leonard Cohen (1984)" } : node,
+    );
+    return draft;
+  };
+
+  it("is named as the song, never as this track", () => {
+    const code = buildCodeClaims([coverOfSong()], [item], counter());
+    expect(code.nodes.map((node) => node.label)).toEqual(["Hallelujah (the song)"]);
+    expect(code.nodes[0]).not.toHaveProperty("trackTitle");
+    expect(code.links).toMatchObject([{ source: "mb-hw", target: "current", type: "cover" }]);
+  });
+
+  it("takes the model's node for the original recording only when the record names its artist", () => {
+    const link = {
+      source: "orig",
+      target: "current",
+      value: 1,
+      type: "cover" as const,
+      kind: "inferred" as const,
+      origin: "model" as const,
+      claimId: "m-cover",
+      evidenceIds: [],
+    };
+    // The record names no artist for the song: the model's node stays its own.
+    const unnamed = withCodeClaims(
+      cohen(draftOf([modelClaim("m-cover")], [link])),
+      buildCodeClaims([coverOfSong()], [item], counter()),
+    );
+    expect(unnamed.genealogy.nodes.map((node) => node.id)).toEqual(["current", "orig", "mb-hw"]);
+    // It does: the model's node for Leonard Cohen's recording is the song's node.
+    const named = withCodeClaims(
+      cohen(draftOf([modelClaim("m-cover")], [link])),
+      buildCodeClaims([coverOfSong("Leonard Cohen")], [item], counter()),
+    );
+    expect(named.genealogy.nodes.map((node) => node.label)).toEqual([
+      "Ice Ice Baby",
+      "Hallelujah (the song by Leonard Cohen)",
+    ]);
+    expect(named.claims.map((claim) => claim.id)).not.toContain("m-cover");
+  });
+});
+
+describe("one node for one record", () => {
+  it("takes the model's node whose credit is part of the record's, led by the same artist", () => {
+    const record: GenealogyNode = {
+      id: "mb-up",
+      group: 4,
+      label: "Under Pressure - Queen & David Bowie",
+      size: 22,
+      trackTitle: "Under Pressure",
+      trackArtist: "Queen & David Bowie",
+    };
+    const model = (label: string): GenealogyNode => ({ id: "m", group: 4, label, size: 22 });
+    expect(sameRecord(model("Under Pressure - Queen (1981)"), record)).toBe(true);
+    expect(sameRecord(model("Under Pressure - David Bowie"), record)).toBe(false);
+  });
+
+  it("draws two recordings with one title and artist as one node, keeping both claims", () => {
+    const twin = (n: number): PrimaryRelation => ({
+      ...relation(n, "covered-by", "track"),
+      other: { entity: "recording", mbid: `rec-${n}`, title: "Ice Ice Baby", artist: "DJ Twin" },
+    });
+    const relations = [twin(1), twin(2)];
+    const items = relations.map((r) => ({
+      ...itemOf(r),
+      excerpt: 'MusicBrainz: "Own" by Artist is covered by "Ice Ice Baby" by DJ Twin.',
+    }));
+    const code = buildCodeClaims(relations, items, counter());
+    expect(code.nodes.map((node) => node.id)).toEqual(["mb-rec-1"]);
+    expect(code.links).toHaveLength(1);
+    expect(code.claims.map((claim) => claim.evidenceIds[0])).toEqual(
+      relations.map((r) => r.evidenceId),
+    );
+  });
+
+  it.each([
+    ["Ambassadors", "X Ambassadors"],
+    ["Malcolm", "Malcolm X"],
+  ])("never takes %s for %s", (model, record) => {
+    const code: GenealogyNode = {
+      id: "mb-x",
+      group: 4,
+      label: `Renegades - ${record}`,
+      size: 22,
+      trackTitle: "Renegades",
+      trackArtist: record,
+    };
+    expect(sameRecord({ id: "m", group: 4, label: `Renegades - ${model}`, size: 22 }, code)).toBe(
+      false,
+    );
+  });
+
+  it("never takes a record credited to MusicBrainz's unknown artist", () => {
+    const code: GenealogyNode = {
+      id: "mb-x",
+      group: 4,
+      label: "Song - [unknown]",
+      size: 22,
+      trackTitle: "Song",
+      trackArtist: "[unknown]",
+    };
+    expect(sameRecord({ id: "m", group: 4, label: "Song - [unknown]", size: 22 }, code)).toBe(
+      false,
+    );
+  });
+});
+
+describe("the wording of a partial or medley cover", () => {
+  /** The claim code builds for a cover of this recording, from its item's excerpt. */
+  const cover = (
+    kind: "cover-of" | "covered-by",
+    attributes: string[],
+    other: { title: string; artist: string | null; entity?: "recording" | "work" },
+    excerpt: string,
+  ) => {
+    const relationOf: PrimaryRelation = {
+      type: "relation",
+      source: "musicbrainz",
+      evidenceId: "musicbrainz:track/recording/own/x",
+      scope: "track",
+      kind,
+      attributes,
+      other: {
+        entity: other.entity ?? "recording",
+        mbid: "x",
+        title: other.title,
+        artist: other.artist,
+      },
+    };
+    const item: Evidence = {
+      ...itemOf(relation(1, kind, "track")),
+      id: relationOf.evidenceId,
+      excerpt,
+    };
+    return buildCodeClaims([relationOf], [item], counter()).claims.map((claim) => claim.text);
+  };
+
+  it("splits on the record named at the end, whatever the title before it says", () => {
+    expect(
+      cover(
+        "cover-of",
+        ["cover", "partial"],
+        { title: "Hallelujah", artist: null, entity: "work" },
+        'MusicBrainz: "this is a cover of hallelujah lol" by kid is a cover of "Hallelujah".',
+      ),
+    ).toEqual(['"this is a cover of hallelujah lol" by kid partly covers "Hallelujah".']);
+    expect(
+      cover(
+        "covered-by",
+        ["cover", "partial"],
+        { title: "Snow", artist: "Band" },
+        'MusicBrainz: the work "Snow is covered by Rain" is covered by "Snow" by Band.',
+      ),
+    ).toEqual(['"Snow" by Band partly covers the work "Snow is covered by Rain".']);
+  });
+
+  it("says part of only when MusicBrainz marks the cover partial", () => {
+    const excerpt = 'MusicBrainz: the work "Song" is covered by "Mix" by Band.';
+    expect(
+      cover("covered-by", ["cover", "medley"], { title: "Mix", artist: "Band" }, excerpt),
+    ).toEqual(['"Mix" by Band covers the work "Song" in a medley.']);
+    expect(
+      cover(
+        "covered-by",
+        ["cover", "medley", "partial"],
+        { title: "Mix", artist: "Band" },
+        excerpt,
+      ),
+    ).toEqual(['"Mix" by Band covers part of the work "Song" in a medley.']);
+  });
+});
+
+describe("record text in claims", () => {
+  it("writes a Discogs name with a dollar sign as it is", () => {
+    const money: PrimaryRelation = {
+      type: "credit",
+      source: "discogs",
+      evidenceId: TRACK_CREDIT(0),
+      scope: "track",
+      name: "Ca$$h Money (2)",
+      artistId: 9,
+      roles: ["Producer"],
+    };
+    const item: Evidence = {
+      id: TRACK_CREDIT(0),
+      source: "discogs",
+      sourceTier: "primary-record",
+      url: "https://www.discogs.com/release/599648",
+      title: "To the Extreme — Discogs release 599648",
+      retrievedAt: AT,
+      excerpt:
+        'Discogs release 599648 ("To the Extreme", 1990) credits Ca$$h Money (2) as Producer on track 1 "Ice Ice Baby".',
+      recordRef: "track/release/599648/credit/0",
+    };
+    expect(buildCodeClaims([money], [item], counter()).claims[0].text).toBe(
+      'Discogs release 599648 ("To the Extreme", 1990) credits Ca$$h Money as Producer on track 1 "Ice Ice Baby".',
+    );
+  });
+
+  it("masks a handle in a code claim as in the node made from the same record", async () => {
+    const handle: PrimaryRelation = {
+      ...relation(1, "remixed-by", "track"),
+      other: {
+        entity: "recording",
+        mbid: "rec-1",
+        title: "Song (@djhandle remix)",
+        artist: "Band",
+      },
+    };
+    const item = {
+      ...itemOf(relation(1, "remixed-by", "track")),
+      excerpt: 'MusicBrainz: "Own" by Artist is remixed in "Song (@djhandle remix)" by Band.',
+    };
+    const runtime = testRuntime(
+      stubLlm(() => {
+        throw new LlmError("rate_limited", "composer: rate_limited");
+      }),
+      AT,
+    );
+    const state = stateFor(null as unknown as ComposedDraft, [item], {
+      relations: [handle],
+      usage: [],
+      audioFeatures: null,
+    });
+    const config = { writer: () => {}, configurable: { thread_id: "handle-1" } } as never;
+    const composed = await createComposerNode(runtime)(state, config);
+    const verified = await createVerifierNode(runtime)(
+      { ...state, draft: composed.draft, usage: composed.usage ?? [] } as SonicAgentStateType,
+      config,
+    );
+    const result = TrackAnalysis.parse(verified.trackData);
+    const node = result.genealogy.nodes.find((n) => n.id === "mb-rec-1");
+    const claim = result.claims?.find((c) => c.origin === "code");
+    expect(node?.label).not.toContain("@djhandle");
+    expect(claim?.text).not.toContain("@djhandle");
+    expect(claim).toMatchObject({ kind: "sourced" });
+  });
+});
+
+describe("cover art for the nodes made from records", () => {
+  it("is looked up for the first 2 of each kind only", async () => {
+    const relations = Array.from({ length: 4 }, (_, i) => relation(i, "sampled-by", "track"));
+    const evidence = relations.map(itemOf);
+    const llm = stubLlm(() => {
+      throw new LlmError("rate_limited", "composer: rate_limited");
+    });
+    const runtime = testRuntime(llm, AT);
+    const state = stateFor(null as unknown as ComposedDraft, evidence, {
+      relations,
+      usage: [],
+      audioFeatures: null,
+    });
+    const config = { writer: () => {}, configurable: { thread_id: "artwork-1" } } as never;
+    const composed = await createComposerNode(runtime)(state, config);
+    await createVerifierNode(runtime)(
+      { ...state, draft: composed.draft, usage: composed.usage ?? [] } as SonicAgentStateType,
+      config,
+    );
+    expect(artwork.given).toEqual(["current", "mb-rec-0", "mb-rec-1"]);
   });
 });

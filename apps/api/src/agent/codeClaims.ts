@@ -8,7 +8,8 @@
  *   Discogs excerpt names its release by its Discogs number and has no prefix, so it is kept
  *   whole, with the credited name without Discogs' disambiguation number ("Nirvana (2)" reads
  *   "Nirvana"). A partial or medley cover says so: "partly covers", "covers part of … in a
- *   medley", never "is covered by";
+ *   medley" (only when MusicBrainz marks it partial), "covers … in a medley", never "is covered
+ *   by";
  * - it cites exactly that item, and its scope is the item's recordRef scope (a `track/` record
  *   gives a claim about this recording, `work/` one about the song, `release/` one about a
  *   whole release): a track-scoped Discogs credit gives a recording claim, a release-wide credit
@@ -21,23 +22,36 @@
  * A code link (`origin: "code"`, `kind: "sourced"`) is built for a relation of this recording
  * (a `track/` record) with a genealogy meaning (a sample, interpolation, remix or whole cover),
  * between the analysed track and a node made from the record (the other recording's title and
- * artist, or the work's title). It points from the earlier record to the later one
- * (`GenealogyLink`): a recording this one samples, remixes or covers is the source; one that
- * samples, remixes or covers it is the target. Each link states its own claim (`claimId`),
- * never another link's. No link is drawn for:
+ * artist; for a song this recording covers, "<title> (the song)", so it is never read as this
+ * track). It points from the earlier record to the later one (`GenealogyLink`): a recording this
+ * one samples, remixes or covers is the source; one that samples, remixes or covers it is the
+ * target. Each link states its own claim (`claimId`), never another link's. One node stands for
+ * one record: two MusicBrainz recordings with the same title and artist credit (or one credit
+ * within the other, led by the same artist) are one node, and each keeps its claim. No link is
+ * drawn for:
  * - a cover of the song (a `work/` record: this recording is not shown to be its original, so
  *   nothing says it is the one covered, or the earlier one): its claim, about the work, only;
  * - a partial or medley cover: it takes part of the other record, not the whole of it.
  *
- * Curation. Per relationship kind (samples, sampled-by, remix-of, remixed-by, cover-of,
- * covered-by and the interpolations) at most CODE_RELATIONS_PER_KIND, each kind on its own, so
- * what the track draws on is never pushed out by what draws on it: relations about this
- * recording before those about its song, whole ones before partial or medley ones, then in the
- * order MusicBrainz lists them, one per other record; only relations whose item is in the
- * evidence count. Records carry no release date, so no date order is attempted. Credits: one per
- * credited artist (by Discogs id, else by name) and roles, a credit on the track before the same
- * one on the whole release, at most CODE_CREDITS_MAX, the track's before the whole release's.
- * Every other record stays in the evidence pack only.
+ * Curation. MusicBrainz gives these relationships no release status, so relevance is read from
+ * what the records do say:
+ * - what this recording draws on (samples, interpolates, remix-of, cover-of) always comes before
+ *   what draws on it (sampled-by, interpolated-by, remixed-by, covered-by), in the claims and in
+ *   the node order;
+ * - each kind is capped on its own, what draws on this recording lower
+ *   (CODE_DESCENDANTS_PER_KIND) than what it draws on (CODE_SOURCES_PER_KIND);
+ * - within a kind: relations about this recording before those about its song, whole ones
+ *   before partial or medley ones, then in the order MusicBrainz lists them;
+ * - a record that draws on this one with an artist credit that is mostly not letters or digits
+ *   (decorative Unicode: an uploader's handle, not a known artist) is left out;
+ * - only relations whose item is in the evidence count, and a record is counted once.
+ * Credits: one per credited artist (by Discogs id, else by name) and roles, a credit on the
+ * track before the same one on the whole release, at most CODE_CREDITS_MAX, the track's before
+ * the whole release's. Every other record stays in the evidence pack only.
+ *
+ * Artwork. Each node made from a recording may be searched for its cover, but only the first
+ * CODE_ARTWORK_PER_KIND of each relationship kind (`noArtwork` lists the rest), so one run never
+ * sends a burst of searches that a rate limit would cut short.
  */
 
 import {
@@ -48,23 +62,29 @@ import {
   LINK_CLAIM_ABOUT,
   type LinkType,
 } from "@liner-notes/contract";
-import { normalizeArtist, normalizeTitle, titlesMatch } from "../sources/records.js";
+import { normalizeArtist, normalizeTitle, quoted, titlesMatch } from "../sources/records.js";
 import type { CreditRelation, PrimaryRelation, RecordingRelation } from "./research/relations.js";
 import type { Genealogy, GenealogyLink, GenealogyNode } from "./schema.js";
 import type { ComposedDraft } from "./state.js";
 import { LINK_VALUE } from "./verifier/links.js";
 
-/** The most relations of one kind a result states; the rest stay in the evidence pack. */
-export const CODE_RELATIONS_PER_KIND = 6;
+/** The most relations of one kind this recording draws on (samples, remix-of …) a result states. */
+export const CODE_SOURCES_PER_KIND = 6;
+/** The most relations of one kind that draw on this recording (sampled-by …) a result states. */
+export const CODE_DESCENDANTS_PER_KIND = 4;
 /** The most credits a result states; the rest stay in the evidence pack. */
 export const CODE_CREDITS_MAX = 12;
+/** The nodes of one relationship kind whose cover art is looked up. */
+export const CODE_ARTWORK_PER_KIND = 2;
 
 /** How a node made from a record is drawn: a related record, until the verifier groups it. */
 const CODE_NODE_GROUP = 4;
 const CODE_NODE_SIZE = 22;
 
+type Kind = RecordingRelation["kind"];
+
 /** The link type of each relationship kind, and whether the other record is the earlier one. */
-const LINK_OF: Record<RecordingRelation["kind"], { type: LinkType; otherEarlier: boolean }> = {
+const LINK_OF: Record<Kind, { type: LinkType; otherEarlier: boolean }> = {
   samples: { type: "sample", otherEarlier: true },
   "sampled-by": { type: "sample", otherEarlier: false },
   interpolates: { type: "interpolation", otherEarlier: true },
@@ -74,6 +94,9 @@ const LINK_OF: Record<RecordingRelation["kind"], { type: LinkType; otherEarlier:
   "cover-of": { type: "cover", otherEarlier: true },
   "covered-by": { type: "cover", otherEarlier: false },
 };
+
+/** True for a kind this recording draws on: the other record is the earlier one. */
+const drawsOn = (kind: Kind) => LINK_OF[kind].otherEarlier;
 
 /** The claim scope of a record's recordRef scope. */
 const CLAIM_SCOPE: Record<PrimaryRelation["scope"], ClaimScope> = {
@@ -97,21 +120,28 @@ const partOnly = (relation: RecordingRelation) =>
   relation.attributes.includes("partial") || relation.attributes.includes("medley");
 
 /**
- * The text of a partial or medley cover's claim, from its item's excerpt ("A is covered by B",
- * "A is a cover of B"): "B partly covers A", or "B covers part of A in a medley". Null when the
- * excerpt is not one of those sentences: the claim is then not made.
+ * The text of a partial or medley cover's claim, from its item's excerpt, which ends with the
+ * relationship and the other record (`${phrase} "Title" by Artist.`, what the cache check
+ * requires): "B partly covers A." (partial), "B covers part of A in a medley." (partial, in a
+ * medley), "B covers A in a medley." (a medley not marked partial). Null when the excerpt does
+ * not end so: the claim is then not made.
  */
 function partialCoverText(relation: RecordingRelation, item: Evidence): string | null {
   const text = item.excerpt.replace(SOURCE_PREFIX, "").trim();
   const phrase = relation.kind === "covered-by" ? " is covered by " : " is a cover of ";
-  const at = text.indexOf(phrase);
-  if (at < 0 || !text.endsWith(".")) return null;
-  const [subject, object] = [text.slice(0, at), text.slice(at + phrase.length, -1)];
+  const other = quoted(relation.other.title, relation.other.artist);
+  const ending = `${phrase}${other}.`;
+  if (!text.endsWith(ending) || text.length === ending.length) return null;
+  const subject = text.slice(0, -ending.length);
   // "A is covered by B": B covers A. "A is a cover of B": A covers B.
-  const [coverer, covered] = relation.kind === "covered-by" ? [object, subject] : [subject, object];
+  const [coverer, covered] = relation.kind === "covered-by" ? [other, subject] : [subject, other];
+  const partial = relation.attributes.includes("partial");
+  const medley = relation.attributes.includes("medley");
   return capitalized(
-    relation.attributes.includes("medley")
-      ? `${coverer} covers part of ${covered} in a medley.`
+    medley
+      ? partial
+        ? `${coverer} covers part of ${covered} in a medley.`
+        : `${coverer} covers ${covered} in a medley.`
       : `${coverer} partly covers ${covered}.`,
   );
 }
@@ -127,41 +157,137 @@ const creditedName = (name: string) =>
 /** A credit claim's text: the excerpt, naming the artist without Discogs' disambiguation. */
 function creditText(credit: CreditRelation, item: Evidence): string {
   const as = ` as ${credit.roles.join(", ")} on `;
+  // A function, so a "$" in a name is written as it is.
   return codeClaimText({
     excerpt: item.excerpt.replace(
       ` credits ${credit.name}${as}`,
-      ` credits ${creditedName(credit.name)}${as}`,
+      () => ` credits ${creditedName(credit.name)}${as}`,
     ),
   });
 }
 
-/** The id of the node made from a MusicBrainz record. */
-const nodeId = (relation: RecordingRelation) => `mb-${relation.other.mbid}`;
+// =============================================================================
+// Artist credits
+// =============================================================================
+
+/** Joins between the artists of one credit; a word inside a name ("X Ambassadors") never is. */
+const SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/)\s*/i;
+
+/** A credit's artists, normalised, in credit order, each a whole name. */
+const creditArtists = (credit: string) =>
+  credit
+    .split(SEPARATOR)
+    .map((part) => normalizeArtist(part))
+    .filter(Boolean);
+
+/**
+ * True when two artist credits name the same artists: the same whole credit, or the same
+ * artists in any order, or one credit within the other led by the same artist ("Queen" within
+ * "Queen & David Bowie"; never "Fire" within "Earth, Wind & Fire", whose lead is "Earth").
+ */
+export function sameCredit(a: string, b: string): boolean {
+  const [wholeA, wholeB] = [normalizeArtist(a), normalizeArtist(b)];
+  if (wholeA !== "" && wholeA === wholeB) return true;
+  const [left, right] = [creditArtists(a), creditArtists(b)];
+  if (left.length === 0 || right.length === 0) return false;
+  const [small, large] = left.length <= right.length ? [left, right] : [right, left];
+  if (!small.every((artist) => large.includes(artist))) return false;
+  // The same artists in any order, or fewer of them led by the same artist.
+  return small.length === large.length || small[0] === large[0];
+}
+
+/** Credits that name no artist: a compilation's, or MusicBrainz's special-purpose artists. */
+const GENERIC_ARTISTS = new Set(
+  ["Various Artists", "Various", "Unknown Artist", "[unknown]", "Anonymous", "[anonymous]"].map(
+    (name) => normalizeArtist(name),
+  ),
+);
+
+/** Titles too common to tell one record from another. */
+const GENERIC_TITLES = new Set(
+  [
+    "Intro",
+    "Outro",
+    "Interlude",
+    "Skit",
+    "Remix",
+    "Megamix",
+    "Mix",
+    "Medley",
+    "Untitled",
+    "Instrumental",
+    "Prelude",
+    "Hidden Track",
+  ].map((title) => normalizeTitle(title)),
+);
+
+/**
+ * An artist credit that is mostly not letters or digits, or written in decorative letters
+ * (Unicode's mathematical alphanumerics): an uploader's handle, not a known artist.
+ */
+export function oddCredit(credit: string | null): boolean {
+  if (credit === null) return false;
+  const chars = [...credit.replace(/\s+/gu, "")];
+  if (chars.length === 0) return true;
+  if (chars.some((char) => /[\u{1D400}-\u{1D7FF}]/u.test(char))) return true;
+  const plain = chars.filter((char) => /[\p{L}\p{N}]/u.test(char)).length;
+  return plain * 2 < chars.length;
+}
+
+/** True when two recordings, by their names, are one record (see `sameCredit`). */
+const sameNames = (
+  a: { title: string; artist: string | null },
+  b: { title: string; artist: string | null },
+) =>
+  a.artist !== null &&
+  b.artist !== null &&
+  normalizeTitle(a.title) !== "" &&
+  normalizeTitle(a.title) === normalizeTitle(b.title) &&
+  sameCredit(a.artist, b.artist);
+
+// =============================================================================
+// Curation and building
+// =============================================================================
 
 export interface CodeBuilt {
   claims: Claim[];
   /** The nodes made from the records, the analysed track's not included. */
   nodes: GenealogyNode[];
   links: GenealogyLink[];
+  /** The ids of the nodes whose cover art is not looked up (see the module comment). */
+  noArtwork: string[];
+  /** The song each work node stands for, by node id, for the fold of the model's nodes. */
+  works: Record<string, { title: string; artist: string | null }>;
 }
 
-/** The relationships that get a claim, curated (see the module comment). */
+/** The relationships that get a claim, curated (see the module comment), in claim order. */
 export function curatedRelations(relations: readonly PrimaryRelation[]): RecordingRelation[] {
-  const recordings = relations.filter((r): r is RecordingRelation => r.type === "relation");
-  const rank = (r: RecordingRelation) => (r.scope === "track" ? 0 : 2) + (partOnly(r) ? 1 : 0);
+  const recordings = relations.filter(
+    (r): r is RecordingRelation =>
+      r.type === "relation" && (drawsOn(r.kind) || !oddCredit(r.other.artist)),
+  );
+  const rank = (r: RecordingRelation) =>
+    (drawsOn(r.kind) ? 0 : 4) + (r.scope === "track" ? 0 : 2) + (partOnly(r) ? 1 : 0);
   const ordered = recordings
     .map((relation, index) => ({ relation, index }))
     .sort((a, b) => rank(a.relation) - rank(b.relation) || a.index - b.index)
     .map(({ relation }) => relation);
-  const seen = new Set<string>();
-  const perKind = new Map<RecordingRelation["kind"], number>();
+  const counted = new Map<Kind, RecordingRelation[]>();
   const kept: RecordingRelation[] = [];
   for (const relation of ordered) {
-    const key = `${relation.kind} ${relation.other.mbid}`;
-    const count = perKind.get(relation.kind) ?? 0;
-    if (seen.has(key) || count >= CODE_RELATIONS_PER_KIND) continue;
-    seen.add(key);
-    perKind.set(relation.kind, count + 1);
+    const list = counted.get(relation.kind) ?? [];
+    // The same record filed twice under one kind: once.
+    if (kept.some((r) => r.kind === relation.kind && r.other.mbid === relation.other.mbid)) {
+      continue;
+    }
+    // A second recording of a record already kept keeps its claim and takes no place.
+    if (list.some((other) => sameNames(other.other, relation.other))) {
+      kept.push(relation);
+      continue;
+    }
+    const cap = drawsOn(relation.kind) ? CODE_SOURCES_PER_KIND : CODE_DESCENDANTS_PER_KIND;
+    if (list.length >= cap) continue;
+    counted.set(relation.kind, [...list, relation]);
     kept.push(relation);
   }
   return kept;
@@ -217,8 +343,44 @@ export function buildCodeClaims(
     return claim;
   };
 
-  const nodes = new Map<string, GenealogyNode>();
+  const nodes: GenealogyNode[] = [];
+  const records: Array<{ id: string; title: string; artist: string | null; mbid: string }> = [];
+  const works: CodeBuilt["works"] = {};
   const links: GenealogyLink[] = [];
+  const drawn = new Set<string>();
+  const artworkPerKind = new Map<Kind, Set<string>>();
+  /** The node standing for a relation's other record: one per record. */
+  const nodeFor = (relation: RecordingRelation): string => {
+    const { entity, mbid, title, artist } = relation.other;
+    const known = records.find(
+      (record) =>
+        record.mbid === mbid || (entity === "recording" && sameNames(record, relation.other)),
+    );
+    if (known) return known.id;
+    const id = `mb-${mbid}`;
+    records.push({ id, title, artist: entity === "recording" ? artist : null, mbid });
+    if (entity === "work") {
+      // A song: named as one, never as a recording (the analysed track may share its title).
+      works[id] = { title, artist };
+      nodes.push({
+        id,
+        group: CODE_NODE_GROUP,
+        label: artist ? `${title} (the song by ${artist})` : `${title} (the song)`,
+        size: CODE_NODE_SIZE,
+      });
+    } else {
+      nodes.push({
+        id,
+        group: CODE_NODE_GROUP,
+        label: artist ? `${title} - ${artist}` : title,
+        size: CODE_NODE_SIZE,
+        // A recording without an artist credit is not searched for as a track.
+        ...(artist ? { trackTitle: title, trackArtist: artist } : {}),
+      });
+    }
+    return id;
+  };
+
   for (const relation of curatedRelations(present)) {
     const item = items.get(relation.evidenceId);
     if (!item) continue;
@@ -228,21 +390,18 @@ export function buildCodeClaims(
     const claim = claimFor(relation, LINK_CLAIM_ABOUT[type][0], text);
     // A link only for a whole relation of this recording (see the module comment).
     if (relation.scope !== "track" || partOnly(relation)) continue;
-    const id = nodeId(relation);
-    if (!nodes.has(id)) {
-      const { title, artist } = relation.other;
-      nodes.set(id, {
-        id,
-        group: CODE_NODE_GROUP,
-        label: artist ? `${title} - ${artist}` : title,
-        size: CODE_NODE_SIZE,
-        // A work has no artist: it is not searched for as a track.
-        ...(artist ? { trackTitle: title, trackArtist: artist } : {}),
-      });
-    }
+    const id = nodeFor(relation);
+    const [source, target] = otherEarlier ? [id, "current"] : ["current", id];
+    const key = `${type} ${source} ${target}`;
+    // A second recording of one record: its claim stands, the link is drawn once.
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+    const searched = artworkPerKind.get(relation.kind) ?? new Set<string>();
+    if (searched.size < CODE_ARTWORK_PER_KIND) searched.add(id);
+    artworkPerKind.set(relation.kind, searched);
     links.push({
-      source: otherEarlier ? id : "current",
-      target: otherEarlier ? "current" : id,
+      source,
+      target,
       value: LINK_VALUE[type],
       type,
       kind: "sourced",
@@ -259,44 +418,16 @@ export function buildCodeClaims(
     const item = items.get(release.evidenceId);
     if (item) claimFor(release, "track", codeClaimText(item));
   }
-  return { claims, nodes: [...nodes.values()], links };
+  const searched = new Set([...artworkPerKind.values()].flatMap((ids) => [...ids]));
+  const noArtwork = nodes
+    .filter((node) => node.trackTitle && node.trackArtist && !searched.has(node.id))
+    .map((node) => node.id);
+  return { claims, nodes, links, noArtwork, works };
 }
 
 // =============================================================================
 // With the model's genealogy
 // =============================================================================
-
-const SEPARATOR = /\s*(?:,|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\/|\bx\b|\bwith\b)\s*/i;
-
-/** A credit's artists, normalised, as a sorted list: equal lists are the same credit. */
-const creditOf = (credit: string) =>
-  credit
-    .split(SEPARATOR)
-    .map((part) => normalizeArtist(part))
-    .filter(Boolean)
-    .sort()
-    .join("|");
-
-/** Titles too common to tell one record from another. */
-const GENERIC_TITLES = new Set(
-  [
-    "Intro",
-    "Outro",
-    "Interlude",
-    "Skit",
-    "Remix",
-    "Megamix",
-    "Mix",
-    "Medley",
-    "Untitled",
-    "Instrumental",
-    "Prelude",
-    "Hidden Track",
-  ].map((title) => normalizeTitle(title)),
-);
-
-/** Credits that name no artist: a compilation's. */
-const GENERIC_ARTISTS = new Set(["various artists", "various", "unknown artist", "anonymous"]);
 
 /** The title and artist a model node names: its own fields, else its label "Title - Artist". */
 function namedRecord(node: GenealogyNode): { title: string; artist: string } {
@@ -308,47 +439,74 @@ function namedRecord(node: GenealogyNode): { title: string; artist: string } {
   };
 }
 
+/** True when a model node names a record titled `title`, credited to `artist`. */
+function namesRecord(model: GenealogyNode, title: string, artist: string): boolean {
+  const named = namedRecord(model);
+  if (!named.title || !named.artist || !titlesMatch(named.title, title)) return false;
+  if (GENERIC_TITLES.has(normalizeTitle(title))) return false;
+  if (GENERIC_ARTISTS.has(normalizeArtist(artist))) return false;
+  return sameCredit(named.artist, artist);
+}
+
 /**
  * True when a model node names the record a code node was made from: the same title (without
- * featured-artist and remaster suffixes) and the same artist credit, every credited artist and
- * no other (in any order, case and punctuation aside). Never for a generic title ("Intro",
- * "Remix") or a credit that names no artist ("Various Artists").
+ * featured-artist and remaster suffixes) and the same artists (`sameCredit`: whole names,
+ * never a word of one). Never for a generic title ("Intro", "Remix") or a credit that names no
+ * artist ("Various Artists", "[unknown]").
  */
 export function sameRecord(model: GenealogyNode, code: GenealogyNode): boolean {
   if (!code.trackTitle || !code.trackArtist) return false;
-  const named = namedRecord(model);
-  if (!named.title || !named.artist || !titlesMatch(named.title, code.trackTitle)) return false;
-  if (GENERIC_TITLES.has(normalizeTitle(code.trackTitle))) return false;
-  if (GENERIC_ARTISTS.has(normalizeArtist(code.trackArtist))) return false;
-  const whole = normalizeArtist(named.artist) === normalizeArtist(code.trackArtist);
-  return whole || creditOf(named.artist) === creditOf(code.trackArtist);
+  return namesRecord(model, code.trackTitle, code.trackArtist);
 }
 
 const linkKey = (link: Pick<GenealogyLink, "source" | "target" | "type">) =>
   `${link.type ?? "influence"} ${link.source} ${link.target}`;
 
+/** Words a model credit claim may use beside what the code credit claims state. */
+const CONNECTIVES = new Set(
+  "a an the is was are were as on of by and in for to with this that it its credited credits credit track song recording release album".split(
+    " ",
+  ),
+);
+const wordsOf = (text: string) =>
+  text
+    .normalize("NFKC")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
 /**
  * The draft with the code-built claims and links added.
  * - A model node that names a code node's record becomes that node (the record's names are
- *   kept); a code node takes at most one model node, so no model link between two of its nodes
- *   is lost. A model node whose id a code node uses is renamed.
+ *   kept); so does a model node for the original recording of a song this track covers, when
+ *   the record names the song's artist and the model's node names the same. A code node takes
+ *   at most one model node, so no model link between two of its nodes is lost. A model node
+ *   whose id a code node uses is renamed.
  * - A model link that then duplicates a code link (the same two nodes, the same type and the
  *   same direction) folds into it: the code link and its claim stay, the model link and its
  *   relation claim go. A link stated the other way round stays, for the verifier to judge.
  * - A model claim about a credit (not a card's) that cites only Discogs items the code credit
- *   claims cite folds into them: it goes.
+ *   claims cite, and states nothing beyond them (its words are theirs, or connectives), folds
+ *   into them: it goes. One that says more (a studio, a year, another role) goes to the judge.
+ * - `noArtwork` lists the code nodes whose cover is not looked up, but none the model named.
  * Pure.
  */
-export function withCodeClaims<T extends Pick<ComposedDraft, "claims" | "genealogy" | "nodeYears">>(
-  draft: T,
-  code: CodeBuilt,
-): T {
-  if (code.claims.length === 0) return draft;
+export function withCodeClaims<
+  T extends Pick<ComposedDraft, "claims" | "genealogy" | "nodeYears"> & {
+    noArtwork?: string[];
+  },
+>(draft: T, code: CodeBuilt): T & { noArtwork: string[] } {
+  if (code.claims.length === 0) return { ...draft, noArtwork: draft.noArtwork ?? [] };
   const codeIds = new Set(code.nodes.map((node) => node.id));
   const taken = new Set(["current", ...codeIds]);
   const absorbed = new Set<string>();
   const idOf = new Map<string, string>([["current", "current"]]);
   const modelNodes: GenealogyNode[] = [];
+  const matches = (node: GenealogyNode, codeNode: GenealogyNode) => {
+    const work = code.works[codeNode.id];
+    if (work) return work.artist !== null && namesRecord(node, work.title, work.artist);
+    return sameRecord(node, codeNode);
+  };
   let current: GenealogyNode | undefined;
   for (const node of draft.genealogy.nodes) {
     if (node.id === "current") {
@@ -356,7 +514,7 @@ export function withCodeClaims<T extends Pick<ComposedDraft, "claims" | "genealo
       continue;
     }
     const same = code.nodes.find(
-      (codeNode) => !absorbed.has(codeNode.id) && sameRecord(node, codeNode),
+      (codeNode) => !absorbed.has(codeNode.id) && matches(node, codeNode),
     );
     if (same) {
       absorbed.add(same.id);
@@ -385,18 +543,30 @@ export function withCodeClaims<T extends Pick<ComposedDraft, "claims" | "genealo
     if (source !== target) modelLinks.push(moved);
   }
 
-  // The Discogs items the code credit claims cite.
-  const credited = new Set(
-    code.claims.filter((claim) => claim.about === "credit").flatMap((claim) => claim.evidenceIds),
+  // The Discogs items the code credit claims cite, with the claim citing each.
+  const credited = new Map(
+    code.claims
+      .filter((claim) => claim.about === "credit")
+      .flatMap((claim) => claim.evidenceIds.map((id) => [id, claim] as const)),
   );
   const linkClaims = new Set(draft.genealogy.links.flatMap((link) => link.claimId ?? []));
-  const foldedCredit = (claim: Claim) =>
-    claim.origin === "model" &&
-    claim.about === "credit" &&
-    claim.factoid === undefined &&
-    !linkClaims.has(claim.id) &&
-    claim.evidenceIds.length > 0 &&
-    claim.evidenceIds.every((id) => credited.has(id));
+  const foldedCredit = (claim: Claim) => {
+    if (
+      claim.origin !== "model" ||
+      claim.about !== "credit" ||
+      claim.factoid !== undefined ||
+      linkClaims.has(claim.id) ||
+      claim.evidenceIds.length === 0 ||
+      !claim.evidenceIds.every((id) => credited.has(id))
+    ) {
+      return false;
+    }
+    const allowed = new Set([
+      ...CONNECTIVES,
+      ...claim.evidenceIds.flatMap((id) => wordsOf(credited.get(id)?.text ?? "")),
+    ]);
+    return wordsOf(claim.text).every((word) => allowed.has(word));
+  };
 
   const nodeYears: Record<string, string> = {};
   for (const [id, year] of Object.entries(draft.nodeYears)) {
@@ -404,6 +574,7 @@ export function withCodeClaims<T extends Pick<ComposedDraft, "claims" | "genealo
     // The model's year is kept for its own nodes only, never put on a node made from a record.
     if (moved && !codeIds.has(moved)) nodeYears[moved] = year;
   }
+  const named = new Set(idOf.values());
   const genealogy: Genealogy = {
     nodes: [...(current ? [current] : []), ...modelNodes, ...code.nodes],
     links: [...modelLinks, ...code.links],
@@ -416,5 +587,6 @@ export function withCodeClaims<T extends Pick<ComposedDraft, "claims" | "genealo
     ],
     genealogy,
     nodeYears,
+    noArtwork: [...(draft.noArtwork ?? []), ...code.noArtwork.filter((id) => !named.has(id))],
   };
 }

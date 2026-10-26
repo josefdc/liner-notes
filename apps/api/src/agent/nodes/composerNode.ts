@@ -411,6 +411,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       claims: withCode.claims,
       genealogy: withCode.genealogy,
       nodeYears: withCode.nodeYears,
+      noArtwork: withCode.noArtwork,
       // A generic structure, not an analysis of this track
       segments: createDefaultSegments(spotify.durationMs),
       segmentsSource: "template",
@@ -450,6 +451,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         claims: withCode.claims,
         genealogy: withCode.genealogy,
         nodeYears: withCode.nodeYears,
+        noArtwork: withCode.noArtwork,
         segments: fallback.segments,
         segmentsSource: "template",
         samples: fallback.samples,

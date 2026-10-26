@@ -38,7 +38,8 @@
  *    the rejected panel. A link is sourced only through its own claim (`linkClaimProblem`'s
  *    rules): a link whose claim is not sourced, or is rejected, is drawn as an inferred
  *    influence that keeps its stated type.
- * 5. Model-written claims and factoid cards have their @handles masked.
+ * 5. Claims (the model's and the code-built ones, as their node labels are) and factoid cards
+ *    have their @handles masked.
  * 6. The result: the measurement written in by finalize.ts, the contract's checks, then
  *    `complete` and, when nothing a later run may do better is missing, the long-term store. A
  *    result whose check did not complete is stored too, served for a shorter time
@@ -144,20 +145,31 @@ export interface CheckedDraft {
 /**
  * The deterministic step (see the module comment): citations checked against the pack and the
  * claim's scope, and the numeric check against the measurement (`audio`, the block the result
- * carries) of what each claim states about the track titled `title`. Pure.
+ * carries) of what each claim states about the track titled `title`, credited to `artist` (by
+ * default the current node's artist). Pure.
  */
 export function checkClaims(
   draft: Pick<ComposedDraft, "claims" | "genealogy">,
   evidence: readonly Evidence[],
   audio: AudioFeatures | null,
   title?: string,
+  artist?: string,
 ): CheckedDraft {
   const pack = new Map(evidence.map((item) => [item.id, item]));
   const stated = linkClaimIds(draft.genealogy);
-  // The other records the result names, so a number said of one is not taken for this track's.
-  const nodeTitles = draft.genealogy.nodes
+  const ownArtist =
+    artist ?? draft.genealogy.nodes.find((node) => node.id === "current")?.trackArtist;
+  // The other records the result names, so a number said of one is not taken for this track's:
+  // each title, with its artist credit.
+  const nodeRecords = draft.genealogy.nodes
     .filter((node) => node.id !== "current")
-    .flatMap((node) => [node.trackTitle ?? node.label.split(" - ")[0]].filter(Boolean));
+    .flatMap((node) => {
+      const [labelTitle, ...rest] = node.label.split(" - ");
+      const recordTitle = node.trackTitle ?? labelTitle;
+      const recordArtist =
+        node.trackArtist ?? (rest.join(" - ").replace(/\s*\(\d{4}\)\s*$/, "") || null);
+      return recordTitle ? [{ title: recordTitle, artist: recordArtist }] : [];
+    });
   const claims: Claim[] = [];
   for (const claim of draft.claims) {
     const inPack = claim.evidenceIds.filter((id) => pack.has(id));
@@ -181,7 +193,8 @@ export function checkClaims(
         .map((entity) => entity.text.split(" - ")[0]);
       const numbers = checkNumbers(claim, audio, {
         title,
-        others: [...nodeTitles, ...cardRecords],
+        ...(ownArtist ? { artist: ownArtist } : {}),
+        others: [...nodeRecords, ...cardRecords],
         // A claim of the model's own that cites nothing and is no card restates what it states
         // of the track as its own finding: that may be contradicted, as with its own `field`.
         restatement:
@@ -299,7 +312,10 @@ export function maskedNodes(genealogy: Genealogy): Genealogy {
   return { nodes, links: genealogy.links };
 }
 
-/** Model-written text with its @handles masked: claims and factoid cards. */
+/**
+ * Claim and factoid card text with its @handles masked: the model's, and a code-built claim's
+ * (record text, masked as the node labels made from the same records are).
+ */
 function maskedText(
   claims: Claim[],
   factoids: Factoid[],
@@ -307,7 +323,7 @@ function maskedText(
   return {
     claims: claims.map((claim) =>
       claim.origin !== "model"
-        ? claim
+        ? { ...claim, text: maskHandles(claim.text) }
         : {
             ...claim,
             text: maskHandles(claim.text),
@@ -387,13 +403,18 @@ async function withArtwork(
   coverUrl: string,
   signal: AbortSignal | undefined,
   nodeYears: Readonly<Record<string, string>> = {},
+  noArtwork: readonly string[] = [],
 ): Promise<{ genealogy: Genealogy; sourceErrors: SourceError[]; complete: boolean }> {
   const sourceErrors: SourceError[] = [];
+  const skipped = new Set(noArtwork);
   try {
-    const dated = genealogy.nodes.map((node) => {
-      const year = Object.hasOwn(nodeYears, node.id) ? nodeYears[node.id] : undefined;
-      return year ? { ...node, year } : node;
-    });
+    // A node made from a record past the first few of its kind is not searched for.
+    const dated = genealogy.nodes
+      .filter((node) => !skipped.has(node.id))
+      .map((node) => {
+        const year = Object.hasOwn(nodeYears, node.id) ? nodeYears[node.id] : undefined;
+        return year ? { ...node, year } : node;
+      });
     const enriched = await enrichGenealogyWithArtwork({ nodes: dated }, coverUrl, signal, (error) =>
       sourceErrors.push(error),
     );
@@ -509,7 +530,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
     const audio = emittableAudio(state.audioFeatures);
 
     // 1. The deterministic step, and 2. masked node text.
-    const checked = checkClaims(draft, state.evidence, audio, spotify.title);
+    const checked = checkClaims(draft, state.evidence, audio, spotify.title, spotify.artist);
     const genealogy = maskedNodes(checked.genealogy);
 
     // 3. The judge, in its share of the run's time, with the artwork lookup meanwhile.
@@ -525,7 +546,7 @@ export function createVerifierNode(runtime: AgentRuntime = defaultAgentRuntime) 
         signal,
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       }),
-      withArtwork(genealogy, spotify.coverUrl, signal, draft.nodeYears),
+      withArtwork(genealogy, spotify.coverUrl, signal, draft.nodeYears, draft.noArtwork),
     ]);
     const statusMessages: string[] = [];
     const checkFailed = judged.failure !== null || judged.omitted > 0;

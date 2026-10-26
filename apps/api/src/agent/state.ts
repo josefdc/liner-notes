@@ -414,6 +414,8 @@ export interface ComposedDraft {
   genealogy: TrackData["genealogy"];
   /** The year the model gave for a node, by node id: for the artwork's release check only. */
   nodeYears: Record<string, string>;
+  /** Nodes made from records whose cover art is not looked up (codeClaims.ts); none when absent. */
+  noArtwork?: string[];
   segments: TrackData["segments"];
   segmentsSource: "template";
   samples: TrackData["samples"];

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { countInText, PROTOTYPE_PHRASES, rules } from "./guard-honest.mjs";
+import { countInText, PLANNER_OWN_LINE, PROTOTYPE_PHRASES, rules } from "./guard-honest.mjs";
 
 const rule = (id) => rules.find((candidate) => candidate.id === id);
 // `path` decides how comments and strings are read; snippets default to a TSX file.
@@ -370,6 +370,53 @@ describe("recordings", () => {
     expect(found("emoji-in-recordings")).toEqual(["🔎", "🔍", "🔬"]);
   });
 
+  describe("the planner's lines in a newer run, without an emoji before its reasoning", () => {
+    const newer = JSON.stringify(
+      {
+        events: [
+          status("Starting the research steps", "research_manager"),
+          status("Planning research step 1 of 2", "research_manager"),
+          // The model's reasoning, as the model wrote it.
+          status("A deep dive into its DNA finds the Command Center 🎧", "research_manager"),
+          // The app's own line, with a phrase in its filled part.
+          status(
+            "Research ended: the research planner was unavailable (Target acquired)",
+            "research_manager",
+          ),
+          // The same phrases in another node's status.
+          status("A deep dive into its DNA 🎧", "historian"),
+          // An older run's line: only the emoji before the reasoning counts.
+          status("🔍 A deep dive into its DNA", "research_manager"),
+        ],
+      },
+      null,
+      2,
+    );
+    const foundIn = (id) => countInText(rule(id), newer, path).matches.map(({ text }) => text);
+
+    it("does not count the model's reasoning, and counts the app's lines and other nodes", () => {
+      expect(foundIn("prototype-copy-recordings")).toEqual([
+        "Target acquired",
+        "deep dive",
+        "its DNA",
+      ]);
+      expect(foundIn("emoji-in-recordings")).toEqual(["🎧", "🔍"]);
+    });
+
+    it("knows the planner's own lines from the API, with their filled parts", () => {
+      for (const line of [
+        "Starting the research steps",
+        "Research steps finished",
+        "Planning research step 2 of 2",
+        "Research ended: the research planner was unavailable (timeout)",
+      ]) {
+        expect(PLANNER_OWN_LINE.test(line)).toBe(true);
+      }
+      expect(PLANNER_OWN_LINE.test("Starting the research steps for a deep dive")).toBe(false);
+      expect(PLANNER_OWN_LINE.test("Planning research step")).toBe(false);
+    });
+  });
+
   it("reports a recorded message on its own line", () => {
     const { lines } = countInText(rule("emoji-in-recordings"), recording, path);
     const text = recording.split("\n");
@@ -454,6 +501,12 @@ describe("baselines", () => {
     mkdirSync(join(dir, "scripts"));
     mkdirSync(join(dir, "apps/api/src"), { recursive: true });
     copyFileSync(script, join(dir, "scripts/guard-honest.mjs"));
+    // The guard reads the research planner's own status lines from the API.
+    mkdirSync(join(dir, "apps/api/src/agent/research"), { recursive: true });
+    copyFileSync(
+      join(repoRoot, "apps/api/src/agent/research/plannerLines.ts"),
+      join(dir, "apps/api/src/agent/research/plannerLines.ts"),
+    );
     const full = {
       "random-values-api": 0,
       "stock-images-web": 0,

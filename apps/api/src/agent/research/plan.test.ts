@@ -371,7 +371,7 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.planner).toHaveLength(1);
     expect(run.planner[0].tier).toBe("fast");
     // The status counts the steps that ran: the four fixed ones.
-    expect(run.status).toContain("Intelligence extraction complete: 4 layers processed");
+    expect(run.status).toContain("Research finished: 4 steps run");
     // The research holds what they found.
     expect(run.research?.collaborators).toEqual(["Earthquake (supporting musician)"]);
     expect(run.research?.listenbrainzSimilarArtists?.[0]).toMatch(/^1\. MC Hammer \(similar to /);
@@ -411,10 +411,10 @@ describe("the research plan of a track with an ISRC", () => {
     }
     expect(choices).toContain("search_general");
     expect(run.status).toContain(
-      "⏭️ Not asked again: listenbrainz similar (already ran in this research)",
+      "Not asked again: listenbrainz similar (already ran in this research)",
     );
     // Skipped picks are not counted as steps that ran.
-    expect(run.status).toContain("Intelligence extraction complete: 4 layers processed");
+    expect(run.status).toContain("Research finished: 4 steps run");
   });
 
   it("does not run a step the research itself ran again", async () => {
@@ -422,8 +422,8 @@ describe("the research plan of a track with an ISRC", () => {
 
     // The sample history, the production history and one lead: the second pick is not asked.
     expect(run.tavilyQueries).toHaveLength(3);
-    expect(run.status).toContain("⏭️ Not asked again: general (already ran in this research)");
-    expect(run.status).toContain("Intelligence extraction complete: 5 layers processed");
+    expect(run.status).toContain("Not asked again: general (already ran in this research)");
+    expect(run.status).toContain("Research finished: 5 steps run");
   });
 
   it("keeps no placeholder or error page as research or evidence", async () => {
@@ -514,7 +514,7 @@ describe("the research plan of a track with an ISRC", () => {
         "Found samples information (1 web results kept, 2 left out: error pages or no text)",
         "Found production information (1 web results kept, 2 left out: error pages or no text)",
         "Found artist collaborators information",
-        "⚠️ ListenBrainz could not be read (unavailable)",
+        "ListenBrainz could not be read (unavailable)",
       ]),
     );
     expect(run.research?.collaborators).toEqual(["Earthquake (supporting musician)"]);
@@ -551,7 +551,7 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.research?.notAsked?.some((l) => l.startsWith(`Last.fm artist tags (${why}`))).toBe(
       true,
     );
-    expect(run.status.some((l) => l.startsWith(`⚠️ Last.fm artist tags (${why}`))).toBe(true);
+    expect(run.status.some((l) => l.startsWith(`Last.fm artist tags (${why}`))).toBe(true);
     expect(
       run.messages.some((l) =>
         l.startsWith("Not asked: lastfm artist info (Last.fm does not know"),
@@ -565,7 +565,7 @@ describe("the research plan of a track with an ISRC", () => {
     vi.stubEnv("TAVILY_API_KEY", "");
     const run = await runPlan([]);
 
-    const warnings = run.status.filter((l) => l.startsWith("⚠️ Web search (Tavily)"));
+    const warnings = run.status.filter((l) => l.startsWith("Web search (Tavily)"));
     expect(warnings).toHaveLength(1);
     // Only the recording's MusicBrainz sample relations: no web text.
     expect((run.research?.samples ?? []).every((e) => e.startsWith("[MusicBrainz Samples]"))).toBe(
@@ -680,7 +680,7 @@ describe("steps run together", () => {
         stepsRun: 1,
         sourceErrors: [{ source: "listenbrainz", code: "unavailable", message: "busy" }],
         lastfmArtistUncertain: "shared",
-        statusMessages: ["⚠️ ListenBrainz could not be read (unavailable)"],
+        statusMessages: ["ListenBrainz could not be read (unavailable)"],
       },
     ]);
     expect(merged.researchData?.samples).toEqual(["a"]);
@@ -698,7 +698,7 @@ describe("steps run together", () => {
     expect(merged.statusMessages).toEqual([
       "Found samples information",
       "Found artist collaborators information",
-      "⚠️ ListenBrainz could not be read (unavailable)",
+      "ListenBrainz could not be read (unavailable)",
     ]);
     expect(merged.artistResolution).toEqual(artist);
     expect(merged.lastfmArtistUncertain).toBe("shared");

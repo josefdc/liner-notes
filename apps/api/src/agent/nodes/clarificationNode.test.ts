@@ -297,7 +297,7 @@ describe("clarificationNode's stored results", () => {
     expect(update.trackData).toMatchObject({ id: "track-b" });
     expect(update.sourceErrors).toEqual(expect.arrayContaining([lasting]));
     const line =
-      "⚠️ Stored result: SecondHandSongs could not be read when it was composed (invalid_response)";
+      "Stored analysis: SecondHandSongs could not be read when it was made (invalid_response)";
     expect(update.statusMessages).toContain(line);
     const warned = events.findIndex((e) => e.code === "SYS-WARN" && e.message === line);
     expect(warned).toBeGreaterThan(-1);

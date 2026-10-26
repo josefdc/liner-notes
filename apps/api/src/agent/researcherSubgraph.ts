@@ -32,6 +32,7 @@ import { ResearchPlanOutput } from "@liner-notes/contract";
 
 import { answeredCall, failedCall } from "./callRecords.js";
 import type { WebFinding } from "./research/evidencePack.js";
+import { PLANNER_LINES, plannerLine } from "./research/plannerLines.js";
 import {
   FIRST_STEP,
   FOLLOW_UP_TIER,
@@ -232,7 +233,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
 
     // The fixed steps, together, without a model call
     if (iteration === 0) {
-      status("🔬 Starting deep dive research...");
+      status(PLANNER_LINES.starting);
       const taken = new Set(state.ranSteps.map((step) => step.action));
       const plans: ResearchPlan[] = state.plannedSteps
         .filter((action) => !taken.has(action))
@@ -241,22 +242,22 @@ function createResearchManagerNode(runtime: AgentRuntime) {
           query: null,
           reasoning:
             action === FIRST_STEP
-              ? "Starting research with sample history to discover musical DNA"
+              ? "The research plan starts with the sample history"
               : "Part of the research plan for this track",
         }));
       return {
         ...(plans.length > 0 ? { researchPlan: plans[0], pendingPlans: plans } : {}),
         researchIteration: 1,
-        statusMessages: ["🔬 Starting deep dive research..."],
+        statusMessages: [PLANNER_LINES.starting],
       };
     }
 
     if (!state.spotifyData || iteration > MAX_PLANNED_STEPS) {
-      return { researchComplete: true, statusMessages: ["✅ Deep dive complete"] };
+      return { researchComplete: true, statusMessages: [PLANNER_LINES.finished] };
     }
 
     const { title, artist } = state.spotifyData;
-    status(`🧠 Planning the next research step (${iteration}/${MAX_PLANNED_STEPS})...`);
+    status(plannerLine(PLANNER_LINES.planning, { step: iteration, steps: MAX_PLANNED_STEPS }));
 
     const messages = plannerMessages({
       track: { title, artist },
@@ -292,7 +293,7 @@ function createResearchManagerNode(runtime: AgentRuntime) {
       return {
         researchComplete: true,
         usage: [failed],
-        statusMessages: [`Research complete (planner unavailable: ${failed.status})`],
+        statusMessages: [plannerLine(PLANNER_LINES.ended, { status: failed.status })],
       };
     }
 
@@ -300,16 +301,16 @@ function createResearchManagerNode(runtime: AgentRuntime) {
     log.info(`Plan: ${plan.nextAction}`);
     log.debug("Planner reasoning", { reasoning: plan.reasoning });
     if (plan.nextAction === "done") {
-      status("✅ Deep dive complete");
-      return { researchComplete: true, usage: [call], statusMessages: [`✅ ${plan.reasoning}`] };
+      status(PLANNER_LINES.finished);
+      return { researchComplete: true, usage: [call], statusMessages: [plan.reasoning] };
     }
 
-    status(`🔍 ${plan.reasoning}`);
+    status(plan.reasoning);
     return {
       researchPlan: plan,
       researchIteration: iteration + 1,
       usage: [call],
-      statusMessages: [`🔍 ${plan.reasoning}`],
+      statusMessages: [plan.reasoning],
     };
   };
 }
@@ -538,8 +539,8 @@ export class StepReader {
 }
 
 /**
- * One status line per source that could not be read: "⚠️ Last.fm could not be read (…)",
- * "⚠️ Last.fm key rejected (…)" for a key the source refused, or, for a bug in our own reader
+ * One status line per source that could not be read: "Last.fm could not be read (…)",
+ * "Last.fm key rejected (…)" for a key the source refused, or, for a bug in our own reader
  * (an internal error), that the reader failed: the source is not to blame.
  */
 export function unreadableStatus(
@@ -548,10 +549,10 @@ export function unreadableStatus(
 ): string[] {
   return uniqueErrors(errors).map((e) =>
     rejected.has(e.source)
-      ? `⚠️ ${SOURCE_NAMES[e.source]} key rejected: fix the key (${e.code})`
+      ? `${SOURCE_NAMES[e.source]} key rejected: fix the key (${e.code})`
       : e.message?.startsWith(INTERNAL_ERROR_PREFIX)
-        ? `⚠️ ${SOURCE_NAMES[e.source]}: our reader failed on its answer (internal error)`
-        : `⚠️ ${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
+        ? `${SOURCE_NAMES[e.source]}: our reader failed on its answer (internal error)`
+        : `${SOURCE_NAMES[e.source]} could not be read (${e.code})`,
   );
 }
 
@@ -697,7 +698,7 @@ async function researchStep(
   // asked again, and costs the planner its step.
   const ran = state.ranSteps.find((step) => step.action === plan.nextAction);
   if (ran) {
-    const message = `⏭️ Not asked again: ${label} (${ran.why})`;
+    const message = `Not asked again: ${label} (${ran.why})`;
     writer?.({ type: "status", message, node: "research_tool", timestamp: timestampOf(runtime) });
     return { statusMessages: [message] };
   }
@@ -715,7 +716,7 @@ async function researchStep(
 
   writer?.({
     type: "status",
-    message: `🔎 Searching ${label}...`,
+    message: `Searching ${label}`,
     node: "research_tool",
     timestamp: timestampOf(runtime),
   });
@@ -1075,8 +1076,8 @@ async function researchStep(
       // A bug in our own reader says so: the source is not to blame.
       statusMessages: [
         record.message?.startsWith(INTERNAL_ERROR_PREFIX)
-          ? `⚠️ Search failed: ${label} (internal error in our reader)`
-          : `⚠️ Search failed: ${label} (${record.code})`,
+          ? `Search failed: ${label} (internal error in our reader)`
+          : `Search failed: ${label} (${record.code})`,
       ],
     };
   }
@@ -1117,7 +1118,7 @@ function afterToolExecution(state: ResearcherStateType): string {
 // =============================================================================
 
 /**
- * Create the researcher subgraph for deep dive analysis.
+ * Create the researcher subgraph: the research steps and the planner.
  *
  * Flow: research_manager → [research_tool → research_manager]* → END
  *

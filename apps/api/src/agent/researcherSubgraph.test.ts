@@ -197,7 +197,7 @@ describe("researcher subgraph", () => {
       }),
     ]);
     expect(final.statusMessages).toContain(
-      "⚠️ Search failed: musicbrainz (internal error in our reader)",
+      "Search failed: musicbrainz (internal error in our reader)",
     );
     expect(tools.getLastfmArtistInfo.invoke).toHaveBeenCalledTimes(1);
   });
@@ -213,7 +213,7 @@ describe("researcher subgraph", () => {
     expect(tools.searchProductionHistory.invoke).toHaveBeenCalledTimes(2);
     expect(final.sourceErrors).toEqual([expect.objectContaining({ source: "tavily" })]);
     expect(tools.getLastfmArtistInfo.invoke).toHaveBeenCalledTimes(1);
-    expect(final.statusMessages).toContain("⚠️ Search failed: production (unavailable)");
+    expect(final.statusMessages).toContain("Search failed: production (unavailable)");
     tools.searchProductionHistory.invoke.mockReset();
     tools.searchProductionHistory.invoke.mockImplementation(async () =>
       JSON.stringify({ found: false }),

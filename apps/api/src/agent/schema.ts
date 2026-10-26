@@ -356,7 +356,7 @@ export const TrackDataSchema = z.object({
 
   // Genealogy graph
   genealogy: GenealogySchema.describe(
-    "Musical DNA graph. Current song = group 1. ALL referenced songs MUST be REAL and exist on Spotify.",
+    "Genealogy graph: the songs this one samples, covers or is sampled by. Current song = group 1. ALL referenced songs MUST be REAL and exist on Spotify.",
   ),
 
   // Audio provenance

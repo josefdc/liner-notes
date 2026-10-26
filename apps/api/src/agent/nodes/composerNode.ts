@@ -463,7 +463,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     if (!spotify) {
       return {
         error: "No Spotify data to compose",
-        statusMessages: ["❌ Cannot compose - missing track data"],
+        statusMessages: ["Liner notes not written: no track was chosen"],
       };
     }
 
@@ -556,7 +556,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       runtime.newId,
     );
 
-    status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
+    status("GRAPH-ENRICH", "Looking up cover art on Spotify for the genealogy");
     const enriched = await withArtwork(
       composed.genealogy,
       spotify.coverUrl,
@@ -638,7 +638,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       claims: composed.claims,
       usage: [call],
       sourceErrors: runErrors,
-      statusMessages: ["🎼 Analysis complete!"],
+      statusMessages: ["Analysis complete"],
     };
 
     /**
@@ -655,7 +655,9 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         error: `Composer result does not fit the contract: ${problems}`,
         usage: calls,
         sourceErrors: errors,
-        statusMessages: ["❌ The analysis could not be completed"],
+        statusMessages: [
+          "The analysis could not be completed: the result does not fit the contract",
+        ],
       };
     }
 
@@ -695,7 +697,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         usage: [failed],
         sourceErrors: runErrors,
         statusMessages: [
-          `⚠️ Model unavailable (${MODEL_REASON_TEXT[reason]}); showing source data only`,
+          `Model unavailable (${MODEL_REASON_TEXT[reason]}); showing source data only`,
         ],
       };
     }

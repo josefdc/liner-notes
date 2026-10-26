@@ -170,26 +170,29 @@ interface PrimaryOutcome {
 /** The status line of a source whose request was not sent: not a source error. */
 const notAskedNote = (source: SourceId, why: "pace" | "deadline") =>
   why === "pace"
-    ? `📇 ${SOURCE_NAMES[source]} not asked: our own pacing of its requests left no time in this run; a later run asks it`
-    : `📇 ${SOURCE_NAMES[source]} not asked: the run's time for the primary sources ran out first; a later run asks it`;
+    ? `${SOURCE_NAMES[source]} not asked: our own pacing of its requests left no time in this run; a later run asks it`
+    : `${SOURCE_NAMES[source]} not asked: the run's time for the primary sources ran out first; a later run asks it`;
 
 /** The status line of a source the cached run did not ask. */
 const cachedNotAskedNote = (source: SourceId, readAt: string) =>
-  `📇 ${SOURCE_NAMES[source]} not asked: the research cached on ${readAt.slice(0, 10)} did not ask it; a later run asks it`;
+  `${SOURCE_NAMES[source]} not asked: the research cached on ${readAt.slice(0, 10)} did not ask it; a later run asks it`;
 
 /**
  * The status line of a run whose MusicBrainz releases could not be read: no release is named
  * for the recording (its cover in a recording), and a later run reads them again.
  */
 const RELEASES_NOTE =
-  "MusicBrainz: releases incomplete, the recording's releases could not be read, so no release is named for it; a later run reads them";
+  "MusicBrainz releases incomplete: the recording's releases could not be read, so no release is named for it; a later run reads them";
 
 const DATES_NOTE =
-  "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
+  "MusicBrainz release dates incomplete: the work's recordings could not be dated, so its covers are not claimed for this recording; a later run reads them";
+
+/** The status line of a track without an ISRC: the primary sources are read by it. */
+const NO_ISRC_LINE = "Primary sources not asked: the track has no ISRC";
 
 /** The status line of the primary sources' records; `from` says where they came from. */
 function recordsLine(records: readonly SourcedEvidence[], from = ""): string {
-  return `📇 Primary sources: ${records.length} records (${countsBySource(records)})${from}`;
+  return `Read ${records.length} ${records.length === 1 ? "record" : "records"} from the primary sources (${countsBySource(records)})${from}`;
 }
 
 /** The outcome of reading the primary sources for this run. */
@@ -203,7 +206,7 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
       samples: [],
       incomplete: [],
       trackIsOriginal: false,
-      found: ["📇 Primary sources not asked: the track has no ISRC"],
+      found: [NO_ISRC_LINE],
       warnings: [],
     };
   }
@@ -213,12 +216,12 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   // Without MusicBrainz the others are not asked: nothing was read, which is not "no match".
   const unread =
     musicbrainz.status === "missing" && musicbrainz.error
-      ? `📇 Primary sources: none could be read (${SOURCE_NAMES.musicbrainz} could not be read)`
+      ? `Primary sources: none could be read (${SOURCE_NAMES.musicbrainz} could not be read)`
       : null;
   const found = [
     records.length > 0
       ? recordsLine(records)
-      : (unread ?? "📇 Primary sources: no record matched the track"),
+      : (unread ?? "Primary sources: no record matched the track"),
   ];
   const errors = uniqueErrors(primarySourceErrors(read.sources));
   const lasting = lastingErrors(read.sources);
@@ -227,7 +230,7 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   const warnings: string[] = [];
   for (const { error, note } of losses) {
     warnings.push(
-      `⚠️ ${SOURCE_NAMES[error.source]} records are incomplete (${error.code}): ${
+      `${SOURCE_NAMES[error.source]} records are incomplete (${error.code}): ${
         note ?? error.message ?? "a request failed"
       }`,
     );
@@ -270,7 +273,7 @@ function packOf(
   const omitted = pack.omitted + omittedBefore;
   const warnings = [...primary.warnings];
   if (omitted > 0) {
-    warnings.push(`📇 Evidence pack: ${omitted} lower-ranked items left out (size cap)`);
+    warnings.push(`Evidence pack: ${omitted} lower-ranked items left out (size cap)`);
   }
   const evidence = pack.items();
   for (const item of evidence) config.writer?.({ type: "evidence", evidence: item });
@@ -351,7 +354,7 @@ export async function refreshedRunEvidence(
       );
       outcome.warnings = [
         ...outcome.warnings.filter((line) => line !== notAskedNote(source, why)),
-        `📇 ${SOURCE_NAMES[source]} not asked again: its ${kept.length} records come from the research cache (read ${cached.readAt.slice(0, 10)})`,
+        `${SOURCE_NAMES[source]} not asked again: its ${kept.length} records come from the research cache (read ${cached.readAt.slice(0, 10)})`,
       ];
     }
     if (merged) outcome.found = [recordsLine(outcome.records)];
@@ -486,13 +489,13 @@ export function cachedRunEvidence(
   const musicbrainzUnread = cached.errors.some((e) => e.source === "musicbrainz");
   const found =
     cached.isrc === null
-      ? ["📇 Primary sources not asked: the track has no ISRC"]
+      ? [NO_ISRC_LINE]
       : [
           records.length > 0
             ? recordsLine(records, from)
             : musicbrainzUnread
-              ? `📇 Primary sources: none could be read (${SOURCE_NAMES.musicbrainz} could not be read)${from}`
-              : `📇 Primary sources: no record matched the track${from}`,
+              ? `Primary sources: none could be read (${SOURCE_NAMES.musicbrainz} could not be read)${from}`
+              : `Primary sources: no record matched the track${from}`,
         ];
   const outcome: PrimaryOutcome = {
     records,

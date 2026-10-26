@@ -340,7 +340,7 @@ describe("research inputs", () => {
       expect(final.sourceErrors).toEqual([
         expect.objectContaining({ source: "musicbrainz", code: "rate_limited" }),
       ]);
-      expect(final.statusMessages).toContain("⚠️ MusicBrainz could not be read (rate_limited)");
+      expect(final.statusMessages).toContain("MusicBrainz could not be read (rate_limited)");
     });
 
     it("Last.fm's 'not found' is recorded as nothing found, never as a sentence", async () => {
@@ -382,7 +382,7 @@ describe("research inputs", () => {
       expect(out.sourceErrors).toContainEqual(
         expect.objectContaining({ source: "lastfm", code: "not_configured" }),
       );
-      expect(out.statusMessages).toContain("⚠️ Last.fm could not be read (not_configured)");
+      expect(out.statusMessages).toContain("Last.fm could not be read (not_configured)");
       expect(out.statusMessages).not.toContain("Found lastfm tags information");
       const [first] = prompts;
       expect(first.user).toContain('"lastfmTags":"unavailable"');
@@ -401,9 +401,7 @@ describe("research inputs", () => {
       expect(final.sourceErrors).toEqual([
         expect.objectContaining({ source: "tavily", code: "unavailable" }),
       ]);
-      expect(final.statusMessages).toContain(
-        "⚠️ Web search (Tavily) could not be read (unavailable)",
-      );
+      expect(final.statusMessages).toContain("Web search (Tavily) could not be read (unavailable)");
       expect(final.statusMessages).not.toContain("Found samples information");
     });
 
@@ -672,7 +670,7 @@ describe("research inputs", () => {
           message: expect.stringContaining("Last.fm rejected the API key"),
         }),
       ]);
-      expect(out.statusMessages).toContain("⚠️ Last.fm key rejected: fix the key (unavailable)");
+      expect(out.statusMessages).toContain("Last.fm key rejected: fix the key (unavailable)");
       expect(store.puts).toEqual([]);
     });
 
@@ -688,7 +686,7 @@ describe("research inputs", () => {
       const second = await historian(ICE);
 
       expect(first.out.statusMessages).toContain(
-        "⚠️ Web search (Tavily) key rejected: fix the key (unavailable)",
+        "Web search (Tavily) key rejected: fix the key (unavailable)",
       );
       expect(store.puts).toEqual([]);
       expect(second.plannerCalls).toBe(1);

@@ -1,5 +1,5 @@
 /**
- * Historian Node — Deep Dive Research
+ * Historian Node — Research
  * Runs in parallel with Engineer
  * Runs the run's research plan (research/plan.ts): the primary sources from the track's ISRC,
  * each Last.fm method once, then the ResearcherSubgraph: its fixed steps together (the
@@ -89,8 +89,11 @@ function readingPrimary(): string {
     "SecondHandSongs",
     ...(geniusConfigured() ? ["Genius"] : []),
   ];
-  return `📇 Reading primary sources (${asked.join(", ")})...`;
+  return `Reading the primary sources again (${asked.join(", ")})`;
 }
+
+/** The status line of a research-cache hit. */
+const CACHED_LINE = "Using the research stored by an earlier run";
 
 export async function historianNode(
   state: SonicAgentStateType,
@@ -98,7 +101,7 @@ export async function historianNode(
   runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
-    return { statusMessages: ["⚠️ Skipping research - no track data"] };
+    return { statusMessages: ["Research not run: no track was chosen"] };
   }
 
   const writer = config.writer;
@@ -124,7 +127,7 @@ export async function historianNode(
   writer?.({
     type: "status",
     code: "RESEARCH-START",
-    message: "Activating deep-web research protocols...",
+    message: "Reading Last.fm, the primary sources and web search results for the track",
     node: "historian",
     timestamp: timestampOf(runtime),
   });
@@ -135,7 +138,7 @@ export async function historianNode(
   const query = trackQuery(state.spotifyData);
   // Every search stops when the run is cancelled.
   const options = { signal: config.signal };
-  log.debug(`Deep dive research for: ${title} by ${artist}`);
+  log.debug(`Researching: ${title} by ${artist}`);
 
   // The plan's Last.fm step, each method at most once per run (outside the researcher subgraph,
   // which does not ask them again): the track's tags and similar tracks while the ISRC identifies
@@ -199,8 +202,7 @@ export async function historianNode(
     // name may be another artist's.
     ...prefetch.notAsked
       .filter(() => prefetch.reasons.includes("lastfm_unknown_mbid"))
-      .filter((line) => line.startsWith("Last.fm artist tags"))
-      .map((line) => `⚠️ ${line}`),
+      .filter((line) => line.startsWith("Last.fm artist tags")),
   ];
   for (const message of prefetchStatus) {
     writer?.({
@@ -339,9 +341,10 @@ export async function historianNode(
     });
   }
 
+  const steps = finalState.stepsRun ?? 0;
   const summary = failure
-    ? "⚠️ Research stopped early; showing what was found"
-    : `Intelligence extraction complete: ${finalState.stepsRun ?? 0} layers processed`;
+    ? "Research stopped early; showing what was found"
+    : `Research finished: ${steps} ${steps === 1 ? "step" : "steps"} run`;
   writer?.({
     type: "status",
     code: failure ? "SYS-WARN" : "RESEARCH-FOUND",
@@ -429,12 +432,7 @@ async function cacheHit(
     return null;
   }
   log.debug(`Cache hit for: ${spotify.title}`, { primarySources: use });
-  sendStatus(
-    config,
-    runtime,
-    "RESEARCH-FOUND",
-    "Research cache hit — intelligence already extracted",
-  );
+  sendStatus(config, runtime, "RESEARCH-FOUND", CACHED_LINE);
   let pack: RunEvidence;
   let recording: IdentifiedRecording | null;
   let reading: string | null = null;
@@ -489,7 +487,7 @@ async function cacheHit(
     ...(lasting.length > 0 ? { lastingSourceErrors: lasting } : {}),
     ...(notAsked.length > 0 ? { primaryNotAsked: notAsked } : {}),
     statusMessages: [
-      "📚 Research (cached): loaded from persistent cache",
+      CACHED_LINE,
       ...unreadableStatus(notConfigured),
       ...(reading ? [reading] : []),
       ...pack.status,

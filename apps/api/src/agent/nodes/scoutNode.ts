@@ -29,6 +29,7 @@ import {
   readStoredResult,
   servedResult,
   shownQueryMatch,
+  STORED_LINE,
   storedErrorStatus,
 } from "../storedResults.js";
 import { matchTrack, needsChoice, rankTracks } from "../trackMatch.js";
@@ -40,6 +41,10 @@ const log = logger("Scout");
 export const MAX_RETRY_WAIT_MS = 10_000;
 
 type Update = Partial<SonicAgentStateType>;
+
+/** The status line of a track the run found: "Found the track on Spotify: <title> by <artist>". */
+const foundLine = (track: SpotifyData) =>
+  `Found the track on Spotify: ${track.title} by ${track.artist}`;
 
 /** A Spotify call with the scout's retries (see the top of this file), each wait said. */
 function withSpotifyRetry<T>(
@@ -94,7 +99,7 @@ async function selectedTrack(
     config.writer?.({
       type: "status",
       code: "NET-200",
-      message: "Cache hit — returning stored analysis",
+      message: STORED_LINE,
       node: "scout",
       timestamp: timestampOf(runtime),
     });
@@ -125,12 +130,12 @@ async function selectedTrack(
   config.writer?.({
     type: "status",
     code: "SPOTIFY-FOUND",
-    message: `Target acquired: "${track.title}" // ${track.artist}`,
+    message: foundLine(track),
     node: "scout",
     timestamp: timestampOf(runtime),
   });
   log.info(`Selected: ${track.title} by ${track.artist}`);
-  return { ...selected, statusMessages: [`✅ Found: "${track.title}" by ${track.artist}`] };
+  return { ...selected, statusMessages: [foundLine(track)] };
 }
 
 /**
@@ -158,8 +163,12 @@ async function requestedTrack(
       isSourceError(error, "invalid_input") ||
       (isSourceError(error, "http") && (error.status === 404 || error.status === 400));
     return missing
-      ? failed({ kind: "no_match" }, `No Spotify track ${trackId}`, "❌ Track not found")
-      : failed(failureOf(error), `Spotify track ${trackId} not read`, "❌ Error reading Spotify");
+      ? failed(
+          { kind: "no_match" },
+          `No Spotify track ${trackId}`,
+          "Spotify has no track with this id",
+        )
+      : failed(failureOf(error), `Spotify track ${trackId} not read`, "Spotify could not be read");
   }
   return selectedTrack(
     {
@@ -185,7 +194,7 @@ export async function scoutNode(
   writer?.({
     type: "status",
     code: "NET-100",
-    message: "Establishing connection to Spotify API...",
+    message: state.requestedTrackId ? "Reading the track from Spotify" : "Searching Spotify",
     node: "scout",
     timestamp: timestampOf(runtime),
   });
@@ -210,15 +219,11 @@ export async function scoutNode(
     } catch (error) {
       if (config.signal?.aborted || isAbortError(error)) throw error;
       const why = error instanceof Error ? error.message : String(error);
-      return failed(
-        failureOf(error),
-        `Spotify search failed: ${why}`,
-        "❌ Error searching Spotify",
-      );
+      return failed(failureOf(error), `Spotify search failed: ${why}`, "Spotify search failed");
     }
 
     if (tracks.length === 0) {
-      return failed({ kind: "no_match" }, "No tracks found", "❌ No matching songs found");
+      return failed({ kind: "no_match" }, "No tracks found", "Spotify found no matching track");
     }
 
     // Spotify gives this app no popularity, so the results are judged on how their title and
@@ -270,7 +275,7 @@ export async function scoutNode(
       if (candidates.length === 0) {
         return {
           error: "No candidate fits the contract",
-          statusMessages: ["❌ No usable matches"],
+          statusMessages: ["No Spotify result could be offered as a choice"],
         };
       }
 
@@ -285,7 +290,7 @@ export async function scoutNode(
       return {
         candidates,
         queryMatch,
-        statusMessages: [`⚠️ Found ${candidates.length} matches - please select`],
+        statusMessages: [`Found ${candidates.length} possible tracks; waiting for a choice`],
       };
     }
 
@@ -309,7 +314,7 @@ export async function scoutNode(
     log.error(`Error: ${message}`);
     return {
       error: `Scout error: ${message}`,
-      statusMessages: ["❌ Error searching Spotify"],
+      statusMessages: ["Spotify search failed"],
     };
   }
 }

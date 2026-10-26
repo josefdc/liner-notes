@@ -26,6 +26,10 @@
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+import type {
+  AudioGateReason,
+  AudioUnavailableReason as ResultUnavailableReason,
+} from "@liner-notes/contract";
 import {
   analyzeAudioPreview,
   type AudioAnalysisResult,
@@ -80,7 +84,29 @@ export function toAudioMeasurement(analysis: AudioAnalysisResult): AudioMeasurem
   };
 }
 
-/** What a measurement says, for status lines: "116 BPM // D Minor" or what is missing. */
+/** Why audio was not measured at all, in words, by the engineer's reason code. */
+const UNMEASURED_TEXT: Record<ResultUnavailableReason, string> = {
+  no_preview: "no preview clip of this recording was found",
+  preview_rejected: "the preview clip is not on an audio host the analysis accepts",
+  service_unavailable: "the audio service is unavailable",
+  analysis_failed: "the analysis failed",
+  not_detected: "not detected",
+  not_run: "the analysis did not run",
+  low_confidence: "the estimate was not confident enough",
+};
+
+/** What the service's gate means, for a block that carries no reason of its own. */
+const GATE_TEXT: Record<AudioGateReason, string> = {
+  silence: "the preview is silent",
+  noise: "no beat and no musical pitch in the preview",
+  too_short: "the preview is too short to measure",
+};
+
+/**
+ * What a measurement says, for status lines: "116 BPM, D Minor", or what is missing and why.
+ * A tempo or key the service withheld is named with the service's own reason for that field
+ * (`audio.withheld`); "not detected" only when the block gives no reason.
+ */
 function measuredSummary(measurement: AudioMeasurement): {
   measured: boolean;
   text: string;
@@ -90,30 +116,29 @@ function measuredSummary(measurement: AudioMeasurement): {
   if (fields.audioSource === "analyzed") {
     return {
       measured: true,
-      text: `${fields.bpm} BPM // ${fields.key}`,
+      text: `${fields.bpm} BPM, ${fields.key}`,
       complete: fields.audioConfidence === "high",
     };
   }
-  const reason = fields.audioUnavailableReason ?? "not_run";
   const audio = fields.audio;
   if (audio && !audio.gate.passed) {
-    return {
-      measured: false,
-      text: `The analysis measured nothing on the preview (${audio.gate.reason ?? "gate"}) (${reason})`,
-      complete: false,
-    };
+    const why =
+      audio.withheld?.tempo?.reason ??
+      (audio.gate.reason ? GATE_TEXT[audio.gate.reason] : "the preview did not pass the checks");
+    return { measured: false, text: `Nothing measured on the preview: ${why}`, complete: false };
   }
   if (audio) {
-    const missing = [!audio.tempo && "tempo", !audio.key && "key"].filter(Boolean).join(" and ");
-    return {
-      measured: false,
-      text: `The analysis found no ${missing} (${reason})`,
-      complete: false,
-    };
+    const why = (field: "tempo" | "key") => audio.withheld?.[field]?.reason ?? "not detected";
+    const parts = [
+      fields.bpm !== null ? `Measured ${fields.bpm} BPM` : `Tempo not given: ${why("tempo")}`,
+      fields.key !== null ? `measured ${fields.key}` : `key not given: ${why("key")}`,
+    ];
+    return { measured: false, text: parts.join("; "), complete: false };
   }
+  const reason = fields.audioUnavailableReason ?? "not_run";
   return {
     measured: false,
-    text: `Audio not measured (${reason}): BPM and key unavailable`,
+    text: `Tempo and key not measured: ${UNMEASURED_TEXT[reason]}`,
     complete: false,
   };
 }
@@ -216,7 +241,7 @@ export async function engineerNode(
   runtime: AgentRuntime = defaultAgentRuntime,
 ): Promise<Partial<SonicAgentStateType>> {
   if (!state.spotifyData) {
-    return { statusMessages: ["⚠️ Skipping audio analysis - no track data"] };
+    return { statusMessages: ["Audio not measured: no track was chosen"] };
   }
 
   const writer = config.writer;
@@ -244,7 +269,7 @@ export async function engineerNode(
     const old = hit.unversioned;
     const served = old
       ? `${old.reason} Showing the measurement by analyzer ${hit.measurement.audio.analyzerVersion} from ${old.measuredAt.toISOString().slice(0, 10)}: ${summary}`
-      : `Audio cache hit: ${summary}`;
+      : `Measured in an earlier run: ${summary}`;
     log.info(`Cache hit for: ${track.title}${old ? " (service version unknown)" : ""}`);
     writer?.({
       type: "status",
@@ -262,21 +287,20 @@ export async function engineerNode(
       previewUrl:
         fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null,
       ...lookupErrors(fresh.sourceError),
-      statusMessages: [
-        old
-          ? `⚠️ ${served.replace(" // ", ", ")}`
-          : `🎵 Audio (cached): ${summary.replace(" // ", ", ")}`,
-      ],
+      statusMessages: [served],
     };
   }
 
-  writer?.({
-    type: "status",
-    code: "AUDIO-INIT",
-    message: "Initializing audio waveform parser...",
-    node: "engineer",
-    timestamp: timestampOf(runtime),
-  });
+  // Said only when there is a clip to measure: without one, the next line says so.
+  if (fresh.previewUrl) {
+    writer?.({
+      type: "status",
+      code: "AUDIO-INIT",
+      message: "Measuring tempo and key from the 30 s preview",
+      node: "engineer",
+      timestamp: timestampOf(runtime),
+    });
+  }
 
   log.info(`Analyzing: ${track.title}`);
 
@@ -320,7 +344,7 @@ export async function engineerNode(
     return {
       audioFeatures: measurement,
       ...previewOut,
-      statusMessages: [`⚠️ ${summary.text}`],
+      statusMessages: [summary.text],
     };
   }
 
@@ -339,10 +363,11 @@ export async function engineerNode(
   }
 
   const partial = summary.complete ? "" : " (some perceptual features not measured)";
+  const measured = `Measured from the preview: ${summary.text}${partial}`;
   writer?.({
     type: "status",
     code: "AUDIO-COMPLETE",
-    message: `Frequency analysis: ${summary.text}${partial}`,
+    message: measured,
     node: "engineer",
     timestamp: timestampOf(runtime),
   });
@@ -351,6 +376,6 @@ export async function engineerNode(
   return {
     audioFeatures: measurement,
     ...previewOut,
-    statusMessages: [`🎵 Audio (measured): ${summary.text.replace(" // ", ", ")}`],
+    statusMessages: [measured],
   };
 }

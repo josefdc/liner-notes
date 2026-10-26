@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { PLANNER_LINES } from "../apps/api/src/agent/research/plannerLines.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const baselinePath = join(root, "scripts", "guard-baseline.json");
@@ -162,10 +163,24 @@ function jsonStrings(text) {
 // In a recorded run (fixtures/replays/*.json), the text the app wrote into its events: the
 // `message` of status and interrupt events and the `error` of error events. The result itself
 // (claims, factoids, analysis) and every other model answer are not scanned: a recording keeps
-// what the model said, and must never be edited to bring a count down. The planner's status
-// lines (`🔍 <reasoning>`, `✅ <reasoning>`, node `research_manager`) are model text after the
-// app's leading emoji, so only that emoji is scanned.
+// what the model said, and must never be edited to bring a count down.
+//
+// The planner's status lines (node `research_manager`) are the app's own lines or the model's
+// reasoning. Its own lines (PLANNER_LINES, imported from the API so the two cannot drift; a
+// `{name}` part matches any text) are scanned in full, and so are the fixed lines of older runs
+// (OLD_PLANNER_OWN_LINE). Any other line is model text: in older runs the app put an emoji before
+// it (`🔍 <reasoning>`, `✅ <reasoning>`), and only that emoji is scanned; in newer runs the line
+// is the reasoning alone, and nothing of it is scanned.
 const PLANNER_LINE = /^(?:🔍|✅) (?!Deep dive complete$)/u;
+const OLD_PLANNER_OWN_LINE =
+  /^(?:🔬 Starting deep dive research\.\.\.|🧠 Planning the next research step \(\d+\/\d+\)\.\.\.|✅ Deep dive complete)$/u;
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export const PLANNER_OWN_LINE = new RegExp(
+  `^(?:${Object.values(PLANNER_LINES)
+    .map((line) => escapeRegExp(line).replace(/\\\{\w+\\\}/g, ".+"))
+    .join("|")})$`,
+  "u",
+);
 function recordedMessageSpans(text) {
   const run = JSON.parse(text);
   const spans = [];
@@ -177,8 +192,12 @@ function recordedMessageSpans(text) {
       ((event.type === "status" || event.type === "interrupt") && field === "message") ||
       (event.type === "error" && field === "error");
     if (!written) continue;
-    if (event.type === "status" && event.node === "research_manager" && PLANNER_LINE.test(value)) {
-      spans.push([start + 1, start + 1 + value.indexOf(" ")]);
+    if (event.type === "status" && event.node === "research_manager") {
+      if (PLANNER_LINE.test(value)) spans.push([start + 1, start + 1 + value.indexOf(" ")]);
+      else if (PLANNER_OWN_LINE.test(value) || OLD_PLANNER_OWN_LINE.test(value)) {
+        spans.push([start, end]);
+      }
+      // else: the model's reasoning, not scanned
     } else {
       spans.push([start, end]);
     }

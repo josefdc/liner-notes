@@ -4,8 +4,8 @@
  *
  * - `/`: the search.
  * - `/t/<spotifyId>`: the result for one track. Links the app writes carry `?q=<title artist>`,
- *   the words the track was found by, so a link to a track that has no stored result yet can
- *   still be analysed under a name.
+ *   the result's own title and artist, so a link to a track whose stored result cannot be read
+ *   can still be analysed under a name.
  */
 
 /** Where the app is. */

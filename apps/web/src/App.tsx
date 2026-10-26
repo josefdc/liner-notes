@@ -18,6 +18,7 @@ import {
   routeUrl,
   writeHistoryEntry,
 } from './router/route';
+import { ShownResults } from './router/shownResults';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
 const shimmerClass =
@@ -84,9 +85,6 @@ const PlayerSkeleton = (
     </div>
   </div>
 );
-
-/** How long a result view's heading is waited for (its code may still be loading). */
-const FOCUS_WAIT_MS = 10_000;
 
 /** The loading view on the page, if any (see LOADING_VIEW_PROPS). */
 const loadingView = () => document.querySelector<HTMLElement>('[data-loading-view]');
@@ -186,11 +184,11 @@ const App: React.FC = () => {
   const playerHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   // A result view whose heading is to take the focus as soon as it is in the page: its code
-  // was still loading when it was opened. Waited for up to FOCUS_WAIT_MS.
-  const focusWait = useRef<{ screen: AppPhase; until: number } | null>(null);
+  // was still loading when it was opened. Waited for however long the code takes: the focus
+  // stays on the loading view meanwhile, and is taken only from there or from the page.
+  const focusWait = useRef<AppPhase | null>(null);
   const takeWaitingFocus = useCallback((screen: AppPhase, heading: HTMLHeadingElement) => {
-    const wait = focusWait.current;
-    if (wait?.screen !== screen || performance.now() > wait.until) return;
+    if (focusWait.current !== screen) return;
     focusWait.current = null;
     // Unless the user has moved it elsewhere meanwhile (from the loading view, or from the
     // page where the loading view's removal left it).
@@ -223,12 +221,13 @@ const App: React.FC = () => {
   const [isRestoredSession, setIsRestoredSession] = useState(false);
   const effectiveTrackData = overrideTrackData || trackData;
 
-  // Every result shown on this page, by track id: Back and Forward to a result show it again
-  // without a request. One per track: an older entry of a track analysed twice on this page
-  // shows the track's newest result (the same track, never another's).
-  const shownResults = useRef(new Map<string, TrackData>());
+  // The results shown on this page, by track id (the last SHOWN_RESULTS_LIMIT): Back and
+  // Forward to a result show it again without a request. One per track: an older entry of a
+  // track analysed twice on this page shows the track's newest result (the same track, never
+  // another's).
+  const shownResults = useRef(new ShownResults());
   useEffect(() => {
-    if (effectiveTrackData?.id) shownResults.current.set(effectiveTrackData.id, effectiveTrackData);
+    if (effectiveTrackData?.id) shownResults.current.remember(effectiveTrackData);
   }, [effectiveTrackData]);
 
   // ─── A link's stored result (GET /api/runs/by-track/:id): read only, never an analysis ──
@@ -275,9 +274,17 @@ const App: React.FC = () => {
       heading.focus();
       return;
     }
-    focusWait.current = { screen, until: performance.now() + FOCUS_WAIT_MS };
+    focusWait.current = screen;
     loadingView()?.focus();
   }, [screen]);
+
+  // A link to a result: its view's code is fetched while the stored result loads, not after.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the screen the page opened on
+  useEffect(() => {
+    if (!opening.link) return;
+    if (opening.phase === AppPhase.PLAYER) import('./components/Player');
+    else import('./components/Dashboard');
+  }, []);
 
   // Preload lazy chunks when analysis nears completion
   useEffect(() => {

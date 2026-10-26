@@ -19,6 +19,7 @@ const STORED_ID = "4cOdK2wGLETKBW3PvgPWqT";
 /** A well-formed Spotify track id without a stored run: the fixture's stream analyses it. */
 const MISSING_ID = "7ouMYWpwJ422jRcDASZB7P";
 
+const MISSING_TITLE = "No stored analysis for this track yet";
 const resultHeading = (page: Page) => page.getByRole("heading", { name: "Command Center" });
 const searchBox = (page: Page) => page.getByRole("combobox", { name: "Song title and artist" });
 const streams = (log: string[]) => log.filter((entry) => entry.startsWith("stream "));
@@ -72,14 +73,12 @@ test("a reload of the Player keeps the Player", async ({ page }) => {
   expect(streams(await apiRequests(page))).toEqual([]);
 });
 
-test("a track without a stored run is not analyzed yet: nothing runs until Analyze", async ({
-  page,
-}) => {
+test("a track without a stored run says so: nothing runs until Analyze", async ({ page }) => {
   const problems = collectProblems(page);
   await useMockApi(page, stored);
   await page.goto(`/t/${MISSING_ID}?q=Midnight%20City%20M83`);
 
-  const heading = page.getByRole("heading", { name: "Not analyzed yet" });
+  const heading = page.getByRole("heading", { name: MISSING_TITLE });
   await expect(heading).toBeVisible();
   await expect(heading).toBeFocused();
   await expect(page.getByText("Named in the link: Midnight City M83")).toBeVisible();
@@ -101,7 +100,7 @@ test("a track without a stored run is not analyzed yet: nothing runs until Analy
   await expect(resultHeading(page)).toBeFocused();
   await expect(page).toHaveURL(`/t/${MISSING_ID}?q=Bright+Lines+Test+Artist`);
 
-  // Back from the result goes to the search, not to the "not analyzed yet" screen.
+  // Back from the result goes to the search, not to the screen that had no stored analysis.
   await page.goBack();
   await expect(searchBox(page)).toBeVisible();
   await expect(page).toHaveURL("/");
@@ -111,7 +110,7 @@ test("a track without a stored run is not analyzed yet: nothing runs until Analy
 test("Analyze on a link without words asks for the track by its id", async ({ page }) => {
   await useMockApi(page, stored);
   await page.goto(`/t/${MISSING_ID}`);
-  await expect(page.getByRole("heading", { name: "Not analyzed yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: MISSING_TITLE })).toBeVisible();
   await expect(page.getByText("Named in the link")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
@@ -255,6 +254,93 @@ test("a result whose id is not a Spotify track id keeps the search's address", a
   ).toHaveCount(0);
 });
 
+for (const outcome of [
+  { name: "no stored run", title: MISSING_TITLE, failWith: null },
+  { name: "a failure", title: "The stored analysis could not be loaded", failWith: 500 },
+]) {
+  test(`after loading, ${outcome.name} is announced: a new heading takes the focus`, async ({
+    page,
+  }) => {
+    await useMockApi(page, { ...stored, runWaits: { [MISSING_ID]: "answer" } });
+    await page.goto(`/t/${MISSING_ID}`);
+    const loading = page.getByRole("heading", { name: "Loading the stored analysis..." });
+    await expect(loading).toBeFocused();
+    // The loading heading, and every focus move from here on.
+    await page.evaluate(() => {
+      const w = window as unknown as { __loading: Element | null; __focusIns: string[] };
+      w.__loading = document.activeElement;
+      w.__focusIns = [];
+      document.addEventListener("focusin", (event) =>
+        w.__focusIns.push((event.target as Element).textContent ?? ""),
+      );
+    });
+    if (outcome.failWith) {
+      await page.evaluate(
+        ([path, status]) => {
+          (window as unknown as { __mockApi: { fetchStatus: object } }).__mockApi.fetchStatus = {
+            [path]: status,
+          };
+        },
+        [`/api/runs/by-track/${MISSING_ID}`, outcome.failWith] as const,
+      );
+    }
+    await releaseStream(page, "answer");
+
+    const heading = page.getByRole("heading", { name: outcome.title });
+    await expect(heading).toBeFocused();
+    // Another element than the loading heading, which a screen reader reads as it takes the
+    // focus: a renamed heading that already had the focus would be read by none.
+    expect(
+      await page.evaluate(() => {
+        const w = window as unknown as { __loading: Element | null; __focusIns: string[] };
+        return { same: document.activeElement === w.__loading, focusIns: w.__focusIns };
+      }),
+    ).toEqual({ same: false, focusIns: [outcome.title] });
+  });
+}
+
+test("a link's result takes the focus even when its code takes more than ten seconds", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await useMockApi(page, stored);
+  await page.route(/\/assets\/Dashboard-[^/]*\.js$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 11_500));
+    await route.continue();
+  });
+  await page.goto(`/t/${STORED_ID}`);
+  await expect(page.getByRole("status", { name: "Loading the results" })).toBeFocused({
+    timeout: 8000,
+  });
+  await page.evaluate(() => {
+    const w = window as unknown as { __seen: string[] };
+    w.__seen = [];
+    const note = () => {
+      w.__seen.push(document.activeElement?.tagName ?? "none");
+      requestAnimationFrame(note);
+    };
+    requestAnimationFrame(note);
+  });
+  await expect(resultHeading(page)).toBeFocused({ timeout: 20_000 });
+  expect(
+    await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen.includes("BODY")),
+  ).toBe(false);
+});
+
+test("a stored result whose measured copies have no measurement is not shown", async ({ page }) => {
+  // An older row: no measurement, yet the top-level copies say BPM 105 and A minor. The
+  // contract's RunResponse accepts it; its measured-value rule does not.
+  const body = structuredClone(stored.runs[STORED_ID]);
+  Object.assign(body.analysis, { audio: null, bpm: 105, key: "A Minor", energy: 0.8 });
+  await useMockApi(page, { ...stored, runs: { [STORED_ID]: body } });
+  await page.goto(`/t/${STORED_ID}`);
+  await expect(
+    page.getByRole("heading", { name: "The stored analysis could not be loaded" }),
+  ).toBeFocused();
+  await expect(page.getByText(/BPM\s*105/)).toHaveCount(0);
+  await expect(resultHeading(page)).toHaveCount(0);
+});
+
 test("an address the app does not know opens the search", async ({ page }) => {
   await useMockApi(page, stored);
   await page.goto("/somewhere/else");
@@ -314,7 +400,7 @@ test("a reload of a result the API holds no stored run of starts no analysis", a
   await expect(page).toHaveURL(`/t/${MISSING_ID}?q=Bright+Lines+Test+Artist`);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Not analyzed yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: MISSING_TITLE })).toBeVisible();
   await expect(page.getByText("Named in the link: Bright Lines Test Artist")).toBeVisible();
   expect(streams(await apiRequests(page))).toEqual([]);
 });

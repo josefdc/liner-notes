@@ -71,7 +71,22 @@ export async function fetchStoredRun(
     if (!isObject(analysis) || analysis.id !== trackId) return failed();
     // The measurement is read only as the contract reads it, as for a streamed result.
     await loadEventSchemas();
-    return { kind: 'found', track: withContractAudio(analysis, readContractAudio) };
+    const track = withContractAudio(analysis, readContractAudio);
+    // A stored row can be older than the API's checks: its measured copies (bpm, key,
+    // energy…) must agree with its measurement block, by the contract's own rule, or none of it
+    // is shown, since a copy without a measurement would read as measured. A result without the
+    // block at all predates it, and is read as the streamed path reads one (its values labelled
+    // with an unknown basis).
+    const { measuredCopyIssues } = await import('./eventSchemas');
+    const issues =
+      analysis.audio === undefined
+        ? []
+        : measuredCopyIssues(track as unknown as Parameters<typeof measuredCopyIssues>[0]);
+    if (issues.length > 0) {
+      console.warn('[storedRun] The stored result breaks the measured-value rule:', issues);
+      return failed();
+    }
+    return { kind: 'found', track };
   } catch (error) {
     if (signal?.aborted) throw abortError();
     console.warn(

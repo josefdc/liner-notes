@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SOURCE_URL, sourceUrl } from './sourceUrl';
 
 describe('sourceUrl', () => {
@@ -20,5 +20,26 @@ describe('sourceUrl', () => {
     expect(sourceUrl('github.com/me/liner-notes')).toBe(DEFAULT_SOURCE_URL);
     expect(sourceUrl('javascript:alert(1)')).toBe(DEFAULT_SOURCE_URL);
     expect(sourceUrl('/source')).toBe(DEFAULT_SOURCE_URL);
+  });
+});
+
+describe('SOURCE_URL', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('is read from VITE_SOURCE_URL at build time', async () => {
+    vi.stubEnv('VITE_SOURCE_URL', 'https://git.example.org/me/liner-notes');
+    vi.resetModules();
+    const { SOURCE_URL } = await import('./sourceUrl');
+    expect(SOURCE_URL).toBe('https://git.example.org/me/liner-notes');
+  });
+
+  it('is the public repository without it', async () => {
+    vi.stubEnv('VITE_SOURCE_URL', '');
+    vi.resetModules();
+    const { SOURCE_URL } = await import('./sourceUrl');
+    expect(SOURCE_URL).toBe(DEFAULT_SOURCE_URL);
   });
 });

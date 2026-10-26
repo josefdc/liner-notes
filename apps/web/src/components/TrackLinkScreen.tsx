@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { CircleAlert, Network, RotateCcw, Search } from 'lucide-react';
 import { Button } from './ui/Button';
 
 /**
  * What a link to a track (`/t/<spotifyId>`) shows until its stored result is on screen:
  * - `loading`: the stored result is being read (no analysis runs);
- * - `missing`: the track has no stored result; Analyze starts one, and only on a click;
+ * - `missing`: the API has no stored result of the track it can serve (none, or none it still
+ *   accepts); Analyze starts one, and only on a click;
  * - `invalid`: the link does not name a Spotify track;
  * - `failed`: the stored result could not be read.
  */
@@ -27,7 +28,7 @@ interface TrackLinkScreenProps {
 
 const TITLE: Record<TrackLinkState, string> = {
   loading: 'Loading the stored analysis...',
-  missing: 'Not analyzed yet',
+  missing: 'No stored analysis for this track yet',
   invalid: 'This link does not lead to a track',
   failed: 'The stored analysis could not be loaded',
 };
@@ -35,7 +36,7 @@ const TITLE: Record<TrackLinkState, string> = {
 const TEXT: Record<TrackLinkState, string> = {
   loading: 'Reading the latest analysis of this track. Nothing is analyzed again.',
   missing:
-    'Liner Notes has no analysis of this track yet. Analyze it to trace its samples, credits, history and sound.',
+    'Liner Notes has no stored analysis of this track that it can show. Analyze it to trace its samples, credits, history and sound.',
   invalid: 'A track link ends with a Spotify track id: 22 letters and digits.',
   failed:
     "The analysis server did not send it. The problem may be on your side or on the server's. Try again in a moment.",
@@ -54,10 +55,12 @@ export function TrackLinkScreen({
   onSearch,
 }: TrackLinkScreenProps) {
   // Each state's heading takes the focus: the view the user came from is gone, and the focus
-  // would fall to the page.
+  // would fall to the page. It is a new element for each state (its key), so a screen reader
+  // reads it as it takes the focus: a heading that only changed its words while it had the
+  // focus would be read by none.
   const headingRef = useRef<HTMLHeadingElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each new state is the trigger
-  useEffect(() => {
+  useLayoutEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
   }, [state]);
 
@@ -72,6 +75,7 @@ export function TrackLinkScreen({
       >
         <Network size={40} aria-hidden="true" className="text-cyber mx-auto" />
         <h1
+          key={state}
           id="track-link-title"
           ref={headingRef}
           tabIndex={-1}

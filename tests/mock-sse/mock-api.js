@@ -17,7 +17,8 @@
 //                answers with; a well-formed id without one answers 404 not_found, and an id
 //                that is not 22 letters or digits 400 invalid_input, as the API does
 //   runWaits:    { "<spotifyId>": "<name>" } holds that answer until the test calls
-//                `window.__mockApi.release("<name>")`
+//                `window.__mockApi.release("<name>")`; a `fetchStatus` set for its path while it
+//                is held applies when it is released
 //   streams:     { "<path>": [event, ...] } — events replayed, in order, by an EventSource
 //                opened on that path (e.g. "/api/analyze/stream"); when they run out the
 //                stream ends like a server response does (onerror unless the app closed it).
@@ -155,6 +156,14 @@
       const id = decodeURIComponent(byTrack[1]);
       const wait = config.runWaits?.[id];
       if (wait) await new Promise((resolve) => whenReleased(wait, resolve));
+      // A failure set while the answer was held (the test changes `fetchStatus` meanwhile).
+      const late = config.fetchStatus?.[pathOf(url)];
+      if (late) {
+        return new Response(JSON.stringify({ success: false, error: "mocked failure" }), {
+          status: late,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       const json = (body, status = 200) =>
         new Response(JSON.stringify(body), {
           status,

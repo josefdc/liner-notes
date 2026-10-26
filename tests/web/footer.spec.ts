@@ -29,7 +29,9 @@ for (const viewport of [
     await expect(source).toHaveAttribute("href", REPOSITORY);
 
     await page.goto(`/t/${STORED_ID}`);
-    await expect(page.getByRole("heading", { name: "Not analyzed yet" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No stored analysis for this track yet" }),
+    ).toBeVisible();
     await expect(source).toBeInViewport({ ratio: 1 });
   });
 }

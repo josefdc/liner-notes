@@ -48,6 +48,24 @@ describe('fetchStoredRun', () => {
     });
   });
 
+  it('fails for a result whose measured copies disagree with its measurement', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // An older row: no measurement, yet BPM 105 and A minor at the top.
+    answer(200, {
+      success: true,
+      run,
+      analysis: { ...analysis, audio: null, bpm: 105, key: 'A Minor', energy: 0.8 },
+    });
+    expect(await fetchStoredRun(ID)).toEqual({ kind: 'failed' });
+    // A measurement the contract cannot read counts as none: its copies are not shown either.
+    answer(200, {
+      success: true,
+      run,
+      analysis: { ...analysis, audio: { bpm: 'fast' }, bpm: 105 },
+    });
+    expect(await fetchStoredRun(ID)).toEqual({ kind: 'failed' });
+  });
+
   it("is missing for the API's not_found, and invalid for its invalid_input", async () => {
     answer(404, { success: false, code: 'not_found', error: 'Not found.' });
     expect(await fetchStoredRun(ID)).toEqual({ kind: 'missing' });

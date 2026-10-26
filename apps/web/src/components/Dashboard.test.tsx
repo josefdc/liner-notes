@@ -311,7 +311,7 @@ describe('Dashboard connected tracks', () => {
     );
   });
 
-  it('relates tracks to each other when the analysed track is not in the graph', async () => {
+  it('relates tracks to each other when the analyzed track is not in the graph', async () => {
     const track = connected([sourcedSample('older', 'later')]);
     track.genealogy.nodes = track.genealogy.nodes.filter((n) => n.group !== 1);
     renderDashboard(track);

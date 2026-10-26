@@ -12,14 +12,14 @@ export const LIVE_UNAVAILABLE_COPY: Record<LiveUnavailableCode, { title: string;
   budget_exhausted: {
     title: 'Live analysis paused',
     text:
-      'The budget for live analysis is spent for now, so no new song is analysed. ' +
+      'The budget for live analysis is spent for now, so no new song is analyzed. ' +
       'Recorded runs can still be shown. Each one is labelled as a recording, ' +
       'not a live analysis.',
   },
   live_disabled: {
     title: 'Live analysis is off here',
     text:
-      'This server does not analyse songs live right now: it only replays recorded runs. ' +
+      'This server does not analyze songs live right now: it only replays recorded runs. ' +
       'A recorded track is shown as a recording, not a live analysis.',
   },
 };

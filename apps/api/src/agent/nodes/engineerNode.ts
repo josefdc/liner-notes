@@ -153,6 +153,8 @@ const withheldText = (reason: { code: AudioWithheldCode } | undefined) =>
  */
 function measuredSummary(measurement: AudioMeasurement): {
   measured: boolean;
+  /** A tempo or a key was measured, even if not both. */
+  partly: boolean;
   text: string;
   complete: boolean;
 } {
@@ -160,6 +162,7 @@ function measuredSummary(measurement: AudioMeasurement): {
   if (fields.audioSource === "analyzed") {
     return {
       measured: true,
+      partly: true,
       text: `${fields.bpm} BPM, ${fields.key}`,
       complete: fields.audioConfidence === "high",
     };
@@ -171,7 +174,12 @@ function measuredSummary(measurement: AudioMeasurement): {
       : audio.gate.reason
         ? GATE_TEXT[audio.gate.reason]
         : "the preview did not pass the checks";
-    return { measured: false, text: `Nothing measured on the preview: ${why}`, complete: false };
+    return {
+      measured: false,
+      partly: false,
+      text: `Nothing measured on the preview: ${why}`,
+      complete: false,
+    };
   }
   if (audio) {
     const why = (field: "tempo" | "key") => withheldText(audio.withheld?.[field]);
@@ -179,11 +187,17 @@ function measuredSummary(measurement: AudioMeasurement): {
       fields.bpm !== null ? `Measured ${fields.bpm} BPM` : `Tempo not given: ${why("tempo")}`,
       fields.key !== null ? `measured ${fields.key}` : `key not given: ${why("key")}`,
     ];
-    return { measured: false, text: parts.join("; "), complete: false };
+    return {
+      measured: false,
+      partly: fields.bpm !== null || fields.key !== null,
+      text: parts.join("; "),
+      complete: false,
+    };
   }
   const reason = fields.audioUnavailableReason ?? "not_run";
   return {
     measured: false,
+    partly: false,
     text: `Tempo and key not measured: ${UNMEASURED_TEXT[reason]}`,
     complete: false,
   };
@@ -392,7 +406,9 @@ export async function engineerNode(
   if (!summary.measured) {
     writer?.({
       type: "status",
-      code: "AUDIO-ERROR",
+      // A tempo or a key measured is a completed step whose line names what was withheld and
+      // why; an error only when nothing was measured.
+      code: summary.partly ? "AUDIO-COMPLETE" : "AUDIO-ERROR",
       message: summary.text,
       node: "engineer",
       timestamp: timestampOf(runtime),

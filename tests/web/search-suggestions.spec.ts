@@ -21,7 +21,11 @@ test("a failing suggestion request shows that suggestions are unavailable", asyn
   await expect(page.getByText(unavailable)).toBeVisible();
   expect(await apiRequests(page)).toContain("fetch /api/search/suggest");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "ANALYZE_SONG" })).toBeEnabled();
+  // The search itself still runs.
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await expect
+    .poll(async () => (await apiRequests(page)).filter((entry) => entry.startsWith("stream ")))
+    .toEqual([expect.stringMatching(/^stream \/api\/analyze\/stream\?query=Hurt(&|$)/)]);
 });
 
 test("suggestions that load show the list and no error", async ({ page }) => {

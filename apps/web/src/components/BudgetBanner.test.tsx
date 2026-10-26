@@ -44,7 +44,7 @@ describe('BudgetBanner', () => {
     );
     expect(screen.getByRole('heading', { name: 'Live analysis is off here' })).toBeTruthy();
     expect(
-      screen.getByText(/does not analyse songs live right now: it only replays recorded runs/),
+      screen.getByText(/does not analyze songs live right now: it only replays recorded runs/),
     ).toBeTruthy();
     expect(await screen.findByRole('list', { name: 'Recorded tracks' })).toBeTruthy();
   });

@@ -171,7 +171,7 @@ describe('Player', () => {
   it('says no key moments were detected when the tempo or key was not detected', () => {
     const { container } = render(<Player trackData={missingTrack} onBack={() => {}} />);
     expect(container.textContent).toContain('No key moments detected');
-    expect(container.textContent).not.toContain('the audio was not analysed');
+    expect(container.textContent).not.toContain('the audio was not analyzed');
   });
 
   it('labels decrypted factoids as model inference and counts only the ones shown', async () => {

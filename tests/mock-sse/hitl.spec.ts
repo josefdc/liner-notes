@@ -26,7 +26,7 @@ test("an ambiguous search shows the track picker and keeps it after the stream e
 }) => {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 
   const picker = page.getByText("Is this the right track?");
   await expect(picker).toBeVisible();
@@ -50,7 +50,7 @@ test("an ambiguous search shows the track picker and keeps it after the stream e
 test("choosing a candidate resumes the analysis with that track", async ({ page }) => {
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 
   const second = candidates[1];
   await page
@@ -67,5 +67,5 @@ test("choosing a candidate resumes the analysis with that track", async ({ page 
   expect((await requests(page)).filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual(
     [],
   );
-  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
 });

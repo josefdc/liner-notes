@@ -266,7 +266,7 @@ export const RecordedRunNotice: React.FC<{
     ? `The model's answers in this result were replayed from answers recorded ${known ?? 'at a time that was not stored'}${commit}. ` +
       'The rest of it may have run live; it is not a live model call.'
     : `This result was recorded ${known ?? 'earlier'}${commit} and is shown again as it was ` +
-      'then. Nothing was analysed live for it.';
+      'then. Nothing was analyzed live for it.';
   return (
     <section
       aria-label={modelOnly ? 'Replayed model answers' : 'Recorded run'}

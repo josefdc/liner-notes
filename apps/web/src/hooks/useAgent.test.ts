@@ -133,6 +133,7 @@ describe('useAgent stream errors', () => {
     analysis.fail();
 
     expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('connection_lost');
     expect(result.current.isLoading).toBe(false);
     expect(analysis.closed).toBe(true);
     expect(streams()).toHaveLength(1);
@@ -193,6 +194,49 @@ describe('useAgent stream errors', () => {
     lastStream().send({ type: 'done' });
 
     expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('no_result');
+  });
+
+  it('gives a search without candidates the no_match code', () => {
+    const { result } = startAnalysis();
+    lastStream().send({ type: 'connected', threadId: 't1' });
+    lastStream().send(interrupt([]));
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('no_match');
+  });
+
+  it('gives a stream that cannot be opened its own code', () => {
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        constructor() {
+          throw new TypeError('Failed to fetch');
+        }
+      },
+    );
+    const { result } = startAnalysis();
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('stream_open_failed');
+  });
+
+  it('gives a resume that cannot be opened its own code', async () => {
+    const { hook } = openPicker();
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        constructor() {
+          throw new TypeError('Failed to fetch');
+        }
+      },
+    );
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.errorCode).toBe('resume_failed');
   });
 });
 
@@ -225,6 +269,190 @@ describe('useAgent results', () => {
     first.send({ type: 'complete', data: track }, { late: true });
     expect(result.current.status).toBe('connecting');
     expect(result.current.trackData).toBeNull();
+  });
+});
+
+describe('useAgent progress', () => {
+  it('moves to checking when the verifier reports, after composing', () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({
+      type: 'status',
+      node: 'composer',
+      message: 'Writing the notes',
+      code: 'LLM-CONNECT',
+    });
+    expect(result.current.status).toBe('composing');
+    analysis.send({
+      type: 'status',
+      node: 'verifier',
+      message: 'Checking the notes against their sources',
+      code: 'LLM-RESPONSE',
+    });
+
+    expect(result.current.status).toBe('checking');
+    expect(result.current.logs.at(-1)).toMatchObject({
+      message: 'Checking the notes against their sources',
+      node: 'verifier',
+    });
+    analysis.send({ type: 'complete', data: track });
+    expect(result.current.status).toBe('complete');
+  });
+
+  it.each(['click', 'countdown'] as const)(
+    'logs what happened in plain words, for a row picked by %s: no emoji and no prototype copy',
+    async (pickedBy) => {
+      const { hook, analysis } = openPicker();
+      await act(async () => {
+        await hook.result.current.selectCandidate('c2', pickedBy);
+      });
+      lastStream().send({ type: 'complete', data: track });
+      expect(analysis.closed).toBe(true);
+
+      const messages = hook.result.current.logs.map((log) => log.message);
+      expect(messages).toEqual([
+        'Searching for "Hurt"',
+        'Connected to the analysis server',
+        'Multiple songs found. Please select the correct one.',
+        'Resuming the analysis with the selected track',
+        'Analysis complete.',
+      ]);
+      for (const message of messages) {
+        expect(message).not.toMatch(/\p{Extended_Pictographic}/u);
+        expect(message).not.toMatch(/Ready for deployment|Connected to agent|Processing\.\.\./);
+      }
+    },
+  );
+
+  it("logs the picker with the server's own words, as a Spotify step and not a warning", () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    const message = 'One possible track from Spotify; confirm it or search again';
+    analysis.send({ ...interrupt(candidates.slice(0, 1)), message });
+
+    expect(hook.result.current.status).toBe('disambiguation');
+    expect(hook.result.current.statusNote).toBe(message);
+    const last = hook.result.current.logs.at(-1);
+    expect(last).toMatchObject({ message, node: 'scout' });
+    expect(last?.code).toBeUndefined();
+    expect(hook.result.current.logs.map((log) => log.message).join('\n')).not.toMatch(
+      /Several tracks|Multiple matches/,
+    );
+  });
+
+  it('logs a neutral picker line when the server sends no words', () => {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ ...interrupt(candidates.slice(0, 1)), message: '' });
+
+    expect(hook.result.current.logs.at(-1)?.message).toBe('Pick the track to analyze');
+    expect(hook.result.current.statusNote).toBe('Pick the track to analyze');
+  });
+
+  // The API's order, from the recorded demo run: the historian reports before any await, the
+  // engineer only after its health probe and preview lookup (research at 328 ms, AUDIO-INIT at
+  // 753 ms, the engineer's result at 10 877 ms).
+  function realOrder() {
+    const hook = startAnalysis();
+    const analysis = lastStream();
+    const send = (node: string, message: string, code?: string) =>
+      analysis.send({ type: 'status', node, message, ...(code ? { code } : {}) });
+    analysis.send({ type: 'connected', threadId: 't1' });
+    send('scout', 'Reading the track from Spotify', 'NET-100');
+    send('scout', 'Found the track on Spotify: One More Time by Daft Punk', 'SPOTIFY-FOUND');
+    return { hook, analysis, send };
+  }
+
+  it('shows the measurement while research runs, in the order the API sends them', () => {
+    const { hook, send } = realOrder();
+    const status = () => hook.result.current.status;
+    send('historian', 'Starting the research: Last.fm, MusicBrainz', 'RESEARCH-START');
+    expect(status()).toBe('researching');
+    send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
+    expect(status()).toBe('measuring');
+    send('research_manager', 'Starting the research steps');
+    send('research_tool', 'Searching: sample history on the web');
+    send('research_manager', 'Choosing follow-up step 1 of at most 2');
+    expect(status()).toBe('measuring');
+    send(
+      'engineer',
+      'Measured 123 BPM; key not given: one pitch line without stable notes',
+      'AUDIO-ERROR',
+    );
+    // The measurement is over and the research goes on.
+    expect(status()).toBe('researching');
+    send('composer', 'Writing the liner notes', 'LLM-CONNECT');
+    expect(status()).toBe('composing');
+  });
+
+  it('keeps measuring for the whole measurement after a research cache hit', () => {
+    const { hook, send } = realOrder();
+    const stored = 'Using the research stored by an earlier run';
+    send('historian', stored, 'RESEARCH-FOUND');
+    expect(hook.result.current.status).toBe('researching');
+    expect(hook.result.current.statusNote).toBe(stored);
+    send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
+    expect(hook.result.current.status).toBe('measuring');
+    // A historian line during the measurement does not hide it.
+    send('historian', 'Sources read', 'RESEARCH-FOUND');
+    expect(hook.result.current.status).toBe('measuring');
+    send('engineer', 'Measured from the preview: 123 BPM, A minor', 'AUDIO-COMPLETE');
+    expect(hook.result.current.status).toBe('researching');
+  });
+
+  it('measures first when the engineer reports before the historian, as older runs did', () => {
+    const { hook, send } = realOrder();
+    send('engineer', 'Measuring tempo and key from the preview clip', 'AUDIO-INIT');
+    expect(hook.result.current.status).toBe('measuring');
+    send('historian', 'Starting the research', 'RESEARCH-START');
+    expect(hook.result.current.status).toBe('measuring');
+    send('engineer', 'Measured from the preview: 123 BPM, A minor', 'AUDIO-COMPLETE');
+    expect(hook.result.current.status).toBe('researching');
+  });
+
+  it('never says it measures on an audio cache hit', () => {
+    const { hook, send } = realOrder();
+    send('engineer', 'Measured in an earlier run: 123 BPM, A minor', 'AUDIO-COMPLETE');
+    expect(hook.result.current.status).toBe('analyzing');
+    send('historian', 'Starting the research', 'RESEARCH-START');
+    expect(hook.result.current.status).toBe('researching');
+  });
+
+  it('says it reads the selected track after a pick, not that it reads the audio', async () => {
+    const { hook } = openPicker();
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'countdown');
+    });
+    expect(hook.result.current.status).toBe('analyzing');
+    expect(hook.result.current.statusNote).toBe('Reading the track you selected...');
+  });
+
+  it("checks only on the verifier's model lines, not on its cover-art lookup", () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    const verifier = (code: string, message: string) =>
+      analysis.send({ type: 'status', node: 'verifier', code, message });
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'composer', code: 'LLM-CONNECT', message: 'Writing' });
+    verifier('GRAPH-ENRICH', 'Looking up cover art on Spotify for the genealogy');
+    expect(result.current.status).toBe('composing');
+    verifier('LLM-CONNECT', 'Checking the notes against their sources');
+    expect(result.current.status).toBe('checking');
+  });
+
+  it("says the composer's fallback in the server's words, not that notes are being written", () => {
+    const { result } = startAnalysis();
+    const analysis = lastStream();
+    analysis.send({ type: 'connected', threadId: 't1' });
+    analysis.send({ type: 'status', node: 'composer', code: 'LLM-CONNECT', message: 'Writing' });
+    expect(result.current.statusNote).toBeNull();
+    const fallback = 'The model did not answer; showing source data only, with no written notes';
+    analysis.send({ type: 'status', node: 'composer', code: 'LLM-ERROR', message: fallback });
+    expect(result.current.status).toBe('composing');
+    expect(result.current.statusNote).toBe(fallback);
   });
 });
 
@@ -301,6 +529,7 @@ describe('useAgent track picker', () => {
     expect(streams()).toHaveLength(opened);
     expect(hook.result.current.status).toBe('error');
     expect(hook.result.current.error).toContain('could not be found again');
+    expect(hook.result.current.errorCode).toBe('choice_lost');
   });
 
   it('opens one resume per picker and closes the analysis stream', async () => {
@@ -348,7 +577,7 @@ describe('useAgent track picker', () => {
     expect(hook.result.current.status).not.toBe('error');
     // The reason stays in the log of the new run.
     expect(hook.result.current.logs.map((log) => log.message)).toContain(
-      'Live analysis is unavailable: replaying the recording of the track you picked.',
+      'Live analysis is unavailable: replaying the recording of the selected track.',
     );
     search.send({ type: 'complete', data: track });
     expect(hook.result.current.status).toBe('complete');
@@ -413,7 +642,7 @@ describe('useAgent track picker', () => {
     });
     expect(result.current.isReplay).toBe(true);
     expect(result.current.logs.at(-1)?.message).toBe(
-      'Recorded analysis replayed. Nothing was analysed live.',
+      'Recorded analysis replayed. Nothing was analyzed live.',
     );
     expect(completeLogs(result.current.logs)).toBe(0);
     act(() => {
@@ -524,6 +753,7 @@ describe('useAgent inactivity watchdog', () => {
 
     expect(result.current.status).toBe('error');
     expect(result.current.error).toMatch(/stopped responding/);
+    expect(result.current.errorCode).toBe('stream_stalled');
     expect(analysis.closed).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -780,8 +1010,8 @@ describe('useAgent typed events', () => {
 
     expect(result.current.status).not.toBe('error');
     expect(result.current.logs.map((log) => log.message)).toEqual([
-      '🔍 Searching for "Hurt"...',
-      'Connected to agent',
+      'Searching for "Hurt"',
+      'Connected to the analysis server',
     ]);
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls.map(([message]) => message)).toEqual([

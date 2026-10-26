@@ -115,8 +115,8 @@ export async function analyzeAndOpenDashboard(
 ) {
   if (reload) await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   // The connected tracks follow once the link reader has loaded.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);

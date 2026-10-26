@@ -1,7 +1,7 @@
 import type React from 'react';
 import { forwardRef } from 'react';
 
-type ButtonVariant = 'cyber' | 'analog' | 'ghost' | 'spotify';
+type ButtonVariant = 'cyber' | 'analog' | 'ghost' | 'neutral' | 'spotify';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,6 +19,9 @@ const variantStyles: Record<ButtonVariant, string> = {
     'border-analog/50 text-analog hover:bg-analog/10 hover:border-analog/70 hover:shadow-glow-analog-subtle hover:-translate-y-px active:translate-y-0 focus-visible:ring-analog/70',
   ghost:
     'border-white/10 text-text-tertiary hover:text-white hover:bg-white/5 hover:border-white/20 focus-visible:ring-white/60',
+  // A plain action that says nothing about how data is known: white, not cyan or amber.
+  neutral:
+    'border-white/40 text-text-primary hover:bg-white/10 hover:border-white/60 hover:-translate-y-px active:translate-y-0 focus-visible:ring-white/60',
   spotify:
     'border-spotify/50 text-spotify hover:bg-spotify/10 hover:border-spotify/70 hover:shadow-glow-spotify-subtle focus-visible:ring-spotify/70',
 };

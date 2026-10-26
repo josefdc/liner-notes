@@ -15,9 +15,13 @@ export type AgentStatus =
   | 'idle'
   | 'connecting'
   | 'searching'
+  // The engineer's step; `measuring` only while a measurement of the preview runs.
   | 'analyzing'
+  | 'measuring'
   | 'researching'
   | 'composing'
+  // The verifier checks the composed notes against their sources.
+  | 'checking'
   | 'disambiguation'
   | 'complete'
   | 'error';
@@ -30,8 +34,9 @@ export interface AgentState {
   threadId: string | null;
   error: string | null;
   /**
-   * Why the run failed, when the server said so (`error` events carry a code such as
-   * no_match, choice_expired or timeout); null for errors without one.
+   * Why the run failed: the code of the server's `error` event (no_match, choice_expired,
+   * timeout…), or the app's own code for a failure it raised itself (useAgent's
+   * CLIENT_ERROR_CODES and OUTDATED_ERROR). Null only for an error without either.
    */
   errorCode: string | null;
   isLoading: boolean;
@@ -41,6 +46,12 @@ export interface AgentState {
    * notice, or a result whose run.mode is "replay"). The progress screens say so too.
    */
   isReplay: boolean;
+  /**
+   * The server's own words for the step under way, when they say more than the status: the
+   * picker's question ("One possible track…"), the composer's fallback. Cleared when the run
+   * moves to another step.
+   */
+  statusNote: string | null;
 }
 
 /** How a result was produced: computed live, or a recorded run replayed. */

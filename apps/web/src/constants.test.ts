@@ -178,7 +178,7 @@ describe('hasMeasuredAudioSource', () => {
       reason: 'the preview lookup could not be finished',
     });
     expect(audioUnavailableText('preview_lookup_incomplete')).toBe(
-      'The preview lookup on Deezer could not be finished, so the audio was not analysed. A later analysis tries again.',
+      'The preview lookup on Deezer could not be finished, so the audio was not analyzed. A later analysis tries again.',
     );
     expect(signal.key).toMatchObject({
       state: 'missing',
@@ -704,7 +704,7 @@ describe('audioNoticeOf', () => {
     const signal = byField(audioReadings(track).signal);
     expect(signal.bpm).toMatchObject({ state: 'missing', reason: null });
     expect(audioNoticeOf(track)).toEqual({
-      title: 'Audio not analysed',
+      title: 'Audio not analyzed',
       lines: [
         'The analysis did not report why.',
         'Not measured: BPM, key, energy.',

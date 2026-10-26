@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-// Hovering a connected-track card reliably. The click on PROCEED TO COMMAND CENTER leaves the
+// Hovering a connected-track card reliably. The click on "Open the results" leaves the
 // pointer where, at 1440x900, the card then fades in. Chrome sends the card a mouseover whose
 // relatedTarget is the onboarding button that was just removed; React ignores an over event whose
 // relatedTarget it manages (it expects that element's mouseout, which never comes), so the card's

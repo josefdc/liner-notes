@@ -29,7 +29,7 @@ const liveDisabled = [
 
 async function search(page: Page, query: string) {
   await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
 test("a spent budget pauses live analysis, offers the recorded tracks and labels the replay", async ({
@@ -45,9 +45,9 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   await expect(banner).toContainText("The budget for live analysis is spent");
   await expect(banner).toContainText("not a live analysis");
   // Not an error to retry, and no result: only the recorded tracks are offered.
-  await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "RETRY ANALYSIS" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);
   const tracks = banner.getByRole("list", { name: "Recorded tracks" });
   await expect(tracks.getByRole("button")).toHaveCount(1);
   await expect(tracks).toContainText("Bright Lines");
@@ -76,14 +76,14 @@ test("a spent budget pauses live analysis, offers the recorded tracks and labels
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   await animationsSettled(page);
 
   const dashboardLabel = page.getByRole("region", { name: "Recorded run" });
   await expect(dashboardLabel).toContainText("Recorded run · 22 Oct 2026 · replayed");
   await expect(dashboardLabel).toContainText("commit abc1234");
-  await expect(dashboardLabel).toContainText("Nothing was analysed live for it.");
+  await expect(dashboardLabel).toContainText("Nothing was analyzed live for it.");
 
   await openPlayer(page);
   const playerLabel = page.getByRole("region", { name: "Recorded run" });
@@ -122,14 +122,14 @@ test("live_disabled is explained, and a live result carries no recording label",
 
   const banner = page.getByRole("region", { name: "Live analysis is off here" });
   await expect(banner).toContainText(
-    "does not analyse songs live right now: it only replays recorded runs",
+    "does not analyze songs live right now: it only replays recorded runs",
   );
   await expect(banner.getByRole("list", { name: "Recorded tracks" })).toContainText("Bright Lines");
 
   // Another song, on a server that analyses it live this time: no recording label.
   await page.getByRole("button", { name: "or try a different song" }).click();
   await search(page, "Bright Lines");
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Recorded run" })).toHaveCount(0);
   await openPlayer(page);
@@ -165,7 +165,7 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   // The status line on screen (a live region repeats it for screen readers, half a second later)
   await expect(page.getByText(replaying, { exact: true }).filter({ visible: true })).toBeVisible();
   await expect(page.locator('div.sr-only[aria-live="polite"]')).toHaveText(replaying);
-  await expect(page.getByText(/Scanning Spotify catalog/)).toHaveCount(0);
+  await expect(page.getByText(/Searching Spotify for your track/)).toHaveCount(0);
 
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   const sent = async () =>
@@ -178,11 +178,11 @@ test("while a recording plays, the progress screen says it is a replay, not a li
     expect(step, "the replay's stream sends its last event").toBeLessThan(60);
     await page.clock.runFor(50);
   }
-  const ready = page.locator("span", { hasText: "REPLAY READY // ENTERING COMMAND CENTER" });
+  const ready = page.locator("span", { hasText: "Replay complete. Opening the results" });
   await expect(ready).toBeAttached();
-  await expect(page.getByText("INTEL READY", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Analysis complete. Opening the results")).toHaveCount(0);
   await expect(page.getByRole("log")).toContainText(
-    "Recorded analysis replayed. Nothing was analysed live.",
+    "Recorded analysis replayed. Nothing was analyzed live.",
   );
   await expect(page.getByRole("log")).not.toContainText("Analysis complete");
   // Revealed whole: the line fits the 40ch the reveal animation stops at.
@@ -206,6 +206,12 @@ test("the paused state still explains itself when the banner's code cannot be lo
   await expect(paused).toContainText("The budget for live analysis is spent");
   await expect(paused).toContainText("The recorded tracks could not be loaded. Reload the page");
   await expect(page.getByRole("button", { name: "or try a different song" })).toBeVisible();
+
+  // The text asks for a reload: the button for it is there, and it brings back a fresh page.
+  await page.unroute(/BudgetBanner/);
+  await paused.getByRole("button", { name: "Reload the page" }).click();
+  await expect(paused).toHaveCount(0);
+  await expect(page.getByPlaceholder(/Song title/)).toHaveValue("");
 });
 
 test("on a phone, the recording label stays visible on every Player tab", async ({ page }) => {
@@ -214,7 +220,7 @@ test("on a phone, the recording label stays visible on every Player tab", async 
   await page.goto("/");
   await search(page, "Some Other Song");
   await page.getByRole("button", { name: /Bright Lines/ }).click();
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await openPlayer(page);
   for (const tab of ["Analysis", "Player", "Network"]) {
     await page.getByRole("tab", { name: tab }).click();
@@ -235,13 +241,13 @@ test("a track picked after the budget tripped replays its recording", async ({ p
 
   // The resume is refused (budget spent); the recording of that very track is replayed.
   await expect(page.getByRole("log")).toContainText(
-    "Live analysis is unavailable: replaying the recording of the track you picked.",
+    "Live analysis is unavailable: replaying the recording of the selected track.",
   );
   await expect(page.getByRole("log")).toContainText("Replaying an analysis recorded on");
   expect(await apiRequests(page)).toContain(
     "stream /api/analyze/stream?query=Bright%20Lines%20Test%20Artist",
   );
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("region", { name: "Recorded run" })).toContainText(
     "Recorded run · 22 Oct 2026 · replayed",
   );
@@ -262,6 +268,6 @@ test("a picked take without a recording ends paused, never with another take's r
   const requests = await apiRequests(page);
   expect(requests).toContain("fetch /api/replays");
   expect(requests.filter((r) => r.startsWith("stream /api/analyze/stream?"))).toHaveLength(1);
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);
   expect(problems).toEqual([]);
 });

@@ -45,6 +45,12 @@ import {
   type WebFinding,
   webSearchEvidence,
 } from "./evidencePack.js";
+import {
+  type PrimaryRelation,
+  primaryRelations,
+  relationsIn,
+  relationsIssue,
+} from "./relations.js";
 
 /** The primary sources' answers, or the failure of the collection (a bug: it never throws). */
 export type PrimaryRun = Promise<
@@ -116,6 +122,12 @@ export interface RunEvidence {
    * […]"), for the result built without the model (its Sample DNA cards); empty when none.
    */
   samples: string[];
+  /**
+   * The relations the primary records state (research/relations.ts), each stated by an item of
+   * `evidence`: what the result's code-built claims and links are made from. The model is never
+   * shown them; it reads the items.
+   */
+  relations: PrimaryRelation[];
   /** How many items the pack's size cap left out. */
   omitted: number;
   /**
@@ -165,6 +177,7 @@ interface PrimaryOutcome {
   lost: SourceError[];
   lasting: SourceError[];
   samples: string[];
+  relations: PrimaryRelation[];
   incomplete: Incomplete[];
   trackIsOriginal: boolean;
   found: string[];
@@ -212,6 +225,7 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
       lost: [],
       lasting: [],
       samples: [],
+      relations: [],
       incomplete: [],
       trackIsOriginal: false,
       found: [
@@ -222,6 +236,7 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
   }
   const samples = musicBrainzSampleEntries(read.sources);
   const records = primaryRecordEvidence(read.sources);
+  const relations = primaryRelations(read.sources);
   const { musicbrainz } = read.sources;
   // Without MusicBrainz the others are not asked: nothing was read, which is not "no match".
   const unread =
@@ -257,7 +272,18 @@ function readOutcome(read: Awaited<PrimaryRun>): PrimaryOutcome {
     warnings.push(notAskedNote(source, why));
   }
   const trackIsOriginal = read.sources.identity?.original.original ?? false;
-  return { records, errors, lost, lasting, samples, incomplete, trackIsOriginal, found, warnings };
+  return {
+    records,
+    errors,
+    lost,
+    lasting,
+    samples,
+    relations,
+    incomplete,
+    trackIsOriginal,
+    found,
+    warnings,
+  };
 }
 
 /**
@@ -290,6 +316,8 @@ function packOf(
     lost: primary.lost,
     lasting: primary.lasting,
     samples: primary.samples,
+    // Only those the pack keeps an item for: a relation never stands without its item.
+    relations: relationsIn(primary.relations, evidence),
     omitted,
     incomplete: primary.incomplete,
     trackIsOriginal: primary.trackIsOriginal,
@@ -327,8 +355,10 @@ export const RESEARCH_TTL_MS = 48 * 60 * 60 * 1000;
  * its @handles masked and leaves out social platform pages and comment threads (a row of 3 may
  * hold them, also in the research text the composer reads). 5: web text leaves out forum pages
  * and forum comment bylines (a row of 4 may hold them, or research text written from them).
+ * 6: the relations the primary records state are kept beside the items (`relations`), for the
+ * result's code-built claims and links (a row of 5 has none).
  */
-export const CACHED_EVIDENCE_FORMAT = 5;
+export const CACHED_EVIDENCE_FORMAT = 6;
 
 /**
  * The run's evidence on a refresh hit (a cached row that left a part for a later run): the
@@ -356,6 +386,8 @@ export async function refreshedRunEvidence(
       const kept = items.filter((i) => i.sourceTier === "primary-record" && i.source === source);
       if (leftThen.has(source) || kept.length === 0) continue;
       outcome.records.push(...kept);
+      // With the relations those items state.
+      outcome.relations.push(...relationsIn(cached.relations, kept));
       outcome.incomplete = outcome.incomplete.filter(
         (part) => !(part.part === "not_asked" && part.source === source),
       );
@@ -388,6 +420,7 @@ export function cachedEvidenceOf(
     items: run.evidence.map((item) => ({ ...item })),
     omitted: run.omitted,
     samples: [...run.samples],
+    relations: run.relations.map((relation) => structuredClone(relation)),
     recording,
     trackIsOriginal: run.trackIsOriginal,
     errors: [...run.errors],
@@ -426,6 +459,8 @@ function cachedEvidenceIssue(
   for (const e of cached.lasting) {
     if (e.code !== "invalid_response" || !errors.has(keyOf(e))) return "not a lasting error";
   }
+  const relations = relationsIssue(cached.relations, cached.items);
+  if (relations !== null) return relations;
   const own = cached.items.some(
     (item) => item.source === "musicbrainz" && item.recordRef?.startsWith("track/"),
   );
@@ -510,6 +545,7 @@ export function cachedRunEvidence(
     lost: [],
     lasting: [...cached.lasting],
     samples: [...cached.samples],
+    relations: cached.relations.map((relation) => structuredClone(relation)),
     // What the cached run left for a later one is still missing: said again, never dropped.
     incomplete: cached.incomplete.map((part) => ({ ...part })),
     trackIsOriginal: cached.trackIsOriginal,

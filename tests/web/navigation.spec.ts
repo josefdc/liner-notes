@@ -55,7 +55,7 @@ test("back while the track picker is open keeps the picker", async ({ page }) =>
   await analyzeAndOpenDashboard(page, "Bright Lines");
   await page.getByRole("button", { name: "NEW SEARCH" }).click();
   await page.getByPlaceholder(/Song title/).fill("Hurt");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
   const picker = page.getByText("Is this the right track?");
   await expect(picker).toBeVisible();
 
@@ -77,7 +77,7 @@ test("back on the first search after arriving keeps the open picker in the app",
   await page.goto(ELSEWHERE);
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Hurt");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
   const picker = page.getByText("Is this the right track?");
   await expect(picker).toBeVisible();
 
@@ -109,7 +109,7 @@ test("back on the first search after arriving keeps the running analysis", async
   await page.goto(ELSEWHERE);
   await page.goto("/");
   await page.getByPlaceholder(/Song title/).fill("Bright Lines");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
   await expect(page.getByText("Searching for the track")).toBeVisible();
 
   await page.goBack();
@@ -119,7 +119,7 @@ test("back on the first search after arriving keeps the running analysis", async
 
   // The run goes on and its result is shown, in a single history entry after the search.
   await releaseStream(page, "result");
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   await page.goBack();
   await expect(page.getByPlaceholder(/Song title/)).toBeVisible();
@@ -143,7 +143,7 @@ test("back on a search started after going back to the search keeps the picker",
   await expect(page.getByPlaceholder(/Song title/)).toBeVisible();
 
   await page.getByPlaceholder(/Song title/).fill("Hurt");
-  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
   const picker = page.getByText("Is this the right track?");
   await expect(picker).toBeVisible();
   await page.goBack();

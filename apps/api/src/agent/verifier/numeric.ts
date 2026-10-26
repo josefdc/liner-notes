@@ -14,11 +14,14 @@
  *
  * Whose tempo or key. Within its sentence (or its part after a ";"), a mention belongs to the
  * nearest record named before it:
- * - another record: a title of another record in the result (`others`: the genealogy's other
- *   nodes, a factoid's sample and album entities), or a word that points at one ("the
- *   original", "originally", "the break", "the sample", "samples", "interpolates", "a cover
- *   of"). Such a mention is not compared (`n/a`): "The 1972 break ran at 90 BPM", "Unlike the
- *   original in F# major";
+ * - another record: a title or artist credit of another record in the result (`others`: the
+ *   genealogy's other nodes, a factoid's sample and album entities), or a word that points at
+ *   one ("the original", "originally", "the break", "the sample", "samples", "interpolates", "a
+ *   cover of"). Such a mention is not compared (`n/a`): "The 1972 break ran at 90 BPM", "Unlike
+ *   the original in F# major", "the TAPS track DAFT runs at 140 BPM". A name that overlaps this
+ *   track's own title or artist credit word for word, either way ("DAFT" and "Daft Punk", "One
+ *   More Time (TeeVex remix)" and "One More Time"), names another record only where it is
+ *   quoted ("DAFT") or given with its artist ("DAFT by TAPS"): bare, it may be this track's;
  * - this track: "this track", "the song", "the record", "the single", "the recording", "It" at
  *   the start of the clause or after a comma, or the track's title at the start of a clause
  *   (Spotify's suffixes such as "- Remastered 2011" taken off). It is compared;
@@ -306,14 +309,43 @@ export type Attribution = "track" | "other" | "unsaid";
 export interface NumericContext {
   /** The analysed track's title (Spotify's; its suffixes are taken off). */
   title?: string;
-  /** Titles of other records the result names (genealogy nodes, a card's sample entities). */
-  others?: readonly string[];
+  /** The analysed track's artist credit (Spotify's). */
+  artist?: string;
+  /**
+   * Other records the result names (genealogy nodes, a card's sample entities): a title, or a
+   * title with its artist credit.
+   */
+  others?: readonly (string | OtherRecord)[];
   /**
    * The claim restates a measured value as its own statement and cites nothing: a mention this
    * track is named before may then be contradicted, as with a `field` the model set.
    */
   restatement?: boolean;
 }
+
+/** Another record the result names, with its artist credit when known. */
+export interface OtherRecord {
+  title: string;
+  artist?: string | null;
+}
+
+/** A name's words, case and width folded: "DAFT" and "Daft Punk" give ["daft"], ["daft", "punk"]. */
+const wordsOf = (name: string) =>
+  name
+    .normalize("NFKC")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+/** True when every word of one name is a word of the other (either way). */
+function overlaps(a: string, b: string): boolean {
+  const [left, right] = [wordsOf(a), wordsOf(b)];
+  if (left.length === 0 || right.length === 0) return false;
+  return left.every((w) => right.includes(w)) || right.every((w) => left.includes(w));
+}
+
+/** The name in quotes: "DAFT", “DAFT”, 'DAFT'. */
+const quotedPhrase = (name: string) => new RegExp(`["“”'‘’]${escaped(name)}["“”'‘’]`, "giu");
 
 /** Where each record is named in `text`, and as what. */
 function markers(text: string, context: NumericContext): Array<{ at: number; who: Attribution }> {
@@ -330,11 +362,23 @@ function markers(text: string, context: NumericContext): Array<{ at: number; who
       if (/(?:^|[.!?;])\s*$/u.test(text.slice(0, at))) found.push({ at, who: "track" });
     }
   }
-  for (const other of context.others ?? []) {
-    const name = bareTitle(other);
-    if (name.length < 3 || name.toLowerCase() === title.toLowerCase()) continue;
-    for (const match of text.matchAll(phrase(name)))
-      found.push({ at: match.index ?? 0, who: "other" });
+  const own = [title, context.artist ?? ""].filter((name) => name.length > 0);
+  const ownName = (name: string) => own.some((mine) => overlaps(name, mine));
+  const other = (pattern: RegExp) => {
+    for (const match of text.matchAll(pattern)) found.push({ at: match.index ?? 0, who: "other" });
+  };
+  for (const record of context.others ?? []) {
+    const { title: otherTitle, artist = null } =
+      typeof record === "string" ? { title: record } : record;
+    const name = bareTitle(otherTitle);
+    const credit = artist?.trim() ?? "";
+    if (name.length >= 3 && name.toLowerCase() !== title.toLowerCase()) {
+      // A bare name this track's own title or credit could be read as is not taken.
+      if (!ownName(name)) other(phrase(name));
+      other(quotedPhrase(name));
+      if (credit) other(phrase(`${name} by ${credit}`));
+    }
+    if (credit.length >= 3 && !ownName(credit)) other(phrase(credit));
   }
   return found.sort((a, b) => a.at - b.at);
 }

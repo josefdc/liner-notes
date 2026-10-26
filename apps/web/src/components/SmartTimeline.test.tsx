@@ -17,7 +17,7 @@ describe('SmartTimeline', () => {
   it('labels template segments and draws no marker when nothing was detected', () => {
     render(<SmartTimeline segments={template} segmentsSource="template" audioAnalyzed={false} />);
     const timeline = screen.getByRole('group', { name: 'Song structure' });
-    expect(timeline.textContent).toContain('Template — not analysed');
+    expect(timeline.textContent).toContain('Template — not analyzed');
     expect(timeline.textContent).toContain('No key moments');
     expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
   });
@@ -62,7 +62,7 @@ describe('SmartTimeline', () => {
       cleanup();
       return found;
     };
-    expect(chipOf('template')).toEqual({ kind: 'missing', text: 'Template — not analysed' });
+    expect(chipOf('template')).toEqual({ kind: 'missing', text: 'Template — not analyzed' });
     expect(chipOf(undefined)).toEqual({ kind: 'unconfirmed', text: 'Not measured' });
     expect(chipOf('inferred')).toEqual({ kind: 'inferred', text: 'Model inference' });
   });
@@ -169,13 +169,13 @@ describe('SmartTimeline', () => {
 
   it.each([
     [true, 'No key moments detected'],
-    [false, 'No key moments — the audio was not analysed'],
+    [false, 'No key moments — the audio was not analyzed'],
     [undefined, 'No key moments'],
   ])('says why there are no key moments when audioAnalyzed is %s', (analysed, text) => {
     render(<SmartTimeline segments={template} audioAnalyzed={analysed} />);
     const timeline = screen.getByRole('group', { name: 'Song structure' });
     expect(timeline.textContent).toContain(text);
-    if (analysed !== false) expect(timeline.textContent).not.toContain('not analysed');
+    if (analysed !== false) expect(timeline.textContent).not.toContain('not analyzed');
   });
 
   it('labels sample times as inferred and leaves out samples past the end of the song', () => {

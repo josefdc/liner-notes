@@ -21,6 +21,7 @@ import type { LlmErrorKind } from "../llm/errors.js";
 import type { PreviewSourceMatch } from "../sources/audio.js";
 import type { IdentifiedRecording } from "../sources/identity.js";
 import { isPlaceholder, lastfmBio } from "./research/plan.js";
+import type { PrimaryRelation } from "./research/relations.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import type { QueryMatch } from "./trackMatch.js";
 
@@ -400,8 +401,10 @@ type PreviewMatchValue = z.infer<typeof PreviewMatch>;
 /**
  * The result the composer hands the verifier: what the model wrote, as claims, factoid cards and
  * a genealogy (nodes without artwork, links still inferred), or the fallback built from source
- * data when the model gave nothing usable (`modelUnavailableReason`). Everything the verifier
- * does not change (metadata, the measurement, the evidence) it takes from the state.
+ * data when the model gave nothing usable (`modelUnavailableReason`); either way with the claims
+ * and links code built from the primary records (codeClaims.ts), sourced by construction.
+ * Everything the verifier does not change (metadata, the measurement, the evidence) it takes from
+ * the state.
  */
 export interface ComposedDraft {
   /** null for a composed result; for the fallback, why the model gave nothing usable. */
@@ -411,6 +414,8 @@ export interface ComposedDraft {
   genealogy: TrackData["genealogy"];
   /** The year the model gave for a node, by node id: for the artwork's release check only. */
   nodeYears: Record<string, string>;
+  /** Nodes made from records whose cover art is not looked up (codeClaims.ts); none when absent. */
+  noArtwork?: string[];
   segments: TrackData["segments"];
   segmentsSource: "template";
   samples: TrackData["samples"];
@@ -585,6 +590,14 @@ export const SonicAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // The relations the primary records state (research/relations.ts), each stated by an item of
+  // `evidence`: the historian writes them with the pack, and the composer builds the result's
+  // code-built claims and links from them (codeClaims.ts). The model is never shown them.
+  relations: Annotation<PrimaryRelation[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
   // What the composer wrote (or its fallback), before the verifier checks it; null until the
   // composer runs. It holds no preview URL: artwork and previews are looked up by the verifier,
   // after its checks (and the checkpointer scrubs this channel all the same).
@@ -646,6 +659,7 @@ export function withChannelDefaults(state: SonicAgentStateType): SonicAgentState
   return {
     ...state,
     evidence: state.evidence ?? [],
+    relations: state.relations ?? [],
     claims: state.claims ?? [],
     draft: state.draft ?? null,
     usage: state.usage ?? [],

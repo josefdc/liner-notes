@@ -22,6 +22,7 @@ import type { LogCode, Factoid, FactoidUnavailableCode } from '../types';
 import type { AgentLog } from '../types';
 import type {
   AgentState,
+  AgentStatus,
   AnalyzeOptions as RequestOptions,
   PickedBy,
   ResultMode,
@@ -66,6 +67,22 @@ export const OUTDATED_ERROR = {
     'This page is out of date and cannot show the analysis. Reload the page, then search again.',
 } as const;
 
+/**
+ * Codes for the failures this hook raises itself, so the page can explain each one. They are the
+ * app's own, not codes the API sends (`no_match` has the same meaning as the API's).
+ */
+export const CLIENT_ERROR_CODES = {
+  noMatch: 'no_match',
+  wrongTrack: 'wrong_track',
+  noResult: 'no_result',
+  streamStalled: 'stream_stalled',
+  connectionLost: 'connection_lost',
+  choiceLost: 'choice_lost',
+  // The stream could not be opened (the exception's own text is kept in `error`, never shown).
+  streamOpenFailed: 'stream_open_failed',
+  resumeFailed: 'resume_failed',
+} as const;
+
 /** Loads the code that reads the streams, unless it is loaded already. */
 function readersReady(): Promise<void> | null {
   return eventSchemasLoaded() ? null : loadEventSchemas();
@@ -82,10 +99,113 @@ const INITIAL_STATE: AgentState = {
   isLoading: false,
   isComplete: false,
   isReplay: false,
+  statusNote: null,
 };
+
+// The order of a run's steps. A step reported after a later one does not move the run back.
+// The engineer measures beside the historian's research (the historian reports first), so
+// `measuring` ranks with `researching`; the engineer's other lines are the `analyzing` step.
+const STEP_ORDER: Partial<Record<AgentStatus, number>> = {
+  connecting: 0,
+  searching: 1,
+  disambiguation: 1,
+  analyzing: 2,
+  measuring: 3,
+  researching: 3,
+  composing: 4,
+  checking: 5,
+};
+
+interface Step {
+  status: AgentStatus;
+  /**
+   * The server's own words for the step, when they say more than the status; null clears them,
+   * and undefined keeps those already shown for the same step (the composer's fallback stays
+   * through its later lines).
+   */
+  note?: string | null;
+  /** The measurement ended: the run leaves `measuring` even for a lower step. */
+  ended?: boolean;
+}
+
+/** The state after the server reports a step. */
+function toStep(prev: AgentState, { status, note, ended }: Step): AgentState {
+  const from = STEP_ORDER[prev.status];
+  const to = STEP_ORDER[status];
+  const leaving = ended && prev.status === 'measuring';
+  if (!leaving && from !== undefined && to !== undefined && to < from) return prev;
+  const statusNote =
+    note === undefined && prev.status === status ? prev.statusNote : (note ?? null);
+  if (prev.status === status && prev.statusNote === statusNote) return prev;
+  return { ...prev, status, statusNote };
+}
+
+/** What the engineer and the historian, which run side by side, have said so far in a run. */
+interface Branches {
+  researched: boolean;
+  /** The historian's words for its research ("Using the research stored by an earlier run"). */
+  researchNote: string | null;
+  measuring: boolean;
+}
+
+const newBranches = (): Branches => ({ researched: false, researchNote: null, measuring: false });
+
+/** The step a status event moves the run to, if any; `branches` keeps what it says. */
+function stepOf(
+  branches: Branches,
+  node: string | undefined,
+  code: string | undefined,
+  message: string,
+): Step | null {
+  switch (node) {
+    case 'scout':
+      return { status: 'searching', note: null };
+    case 'historian':
+      branches.researched = true;
+      if (code === 'RESEARCH-FOUND' && message) branches.researchNote = message;
+      // A measurement under way stays on screen until it ends.
+      if (branches.measuring) return null;
+      return { status: 'researching', note: branches.researchNote };
+    case 'engineer': {
+      // Measuring only while a measurement runs: a cache hit or a result line is not one.
+      if (code === 'AUDIO-INIT') {
+        branches.measuring = true;
+        return { status: 'measuring', note: null };
+      }
+      const ended = branches.measuring;
+      branches.measuring = false;
+      // The measurement is over: back to the research when it has started.
+      return branches.researched
+        ? { status: 'researching', note: branches.researchNote, ended }
+        : { status: 'analyzing', note: null, ended };
+    }
+    case 'composer':
+      branches.measuring = false;
+      // The composer's fallback says in its own words that no notes are written.
+      return {
+        status: 'composing',
+        note: code?.endsWith('-ERROR') && message ? message : undefined,
+      };
+    case 'verifier':
+      // Its model lines are the check; its other lines (a cover-art lookup) are not.
+      return code?.startsWith('LLM-') || code?.startsWith('VERIFY-')
+        ? { status: 'checking', note: null }
+        : null;
+    default:
+      return null;
+  }
+}
+
+// What the progress line says right after a pick, while the server reads the chosen track.
+const RESUME_NOTE = 'Reading the track you selected...';
+
+// The picker line when the server sends no words of its own.
+const PICK_FALLBACK = 'Pick the track to analyze';
 
 interface Run {
   query: string;
+  /** What the engineer and the historian have said so far. */
+  branches: Branches;
   threadId: string | null;
   candidates: SearchCandidate[] | null;
   /** How far the run got; a result or an error is final and later events are ignored. */
@@ -127,6 +247,7 @@ function newRun(query: string): Run {
     expectedTrackId: null,
     trackId: null,
     pickedBy: null,
+    branches: newBranches(),
   };
 }
 
@@ -217,6 +338,7 @@ export function useAgent(): UseAgentReturn {
       setState((prev) => ({
         ...prev,
         status: 'error',
+        statusNote: null,
         error: message,
         errorCode: code ?? null,
         candidates: null,
@@ -255,7 +377,7 @@ export function useAgent(): UseAgentReturn {
             ...prev,
             threadId: run.threadId,
           }));
-          addLog('Connected to agent', 'SYS-INIT');
+          addLog('Connected to the analysis server', 'SYS-INIT');
           break;
 
         case 'status':
@@ -265,17 +387,11 @@ export function useAgent(): UseAgentReturn {
             run.replay = true;
             setState((prev) => ({ ...prev, isReplay: true }));
           }
-          // Pass the code from the backend event
-          addLog(data.message || 'Processing...', data.code as LogCode | undefined, data.node);
-          // Update status based on node
-          if (data.node === 'scout') {
-            setState((prev) => ({ ...prev, status: 'searching' }));
-          } else if (data.node === 'engineer') {
-            setState((prev) => ({ ...prev, status: 'analyzing' }));
-          } else if (data.node === 'historian') {
-            setState((prev) => ({ ...prev, status: 'researching' }));
-          } else if (data.node === 'composer') {
-            setState((prev) => ({ ...prev, status: 'composing' }));
+          // The server's own words, with its code; a status without words adds no line.
+          if (data.message) addLog(data.message, data.code as LogCode | undefined, data.node);
+          {
+            const step = stepOf(run.branches, data.node, data.code, data.message);
+            if (step) setState((prev) => toStep(prev, step));
           }
           break;
 
@@ -285,28 +401,35 @@ export function useAgent(): UseAgentReturn {
           const { candidates } = data;
           if (candidates.length === 0) {
             close();
-            fail(run, 'No matching songs were found.');
+            fail(run, 'No matching songs were found.', CLIENT_ERROR_CODES.noMatch);
             break;
           }
           run.threadId = data.threadId || run.threadId;
           // Keep the same list object when nothing changed, so the picker is not reset.
           if (!sameCandidates(run.candidates, candidates)) run.candidates = candidates;
           run.phase = 'awaiting-selection';
+          // The server counts the candidates ("One possible track…"): its words are the line.
+          const question = data.message || PICK_FALLBACK;
           setState((prev) => ({
             ...prev,
             status: 'disambiguation',
+            statusNote: question,
             threadId: run.threadId,
             candidates: run.candidates,
             isLoading: false,
           }));
-          addLog('Awaiting user selection...', 'SYS-WARN');
+          addLog(question, undefined, 'scout');
           break;
         }
 
         case 'complete': {
           if (run.expectedTrackId !== null && data.data?.id !== run.expectedTrackId) {
             close();
-            fail(run, 'The recording found is not the track you picked, so it is not shown.');
+            fail(
+              run,
+              'The recording found is not the track you picked, so it is not shown.',
+              CLIENT_ERROR_CODES.wrongTrack,
+            );
             break;
           }
           run.phase = 'complete';
@@ -316,6 +439,7 @@ export function useAgent(): UseAgentReturn {
           setState((prev) => ({
             ...prev,
             status: 'complete',
+            statusNote: null,
             trackData: data.data,
             candidates: null,
             isLoading: false,
@@ -324,8 +448,8 @@ export function useAgent(): UseAgentReturn {
           }));
           addLog(
             replay
-              ? 'Recorded analysis replayed. Nothing was analysed live.'
-              : 'Analysis complete. Ready for deployment.',
+              ? 'Recorded analysis replayed. Nothing was analyzed live.'
+              : 'Analysis complete.',
             'SYS-READY',
           );
           break;
@@ -354,7 +478,7 @@ export function useAgent(): UseAgentReturn {
                 // The recording's own title and artist name it alone (no two recordings share
                 // them); the result is still checked against the picked id.
                 void analyzeRef.current?.(`${recording.title} ${recording.artist}`, {
-                  note: 'Live analysis is unavailable: replaying the recording of the track you picked.',
+                  note: 'Live analysis is unavailable: replaying the recording of the selected track.',
                   trackId: picked.id,
                   expectedTrackId: picked.id,
                 });
@@ -373,7 +497,8 @@ export function useAgent(): UseAgentReturn {
         case 'done':
           close();
           // A stream that ends without a result, an error or a picker has nothing to show.
-          if (run.phase === 'running') fail(run, 'The analysis ended without a result.');
+          if (run.phase === 'running')
+            fail(run, 'The analysis ended without a result.', CLIENT_ERROR_CODES.noResult);
           break;
       }
     },
@@ -397,12 +522,14 @@ export function useAgent(): UseAgentReturn {
         if (streamRef.current?.source === source) streamRef.current = null;
       };
       // The connection is gone: an error unless the run already has what it needs.
-      const lose = (message: string) => {
+      const lose = (message: string, code: string) => {
         const current = isCurrent();
         close();
-        if (current && run.phase === 'running') fail(run, message);
+        if (current && run.phase === 'running') fail(run, message, code);
       };
-      const watchdog = inactivityWatchdog(() => lose('The analysis stopped responding.'));
+      const watchdog = inactivityWatchdog(() =>
+        lose('The analysis stopped responding.', CLIENT_ERROR_CODES.streamStalled),
+      );
 
       run.controller.signal.addEventListener('abort', close, { once: true });
       streamRef.current = { source, close };
@@ -431,7 +558,8 @@ export function useAgent(): UseAgentReturn {
       };
       // EventSource reconnects by itself, which would start the analysis again on the
       // server: close instead and let the user retry.
-      source.onerror = () => lose('Lost the connection to the analysis.');
+      source.onerror = () =>
+        lose('Lost the connection to the analysis.', CLIENT_ERROR_CODES.connectionLost);
     },
     [fail, handleStreamEvent],
   );
@@ -449,7 +577,7 @@ export function useAgent(): UseAgentReturn {
       runRef.current = run;
 
       setState({ ...INITIAL_STATE, status: 'connecting', isLoading: true });
-      addLog(`🔍 Searching for "${query}"...`);
+      addLog(`Searching for "${query}"`);
       // Logged after the reset above, so it stays with the run it explains.
       if (options.note) addLog(options.note, 'SYS-WARN');
 
@@ -480,7 +608,11 @@ export function useAgent(): UseAgentReturn {
           ),
         );
       } catch (error) {
-        fail(run, error instanceof Error ? error.message : 'Connection failed');
+        fail(
+          run,
+          error instanceof Error ? error.message : 'Connection failed',
+          CLIENT_ERROR_CODES.streamOpenFailed,
+        );
       }
     },
     [addLog, fail, openRunStream],
@@ -510,7 +642,11 @@ export function useAgent(): UseAgentReturn {
         // picked, as a resume would. A row without a Spotify id cannot be asked for: searching
         // the text again would only bring the same picker back.
         if (!isSpotifyTrackId(candidate.id)) {
-          fail(run, 'The track you picked could not be found again. Please search again.');
+          fail(
+            run,
+            'The track you picked could not be found again. Please search again.',
+            CLIENT_ERROR_CODES.choiceLost,
+          );
           return;
         }
         await analyze(run.query || `${candidate.title} ${candidate.artist}`, {
@@ -521,10 +657,12 @@ export function useAgent(): UseAgentReturn {
       }
 
       run.picked = candidate;
-      addLog(`🎵 Resuming with selected track...`);
+      // True whether the user or the countdown picked it.
+      addLog('Resuming the analysis with the selected track');
       setState((prev) => ({
         ...prev,
         status: 'analyzing',
+        statusNote: RESUME_NOTE,
         isLoading: true,
         candidates: null,
       }));
@@ -534,7 +672,11 @@ export function useAgent(): UseAgentReturn {
         const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`;
         openRunStream(url, run);
       } catch (error) {
-        fail(run, error instanceof Error ? error.message : 'Selection failed');
+        fail(
+          run,
+          error instanceof Error ? error.message : 'Selection failed',
+          CLIENT_ERROR_CODES.resumeFailed,
+        );
       }
     },
     [addLog, analyze, fail, openRunStream],

@@ -1364,7 +1364,7 @@ class LibrosaEstimator(_Estimator):
 _thread_state = threading.local()
 
 # RhythmExtractor2013 is not a function of its input alone: its TempoTapDegara adds noise of up
-# to 1e-4 of the onset curve's peak to every frame, drawn from the C library's rand(). That
+# to 1e-4 of the largest per-frame periodicity value to every frame, drawn from the C library's rand(). That
 # state belongs to the whole process (every thread and every instance; Essentia never seeds
 # it), so a tempo, its confidence and its beats depended on how many numbers the analyses
 # before had drawn. Each call starts from the state of a new process (srand(1)) and holds a

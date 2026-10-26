@@ -41,6 +41,9 @@ The unit tests, ruff and the service-pin check run in CI (`.github/workflows/eva
 when `evals/audio` or `services/audio` changes. The suites themselves download data and are run
 by hand.
 
+Before analyzer 2.3.1, an Essentia tempo could depend on the clips its worker had analysed
+before it (#121). Reports name the analyzer version of each run.
+
 ## Suites
 
 | suite | data | what it reports |

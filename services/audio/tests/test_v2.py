@@ -358,7 +358,7 @@ def test_a_tempo_that_starts_late_is_reported(probe, bpm, estimator, request):
 
 
 # Analysed first in a new process, this probe gave 97.0 BPM at 0.568 with 55 beats; after three
-# other probes in the same process, 96.99 BPM at 0.570 with 47 beats.
+# other probes in the same process, 97.0 BPM at 0.558 with 54 beats.
 HISTORY_PROBE = "band-97-after-10s-silence"
 EARLIER_PROBES = ["noise-bursts", "drums-only-97", "drums-only-120"]
 FIRST_ANALYSIS = """

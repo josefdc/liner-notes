@@ -382,6 +382,8 @@ export interface ResultClaims {
   isUnreadable: (id: unknown) => boolean;
   /** True for an id any claim with it was rejected under, read or not. */
   isRejected: (id: unknown) => boolean;
+  /** The ids any claim was rejected under, read or not (as `isRejected`). */
+  rejectedIds: ReadonlySet<string>;
   /** The page's reading of the measurement, for the conflict lines. */
   audio: MeasuredAudio | null;
 }
@@ -448,6 +450,7 @@ export function resultClaims(track: TrackData): ResultClaims {
     isHidden,
     isUnreadable,
     isRejected,
+    rejectedIds,
     audio: context.audio,
   };
 }

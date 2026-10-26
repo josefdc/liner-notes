@@ -5,6 +5,7 @@ import {
   GenealogyLink,
   type LinkKind,
   type LinkType,
+  linkClaimMismatches,
   linkDisplayKind as contractLinkDisplayKind,
 } from '@liner-notes/contract';
 import { readEvidence, type ResultClaims } from '../provenance/claims';
@@ -14,10 +15,10 @@ import { sourceLabel } from '../provenance/SourceLink';
  * How the web app reads and names genealogy links. Each link is read with the contract's link
  * schema and shown by the contract's rule (`linkDisplayKind`, given the result's claims:
  * sourced only when it says so, every evidence id it cites is in the result's evidence pack,
- * and, for a link the model proposed, its claim (`claimId`) is not rejected and reads sourced:
- * citing is not support), with three stricter rules of this app's own:
- * - a link of any origin that states a claim is sourced only when that claim's chip reads
- *   sourced;
+ * and a link that states a claim (`claimId`), whatever its origin, is sourced only when no
+ * claim with that id is rejected, the claim reads sourced, cites every id the link cites and is
+ * about the link's relation; a model link must state one: citing is not support). This app
+ * applies the claim rule itself too, to say why, and adds two rules of its own:
  * - a link whose claim the main view hides (rejected by the verifier, or unreadable: the one
  *   rule of `resultClaims` in provenance/claims.ts) is not shown at all;
  * - a link whose direction contradicts the release years is "related (direction unknown)".
@@ -100,6 +101,8 @@ export interface LinkContext {
   claimOf: (id: string) => { claim: Claim; kind: ClaimKind } | null;
   /** The readable claims by id (the first with each id), for the contract's link rule. */
   claims: ReadonlyMap<string, Claim>;
+  /** The ids any claim was rejected under, whichever copy, for the contract's link rule. */
+  rejectedClaimIds: ReadonlySet<string>;
   /** True for a claim id the main view shows nothing for (`ResultClaims.isHidden`). */
   isHidden: (id: string) => boolean;
   /** The analysed track's release year, for its node when the node's label names none. */
@@ -139,6 +142,7 @@ export function linkContext(
       return shown ? { claim: shown.claim, kind: shown.kind } : null;
     },
     claims: new Map([...(claims?.byId ?? [])].map(([id, shown]) => [id, shown.claim])),
+    rejectedClaimIds: claims?.rejectedIds ?? new Set(),
     isHidden: (id) => claims?.isHidden(id) ?? false,
     trackYear: yearFrom(releaseYear),
   };
@@ -154,18 +158,21 @@ export function yearFrom(value: unknown): number | null {
 }
 
 /**
- * The kind of a link by the contract's `linkDisplayKind`, against the pack's ids and the
- * result's claims (without them, no model link reads as sourced).
+ * The kind of a link by the contract's `linkDisplayKind`, against the pack's ids, the result's
+ * claims and the ids any claim was rejected under (without claims, no link that states one and
+ * no model link reads as sourced).
  */
 export function linkDisplayKind(
   link: GenealogyLink,
   evidence: ReadonlyMap<string, Evidence>,
   claims: ReadonlyMap<string, Claim> = new Map(),
+  rejectedClaimIds: ReadonlySet<string> = new Set(),
 ): LinkKind {
   return contractLinkDisplayKind(link, {
     evidenceIds: new Set(evidence.keys()),
     audio: null,
     claims,
+    rejectedClaimIds,
   });
 }
 
@@ -230,17 +237,21 @@ export function readLink(
     reasons.push(`the years (${fromYear} and ${toYear}) do not fit this direction`);
   }
 
-  // The contract's rule, given the result's claims: a model link without a sourced claim is
-  // never sourced (citing is not support). On top of it, a link that states a claim is sourced
-  // only when that claim's chip says sourced, whoever wrote the link. The reasons are given
-  // only for a link whose evidence alone would make it sourced.
-  let kind = linkDisplayKind(link, context.evidence, context.claims);
+  // The contract's rule, given the result's claims: a link that states a claim is sourced only
+  // through it, whoever wrote the link, and a model link without one is never sourced (citing
+  // is not support). The same rule is applied here to say why, with the claim as its chip
+  // reads it. The reasons are given only for a link whose evidence alone would make it sourced.
+  let kind = linkDisplayKind(link, context.evidence, context.claims, context.rejectedClaimIds);
   const citesPack =
     link.kind === 'sourced' && citations.length > 0 && citations.every((c) => c.evidence !== null);
   if (citesPack && claimed) {
+    const mismatches = linkClaimMismatches(link, claimed.claim);
     if (claimed.kind !== 'sourced') {
       kind = 'inferred';
       if (!claim?.verdict) reasons.push('its claim is not sourced');
+    } else if (mismatches.length > 0) {
+      kind = 'inferred';
+      reasons.push(...mismatches.map((mismatch) => `its claim ${mismatch}`));
     }
   } else if (citesPack && origin === 'model') {
     kind = 'inferred';

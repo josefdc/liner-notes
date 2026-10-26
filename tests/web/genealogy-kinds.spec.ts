@@ -123,12 +123,14 @@ async function graphFitted(page: Page) {
     .not.toBeNull();
 }
 
-test("the mock result is one the API may send, but for the two links planted on purpose", () => {
+test("the mock result is one the API may send, but for the four links planted on purpose", () => {
   const analysis = TrackAnalysis.parse(resultOf(fixture));
   expect(analysis.genealogy.links).toHaveLength(DRAWN.length + 1);
   expect(analysisIssues(analysis)).toEqual([
     'genealogy.links[12].evidenceIds: cites "ev-ghost", not in the pack',
     "genealogy.links[13].evidenceIds: a sourced link cites nothing",
+    "genealogy.links[14].kind: model link marked sourced without a supported claim",
+    "genealogy.links[16].kind: link marked sourced without a supported claim",
   ]);
 });
 

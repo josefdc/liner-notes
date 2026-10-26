@@ -184,7 +184,7 @@
                   "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
                 },
                 "kind": {
-                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+                  "description": "sourced only when every id it cites is in the pack and, for a model link or one that states a claim, that claim is supported and states this relation; a sample link that is not sourced is an inferred influence",
                   "type": "string",
                   "enum": ["sourced", "inferred"]
                 },
@@ -194,7 +194,7 @@
                   "enum": ["code", "model"]
                 },
                 "claimId": {
-                  "description": "The claim that states this relation",
+                  "description": "The claim that states this relation: it cites every id the link cites and is about the link's type",
                   "type": "string"
                 },
                 "evidenceIds": { "type": "array", "items": { "type": "string" } }
@@ -575,7 +575,7 @@
                   "enum": ["sample", "interpolation", "cover", "remix", "producer", "influence"]
                 },
                 "kind": {
-                  "description": "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+                  "description": "sourced only when every id it cites is in the pack and, for a model link or one that states a claim, that claim is supported and states this relation; a sample link that is not sourced is an inferred influence",
                   "type": "string",
                   "enum": ["sourced", "inferred"]
                 },
@@ -585,7 +585,7 @@
                   "enum": ["code", "model"]
                 },
                 "claimId": {
-                  "description": "The claim that states this relation",
+                  "description": "The claim that states this relation: it cites every id the link cites and is about the link's type",
                   "type": "string"
                 },
                 "evidenceIds": { "type": "array", "items": { "type": "string" } }

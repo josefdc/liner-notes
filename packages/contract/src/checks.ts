@@ -17,6 +17,7 @@ import {
 } from "./audio.js";
 import {
   type Claim,
+  type ClaimAbout,
   type ClaimField,
   type ClaimKind,
   type ClaimScope,
@@ -27,6 +28,7 @@ import {
   FACTOID_LIMITS,
   type GenealogyLink,
   type LinkKind,
+  type LinkType,
   type RunInfo,
   type TrackAnalysis,
 } from "./track.js";
@@ -35,23 +37,30 @@ const at = (path: string, message: string) => (path ? `${path}: ${message}` : me
 
 /**
  * What a claim or link is checked and shown against: the evidence pack, the measurement and
- * the result's claims (by id; the first claim with each id). Without `claims`, no model link
- * can read as sourced.
+ * the result's claims (by id; the first claim with each id), with the ids any claim was
+ * rejected under (`claimIsRejected`, whichever copy of the id). Without `claims`, no link that
+ * states a claim, and no model link, can read as sourced.
  */
 export interface ResultContext {
   evidenceIds: ReadonlySet<string>;
   audio: AudioFeatures | null | undefined;
   claims?: ReadonlyMap<string, Claim>;
+  rejectedClaimIds?: ReadonlySet<string>;
 }
 
 /** The context of a result, for `claimDisplayKind` and `linkDisplayKind`. */
 export function resultContext(analysis: TrackAnalysis): ResultContext {
   const claims = new Map<string, Claim>();
-  for (const claim of analysis.claims ?? []) if (!claims.has(claim.id)) claims.set(claim.id, claim);
+  const rejectedClaimIds = new Set<string>();
+  for (const claim of analysis.claims ?? []) {
+    if (!claims.has(claim.id)) claims.set(claim.id, claim);
+    if (claimIsRejected(claim)) rejectedClaimIds.add(claim.id);
+  }
   return {
     evidenceIds: new Set((analysis.evidence ?? []).map((item) => item.id)),
     audio: analysis.audio,
     claims,
+    rejectedClaimIds,
   };
 }
 
@@ -157,9 +166,11 @@ export function audioFeaturesIssues(audio: AudioFeatures, path = "audio"): strin
  * True for a claim the verifier rejected: the judge found it contradicted by its cited
  * excerpts (`verdict`), or the numeric check found its number contradicted by the measurement
  * (`numericCheck`). A rejected claim is shown only in the rejected panel, with why, whatever
- * its kind and whoever wrote it (code or model), and a model link that states it never reads
- * as sourced (`linkDisplayKind`). A numeric `conflict` is not a rejection. It takes any object, read by the contract
- * or not, so a reader can keep a rejected claim it cannot read out of the main view too.
+ * its kind and whoever wrote it (code or model). When several claims share an id, any rejected
+ * one rejects the id: a link that states it never reads as sourced (`linkDisplayKind`), and the
+ * main view shows nothing under it. A numeric `conflict` is not a rejection. It takes any
+ * object, read by the contract or not, so a reader can keep a rejected claim it cannot read out
+ * of the main view too.
  */
 export function claimIsRejected(claim: { verdict?: unknown; numericCheck?: unknown }): boolean {
   return claim.verdict === "contradicted" || claim.numericCheck === "contradicted";
@@ -247,20 +258,68 @@ export function claimDisplayKind(claim: Claim, context: ResultContext): ClaimKin
 }
 
 /**
- * True when a model-written link has a claim (`claimId`) in the context that is not rejected
- * and reads as sourced: only the verifier's support makes a model link sourced, never citing.
+ * What a claim that states each relation a link may state is about (`Claim.about`); the first is
+ * the one a producer writes. A link without a type is an influence.
  */
-function modelLinkSupported(link: GenealogyLink, context: ResultContext): boolean {
-  const claim = link.claimId === undefined ? undefined : context.claims?.get(link.claimId);
-  return (
-    claim !== undefined && !claimIsRejected(claim) && claimDisplayKind(claim, context) === "sourced"
-  );
+export const LINK_CLAIM_ABOUT: Readonly<Record<LinkType, readonly ClaimAbout[]>> = {
+  sample: ["sample"],
+  interpolation: ["sample"],
+  remix: ["sample"],
+  cover: ["cover"],
+  producer: ["credit", "production"],
+  influence: ["connection", "history"],
+};
+
+/**
+ * Why a claim does not state a link, in words that follow "its claim" (empty when it does): it
+ * must cite every evidence id the link cites, so the verifier judged the link's own evidence,
+ * and be about the relation the link states (`LINK_CLAIM_ABOUT`).
+ */
+export function linkClaimMismatches(
+  link: GenealogyLink,
+  claim: Pick<Claim, "about" | "evidenceIds">,
+): string[] {
+  const mismatches: string[] = [];
+  const uncited = (link.evidenceIds ?? []).filter((id) => !claim.evidenceIds.includes(id));
+  if (uncited.length > 0) {
+    mismatches.push(`does not cite ${uncited.map((id) => `"${id}"`).join(", ")}`);
+  }
+  const type = link.type ?? "influence";
+  if (!LINK_CLAIM_ABOUT[type].includes(claim.about)) {
+    mismatches.push(`is about ${claim.about}, not this ${type} relation`);
+  }
+  return mismatches;
+}
+
+/**
+ * Why a link that says sourced is not sourced through its claim, in words that follow "marked
+ * sourced" (null when nothing stops it). A link that states a claim (`claimId`), whoever wrote
+ * it, is sourced only through that claim: it is in the context, no claim with its id is rejected
+ * (`claimIsRejected`), it reads as sourced (`claimDisplayKind`) and it states this link
+ * (`linkClaimMismatches`). A model link must state such a claim: citing is not support, the
+ * verifier's verdict is. A code-built link that states no claim rests on its evidence.
+ */
+function linkClaimProblem(link: GenealogyLink, context: ResultContext): string | null {
+  if (link.claimId === undefined) {
+    return link.origin === "model" ? "without a supported claim" : null;
+  }
+  const claim = context.claims?.get(link.claimId);
+  if (
+    claim === undefined ||
+    context.rejectedClaimIds?.has(link.claimId) ||
+    claimIsRejected(claim) ||
+    claimDisplayKind(claim, context) !== "sourced"
+  ) {
+    return "without a supported claim";
+  }
+  const mismatches = linkClaimMismatches(link, claim);
+  return mismatches.length > 0 ? `through a claim that ${mismatches.join(" and ")}` : null;
 }
 
 /**
  * A sourced link cites at least one evidence item, and every id a link cites is in the pack. A
- * sourced link the model wrote also states a claim (`claimId`) that is not rejected and reads
- * as sourced (`claimDisplayKind`).
+ * sourced link is sourced through the claim it states, and a model link states one
+ * (`linkDisplayKind`).
  */
 export function linkIssues(link: GenealogyLink, context: ResultContext, path = ""): string[] {
   const issues: string[] = [];
@@ -268,8 +327,10 @@ export function linkIssues(link: GenealogyLink, context: ResultContext, path = "
   if (link.kind === "sourced" && ids.length === 0) {
     issues.push(at(`${path}.evidenceIds`, "a sourced link cites nothing"));
   }
-  if (link.kind === "sourced" && link.origin === "model" && !modelLinkSupported(link, context)) {
-    issues.push(at(`${path}.kind`, "model link marked sourced without a supported claim"));
+  const problem = link.kind === "sourced" ? linkClaimProblem(link, context) : null;
+  if (problem !== null) {
+    const who = link.origin === "model" ? "model link" : "link";
+    issues.push(at(`${path}.kind`, `${who} marked sourced ${problem}`));
   }
   for (const id of ids) {
     if (!context.evidenceIds.has(id)) {
@@ -280,19 +341,20 @@ export function linkIssues(link: GenealogyLink, context: ResultContext, path = "
 }
 
 /**
- * How a reader shows a link: sourced only when it says so and cites evidence that is all in
- * the pack, and, when the model wrote it (`origin: "model"`), its claim (`claimId`) is in the
- * context's claims, is not rejected (`claimIsRejected`) and reads as sourced
- * (`claimDisplayKind`): citing is not support, the verifier's verdict is. Otherwise (no kind,
- * no citation, an unknown citation, no supported claim) a model inference. A sample link shown
- * as inferred is an inferred influence, not a documented sample.
+ * How a reader shows a link: sourced only when it says so, cites evidence that is all in the
+ * pack, and its claim allows it. A link that states a claim (`claimId`), whatever its origin,
+ * is sourced only when that claim is in the context, no claim with its id is rejected, it reads
+ * as sourced and it cites every id the link cites and is about the link's relation; a model link
+ * must state one (citing is not support, the verifier's verdict is). Otherwise (no kind, no
+ * citation, an unknown citation, no supported claim about the link) a model inference. A sample
+ * link shown as inferred is an inferred influence, not a documented sample. Where it is shown is
+ * a separate rule: a reader leaves a link whose claim id is rejected out of the main view.
  */
 export function linkDisplayKind(link: GenealogyLink, context: ResultContext): LinkKind {
   if (link.kind !== "sourced" || !citesOnlyKnown(link.evidenceIds ?? [], context)) {
     return "inferred";
   }
-  if (link.origin === "model" && !modelLinkSupported(link, context)) return "inferred";
-  return "sourced";
+  return linkClaimProblem(link, context) === null ? "sourced" : "inferred";
 }
 
 // =============================================================================
@@ -434,12 +496,14 @@ export function runIssues(
 export function analysisIssues(analysis: TrackAnalysis): string[] {
   const issues: string[] = [];
   const context = resultContext(analysis);
-  const claimIds = new Set((analysis.claims ?? []).map((claim) => claim.id));
+  const claimIds = new Set<string>();
 
   (analysis.evidence ?? []).forEach((item, i) => {
     issues.push(...evidenceIssues(item, `evidence[${i}]`));
   });
   analysis.claims?.forEach((claim, i) => {
+    if (claimIds.has(claim.id)) issues.push(at(`claims[${i}].id`, `duplicate id "${claim.id}"`));
+    claimIds.add(claim.id);
     issues.push(...claimIssues(claim, context, `claims[${i}]`));
   });
   if (analysis.audio) issues.push(...audioFeaturesIssues(analysis.audio));

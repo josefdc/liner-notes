@@ -14,6 +14,8 @@ import {
   claimIsRejected,
   claimIssues,
   evidenceIssues,
+  LINK_CLAIM_ABOUT,
+  linkClaimMismatches,
   linkDisplayKind,
   linkIssues,
   measuredCopyIssues,
@@ -32,7 +34,7 @@ import {
   sampleEvidence,
   sampleRun,
 } from "./testing/samples.js";
-import { TrackAnalysis } from "./track.js";
+import { LinkType, TrackAnalysis } from "./track.js";
 
 const pack: ResultContext = { evidenceIds: new Set(["ev-1", "ev-2"]), audio: sampleAudio() };
 const claim = (change: Partial<Claim>): Claim => ({
@@ -638,12 +640,61 @@ describe("links", () => {
     expect(shown({ numericCheck: "conflict" })).toBe("sourced");
   });
 
-  it("leaves a code-built link, or one that names no origin, to its evidence", () => {
-    const rejected = withClaims(relation({ verdict: "contradicted" }));
-    for (const origin of ["code", undefined]) {
-      expect(linkDisplayKind(link({ origin }), pack)).toBe("sourced");
-      expect(linkDisplayKind(link({ origin, claimId: "cl-s" }), rejected)).toBe("sourced");
+  it("shows a model link as sourced only through a claim about that link", () => {
+    const shown = (change: Partial<Claim>, linkChange: object = {}) =>
+      linkDisplayKind(link({ claimId: "cl-s", ...linkChange }), withClaims(relation(change)));
+    // The claim cites every id the link cites (more is fine).
+    expect(shown({ evidenceIds: ["ev-2"] })).toBe("inferred");
+    expect(shown({ evidenceIds: ["ev-1"] }, { evidenceIds: ["ev-1", "ev-2"] })).toBe("inferred");
+    expect(shown({ evidenceIds: ["ev-1", "ev-2"] })).toBe("sourced");
+    // Its subject states the link's relation.
+    expect(shown({ about: "credit" })).toBe("inferred");
+    expect(shown({ about: "sample" }, { type: "cover" })).toBe("inferred");
+    expect(shown({ about: "cover" }, { type: "cover" })).toBe("sourced");
+    expect(shown({ about: "sample" }, { type: undefined })).toBe("inferred");
+    expect(shown({ about: "connection" }, { type: undefined })).toBe("sourced");
+    for (const type of LinkType.options) {
+      for (const about of LINK_CLAIM_ABOUT[type])
+        expect(shown({ about }, { type })).toBe("sourced");
     }
+  });
+
+  it("names why a claim does not state a link", () => {
+    expect(linkClaimMismatches(link(), relation())).toEqual([]);
+    expect(
+      linkClaimMismatches(link({ evidenceIds: ["ev-1", "ev-2"] }), relation({ about: "credit" })),
+    ).toEqual(['does not cite "ev-2"', "is about credit, not this sample relation"]);
+  });
+
+  it("shows a link of any origin that states a claim as sourced only through that claim", () => {
+    const shown = (origin: string | undefined, claims: ResultContext) =>
+      linkDisplayKind(link({ origin, claimId: "cl-s" }), claims);
+    for (const origin of ["code", undefined]) {
+      // Without a claim id, a code-built link rests on its evidence.
+      expect(linkDisplayKind(link({ origin }), pack)).toBe("sourced");
+      expect(shown(origin, withClaims(relation()))).toBe("sourced");
+      expect(shown(origin, withClaims(relation({ origin: "code", verdict: null })))).toBe(
+        "sourced",
+      );
+      expect(shown(origin, withClaims(relation({ verdict: "contradicted" })))).toBe("inferred");
+      expect(shown(origin, withClaims(relation({ verdict: "unsupported" })))).toBe("inferred");
+      expect(shown(origin, withClaims(relation({ about: "credit" })))).toBe("inferred");
+      // A claim id that is not in the result.
+      expect(shown(origin, withClaims())).toBe("inferred");
+    }
+  });
+
+  it("reports a link of any origin marked sourced through a claim that does not allow it", () => {
+    const issues = (origin: string, change: Partial<Claim>) =>
+      linkIssues(link({ origin, claimId: "cl-s" }), withClaims(relation(change)));
+    expect(issues("code", {})).toEqual([]);
+    expect(issues("code", { verdict: "contradicted" })).toEqual([
+      ".kind: link marked sourced without a supported claim",
+    ]);
+    expect(issues("model", { about: "credit", evidenceIds: ["ev-2"] })).toEqual([
+      '.kind: model link marked sourced through a claim that does not cite "ev-1" and is about ' +
+        "credit, not this sample relation",
+    ]);
   });
 
   it("reports a model link marked sourced without a supported claim", () => {
@@ -660,20 +711,32 @@ describe("links", () => {
     expect(linkIssues(link({ origin: "code" }), pack)).toEqual([]);
   });
 
-  it("resultContext reads a result's claims by id, the first of each id", () => {
+  it("resultContext keeps the first claim of each id; any rejected copy rejects the id", () => {
     const supported = { ...relation(), evidenceIds: ["ev-mb-1"] };
     const second = { ...supported, kind: "inferred" as const, verdict: "contradicted" as const };
     const genealogy = {
       nodes: [],
       links: [link({ claimId: "cl-s", evidenceIds: ["ev-mb-1"] })],
     };
-    const result = analysis({ claims: [supported, second], genealogy });
-    const ctx = resultContext(result);
-    expect(ctx.claims?.get("cl-s")?.verdict).toBe("supported");
-    expect(ctx.claims?.size).toBe(1);
-    const [only] = result.genealogy.links;
-    expect(only && linkDisplayKind(only, ctx)).toBe("sourced");
-    expect(analysisIssues(result)).toEqual([]);
+    const alone = analysis({ claims: [supported], genealogy });
+    const [only] = alone.genealogy.links;
+    expect(only && linkDisplayKind(only, resultContext(alone))).toBe("sourced");
+    expect(analysisIssues(alone)).toEqual([]);
+    for (const claims of [
+      [supported, second],
+      [second, supported],
+    ]) {
+      const result = analysis({ claims, genealogy });
+      const ctx = resultContext(result);
+      expect(ctx.claims?.get("cl-s")).toEqual(claims[0]);
+      expect(ctx.claims?.size).toBe(1);
+      expect([...(ctx.rejectedClaimIds ?? [])]).toEqual(["cl-s"]);
+      expect(only && linkDisplayKind(only, ctx)).toBe("inferred");
+      expect(analysisIssues(result)).toEqual([
+        'claims[1].id: duplicate id "cl-s"',
+        "genealogy.links[0].kind: model link marked sourced without a supported claim",
+      ]);
+    }
     // As the composer writes a model claim before any verdict: inferred, not judged.
     const unjudged = { ...supported, kind: "inferred" as const, verdict: null };
     const unsupported = analysis({ claims: [unjudged], genealogy });

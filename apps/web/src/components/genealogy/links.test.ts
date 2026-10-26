@@ -328,10 +328,19 @@ describe('readLink', () => {
       link('a', 'b'),
       sourced({ origin: 'model', claimId: 'cl-s' }),
       sourced({ origin: 'model', claimId: 'cl-u' }),
-      // The contract leaves a code link to its evidence; the app follows its claim too.
+      // A link of any origin that states a claim follows it, in the contract and here.
       sourced({ origin: 'code', claimId: 'cl-u' }),
+      sourced({ origin: 'code', claimId: 'cl-gone' }),
+      // A supported claim that is not about the link: another citation, or another relation.
+      sourced({ origin: 'model', claimId: 'cl-other' }),
+      sourced({ origin: 'model', claimId: 'cl-credit' }),
     ];
-    const claims = [supported, unsupported];
+    const claims = [
+      supported,
+      unsupported,
+      { ...supported, id: 'cl-other', evidenceIds: ['ev-shs-1'] },
+      { ...supported, id: 'cl-credit', about: 'credit' },
+    ];
     const genealogy = Genealogy.parse({ nodes: [node('a', 1), node('b', 4)], links });
     const ctx = resultContext({
       evidence: PACK.map((item) => Evidence.parse(item)),
@@ -345,7 +354,7 @@ describe('readLink', () => {
     expect(contract[3]).toBe('inferred');
     expect(contract[7]).toBe('sourced');
     expect(contract[8]).toBe('inferred');
-    expect(contract[9]).toBe('sourced');
+    expect(contract[9]).toBe('inferred');
     expect(ours).toEqual([
       'sourced',
       'inferred',
@@ -357,10 +366,12 @@ describe('readLink', () => {
       'sourced',
       'inferred',
       'inferred',
+      'inferred',
+      'inferred',
+      'inferred',
     ]);
-    ours.forEach((kind, i) => {
-      if (kind === 'sourced') expect(contract[i]).toBe('sourced');
-    });
+    // With no years against a direction, the app and the contract agree on every link.
+    expect(ours).toEqual(contract);
   });
 
   it("passes the result's claims to the contract's rule, so a supported model link stays sourced", () => {
@@ -376,6 +387,51 @@ describe('readLink', () => {
     // Without the claims, the contract cannot see the support: the link reads as inference.
     expect(linkDisplayKind(modelLink, ctx.evidence)).toBe('inferred');
     expect(linkContext(PACK, null).claims.size).toBe(0);
+  });
+
+  it('shows a link as sourced only through a claim about that link, and says why not', () => {
+    const supported = (fields: Record<string, unknown>) =>
+      claim('cl-1', { kind: 'sourced', verdict: 'supported', evidenceIds: ['ev-mb-1'], ...fields });
+    const elsewhere = read(
+      sourced({ origin: 'model', claimId: 'cl-1' }),
+      context([supported({ evidenceIds: ['ev-shs-1'] })]),
+    );
+    expect(elsewhere).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(provenanceText(elsewhere)).toContain('its claim does not cite "ev-mb-1"');
+    const credit = read(
+      sourced({ origin: 'code', claimId: 'cl-1' }),
+      context([supported({ about: 'credit' })]),
+    );
+    expect(credit).toMatchObject({ kind: 'inferred', type: 'influence' });
+    expect(provenanceText(credit)).toContain('its claim is about credit, not this sample relation');
+    const cover = read(
+      sourced({ origin: 'model', type: 'cover', claimId: 'cl-1' }),
+      context([supported({ about: 'cover' })]),
+    );
+    expect(cover).toMatchObject({ kind: 'sourced', type: 'cover', reasons: [] });
+  });
+
+  it('shows a code-built link whose claim is not in the result as not sourced, and says so', () => {
+    const shown = read(sourced({ origin: 'code', claimId: 'cl-gone' }));
+    expect(shown.kind).toBe('inferred');
+    expect(provenanceText(shown)).toContain('its claim is not in this result');
+  });
+
+  it('gives the contract the ids any claim was rejected under, whichever copy', () => {
+    const supported = claim('cl-1', {
+      kind: 'sourced',
+      verdict: 'supported',
+      evidenceIds: ['ev-mb-1'],
+    });
+    const ctx = context([supported, { ...supported, verdict: 'contradicted' }]);
+    expect(ctx.claims.get('cl-1')?.verdict).toBe('supported');
+    expect([...ctx.rejectedClaimIds]).toEqual(['cl-1']);
+    const modelLink = sourced({ origin: 'model', claimId: 'cl-1' }) as GenealogyLinkValue;
+    expect(linkDisplayKind(modelLink, ctx.evidence, ctx.claims)).toBe('sourced');
+    expect(linkDisplayKind(modelLink, ctx.evidence, ctx.claims, ctx.rejectedClaimIds)).toBe(
+      'inferred',
+    );
+    expect(readLink(modelLink, ctx)).toEqual({ hidden: true });
   });
 });
 

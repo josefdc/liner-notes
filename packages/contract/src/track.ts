@@ -146,10 +146,18 @@ export const GenealogyLink = z.object({
   value: z.number().describe("Strength 1-3: 1 = weak influence, 3 = direct sample"),
   type: LinkType.optional(),
   kind: LinkKind.optional().describe(
-    "sourced only with evidence in the pack; a sample link without evidence is an inferred influence",
+    "sourced only when every id it cites is in the pack and, for a model link or one that " +
+      "states a claim, that claim is supported and states this relation; a sample link that is " +
+      "not sourced is an inferred influence",
   ),
   origin: ClaimOrigin.optional().describe("code: from a source record; model: proposed by it"),
-  claimId: z.string().optional().describe("The claim that states this relation"),
+  claimId: z
+    .string()
+    .optional()
+    .describe(
+      "The claim that states this relation: it cites every id the link cites and is about the " +
+        "link's type",
+    ),
   evidenceIds: z.array(z.string()).optional(),
 });
 export type GenealogyLink = z.infer<typeof GenealogyLink>;

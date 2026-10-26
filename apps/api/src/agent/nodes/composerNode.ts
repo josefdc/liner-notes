@@ -222,7 +222,7 @@ export function composeFromOutput(
 ): Composed {
   const known = new Set(evidence.map((item) => item.id));
   const cited = (ids: readonly string[]) => ids.filter((id) => known.has(id));
-  const modelClaim = (fields: Pick<Claim, "text" | "about" | "evidenceIds">): Claim => ({
+  const modelClaim = (fields: Pick<Claim, "text" | "about" | "evidenceIds" | "scope">): Claim => ({
     id: newId(),
     ...fields,
     kind: "inferred",
@@ -233,7 +233,12 @@ export function composeFromOutput(
   });
 
   const claims: Claim[] = output.claims.map((claim) => ({
-    ...modelClaim({ text: claim.text, about: claim.about, evidenceIds: cited(claim.evidenceIds) }),
+    ...modelClaim({
+      text: claim.text,
+      about: claim.about,
+      evidenceIds: cited(claim.evidenceIds),
+      scope: claim.scope,
+    }),
     ...(claim.field ? { field: claim.field } : {}),
   }));
 
@@ -243,6 +248,7 @@ export function composeFromOutput(
         text: card.text,
         about: FACTOID_ABOUT[card.type],
         evidenceIds: cited(card.evidenceIds),
+        scope: card.scope,
       }),
       factoid: { title: card.title, type: card.type, entities: card.entities },
     };

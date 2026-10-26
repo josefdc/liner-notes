@@ -18,7 +18,7 @@ vi.hoisted(() => {
 import { leaks } from "../../replay/recorder.js";
 import { searchSamples } from "../../sources/search.js";
 import { json, stubFetch } from "../../sources/testing/fetchStub.js";
-import { FORUM_THREADS } from "../../sources/testing/forumThreads.js";
+import { FORUM_LIMITS, FORUM_THREADS } from "../../sources/testing/forumThreads.js";
 import { configuredSources, resultCacheKey, TRACKS_NAMESPACE } from "../cacheKeys.js";
 import { readStoredResult } from "../storedResults.js";
 import { restoredEvidence, type SourcedEvidence, webSearchEvidence } from "./evidencePack.js";
@@ -121,10 +121,18 @@ const FORUM_PIECES = [
   (n: number) => `sure? – Fan${n} Feb 22 '21 at 16:01`,
   (n: number) => `posted by Fan${n} at 6:47 AM on February 22, 2021`,
   (n: number) => `[${n} favorites]`,
+  (n: number) => `Fan${n} February 22, 2021, 3:15pm #${n}`,
+  (n: number) => `Post by Fan${n} » Mon Feb 22, 2021 3:${String(n % 60).padStart(2, "0")} pm`,
+  (n: number) => `Fan${n} • ${(n % 9) + 1}y ago`,
+  () => "Reply Share",
+  (n: number) => `${n} Reply`,
+  (n: number) => `#${n} 22nd February 2021`,
+  (n: number) => `Fan from Ohio Oct ${(n % 28) + 1}, 2009:`,
+  (n: number) => `Reviewed in the United States on February ${(n % 28) + 1}, 2021`,
 ];
 /** A forum piece in a kept excerpt: forumThread decided on it, and the readers must agree. */
 const FORUM_PIECE =
-  /said:|Click to expand|\d #\d|Joined Mar|Messages: |Originally Posted by|Reply With Quote|Posts: |improve this answer|answered Feb|'21 at|posted by Fan|favorites\]/;
+  /said:|Click to expand|\d #\d|Joined Mar|Messages: |Originally Posted by|Reply With Quote|Posts: |improve this answer|answered Feb|'21 at|posted by Fan|favorites\]|pm #|» Mon|y ago|Reply Share|\d Reply|22nd February|from Ohio|Reviewed in/;
 
 const URLS = [
   "https://www.example.org/news/one-more-time",
@@ -371,6 +379,10 @@ describe("forum thread layouts", () => {
     expect(webSearchEvidence([web("https://www.example.org/thread", "A page.", text)])).toEqual([]);
   });
 
+  it.each(FORUM_LIMITS)("keeps %s, a known limit: %s", (_name, _why, text) => {
+    expect(webSearchEvidence([web("https://www.example.org/thread", text)])).toHaveLength(1);
+  });
+
   it("refuses a forum thread when read back (written by older code)", async () => {
     const [item] = webSearchEvidence([
       web("https://www.example.org/news/one-more-time", "A page about the song."),
@@ -570,6 +582,607 @@ const MUSIC_PROSE: Array<[string, string]> = [
   [
     "a band's line-up",
     "Line-up. Thomas Bangalter Joined: 1993. Guy-Manuel de Homem-Christo Joined: 1993. Posts: drums, keys. Quote: 'We are robots.' Join Date: 1993.",
+  ],
+  // Bylines, ages, reviews and quoted comments, which read like a comment widget's or a forum's.
+  [
+    "an interview with its age in the byline",
+    "Interview by Jane Smith • 3y ago. Thomas Bangalter on One More Time: 'We wanted it to feel like a party.' Share this interview with a friend.",
+  ],
+  [
+    "a list of articles with their ages",
+    "Daft Punk's Thomas Bangalter: the interview · 3y ago · 8 min read. Read next: Nile Rodgers on Get Lucky • 2y ago. Romanthony remembered • 4y ago.",
+  ],
+  [
+    "a review site's editorial review",
+    "Daft Punk – Discovery review. Rating: 4.5 out of 5 stars. Reviewed by Jane Smith on February 22, 2021. One More Time opens the album with Romanthony's vocal. Verified by our editors.",
+  ],
+  [
+    "liner notes with Posted by",
+    "Liner notes. Posted by Virgin Records at 9:00 AM. Written by T. Bangalter and G-M. de Homem-Christo. Posted by Virgin Records at 4:30 PM: the remaster notes.",
+  ],
+  [
+    "a group blog's capitalised bylines",
+    "Posted by Jane Doe at 9:00 AM on February 22, 2021. Daft Punk split. Posted by John Roe at 3:15 PM on February 23, 2021. The Romanthony story.",
+  ],
+  [
+    "an article quoting a YouTube comment once",
+    "One fan wrote under the video 3 years ago: 'This song never gets old.' The comment has 1.2K likes and 45 replies, more than the label's own post.",
+  ],
+  [
+    "an article quoting a YouTube comment with its button",
+    "A YouTube comment from 3 years ago, 'This song never gets old', shows 1.2K Reply. In 2015 Reply 1988, the Korean series, used the song.",
+  ],
+  [
+    "a blog's bylines with an arrow and no time",
+    "Daft Punk split: the story by Jane Doe » February 22, 2021. One More Time and the Romanthony vocal, by John Roe » February 23, 2021.",
+  ],
+  ["a breadcrumb", "Home » News » Daft Punk » Feb 22, 2021 Daft Punk have split after 28 years."],
+  [
+    "a chart run that falls one place a week",
+    "UK Singles Chart run. Week of Feb 24, 2001 #1 One More Time. Week of Mar 3, 2001 #2 One More Time. Week of Mar 10, 2001 #3 One More Time.",
+  ],
+  [
+    "a magazine issue's number and date",
+    "Sound On Sound, #1 22nd February 2021 issue: how Daft Punk made Discovery. #2 1st March 2021 issue: the vocoder.",
+  ],
+  [
+    "a mention of a forum's member title",
+    "Fans on the Gearspace forum, where one Gear Addict asked about the vocoder, guessed a DigiTech Talker. A Forum Resident at another board agreed.",
+  ],
+  [
+    "a Songfacts page's facts above an undated comment",
+    "One More Time by Daft Punk. Songfacts: The vocal is Romanthony's, heavily processed with Auto-Tune. Comments: 1 Jane from Ohio This is the best.",
+  ],
+  [
+    "a dateline",
+    "News from Paris Feb 22, 2021: Daft Punk have split after 28 years, with a video.",
+  ],
+  // Pages a first version of these layouts left out: each read like one layout's two marks.
+  [
+    "a news byline's age beside a contest's points",
+    "By Jane Doe · 6 months ago. Eurovision 2024: Loreen, who won with 583 points a year ago, returns to open the show in Malmö.",
+  ],
+  [
+    "a contest's points beside a byline's age",
+    "Måneskin, who won Eurovision with 524 points 3 years ago, play Rome tonight. Jane Doe • 2 years ago",
+  ],
+  [
+    "contest news with a related list's ages",
+    "Loreen won Eurovision with 583 points a year ago in Liverpool, the second performer ever to win twice. More Eurovision news • 1y ago Käärijä's Cha Cha Cha tops the Finnish chart • 2y ago Måneskin sign a worldwide deal",
+  ],
+  [
+    "a game score's level beside a related list's age",
+    "Koji Kondo wrote the level 1 theme · 3 notes repeat before the bass enters, and the overworld theme became the most covered game tune. Related: Inside the Zelda score • 3y ago",
+  ],
+  [
+    "a news card with Reply and Share under a byline",
+    "Jane Doe • 2 years ago Why the Amen break is the most sampled drum loop in history: a six-second solo from the Winstons' 1969 B-side. Reply Share this story with a friend",
+  ],
+  [
+    "a trends page with a bullet age and Reply Share",
+    "r/Music trends: Daft Punk's One More Time · 3 yr. ago became the most streamed French song; Reply Share",
+  ],
+  [
+    "one writer's blog archive with an arrow, a date and a time",
+    "by Mark Smith » February 22, 2021 3:15 pm Kid A turns 21. by Mark Smith » March 1, 2021 9:00 am Amnesiac's Pyramid Song was built on a Mingus record.",
+  ],
+  [
+    "a blog's category bylines with an arrow",
+    "Posted by admin in Reviews » 22 Feb 2021, 15:15 Daft Punk's Discovery samples Edwin Birdsong. Posted by admin in News » 23 Feb 2021, 10:00 Romanthony sang One More Time.",
+  ],
+  [
+    "one week's chart in two countries",
+    "On the charts dated Feb 24, 2001 #1 in the UK and Feb 24, 2001 #2 in Ireland, Daft Punk's One More Time was at its peak.",
+  ],
+  [
+    "one week's peaks in two countries",
+    "One More Time peaked on Dec 2, 2000 #1 in France and Dec 2, 2000 #2 in the UK.",
+  ],
+  [
+    "one week's chart with ordinal dates",
+    "The Official Chart of #1 26th February 2000 was All Saints; #2 26th February 2000 was Craig David's Fill Me In.",
+  ],
+  [
+    "a festival's best sets with weekday times",
+    "Our five best sets of Glastonbury: Saturday at 10:15 PM #1 Coldplay, Saturday at 8:00 PM #2 Burna Boy, Sunday at 9:30 PM #3 SZA.",
+  ],
+  [
+    "a festival live-blog with weekday times",
+    "Glastonbury 2024 live: Friday at 9:45 PM #1 Dua Lipa's headline set began, after Friday at 7:00 PM #2 Michael Kiwanuka.",
+  ],
+  [
+    "a festival's running order with weekday times",
+    "Woodstock running order: Saturday at 9:00 PM #1 Santana; Saturday at 10:30 PM #2 Grateful Dead; Sunday at 9:00 AM #3 Jimi Hendrix.",
+  ],
+  [
+    "a tour's infobox with a chart week",
+    "The Eras Tour Start date March 17, 2023 End date December 8, 2024 No. of shows 149. It led Billboard Boxscore on Dec 9, 2023 #1 among all tours.",
+  ],
+  [
+    "a tour's infobox and its box office",
+    "The Eras Tour Start date March 17, 2023 End date December 8, 2024 Legs 5 No. of shows 149 Box office $2.077 billion. Billboard Boxscore chart dated Dec 9, 2023 #1 for the year.",
+  ],
+  [
+    "a tour's infobox beside a trending list",
+    "Start date March 17, 2023 End date December 8, 2024. Trending 3 hours ago #1 Taylor Swift ends The Eras Tour.",
+  ],
+  [
+    "an article quoting one Amazon review",
+    "One fan's review captures it: '5.0 out of 5 stars A classic. Reviewed in the United States on February 22, 2021. Verified Purchase. The vocoder still sounds like the future.' The album has sold four million copies.",
+  ],
+  [
+    "an article quoting one Amazon review without its badge",
+    "A fan wrote: '5.0 out of 5 stars Masterpiece. Reviewed in the United States on February 22, 2021.' Another called it overrated.",
+  ],
+  [
+    "a metareview with dated star ratings",
+    "Critics: AllMusic Mar 12 2001 4.50 stars; Rolling Stone Mar 29 2001 4.00 stars; Pitchfork gave it 6.4.",
+  ],
+  [
+    "two writers' lowercase blog bylines",
+    "posted by jane at 9:00 AM on February 22, 2021 Discovery turns 20. posted by mark at 10:00 AM on February 23, 2021 Homework's Da Funk was a b-side first.",
+  ],
+  [
+    "liner notes with Live from datelines",
+    "Disc 1 – Live from Wembley Stadium, London, July 13, 1985: Status Quo, Queen, David Bowie. Disc 2 – Live from JFK Stadium, Philadelphia, July 13, 1985: Led Zeppelin, Madonna.",
+  ],
+  [
+    "a live album's Live from sections",
+    "Live from the Royal Albert Hall May 2, 1966: Tell Me, Baby. Live from the Free Trade Hall May 17, 1966: Like a Rolling Stone.",
+  ],
+  [
+    "liner notes quoting dated letters",
+    "Letter from Brian Epstein, London, October 2, 1963: the boys will record on the 17th. Letter from George Martin, London, October 18, 1963: I Want to Hold Your Hand is finished.",
+  ],
+  [
+    "a tour diary's datelines",
+    "Notes from Tokyo March 3, 2024: the Budokan show sold out in an hour. Notes from Osaka March 5, 2024: we added a second encore.",
+  ],
+  [
+    "a related tracks list with glued ages beside Like",
+    "Daft Punk - Veridis Quo (Edit) 3y Like Repost Daft Punk - Aerodynamic (Live) 2mo Like Repost 12.3K plays",
+  ],
+  [
+    "a related artists list with glued ages beside Follow",
+    "Daft Punk 3y Follow · Justice 1y Follow · Air 2mo Follow — artists you may like.",
+  ],
+  [
+    "an artist card with ages beside Follow",
+    "Daft Punk Artist 23,456,789 monthly listeners Follow 3y ago released Random Access Memories (10th Anniversary Edition). Popular releases 2mo ago Follow",
+  ],
+  [
+    "an article naming a forum title and a start date",
+    "Steve Hoffman's board gave him the title Forum Resident; his remasters of Discovery are discussed with Start date Feb 22, 2021 in the trade press.",
+  ],
+  [
+    "a gear magazine's issue number with gear words",
+    "Sound On Sound: Lives for gear? The DigiTech Talker that Daft Punk used on Digital Love. Report Post-production notes follow. #1 22nd February 2001 issue.",
+  ],
+  [
+    "an interview with a clock, a number and a last reply",
+    "February 22, 2021, 3:15pm #1 single of the week. Bangalter created the vocal as his last reply to critics of Homework.",
+  ],
+  [
+    "a feature quoting two YouTube comments with their likes",
+    "Fans still argue about the vocal. 'It is Romanthony, not a vocoder' 3 years ago 1.2K Reply and 'This is the best house record ever' 2 years ago 300 Reply, read two top comments.",
+  ],
+  [
+    "an article quoting two YouTube comments with their likes",
+    "Two comments sum up the reaction: 'Romanthony forever' 3 years ago 1.2K Reply and 'Still my favourite' 2 years ago 845 Reply.",
+  ],
+  [
+    "an author box with a join date and a post count",
+    "About the author: Jane Doe Joined: Mon Mar 03, 2010 Posts: 245. Jane has written about house music since 1997.",
+  ],
+  [
+    "an article quoting four YouTube comments with their likes",
+    "Four comments sum up the reaction: 'Romanthony forever' 3 years ago 1.2K Reply, 'Still my favourite' 2 years ago 845 Reply, 'One more time' 1 year ago 300 Reply, and 'RIP' 4 years ago 120 Reply.",
+  ],
+  [
+    "a video page with one top comment",
+    "Daft Punk - One More Time (Official Video) 245M views 13 years ago. Top comment 3 years ago Romanthony's voice is the reason this works 1.2K Reply",
+  ],
+  [
+    "a festival's best sets with the artists before their times",
+    "Our top three Glastonbury sets: Coldplay Saturday at 10:15 PM #1 Burna Boy Saturday at 8:00 PM #2 SZA Sunday at 9:30 PM #3",
+  ],
+  [
+    "a drama's title after an episode number",
+    "Reply 1988 rewatch diary. Started 3 years ago with episode 1 Reply 1988 and its OST; finished 2 years ago with episode 20 Reply 1988, still the best soundtrack.",
+  ],
+  [
+    "two albums' peaks on different days",
+    "Daft Punk's albums in France: Homework Jan 20, 1997 #1 and Discovery Mar 12, 2001 #2.",
+  ],
+  // Pages that read like a forum's marks beside a page's own: a chart row, a stamp, a comment count.
+  [
+    "concert review, stage times, rating, Comments footer",
+    "Live review: LCD Soundsystem, Brixton Academy, Friday 12 April 2024. Doors were at 7:00 PM, Jayda G played from 8:15 PM and James Murphy's band came on at 9:30 PM sharp. The two-hour set opened with Us v Them and closed, as ever, on All My Friends. Rating: 4.5 out of 5 stars. Comments: 6",
+  ],
+  [
+    "concert review opening with a Live from dateline, Comments footer",
+    "Live from the Barrowland, Glasgow, March 3, 2024: Blur's first Scottish show in nine years sold out in four minutes. Damon Albarn told the crowd it was the loudest night of the tour, and the sprung floor bounced through Song 2. Setlist: St. Charles Square, There's No Other Way, Popscene, Beetlebum, Tender. Comments: 14",
+  ],
+  [
+    "tour diary postcards, Comments footer",
+    "Tour diary, part three. Postcard from Glasgow March 3, 2024: the Barrowland's sprung floor was bouncing by the second chorus of Song 2. Postcard from Manchester March 5, 2024: a quieter crowd, but This Is a Low got the biggest singalong of the run. Comments: 3",
+  ],
+  [
+    "gig guide with weekday times and numbered picks",
+    "This weekend's best gigs in London. Friday at 8:00 PM #1 pick: Jungle at the O2, with their full live band. Saturday at 7:30 PM #2 pick: Arlo Parks at the Roundhouse. Sunday at 6:00 PM #3 pick: Ezra Collective at the Barbican.",
+  ],
+  [
+    "festival live blog, dash update stamps, comments plugin",
+    "Glastonbury 2024 live: Dua Lipa headlines the Pyramid. The crowd stretched back to the Other Stage. – Updated Jun 28 at 21:45. Dua opened with Training Season and Levitating, then brought out Elton John for Cold Heart. – Updated Jun 28 at 22:30. 0 Comments Sort by Newest Add a comment... Facebook Comments Plugin",
+  ],
+  [
+    "tour dates after dashes, comments plugin",
+    "Justice announce the Hyperdrama world tour. Tickets go on sale Friday at 10:00. – Zénith Paris Mar 14 at 20:00. – O2 Academy Brixton Mar 21 at 19:30. – Brooklyn Mirage May 2 at 21:00. Add a comment...",
+  ],
+  [
+    "bootleg list of a two-show night",
+    "Grateful Dead, February 1970 tapes. Fillmore East Feb 13, 1970 #1 (early show): Dark Star > That's It for the Other One. Fillmore East Feb 13, 1970 #2 (late show): the Dark Star > Spanish Jam that tapers rank among the best. Both were issued on Dick's Picks Volume 4.",
+  ],
+  [
+    "Bandcamp album with fan notes",
+    "Discovery (Remastered) by Daft Punk. Digital Album. Streaming + Download. Includes unlimited streaming via the free Bandcamp app, plus high-quality download in MP3, FLAC and more. Buy Digital Album €9.99 EUR or more. Supported by marc_dj Favorite track: Digital Love. Still sounds like the future. sophie.k Favorite track: Something About Us. That bassline! released March 12, 2001. Tags: electronic, french house, Paris.",
+  ],
+  [
+    "Bandcamp album with about text and credits",
+    "Ambient Works Vol. 3 by Lumen. 1. Drift 04:12 2. Harbour Lights 06:30 3. Low Tide 05:02. about: Recorded live from the Harbour Studio, Bristol, February 22, 2021: one take, no overdubs. supported by 120 fans who also own Ambient Works Vol. 2. tom_w Favorite track: Harbour Lights. credits: released February 22, 2021. Lumen: synths, field recordings. Mastered by Jane Doe.",
+  ],
+  [
+    "Discogs release with notes and credits",
+    "Daft Punk – Discovery. Label: Virgin – 7243 8 49606 2 6. Format: CD, Album. Country: Europe. Released: 12 Mar 2001. Genre: Electronic. Style: House, Disco, Synth-pop. Tracklist 1 One More Time 5:20 2 Aerodynamic 3:27 3 Digital Love 4:58. Credits: Vocals – Romanthony (tracks: 1, 13), Todd Edwards (tracks: 9). Notes: Recorded at Daft House, Paris, 1997–2000. Includes a Daft Club card. Have: 24,512 Want: 8,901 Avg Rating: 4.52 / 5 Ratings: 3,120 Last Sold: Feb 22, 2021",
+  ],
+  [
+    "Discogs reissue with two reviews",
+    "Daft Punk – Homework (2xLP, Album, Reissue). Released: 2 Feb 2014. Notes: Cut by Kevin Gray at Cohearent Audio. Reviews: Reviewed by vinyl_head on February 22, 2021: quiet pressing, Da Funk sounds huge. Reviewed by tom.b on March 3, 2021: some surface noise on side C. Have: 12,034 Want: 2,210",
+  ],
+  [
+    "session notes with a dated log",
+    "Miles Davis – Kind of Blue. Recorded March 2, 1959 (tracks A1, A2, B1) and April 22, 1959 (A3, B2) at Columbia 30th Street Studio, New York. Credits: Bass – Paul Chambers. Drums – Jimmy Cobb. Piano – Bill Evans, Wynton Kelly (A2). Tenor Saxophone – John Coltrane. Notes from the session log, March 2, 1959: Freddie Freeloader was the first full take.",
+  ],
+  [
+    "press bio",
+    "Biography. Justice are Gaspard Augé and Xavier de Rosnay. Formed in Paris in 2003, the duo signed to Ed Banger Records after their remix of Simian's Never Be Alone won a student radio contest. Their debut album † (Cross) came out on June 11, 2007 and was nominated for a Grammy. Hyperdrama, their fourth, followed on April 26, 2024 with Tame Impala's Kevin Parker on two tracks.",
+  ],
+  [
+    "news story with a Posted stamp and an author box post count",
+    "Posted: Feb 22, 2021 3:15 pm. PARIS — Daft Punk have announced their split in an eight-minute video, Epilogue, taken from their 2006 film Electroma. The duo formed in 1993. About the author: Jane Doe has covered electronic music since 1997. Posts: 1,204",
+  ],
+  [
+    "label news with a Posted stamp and an author join date",
+    "Posted: Mon Feb 22, 2021 3:15 pm. Ed Banger Records confirms Justice's new single, Generator, for Friday. Written by Jane Doe, staff writer. Joined: Mon Mar 03, 2010.",
+  ],
+  [
+    "podcast transcript with timestamps",
+    "Song Exploder, episode 201: Daft Punk, Touch. Transcript. [00:00:12] Hrishikesh Hirway: You're listening to Song Exploder. [00:01:45] Thomas Bangalter: We wanted Paul Williams to sound like he was singing from space. [00:03:20] Hrishikesh Hirway: How did that begin? [00:03:24] Thomas Bangalter: With a modular synth patch we left running for days.",
+  ],
+  [
+    "podcast episode page with chapters",
+    "Episode 312 · 3 years ago · 1h 12m. Nile Rodgers on Get Lucky and the Chic sound. Chapters: 00:00 Intro 04:12 The Power Station 31:40 Meeting Daft Punk 58:02 Random Access Memories. 245 Reply All listeners voted it the best episode of the year.",
+  ],
+  [
+    "song-meaning page quoting an annotation",
+    "What does One More Time mean? Genius annotation (verified by Daft Punk's label): 'The vocal is Romanthony's, run through Auto-Tune and a vocoder.' Bangalter told Remix magazine in 2001 that the effect was meant to feel like a party on a Friday night. Upvote 245 Downvote. 3 contributors.",
+  ],
+  [
+    "annotation page with two helpful counts",
+    "One More Time meaning. [Chorus: Romanthony] 'One more time, we're gonna celebrate.' Annotation by 4 contributors · last edited 3 years ago. The line nods to Chicago house, where 'one more time' was the DJ's call for an encore. 12 people found this helpful. Was this annotation helpful? 3 people found this helpful.",
+  ],
+  [
+    "liner notes with credits",
+    "Liner notes. 1. One More Time (Bangalter, de Homem-Christo, Moore) 5:20. Vocals: Romanthony. 2. Aerodynamic 3:27. 3. Digital Love (Bangalter, de Homem-Christo, Jordan) 4:58: contains a sample of I Love You More by George Duke. Recorded at Daft House, Paris, 1997–2000. Mastered by Nilesh Patel at The Exchange, London. Thanks to Pedro Winter.",
+  ],
+  [
+    "box set notes with session datelines",
+    "The Esher Demos. Demos from Kinfauns, Esher, May 28, 1968: Cry Baby Cry, Child of Nature, The Continuing Story of Bungalow Bill. Session from Abbey Road, London, May 30, 1968: the first take of Revolution 1, ten minutes long. Notes by Kevin Howlett.",
+  ],
+  [
+    "live album notes for a two-show night",
+    "Live at the Fillmore East, March 7, 1970. Disc 1 is the early show, disc 2 the late one. Credits: Miles Davis – trumpet; Chick Corea – electric piano; Dave Holland – bass; Jack DeJohnette – drums. Fillmore East Mar 7, 1970 #1 runs 42 minutes; Fillmore East Mar 7, 1970 #2 adds Spanish Key.",
+  ],
+  [
+    "chart week table, flattened",
+    "Official Singles Chart Top 100, 24 February 2001 – 2 March 2001. Pos LW Title Artist Label 1 1 It Wasn't Me Shaggy feat. Rikrok MCA 2 2 Whole Again Atomic Kitten Innocent 3 New Uptown Girl Westlife RCA 4 3 Rollin' Limp Bizkit Interscope 5 5 Stuck in the Middle with You Louise EMI.",
+  ],
+  [
+    "chart rows with the date on each row",
+    "Billboard Hot 100 archive, top three. Shaggy Mar 3, 2001 #1 It Wasn't Me (MCA). OutKast Mar 3, 2001 #2 Ms. Jackson (LaFace). Crazy Town Mar 3, 2001 #3 Butterfly (Columbia).",
+  ],
+  [
+    "chart rows with an ordinal date on each row",
+    "UK Singles Chart, top three: #1 26th February 2000 All Saints – Pure Shores (London). #2 26th February 2000 Craig David – Fill Me In (Wildstar). #3 26th February 2000 Gabrielle – Rise (Go! Beat).",
+  ],
+  [
+    "peak positions by country in one week",
+    "One More Time peaked in its second week. Peak positions: France Nov 25, 2000 #1, UK Nov 25, 2000 #2, Belgium Nov 25, 2000 #3, Netherlands Dec 2, 2000 #4.",
+  ],
+  [
+    "year-end countdown with peak weeks",
+    "Our 2021 countdown. Each entry links to the week it peaked. Olivia Rodrigo – drivers license, peaked Jan 16, 2021 #1. The Weeknd – Save Your Tears, peaked Apr 10, 2021 #1. Dua Lipa – Levitating, peaked Mar 27, 2021 #2.",
+  ],
+  [
+    "journalism citing a forum post number and member title",
+    "Collectors spotted the mastering error first. On the Steve Hoffman Music Forums, one Forum Resident noted on Feb 22, 2021 #47 in the Discovery remaster thread that the new vinyl cuts Digital Love short by four seconds. Warner later confirmed a corrected pressing.",
+  ],
+  [
+    "journalism quoting a Reddit score",
+    "The theory took off on Reddit, where a post titled 'Epilogue is the Electroma ending' had 4,512 points 3 years ago and drew more than 900 comments. 'They told us in 2006,' wrote one user. The post still shows Upvote 4.5K Downvote today.",
+  ],
+  [
+    "journalism naming forum titles",
+    "Gearheads have argued about the vocoder for twenty years. On Gearspace, a self-described Gear Addict posted a teardown of the DigiTech Talker in the long-running Daft Punk thread, and a Well-Known Member at the Hoffman board pointed out that Thomas Bangalter also used a Roland SVC-350.",
+  ],
+  [
+    "journalism citing two posts by date and number",
+    "As one Forum Resident put it (Feb 22, 2021 #12): 'This is the cut to own.' Another disagreed two posts later (Feb 22, 2021 #14): 'The 2001 Virgin pressing is warmer.'",
+  ],
+  [
+    "journalism quoting one phpBB post",
+    "The earliest mention we found is on a German fan board: 'Post by marc » Mon Feb 22, 1999 3:15 pm — new Daft Punk album next year, Romanthony on vocals.' Asked about it, Pedro Winter said he never posted there.",
+  ],
+  [
+    "Wikipedia song lead and infobox",
+    "One More Time (Daft Punk song). 'One More Time' is a song by French duo Daft Punk, released as the lead single from their second studio album, Discovery, on 13 November 2000. Released 13 November 2000 Recorded 1998 Studio Daft House, Paris Genre French house, disco Length 5:20 (album version) Label Virgin Songwriter(s) Thomas Bangalter, Guy-Manuel de Homem-Christo, Anthony Moore Producer(s) Daft Punk.",
+  ],
+  [
+    "Wikipedia tour infobox",
+    "Alive 2007 was a concert tour by Daft Punk. Start date 14 June 2006 End date 14 December 2007 Legs 4 No. of shows 48. Associated album Human After All. The tour began at Coachella on 29 April 2006 #1 among the festival's most talked-about sets, and the Bercy show of 14 June 2007 was released as Alive 2007.",
+  ],
+  [
+    "album review with a dispatch dateline and Comments footer",
+    "Album review: Fontaines D.C. – Romance. Dispatch from Dublin August 23, 2024: the band's fourth album arrived to queues outside Tower Records on Wicklow Street. Grian Chatten's voice has never sounded this intimate, and Favourite is the best song they have written. Rating: 9/10. Comments: 27",
+  ],
+  [
+    "critics roundup with arrow bylines",
+    "Critic reviews for Discovery. Pitchfork, by Ryan Schreiber » 13 Mar 2001, 09:00 — 6.4. NME, by John Mulvey » 12 Mar 2001, 12:00 — 8/10. Rolling Stone, by Joshua Klein » 29 Mar 2001, 10:30 — 3.5/5.",
+  ],
+  [
+    "radio station recently-played log",
+    "Recently played on Radio Nova: One More Time by Daft Punk » 22 Feb 2021, 15:15 · Midnight City by M83 » 22 Feb 2021, 15:19 · D.A.N.C.E. by Justice » 22 Feb 2021, 15:24 · Pursuit of Happiness by Kid Cudi » 22 Feb 2021, 15:28",
+  ],
+  [
+    "setlist page with song numbers",
+    "Daft Punk setlist at Coachella 2006, Apr 29, 2006 #1 Robot Rock / Oh Yeah #2 Steam Machine #3 Around the World / Harder, Better, Faster, Stronger #4 Television Rules the Nation / Crescendolls. Edit setlist. Show stats. 1,245 users attended this show.",
+  ],
+  [
+    "live setlist tracker with clock times",
+    "Eras Tour live setlist tracker, Wembley night one. 21 June 2024, 19:55 #1 Miss Americana & The Heartbreak Prince. 21 June 2024, 20:01 #2 Cruel Summer. 21 June 2024, 20:05 #3 The Man. Surprise songs at 21:40.",
+  ],
+  [
+    "label release countdown with weekday times",
+    "Ed Banger Records release schedule. Friday at 12:00 AM #1 in our Hyperdrama countdown: Generator. Friday at 12:00 AM #2: One Night/All Night with Tame Impala. Friday at 12:00 AM #3: Neverender.",
+  ],
+  [
+    "news list with ages and comment counts",
+    "Latest music news. Justice announce Hyperdrama tour • 2 hours ago • 14 comments. Daft Punk's Discovery gets a 25th anniversary reissue • 1 day ago • 245 comments. Romanthony's estate releases unheard demos • 3 days ago • 31 comments.",
+  ],
+  [
+    "live blog with numbered updates on one day",
+    "Daft Punk split: live updates. Update Feb 22, 2021 #1: the duo posted Epilogue, an eight-minute clip from Electroma. Update Feb 22, 2021 #2: their publicist confirmed the split to Pitchfork. Update Feb 23, 2021 #3: tributes from Pharrell and Nile Rodgers.",
+  ],
+  [
+    "video page description with a comment prompt",
+    "Daft Punk - Something About Us (Official Video) 12,345,678 views 13 years ago. Music video by Daft Punk performing Something About Us. (C) 2001 Daft Life Ltd. under exclusive license to Parlophone. 245K Like Share Download Clip Save 3,201 Comments Add a comment...",
+  ],
+  [
+    "radio show page with a tracklist and a 2h duration",
+    "Gilles Peterson Worldwide, 22 Feb 2021 · 2h · 1,204 plays. Tracklist: Daft Punk – One More Time; Justice – Genesis; Romanthony – Hold On. 12 Reply guy jokes aside, the Daft Punk tribute hour was the show's most shared.",
+  ],
+  [
+    "listicle quoting two one-star reviews",
+    "The funniest one-star reviews of classic albums. On Abbey Road: '1.0 out of 5 stars Overrated. Reviewed in the United Kingdom on 3 March 2015.' On Discovery: '1.0 out of 5 stars Robots can't sing. Reviewed in the United States on February 22, 2021.'",
+  ],
+  [
+    "contest news with a level and a bullet age",
+    "Eurovision 2024 explained. Switzerland's Nemo won with 591 points 6 months ago. The stage design had level 2 lighting · 3 years ago Loreen used the same rig. Read more • 1y ago",
+  ],
+  [
+    "peaks in two countries as a list",
+    "One More Time peaks: France Dec 2, 2000 #1; UK Dec 2, 2000 #2.",
+  ],
+  [
+    "a chart's top two as table rows",
+    "The Official Chart, top two: #1 26th February 2000 All Saints – Pure Shores; #2 26th February 2000 Craig David – Fill Me In.",
+  ],
+  [
+    "a dateline with a blog's comment count",
+    "News from Paris Feb 22, 2021: Daft Punk have split after 28 years, with a video. Comments: 2",
+  ],
+  [
+    "an author box beside the story's posted stamp",
+    "Posted: Feb 22, 2021 3:15 pm. Daft Punk split. About the author: Jane Doe Joined: Mon Mar 03, 2010 Posts: 245. Jane has written about house music since 1997.",
+  ],
+  [
+    "set times after a dash",
+    "Festival guide. – Daft Punk Jul 14 at 22:00. – Justice Jul 14 at 20:30.",
+  ],
+  [
+    "set times after a dash with a comment prompt",
+    "Festival guide. – Daft Punk Jul 14 at 22:00. – Justice Jul 14 at 20:30. Add a comment",
+  ],
+  [
+    "news with an Instagram embed and an update stamp",
+    "Pharrell paid tribute on Instagram. View this post on Instagram A post shared by Pharrell Williams. Add a comment... The label has not commented. — Updated: Feb 22, 2021 at 4:30 PM",
+  ],
+  [
+    "a festival's clashes at one time",
+    "Glastonbury 2024 clashes: Coldplay Saturday at 9:00 PM #1 vs SZA Saturday at 9:00 PM #2, and Burna Boy Sunday at 8:00 PM #3.",
+  ],
+  [
+    "a critics' roundup with arrow bylines under a story stamp",
+    "Posted: Mar 14, 2001 9:00 am. Critic reviews for Discovery. Pitchfork, by Ryan Schreiber » 13 Mar 2001, 09:00 — 6.4. NME, by John Mulvey » 12 Mar 2001, 12:00 — 8/10.",
+  ],
+  [
+    "one writer's posts with a forum theme's byline",
+    "Post by admin » Mon Feb 22, 2021 3:15 pm Discovery turns 20. Post by admin » Tue Feb 23, 2021 9:00 am Homework's Da Funk was a b-side first.",
+  ],
+  [
+    "an advice column's question with a comment prompt",
+    "Q. How did Daft Punk get the One More Time vocal? asked Feb 22, 2021 at 10:00 by a reader. A. Through a vocoder and Auto-Tune. Add a comment",
+  ],
+  // Datelines, page chrome and quoted chrome beside a forum's or a review site's own words.
+  [
+    "live blog 'Updates from' + Comments",
+    "Glastonbury 2024 live: SZA, Coldplay and Dua Lipa. Updates from Glastonbury, June 28, 2024: Dua Lipa opened her Pyramid Stage headline set with Training Season, then brought out Kevin Parker for a cover of Tame Impala's The Less I Know the Better. Coldplay play tomorrow. Comments: 128",
+  ],
+  [
+    "band statement 'Statement from'",
+    "Daft Punk announce split after 28 years. Statement from Daft Punk, February 22, 2021: the duo shared an eight-minute video titled Epilogue, cut from their 2006 film Electroma, with no further comment. Their publicist Kathryn Frazier confirmed the news to Pitchfork. Comments: 46",
+  ],
+  [
+    "gig photos 'Photos from'",
+    "Gallery: LCD Soundsystem at Brixton. Photos from the pit, Brixton Academy, April 12, 2024: James Murphy at the mirror ball, Nancy Whang on keys, and the crowd during All My Friends. All photos by Jane Doe for the magazine. Comments: 7",
+  ],
+  [
+    "setlist page 'Setlist from'",
+    "Blur at the Barrowland. Setlist from the Barrowland, Glasgow, March 3, 2024: St. Charles Square, There's No Other Way, Popscene, Beetlebum, Out of Time, Tender, Song 2, The Universal. Encore: This Is a Low. Comments: 3",
+  ],
+  [
+    "radio playlist 'Tracks from'",
+    "6 Music Recommends with Jane Doe. Tracks from tonight's show, March 3, 2024: Fontaines D.C. – Starburster; Jayda G – Circle Back Around; Overmono – Good Lies; Daft Punk – Veridis Quo. Listen again for 30 days on BBC Sounds. Comments: 0",
+  ],
+  [
+    "festival coverage 'Reports from'",
+    "SXSW 2024, day three. Reports from SXSW, Austin, March 14, 2024: Bob Vylan played the Mohawk twice, Brittany Howard previewed What Now at Stubb's, and several UK acts withdrew in protest at the festival's army sponsorship. Comments: 12",
+  ],
+  [
+    "newsletter 'Hello from'",
+    "Liner notes newsletter, issue 112. Hello from Paris, February 22, 2021: the city woke up to Epilogue. This week: why Discovery still sounds new, and where Romanthony's vocal on One More Time came from. Comments: 2",
+  ],
+  [
+    "bootleg blog 'Soundboard from'",
+    "Grateful Dead bootleg of the week. Soundboard from the Fillmore East, February 13, 1970: the late show, with Dark Star into That's It for the Other One, mixed by Owsley Stanley and later issued as Dick's Picks Volume 4. Comments: 5",
+  ],
+  [
+    "reissue post 'Outtakes from'",
+    "Homework 25th anniversary. Outtakes from the Homework sessions, March 3, 1996: early takes of Da Funk and Revolution 909 recorded in Thomas Bangalter's bedroom on a Roland TR-909 and a Juno-106. Comments: 9",
+  ],
+  [
+    "concert film 'Footage from'",
+    "Daft Punk Alive 2007. Footage from Wembley Arena, June 16, 2007: the pyramid show filmed by fans, later the basis of the Alive 2007 album recorded in Paris on June 14. Comments: 31",
+  ],
+  [
+    "statement 'Note from'",
+    "Radiohead postpone tour. Note from the band, July 1, 2012: after the stage collapse at Downsview Park that killed drum technician Scott Johnson, the band rescheduled their European dates. Comments: 64",
+  ],
+  [
+    "tour diary 'Diary from'",
+    "On the road with Wet Leg. Diary from the tour bus, Austin, March 14, 2024: two shows a day, tacos at 2 a.m., and Chaise Longue played to a crowd that knew every word. Comments: 4",
+  ],
+  [
+    "dateline, no Comments heading",
+    "Updates from Glastonbury, June 28, 2024: Dua Lipa opened her Pyramid Stage headline set with Training Season, then brought out Kevin Parker for The Less I Know the Better.",
+  ],
+  [
+    "'Thread Starter' badge in an essay",
+    "On the Steve Hoffman forums the person who opens a discussion is marked Thread Starter under the avatar. In the Discovery remaster thread that badge sat beside the most quoted post of 2021, a needle-drop comparison.",
+  ],
+  [
+    "moderation story, Report Post only",
+    "Moderators of the Gearspace forum say Report Post is the fastest way to flag leaked stems. After the Discovery multitracks surfaced in 2021, more than 300 reports reached the team within an hour.",
+  ],
+  [
+    "magazine column 'Ask the Gear Guru' beside a UK chart #",
+    "Ask the Gear Guru: how was the vocal on Pure Shores recorded? The Official Chart of #1 26th February 2000 was All Saints' Pure Shores, produced by William Orbit on a Mac running Logic.",
+  ],
+  [
+    "Reddit-culture article, natural vote talk",
+    "How r/indieheads crowned the album of the year. The top post, by a moderator · 3 hours ago, reached 4.5K upvotes; Fontaines D.C.'s Romance won the community vote with 1,204 of the 5,000 ballots.",
+  ],
+  [
+    "blog footer with permalink",
+    "Posted by Jane at 9:00 AM. Discovery at 20: a track-by-track listen, from One More Time to Too Long. permalink · 12 comments · Labels: Daft Punk, French house",
+  ],
+  [
+    "mixtape blog 'permalink save'",
+    "Mixtape 41: Paris 1997, an hour of French house from Cassius, Motorbass and Daft Punk. Tracklist below. Download permalink save to your library 583 points from listeners 3 years ago.",
+  ],
+  [
+    "guide with a helpful count only",
+    "Best headphones for vinyl listening. Sony MDR-7506, 4.6 out of 5 stars from 12,345 ratings; its top review, which 1,204 people found this helpful, praises the flat mids.",
+  ],
+  [
+    "guide with 'Reviewed in' only",
+    "Our pick for a first turntable is the Fluance RT81. One owner wrote, Reviewed in Canada on March 3, 2021, that the built-in preamp is quiet enough for a first system.",
+  ],
+  [
+    "Bandcamp album page with fan notes",
+    "Discovery by Daft Punk. Digital Album Streaming + Download. Buy Digital Album €9.99 EUR or more. Send as Gift. Share / Embed. released March 12, 2001. supported by 1,204 fans who also own “Homework”. RoboFan the album that made me buy a sampler. Favorite track: Digital Love. DiscoHead pure joy Favorite track: Veridis Quo.",
+  ],
+  [
+    "Bandcamp page, tags and credits",
+    "Romance by Fontaines D.C. released August 23, 2024. Credits: produced by James Ford, recorded at La Frette Studios. Tags: post-punk, rock, Dublin. 1,204 supporters. Share / Embed. Wishlist. Favorite track: Starburster.",
+  ],
+  [
+    "Bandcamp Daily feature quoting fans",
+    "Bandcamp Daily: Album of the Day. Jayda G's Guy is a love letter to her late father. Fans agree: 'the most moving dance record of the year', reads one note on the album page, beside Favorite track: Circle Back Around.",
+  ],
+  [
+    "SoundCloud track page text",
+    "One More Time (Romanthony a cappella) by Daft Punk Archive. Published 3 years ago. 1.2M plays, 245 comments, 4,512 likes. Genre: French house. Description: the isolated vocal from the 2000 single, as heard on the Discovery promo.",
+  ],
+  [
+    "article quoting SoundCloud timed comments",
+    "The leak of Get Lucky's demo drew thousands of timed comments on SoundCloud. At 1:23 one listener wrote 'this is the drop', and at 2:01 another asked whether Nile Rodgers had recorded the guitar in one take.",
+  ],
+  [
+    "article quoting a Genius annotation",
+    "Genius annotation (verified, +245): Bangalter told the site the vocoder on Digital Love was a DigiTech Talker. The line 'why don't you play the game' is the album's only direct address to the listener.",
+  ],
+  [
+    "lyrics page with annotation chrome",
+    "One More Time Lyrics. [Chorus] One more time, we're gonna celebrate. Genius Annotation 3 contributors. Romanthony recorded the vocal in 1996; Daft Punk later processed it with Auto-Tune. +245 Share Embed.",
+  ],
+  [
+    "YouTube video page description",
+    "Daft Punk - One More Time (Official Video). 245M views 14 years ago. Directed by Kazuhisa Takenouchi, from Interstella 5555. Remastered in 4K. Show less. Music: One More Time, Daft Punk, Discovery.",
+  ],
+  [
+    "article on the top YouTube comment",
+    "Under the One More Time video, the top comment, posted 3 years ago, reads 'Romanthony's voice is pure joy', with 1.2K likes; the second, from a 2021 visitor, simply says goodbye.",
+  ],
+  [
+    "premiere page with chapters",
+    "Fontaines D.C. – Romance (Live at the Olympia). Premiered 3 years ago. Chapters: 0:00 Romance, 4:12 Starburster, 8:30 Favourite. 12 Reply guy cover versions are linked in the description.",
+  ],
+  [
+    "news with comment widget header",
+    "Daft Punk's Thomas Bangalter scores the ballet Mythologies · 3 hours ago. The 90-minute score was recorded by the Orchestre National Bordeaux Aquitaine. 12 Comments Login Recommend Tweet Share Sort by Best.",
+  ],
+  [
+    "Substack music newsletter",
+    "The Honest Broker. Why Discovery still sounds new. Ted Gioia Feb 22, 2021 245 12 Share. Daft Punk's second album turned the sampler into an instrument of nostalgia.",
+  ],
+  [
+    "Medium essay header",
+    "The Robots Who Loved Disco. Jane Doe · Follow 6 min read · 3 days ago 245 12 Listen Share. Discovery took 1970s disco and 1980s soft rock and made them feel like the future.",
+  ],
+  [
+    "Instagram embed in news",
+    "View this post on Instagram. A post shared by Daft Punk. 1.2M likes. View all 24,512 comments. Add a comment… Daft Punk's farewell post, February 22, 2021 · 3 hours ago.",
+  ],
+  [
+    "LinkedIn-like press repost",
+    "Ed Banger Records · 2y · Justice return with Generator, their first single in five years. Like · Comment · Share. 245 reactions, 12 comments.",
+  ],
+  [
+    "Wikipedia-like discography with 'B-sides from'",
+    "B-sides from Discovery, March 12, 2001: The Prime Time of Your Life (Live), Aerodynamite. Comments: 4. See also Daft Club (2003), a remix album.",
+  ],
+  [
+    "peak dates by country with weeks",
+    "One More Time peaks. France December 2, 2000, 1 week at number one; Belgium December 9, 2000, 2 weeks in the top ten.",
+  ],
+  [
+    "a dateline whose band's name ends with a dot",
+    "R.E.M. from Athens, Georgia, April 5, 1980: their first show, at a converted church on Oconee Street, with a set of covers and early originals. Comments: 12",
+  ],
+  [
+    "a podcast's episode ages",
+    "Episode 12 • 3 years ago: the making of Discovery. Episode 13 • 2 years ago: Romanthony. Listen and Share.",
   ],
 ];
 

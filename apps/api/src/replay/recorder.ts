@@ -30,9 +30,10 @@
  * Archive link `archiveCoverOf` derives is allowed as the result's cover only), the typed query
  * (when it is not the track's own title, artist or album; compared without case, accents,
  * punctuation or URL encoding), the id of a run (its own anywhere but the envelope, or any other
- * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), a source
- * error's message the run routes refuse (reasonIssue: markup, also entity-escaped, a stack
- * trace, a signature or token parameter, or a link), a social platform page, a web evidence
+ * run the database knows; the ids sources use, such as MusicBrainz MBIDs, are content), a link
+ * with a signature or token parameter (on any site), a source error's message or a status line
+ * the run routes would refuse as an error message (reasonIssue: markup, also entity-escaped, a
+ * stack trace, a signature or token parameter, or a link), a social platform page, a web evidence
  * title or excerpt with a private @handle, profile boilerplate or a comment thread
  * (webTextIssue), or that fails the record's schema or says less than a replay must
  * (`runIssues`). The result's other producer checks (`analysisIssues`) are reported as warnings:
@@ -151,8 +152,11 @@ const SECRET_SHAPES: Array<[string, RegExp]> = [
   ["an e-mail address", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/],
 ];
 
-/** A URL signed with an expiring token, on any host. */
-const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature)=/i;
+/**
+ * A URL signed with an expiring token, or carrying a token parameter, on any host (as an error
+ * message may not: reasonIssue).
+ */
+const SIGNED_URL = /[?&;~](?:hdnea|hdnts|x-amz-signature|sig|signature|token)=/i;
 
 /** The message of a source error, wherever the record holds one (its result, its events). */
 const SOURCE_ERROR_MESSAGE = /(?:^|\.)sourceErrors\[\d+\]\.message$/;
@@ -321,18 +325,23 @@ export interface LeakCheck {
   allowedCover?: string;
 }
 
-/** The paths of the result's cover in a record: its result's, and its complete events'. */
-function resultCoverPaths(record: unknown): Set<string> {
-  const paths = new Set(["analysis.coverUrl"]);
+/** The paths of `field` in a record's events of `type`. */
+function eventPaths(record: unknown, type: string, field: string): Set<string> {
+  const paths = new Set<string>();
   const events = (record as { events?: unknown } | null)?.events;
   if (Array.isArray(events)) {
     events.forEach((item, i) => {
-      if ((item as { event?: { type?: unknown } } | null)?.event?.type === "complete") {
-        paths.add(`events[${i}].event.data.coverUrl`);
+      if ((item as { event?: { type?: unknown } } | null)?.event?.type === type) {
+        paths.add(`events[${i}].event.${field}`);
       }
     });
   }
   return paths;
+}
+
+/** The paths of the result's cover in a record: its result's, and its complete events'. */
+function resultCoverPaths(record: unknown): Set<string> {
+  return new Set(["analysis.coverUrl", ...eventPaths(record, "complete", "data.coverUrl")]);
 }
 
 /**
@@ -361,6 +370,7 @@ export function leaks(
     allowedUrl(url) || pages.some((page) => page === url || page.startsWith(url));
   const cover = ARCHIVE_FRONT.test(allowedCover) ? allowedCover : null;
   const coverPaths = resultCoverPaths(record);
+  const statusLines = eventPaths(record, "status", "message");
   const webTexts = webEvidenceTexts(record);
   for (const { path, text, isId } of strings(record)) {
     const plain = decoded(text);
@@ -384,9 +394,15 @@ export function leaks(
     if (SIGNED_URL.test(text)) found.push(`${path}: a signed URL`);
     // A source error says what failed in words, as the run routes read it (reasonIssue): markup
     // is an answer's page that slipped in, and a stack trace, a token parameter or a link is not
-    // what an error message keeps.
-    const reason = SOURCE_ERROR_MESSAGE.test(path) ? reasonIssue(text) : null;
-    if (reason) found.push(`${path}: ${reason} in a source error`);
+    // what an error message keeps. A status line is held to the same: the run writes it from
+    // codes (agent/statusText.ts), never from a source's or a provider's text.
+    const where = SOURCE_ERROR_MESSAGE.test(path)
+      ? "a source error"
+      : statusLines.has(path)
+        ? "a status line"
+        : null;
+    const reason = where ? reasonIssue(text) : null;
+    if (reason) found.push(`${path}: ${reason} in ${where}`);
     // A web page's stored text never holds a private handle, boilerplate or a comment thread.
     const webIssue = webTexts.has(path) ? webTextIssue(text) : null;
     if (webIssue) found.push(`${path}: ${webIssue}`);

@@ -112,21 +112,32 @@ function suggestion(record: ReplayRecord): SearchCandidate {
  *   evidence event's item);
  * - what the recorder refuses (leaks), as far as the file can tell: the configured credentials,
  *   the query the user typed and the ids of the database's runs are checked when it is recorded.
+ * Each place is listed once, with the first reason found for it: a field of an item the run
+ * routes' check already names (an evidence item's excerpt) is not listed again.
  * A file written by the recorder passes both; one placed in the directory by hand, or written by
  * an older recorder, may not.
  */
 function heldIssues(record: ReplayRecord, cover: string): string[] {
-  const issues: string[] = [];
-  const held = heldTextIssue(record.analysis);
-  if (held) issues.push(`analysis.${held}`);
+  const found = new Map<string, string>();
+  const add = (issue: string) => {
+    const at = issue.indexOf(": ");
+    const path = issue.slice(0, at);
+    const listed = [...found.keys()].some(
+      (place) => path === place || path.startsWith(`${place}.`) || path.startsWith(`${place}[`),
+    );
+    if (!listed) found.set(path, issue.slice(at + 2));
+  };
+  const held = (prefix: string, issue: string | null) => {
+    if (issue) add(`${prefix}.${issue}`);
+  };
+  held("analysis", heldTextIssue(record.analysis));
   for (const [i, { event }] of record.events.entries()) {
-    const sent =
-      event.type === "complete"
-        ? heldTextIssue(event.data)
-        : event.type === "evidence"
-          ? heldTextIssue({ evidence: [event.evidence] })
-          : null;
-    if (sent) issues.push(`events[${i}].event: ${sent}`);
+    if (event.type === "complete") held(`events[${i}].event.data`, heldTextIssue(event.data));
+    if (event.type === "evidence") {
+      // The item is checked as the one item of an evidence list: "evidence[0]: …".
+      const issue = heldTextIssue({ evidence: [event.evidence] });
+      if (issue) add(`events[${i}].event.evidence${issue.slice("evidence[0]".length)}`);
+    }
   }
   const leaked = leaks(record, {
     secrets: [],
@@ -134,7 +145,8 @@ function heldIssues(record: ReplayRecord, cover: string): string[] {
     publicTexts: [],
     allowedCover: cover,
   });
-  return [...new Set([...issues, ...leaked])];
+  for (const issue of leaked) add(issue);
+  return [...found].map(([path, why]) => `${path}: ${why}`);
 }
 
 /** Reads and checks every record in `dir`. A missing directory holds no records. */

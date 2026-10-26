@@ -24,6 +24,8 @@ import {
   ReplaysResponse,
   RunResponse,
   runIssues,
+  SourceError,
+  SourceId,
   TrackAnalysis,
 } from "@liner-notes/contract";
 import request from "supertest";
@@ -31,6 +33,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { finalizeResult } from "../agent/finalize.js";
 import type { TrackData } from "../agent/schema.js";
 import type { SonicAgentStateType } from "../agent/state.js";
+import {
+  heldTextIssue,
+  STORED_LINE,
+  STORED_UNCHECKED_LINE,
+  storedErrorStatus,
+} from "../agent/storedResults.js";
+import { lostRecordsLine, MODEL_FAILURE_TEXT, sourceErrorLine } from "../agent/statusText.js";
+import { PLANNER_LINES, plannerLine } from "../agent/research/plannerLines.js";
+import { reasonIssue } from "../sources/http.js";
+import { INTERNAL_ERROR_PREFIX } from "../sources/toolResult.js";
 import { ANALYZER_VERSION, audioV2, measurementOf } from "../agent/testing/measuredAudio.js";
 import { DEFAULT_RATE_LIMIT, DEFAULT_SEARCH_RATE_LIMIT } from "../config/settings.js";
 import { runningCommit } from "../config/checkoutCommit.js";
@@ -928,6 +940,112 @@ describe("the recorder", () => {
     expect(build(withError(plain)).record.analysis.run?.sourceErrors).toEqual([
       { source: "musicbrainz", code: "unavailable", message: plain },
     ]);
+  });
+
+  it("refuses a status line with a stack trace or a token parameter, as a source error's message", async () => {
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const trace = "MusicBrainz failed at fetchJson (/app/src/sources/http.ts:120:11)";
+    const tokenLink = "MusicBrainz failed: https://musicbrainz.org/ws/2/recording?token=abc";
+    expect(
+      leaks(
+        {
+          events: [
+            { event: { type: "status", message: trace } },
+            { event: { type: "status", message: tokenLink } },
+            { event: { type: "status", message: "Research finished" } },
+          ],
+        },
+        check,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "events[0].event.message: a stack trace in a status line",
+        "events[1].event.message: a signature or token parameter in a status line",
+      ]),
+    );
+    // A stored run's status line, recorded: refused, never echoed.
+    const runId = await liveRun("plain words");
+    const { run, events } = stored(runId);
+    const first = events.findIndex((item) => (item.event as Event).type === "status");
+    const edited = events.map((item, i) =>
+      i === first ? { ...item, event: { ...(item.event as Event), message: trace } } : item,
+    );
+    const reasons = refusal(() =>
+      buildRecord(run, edited, { slug: "recorded-song", commit: "abc1234", secrets: [SECRET] }),
+    );
+    expect(reasons.join("\n")).toMatch(/\.event\.message: a stack trace in a status line/);
+    expect(reasons.join(" ")).not.toContain("fetchJson");
+  });
+
+  it("passes every kind of status line today's code writes", async () => {
+    const codes = SourceError.shape.code.options;
+    const lines = [
+      ...SourceId.options.flatMap((source) => [
+        ...codes.flatMap((code) => [
+          sourceErrorLine({ source, code }),
+          sourceErrorLine({ source, code, message: "musicbrainz: HTTP 503 (from [link])" }),
+          sourceErrorLine({ source, code, message: `${INTERNAL_ERROR_PREFIX}x is undefined` }),
+          lostRecordsLine({ source, code }),
+        ]),
+        sourceErrorLine({ source, code: "unavailable" }, true),
+      ]),
+      ...Object.values(MODEL_FAILURE_TEXT),
+      ...Object.values(MODEL_FAILURE_TEXT).map((reason) =>
+        plannerLine(PLANNER_LINES.ended, { reason }),
+      ),
+      PLANNER_LINES.starting,
+      PLANNER_LINES.finished,
+      plannerLine(PLANNER_LINES.planning, { step: 2, steps: 4 }),
+      STORED_LINE,
+      STORED_UNCHECKED_LINE,
+      ...storedErrorStatus(codes.map((code) => ({ source: "lastfm" as const, code }))),
+    ];
+    // And the status lines of real runs: the committed recordings' and a run made here.
+    const committed = loadReplays(DEFAULT_REPLAY_DIR).records.flatMap((r) => r.events);
+    const made = record(await liveRun("plain words")).record.events;
+    const sent = [...committed, ...made].flatMap(({ event }) =>
+      event.type === "status" ? [event.message] : [],
+    );
+    expect(sent.length).toBeGreaterThan(10);
+    const all = [...lines, ...sent];
+    const check = { secrets: [], typedQuery: "", publicTexts: [] };
+    const statusEvents = all.map((message) => ({ event: { type: "status", message } }));
+    expect(leaks({ events: statusEvents }, check)).toEqual([]);
+    for (const message of all) expect(reasonIssue(message), message).toBeNull();
+  });
+
+  it("refuses a token or signature parameter in any link, also on an allow-listed site", () => {
+    const check = { secrets: [SECRET], typedQuery: "", publicTexts: [] };
+    const page = "https://www.discogs.com/release/123-One-More-Time?token=abc";
+    expect(
+      leaks(
+        {
+          analysis: {
+            claims: [
+              { text: "See https://musicbrainz.org/recording/x?token=abc for the credits." },
+            ],
+            evidence: [
+              {
+                id: "discogs:release/123",
+                source: "discogs",
+                sourceTier: "primary-record",
+                url: page,
+                title: "A release",
+                retrievedAt: "2026-10-20T12:00:00.000Z",
+                excerpt: "Released 2000.",
+                recordRef: "release/123",
+              },
+            ],
+          },
+        },
+        check,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "analysis.claims[0].text: a signed URL",
+        "analysis.evidence[0].url: a signed URL",
+      ]),
+    );
   });
 
   it("refuses a configured credential the stored result holds, rather than editing it", async () => {
@@ -1901,7 +2019,7 @@ describe("the replay directory", () => {
     expect(normalizeQuery("  Beyoncé — HALO!! ")).toBe("beyonce halo");
   });
 
-  it("leaves out a recording that holds text the run routes refuse: not listed, never replayed", async () => {
+  it("leaves out a recording that holds text the run routes or the recorder refuse: not listed, never replayed", async () => {
     rmSync(replayDir, { recursive: true, force: true });
     mkdirSync(replayDir);
     const runId = await liveRun("source run");
@@ -1912,8 +2030,14 @@ describe("the replay directory", () => {
     live.model = 0;
     vi.stubEnv("REPLAY_MODE", "only");
 
-    // The clean recording as another track, its result and the result its complete event sends
-    // changed by `change`.
+    const complete = clean.events.findIndex(({ event }) => event.type === "complete");
+    const status = clean.events.findIndex(({ event }) => event.type === "status");
+    expect(complete).toBeGreaterThan(0);
+    expect(status).toBeGreaterThan(0);
+    const added = clean.analysis.evidence?.length ?? 0;
+
+    // The clean recording as another track: its result, the result its complete event sends and
+    // its first status line changed as given.
     const variant = (
       slug: string,
       id: string,
@@ -1921,38 +2045,44 @@ describe("the replay directory", () => {
       change: {
         analysis?: (a: TrackAnalysis) => TrackAnalysis;
         sent?: (a: TrackAnalysis) => TrackAnalysis;
+        statusLine?: string;
       },
-    ) => {
+    ): ReplayRecord => {
       const base = { ...clean.analysis, id, title };
       const analysis = change.analysis?.(base) ?? base;
       const sent = change.sent?.(analysis) ?? analysis;
-      return {
+      return ReplayRecord.parse({
         ...clean,
         slug,
         request: { query: `${title} The Recorders`, selectedTrackId: null },
         analysis,
-        events: clean.events.map((item) =>
-          item.event.type === "complete" ? { ...item, event: { ...item.event, data: sent } } : item,
-        ),
-      };
+        events: clean.events.map((item, i) => {
+          if (item.event.type === "complete") {
+            return { ...item, event: { ...item.event, data: sent } };
+          }
+          if (i === status && change.statusLine !== undefined) {
+            return { ...item, event: { ...item.event, message: change.statusLine } };
+          }
+          return item;
+        }),
+      });
     };
-    const [, thread] = FORUM_THREADS[0];
-    const forumPage = "https://example.org/threads/one-more-time.1234/";
-    const forumItem = {
-      id: `tavily:${forumPage}`,
+    const webItem = (url: string, excerpt: string) => ({
+      id: `tavily:${url}`,
       source: "tavily" as const,
       sourceTier: "web" as const,
-      url: forumPage,
-      title: "A thread about the song",
+      url,
+      title: "A page about the song",
       retrievedAt: "2026-10-20T12:00:00.000Z",
-      excerpt: thread,
+      excerpt,
       recordRef: null,
-    };
-    const trace = "musicbrainz: fetch failed at fetchJson (/app/src/sources/http.ts:120:11)";
-    const withForum = (a: TrackAnalysis) => ({
-      ...a,
-      evidence: [...(a.evidence ?? []), forumItem],
     });
+    const withItem = (item: ReturnType<typeof webItem>) => (a: TrackAnalysis) => ({
+      ...a,
+      evidence: [...(a.evidence ?? []), item],
+    });
+    const [, thread] = FORUM_THREADS[0];
+    const trace = "musicbrainz: fetch failed at fetchJson (/app/src/sources/http.ts:120:11)";
     const withTrace = (a: TrackAnalysis) => ({
       ...a,
       run: {
@@ -1962,42 +2092,83 @@ describe("the replay directory", () => {
         ],
       },
     });
-    const files = {
-      [clean.slug]: clean,
-      // In the result and in what its complete event sends.
-      "forum-thread": variant("forum-thread", CHOICE_A, "Forum Song", {
-        analysis: withForum,
-      }),
-      // Only in what its complete event sends.
-      "stack-trace": variant("stack-trace", CHOICE_B, "Trace Song", { sent: withTrace }),
+    // The checks the loader runs on a file, as far as it can tell.
+    const recorderCheck = (file: ReplayRecord) =>
+      leaks(file, {
+        secrets: [],
+        typedQuery: "",
+        publicTexts: [],
+        allowedCover: archiveCoverOf(file.analysis),
+      });
+
+    const bad: Record<string, [ReplayRecord, string]> = {
+      // In the result and in what its complete event sends: both checks see it.
+      "forum-thread": [
+        variant("forum-thread", CHOICE_A, "Forum Song", {
+          analysis: withItem(webItem("https://example.org/threads/one-more-time.1234/", thread)),
+        }),
+        `analysis.evidence[${added}]: a comment thread; events[${complete}].event.data.evidence[${added}]: a comment thread`,
+      ],
+      // In what its complete event sends: both checks see it.
+      "stack-trace": [
+        variant("stack-trace", CHOICE_B, "Trace Song", { sent: withTrace }),
+        `events[${complete}].event.data.run.sourceErrors[0].message: a stack trace`,
+      ],
+      // A social page written without its scheme, only in what the complete event sends: the
+      // run routes' check of the event (heldTextIssue) sees it, the recorder's does not.
+      "social-sent": [
+        variant("social-sent", "0ReplayTestTrackC00001", "Social Song", {
+          sent: withItem(webItem("www.instagram.com/p/abc123/", "A caption about the song.")),
+        }),
+        `events[${complete}].event.data.evidence[${added}]: a social platform page`,
+      ],
+      // Only the recorder's check (leaks) sees an address or a stack trace in a status line.
+      "email-status": [
+        variant("email-status", "0ReplayTestTrackD00001", "Mail Song", {
+          statusLine: "Write to someone@example.com for the stems",
+        }),
+        `events[${status}].event.message: an e-mail address`,
+      ],
+      "trace-status": [
+        variant("trace-status", "0ReplayTestTrackE00001", "Status Song", { statusLine: trace }),
+        `events[${status}].event.message: a stack trace in a status line`,
+      ],
     };
-    for (const [slug, file] of Object.entries(files)) {
-      // Each fits the record's schema: only the text checks leave one out.
-      ReplayRecord.parse(file);
+    expect(recorderCheck(bad["social-sent"][0])).toEqual([]);
+    for (const slug of ["email-status", "trace-status"]) {
+      const [file] = bad[slug];
+      const sent = file.events.find(({ event }) => event.type === "complete")?.event;
+      expect(heldTextIssue(file.analysis), slug).toBeNull();
+      expect(sent?.type === "complete" && heldTextIssue(sent.data), slug).toBeNull();
+    }
+
+    for (const [slug, file] of [
+      [clean.slug, clean] as const,
+      ...Object.entries(bad).map(([slug, [file]]) => [slug, file] as const),
+    ]) {
       writeFileSync(join(replayDir, `${slug}.json`), JSON.stringify(file));
     }
 
     const set = loadReplays(replayDir);
     expect(set.records.map((r) => r.slug)).toEqual([clean.slug]);
-    expect(set.problems).toEqual([
-      expect.stringMatching(
-        /^forum-thread\.json: holds text a recording must not \(analysis\.evidence\[\d+\]: a comment thread; events\[\d+\]\.event: evidence\[\d+\]: a comment thread/,
-      ),
-      expect.stringMatching(
-        /^stack-trace\.json: holds text a recording must not \(events\[\d+\]\.event: run\.sourceErrors\[0\]\.message: a stack trace/,
-      ),
-    ]);
+    // Each place once, with the first reason found for it.
+    expect([...set.problems].sort()).toEqual(
+      Object.entries(bad)
+        .map(([slug, [, why]]) => `${slug}.json: holds text a recording must not (${why})`)
+        .sort(),
+    );
 
     resetReplaysForTests();
     const logs = captureLogsForTests();
     try {
       const listed = await request(app).get("/api/replays");
       expect(listed.body.replays.map((r: { id: string }) => r.id)).toEqual([TRACK_ID]);
-      for (const [query, trackId] of [
-        ["Forum Song The Recorders", CHOICE_A],
-        ["Trace Song The Recorders", CHOICE_B],
-      ]) {
-        for (const path of [streamPath(query), `${streamPath(query)}&trackId=${trackId}`]) {
+      for (const [file] of Object.values(bad)) {
+        const query = `${file.analysis.title} The Recorders`;
+        for (const path of [
+          streamPath(query),
+          `${streamPath(query)}&trackId=${file.analysis.id}`,
+        ]) {
           const events = await sse(path);
           expect(types(events), path).toEqual(["error", "done"]);
           expect(events[0].code).toBe("live_disabled");
@@ -2011,9 +2182,11 @@ describe("the replay directory", () => {
     noLiveCalls();
     // The log names the file and why, never the text.
     const logged = logs.lines().join("\n");
-    expect(logged).toMatch(/forum-thread\.json: holds text a recording must not/);
-    expect(logged).toMatch(/stack-trace\.json: holds text a recording must not/);
-    expect(logged).not.toContain("RecordFan");
-    expect(logged).not.toContain("fetchJson");
+    for (const slug of Object.keys(bad)) {
+      expect(logged).toContain(`${slug}.json: holds text a recording must not`);
+    }
+    for (const text of ["RecordFan", "fetchJson", "someone@example.com", "instagram"]) {
+      expect(logged).not.toContain(text);
+    }
   });
 });

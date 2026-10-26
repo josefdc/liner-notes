@@ -34,7 +34,7 @@ import {
   relationToTrack,
   type ShownLink,
 } from './genealogy/links';
-import { labelHeight, labelWidth, visibleLabels } from './genealogy/labels';
+import { labelHeight, labelWidth, placeLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
@@ -67,6 +67,19 @@ const GRAPH_TEXT_PX = 12;
 const LINE_LABEL_PX = GRAPH_TEXT_PX;
 const NODE_LABEL_PX = GRAPH_TEXT_PX;
 const SUB_LABEL_PX = GRAPH_TEXT_PX;
+/** Where along its line a line's label may go, the middle first. */
+/**
+ * Where a line's label may go, the first that fits: along the line (0 at its source, 1 at its
+ * target, the middle first), above it or just below it.
+ */
+const LINE_LABEL_PLACES = [0.5, 0.58, 0.42, 0.66, 0.34, 0.74, 0.26, 0.82, 0.18, 0.9, 0.1].flatMap(
+  (at) => [
+    { at, below: false },
+    { at, below: true },
+  ],
+);
+/** A line label's baseline from its line: 0.4 em above, or 1.1 em below. */
+const lineLabelDy = (below: boolean) => (below ? '1.1em' : '-0.4em');
 
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
@@ -326,7 +339,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .join('text')
       .text((d) => lineLabel(d.shown))
       .attr('text-anchor', 'middle')
-      .attr('dy', '-0.4em')
+      .attr('dy', lineLabelDy(false))
       .attr('fill', (d) => LINK_COLOR[d.shown.type])
       .attr('font-family', 'IBM Plex Mono')
       .attr('font-size', `${LINE_LABEL_PX}px`)
@@ -436,22 +449,28 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     // Node - Labels (responsive sizing)
     const labelFontSize = NODE_LABEL_PX;
+    /** How far below its track's centre a name's first line sits (graph units). */
+    const nameOffset = (d: CustomNode) => d.size + (isMobile ? 8 : 15);
+    const nameText = (d: CustomNode) => {
+      // More aggressive truncation on mobile
+      const maxLen = isMobile ? 12 : 30;
+      return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
+    };
+    // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
+    const tagText = (d: CustomNode) =>
+      d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]';
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
       .append('g')
       .attr('class', 'node-label')
-      .attr('transform', (d) => `translate(0, ${d.size + (isMobile ? 8 : 15)})`)
+      .attr('transform', (d) => `translate(0, ${nameOffset(d)})`)
       .style('pointer-events', 'none')
       .style('opacity', (d) => (isMobile && d.group !== 1 && !isOrigin(d) ? 0.7 : 1)); // Dim non-essential labels on mobile
 
     labels
       .append('text')
-      .text((d) => {
-        // More aggressive truncation on mobile
-        const maxLen = isMobile ? 12 : 30;
-        return d.label.length > maxLen ? `${d.label.slice(0, maxLen)}…` : d.label;
-      })
+      .text(nameText)
       .attr('text-anchor', 'middle')
       .attr('fill', colors.white)
       .attr('font-family', 'IBM Plex Mono')
@@ -464,8 +483,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       labels
         .append('text')
         .attr('class', 'sub-label')
-        // [ORIGIN] only for a track a sourced link says this one uses, never from the group.
-        .text((d) => (d.group === 1 ? '[CURRENT]' : isOrigin(d) ? '[ORIGIN]' : '[LINK]'))
+        .text(tagText)
         .attr('dy', '1.2em')
         .attr('text-anchor', 'middle')
         .attr('fill', (d) =>
@@ -482,7 +500,39 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // A track's own drawing is decorative for screen readers: its name says it all.
     node.selectChildren().attr('aria-hidden', 'true');
 
-    /** Keeps text the same size on screen at any zoom, and hides line labels that overlap. */
+    // Line labels are drawn above the tracks: one may sit over a name or a disc (see fitText),
+    // and its band of the page's colour keeps it readable there.
+    g.select('g.link-labels').raise();
+
+    /**
+     * Which name is shown whatever it overlaps: the track the pointer or the keyboard is on.
+     * Every name stays in the track's aria-label, the detail box and the list of links.
+     */
+    let pinnedName: string | null = null;
+    /**
+     * Which label goes first when two would overlap: the pointed or focused track's name, this
+     * track's name, the names of tracks a sourced link relates to it, the labels of sourced lines
+     * (the relation in words), the other names, the other lines; within each, the stronger link
+     * first (`rank`).
+     */
+    const namePriority = (d: CustomNode) => {
+      if (d.id === pinnedName) return Number.POSITIVE_INFINITY;
+      if (d.group === 1) return 4000;
+      const link = relations.get(d.id)?.link ?? null;
+      if (link === null) return 1000;
+      return (link.kind === 'sourced' ? 3000 : 1000) + rank(link);
+    };
+    const linePriority = (link: ShownLink) => (link.kind === 'sourced' ? 2000 : 0) + rank(link);
+    /** Where a line's label is drawn: at its place along the line (graph units). */
+    const labelX = (d: any) => d.source.x + (d.target.x - d.source.x) * (d.labelPlace?.at ?? 0.5);
+    const labelY = (d: any) => d.source.y + (d.target.y - d.source.y) * (d.labelPlace?.at ?? 0.5);
+
+    /**
+     * Keeps text the same size on screen at any zoom, and places the labels in the order
+     * namePriority and linePriority give: no name over another name, no line label over another
+     * line label or over this track's (or the pointed track's) name. A line label moves along its
+     * line to find room, and sits over a disc or another name only when no clear place is left.
+     */
     function fitText() {
       const k = transform.k || 1;
       linkLabel.attr('font-size', `${LINE_LABEL_PX / k}px`);
@@ -493,15 +543,63 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         return `${base / k}px`;
       });
       g.selectAll('.preview-indicator').attr('font-size', `${GRAPH_TEXT_PX / k}px`);
-      const boxes = simulationLinks.map((d: any) => ({
-        x: (((d.source.x ?? 0) + (d.target.x ?? 0)) / 2) * k,
-        y: (((d.source.y ?? 0) + (d.target.y ?? 0)) / 2) * k,
-        width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
-        height: labelHeight(LINE_LABEL_PX),
-        priority: rank(d.shown),
+      // Boxes on screen. A line's first baseline is at its y, the box from 0.95 em above it to
+      // 0.35 em below (labelHeight); a name's tag is a second line, 1.2 em lower.
+      const names = nodes.map((d) => {
+        const tag = isMobile ? null : tagText(d);
+        const height = labelHeight(NODE_LABEL_PX) + (tag ? 1.2 * SUB_LABEL_PX : 0);
+        const top = ((d.y ?? 0) + nameOffset(d)) * k - 0.95 * NODE_LABEL_PX;
+        const box = {
+          x: (d.x ?? 0) * k,
+          y: top + height / 2,
+          width: Math.max(
+            labelWidth(nameText(d), NODE_LABEL_PX),
+            tag ? labelWidth(tag, SUB_LABEL_PX) : 0,
+          ),
+          height,
+        };
+        return {
+          candidates: [box],
+          priority: namePriority(d),
+          kind: 'name',
+          // Nothing sits over this track's name or the pointed one
+          coverable: d.group !== 1 && d.id !== pinnedName,
+        };
+      });
+      // A line's label may sit along its line, above or below it (LINE_LABEL_PLACES), clear of
+      // the other labels and the tracks' discs where it can be.
+      const lines = simulationLinks.map((d: any) => ({
+        candidates: LINE_LABEL_PLACES.map(({ at, below }) => ({
+          x: ((d.source.x ?? 0) + ((d.target.x ?? 0) - (d.source.x ?? 0)) * at) * k,
+          // The box's centre: 0.7 em above the line for a baseline 0.4 em above it, 0.775 em
+          // below for a baseline 1.1 em below
+          y:
+            ((d.source.y ?? 0) + ((d.target.y ?? 0) - (d.source.y ?? 0)) * at) * k +
+            (below ? 0.775 : -0.7) * LINE_LABEL_PX,
+          width: labelWidth(lineLabel(d.shown), LINE_LABEL_PX),
+          height: labelHeight(LINE_LABEL_PX),
+        })),
+        priority: linePriority(d.shown),
+        kind: 'line',
+        // Drawn above the names, on a band of the page's colour: still readable over one
+        mayCover: ['name'],
       }));
-      const visible = visibleLabels(boxes);
-      linkLabel.attr('visibility', (d) => (visible[d.n] ? null : 'hidden'));
+      const discs = nodes.map((d) => {
+        const side = 2 * (d.size + 4) * k;
+        return { x: (d.x ?? 0) * k, y: (d.y ?? 0) * k, width: side, height: side };
+      });
+      const placed = placeLabels([...names, ...lines], discs).at;
+      const shownNames = new Set(nodes.filter((_, i) => placed[i] !== -1).map((d) => d.id));
+      labels.attr('visibility', (d) => (shownNames.has(d.id) ? null : 'hidden'));
+      for (const d of simulationLinks) {
+        const at = placed[nodes.length + d.n];
+        d.labelPlace = at === -1 ? undefined : LINE_LABEL_PLACES[at];
+      }
+      linkLabel
+        .attr('visibility', (d) => (d.labelPlace ? null : 'hidden'))
+        .attr('x', labelX)
+        .attr('y', labelY)
+        .attr('dy', (d) => lineLabelDy(d.labelPlace?.below ?? false));
     }
     fitText();
 
@@ -512,6 +610,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     let focusOn: Item | null = null;
     const drawActive = () => {
       const active = pointerOn ?? focusOn;
+      const name = active?.kind === 'node' ? active.id : null;
+      if (name !== pinnedName) {
+        pinnedName = name;
+        fitText();
+      }
       const activeLink = active?.kind === 'link' ? active.index : null;
       link
         .attr('stroke-opacity', (d) =>
@@ -729,9 +832,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           .attr('x2', (d: any) => d.target.x)
           .attr('y2', (d: any) => d.target.y);
       }
-      linkLabel
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
+      linkLabel.attr('x', labelX).attr('y', labelY);
 
       node.attr('transform', (d) => `translate(${d.x},${d.y})`);
     });

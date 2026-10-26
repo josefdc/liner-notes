@@ -6,6 +6,7 @@ import {
   loadFixture,
   openPlayer,
   releaseStream,
+  streamLog,
   useMockApi,
 } from "./mock";
 
@@ -167,9 +168,16 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   await expect(page.getByText(/Scanning Spotify catalog/)).toHaveCount(0);
 
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  const sent = async () =>
+    (await streamLog(page)).filter((entry) => entry === "/api/analyze/stream done").length;
+  const before = await sent();
   await releaseStream(page, "rest");
-  // The rest of the stream (the result and the end), 50 ms apart; well short of the 3.5 s.
-  await page.clock.runFor(500);
+  // Runs the clock on, 50 ms at a time (the mock's pace), until the replay's stream has sent its
+  // last event: the result comes just before it, so the 3.5 s after the result are far off.
+  for (let step = 0; (await sent()) === before; step += 1) {
+    expect(step, "the replay's stream sends its last event").toBeLessThan(60);
+    await page.clock.runFor(50);
+  }
   const ready = page.locator("span", { hasText: "REPLAY READY // ENTERING COMMAND CENTER" });
   await expect(ready).toBeAttached();
   await expect(page.getByText("INTEL READY", { exact: false })).toHaveCount(0);

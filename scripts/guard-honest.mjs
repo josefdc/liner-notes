@@ -21,12 +21,18 @@ const baselinePath = join(root, "scripts", "guard-baseline.json");
 
 const isTest = (path) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
 const isScript = (path) => /\.[cm]?[jt]sx?$/.test(path);
-// Test helpers and fixtures that live next to the source (e.g. apps/api/src/sources/testing/, or
-// a `testing.ts` module that only tests import).
+// Modules next to the source that only tests import (guard-honest.test.mjs checks that no other
+// file imports them).
+export const TEST_HELPERS = new Set([
+  "apps/web/src/components/genealogy/testing.ts",
+  "apps/web/src/components/measured/testing.ts",
+  "apps/web/src/components/provenance/testing.ts",
+]);
+// Test helpers and fixtures that live next to the source (e.g. apps/api/src/sources/testing/).
 const isTestSupport = (path) =>
   isTest(path) ||
   /(?:^|\/)(?:tests?|__tests__|__mocks__|testing|fixtures)\//.test(path) ||
-  /(?:^|\/)testing\.[cm]?[jt]sx?$/.test(path);
+  TEST_HELPERS.has(path);
 const isRecording = (path) => /^fixtures\/replays\/[^/]+\.json$/.test(path);
 
 // An occurrence that is not user-facing data (e.g. retry jitter) is allowed only with a marker
@@ -449,30 +455,34 @@ export const CSS_NAMED_COLOURS = [
   "yellowgreen",
 ];
 const NAMED = `(?:${CSS_NAMED_COLOURS.join("|")})`;
-// A property that takes a colour, in JSX or CSS spelling (fill, stroke, background, *color).
+// A property that takes a colour, in JSX or CSS spelling (fill, stroke, background, *color), or
+// a shorthand with a colour in it (border, outline, a shadow).
 const COLOUR_PROPERTY =
-  "(?:fill|stroke|background|background-color|border(?:-[a-z]+)*-color|[A-Za-z-]*[cC]olor)";
+  "(?:fill|stroke|background|background-color|[A-Za-z-]*[cC]olor|border(?:-[a-z]+)*|border(?:[A-Z][a-z]+)*|outline|box-shadow|boxShadow|text-shadow|textShadow)";
+// A named colour as one word of a value, not part of a name (`--color-white`, `colors.white`).
+const NAMED_WORD = `(?<![\\w.$#-])${NAMED}(?![\\w-])`;
 const HEX = "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\\w-])";
 export const COLOUR_LITERALS = [
-  // Hex. After white space, a hex of digits only is an issue number ("see #123").
-  new RegExp(
-    `(?<![A-Za-z0-9&]|url\\(|href=["'])(?:(?<=\\s)(?!#\\d{3,4}(?![\\w-]))|(?<!\\s))${HEX}(?!\\s*\\{)`,
-    "g",
-  ),
+  // Hex, but not an id or an anchor (`url(#fade)`, `href="#add"`, `href={'#add'}`), a word with a
+  // `#` inside (`page#fade`, `&#160;`), or an id in a CSS selector (`#a, #b .x {`: a `{` follows
+  // on the line with no `;`, quote or `${` between). An issue number in copy ("fixed in #123")
+  // counts: mark it with a guard-allow comment.
+  new RegExp(`(?<![A-Za-z0-9&]|url\\(|href=\\{?["'\`])${HEX}(?![^;{}'"\`$\\n]*\\{)`, "g"),
   // Not after a letter or digit (toRgb(), a.color()); after `_` it is in a Tailwind arbitrary value.
   /(?<![A-Za-z0-9$.-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/gi,
-  // JSX attributes and style objects: fill="black", color: 'red', stroke={'white'}.
-  new RegExp(`(?<![\\w-])${COLOUR_PROPERTY}\\s*[=:]\\s*\\{?\\s*(['"\`])\\s*${NAMED}\\s*\\1`, "gi"),
-  // D3: .attr('fill', 'white'), .style('stroke', "red").
+  // JSX attributes and style objects: fill="black", color: 'red', stroke={'white'},
+  // border: '1px solid white', boxShadow: '0 0 4px black'.
   new RegExp(
-    `\\.(?:attr|style)\\(\\s*(['"])${COLOUR_PROPERTY}\\1\\s*,\\s*(['"\`])${NAMED}\\2`,
+    `(?<![\\w-])${COLOUR_PROPERTY}\\s*[=:]\\s*\\{?\\s*(['"\`])[^'"\`\\n]*?${NAMED_WORD}[^'"\`\\n]*\\1`,
+    "gi",
+  ),
+  // D3: .attr('fill', 'white'), .style('border', "1px solid red").
+  new RegExp(
+    `\\.(?:attr|style)\\(\\s*(['"])${COLOUR_PROPERTY}\\1\\s*,\\s*(['"\`])[^'"\`\\n]*?${NAMED_WORD}[^'"\`\\n]*\\2`,
     "gi",
   ),
   // A stylesheet declaration: color: red; border: 1px solid white.
-  new RegExp(
-    `(?<![\\w-])(?:${COLOUR_PROPERTY}|border(?:-[a-z]+)*|outline|box-shadow|text-shadow)\\s*:[^;{}'"\`\\n]*?(?<![\\w.$-])${NAMED}(?![\\w-])`,
-    "gi",
-  ),
+  new RegExp(`(?<![\\w-])${COLOUR_PROPERTY}\\s*:[^;{}'"\`\\n]*?${NAMED_WORD}`, "gi"),
   // A Tailwind arbitrary value: bg-[red], shadow-[0_0_4px_white], text-[color:navy].
   new RegExp(`-\\[[^\\]\\s'"\`]*?(?<=[\\[_,(:])${NAMED}(?=[\\]_,)])[^\\]\\s'"\`]*\\]`, "gi"),
 ];

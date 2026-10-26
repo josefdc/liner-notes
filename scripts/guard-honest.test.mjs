@@ -2,12 +2,21 @@
 // baseline must stay one-way. Run with `npm test`.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { countInText, PROTOTYPE_PHRASES, rules } from "./guard-honest.mjs";
+import { countInText, PROTOTYPE_PHRASES, rules, TEST_HELPERS } from "./guard-honest.mjs";
 
 const rule = (id) => rules.find((candidate) => candidate.id === id);
 // `path` decides how comments and strings are read; snippets default to a TSX file.
@@ -90,6 +99,13 @@ describe("colour-literals-design-system", () => {
     ["a named colour in an arbitrary class", 'className="bg-[red]"'],
     ["a named colour inside an arbitrary value", 'className="shadow-[0_0_4px_white]"'],
     ["a typed arbitrary value", 'className="text-[color:navy]"'],
+    ["a digits-only hex in a style string", "{ boxShadow: '0 0 4px #000' }"],
+    ["a digits-only hex in a template literal", "const s = `0 0 2px #222`;"],
+    ["a digits-only hex after white space in code", "const shadow = '1px solid ' + ' #333';"],
+    ["an issue number in copy", "<p>Fixed in #123.</p>"],
+    ["a named colour in a multi-value style string", "style={{ border: '1px solid white' }}"],
+    ["a named colour in a shadow", "{ boxShadow: '0 0 4px black' }"],
+    ["a named colour in a D3 shorthand", ".style('border', '1px solid red')"],
   ])("counts %s", (_name, line) => {
     expect(count("colour-literals-design-system", line)).toBe(1);
   });
@@ -98,6 +114,11 @@ describe("colour-literals-design-system", () => {
     ["a stylesheet declaration", "a { color: red; }"],
     ["a shorthand in a stylesheet", "a { border: 1px solid white; }"],
     ["upper-case RGB() in a stylesheet", "a { color: RGB(0 0 0); }"],
+    ["a digits-only hex", "a { color: #000; }"],
+    ["a digits-only background", "a { background: #111; }"],
+    ["a digits-only hex in a shorthand", "a { border: 1px solid #333; }"],
+    ["a digits-only hex with alpha in a shadow", "a { box-shadow: 0 0 4px #0008; }"],
+    ["the last declaration of a block", "a { color: #000 } b { color: var(--x); }"],
   ])("counts %s", (_name, line) => {
     expect(count("colour-literals-design-system", line, css)).toBe(1);
   });
@@ -117,9 +138,15 @@ describe("colour-literals-design-system", () => {
     ["a method named color", "const c = palette.color(1);"],
     ["an element id in url()", 'fill="url(#fade)"'],
     ["an anchor", 'href="#add"'],
+    ["an anchor in a JSX expression", "<a href={'#add'}>"],
     ["a word with a hash inside", "const id = 'page#fade';"],
     ["an HTML entity", "<span>a&#160;b</span>"],
-    ["an issue number in text", "<p>Fixed in #123, see #1234.</p>"],
+    [
+      "an issue number in copy with a marker",
+      "<p>Fixed in #123.</p> // guard-allow: colour-literals-design-system — an issue number",
+    ],
+    ["a named colour in a token", "style={{ border: '1px solid var(--color-white)' }}"],
+    ["a shadow token", "style={{ boxShadow: 'var(--shadow-glow-white)' }}"],
     ["a named colour as text", "<p>The red line is a sample.</p>"],
     ["a named colour as a prop that is not a colour", '<Badge variant="green">'],
     ["a word that starts with a colour name in an arbitrary value", 'className="font-[redacted]"'],
@@ -129,6 +156,9 @@ describe("colour-literals-design-system", () => {
 
   it.each([
     ["a selector", "#abc { color: var(--color-cyber); }"],
+    ["a selector list", "#abc, #def { color: var(--color-cyber); }"],
+    ["a descendant selector", "#abc .x { color: var(--color-cyber); }"],
+    ["a selector with a pseudo-class", "#abc:hover { color: var(--color-cyber); }"],
     ["a token in a declaration", "a { color: var(--color-white); }"],
     ["a non-colour value", "a { border: none; transition: color 0.2s; }"],
   ])("ignores %s in a stylesheet", (_name, line) => {
@@ -150,7 +180,37 @@ describe("colour-literals-design-system", () => {
     expect(files("apps/web/src/styles/theme.ts")).toBe(false);
     expect(files("apps/web/src/components/Thing.test.tsx")).toBe(false);
     expect(files("apps/web/src/components/genealogy/testing.ts")).toBe(false);
+    // A module of that name that is not a listed test helper is scanned.
+    expect(files("apps/web/src/components/Other/testing.ts")).toBe(true);
     expect(files("apps/api/src/a.ts")).toBe(false);
+  });
+
+  it("skips only test helpers that nothing but tests imports", () => {
+    const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const sources = execFileSync("git", ["ls-files", "apps/web/src"], {
+      cwd: repo,
+      encoding: "utf8",
+    })
+      .split("\n")
+      .filter((path) => /\.[cm]?[jt]sx?$/.test(path));
+    for (const helper of TEST_HELPERS) {
+      expect(existsSync(join(repo, helper)), helper).toBe(true);
+      const importers = sources.filter((path) => {
+        if (path === helper) return false;
+        const text = readFileSync(join(repo, path), "utf8");
+        return [...text.matchAll(/from\s+["']([^"']+)["']/g)].some(
+          ([, from]) =>
+            from.startsWith(".") &&
+            join(dirname(path), from).replace(/\.[cm]?[jt]sx?$/, "") ===
+              helper.replace(/\.[cm]?[jt]sx?$/, ""),
+        );
+      });
+      expect(importers.length, helper).toBeGreaterThan(0);
+      expect(
+        importers.filter((path) => !/\.(test|spec)\.[cm]?[jt]sx?$/.test(path)),
+        helper,
+      ).toEqual([]);
+    }
   });
 });
 

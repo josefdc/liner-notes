@@ -590,7 +590,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
     <div
       className={`h-[100dvh] w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? 'justify-center' : 'justify-start pt-[min(8vh,4rem)]'}`}
     >
-      {/* Background Ambience */}
+      {/* Background ambience: decorative, barely above the page (about 1.04:1 at its centre) */}
       <div
         aria-hidden="true"
         data-testid="background-ambience"

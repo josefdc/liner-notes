@@ -66,7 +66,7 @@ test("a candidate picked before the analysis stream ends opens one resume and sh
 
   const second = candidates[1];
   await page
-    .getByRole("button", { name: `${second.title} ${second.artist} • ${second.releaseYear}` })
+    .getByRole("option", { name: `${second.title} ${second.artist} • ${second.releaseYear}` })
     .click();
   await expect
     .poll(() => apiRequests(page))
@@ -148,9 +148,7 @@ test("a complete event without a result shows an error that offers a reload", as
   expect(posts(await apiRequests(page))).toEqual([]);
 });
 
-test("a duplicate complete for the thread is ignored when the picker times out", async ({
-  page,
-}) => {
+test("a duplicate complete for the thread is ignored after a pick", async ({ page }) => {
   const problems = collectProblems(page);
   await useMockApi(page, {
     suggestions: [],
@@ -168,10 +166,9 @@ test("a duplicate complete for the thread is ignored when the picker times out",
   await search(page, "Hurt");
   await expect(page.getByText("Is this the right track?")).toBeVisible();
 
-  // Nobody picks: the countdown chooses the highlighted (first) candidate.
-  await expect
-    .soft(page.getByRole("button", { name: "Open the results" }))
-    .toBeVisible({ timeout: 10_000 });
+  // The highlighted (first) candidate, picked with Enter.
+  await page.keyboard.press("Enter");
+  await expect.soft(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect.poll(async () => finished(await streamLog(page), RESUME)).toBe(true);
   await page.waitForTimeout(300);
 
@@ -179,7 +176,7 @@ test("a duplicate complete for the thread is ignored when the picker times out",
   expect
     .soft(resumes(log))
     .toEqual([
-      `stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${candidates[0].id}&pickedBy=countdown`,
+      `stream ${RESUME}?threadId=thread-hitl&selectedTrackId=${candidates[0].id}&pickedBy=click`,
     ]);
   expect.soft(posts(log)).toEqual([]);
   expect((await streamLog(page)).filter((entry) => entry === `${RESUME} complete`)).toHaveLength(2);

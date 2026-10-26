@@ -1,19 +1,8 @@
 import type React from 'react';
 import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import type { TrackData, AgentLog } from '../types';
-import {
-  Network,
-  Cpu,
-  Search,
-  Check,
-  CircleAlert,
-  RotateCcw,
-  ArrowRight,
-  ArrowLeft,
-} from 'lucide-react';
+import { Network, Search, CircleAlert, RotateCcw, ArrowLeft } from 'lucide-react';
 import type { AgentStatus, AnalyzeOptions, PickedBy, SearchCandidate } from '../hooks/agent/types';
-import SystemConsole from './SystemConsole';
-import { CoverThumb } from './AlbumCover';
 import {
   isLiveUnavailable,
   LIVE_UNAVAILABLE_COPY,
@@ -23,46 +12,12 @@ import type { ReplayTrack } from '../hooks/agent/apiClient';
 import { Button } from './ui/Button';
 import { SearchBox } from './search/SearchBox';
 import type { SuggestionFetcher } from './search/useSuggestions';
-import { ANALYZING_STATUSES, nextProgress } from './console/progress';
+import { TrackPicker } from './search/TrackPicker';
+import { ANALYZING_STATUSES } from './console/progress';
+import { ProgressScreen, type ShownTrack } from './ProgressScreen';
 
 // Loaded only when live analysis turns out to be unavailable.
 const BudgetBanner = lazy(() => import('./BudgetBanner'));
-
-// ─── Status Messages (P0:1) ────────────────────────────────────────────────
-// What the analysis is doing, in plain words. The completion line is at most 40 characters: it
-// is revealed up to 40ch (typing-reveal).
-const STATUS_MESSAGES: Record<AgentStatus, string> = {
-  idle: '',
-  connecting: 'Connecting to the analysis server...',
-  searching: 'Searching Spotify for your track...',
-  // The engineer's step: measuring only while the server says a measurement runs.
-  analyzing: 'Reading the audio...',
-  measuring: 'Measuring tempo, key and energy from the preview clip...',
-  researching: 'Searching sources for samples, credits and history...',
-  composing: 'Writing the liner notes...',
-  checking: 'Checking the notes against their sources...',
-  // Used only when the server's own question is missing.
-  disambiguation: 'Pick the track to analyze...',
-  complete: 'Analysis complete. Opening the results',
-  // Nothing here: an error replaces this view with the error block, which says what happened.
-  error: '',
-};
-
-// While a recorded run plays, the recorded progress is not live work: these replace the
-// messages above, so neither the screen nor the screen reader describes a live analysis.
-const REPLAY_PROGRESS_MESSAGE = 'Replaying a recorded analysis — nothing runs live...';
-// At most 40 characters: the completion line is revealed up to 40ch (typing-reveal).
-export const REPLAY_COMPLETE_MESSAGE = 'Replay complete. Opening the results';
-
-/**
- * The status line for a run, live or replayed. The server's own words for the step (`note`:
- * the picker's question, the composer's fallback) win; the picker is asked live in a replay too.
- */
-function statusMessage(status: AgentStatus, isReplay: boolean, note: string | null): string {
-  if (note && (!isReplay || status === 'disambiguation')) return note;
-  if (!isReplay || status === 'idle' || status === 'error') return STATUS_MESSAGES[status];
-  return status === 'complete' ? REPLAY_COMPLETE_MESSAGE : REPLAY_PROGRESS_MESSAGE;
-}
 
 /**
  * Shows the paused-analysis banner, or, when its code cannot be loaded (a page older than the
@@ -108,22 +63,6 @@ class BannerBoundary extends Component<
         </div>
       </section>
     );
-  }
-}
-
-/** The picker row a navigation key moves the highlight to, or null for other keys. */
-function pickerTarget(key: string, current: number, count: number): number | null {
-  switch (key) {
-    case 'ArrowDown':
-      return (current + 1) % count;
-    case 'ArrowUp':
-      return (current - 1 + count) % count;
-    case 'Home':
-      return 0;
-    case 'End':
-      return count - 1;
-    default:
-      return null;
   }
 }
 
@@ -286,30 +225,13 @@ const Onboarding: React.FC<OnboardingProps> = ({
   );
 
   // ─── P1:10 Track preview state ────────────────────────────────────────────
-  const [previewTrack, setPreviewTrack] = useState<{
-    title: string;
-    artist: string;
-    coverUrl: string;
-  } | null>(null);
+  const [previewTrack, setPreviewTrack] = useState<ShownTrack | null>(null);
 
-  // ─── P1:9 Debounced ARIA live region ──────────────────────────────────────
-  const [announcedStatus, setAnnouncedStatus] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const message = statusMessage(status, isReplay, statusNote);
-      if (message) setAnnouncedStatus(message);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [status, isReplay, statusNote]);
-
-  // ─── P1:14 HITL disambiguation state ─────────────────────────────────────
-  const [hitlSelectedIndex, setHitlSelectedIndex] = useState(0);
-  const [hitlCountdown, setHitlCountdown] = useState<number | null>(null);
-  const hitlRowRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  // UX: HITL pause-on-hover (Item 6)
-  const [hitlPaused, setHitlPaused] = useState(false);
-  // UX: Auto-scroll to disambiguation when it appears
-  const hitlRef = useRef<HTMLDivElement>(null);
+  // The progress screen's status line takes the focus when a run starts or moves on from the
+  // user's hand (a search, a pick, a retry): the box, row or button that had it is gone, and the
+  // focus would fall to the page. The picker and the error block take it themselves.
+  const statusRef = useRef<HTMLDivElement>(null);
+  const focusStatusNext = useRef(false);
 
   // UX: Completion skip button (Item 9)
   const [showCompletionButton, setShowCompletionButton] = useState(false);
@@ -327,6 +249,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       // re-recording or a cover with the same title). It is a deliberate click on that track,
       // so the result does not warn that the text matched it loosely (a self-titled song, such
       // as "Black Sabbath" by Black Sabbath, reads as a partial match of its own text).
+      focusStatusNext.current = true;
       analyze(`${candidate.title} ${candidate.artist}`, {
         trackId: candidate.id,
         pickedBy: 'click',
@@ -361,6 +284,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const handleSearch = useCallback(
     (query: string) => {
       setPreviewTrack(null);
+      focusStatusNext.current = true;
       analyze(query);
     },
     [analyze],
@@ -396,34 +320,29 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
-  // ─── P1:14 HITL disambiguation logic ──────────────────────────────────────
-  // Any candidate list is shown to the user; nothing is chosen without them seeing it.
+  // ─── P1:14 Track picker ───────────────────────────────────────────────────
+  // Any candidate list is shown to the user, and nothing is chosen without them: the run waits
+  // for a pick for as long as the picker is open.
   const showPicker = status === 'disambiguation' && !!candidates && candidates.length > 0;
 
+  // See statusRef: once the progress screen shows a step, unless the picker or the error block
+  // has taken the focus.
   useEffect(() => {
-    if (status === 'disambiguation' && candidates && candidates.length > 0) {
-      // Show disambiguation UI with 5s countdown
-      setHitlSelectedIndex(0);
-      setHitlCountdown(5);
-    } else {
-      // Clear HITL state when not in disambiguation
-      setHitlCountdown(null);
+    if (!focusStatusNext.current) return;
+    if (status === 'idle' || status === 'error' || showPicker) {
+      focusStatusNext.current = false;
+      return;
     }
-  }, [status, candidates]);
-
-  // Bring the picker into view and give it the keyboard when it appears
-  useEffect(() => {
-    if (status === 'disambiguation' && candidates && candidates.length > 0 && hitlRef.current) {
-      hitlRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      hitlRef.current.focus({ preventScroll: true });
+    if (statusRef.current) {
+      focusStatusNext.current = false;
+      statusRef.current.focus();
     }
-  }, [status, candidates]);
+  }, [status, showPicker]);
 
-  // "Search again" in the picker: the countdown stops, the run is dropped and the search box
-  // gets the keyboard once it is back.
+  // "Search again" in the picker, or Escape: the run is dropped and the search box gets the
+  // keyboard once it is back.
   const focusSearchOnIdle = useRef(false);
   const handleSearchAgain = useCallback(() => {
-    setHitlCountdown(null);
     focusSearchOnIdle.current = true;
     onSearchAgain?.();
   }, [onSearchAgain]);
@@ -434,59 +353,25 @@ const Onboarding: React.FC<OnboardingProps> = ({
     }
   }, [status]);
 
-  // HITL candidate selection handler: a click or Enter on a row, or the countdown at zero.
-  const handleHitlSelect = useCallback(
-    (index: number, pickedBy: PickedBy) => {
-      const candidate = candidates?.[index];
-      if (!candidate) return;
+  // A row of the picker chosen with Enter or a click: always the user's own pick.
+  const handlePick = useCallback(
+    (candidate: SearchCandidate) => {
       // Update preview (P1:10)
       setPreviewTrack({
         title: candidate.title,
         artist: candidate.artist,
         coverUrl: candidate.coverUrl,
       });
-      setHitlSelectedIndex(index);
-      setHitlCountdown(null);
-      selectCandidate(candidate.id, pickedBy);
+      focusStatusNext.current = true;
+      selectCandidate(candidate.id, 'click');
     },
-    [candidates, selectCandidate],
+    [selectCandidate],
   );
 
-  // HITL countdown timer (respects pause state). The selection at zero happens here, in
-  // the effect, never inside a state updater.
-  useEffect(() => {
-    if (hitlCountdown === null || hitlPaused) return;
-    if (hitlCountdown <= 0) {
-      handleHitlSelect(hitlSelectedIndex, 'countdown');
-      return;
-    }
-    const timer = setTimeout(
-      () => setHitlCountdown((prev) => (prev === null ? null : prev - 1)),
-      1000,
-    );
-    return () => clearTimeout(timer);
-  }, [hitlCountdown, hitlPaused, hitlSelectedIndex, handleHitlSelect]);
-
-  // Arrow keys, Home and End move the highlight (and focus) and stop the countdown; Enter
-  // selects the highlighted row, wherever focus is inside the picker.
-  const handleHitlKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!candidates || candidates.length === 0) return;
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleHitlSelect(hitlSelectedIndex, 'click');
-        return;
-      }
-      const next = pickerTarget(e.key, hitlSelectedIndex, candidates.length);
-      if (next !== null) {
-        e.preventDefault();
-        setHitlSelectedIndex(next);
-        setHitlCountdown(null); // Pause countdown on interaction
-        hitlRowRefs.current[next]?.focus();
-      }
-    },
-    [candidates, hitlSelectedIndex, handleHitlSelect],
-  );
+  const handleRetry = useCallback(() => {
+    focusStatusNext.current = true;
+    retry();
+  }, [retry]);
 
   // A recorded track offered while live analysis is unavailable: its title and artist name its
   // recording, which the API replays (labelled as a recording).
@@ -495,6 +380,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       const query = `${track.title} ${track.artist}`;
       setSearchQuery(query);
       setPreviewTrack({ title: track.title, artist: track.artist, coverUrl: '' });
+      focusStatusNext.current = true;
       analyze(query);
     },
     [analyze],
@@ -506,11 +392,6 @@ const Onboarding: React.FC<OnboardingProps> = ({
     setPreviewTrack(null);
     inputRef.current?.focus();
   }, []);
-
-  // The bar's place: it never moves back within a run (console/progress.ts).
-  const shownProgress = useRef(0);
-  shownProgress.current = nextProgress(shownProgress.current, status);
-  const progress = shownProgress.current;
 
   // Display track for analysis view (P1:10 — previewTrack || trackData)
   const displayTrack =
@@ -614,7 +495,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   }
                   onClick={
                     shownError.action === 'retry'
-                      ? retry
+                      ? handleRetry
                       : shownError.action === 'search'
                         ? handleSearchAgain
                         : () => window.location.reload()
@@ -649,229 +530,26 @@ const Onboarding: React.FC<OnboardingProps> = ({
           )}
         </div>
       ) : (
-        <div className="z-10 w-full max-w-2xl p-6">
-          {/* Central Node Graphic (P1:11 — completion reveal animation) */}
-          <div
-            className={`flex justify-center ${status === 'disambiguation' ? 'mb-4' : 'mb-8'} transition-all duration-300`}
-          >
-            <div
-              className={`relative ${status === 'complete' ? 'animate-completion-reveal' : ''} ${status === 'disambiguation' ? 'scale-75' : ''} transition-transform duration-300`}
-            >
-              <div
-                className={`w-28 h-28 rounded-full border ${status === 'complete' ? 'border-status-success/50' : 'border-white/20'} flex items-center justify-center animate-spin-slow`}
-              >
-                <div
-                  className={`w-16 h-16 rounded-full border ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'} flex items-center justify-center animate-spin-reverse`}
-                >
-                  {status === 'complete' ? (
-                    <Check size={24} className="text-status-success" />
-                  ) : (
-                    <Cpu size={24} className="text-white opacity-80" />
-                  )}
-                </div>
-              </div>
-              {/* Data Lines */}
-              <div
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[1px] bg-gradient-to-r from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-white/30'} to-transparent animate-pulse`}
-              ></div>
-              <div
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[200%] bg-gradient-to-b from-transparent ${status === 'complete' ? 'via-status-success/50' : 'via-white/30'} to-transparent animate-pulse`}
-              ></div>
-              {/* Corner brackets */}
-              <div
-                className={`absolute -top-2 -left-2 w-4 h-4 border-l border-t ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
+        <ProgressScreen
+          status={status}
+          logs={logs}
+          isReplay={isReplay}
+          statusNote={statusNote}
+          track={displayTrack}
+          picker={
+            showPicker &&
+            candidates && (
+              <TrackPicker
+                candidates={candidates}
+                onPick={handlePick}
+                onSearchAgain={onSearchAgain ? handleSearchAgain : undefined}
               />
-              <div
-                className={`absolute -top-2 -right-2 w-4 h-4 border-r border-t ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
-              />
-              <div
-                className={`absolute -bottom-2 -left-2 w-4 h-4 border-l border-b ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
-              />
-              <div
-                className={`absolute -bottom-2 -right-2 w-4 h-4 border-r border-b ${status === 'complete' ? 'border-status-success/30' : 'border-white/30'}`}
-              />
-            </div>
-          </div>
-
-          {/* Currently Analyzing — P1:10 uses previewTrack || trackData */}
-          {displayTrack && (
-            <div className="flex flex-col items-center justify-center gap-4 mb-6 animate-fade-in">
-              {/* No cover, or one that fails to load: nothing, as for a track without one */}
-              <CoverThumb
-                url={displayTrack.coverUrl}
-                className="w-20 h-20 rounded-md shadow-lg border border-border"
-                fallback={null}
-              />
-              <div className="text-center">
-                <div className="text-white font-bold">{displayTrack.title}</div>
-                <div className="text-text-tertiary text-sm">{displayTrack.artist}</div>
-              </div>
-            </div>
-          )}
-
-          {/* P1:14 HITL Disambiguation UI (Item 6 — pause-on-hover, keyboard hint, timer bar) */}
-          {showPicker && candidates && (
-            <div
-              ref={hitlRef}
-              className="mb-6 animate-fade-in-up rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-4 focus-visible:ring-offset-void"
-              onKeyDown={handleHitlKeyDown}
-              tabIndex={0}
-              onMouseEnter={() => setHitlPaused(true)}
-              onMouseLeave={() => setHitlPaused(false)}
-            >
-              <div className="text-center mb-3">
-                <p className="text-sm font-mono text-text-secondary">Is this the right track?</p>
-                {/* Keyboard hint above candidates */}
-                <p className="text-chrome font-mono text-text-muted mt-1">
-                  ↑↓ navigate &nbsp; Enter select &nbsp; hover pauses timer
-                </p>
-              </div>
-              <div className="space-y-1 max-h-64 overflow-y-auto">
-                {candidates.map((candidate, index) => (
-                  <button
-                    type="button"
-                    key={candidate.id}
-                    ref={(el) => {
-                      hitlRowRefs.current[index] = el;
-                    }}
-                    aria-current={index === hitlSelectedIndex ? 'true' : undefined}
-                    onClick={() => handleHitlSelect(index, 'click')}
-                    onFocus={(e) => {
-                      // Keyboard focus (Tab) moves the highlight there and stops the
-                      // countdown, as the arrow keys do. A mouse press is left alone: the
-                      // click selects the row, and a layout change between press and
-                      // release would swallow that click.
-                      if (!e.currentTarget.matches(':focus-visible')) return;
-                      setHitlSelectedIndex(index);
-                      setHitlCountdown(null);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-all focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
-                      index === hitlSelectedIndex
-                        ? 'bg-white/10 border border-white/30'
-                        : 'bg-white/5 border border-transparent hover:bg-white/10'
-                    }`}
-                  >
-                    <CoverThumb
-                      url={candidate.coverUrl}
-                      className="w-8 h-8 rounded"
-                      iconSize={12}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-white text-sm font-mono truncate block">
-                        {candidate.title}
-                      </span>
-                      <span className="text-text-tertiary text-xs truncate block">
-                        {candidate.artist} • {candidate.releaseYear || candidate.album}
-                      </span>
-                    </div>
-                    {index === hitlSelectedIndex && (
-                      <span className="text-text-secondary text-xs font-mono flex-shrink-0">▶</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-              {/* Visual timer bar */}
-              {hitlCountdown !== null && (
-                <div className="mt-2">
-                  <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-text-secondary rounded-full transition-all duration-1000 ease-linear"
-                      style={{ width: `${(hitlCountdown / 5) * 100}%` }}
-                    />
-                  </div>
-                  <p className="text-xs font-mono text-text-tertiary mt-1 text-center">
-                    {hitlPaused ? (
-                      <span className="text-text-muted">(paused)</span>
-                    ) : (
-                      `Take your time. We'll pick the top match if you don't.`
-                    )}
-                  </p>
-                </div>
-              )}
-              {onSearchAgain && (
-                <div className="mt-2 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={handleSearchAgain}
-                    // Its own Enter, not the picker's (which picks the highlighted row)
-                    onKeyDown={(e) => e.stopPropagation()}
-                    className="px-2 py-1 text-xs font-mono text-text-secondary hover:text-text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                  >
-                    Search again
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* System Console */}
-          <SystemConsole
-            logs={logs}
-            isComplete={status === 'complete'}
-            isWaiting={status === 'disambiguation'}
-            isReplay={isReplay}
-          />
-
-          {/* Progress Bar (P1:9 — ARIA progressbar, P2:16 — shimmer) */}
-          <div
-            className="w-full h-[3px] bg-white/5 mt-6 rounded-full overflow-hidden"
-            role="progressbar"
-            aria-valuenow={progress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Analysis progress"
-          >
-            <div
-              className={`h-full transition-all duration-700 ease-out relative rounded-full ${status === 'complete' ? 'bg-status-success' : 'bg-text-secondary'}`}
-              style={{ width: `${progress}%` }}
-            >
-              {/* P2:16 Shimmer effect (only while loading, not on complete) */}
-              {status !== 'complete' && progress > 0 && (
-                <div
-                  className="absolute inset-0 animate-progress-shimmer"
-                  style={{
-                    backgroundImage:
-                      'linear-gradient(90deg, transparent, var(--color-border-hover), transparent)',
-                    backgroundSize: '200px 100%',
-                    backgroundRepeat: 'no-repeat',
-                  }}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* P1:9 ARIA live region (debounced) */}
-          <div aria-live="polite" className="sr-only">
-            {announcedStatus}
-          </div>
-
-          {/* Status Text (P0:1 — human-readable messages) */}
-          <div
-            className={`text-center mt-4 text-sm font-mono ${status === 'complete' ? 'text-status-success animate-fade-in' : 'text-text-tertiary'}`}
-          >
-            {status === 'complete' ? (
-              <span className="inline-block overflow-hidden whitespace-nowrap border-r-2 border-status-success animate-[typing-reveal_1s_steps(40)_forwards] max-w-0">
-                {statusMessage(status, isReplay, statusNote)}
-              </span>
-            ) : (
-              statusMessage(status, isReplay, statusNote)
-            )}
-          </div>
-
-          {/* UX: Completion skip button (Item 9) */}
-          {status === 'complete' && showCompletionButton && (
-            <div className="flex justify-center mt-4 animate-fade-in-up">
-              <Button
-                variant="neutral"
-                size="md"
-                rightIcon={<ArrowRight size={16} />}
-                onClick={handleCompletionSkip}
-              >
-                Open the results
-              </Button>
-            </div>
-          )}
-        </div>
+            )
+          }
+          showCompletionButton={showCompletionButton}
+          onOpenResults={handleCompletionSkip}
+          statusRef={statusRef}
+        />
       )}
     </div>
   );

@@ -20,8 +20,8 @@ async function search(page: Page, query: string) {
   await page.getByRole("button", { name: "Analyze", exact: true }).click();
 }
 
-// The visible status line follows the live region that repeats it for screen readers.
-const statusLine = (page: Page) => page.locator('div.sr-only[aria-live="polite"] + div');
+// The status line under the progress bar.
+const statusLine = (page: Page) => page.locator("[data-progress-status]");
 const progress = (page: Page) =>
   page.getByRole("progressbar").getAttribute("aria-valuenow").then(Number);
 const runLog = (page: Page) => page.locator('section[aria-label="Analysis log"]');
@@ -53,7 +53,10 @@ test("a picker with one candidate says so in the server's words, and waits", asy
   await expect(line.locator("xpath=..")).toContainText(message);
   await expect(line).toHaveText("Spotify");
   await expect(statusLine(page)).toHaveText(message);
-  await expect(page.locator('div.sr-only[aria-live="polite"]')).toHaveText(message);
+  // Announced once, by the run log: the status line repeats it on screen only.
+  expect((await liveRegions(page)).filter(({ text }) => text.includes(message))).toEqual([
+    expect.objectContaining({ role: "log" }),
+  ]);
   await expect(page.getByText(/Several tracks|Multiple matches/)).toHaveCount(0);
   await expect(page.getByText(/warning/i)).toHaveCount(0);
   await expect(runLog(page)).toContainText("Waiting for your pick");
@@ -130,8 +133,8 @@ test("a picker with one candidate can be left to search again, from the keyboard
   await expect(input).toBeFocused();
   await expect(input).toHaveValue("Hurt");
   await expect(page.getByText("Is this the right track?")).toHaveCount(0);
-  // The countdown is cancelled: nothing is picked after it would have run out.
-  await page.waitForTimeout(6000);
+  // The run is dropped: nothing is picked once the picker is left.
+  await page.waitForTimeout(1000);
   expect((await apiRequests(page)).filter((entry) => entry.includes("resume"))).toEqual([]);
 });
 
@@ -258,3 +261,64 @@ for (const width of [390, 1440]) {
     await releaseStream(page, "end");
   });
 }
+
+/**
+ * The live regions on the page, outermost only (a region inside another speaks as part of it),
+ * with their text. A region set to aria-live="off" announces nothing and is left out.
+ */
+function liveRegions(page: Page) {
+  return page.evaluate(() => {
+    const selector =
+      '[aria-live]:not([aria-live="off"]), [role="log"], [role="status"], [role="alert"], [role="timer"], [role="marquee"]';
+    return [...document.querySelectorAll(selector)]
+      .filter((element) => element.getAttribute("aria-live") !== "off")
+      .filter((element) => !element.parentElement?.closest(selector))
+      .map((element) => ({
+        role: element.getAttribute("role"),
+        live: element.getAttribute("aria-live"),
+        text: element.textContent ?? "",
+      }));
+  });
+}
+
+test("one live region announces each progress line: the run log", async ({ page }) => {
+  const lines = [
+    "Reading the track from Spotify",
+    "Starting the research: Last.fm, MusicBrainz",
+    "Measuring tempo and key from the preview clip",
+  ];
+  await useMockApi(page, {
+    suggestions: [],
+    streams: {
+      [ANALYZE]: [
+        { type: "connected", threadId: "t-regions" },
+        status("scout", lines[0], "NET-100"),
+        ...marker("found"),
+        status("historian", lines[1], "RESEARCH-START"),
+        ...marker("research"),
+        status("engineer", lines[2], "AUDIO-INIT"),
+        ...marker("measuring"),
+        { type: "complete", data: fullResultData() },
+        { type: "done" },
+      ],
+    },
+  });
+  await search(page, "One More Time");
+  for (const wait of ["found", "research", "measuring"]) {
+    await expect(page.getByRole("log")).toContainText(`[${wait}]`);
+    // Past the half second an announcement could be held back for.
+    await page.waitForTimeout(700);
+    const regions = await liveRegions(page);
+    expect(regions.map(({ role }) => role)).toEqual(["log"]);
+    const statusText = (await page.locator("[data-progress-status]").textContent()) ?? "";
+    for (const line of lines.slice(0, ["found", "research", "measuring"].indexOf(wait) + 1)) {
+      expect(
+        regions.filter(({ text }) => text.includes(line)),
+        line,
+      ).toHaveLength(1);
+    }
+    // The status line on screen sums up the step; it is not announced a second time.
+    expect(regions.filter(({ text }) => text.includes(statusText))).toHaveLength(0);
+    await releaseStream(page, wait);
+  }
+});

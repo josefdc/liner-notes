@@ -103,11 +103,11 @@
     }
     50% {
       transform: scale(1.05);
-      box-shadow: 0 0 40px color-mix(in srgb, var(--color-cyber) 40%, transparent);
+      box-shadow: 0 0 40px color-mix(in srgb, var(--color-status-success) 40%, transparent);
     }
     100% {
       transform: scale(1.02);
-      box-shadow: 0 0 20px color-mix(in srgb, var(--color-cyber) 20%, transparent);
+      box-shadow: 0 0 20px color-mix(in srgb, var(--color-status-success) 20%, transparent);
     }
   }
 
@@ -117,16 +117,6 @@
     }
     100% {
       background-position: 200px 0;
-    }
-  }
-
-  @keyframes glow-breathe {
-    0%,
-    100% {
-      box-shadow: 0 0 8px color-mix(in srgb, var(--color-cyber) 15%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 20px color-mix(in srgb, var(--color-cyber) 30%, transparent);
     }
   }
 

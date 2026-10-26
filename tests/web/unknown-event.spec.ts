@@ -12,7 +12,7 @@ import { collectProblems, fullResultData, loadFixture, streamLog, useMockApi } f
 const ANALYZE = "/api/analyze/stream";
 const RESUME = "/api/analyze/stream/resume";
 const RUN = "3f6c1d2e-0000-4000-8000-0000000000aa";
-const COMPLETE_LOG = "Analysis complete. Ready for deployment.";
+const COMPLETE_LOG = "Analysis complete.";
 const result = fullResultData() as { title: string };
 const hitl = loadFixture("hitl");
 const candidates = hitl.streams[ANALYZE].find(
@@ -26,7 +26,7 @@ async function search(page: Page, query: string) {
 }
 
 async function openDashboard(page: Page) {
-  await page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" }).click();
+  await page.getByRole("button", { name: "Open the results" }).click();
   await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
 }
 
@@ -57,12 +57,12 @@ test("an unknown event type is ignored, logged once, and the run goes on to its 
   });
   await search(page, "Hurt");
 
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
   await expect(page.getByText("Searching for the track")).toHaveCount(1);
   // A status without a message is not shown as a placeholder line.
   await expect(page.getByText("Processing...")).toHaveCount(0);
-  await expect(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
   expect(
     (await streamLog(page)).filter((entry) => entry === `${ANALYZE} lyrics-preview`),
   ).toHaveLength(2);
@@ -95,11 +95,11 @@ test("a duplicate complete for the same run is ignored", async ({ page }) => {
   });
   await search(page, "Hurt");
 
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} complete`))
     .toHaveLength(3);
-  await expect(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
   await openDashboard(page);
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Duplicate Result")).toHaveCount(0);
@@ -128,11 +128,11 @@ test("a complete of another run that arrives before the run's own is ignored", a
   });
   await search(page, "Hurt");
 
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect
     .poll(async () => (await streamLog(page)).filter((entry) => entry === `${ANALYZE} done`))
     .toHaveLength(1);
-  await expect(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
   await openDashboard(page);
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Older Run Result")).toHaveCount(0);
@@ -159,7 +159,7 @@ test("a result from a newer API that this page reads leniently is shown", async 
   });
   await search(page, "Hurt");
 
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect(page.getByText("SIGNAL LOST")).toHaveCount(0);
   expect(problems).toEqual([
     expect.stringMatching(/^warning: .*\(complete\): does not fit the contract; read leniently/),
@@ -228,9 +228,9 @@ test("a repeated event and an event of another run are ignored on the resume str
   await expect(page.getByText("Is this the right track?")).toBeVisible();
   await page.keyboard.press("Enter");
 
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await expect(page.getByText("Analyzing audio")).toHaveCount(1);
-  await expect(page.getByText(COMPLETE_LOG)).toHaveCount(1);
+  await expect(page.getByText(COMPLETE_LOG, { exact: true })).toHaveCount(1);
   await openDashboard(page);
   await expect(page.getByText(result.title).first()).toBeVisible();
   await expect(page.getByText("Older Run Result")).toHaveCount(0);

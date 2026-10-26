@@ -68,7 +68,7 @@ test("an interrupt-only picker with data heartbeats resumes to one result", asyn
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
 
-  await expect(page.getByRole("button", { name: "PROCEED TO COMMAND CENTER" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open the results" })).toBeVisible();
   await page.waitForTimeout(400);
   const log = await apiRequests(page);
   expect(log.filter((entry) => entry.startsWith(`stream ${RESUME}`))).toEqual([
@@ -76,7 +76,7 @@ test("an interrupt-only picker with data heartbeats resumes to one result", asyn
   ]);
   expect(log.filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual([]);
   expect((await streamLog(page)).filter((entry) => entry.endsWith("reconnect"))).toEqual([]);
-  await expect(page.getByText("Analysis complete. Ready for deployment.")).toHaveCount(1);
+  await expect(page.getByText("Analysis complete.", { exact: true })).toHaveCount(1);
   expect(problems).toEqual([]);
 });
 

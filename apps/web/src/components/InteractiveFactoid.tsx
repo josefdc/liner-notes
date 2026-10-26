@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
-import { Info, ChevronRight, MicVocal, Music, Users, Sparkles, Link2 } from 'lucide-react';
+import { Info, ChevronRight, MicVocal, Music, Users, Lightbulb, Link2 } from 'lucide-react';
 import type { Reading } from '../constants';
 import type { Factoid, FactoidEntity } from '../types';
 import type { ShownClaim } from './provenance/claims';
-import { InferenceLabel } from './EstimatedWarning';
+import { ProvenanceChip } from './provenance/ProvenanceChip';
 import type { MeasuredAudio } from './measured/audio';
 import { ClaimChip } from './provenance/ClaimChip';
 
@@ -16,18 +16,18 @@ interface InteractiveFactoidProps {
    */
   claim?: ShownClaim;
   /**
-   * Where a card without a claim comes from ("Model inference", "From source data"), when the
-   * cards beside it carry claims of their own.
+   * Where a card without a claim comes from (written by the model, or taken from source data),
+   * when the cards beside it carry claims of their own.
    */
-  label?: string;
+  origin?: 'inferred' | 'record';
   /** The result's signal readings, for a claim about a measured value. */
   readings?: readonly Reading[];
   /** The result's measurement, for the measured side of a conflict. */
   audio?: MeasuredAudio | null;
 }
 
-// Color mapping for entity types. Violet means model inference only (ProvenanceChip), so a
-// sample is amber, the colour of history and of sample links in the genealogy graph.
+// Color mapping for entity types (search chips, not provenance). Violet means model inference
+// only (ProvenanceChip), so no entity is violet.
 const ENTITY_COLORS: Record<FactoidEntity['type'], string> = {
   synth: 'text-cyber hover:bg-cyber/20 border-cyber/30',
   producer: 'text-analog hover:bg-analog/20 border-analog/30',
@@ -38,61 +38,31 @@ const ENTITY_COLORS: Record<FactoidEntity['type'], string> = {
   year: 'text-text-tertiary hover:bg-white/10 border-white/20',
 };
 
-// Get border color based on factoid type
-function getBorderColor(type: Factoid['type']): string {
-  switch (type) {
-    case 'production':
-      return 'border-l-cyber';
-    case 'credits':
-      return 'border-l-analog';
-    case 'sample':
-      return 'border-l-analog';
-    case 'curiosity':
-      return 'border-l-accent-amber';
-    case 'connection':
-      return 'border-l-accent-green';
-    default:
-      return 'border-l-analog';
-  }
-}
+// A card's category (production, credits, sample...) is drawn in neutral greys: the colours
+// that say how a statement is known (cyan measured, amber sourced, violet inferred) belong to its
+// provenance chip alone, and a category says nothing about that.
+const CATEGORY_CHROME = 'text-text-secondary';
 
-// Get hover border color matching factoid type
-function getHoverBorderColor(type: Factoid['type']): string {
-  switch (type) {
-    case 'production':
-      return 'hover:border-cyber/25';
-    case 'credits':
-      return 'hover:border-analog/25';
-    case 'sample':
-      return 'hover:border-analog/25';
-    case 'curiosity':
-      return 'hover:border-accent-amber/25';
-    case 'connection':
-      return 'hover:border-accent-green/25';
-    default:
-      return 'hover:border-analog/25';
-  }
-}
-
-// Get icon and color based on factoid type
+// Get the icon and label of a factoid type
 function getFactoidStyle(type: Factoid['type']): {
   icon: React.ReactNode;
   color: string;
   label: string;
 } {
+  const color = CATEGORY_CHROME;
   switch (type) {
     case 'production':
-      return { icon: <MicVocal size={14} />, color: 'text-cyber', label: 'PRODUCTION' };
+      return { icon: <MicVocal size={14} />, color, label: 'PRODUCTION' };
     case 'credits':
-      return { icon: <Users size={14} />, color: 'text-analog', label: 'CREDITS' };
+      return { icon: <Users size={14} />, color, label: 'CREDITS' };
     case 'sample':
-      return { icon: <Music size={14} />, color: 'text-analog', label: 'SAMPLE' };
+      return { icon: <Music size={14} />, color, label: 'SAMPLE' };
     case 'curiosity':
-      return { icon: <Sparkles size={14} />, color: 'text-accent-amber', label: 'CURIOSITY' };
+      return { icon: <Lightbulb size={14} />, color, label: 'CURIOSITY' };
     case 'connection':
-      return { icon: <Link2 size={14} />, color: 'text-accent-green', label: 'CONNECTION' };
+      return { icon: <Link2 size={14} />, color, label: 'CONNECTION' };
     default:
-      return { icon: <Info size={14} />, color: 'text-analog', label: 'TRIVIA' };
+      return { icon: <Info size={14} />, color, label: 'TRIVIA' };
   }
 }
 
@@ -100,7 +70,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
   factoid,
   onEntityClick,
   claim,
-  label,
+  origin,
   readings,
   audio,
 }) => {
@@ -165,24 +135,11 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
 
   return (
     <div
-      className={`relative bg-surface/80 backdrop-blur-sm border border-border border-l-2 ${getBorderColor(factoid.type)} p-(--space-md) md:p-(--space-lg) rounded-md group ${getHoverBorderColor(factoid.type)} hover:bg-surface transition-all duration-(--duration-normal) ease-out-expo animate-fade-in-up overflow-hidden`}
+      data-factoid-category={factoid.type}
+      className="relative bg-surface/80 backdrop-blur-sm border border-border border-l-2 border-l-white/25 p-(--space-md) md:p-(--space-lg) rounded-md group hover:border-white/20 hover:bg-surface transition-all duration-(--duration-normal) ease-out-expo animate-fade-in-up overflow-hidden"
     >
-      {/* Subtle gradient glow on hover */}
-      <div
-        className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-(--duration-slow) pointer-events-none bg-gradient-to-br from-transparent via-transparent ${
-          factoid.type === 'production'
-            ? 'to-cyber/[0.03]'
-            : factoid.type === 'credits'
-              ? 'to-analog/[0.03]'
-              : factoid.type === 'sample'
-                ? 'to-analog/[0.03]'
-                : factoid.type === 'curiosity'
-                  ? 'to-accent-amber/[0.03]'
-                  : factoid.type === 'connection'
-                    ? 'to-accent-green/[0.03]'
-                    : 'to-analog/[0.03]'
-        }`}
-      />
+      {/* Subtle glow on hover, neutral like the rest of the category chrome */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-(--duration-slow) pointer-events-none bg-gradient-to-br from-transparent via-transparent to-white/[0.03]" />
 
       {/* Header: in a narrow column the type chip moves below the title, and a title still
           wider than the column wraps, so neither is cut */}
@@ -220,7 +177,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
       {claim ? (
         <ClaimChip shown={claim} readings={readings} audio={audio} className="relative mt-3" />
       ) : (
-        label && <InferenceLabel className="relative mt-3">{label}</InferenceLabel>
+        origin && <ProvenanceChip kind={origin} className="relative mt-3" />
       )}
 
       {/* Entities count indicator */}

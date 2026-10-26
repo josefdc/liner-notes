@@ -150,10 +150,19 @@ export function citationsText(shown: ShownClaim): string {
   return shown.claim.origin === 'code' ? 'Cites:' : 'Cited by the model:';
 }
 
+/** The words for a code-built claim that cannot be shown as measured or sourced. */
+export const NOT_SOURCED_TEXT = 'Not sourced';
+
 const KindBadge: React.FC<{ kind: ClaimKind; origin: Claim['origin'] }> = ({ kind, origin }) => {
-  // A code-built claim that cannot be shown as measured or sourced is inferred, not the model's.
-  if (kind === 'inferred')
-    return <InferenceLabel>{origin === 'code' ? 'Inferred' : undefined}</InferenceLabel>;
+  // A code-built claim that cannot be shown as measured or sourced is not the model's: it is
+  // "not sourced" (built from records whose evidence does not hold), as a link of that kind is.
+  if (kind === 'inferred') {
+    return origin === 'code' ? (
+      <ProvenanceChip kind="unconfirmed">{NOT_SOURCED_TEXT}</ProvenanceChip>
+    ) : (
+      <InferenceLabel />
+    );
+  }
   return <ProvenanceChip kind={kind}>{KIND_TEXT[kind]}</ProvenanceChip>;
 };
 

@@ -39,30 +39,32 @@ export const colors = {
   viz: {
     cyan: '#00f0ff',
     amber: '#ffb000',
-    purple: '#a855f7',
     pink: '#ec4899',
     blue: '#3b82f6',
-    indigo: '#6366f1',
     green: '#22c55e',
     neutral: '#9ca3af',
   },
   cyan: '#00f0ff',
   amber: '#ffb000',
-  purple: '#a855f7',
   pink: '#ec4899',
   blue: '#3b82f6',
-  indigo: '#6366f1',
   green: '#22c55e',
   neutral: '#9ca3af',
+  relation: {
+    sample: '#ffb000',
+    interpolation: '#ec4899',
+    cover: '#22c55e',
+    remix: '#e5e7eb',
+    producer: '#3b82f6',
+    influence: '#9ca3af',
+  },
   success: '#22c55e',
   warning: '#fb923c',
   error: '#ff8a8a',
   info: '#60a5fa',
   accent: {
-    purple: '#d8b4fe',
     pink: '#f9a8d4',
     green: '#22c55e',
-    indigo: '#a5b4fc',
     amber: '#ffb000',
     blue: '#93c5fd',
   },
@@ -82,25 +84,16 @@ export const colors = {
 export const genealogyColors = {
   current: colors.cyber,
   origin: colors.analog,
-  sampler: colors.viz.purple,
-  influence: colors.viz.green,
   default: colors.gray[500],
 } as const;
 
 /** Genealogy graph: link colours by type (the graph itself uses genealogy/linkStyle.ts). */
 export const linkColors = {
-  sample: colors.analog,
-  cover: colors.viz.purple,
-  remix: colors.viz.pink,
-  influence: colors.gray[600],
+  sample: colors.relation.sample,
+  interpolation: colors.relation.interpolation,
+  cover: colors.relation.cover,
+  remix: colors.relation.remix,
+  producer: colors.relation.producer,
+  influence: colors.relation.influence,
   default: colors.gray[600],
-} as const;
-
-/** SmartTimeline: key moment colours, for the marker and for the moment's description. */
-export const keyMomentColors = {
-  energy_peak: colors.cyber,
-  energy_drop: colors.accent.pink,
-  onset: colors.accent.indigo,
-  harmonic_change: colors.analog,
-  silence: colors.gray[400],
 } as const;

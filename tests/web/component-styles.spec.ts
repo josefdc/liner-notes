@@ -707,6 +707,12 @@ async function focusRingContrast(page: Page, target: ReturnType<Page["locator"]>
     if (presses > 60) throw new Error("Tab does not reach the element");
     await page.keyboard.press("Tab");
   }
+  // Focused by the page itself (a picker takes the focus when it opens): away and back by Tab,
+  // as a keyboard user would see it.
+  if (!(await target.evaluate((el) => el.matches(":focus-visible")))) {
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+  }
   expect(await target.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
   await target.scrollIntoViewIfNeeded();
   await animationsSettled(page);
@@ -827,18 +833,57 @@ test("the Dashboard's focus rings reach 3:1 against what is beside them", async 
   await page.setViewportSize({ width: 1440, height: 900 });
   await analyzeAndOpenDashboard(page, "Bright Lines");
   const rings: Array<[string, number]> = [];
+  // In the order Tab reaches them.
   rings.push([
     "the hero's BPM chip",
-    await focusRingContrast(page, page.getByRole("button", { name: /^Measured: how BPM/ })),
+    await focusRingContrast(page, page.getByRole("button", { name: /^Measured.*: how BPM/ })),
   ]);
   rings.push([
     "VIEW FULL ANALYSIS",
     await focusRingContrast(page, page.getByRole("button", { name: "VIEW FULL ANALYSIS" })),
   ]);
   rings.push([
+    "the hero's Spotify link",
+    await focusRingContrast(page, page.getByRole("link", { name: "SPOTIFY" })),
+  ]);
+  rings.push([
     "a connected track",
     await focusRingContrast(page, page.getByRole("button", { name: /Older Record/ })),
   ]);
+  rings.push([
+    "the activity log's toggle",
+    await focusRingContrast(page, page.getByRole("button", { name: /^Expand activity log/ })),
+  ]);
+  for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
+});
+
+test("the Player's focus rings reach 3:1 against what is beside them", async ({ page }) => {
+  test.slow();
+  const rings: Array<[string, number]> = [];
+  await useMockApi(page, loadFixture("decrypt-after-model-unavailable"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await analyzeAndOpenDashboard(page, "Track");
+  await openPlayer(page);
+  rings.push([
+    "DECRYPT MORE",
+    await focusRingContrast(page, page.getByRole("button", { name: /DECRYPT MORE/ })),
+  ]);
+  for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
+});
+
+test("the track picker's focus rings reach 3:1 against what is beside them", async ({ page }) => {
+  await useMockApi(page, loadFixture("hitl"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByPlaceholder(/Song title/).fill("Hurt");
+  await page.getByRole("button", { name: "ANALYZE_SONG" }).click();
+  const picker = page.locator('div[tabindex="0"]', { hasText: "Is this the right track?" });
+  await expect(picker).toBeVisible();
+  // Held still: the picker's countdown would pick a track while the rings are measured.
+  await picker.hover();
+  const rings: Array<[string, number]> = [];
+  rings.push(["the picker", await focusRingContrast(page, picker)]);
+  rings.push(["a candidate", await focusRingContrast(page, picker.getByRole("button").first())]);
   for (const [name, ratio] of rings) expect(ratio, name).toBeGreaterThanOrEqual(3);
 });
 

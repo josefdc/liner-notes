@@ -152,6 +152,44 @@ describe("the Dashboard's compact audio values", () => {
   });
 });
 
+describe('MeasuredValue, compact, without a confidence or basis', () => {
+  it('says the basis is unknown on the chip itself, for a measured value and an estimate', () => {
+    const { container } = render(
+      <>
+        <MeasuredValue label="BPM" value="105" kind="measured" title="Measured" layout="compact" />
+        <MeasuredValue label="Mood" value="0.3" kind="estimate" title="Score" layout="compact" />
+      </>,
+    );
+    expect(container.textContent).toBe(
+      'BPM 105Measured, basis unknownMood 0.3Model estimate, basis unknown',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Measured, basis unknown: how BPM was obtained' }),
+    ).toBeTruthy();
+  });
+
+  it('keeps the value and its chip together, as one unit', () => {
+    const { container } = render(
+      <MeasuredValue
+        label="Loudness"
+        value="-13.6 dBFS RMS"
+        kind="measured"
+        confidence="direct measure"
+        basis="signal"
+        title="Measured"
+        layout="compact"
+      />,
+    );
+    const pair = container.querySelector('[data-value-pair]') as HTMLElement;
+    // One line from md up; on a narrow screen the chip right under the value, for every value.
+    expect(pair.className).toContain('md:flex-nowrap');
+    expect(pair.className).toContain('flex-col');
+    expect(pair.className).toContain('gap-1');
+    expect(pair.children).toHaveLength(2);
+    expect((pair.lastElementChild as HTMLElement).className).toContain('shrink-0');
+  });
+});
+
 describe('MissingValue', () => {
   it('says the value is not measured, and why when the result says', () => {
     render(<MissingValue label="Key" reason="not detected in the preview" />);

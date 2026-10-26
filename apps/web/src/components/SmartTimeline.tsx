@@ -1,8 +1,9 @@
 import type React from 'react';
 import { useMemo } from 'react';
 import type { SongSegment, KeyMoment, TrackData } from '../types';
-import { keyMomentColors, colors } from '../styles/theme';
+import { colors } from '../styles/theme';
 import { InferenceLabel } from './EstimatedWarning';
+import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { formatSeconds } from '../constants';
 
 interface SmartTimelineProps {
@@ -50,18 +51,49 @@ const formatTime = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+type Shape = 'diamond' | 'up' | 'down' | 'circle' | 'square';
+
 /**
- * Get marker color based on key moment type
- * Uses centralized Cyber-Noir design system colors
+ * Key moments are measured, so every one is drawn in the measured colour; their types differ by
+ * shape (and say what they are in words). An unknown type is a diamond.
  */
-const getMarkerColor = (type: KeyMoment['type']): string => {
-  return keyMomentColors[type] || colors.analog;
+const MOMENT_SHAPE: Record<KeyMoment['type'], Shape> = {
+  energy_peak: 'up',
+  energy_drop: 'down',
+  onset: 'diamond',
+  harmonic_change: 'circle',
+  silence: 'square',
 };
 
-const SEGMENT_SOURCE_LABEL: Record<NonNullable<TrackData['segmentsSource']>, string> = {
-  template: 'Template — not analysed',
-  inferred: 'Model inference',
+/** A marker's shape, 10 px, in its colour (currentColor). */
+const SHAPE_PATH: Record<Shape, React.ReactNode> = {
+  diamond: <path d="M5 0.5 9.5 5 5 9.5 0.5 5Z" />,
+  up: <path d="M5 0.5 9.5 9.5H0.5Z" />,
+  down: <path d="M0.5 0.5H9.5L5 9.5Z" />,
+  circle: <circle cx="5" cy="5" r="4.5" />,
+  square: (
+    <rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2" />
+  ),
 };
+
+// The song's structure is never measured: the model's sections are drawn in the inferred colour,
+// a template's (or one of unknown origin) in neutral greys. The colour a result sends with each
+// section (chosen by the model) is not used: it would put the measured or sourced colours on an
+// inference. Neighbouring sections alternate two tints and are drawn apart.
+const SEGMENT_TINTS: Record<'inferred' | 'other', [string, string]> = {
+  inferred: ['bg-prov-inferred/60', 'bg-prov-inferred/35'],
+  other: ['bg-white/25', 'bg-white/10'],
+};
+
+/** The chip that says where the structure comes from: a model, a template, or nobody knows. */
+const SegmentsChip: React.FC<{ source: TrackData['segmentsSource'] }> = ({ source }) =>
+  source === 'inferred' ? (
+    <InferenceLabel />
+  ) : source === 'template' ? (
+    <ProvenanceChip kind="missing">Template — not analysed</ProvenanceChip>
+  ) : (
+    <ProvenanceChip kind="unconfirmed">Not measured</ProvenanceChip>
+  );
 
 const EMPTY_SEGMENTS: SongSegment[] = [];
 const EMPTY_SAMPLES: { time: number; description: string }[] = [];
@@ -74,6 +106,7 @@ interface Marker {
   time: number;
   description: string;
   color: string;
+  shape: Shape;
   intensity: number;
 }
 
@@ -99,16 +132,21 @@ const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, 
         role="img"
         aria-label={marker.description}
       >
-        {/* Marker diamond with dynamic color */}
-        <div
-          className="w-2 h-2 rotate-45 border border-black group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
-          style={{ backgroundColor: marker.color, opacity: marker.intensity ?? 1 }}
-        />
-        {/* Tooltip */}
-        <div
-          className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-chrome font-mono transition-opacity z-20 pointer-events-none"
-          style={{ color: marker.color }}
+        {/* The marker's shape (its type), in its colour (how it is known) */}
+        <svg
+          viewBox="0 0 10 10"
+          width={10}
+          height={10}
+          aria-hidden="true"
+          data-shape={marker.shape}
+          fill="currentColor"
+          className="group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
+          style={{ color: marker.color, opacity: marker.intensity ?? 1 }}
         >
+          {SHAPE_PATH[marker.shape]}
+        </svg>
+        {/* Tooltip, in a text colour */}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-chrome font-mono text-text-secondary transition-opacity z-20 pointer-events-none">
           {marker.description}
         </div>
       </div>
@@ -141,7 +179,8 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         (samples ?? []).map((s) => ({
           time: s.time,
           description: `Sample: ${s.description} (time inferred by the model)`,
-          color: colors.analog,
+          color: colors.prov.inferred,
+          shape: 'diamond' as const,
           intensity: 1,
         })),
         duration,
@@ -156,7 +195,8 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       (keyMoments ?? []).map((k) => ({
         time: k.time,
         description: `${k.description} (measured at ${formatTime(k.time)} in the preview)`,
-        color: getMarkerColor(k.type),
+        color: colors.prov.measured,
+        shape: MOMENT_SHAPE[k.type] ?? 'diamond',
         intensity: k.intensity,
       })),
       measuredPreview ?? DECODED_SECONDS,
@@ -178,11 +218,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
           Structure
         </span>
-        {segments.length > 0 && (
-          <InferenceLabel>
-            {segmentsSource ? SEGMENT_SOURCE_LABEL[segmentsSource] : 'Not measured'}
-          </InferenceLabel>
-        )}
+        {segments.length > 0 && <SegmentsChip source={segmentsSource} />}
       </div>
 
       {/* Time labels: the end label only when the duration is known */}
@@ -193,19 +229,17 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
 
       {/* Structure Bar */}
       {segments.length > 0 ? (
-        <div className="h-3 w-full flex rounded-xs overflow-hidden relative" role="list">
-          {segments.map((seg) => (
+        <div className="h-3 w-full flex gap-px rounded-xs overflow-hidden relative" role="list">
+          {segments.map((seg, index) => (
             <div
               // Labels repeat (two choruses); a segment's span is unique.
               key={`${seg.start}-${seg.end}-${seg.label}`}
               role="listitem"
               aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
               tabIndex={0}
-              className="h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/50"
-              style={{
-                width: `${Math.max(seg.end - seg.start, 0)}%`,
-                backgroundColor: seg.color,
-              }}
+              data-segment-tint={segmentsSource === 'inferred' ? 'inferred' : 'neutral'}
+              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${SEGMENT_TINTS[segmentsSource === 'inferred' ? 'inferred' : 'other'][index % 2]}`}
+              style={{ width: `${Math.max(seg.end - seg.start, 0)}%` }}
             >
               {/* Tooltip */}
               <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-void border border-white/20 px-2 py-1 text-chrome font-mono whitespace-nowrap z-10 transition-opacity">

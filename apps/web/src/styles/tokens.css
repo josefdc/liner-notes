@@ -12,8 +12,8 @@
  *   analog, spotify and white, and any colour a text-* class in apps/web/src names (at its
  *   opacity and the element's own; what it cannot see is listed in that file). It checks
  *   them on every surface: a void base, a translucent surface panel on it, and a hover or active
- *   state (or the class string's own bg tint) on that. Data-visualisation colours (--color-viz-*)
- *   are checked at 3:1 or more.
+ *   state (or the class string's own bg tint) on that. Data-visualisation colours (--color-viz-*,
+ *   --color-relation-*) are checked at 3:1 or more.
  *
  * A token that only points at another (`var(--color-...)`) is an alias kept for code that still
  * uses the old name.
@@ -67,23 +67,36 @@
      icon and words (components/provenance/ProvenanceChip.tsx) ===== */
   --color-prov-measured: var(--color-cyber);
   --color-prov-sourced: var(--color-analog);
-  /* Violet, for model inference and audio-model estimates only (nothing else is violet). It is
-     the lightest violet still clearly a hue: 5.5:1 or more on every surface and 4.6:1 on its own
-     badge tint. A light neutral (#cbd5e1) read as the neutral badge (CIE76 ΔE 27 from its grey)
-     and, with protanopia, as the measured cyan (ΔE 9); this violet is ΔE 51 and 33 from them,
-     and over 99 from the sourced amber and the warning orange */
+  /* Violet means inferred, and only that: what a model wrote or estimated (its text, genre
+     profile, song sections and sample times, the model steps of a run, and audio-model scores).
+     No other token is violet or near it (the purple and indigo hues are gone, and the honesty
+     guard keeps their names out of web source). It is the lightest violet still clearly a hue:
+     5.5:1 or more on every surface and 4.6:1 on its own badge tint. A light neutral (#cbd5e1)
+     read as the neutral badge (CIE76 ΔE 27 from its grey) and, with protanopia, as the measured
+     cyan (ΔE 9); this violet is ΔE 51 and 33 from them, and over 99 from the sourced amber and
+     the warning orange */
   --color-prov-inferred: #c4a4fc;
   --color-prov-missing: var(--color-text-tertiary);
 
-  /* ===== Data visualisation: series and relation colours for charts and the graph ===== */
+  /* ===== Data visualisation: series colours for charts and the graph ===== */
   --color-viz-cyan: var(--color-cyber);
   --color-viz-amber: var(--color-analog);
-  --color-viz-purple: #a855f7;
   --color-viz-pink: #ec4899;
   --color-viz-blue: #3b82f6;
-  --color-viz-indigo: #6366f1;
   --color-viz-green: #22c55e;
   --color-viz-neutral: #9ca3af;
+
+  /* ===== Genealogy relations: the colour of each kind of link, named by relation ===== */
+  /* Only a sourced link is drawn as a sample, interpolation, cover or remix (an inferred one is
+     shown as an influence), so the sourced amber marks sourced samples. None is cyan or violet;
+     the remix is a light grey, apart from the influence grey by lightness (ΔE 25). Lines reach
+     3:1 and their labels 4.5:1 on the page */
+  --color-relation-sample: var(--color-analog);
+  --color-relation-interpolation: var(--color-viz-pink);
+  --color-relation-cover: var(--color-viz-green);
+  --color-relation-remix: #e5e7eb;
+  --color-relation-producer: var(--color-viz-blue);
+  --color-relation-influence: var(--color-viz-neutral);
 
   /* ===== Status ===== */
   --color-status-success: var(--color-viz-green);
@@ -95,10 +108,8 @@
 
   /* ===== Accents: the data-visualisation hues for text and badges, lighter where the chart
      value is under 4.5:1 as text ===== */
-  --color-accent-purple: #d8b4fe;
   --color-accent-pink: #f9a8d4;
   --color-accent-green: var(--color-viz-green);
-  --color-accent-indigo: #a5b4fc;
   --color-accent-amber: var(--color-analog);
   --color-accent-blue: #93c5fd;
 

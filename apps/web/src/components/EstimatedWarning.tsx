@@ -20,15 +20,33 @@ import { ProvenanceChip } from './provenance/ProvenanceChip';
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
 
-/** Chip marking content written by the model (or a template) rather than measured. */
-export const InferenceLabel: React.FC<{ children?: React.ReactNode; className?: string }> = ({
-  children = 'Model inference',
-  className = '',
-}) => (
-  <ProvenanceChip kind="inferred" className={className} title="Not measured from the audio">
-    {children}
+/**
+ * Chip marking content a model wrote. It takes no words of its own: content that no model wrote
+ * (source data, a template) has a chip of its own kind (ProvenanceChip).
+ */
+export const InferenceLabel: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <ProvenanceChip kind="inferred" className={className} title="Written by a model, not measured">
+    Model inference
   </ProvenanceChip>
 );
+
+/**
+ * Where content without a claim of its own comes from: written by the model, or taken from
+ * source data by code when the model was unavailable (records with no citation to show).
+ */
+export const ResultOriginLabel: React.FC<{ fromSourceData: boolean; className?: string }> = ({
+  fromSourceData,
+  className = '',
+}) =>
+  fromSourceData ? (
+    <ProvenanceChip
+      kind="record"
+      className={className}
+      title="Taken from source records by code, without the model; no citation to show"
+    />
+  ) : (
+    <InferenceLabel className={className} />
+  );
 
 interface AudioStatsProps {
   track: TrackData;
@@ -100,12 +118,19 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   const listsShown = fingerprint?.styles.state === 'shown' || fingerprint?.tags.state === 'shown';
   const modelRows = showMissingModel ? model : modelShown;
   const firstModel = model[0];
+  // Compact: values further apart than a value from its chip; below md, one value per line,
+  // each line starting at the same edge.
+  const list = compact ? 'gap-x-4 gap-y-3' : 'gap-2';
+  const item = compact ? 'max-md:w-full' : undefined;
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
-      <ul aria-label="Audio values" className={`flex flex-wrap items-start gap-2 ${rowClassName}`}>
+      <ul
+        aria-label="Audio values"
+        className={`flex flex-wrap items-start ${list} ${rowClassName}`}
+      >
         {signal.map((reading) => (
-          <li key={reading.field}>
+          <li key={reading.field} className={item}>
             <ReadingValue reading={reading} size={size} compact={compact} />
           </li>
         ))}
@@ -121,10 +146,10 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
           </p>
           <ul
             aria-label="Audio-model estimates"
-            className={`flex flex-wrap items-start gap-2 ${rowClassName}`}
+            className={`flex flex-wrap items-start ${list} ${rowClassName}`}
           >
             {modelsMissing ? (
-              <li>
+              <li className={item}>
                 <MissingValue
                   label={listsShown ? 'Mood scores' : 'Model scores'}
                   status="not available"
@@ -134,7 +159,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
               </li>
             ) : (
               modelRows.map((reading) => (
-                <li key={reading.field}>
+                <li key={reading.field} className={item}>
                   <ReadingValue reading={reading} size={size} compact={compact} />
                 </li>
               ))

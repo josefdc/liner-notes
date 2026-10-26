@@ -197,6 +197,41 @@ for (const width of [390, 1440]) {
     const hero = page.locator("section").filter({ has: values });
     await expect(hero.getByText(/confidence|preview|essentia|analyzer/)).toHaveCount(0);
 
+    // Each value and its chip are one unit, laid out the same way for every value: on one line
+    // from md up, the chip right under its value on a phone (where the two do not fit on one
+    // line), always closer to its own value than to the next one, every unit at the same edge.
+    const pairs = await hero.locator("[data-value-pair]").evaluateAll((elements) =>
+      elements.map((pair) => {
+        const [value, chip] = [...pair.children].map((child) => child.getBoundingClientRect());
+        const unit = pair.getBoundingClientRect();
+        const middle = (box: DOMRect) => box.top + box.height / 2;
+        const sameLine = Math.abs(middle(value) - middle(chip)) <= 1;
+        return {
+          text: pair.textContent ?? "",
+          sameLine,
+          stacked: Math.abs(value.left - chip.left) <= 1 && chip.top >= value.bottom,
+          inner: sameLine ? chip.left - value.right : chip.top - value.bottom,
+          top: unit.top,
+          bottom: unit.bottom,
+          left: Math.round(value.left),
+        };
+      }),
+    );
+    expect(pairs.length).toBe(8);
+    for (const pair of pairs) {
+      expect(width < 768 ? pair.stacked : pair.sameLine, `${pair.text} laid out`).toBe(true);
+      expect(pair.inner, `${pair.text}: its value and chip`).toBeLessThanOrEqual(4);
+    }
+    if (width < 768) {
+      expect(new Set(pairs.map((pair) => pair.left)).size).toBe(1);
+      // The next unit starts further away than a chip is from its value.
+      for (let i = 1; i < pairs.length; i += 1) {
+        if (pairs[i].top > pairs[i - 1].bottom) {
+          expect(pairs[i].top - pairs[i - 1].bottom).toBeGreaterThan(4);
+        }
+      }
+    }
+
     // The keyboard reaches the chip and opens it: its provenance lines show below the value.
     for (let presses = 0; !(await chip.evaluate((el) => el === document.activeElement)); ) {
       presses += 1;
@@ -481,9 +516,11 @@ test.describe("a result without the audio block", () => {
     const values = page.getByRole("list", { name: "Audio values" });
     // The first analyzer's energy: on its own 0-1 scale, never a percentage or "Measured".
     await expect(valueItem(values, "Energy")).toHaveText("Energy 0.71v1 score");
+    // Its result gives no confidence or basis: the hero's chip says so, closed.
+    await expect(valueItem(values, "BPM")).toHaveText("BPM 105Measured, basis unknown");
     await openProvenance(page);
     await expect(valueItem(values, "BPM")).toHaveText(
-      "BPM 105MeasuredMeasured · confidence and basis unknown",
+      "BPM 105Measured, basis unknownMeasured · confidence and basis unknown",
     );
     await expect(valueItem(values, "Energy")).toHaveText(
       "Energy 0.71v1 scorev1 energy score (0–1, saturates on loud masters) · confidence and basis unknown",

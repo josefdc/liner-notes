@@ -55,14 +55,33 @@ describe('the genealogy panel label', () => {
     expect(panelLabel()).toBe('Genealogy NetworkModel inference');
   });
 
-  it('says the panel holds sourced and inferred links when both are shown', () => {
+  it('says the panel holds sourced and not sourced links when both are shown', () => {
     render(<Player trackData={withLinks([sourced, inferred])} onBack={() => {}} />);
-    expect(panelLabel()).toBe('Genealogy NetworkSourced and inferred links');
+    expect(panelLabel()).toBe('Genealogy NetworkSourced and not sourced links');
   });
 
-  it('says sourced links when every shown link is sourced', () => {
+  it('says sourced links when every shown link is sourced, with the sourced chip', () => {
     render(<Player trackData={withLinks([sourced])} onBack={() => {}} />);
     expect(panelLabel()).toBe('Genealogy NetworkSourced links');
+    expect(
+      document
+        .querySelector('[data-testid="genealogy-kinds"] [data-provenance]')
+        ?.getAttribute('data-provenance'),
+    ).toBe('sourced');
+  });
+
+  it('labels the panel with the chip of the links kind: violet only for the model', () => {
+    const kind = () =>
+      document
+        .querySelector('[data-testid="genealogy-kinds"] [data-provenance]')
+        ?.getAttribute('data-provenance');
+    render(<Player trackData={withLinks([inferred])} onBack={() => {}} />);
+    expect(kind()).toBe('inferred');
+    cleanup();
+    const track = withLinks([]);
+    track.genealogy.links = [{ ...sourced, evidenceIds: ['ev-not-in-pack'] }];
+    render(<Player trackData={track} onBack={() => {}} />);
+    expect(kind()).toBe('unconfirmed');
   });
 
   it('says not sourced, not model inference, for a code-built link whose evidence is not in the pack', () => {

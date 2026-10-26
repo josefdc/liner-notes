@@ -201,6 +201,7 @@ function recordedMessageSpans(text) {
 //   (none)    the text as it is
 //   "code"    comments blanked: script comments (line, block, JSX `{/* … */}`), CSS `/* … */`
 //             and HTML `<!-- … -->`
+//   "code-not-jsx-text"  as "code", and a script's JSX text blanked too (words on the page)
 //   "strings" string and template literals of a script
 //   "copy"    text in source: a script's strings and JSX text, or an HTML page without its
 //             comments, scripts and styles
@@ -208,8 +209,12 @@ function recordedMessageSpans(text) {
 export function scannedText(rule, text, path) {
   if (!rule.scan) return text;
   const html = /\.html?$/.test(path);
-  if (rule.scan === "code") {
-    if (isScript(path)) return mask(text, scriptSpans(text, path).comments, false);
+  if (rule.scan === "code" || rule.scan === "code-not-jsx-text") {
+    if (isScript(path)) {
+      const spans = scriptSpans(text, path);
+      const hidden = rule.scan === "code" ? spans.comments : [...spans.comments, ...spans.jsxText];
+      return mask(text, hidden, false);
+    }
     if (/\.css$/.test(path)) return mask(text, spansOf(text, /\/\*[\s\S]*?\*\//g), false);
     if (html) return mask(text, spansOf(text, HTML_COMMENT), false);
     return text;
@@ -517,18 +522,65 @@ const isDesignSystemCode = (p) =>
   p !== "apps/web/src/styles/tokens.css" &&
   p !== "apps/web/src/styles/theme.ts" &&
   !isTestSupport(p);
+// The hue rule also reads the genealogy graph's code, whose relation colours are named by
+// relation (colors.relation.cover), not by hue.
+const HUE_RULE_DIRS = [...DESIGN_SYSTEM_DIRS, "apps/web/src/components/genealogy/"];
+const isHueRuleCode = (p) =>
+  (isDesignSystemCode(p) || HUE_RULE_DIRS.some((dir) => p.startsWith(dir))) &&
+  /\.([cm]?[jt]sx?|css)$/.test(p) &&
+  p !== "apps/web/src/styles/tokens.css" &&
+  p !== "apps/web/src/styles/theme.ts" &&
+  !isTestSupport(p);
 // A hue that means nothing about where a value comes from, named in code: a class
 // (text-accent-pink), a variant ("green"), a glow (shadow-glow-purple-subtle), a theme value
-// (colors.indigo).
-export const UNMEANING_HUE =
-  /(?<![A-Za-z0-9_])(?:pink|green|purple|indigo|violet)(?![A-Za-z0-9_])/gi;
-// Text under 12 px: a Tailwind size (text-[10px], text-[0.6rem]), a stylesheet font-size, or a
-// size set from script (D3 .attr('font-size', 9), a fontSize: 10 prop or style).
+// (colors.indigo), an identifier in camelCase (accentPurple), snake_case (accent_purple) or
+// capitals (PURPLE_GLOW). Case-sensitive, so a name in prose ("Green Day") is not a colour;
+// JSX text is not scanned.
+const HUES = ["pink", "green", "purple", "indigo", "violet"];
+const title = (word) => word[0].toUpperCase() + word.slice(1);
+export const UNMEANING_HUE = [
+  new RegExp(`(?<![A-Za-z0-9])(?:${HUES.join("|")})(?![a-z0-9])`, "g"),
+  new RegExp(`(?<=[a-z0-9])(?:${HUES.map(title).join("|")})(?![a-z])`, "g"),
+  new RegExp(
+    `(?<![A-Za-z0-9])(?:${HUES.map((h) => h.toUpperCase()).join("|")})(?![A-Za-z0-9])`,
+    "g",
+  ),
+];
+// The purple and indigo tokens, gone from tokens.css: violet means inferred, and only the
+// prov-inferred token is violet. A class, a token or a theme value naming one anywhere in web
+// source brings a near-violet back.
+export const NEAR_VIOLET = [
+  /(?<![A-Za-z0-9_])(?:accent|viz)-(?:purple|indigo|violet)(?![\w-])/g,
+  /\b(?:colors|accent|viz)\.(?:purple|indigo|violet)\b/g,
+];
+
+// Text under 12 px (0.75 rem, 9 pt): a Tailwind size (text-[10px], text-[0.7rem],
+// text-[length:10px], text-[8pt]), a stylesheet font-size or font shorthand, a --text-* size
+// token, or a size set from script (D3 .attr('font-size', 9), `${9}px` or d => 9; a fontSize: 10
+// prop or style, '0.6rem' or '10px'). A unitless fraction (fontSize: 1.2) and a variable named
+// fontSize (const fontSize = 10) are not sizes. Sizes kept in constants are pinned by their own
+// tests (scripts/graph-text-size.test.mjs).
+const N = String.raw`(?:\d|1[01])(?:\.\d+)?`;
+const N_INT = String.raw`(?:\d|1[01])`;
+const REM = String.raw`0?\.(?:[0-6]\d*|7(?:[0-4]\d*)?)r?em`;
+const PT = String.raw`[0-8](?:\.\d+)?pt`;
+const SMALL = `(?:${N}px|${REM}|${PT})`;
 export const TINY_TEXT = [
-  /(?<![\w-])text-\[(?:\d|1[01])(?:\.\d+)?px\]/g,
-  /(?<![\w-])text-\[0?\.(?:[0-6]\d*|7[0-4]\d*)r?em\]/g,
-  /(?<![\w-])font-size\s*:\s*(?:\d|1[01])(?:\.\d+)?px/gi,
-  /(?:(['"])font-size\1\s*,\s*|\bfontSize\s*[:=]\s*\{?\s*)(['"]?)(?:\d|1[01])(?:\.\d+)?(?:px)?\2(?![\d.])/g,
+  new RegExp(String.raw`(?<![\w-])text-\[(?:length:)?${SMALL}\]`, "g"),
+  new RegExp(String.raw`(?<![\w-])font-size\s*:\s*${SMALL}(?![\w.])`, "gi"),
+  new RegExp(String.raw`(?<![\w-])font\s*:[^;{}\n]*?(?<![\w.\-/])${SMALL}(?![\w.])`, "gi"),
+  new RegExp(
+    String.raw`--text-(?!shadow)(?![\w-]*--line-height)[\w-]+\s*:\s*${SMALL}(?![\w.])`,
+    "g",
+  ),
+  new RegExp(
+    String.raw`(['"])font-size\1\s*,\s*(?:(?:\(\s*\w*\s*\)|\w+)\s*=>\s*)?(?:${N}(?![\w.])|(['"\x60])(?:\$\{\s*${N}\s*\}|${N})(?:px)?\2|(['"\x60])(?:${REM}|${PT})\3)`,
+    "g",
+  ),
+  new RegExp(
+    String.raw`\bfontSize\s*(?::|=\s*\{)\s*(?:${N_INT}(?![\w.])|(['"\x60])(?:\$\{\s*${N}\s*\}|${N})px\1|(['"\x60])(?:${REM}|${PT})\2|(['"\x60])${N_INT}\3)`,
+    "g",
+  ),
 ];
 
 // Each rule counts the matches of `pattern` (one expression or several) in the files `files`
@@ -585,16 +637,29 @@ export const rules = [
     id: "unmeaning-hues-design-system",
     owner: "#30",
     description:
-      "Pink, green, purple, indigo or violet named in the design system's code (styles/, components/provenance, measured, ui): name colours by meaning (measured, sourced, inferred, warning, error, neutral)",
-    files: isDesignSystemCode,
+      "Pink, green, purple, indigo or violet named in the design system's code (styles/, components/provenance, measured, ui) and the genealogy graph's: name colours by meaning (measured, sourced, inferred, warning, error, neutral; a relation)",
+    files: isHueRuleCode,
     pattern: UNMEANING_HUE,
+    scan: "code-not-jsx-text",
+  },
+  {
+    id: "near-violet-outside-inference",
+    owner: "#30",
+    description:
+      "The purple and indigo tokens (accent-purple, viz-indigo, colors.purple…) named in web source or its config: violet means inferred, and only prov-inferred is violet",
+    files: (p) =>
+      (p.startsWith("apps/web/src/") || p.startsWith("apps/web/config/")) &&
+      /\.([cm]?[jt]sx?|css)$/.test(p) &&
+      p !== "apps/web/src/styles/theme.ts" &&
+      !isTestSupport(p),
+    pattern: NEAR_VIOLET,
     scan: "code",
   },
   {
     id: "tiny-text-web",
     owner: "#30",
     description:
-      "Text under 12 px in web source (text-[10px], font-size: 9px, .attr('font-size', 9)): use text-chrome (12 px) or larger",
+      "Text under 12 px in web source (text-[10px], text-[0.7rem], font-size: 9px, font: 10px …, a --text-* token, .attr('font-size', 9), fontSize: 10): use text-chrome (12 px) or larger",
     files: (p) =>
       p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p) && !isTestSupport(p),
     pattern: TINY_TEXT,

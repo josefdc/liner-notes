@@ -160,6 +160,12 @@ describe('Player', () => {
     render(<Player trackData={track} onBack={() => {}} />);
     expect(screen.getByText('From source data')).toBeTruthy();
     expect(screen.queryByText('Model inference')).toBeNull();
+    // No model wrote them: a neutral chip with a page icon, not the model's violet sparkles.
+    const chip = screen.getByText('From source data').closest('[data-provenance]') as HTMLElement;
+    expect(chip.dataset.provenance).toBe('record');
+    expect(chip.className).not.toContain('prov-inferred');
+    expect(chip.querySelector('svg.lucide-sparkles')).toBeNull();
+    expect(chip.querySelector('svg.lucide-file-text')).not.toBeNull();
   });
 
   it('says no key moments were detected when the tempo or key was not detected', () => {

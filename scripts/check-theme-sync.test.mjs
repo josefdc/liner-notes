@@ -137,10 +137,16 @@ describe("theme generator", () => {
     --color-analog: #ffb000;
     --color-viz-cyan: var(--color-cyber);
     --color-viz-pink: #ec4899;
-    --color-viz-purple: #a855f7;
+    --color-viz-blue: #3b82f6;
     --color-viz-green: #22c55e;
+    --color-relation-sample: var(--color-analog);
+    --color-relation-interpolation: var(--color-viz-pink);
+    --color-relation-cover: var(--color-viz-green);
+    --color-relation-remix: #e5e7eb;
+    --color-relation-producer: var(--color-viz-blue);
+    --color-relation-influence: var(--color-gray-400);
     --color-accent-pink: #f9a8d4;
-    --color-accent-indigo: #a5b4fc;
+    --color-accent-blue: #93c5fd;
     --color-status-warning: #fb923c;
     --color-text-tertiary: rgba(255, 255, 255, 0.55);
     --color-gray-400: #9ca3af;
@@ -155,13 +161,22 @@ describe("theme generator", () => {
       voidLight: "#0a0a0a",
       cyber: "#00f0ff",
       analog: "#ffb000",
-      viz: { cyan: "#00f0ff", pink: "#ec4899", purple: "#a855f7", green: "#22c55e" },
+      viz: { cyan: "#00f0ff", pink: "#ec4899", blue: "#3b82f6", green: "#22c55e" },
       // The data-visualisation colours under their hue names too.
       cyan: "#00f0ff",
       pink: "#ec4899",
-      purple: "#a855f7",
+      blue: "#3b82f6",
       green: "#22c55e",
-      accent: { pink: "#f9a8d4", indigo: "#a5b4fc" },
+      // The genealogy relations, named by relation.
+      relation: {
+        sample: "#ffb000",
+        interpolation: "#ec4899",
+        cover: "#22c55e",
+        remix: "#e5e7eb",
+        producer: "#3b82f6",
+        influence: "#9ca3af",
+      },
+      accent: { pink: "#f9a8d4", blue: "#93c5fd" },
       warning: "#fb923c",
       text: { tertiary: "rgba(255, 255, 255, 0.55)" },
       gray: { 400: "#9ca3af", 500: "#6b7280", 600: "#4b5563" },
@@ -174,22 +189,38 @@ describe("theme generator", () => {
     expect(theme).toContain("  viz: {\n    cyan: '#00f0ff',\n    pink: '#ec4899',\n");
     expect(theme).toContain("  gray: {\n    400: '#9ca3af',\n");
     expect(theme).toContain("export const genealogyColors = {\n  current: colors.cyber,\n");
-    expect(theme).toContain("  energy_drop: colors.accent.pink,\n");
-    expect(theme).toContain("  silence: colors.gray[400],\n");
+    expect(theme).toContain("export const linkColors = {\n  sample: colors.relation.sample,\n");
+    expect(theme).toContain("  cover: colors.relation.cover,\n");
     expect(theme).not.toContain("space");
   });
 
   it("keeps the export names and colour keys the charts and the graph use", () => {
     const theme = generateTheme(tokens);
-    for (const name of ["colors", "genealogyColors", "linkColors", "keyMomentColors"]) {
+    for (const name of ["colors", "genealogyColors", "linkColors"]) {
       expect(theme).toContain(`export const ${name} = {`);
     }
     const colors = themeColors(tokens);
-    for (const key of ["void", "cyber", "analog", "purple", "pink", "green", "indigo", "blue"]) {
+    for (const key of ["void", "cyber", "analog", "pink", "green", "blue"]) {
       expect(colors[key], key).toMatch(/^#[0-9a-f]{6}$/);
     }
+    // Violet is the inferred colour alone: no purple or indigo hue is left.
+    for (const key of ["purple", "indigo", "violet"]) {
+      expect(colors[key], key).toBeUndefined();
+      expect(colors.viz[key], key).toBeUndefined();
+      expect(colors.accent[key], key).toBeUndefined();
+    }
+    // Every genealogy relation has a colour of its own, named by relation.
+    expect(Object.keys(colors.relation)).toEqual([
+      "sample",
+      "interpolation",
+      "cover",
+      "remix",
+      "producer",
+      "influence",
+    ]);
+    expect(new Set(Object.values(colors.relation)).size).toBe(6);
     // The chart and graph hues stay the data-visualisation values, not the lighter text ones.
-    for (const hue of ["purple", "pink", "indigo", "blue"]) {
+    for (const hue of ["pink", "blue"]) {
       expect(colors[hue], hue).toBe(colors.viz[hue]);
       expect(colors.accent[hue], hue).not.toBe(colors.viz[hue]);
     }

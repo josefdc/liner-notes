@@ -15,7 +15,8 @@
 // A class string that also sets a background tint (`text-accent-pink hover:bg-accent-pink/20`)
 // has its text checked on that tint too, over every surface. Dark text on a light fill
 // (INVERSE) is checked on that fill instead. A text class naming Tailwind's default palette
-// (text-red-900) fails: it is not a token. Data-visualisation colours (--color-viz-*) reach
+// (text-red-900) fails: it is not a token. Data-visualisation colours (--color-viz-*,
+// --color-relation-*) reach
 // 3:1 (AA for graphics) on the page and on panels. KNOWN lists failures whose fix is planned.
 //
 // Not seen: opacity or a background set on an ancestor element, a colour inherited from one,
@@ -54,7 +55,7 @@ export const KNOWN = [];
 const isBase = (name) => /^--color-void(-|$)/.test(name);
 const isTranslucentSurface = (name) => /^--color-surface(-|$)/.test(name);
 const isState = (name) => /^--color-surface-(hover|active)$/.test(name);
-const isGraphic = (name) => name.startsWith('--color-viz-');
+const isGraphic = (name) => /^--color-(viz|relation)-/.test(name);
 const short = (name) => name.replace(/^--color-/, '');
 
 const channel = (value) => {

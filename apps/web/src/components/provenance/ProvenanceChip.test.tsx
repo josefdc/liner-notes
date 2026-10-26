@@ -30,6 +30,7 @@ describe('ProvenanceChip', () => {
       { kind: 'measured', text: 'Measured', icon: true, variant: 'measured' },
       { kind: 'sourced', text: 'Sourced', icon: true, variant: 'sourced' },
       { kind: 'inferred', text: 'Model inference', icon: true, variant: 'inferred' },
+      { kind: 'record', text: 'From source data', icon: true, variant: 'neutral' },
       { kind: 'unconfirmed', text: 'Not confirmed', icon: true, variant: 'neutral' },
       { kind: 'missing', text: 'Missing', icon: true, variant: 'neutral' },
     ]);
@@ -42,6 +43,12 @@ describe('ProvenanceChip', () => {
       return name;
     });
     expect(new Set(icons).size).toBe(icons.length);
+  });
+
+  it('shows a sourced chip with an open book, no check mark: a verdict is a chip of its own', () => {
+    const element = chip('sourced');
+    expect(element.querySelector('svg.lucide-book-open')).not.toBeNull();
+    expect(element.querySelector('svg.lucide-book-open-check')).toBeNull();
   });
 
   it('takes words of its own, keeping the colour and icon of its kind', () => {
@@ -89,7 +96,7 @@ describe('SourceNote', () => {
   it('names the source, links it, and says the day it was retrieved', () => {
     const { container } = render(<SourceNote evidence={evidence()} />);
     expect(container.textContent).toBe(
-      'MusicBrainz · primary record — Some Recording, opens in a new tab· retrieved 20 Oct 2026',
+      'MusicBrainz · primary record — Some Recording, opens in a new tabretrieved 20 Oct 2026',
     );
     expect(screen.getByRole('link').getAttribute('href')).toBe(
       'https://musicbrainz.org/recording/1',

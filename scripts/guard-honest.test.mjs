@@ -267,7 +267,9 @@ describe("unmeaning-hues-design-system", () => {
     ["a variant key", "  purple: 'x',", 1],
     ["a glow", "'shadow-glow-indigo-subtle'", 1],
     ["a theme value", "stroke={colors.violet}", 1],
-    ["a capitalised name", "const Purple = 1;", 1],
+    ["a camelCase name", "const accentPurple = 1;", 1],
+    ["a snake_case name", "const accent_purple = 1;", 1],
+    ["a name in capitals", "const PURPLE_GLOW = 1;", 1],
   ])("counts %s", (_name, line, expected) => {
     expect(count("unmeaning-hues-design-system", line, path)).toBe(expected);
   });
@@ -276,16 +278,19 @@ describe("unmeaning-hues-design-system", () => {
     ["the meaning variants", "'text-prov-inferred bg-status-warning/10'"],
     ["a comment", "// was text-accent-pink"],
     ["a longer word", "const greenhouse = 1; const pinkish = 2;"],
+    ["a capitalised name in prose", "const band = 'Green Day';"],
+    ["JSX text", "<span>green light</span>"],
   ])("ignores %s", (_name, line) => {
     expect(count("unmeaning-hues-design-system", line, path)).toBe(0);
   });
 
-  it("scans the design system's code, but not the tokens, theme.ts, tests or other components", () => {
+  it("scans the design system's and the genealogy graph's code, but not the tokens, theme.ts, tests or other components", () => {
     const { files } = rule("unmeaning-hues-design-system");
     for (const scanned of [
       "apps/web/src/components/ui/Badge.tsx",
       "apps/web/src/components/provenance/ClaimChip.tsx",
       "apps/web/src/components/measured/MeasuredValue.tsx",
+      "apps/web/src/components/genealogy/linkStyle.ts",
       "apps/web/src/styles/placeholder.ts",
       "apps/web/src/styles/index.css",
     ]) {
@@ -297,7 +302,45 @@ describe("unmeaning-hues-design-system", () => {
       "apps/web/src/components/ui/Badge.test.tsx",
       "apps/web/src/components/provenance/testing.ts",
       "apps/web/src/components/InteractiveFactoid.tsx",
-      "apps/web/src/components/genealogy/linkStyle.ts",
+    ]) {
+      expect(files(skipped), skipped).toBe(false);
+    }
+  });
+});
+
+describe("near-violet-outside-inference", () => {
+  it.each([
+    ["an accent class", "'text-accent-purple border-accent-purple/20'", 2],
+    ["a chart class", "'fill-viz-indigo'", 1],
+    ["a token", "--color-viz-purple: #a855f7;", 1],
+    ["a theme value", "onset: colors.accent.indigo,", 1],
+    ["a theme hue", "cover: colors.purple,", 1],
+    ["a role's token", "sampler: '--color-viz-purple',", 1],
+  ])("counts %s", (_name, line, expected) => {
+    expect(count("near-violet-outside-inference", line)).toBe(expected);
+  });
+
+  it.each([
+    ["the inferred token", "'text-prov-inferred'"],
+    ["a comment", "// was text-accent-purple"],
+    ["another accent", "'text-accent-pink'"],
+  ])("ignores %s", (_name, line) => {
+    expect(count("near-violet-outside-inference", line)).toBe(0);
+  });
+
+  it("scans all web source and its config, the tokens too, but not theme.ts or tests", () => {
+    const { files } = rule("near-violet-outside-inference");
+    for (const scanned of [
+      "apps/web/src/components/ActivityLog.tsx",
+      "apps/web/src/styles/tokens.css",
+      "apps/web/config/theme.mjs",
+    ]) {
+      expect(files(scanned), scanned).toBe(true);
+    }
+    for (const skipped of [
+      "apps/web/src/styles/theme.ts",
+      "apps/web/src/components/SystemConsole.test.tsx",
+      "apps/web/config/apiUrl.test.ts",
     ]) {
       expect(files(skipped), skipped).toBe(false);
     }
@@ -310,27 +353,57 @@ describe("tiny-text-web", () => {
     ["an 11 px size", "'text-[11px]'"],
     ["a fractional size", "'text-[9.5px]'"],
     ["a rem size", "'text-[0.6rem]'"],
+    ["0.7 rem", "'text-[0.7rem]'"],
+    ["0.7 em", "'text-[.7em]'"],
+    ["0.749 rem", "'text-[0.749rem]'"],
+    ["a typed length", "'text-[length:10px]'"],
+    ["points", "'text-[8pt]'"],
     ["a size after a variant", "'md:text-[8px]'"],
     ["a D3 font size", ".attr('font-size', 9)"],
     ["a D3 font size in pixels", '.attr("font-size", "10px")'],
+    ["a D3 font size from a template", ".attr('font-size', `\u0024{10}px`)"],
+    ["a D3 font size from a function", ".attr('font-size', (d) => 10)"],
+    ["a D3 font size in rem", ".attr('font-size', '0.6rem')"],
     ["a font size prop", "tick={{ fontSize: 10 }}"],
     ["a font size attribute", "<text fontSize={11}>"],
+    ["a font size style in rem", "style={{ fontSize: '0.6rem' }}"],
+    ["a font size style from a template", "style={{ fontSize: `\u0024{9}px` }}"],
   ])("counts %s", (_name, line) => {
     expect(count("tiny-text-web", line)).toBe(1);
   });
 
-  it("counts a stylesheet font size", () => {
-    expect(count("tiny-text-web", "a { font-size: 10px; }", "apps/web/src/a.css")).toBe(1);
+  it.each([
+    ["a stylesheet font size", "a { font-size: 10px; }"],
+    ["a stylesheet font size in rem", "a { font-size: 0.6rem; }"],
+    ["a font shorthand", "a { font: 10px monospace; }"],
+    ["a font shorthand with a weight and line height", "a { font: 600 0.7rem/1.2 serif; }"],
+    ["a size token", "@theme { --text-tiny: 10px; }"],
+  ])("counts %s", (_name, line) => {
+    expect(count("tiny-text-web", line, "apps/web/src/a.css")).toBe(1);
   });
 
   it.each([
     ["the chrome size", 'className="text-chrome"'],
-    ["a 12 px size", "'text-[12px] text-[0.75rem]'"],
+    ["a 12 px size", "'text-[12px] text-[0.75rem] text-[9pt]'"],
+    ["0.8 rem", "'text-[0.8rem]'"],
     ["a larger size", ".attr('font-size', 14) tick={{ fontSize: 12 }}"],
     ["a comment", "// was text-[10px]"],
     ["a width", "'w-[10px] h-[9px]'"],
+    ["a unitless fraction", "tick={{ fontSize: 1.2 }}"],
+    ["a variable named fontSize", "const fontSize = 10;"],
   ])("ignores %s", (_name, line) => {
     expect(count("tiny-text-web", line)).toBe(0);
+  });
+
+  it.each([
+    [
+      "the chrome token and its line height",
+      "@theme { --text-chrome: 12px; --text-chrome--line-height: 16px; }",
+    ],
+    ["a text shadow token", "@theme { --text-shadow-dark: 0 1px 3px black; }"],
+    ["a 12 px stylesheet size", "a { font-size: 12px; font: 0.75rem serif; }"],
+  ])("ignores %s in a stylesheet", (_name, line) => {
+    expect(count("tiny-text-web", line, "apps/web/src/a.css")).toBe(0);
   });
 });
 
@@ -757,6 +830,7 @@ describe("baselines", () => {
       "colour-literals-design-system": 0,
       "default-palette-utilities": 0,
       "unmeaning-hues-design-system": 0,
+      "near-violet-outside-inference": 0,
       "tiny-text-web": 0,
       "dotenv-outside-config": 0,
       "string-sentinel-tool-results": 0,
@@ -830,6 +904,7 @@ describe("baselines", () => {
         "colour-literals-design-system": 0,
         "default-palette-utilities": 0,
         "unmeaning-hues-design-system": 0,
+        "near-violet-outside-inference": 0,
         "tiny-text-web": 0,
         "dotenv-outside-config": 0,
         "string-sentinel-tool-results": 0,

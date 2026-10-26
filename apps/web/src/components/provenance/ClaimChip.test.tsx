@@ -88,9 +88,11 @@ describe('ClaimChip', () => {
         [evidence({ recordRef })],
       ),
     );
-    expect(screen.getByRole('link').textContent).toMatch(
-      new RegExp(`^MusicBrainz · primary record · ${text} — `),
-    );
+    expect(
+      screen.getByRole('link', {
+        name: new RegExp(`^MusicBrainz · primary record · ${text} — `),
+      }),
+    ).toBeTruthy();
     cleanup();
     const unlinked = renderChip(
       track([claim({ evidenceIds: ['ev1'] })], [evidence({ recordRef, url: null })]),
@@ -172,14 +174,14 @@ describe('ClaimChip', () => {
     [
       'cites evidence that is not in the pack',
       { kind: 'sourced', origin: 'code', evidenceIds: ['gone', 'ev1'] },
-      'Inferred',
+      'Not sourced',
     ],
     [
       'is a model claim the judge did not support',
       { kind: 'sourced', evidenceIds: ['ev1'], verdict: 'unsupported' },
       'Model inference',
     ],
-    ['cites nothing', { kind: 'sourced', origin: 'code', evidenceIds: [] }, 'Inferred'],
+    ['cites nothing', { kind: 'sourced', origin: 'code', evidenceIds: [] }, 'Not sourced'],
   ] satisfies Array<[string, Partial<Claim>, string]>)(
     'shows a sourced claim that %s as inferred, by whoever wrote it',
     (_case, change, label) => {
@@ -187,9 +189,15 @@ describe('ClaimChip', () => {
       expect(chip.dataset.claimKind).toBe('inferred');
       expect(chip.querySelector('span.border')?.textContent).toBe(label);
       expect(chip.textContent).not.toMatch(/Sourced|primary record/);
+      const kindChip = chip.querySelector('[data-provenance]') as HTMLElement;
       if ('origin' in change && change.origin === 'code') {
         expect(chip.textContent).not.toContain('Model inference');
         expect(chip.textContent).not.toContain('Cited by the model');
+        // No model wrote it: neither the model's violet nor its sparkles.
+        expect(kindChip.dataset.provenance).toBe('unconfirmed');
+        expect(kindChip.querySelector('svg.lucide-sparkles')).toBeNull();
+      } else {
+        expect(kindChip.dataset.provenance).toBe('inferred');
       }
     },
   );
@@ -224,7 +232,7 @@ describe('ClaimChip', () => {
     );
     const chip = renderChip({ ...result, audioUnavailableReason: 'not_detected' });
     expect(chip.dataset.claimKind).toBe('inferred');
-    expect(chip.textContent).toContain('Inferred');
+    expect(chip.textContent).toContain('Not sourced');
     const missing = chip.querySelector('[data-value-kind="missing"]');
     expect(missing?.textContent).toMatch(/^Key not measured— /);
   });

@@ -135,7 +135,7 @@ test.describe("a result with claims", () => {
     // inferred: model claims, and sourced claims that cannot be shown as sourced
     for (const [text, label, status] of [
       ["The song was a club favourite in 2011.", "Model inference", "not checked by the verifier"],
-      ["The single reached the top 40.", "Inferred", "1 cited source is not in this result"],
+      ["The single reached the top 40.", "Not sourced", "1 cited source is not in this result"],
       [
         "The song was recorded at Abbey Road.",
         "Model inference",
@@ -175,7 +175,7 @@ test.describe("a result with claims", () => {
       "The preview's key, as measured.",
     );
     // Written by code, but its value was not measured: inferred, not the model's.
-    await expect(key).toContainText("Inferred");
+    await expect(key).toContainText("Not sourced");
     await expect(key).not.toContainText("Model inference");
     await expect(key.locator('[data-value-kind="missing"]')).toHaveText(
       "Key not measured— not detected in the preview",

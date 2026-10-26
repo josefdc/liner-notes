@@ -1,8 +1,9 @@
 import {
-  BookOpenCheck,
+  BookOpen,
   ChevronDown,
   CircleDashed,
   CircleHelp,
+  FileText,
   Gauge,
   Sparkles,
   type LucideIcon,
@@ -10,18 +11,28 @@ import {
 import type React from 'react';
 import { Badge, type BadgeVariant } from '../ui/Badge';
 
-// How a value or a claim is known, as a chip: an icon and words, never colour alone. Measured
-// (cyan, a gauge): read from the audio signal. Sourced (amber, a book): stated by a cited source.
-// Inferred (violet, sparkles): written or estimated by a model. Unconfirmed (neutral, a question
-// mark): shown, but nothing confirms how it was obtained. Missing (neutral, a dashed circle): not
-// there at all.
+// How a value or a claim is known, as a chip: an icon and words, never colour alone.
+// - Measured (cyan, a gauge): read from the audio signal.
+// - Sourced (amber, an open book): stated by a cited source. The book has no check mark: a
+//   verifier's verdict is a chip of its own beside it.
+// - Inferred (violet, sparkles): written or estimated by a model, and only that.
+// - Record (neutral, a page): taken from source records by code, with no citation to show.
+// - Unconfirmed (neutral, a question mark): shown, but nothing confirms how it was obtained.
+// - Missing (neutral, a dashed circle): not there at all.
 
-export type ProvenanceKind = 'measured' | 'sourced' | 'inferred' | 'unconfirmed' | 'missing';
+export type ProvenanceKind =
+  | 'measured'
+  | 'sourced'
+  | 'inferred'
+  | 'record'
+  | 'unconfirmed'
+  | 'missing';
 
 const KINDS: Record<ProvenanceKind, { variant: BadgeVariant; icon: LucideIcon; text: string }> = {
   measured: { variant: 'measured', icon: Gauge, text: 'Measured' },
-  sourced: { variant: 'sourced', icon: BookOpenCheck, text: 'Sourced' },
+  sourced: { variant: 'sourced', icon: BookOpen, text: 'Sourced' },
   inferred: { variant: 'inferred', icon: Sparkles, text: 'Model inference' },
+  record: { variant: 'neutral', icon: FileText, text: 'From source data' },
   unconfirmed: { variant: 'neutral', icon: CircleHelp, text: 'Not confirmed' },
   missing: { variant: 'neutral', icon: CircleDashed, text: 'Missing' },
 };

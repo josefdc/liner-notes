@@ -29,9 +29,14 @@ export const SourceNote: React.FC<SourceNoteProps> = ({ evidence, showTier = tru
   return (
     <span data-source-note className="inline-flex flex-wrap items-center gap-x-1.5 min-w-0">
       <SourceLink evidence={evidence} showTier={showTier} />
+      {/* Two unbreakable parts, so a narrow column breaks the note only between them: never
+          inside the date, and never with a separator left alone at a line's start */}
       {day && (
         <span>
-          · retrieved <time dateTime={evidence.retrievedAt}>{day}</time>
+          <span className="whitespace-nowrap">retrieved</span>{' '}
+          <time dateTime={evidence.retrievedAt} className="whitespace-nowrap">
+            {day}
+          </time>
         </span>
       )}
     </span>

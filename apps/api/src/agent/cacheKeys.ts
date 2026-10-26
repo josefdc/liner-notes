@@ -25,6 +25,10 @@
  * which the contract's producer checks refuse: they are not served, and each track searched
  * again is composed again once (one composer call; the research and the audio are cached
  * apart, though the audio cache was emptied by migration 14 and is measured again for free).
+ * v7: results whose genealogy nodes carry a cover only for a strict match of the recording the
+ * model named (agent/enricher.ts). Earlier results may show the cover of the top search hit (a
+ * cover version, another song, a live album) on a node: they are not served, and each track
+ * searched again is composed again once.
  *
  * The result key also names which primary-record sources with a credential (Discogs, Genius)
  * are configured: a result stored while one was not configured says so and holds none of its
@@ -43,7 +47,7 @@ import { lastfmConfigured } from "../sources/lastfm.js";
 import { tavilyConfigured } from "../sources/search.js";
 
 /** Long-term store namespace of composed results, keyed by `resultCacheKey`. */
-export const TRACKS_NAMESPACE: string[] = ["tracks", "v6"];
+export const TRACKS_NAMESPACE: string[] = ["tracks", "v7"];
 
 /** The optional sources that are configured (have a key). */
 export interface ConfiguredSources {

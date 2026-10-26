@@ -23,22 +23,38 @@ const enrich = vi.hoisted(() => ({
   nodePreview: null as string | null,
   /** A source error the enricher reports for the node previews, when set. */
   reports: null as null | { source: string; code: string; message?: string },
+  /** The enricher's whole answer, when set (else one entry per node). */
+  answer: null as null | Array<{
+    id: string;
+    img?: string;
+    previewUrl?: string;
+    spotifyId?: string;
+  }>,
+  /** The nodes the enricher was given, last call. */
+  given: null as null | ReadonlyArray<Record<string, unknown>>,
+  /** Whether the enricher's pass made every search it meant to (true unless set). */
+  complete: true,
 }));
 const mb = vi.hoisted(() => ({ lookupIsrc: vi.fn() }));
-vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (
-    genealogy: { nodes: object[] },
-    _cover: string,
-    _signal: AbortSignal | undefined,
-    report?: (error: unknown) => void,
-  ) => {
-    enrich.during?.();
-    if (enrich.reports) report?.(enrich.reports);
-    const previewUrl = enrich.nodePreview;
-    if (!previewUrl) return genealogy;
-    return { ...genealogy, nodes: genealogy.nodes.map((node) => ({ ...node, previewUrl })) };
-  },
-}));
+vi.mock(
+  "../enricher.js",
+  () =>
+    ({
+      enrichGenealogyWithArtwork: async (genealogy, _cover, _signal, report) => {
+        enrich.during?.();
+        if (enrich.reports) report?.(enrich.reports as never);
+        const nodes = genealogy?.nodes ?? [];
+        enrich.given = nodes;
+        const complete = enrich.complete;
+        if (enrich.answer) return { nodes: enrich.answer, complete };
+        const previewUrl = enrich.nodePreview;
+        return {
+          nodes: nodes.map(({ id }) => ({ id, ...(previewUrl ? { previewUrl } : {}) })),
+          complete,
+        };
+      },
+    }) satisfies Partial<typeof import("../enricher.js")>,
+);
 vi.mock("@langchain/langgraph", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@langchain/langgraph")>()),
   getStore: () => store,
@@ -193,6 +209,9 @@ describe("composerNode", () => {
     store.get.mockReset();
     enrich.nodePreview = null;
     enrich.reports = null;
+    enrich.answer = null;
+    enrich.given = null;
+    enrich.complete = true;
     mb.lookupIsrc.mockReset();
     for (const method of ["log", "warn", "error"] as const) {
       vi.spyOn(console, method).mockImplementation(() => {});
@@ -486,6 +505,71 @@ describe("composerNode", () => {
       expect(out.sourceErrors).toEqual([deezer]);
     },
   );
+
+  it("merges the enricher's artwork by node id, keeping the composed nodes and links", async () => {
+    const plain = await createComposerNode(testRuntime(succeeding()))(
+      stateWith(measured),
+      config(),
+    );
+    enrich.answer = [
+      { id: "n1", img: "https://i.scdn.co/image/n1", spotifyId: "sp1" },
+      // An id the genealogy does not have: ignored.
+      { id: "ghost", img: "https://i.scdn.co/image/ghost", spotifyId: "sp9" },
+    ];
+
+    const out = await createComposerNode(testRuntime(succeeding()))(stateWith(measured), config());
+
+    const composed = plain.trackData?.genealogy;
+    const genealogy = out.trackData?.genealogy;
+    expect(genealogy?.links).toEqual(composed?.links);
+    expect(genealogy?.nodes.map((node) => node.id)).toEqual(composed?.nodes.map((node) => node.id));
+    for (const node of genealogy?.nodes ?? []) {
+      const before = composed?.nodes.find((other) => other.id === node.id);
+      expect(node).toMatchObject({
+        label: before?.label,
+        group: before?.group,
+        size: before?.size,
+      });
+    }
+    expect(genealogy?.nodes.find((node) => node.id === "n1")).toMatchObject({
+      img: "https://i.scdn.co/image/n1",
+      spotifyId: "sp1",
+    });
+    // Nodes the enricher had nothing for keep what they had: no artwork.
+    expect(genealogy?.nodes.find((node) => node.id === "n2")?.img).toBeUndefined();
+    expect(JSON.stringify(genealogy)).not.toMatch(/ghost|sp9/);
+  });
+
+  it("sends but does not store a result whose artwork pass was cut short", async () => {
+    enrich.complete = false;
+    const writer = vi.fn();
+
+    const out = await createComposerNode(testRuntime(succeeding()))(stateWith(measured), {
+      writer,
+      configurable: { thread_id: "run-1" },
+    } as never);
+
+    expect(out.trackData).toBeTruthy();
+    expect(writer.mock.calls.some(([event]) => event.type === "complete")).toBe(true);
+    // A later run searches again for the artwork this one could not look up.
+    expect(store.put).not.toHaveBeenCalled();
+  });
+
+  it("hands the enricher each model node's year, for the preview's release check", async () => {
+    const withYear = {
+      ...output,
+      genealogyNodes: output.genealogyNodes.map((node) =>
+        node.id === "n1" ? { ...node, year: "1981" } : node,
+      ),
+    };
+
+    await createComposerNode(testRuntime(stubLlm(() => withYear)))(stateWith(measured), config());
+
+    const given = enrich.given ?? [];
+    expect(given.find((node) => node.id === "n1")).toMatchObject({ year: "1981" });
+    expect(given.find((node) => node.id === "n2")).not.toHaveProperty("year");
+    expect(given.find((node) => node.id === "current")).not.toHaveProperty("year");
+  });
 
   describe("on a provider failure", () => {
     it.each<[LlmErrorKind, string]>([
@@ -946,7 +1030,7 @@ describe("composerNode", () => {
       // Versioned: results cached by older code are not served. The key names the configured
       // sources: adding a key later composes the result again.
       // Keyed by the track (its Spotify id), never by the search text.
-      expect(namespace).toEqual(["tracks", "v6"]);
+      expect(namespace).toEqual(["tracks", "v7"]);
       expect(store.put.mock.calls[0][1]).toMatch(
         /^x\|lastfm=[01]:tavily=[01]:discogs=[01]:genius=[01]$/,
       );

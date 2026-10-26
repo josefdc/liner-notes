@@ -101,9 +101,16 @@ vi.mock("../../store/cache.js", () => ({
     putResearch: cache.putResearch,
   }),
 }));
-vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: unknown) => genealogy,
-}));
+vi.mock(
+  "../enricher.js",
+  () =>
+    ({
+      enrichGenealogyWithArtwork: async (genealogy) => ({
+        nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })),
+        complete: true,
+      }),
+    }) satisfies Partial<typeof import("../enricher.js")>,
+);
 
 import { MusicBrainzRateLimiter } from "../../sources/musicbrainz.js";
 import { evidenceScope } from "../../sources/records.js";

@@ -698,8 +698,6 @@ describe("links", () => {
     const shown = (origin: string | undefined, claims: ResultContext) =>
       linkDisplayKind(link({ origin, claimId: "cl-s" }), claims);
     for (const origin of ["code", undefined]) {
-      // Without a claim id, a code-built link rests on its evidence.
-      expect(linkDisplayKind(link({ origin }), pack)).toBe("sourced");
       expect(shown(origin, withClaims(relation()))).toBe("sourced");
       expect(shown(origin, withClaims(relation({ origin: "code", verdict: null })))).toBe(
         "sourced",
@@ -723,6 +721,17 @@ describe("links", () => {
       '.kind: model link marked sourced through a claim that does not cite "ev-1" and is about ' +
         "credit, not this sample relation",
     ]);
+  });
+
+  it("rests only a code-built link without a claim on its evidence; an origin-less one is the model's", () => {
+    expect(linkDisplayKind(link({ origin: "code" }), pack)).toBe("sourced");
+    // An unknown origin is not code: the link needs a supported claim, as a model link does.
+    expect(linkDisplayKind(link({ origin: undefined }), pack)).toBe("inferred");
+    expect(linkIssues(link({ origin: undefined }), pack)).toEqual([
+      ".kind: model link marked sourced without a supported claim",
+    ]);
+    const ctx = withClaims(relation());
+    expect(linkDisplayKind(link({ origin: undefined, claimId: "cl-s" }), ctx)).toBe("sourced");
   });
 
   it("reports a model link marked sourced without a supported claim", () => {

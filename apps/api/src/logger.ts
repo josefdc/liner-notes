@@ -43,6 +43,8 @@ import pino, { type DestinationStream, type Level, type LevelWithSilent } from "
 interface RunContext {
   runId: string;
   signal?: AbortSignal;
+  /** When the run's deadline passes, on the monotonic clock (`performance.now()`). */
+  deadlineAt?: number;
 }
 
 const runContext = new AsyncLocalStorage<RunContext>();
@@ -50,11 +52,21 @@ const runContext = new AsyncLocalStorage<RunContext>();
 /**
  * Runs `fn` as part of run `runId`: every line logged from it (sync or async) carries the id.
  * `signal` is the run's own signal, the one a cancel of the run aborts (a client that left, the
- * run's deadline); inside an outer `withRun` without one, the outer signal is kept.
+ * run's deadline); `deadlineAt` is when that deadline passes, on the monotonic clock
+ * (`performance.now()`). Inside an outer `withRun` without them, the outer ones are kept.
  */
-export function withRun<T>(runId: string, fn: () => T, options: { signal?: AbortSignal } = {}): T {
-  const signal = options.signal ?? runContext.getStore()?.signal;
-  return runContext.run(signal ? { runId, signal } : { runId }, fn);
+export function withRun<T>(
+  runId: string,
+  fn: () => T,
+  options: { signal?: AbortSignal; deadlineAt?: number } = {},
+): T {
+  const outer = runContext.getStore();
+  const signal = options.signal ?? outer?.signal;
+  const deadlineAt = options.deadlineAt ?? outer?.deadlineAt;
+  return runContext.run(
+    { runId, ...(signal ? { signal } : {}), ...(deadlineAt !== undefined ? { deadlineAt } : {}) },
+    fn,
+  );
 }
 
 /** The id of the run the current code belongs to, if any. */
@@ -65,6 +77,16 @@ export function currentRunId(): string | undefined {
 /** The signal of the run the current code belongs to, when the run was given one. */
 export function currentRunSignal(): AbortSignal | undefined {
   return runContext.getStore()?.signal;
+}
+
+/**
+ * How many milliseconds the run the current code belongs to has left before its deadline, on
+ * the monotonic clock; undefined when the run was given no deadline (a graph run outside the
+ * routes).
+ */
+export function currentRunTimeLeft(): number | undefined {
+  const deadlineAt = runContext.getStore()?.deadlineAt;
+  return deadlineAt === undefined ? undefined : deadlineAt - performance.now();
 }
 
 // =============================================================================

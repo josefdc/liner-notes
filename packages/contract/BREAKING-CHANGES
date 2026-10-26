@@ -10,3 +10,4 @@ engine changed: schemas.ts registers ReplaysResponse (GET /api/replays) so it ge
 ComposerOutput input $.claims[].scope: new required field
 ComposerOutput input $.factoids[].scope: new required field
 FactoidsOutput input $.factoids[].scope: new required field
+ComposerOutput input $.genealogyLinks[].scope: new required field

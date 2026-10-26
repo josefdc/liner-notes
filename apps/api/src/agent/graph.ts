@@ -1,7 +1,7 @@
 /**
  * The analysis graph.
  *
- *   scout → [clarification?] → engineer ∥ historian → composer → END
+ *   scout → [clarification?] → engineer ∥ historian → composer → verifier → END
  *                  ↑
  *            (interrupt if ambiguous)
  *
@@ -10,9 +10,12 @@
  *
  * The engineer and the historian run in parallel and meet at the composer through one
  * list-form edge, so the composer runs once, after both, however many steps either branch
- * takes. No node has a retry policy: every node handles its own failures (the scout and the
- * searches retry once or twice themselves, model calls are retried inside the provider layer),
- * so retries never stack and a model call is never repeated by a node retry.
+ * takes. The composer hands its draft (or the fallback) to the verifier, which checks every
+ * claim, then sends and stores the result: the composer sends none.
+ *
+ * No node has a retry policy: every node handles its own failures (the scout and the searches
+ * retry once or twice themselves, model calls are retried inside the provider layer), so
+ * retries never stack and a model call is never repeated by a node retry.
  *
  * The scout, the first node of every run, sets the run id once (the thread id, or a new id
  * from the runtime without a thread): every model call of the run counts under it.
@@ -40,6 +43,7 @@ import {
 import { type AgentRuntime, defaultAgentRuntime, runIdFor } from "./runtime.js";
 import type { SearchCandidate, TrackData } from "./schema.js";
 import { SonicAgentState, type SonicAgentStateType } from "./state.js";
+import { createVerifierNode, verifierNode } from "./verifier/index.js";
 import { currentRunId, currentRunSignal, logger } from "../logger.js";
 import { isAbortError } from "./errors.js";
 
@@ -49,7 +53,13 @@ const log = logger("Graph");
 // Node timings
 // =============================================================================
 
-export type NodeName = "scout" | "clarification" | "engineer" | "historian" | "composer";
+export type NodeName =
+  | "scout"
+  | "clarification"
+  | "engineer"
+  | "historian"
+  | "composer"
+  | "verifier";
 
 /**
  * How a node ended:
@@ -141,6 +151,11 @@ function routeAfterClarification(state: SonicAgentStateType): string[] | string 
   return ["engineer", "historian"];
 }
 
+/** The verifier checks whatever the composer wrote; a composer that wrote nothing ends the run. */
+function routeAfterComposer(state: SonicAgentStateType): string {
+  return state.draft ? "verifier" : END;
+}
+
 // =============================================================================
 // Build the Graph
 // =============================================================================
@@ -157,6 +172,7 @@ export function buildSonicAgentGraph({
   store,
 }: GraphDependencies = {}) {
   const composer = runtime === defaultAgentRuntime ? composerNode : createComposerNode(runtime);
+  const verifier = runtime === defaultAgentRuntime ? verifierNode : createVerifierNode(runtime);
   // Every node is timed (one log line per node run).
   const workflow = new StateGraph(SonicAgentState)
     .addNode(
@@ -179,6 +195,7 @@ export function buildSonicAgentGraph({
       timed("historian", (state, config) => historianNode(state, config, runtime)),
     )
     .addNode("composer", timed("composer", composer))
+    .addNode("verifier", timed("verifier", verifier))
     .addEdge(START, "scout")
     .addConditionalEdges("scout", routeAfterScout, {
       clarification: "clarification",
@@ -193,7 +210,8 @@ export function buildSonicAgentGraph({
     })
     // One fan-in: the composer waits for both branches and runs once
     .addEdge(["engineer", "historian"], "composer")
-    .addEdge("composer", END);
+    .addConditionalEdges("composer", routeAfterComposer, { verifier: "verifier", [END]: END })
+    .addEdge("verifier", END);
 
   // The clarification node pauses itself with interrupt(); no static interruptBefore, which
   // would stop the graph a second time at the same node.

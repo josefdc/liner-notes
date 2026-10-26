@@ -335,7 +335,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991,
-                    "description": "Claims beyond the judge batch; shown as inferred"
+                    "description": "Claims that cite evidence and got no verdict (beyond the judge batch, too long, or the check did not complete); shown as inferred"
+                  },
+                  "failed": {
+                    "description": "True when the judge call failed, ran out of time or left claims it was sent without a verdict; absent on results from before it was sent",
+                    "type": "boolean"
                   }
                 },
                 "required": ["judged", "unjudged"]
@@ -732,7 +736,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991,
-                    "description": "Claims beyond the judge batch; shown as inferred"
+                    "description": "Claims that cite evidence and got no verdict (beyond the judge batch, too long, or the check did not complete); shown as inferred"
+                  },
+                  "failed": {
+                    "description": "True when the judge call failed, ran out of time or left claims it was sent without a verdict; absent on results from before it was sent",
+                    "type": "boolean"
                   }
                 },
                 "required": ["judged", "unjudged"],

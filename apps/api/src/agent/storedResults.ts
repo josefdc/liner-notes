@@ -4,8 +4,9 @@
  *
  * A result is stored without what belongs to the run that composed it: its run information, its
  * preview URLs (handed out for one run, and they expire) and how that run's search text matched
- * the track. It is served for 24 hours, only for the track it is about and only while the
- * contract accepts it; the run that serves it adds how its own search text matched the track.
+ * the track. It is served for 24 hours (a result whose claims the verifier could not check, for
+ * an hour: UNCHECKED_RESULT_TTL_MS), only for the track it is about and only while the contract
+ * accepts it; the run that serves it adds how its own search text matched the track.
  *
  * It is stored with the sources its run could not read without that blocking storage (a source
  * not configured, a primary-record answer of a shape its reader does not know), and the run
@@ -24,7 +25,9 @@ import {
   type SourceError,
   SourceError as SourceErrorSchema,
   TrackAnalysis,
+  VerifierSummary,
 } from "@liner-notes/contract";
+import type { z } from "zod";
 import { sourceErrorLine } from "./statusText.js";
 import { MARKUP } from "../sources/http.js";
 import { webPageIssue } from "../sources/search.js";
@@ -37,6 +40,13 @@ const log = logger("Store");
 
 /** How long a stored result is served. */
 export const STORED_RESULT_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * How long a result is served whose claims the verifier's judge could not check (the call
+ * failed, ran out of time or left claims out): its claims read as not checked, which is honest,
+ * and serving it spares repeat visits a second composition, while a run an hour later checks
+ * them again.
+ */
+export const UNCHECKED_RESULT_TTL_MS = 60 * 60 * 1000;
 /** How far ahead of the clock a stored result's time may be (clocks of other hosts drift). */
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -44,12 +54,23 @@ interface StoredValue {
   trackData?: unknown;
   timestamp?: unknown;
   sourceErrors?: unknown;
+  /** How long it is served, when shorter than STORED_RESULT_TTL_MS. */
+  ttlMs?: unknown;
+  /** What the verifier did, kept when its check did not complete (the run info is not). */
+  verifier?: unknown;
 }
+
+type Verifier = z.infer<typeof VerifierSummary>;
 
 /** A stored result, with the sources its run could not read. */
 export interface StoredResult {
   trackData: TrackData;
   sourceErrors: SourceError[];
+  /**
+   * What the verifier did, when its check did not complete (`failed`): the result is provisional
+   * and the run that serves it says so. null for a checked result.
+   */
+  verifier: Verifier | null;
 }
 
 /** The stored source errors the contract reads; an unreadable entry is dropped. */
@@ -76,9 +97,13 @@ export async function readStoredResult(
     const value = (item?.value ?? null) as StoredValue | null;
     if (!value?.trackData || typeof value.timestamp !== "number") return null;
     const age = now.getTime() - value.timestamp;
+    const ttl =
+      typeof value.ttlMs === "number" && value.ttlMs > 0
+        ? Math.min(value.ttlMs, STORED_RESULT_TTL_MS)
+        : STORED_RESULT_TTL_MS;
     // A result dated ahead of the clock (a clock set back, a database from another host) would
-    // be served past its 24 hours.
-    if (age >= STORED_RESULT_TTL_MS || age < -CLOCK_SKEW_MS) return null;
+    // be served past its time.
+    if (age >= ttl || age < -CLOCK_SKEW_MS) return null;
     // A stored result the contract no longer accepts would be refused on every run until it
     // expires: it is composed again instead.
     const checked = TrackAnalysis.safeParse(value.trackData);
@@ -99,9 +124,11 @@ export async function readStoredResult(
       log.warn("Stored result's source errors hold markup; composing again");
       return null;
     }
+    const verifier = VerifierSummary.safeParse(value.verifier);
     return {
       trackData: checked.data as TrackData,
       sourceErrors,
+      verifier: verifier.success ? verifier.data : null,
     };
   } catch (error) {
     log.warn("Stored result could not be read", { err: error });
@@ -147,27 +174,48 @@ export function storableResult(trackData: TrackData): unknown {
 
 /**
  * Stores a result under its track for the sources configured now, with the sources its run
- * could not read (none of them blocked storing it). Throws on a store error.
+ * could not read (none of them blocked storing it), served for `ttlMs` when that is shorter than
+ * STORED_RESULT_TTL_MS. A result whose verifier check did not complete (`run.verifier.failed`)
+ * keeps that summary, so the copy served says it is provisional. Throws on a store error.
  */
 export async function storeResult(
   store: BaseStore,
   trackData: TrackData,
   now: Date,
   sourceErrors: readonly SourceError[] = [],
+  ttlMs?: number,
 ): Promise<void> {
+  const verifier = trackData.run?.verifier;
   await store.put(TRACKS_NAMESPACE, resultCacheKey(trackData.id, configuredSources()), {
     trackData: storableResult(trackData),
     timestamp: now.getTime(),
     ...(sourceErrors.length > 0 ? { sourceErrors: [...sourceErrors] } : {}),
+    ...(ttlMs !== undefined && ttlMs < STORED_RESULT_TTL_MS ? { ttlMs } : {}),
+    ...(verifier?.failed ? { verifier } : {}),
   });
 }
 
 /** The status line of a result served from the store instead of composed again. */
 export const STORED_LINE = "Serving the analysis stored for this track";
 
+/** The status line of a served result whose notes the verifier could not check. */
+export const STORED_UNCHECKED_LINE =
+  "Stored analysis: the notes were not checked against their sources; they are shown as model inference";
+
 /**
  * The status lines of a served result: one per source its run could not read, so the reader
- * knows that data is missing, not empty.
+ * knows that data is missing, not empty, and one when its notes were not checked.
+ */
+export function storedStatus(stored: StoredResult): string[] {
+  return [
+    ...storedErrorStatus(stored.sourceErrors),
+    ...(stored.verifier?.failed ? [STORED_UNCHECKED_LINE] : []),
+  ];
+}
+
+/**
+ * The status lines of the sources a served result's run could not read, so the reader knows
+ * that data is missing, not empty.
  */
 export function storedErrorStatus(errors: readonly SourceError[]): string[] {
   const seen = new Set<string>();

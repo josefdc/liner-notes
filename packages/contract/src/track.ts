@@ -249,10 +249,28 @@ export const RunUsage = z.object({
 });
 export type RunUsage = z.infer<typeof RunUsage>;
 
-/** What the verifier did in a run: claims judged, and claims left without a verdict. */
+/**
+ * What the verifier did in a run: claims judged, and claims left without a verdict. `failed`
+ * says the check itself did not complete: the judge call failed, ran out of time, or left some
+ * of the claims it was sent without a verdict. Those claims read as not checked, not as checked
+ * and found wanting.
+ */
 export const VerifierSummary = z.object({
   judged: z.int().min(0),
-  unjudged: z.int().min(0).describe("Claims beyond the judge batch; shown as inferred"),
+  unjudged: z
+    .int()
+    .min(0)
+    .describe(
+      "Claims that cite evidence and got no verdict (beyond the judge batch, too long, or the " +
+        "check did not complete); shown as inferred",
+    ),
+  failed: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when the judge call failed, ran out of time or left claims it was sent without a " +
+        "verdict; absent on results from before it was sent",
+    ),
 });
 
 /**

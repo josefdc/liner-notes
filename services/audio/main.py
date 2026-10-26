@@ -77,7 +77,9 @@ for _client_logger in ("httpx", "httpcore"):
 # blocks (without reasons) until they expire.
 # 2.3.1: an Essentia tempo, its confidence and its beats no longer depend on what the process
 # analysed before (estimators._rand_lock); each is what a new process measures first.
-ANALYZER_VERSION = "2.3.1"
+# 2.3.2: beats a tracker counted through silence are left out of the reported beat grid
+# (signal_features.audible_beats); tempo, confidence and sections are unchanged.
+ANALYZER_VERSION = "2.3.2"
 # AudioFeatures version of the `v2` block (packages/contract/src/audio.ts).
 AUDIO_FEATURES_VERSION = 2
 TOKEN_HEADER = "X-Audio-Token"
@@ -125,7 +127,7 @@ def analyzer_version(estimator_name: str | None = None) -> str:
     """
     ANALYZER_VERSION with the estimator (the service's, unless named) and, when the models are
     loaded, a tag for the pinned model set as semver build metadata, e.g.
-    "2.3.1+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
+    "2.3.2+essentia.models-1a2b3c4d". Every result and /health carry it. (The API's audio
     cache is keyed by track and this version, so a version change measures again; a row of
     another version is served, labelled with its analyzer, only when the service cannot say its
     version.)
@@ -269,6 +271,9 @@ def analyze_signals(signals: Signals, estimator=None) -> dict:
     trusted_beats = tempo is not None and (tempo.steady or tempo.beats_follow_changes)
     if trusted_beats:
         times = np.sort(np.clip(np.asarray(tempo.beats, dtype=float), 0.0, duration))
+        # Beats a tracker counted through silence are not reported; the tempo and the sections
+        # still use every tracked beat.
+        times = signal_features.audible_beats(signals, times, loudness)
         v2["beats"] = _signal_block(
             times=[round(float(t), 3) for t in times], method=tempo.method.split("+")[0]
         )

@@ -137,11 +137,11 @@ SEMVER = re.compile(
 
 def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatch):
     monkeypatch.setattr(main, "MODELS_LOADED", False)
-    assert main.analyzer_version("librosa") == "2.3.1+librosa"
-    assert main.analyzer_version("essentia") == "2.3.1+essentia"
+    assert main.analyzer_version("librosa") == "2.3.2+librosa"
+    assert main.analyzer_version("essentia") == "2.3.2+essentia"
     monkeypatch.setattr(main, "MODELS_LOADED", True)
     with_models = main.analyzer_version("essentia")
-    assert with_models == f"2.3.1+essentia.models-{fingerprint.model_set_tag()}"
+    assert with_models == f"2.3.2+essentia.models-{fingerprint.model_set_tag()}"
     assert SEMVER.fullmatch(with_models) and len(with_models) <= 40
     assert re.fullmatch(r"[0-9a-f]{8}", fingerprint.model_set_tag())
     # The tag changes with any pinned model checksum.
@@ -153,7 +153,7 @@ def test_analyzer_version_is_short_semver_naming_estimator_and_models(monkeypatc
 
 def test_results_carry_the_estimator_that_measured_them():
     result, _ = analyse_array(a_major_triad(), "librosa")
-    assert result["v2"]["analyzerVersion"].startswith("2.3.1+librosa")
+    assert result["v2"]["analyzerVersion"].startswith("2.3.2+librosa")
 
 
 def test_one_decode_and_one_chromagram_per_analysis(monkeypatch, tmp_path):
@@ -354,6 +354,76 @@ def test_a_tempo_that_starts_late_is_reported(probe, bpm, estimator, request):
     result, v2 = analyse_array(PROBES[probe], estimator)
     assert v2["tempo"]["bpm"] == pytest.approx(bpm, abs=1.0)
     assert round(v2["tempo"]["bpm"]) == bpm
+
+
+def tracked_beats(y: np.ndarray, estimator: str) -> list[float]:
+    """Every beat the estimator tracked, in the window and rounded as the service reports them."""
+    found = estimators.select_estimator(estimator).measure_tempo(estimators.Signals(y, FIXTURE_SR))
+    assert isinstance(found, estimators.TempoEstimate)
+    beats = np.sort(np.clip(np.asarray(found.beats, dtype=float), 0.0, y.size / FIXTURE_SR))
+    return [round(float(t), 3) for t in beats]
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_no_beats_are_reported_in_digital_silence(estimator):
+    """
+    The band enters at 10 s, after digital silence. Essentia's tracker counts through the
+    silence (23 of its 55 beats, the first at 0.348 s); only the beats on the band are
+    reported, and the tempo, fitted to the beats on onsets, stays 97 BPM.
+    """
+    y = PROBES["band-97-after-10s-silence"]
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    assert min(v2["beats"]["times"]) >= 10.0
+    assert v2["beats"]["times"] == [t for t in tracked if t >= 10.0]
+    assert round(v2["tempo"]["bpm"]) == 97
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+@pytest.mark.parametrize("probe", ["band-97", "brown-noise-with-kick", "drums-crash-jitter-25ms"])
+def test_every_beat_is_reported_without_silence(probe, estimator):
+    """
+    With sound throughout, the reported grid is every beat tracked, as before. (Brown noise
+    with a kick 6 dB under it holds the quietest beats of the probes, about 20 dB under the
+    loudest frame.)
+    """
+    tracked = tracked_beats(PROBES[probe], estimator)
+    _, v2 = analyse_array(PROBES[probe], estimator)
+    assert v2["beats"]["times"] == tracked
+
+
+@pytest.mark.parametrize("estimator", ESTIMATORS)
+def test_beats_in_a_silent_gap_are_left_out(estimator):
+    """
+    2.5 s of digital silence inside a band (12-14.5 s): both trackers keep counting through it
+    (four beats); only those are left out, and the tempo is still reported.
+    """
+    y = signals.drum_pattern(97).copy()
+    y[12 * FIXTURE_SR : int(14.5 * FIXTURE_SR)] = 0
+    tracked = tracked_beats(y, estimator)
+    _, v2 = analyse_array(y, estimator)
+    in_gap = [t for t in tracked if 12.0 < t < 14.5]
+    assert len(in_gap) == 4
+    assert v2["beats"]["times"] == [t for t in tracked if t not in in_gap]
+    assert round(v2["tempo"]["bpm"]) == 97
+
+
+def test_beats_over_silence_or_a_dc_offset_are_left_out_for_any_tracker():
+    """
+    The rule is the service's, not an estimator's: whatever tracked the beats, those over 2 s
+    of digital silence or of a DC offset are not reported. The beats at the edges of those
+    stretches still have sound within BEAT_LEVEL_WINDOW_S and are kept.
+    """
+    y = a_major_triad()
+    y[3 * FIXTURE_SR : 5 * FIXTURE_SR] = 0.0
+    y[6 * FIXTURE_SR : 8 * FIXTURE_SR] = 0.5
+    beats = np.arange(0.0, 10.0, 0.5)
+    estimate = estimators.TempoEstimate(120.0, 0.9, None, beats, "fake", steady=True)
+    result = main.analyze_signals(estimators.Signals(y, FIXTURE_SR), FakeEstimator(tempo=estimate))
+    v2 = check_result(result)
+    left_out = [3.5, 4.0, 4.5, 6.5, 7.0, 7.5]
+    assert v2["beats"]["times"] == [float(b) for b in beats if b not in left_out]
+    assert v2["tempo"]["bpm"] == 120.0
 
 
 # Analysed first in a new process, this probe gave 97.0 BPM at 0.568 with 55 beats; after three
@@ -2282,7 +2352,7 @@ def test_no_fingerprint_without_models(monkeypatch):
     result, v2 = analyse_array(signals.drum_pattern(97))
     assert v2["gate"]["passed"]
     assert v2["fingerprint"] is None
-    assert v2["analyzerVersion"] == f"2.3.1+{main.ESTIMATOR.name}"
+    assert v2["analyzerVersion"] == f"2.3.2+{main.ESTIMATOR.name}"
     assert v2["withheld"]["fingerprint"] == {
         "code": "models_not_loaded",
         "reason": "the audio models are not loaded",

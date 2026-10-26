@@ -12,7 +12,7 @@
  * demo recording's cassettes are keyed on them.
  */
 
-import type { Evidence } from "@liner-notes/contract";
+import { type Evidence, FACTOID_LIMITS } from "@liner-notes/contract";
 import { evidenceForPrompt, neutralise, shownEvidence } from "../agent/prompts.js";
 import type { LlmMessage } from "../llm/invoke.js";
 
@@ -31,11 +31,11 @@ import type { LlmMessage } from "../llm/invoke.js";
 export const FACTOID_PACK_MAX = 8000;
 /**
  * Most existing facts listed, the run's cards first; each is clipped to EXISTING_FACT_MAX
- * characters. The composer writes at most 8 cards, so all of them fit with room for a few of its
+ * characters. Room for every card a result may hold (FACTOID_LIMITS.max) and four of the run's
  * other statements. The repeat check (factoids/service.ts) reads every fact the run has: this
  * bounds only what the prompt shows.
  */
-export const EXISTING_FACTS_MAX = 12;
+export const EXISTING_FACTS_MAX = FACTOID_LIMITS.max + 4;
 export const EXISTING_FACT_MAX = 240;
 
 export const FACTOIDS_SYSTEM_PROMPT = `You write little-known facts about one recorded track for a music discovery app, as JSON in the given schema.

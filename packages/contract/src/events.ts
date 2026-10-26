@@ -195,7 +195,14 @@ const factoidEvent = <T extends string, S extends z.ZodRawShape>(type: T, shape:
   z.object({ type: z.literal(type), ...factoidEnvelope, ...shape });
 
 export const FactoidStreamEvent = z.discriminatedUnion("type", [
-  factoidEvent("connected", { timestamp: Timestamp.optional() }),
+  factoidEvent("connected", {
+    timestamp: Timestamp.optional(),
+    nextRound: z
+      .int()
+      .min(0)
+      .optional()
+      .describe("The round to ask for next (the round query parameter); absent for recorded facts"),
+  }),
   factoidEvent("factoid", { data: Factoid, claim: Claim.optional() }),
   z.object({ type: z.literal("heartbeat"), runId: factoidEnvelope.runId }),
   factoidEvent("error", {

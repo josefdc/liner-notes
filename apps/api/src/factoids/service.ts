@@ -6,17 +6,22 @@
  *    result is read (storedAnalysis: the run's own result, or the recording a replayed run was
  *    sent): its evidence pack, its claims and factoids, and its measured audio. A run that is not
  *    stored or has no result gives no context, and neither does one whose track is not the one the
- *    request names (sameTrack: another Spotify id, or another title or artist): the pack is then
- *    empty and every new fact reads as inferred.
- * 2. One model call per focus (tier `main`, schema `FactoidsOutput`), all at once: three angles of
- *    FACTOID_FOCUSES, the next three on each later click (focusesFor). The provider layer runs at
- *    most LLM_CONCURRENCY of them at a time. The calls and the judge's share one request run id,
- *    so a request makes at most MAX_LLM_CALLS_PER_RUN calls, and each is held to the budget. A
- *    focus whose call fails is reported as failed; the others are kept.
- * 3. No repeats. A fact the client already shows (its first id, under any focus, is one the
- *    client sent) is dropped, and so is one that is a near-duplicate (nearDuplicate) of a fact the
- *    run already has or of one written earlier in the batch. When every fact is dropped, the
- *    answer has no facts: nothing shown before is sent again.
+ *    request names (sameTrack: another Spotify id; without one, another title or artist, or no
+ *    artist at all): the pack is then empty and every new fact reads as inferred. When the
+ *    context is used, the prompt names the stored result's track, as the judge's does.
+ * 2. One model call per focus (tier `main`, schema `FactoidsOutput`), all at once: the three
+ *    angles of FACTOID_FOCUSES for the request's round (roundFor, focusesFor), the next three on
+ *    the next round. Once every angle has been asked there is nothing new to ask: the answer has
+ *    no facts and no model is called. The provider layer runs at most LLM_CONCURRENCY calls at a
+ *    time. The calls and the judge's share one request run id, so a request makes at most
+ *    MAX_LLM_CALLS_PER_RUN calls, and each is held to the budget. A focus whose call fails is
+ *    reported as failed; the others are kept.
+ * 3. No repeats. A fact whose text, normalised (normalisedFact), the client already shows is
+ *    dropped: its first id, under any focus, is one the client sent. So is a near-duplicate
+ *    (nearDuplicate) of a fact the run already has or of one written earlier in the batch. The
+ *    client sends ids, not texts: a fact it shows from an earlier click that comes back reworded
+ *    is not recognised, which is why each round asks about other angles. When every fact is
+ *    dropped, the answer has no facts.
  * 4. Claims. Each fact is a model claim (the composer's builder: inferred, no verdict), with the
  *    facts' claim id as its `claimId`. Cited ids that the prompt did not show are dropped. The
  *    claims then go through the verifier's own steps: checkClaims (citations against the pack and
@@ -26,8 +31,8 @@
  *    budget refuses it, the facts are kept with no verdict, read as inferred, and say they were
  *    not checked.
  * 5. Ids. A fact's id (also its claim's) is `fc-` and a short hash of the run id the request
- *    names, the focus and the text, never a count, and it is unique against the ids the client
- *    and the run already have and the rest of the batch.
+ *    names, the focus and the normalised text, never a count, and it is never one the client or
+ *    the run already has, nor another fact's of the batch.
  *
  * The facts are handed back in focus order once all of them have been checked.
  */
@@ -62,6 +67,8 @@ import { factoidMessages, shownFactoidEvidence } from "./prompt.js";
 const log = logger("Factoids");
 
 export const FACTOIDS_CALL_SITE = "factoids";
+/** The call site of the judge's call on these facts, so its spend is logged apart. */
+export const FACTOIDS_JUDGE_CALL_SITE = "factoids-judge";
 /** Output budget of a call, reasoning included (main tier: low effort). */
 export const FACTOIDS_MAX_OUTPUT_TOKENS = 2500;
 
@@ -78,26 +85,35 @@ export const FACTOID_FOCUSES = [
   "the other records and artists it is tied to",
 ] as const;
 
+/** The rounds of a track's "more facts": FACTOID_FOCUSES asked FACTOIDS_PER_REQUEST at a time. */
+export const FACTOID_ROUNDS = Math.ceil(FACTOID_FOCUSES.length / FACTOIDS_PER_REQUEST);
+
 /** An id factId gives. */
 const FACT_ID = /^fc-[0-9a-f]{12}$/;
 
 /**
- * The focuses of one request, in the order its facts are sent: FACTOIDS_PER_REQUEST consecutive
- * angles of FACTOID_FOCUSES, after those earlier requests asked about. Earlier requests are
- * counted from the ids they gave (factId) that the client sends back: none on the first click,
- * which asks about the first three angles; the next click asks about the next three, and so on
- * round the list. The same request always asks about the same angles, so its prompts replay from
- * the same cassettes.
+ * The round of a request: the later of the round the client sends (`round`: the `nextRound` of
+ * its last answer, so a click that wrote nothing still moves on) and the one the ids it sends
+ * show (each FACTOIDS_PER_REQUEST of the ids factId gave, rounded up, is one earlier round; for a
+ * client that sends no round).
  */
-export function focusesFor(existingIds: readonly string[]): string[] {
+export function roundFor(existingIds: readonly string[], round = 0): number {
   const written = existingIds.filter((id) => FACT_ID.test(id)).length;
-  const start =
-    (Math.ceil(written / FACTOIDS_PER_REQUEST) * FACTOIDS_PER_REQUEST) % FACTOID_FOCUSES.length;
-  return Array.from(
-    { length: FACTOIDS_PER_REQUEST },
-    (_, i) => FACTOID_FOCUSES[(start + i) % FACTOID_FOCUSES.length],
-  );
+  return Math.max(round, Math.ceil(written / FACTOIDS_PER_REQUEST));
 }
+
+/**
+ * The focuses of round `round`, in the order its facts are sent: the round's FACTOIDS_PER_REQUEST
+ * angles of FACTOID_FOCUSES, or none once every angle has been asked (round FACTOID_ROUNDS and
+ * later). The same round always asks about the same angles, so its prompts replay from the same
+ * cassettes.
+ */
+export function focusesFor(round: number): string[] {
+  return FACTOID_FOCUSES.slice(round * FACTOIDS_PER_REQUEST, (round + 1) * FACTOIDS_PER_REQUEST);
+}
+
+/** The round the client is to send on its next request: the next one, at most FACTOID_ROUNDS. */
+export const nextRoundAfter = (round: number) => Math.min(round + 1, FACTOID_ROUNDS);
 
 /** Why a fact that cites evidence has no verdict when the judge gave none. */
 export const NOT_CHECKED_REASON = "Not checked: the check against its sources could not run.";
@@ -217,40 +233,61 @@ export interface FactText {
   entities: readonly string[];
 }
 
-/** The entity names of a fact as a key: normalised, without repeats, sorted. */
-const entityKey = (fact: FactText) =>
-  [...new Set(fact.entities.map(normalisedFact).filter((name) => name !== ""))].sort().join("\n");
-
 /**
- * Whether two facts state the same thing: the same normalised text, or the same entities and
- * word sets that overlap by NEAR_DUPLICATE_OVERLAP or more (shared words over all the words of
- * both). Two facts that name different entities (another sampled record, another player) are
- * different facts, however alike the rest of their words.
+ * Whether two facts state the same thing: the same normalised text, or word sets that overlap by
+ * NEAR_DUPLICATE_OVERLAP or more (shared words over all the words of both). Two facts are
+ * different facts, however alike the rest of their words, when a word only one of them has is
+ * part of one of its entities (another sampled record, another player) and that entity and none
+ * of the other fact's contains the other ("Auto-Tune" and "Antares Auto-Tune" name the same
+ * thing). A fact without entities (a run's credit, say) is compared by the overlap alone.
  */
 export function nearDuplicate(a: FactText, b: FactText): boolean {
   const left = normalisedFact(a.text);
   const right = normalisedFact(b.text);
   if (left === "" || right === "") return false;
   if (left === right) return true;
-  if (entityKey(a) !== entityKey(b)) return false;
-  const words = (text: string) => new Set(text.split(" "));
+  const words = (text: string) => new Set(text.split(" ").filter((word) => word !== ""));
   const one = words(left);
   const other = words(right);
+  if (namesAnotherEntity(one, other, a, b) || namesAnotherEntity(other, one, b, a)) return false;
   const shared = [...one].filter((word) => other.has(word)).length;
   return shared / (one.size + other.size - shared) >= NEAR_DUPLICATE_OVERLAP;
 }
 
+/**
+ * Whether a word of `mine` that `theirs` lacks is part of an entity of `fact` that is not the
+ * same name as an entity of `other` (neither contains the other). False when either fact has no
+ * entities.
+ */
+function namesAnotherEntity(
+  mine: ReadonlySet<string>,
+  theirs: ReadonlySet<string>,
+  fact: FactText,
+  other: FactText,
+): boolean {
+  const own = fact.entities.map(normalisedFact).filter((name) => name !== "");
+  const others = other.entities.map(normalisedFact).filter((name) => name !== "");
+  if (own.length === 0 || others.length === 0) return false;
+  const only = [...mine].filter((word) => !theirs.has(word));
+  return own.some(
+    (entity) =>
+      entity.split(" ").some((word) => only.includes(word)) &&
+      !others.some((name) => name.includes(entity) || entity.includes(name)),
+  );
+}
+
 /** The id `fact` gets first, before any clash: see factId. */
 function firstFactId(runId: string | null, focus: string, text: string): string {
-  return hashedId([runId, focus, text]);
+  return hashedId([runId, focus, normalisedFact(text)]);
 }
 
 const hashedId = (key: unknown[]) =>
   `fc-${createHash("sha256").update(JSON.stringify(key)).digest("hex").slice(0, 12)}`;
 
 /**
- * The fact's id: `fc-` and a short hash of the run id the request names, the focus and the text;
- * a taken id is hashed again with a counter until it is free. Adds it to `taken`.
+ * The fact's id: `fc-` and a short hash of the run id the request names, the focus and the text
+ * (normalised: a fact sent again in other case, spacing or punctuation gets the same id); a
+ * taken id is hashed again with a counter until it is free. Adds it to `taken`.
  */
 export function factId(
   runId: string | null,
@@ -260,7 +297,9 @@ export function factId(
 ): string {
   for (let attempt = 0; ; attempt++) {
     const id =
-      attempt === 0 ? firstFactId(runId, focus, text) : hashedId([runId, focus, text, attempt]);
+      attempt === 0
+        ? firstFactId(runId, focus, text)
+        : hashedId([runId, focus, normalisedFact(text), attempt]);
     if (!taken.has(id)) {
       taken.add(id);
       return id;
@@ -269,8 +308,8 @@ export function factId(
 }
 
 /**
- * Whether the client already shows this very fact: the id it would get first, under any focus,
- * is one the client sent (the same run, the same text). A fact sent on an earlier click comes
+ * Whether the client already shows this fact: the id it would get first, under any focus, is one
+ * the client sent (the same run, the same normalised text). A fact sent on an earlier click comes
  * back that way, under the id it was sent with.
  */
 export function shownBefore(
@@ -298,6 +337,8 @@ export interface FactoidRequest {
   runId?: string;
   /** The ids of the facts the client already shows. */
   existingIds: readonly string[];
+  /** The round the client asks for: the `nextRound` of its last answer (roundFor). */
+  round?: number;
 }
 
 export interface FactoidServiceOptions {
@@ -325,6 +366,9 @@ export interface FactoidsResult {
   runId: string | null;
   /** The deployment of the first answered call; null when none answered. */
   model: string | null;
+  /** The round this request asked about, and the one the client is to send next. */
+  round: number;
+  nextRound: number;
 }
 
 /** What the server log says about a failed call: the error kind, never the prompt. */
@@ -403,7 +447,9 @@ export async function writeFactoids(
   const callRunId = `factoids-${randomUUID()}`;
   const shown = shownFactoidEvidence(context.evidence);
   const citable = new Set(shown.map((item) => item.id));
-  const focuses = focusesFor(request.existingIds);
+  const round = roundFor(request.existingIds, request.round);
+  const focuses = focusesFor(round);
+  const nextRound = nextRoundAfter(round);
   // Ids hash the run the request names, found or not, so a fact keeps its id from click to click.
   const idRun = request.runId ?? null;
   const existing = new Set(request.existingIds);
@@ -424,6 +470,16 @@ export async function writeFactoids(
     if (!seen.some((other) => normalisedFact(other.text) === key)) seen.push(fact);
   }
   const seenTexts = seen.map((fact) => fact.text);
+  // The track the prompt names: the stored result's when its evidence is used, as the judge's.
+  const promptTrack = context.analysis
+    ? { title: context.analysis.title, artist: context.analysis.artist }
+    : request.track;
+
+  // Every angle has been asked: nothing new to ask, and no model is called.
+  if (focuses.length === 0) {
+    log.info("Every angle of more facts has been asked; nothing new");
+    return { runId: context.runId, model: null, outcomes: [], round, nextRound };
+  }
 
   // The run ends with the request, or as soon as the client leaves (calls may still be settling).
   const end = () => llm.endRun(callRunId);
@@ -436,9 +492,7 @@ export async function writeFactoids(
           const result = await llm.invoke(
             FACTOIDS_CALL_SITE,
             "main",
-            factoidMessages({ track: request.track, evidence: shown, existing: seenTexts }, [
-              focus,
-            ]),
+            factoidMessages({ track: promptTrack, evidence: shown, existing: seenTexts }, [focus]),
             FactoidsOutput,
             { purpose, runId: callRunId, maxOutputTokens: FACTOIDS_MAX_OUTPUT_TOKENS, signal },
           );
@@ -502,7 +556,7 @@ export async function writeFactoids(
       context.evidence,
       promptTrackOf(request.track, context.analysis),
       agentRuntime({ llm, purpose }),
-      { runId: callRunId, signal },
+      { runId: callRunId, signal, callSite: FACTOIDS_JUDGE_CALL_SITE },
     );
     if (judged.failure !== null) {
       log.warn(`The facts could not be checked against their sources (${failure(judged.failure)})`);
@@ -525,7 +579,7 @@ export async function writeFactoids(
       outcomes.push({ index, status: "written", ...masked(draft.factoid, claim) });
     }
     outcomes.sort((a, b) => a.index - b.index);
-    return { runId: context.runId, model, outcomes };
+    return { runId: context.runId, model, outcomes, round, nextRound };
   } finally {
     signal.removeEventListener("abort", end);
     if (!signal.aborted) end();

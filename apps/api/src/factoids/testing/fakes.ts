@@ -150,6 +150,10 @@ export function statementsOf(
   return block ? block[1].split("\n").map((line) => JSON.parse(line)) : [];
 }
 
+/** Whether a call is the judge's (its own call site; "verifier" for the analysis's judge). */
+export const isJudge = (call: { callSite: string }) =>
+  call.callSite === "factoids-judge" || call.callSite === "verifier";
+
 export interface FakeModel {
   /** The card each focus gets (by its index in FOCUSES): a card, nothing, or a failed call. */
   cards: Array<ComposerFactoid | null | Error>;
@@ -163,7 +167,7 @@ export interface FakeModel {
  */
 export function fakeModel(model: FakeModel): StubLlm {
   return stubLlm((call) => {
-    if (call.callSite === "verifier") {
+    if (isJudge(call)) {
       if (model.judge instanceof Error) throw model.judge;
       const judge = model.judge ?? (() => "unsupported" as const);
       const output: JudgeOutput = {

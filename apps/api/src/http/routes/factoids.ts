@@ -31,6 +31,8 @@ import {
   type FactoidsResult,
   failure,
   type LoadRun,
+  nextRoundAfter,
+  roundFor,
   runContext,
   writeFactoids,
 } from "../../factoids/service.js";
@@ -66,6 +68,9 @@ const analysisRunId = z
   .regex(RESOURCE_ID_PATTERN, "The run id is 1-100 letters, digits, '-' or '_'")
   .optional();
 
+/** Rounds past the last angle all ask for nothing new; this only bounds the number. */
+const MAX_ROUND = 99;
+
 const DecryptBodySchema = z.object({
   trackId,
   trackTitle: boundedText(1, { truncate: true }),
@@ -73,6 +78,8 @@ const DecryptBodySchema = z.object({
   existingFactoidIds: z.array(factoidId).default([]),
   // The analysis run the facts add to, so they cite its evidence and do not repeat its facts.
   runId: analysisRunId,
+  // The round asked for: the nextRound of the last answer.
+  round: z.int().min(0).max(MAX_ROUND).optional(),
 });
 
 const StreamQuerySchema = z.object({
@@ -87,6 +94,11 @@ const StreamQuerySchema = z.object({
   // How the result these facts add to was produced (its run.mode), when the client says so.
   mode: RunMode.optional(),
   runId: analysisRunId,
+  round: z
+    .string()
+    .regex(/^\d{1,2}$/, "The round is a whole number from 0 to 99")
+    .transform(Number)
+    .optional(),
 });
 
 const DECRYPT_EXAMPLE = {
@@ -95,6 +107,7 @@ const DECRYPT_EXAMPLE = {
   trackArtist: "M83",
   existingFactoidIds: ["f1", "f2"],
   runId: "3f6c1d2e-4b5a-4c3d-9e8f-7a6b5c4d3e2f",
+  round: 1,
 };
 
 const describeTrack = (title: string, artist?: string) =>
@@ -218,12 +231,15 @@ export function createFactoidsRouter({
    *
    * POST /api/factoids/decrypt
    * Body: { "trackId": "...", "trackTitle": "...", "trackArtist": "...",
-   *         "existingFactoidIds": ["f1", "f2"], "runId": "..." }
-   * Returns: { factoids: Factoid[], claims: Claim[] } - up to 3 new facts with entities, one per
-   * focus, in focus order (fewer when the model knows fewer, or when one only repeats a fact the
-   * run already has), each with its checked claim (`claimId`). `runId`, optional, names the
-   * analysis run the facts add to: its evidence is what they may cite, and its facts are not
-   * repeated. Ids are new: never one of the existing ids or the run's.
+   *         "existingFactoidIds": ["f1", "f2"], "runId": "...", "round": 1 }
+   * Returns: { factoids: Factoid[], claims: Claim[], nextRound } - up to 3 new facts with
+   * entities, one per focus, in focus order (fewer when the model knows fewer, or when one only
+   * repeats a fact the client or the run already has), each with its checked claim (`claimId`).
+   * `runId`, optional, names the analysis run the facts add to: its evidence is what they may
+   * cite, and its facts are not repeated. Ids are new: never one of the existing ids or the run's.
+   * `round`, optional, is the `nextRound` of the last answer: each round asks about three other
+   * angles (the client's ids count too, for a client that sends no round), and once every angle
+   * has been asked the answer is an empty list, with no model call: nothing new.
    * A malformed body is a 400 `invalid_input`. When no fact could be written because every call
    * failed: the model's rate limit a 429 `rate_limited`; the budget or the call cap a 503
    * `budget_exhausted`; any other failure a 500 `failed`. A track with no recording while live
@@ -298,6 +314,7 @@ export function createFactoidsRouter({
             track: { title: trackTitle, artist: trackArtist, trackId: parsed.data.trackId },
             runId: parsed.data.runId,
             existingIds: existingFactoidIds,
+            round: parsed.data.round,
           },
           { llm: layer, purpose, signal: disconnect.signal, loadRun },
         );
@@ -318,6 +335,7 @@ export function createFactoidsRouter({
         success: true,
         factoids: written.map((outcome) => outcome.factoid),
         claims: written.map((outcome) => outcome.claim),
+        nextRound: result.nextRound,
         meta: {
           trackId: parsed.data.trackId,
           ...(result.model ? { model: result.model } : {}),
@@ -337,12 +355,14 @@ export function createFactoidsRouter({
   /**
    * Stream factoids via SSE, each with its checked claim
    *
-   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...
+   * GET /api/factoids/decrypt/stream?trackTitle=...&trackArtist=...&existingIds=f1,f2&mode=live&runId=...&round=1
    * Messages (all on the default `message` event), each one FactoidStreamEvent of
    * @liner-notes/contract with `seq` and `runId`: the analysis run the request names when its
    * stored result is what the facts add to (found, and about this track), else null, so a client
    * never ties the facts to a run they did not use:
-   * - { type: "connected" }
+   * - { type: "connected", nextRound? }: `nextRound`, for live facts, is the round to ask for
+   *   next (`round`, as on the POST route); once every angle has been asked, nothing follows
+   *   but `done`, and no model is called
    * - { type: "factoid", data: Factoid, claim?: Claim }: one per focus, in focus order, sent
    *   once all of them have been written and checked; `data.claimId` is `claim.id`
    * - { type: "error", code, error, index? }: invalid input, or one factoid that failed
@@ -412,7 +432,16 @@ export function createFactoidsRouter({
 
       log.info("Streaming factoids");
       logTrack("Streaming factoids", track);
-      stream.send({ type: "connected", timestamp: new Date().toISOString() });
+      // A live answer says which round to ask for next, whatever becomes of this one's facts.
+      const nextRound =
+        replay.kind === "live"
+          ? nextRoundAfter(roundFor(existingIds, parsed.data.round))
+          : undefined;
+      stream.send({
+        type: "connected",
+        timestamp: new Date().toISOString(),
+        ...(nextRound !== undefined ? { nextRound } : {}),
+      });
 
       if (replay.kind === "replay") {
         const cards = recordedFactoids(replay.record, existingIds, FACTOIDS_PER_REQUEST);
@@ -434,6 +463,7 @@ export function createFactoidsRouter({
               track: { title: trackTitle, artist: trackArtist },
               runId: parsed.data.runId,
               existingIds,
+              round: parsed.data.round,
             },
             { llm: layer, purpose, signal: stream.signal, context: context ?? undefined },
           ),

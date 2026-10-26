@@ -18,6 +18,8 @@ import {
   demoRecord,
   evidenceItem,
   fakeModel,
+  focusOf,
+  isJudge,
   RUN_ID,
   storedRun,
 } from "../../factoids/testing/fakes.js";
@@ -712,7 +714,7 @@ describe("each fact's claim", () => {
     const claims = other.messages.filter(ofType("factoid")).map((m) => m.claim as Claim);
     expect(claims.length).toBeGreaterThan(0);
     for (const claim of claims) expect(claim).toMatchObject({ kind: "inferred", evidenceIds: [] });
-    expect(fake.calls.some((call) => call.callSite === "verifier")).toBe(false);
+    expect(fake.calls.some((call) => isJudge(call))).toBe(false);
 
     // A run with no stored result.
     const missing = await openStream(streamQuery({ runId: "run-not-stored" }), router);
@@ -750,5 +752,32 @@ describe("each fact's claim", () => {
 
     expect(cards[0]).toMatchObject({ id: kept.id, claimId: kept.claimId });
     for (const card of cards.slice(1)) expect(card).not.toHaveProperty("claimId");
+  });
+
+  it("says on the stream which round to ask for next, and asks that round's angles", async () => {
+    const { fake, router } = withRun();
+
+    const first = await openStream(streamQuery(), router);
+    await first.waitFor(ofType("done"));
+    expect(first.messages[0]).toMatchObject({ type: "connected", nextRound: 1 });
+
+    const second = await openStream(streamQuery({ round: "1" }), router);
+    await second.waitFor(ofType("done"));
+    expect(second.messages[0]).toMatchObject({ type: "connected", nextRound: 2 });
+    const focuses = fake.calls
+      .filter((call) => call.callSite === "factoids")
+      .map((call) => focusOf(call));
+    expect(focuses).toEqual([0, 1, 2, 3, 4, 5]);
+
+    // Every angle asked: nothing but done, and no model call.
+    const calls = fake.calls.length;
+    const third = await openStream(streamQuery({ round: "2" }), router);
+    await third.waitFor(ofType("done"));
+    expect(third.messages.map((m) => m.type)).toEqual(["connected", "done"]);
+    expect(fake.calls).toHaveLength(calls);
+
+    const invalid = await openStream(streamQuery({ round: "x" }), router);
+    await invalid.waitFor(ofType("done"));
+    expect(invalid.messages.map((m) => m.code ?? m.type)).toEqual(["invalid_input", "done"]);
   });
 });

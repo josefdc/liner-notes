@@ -41,6 +41,12 @@
         "description": "Each new factoid's claim (Factoid.claimId), checked against the run's evidence",
         "type": "array",
         "items": { "$ref": "Claim.schema.json" }
+      },
+      "nextRound": {
+        "description": "The round to ask for next (FactoidsRequest.round); absent for recorded facts",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
       }
     },
     "required": ["factoids"]
@@ -89,6 +95,12 @@
         "description": "Each new factoid's claim (Factoid.claimId), checked against the run's evidence",
         "type": "array",
         "items": { "$ref": "Claim.schema.json" }
+      },
+      "nextRound": {
+        "description": "The round to ask for next (FactoidsRequest.round); absent for recorded facts",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
       }
     },
     "required": ["factoids"],

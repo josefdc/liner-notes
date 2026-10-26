@@ -19,6 +19,7 @@ import {
   evidenceItem,
   type FakeModel,
   fakeModel,
+  isJudge,
   RUN_ID,
   statementsOf,
   storedRun,
@@ -100,9 +101,11 @@ describe("more facts as verified claims", () => {
       evidenceIds: ["ev-1"],
     });
     // One judge call, sent the cited facts in focus order.
-    const judged = llm.calls.filter((call) => call.callSite === "verifier");
+    const judged = llm.calls.filter((call) => isJudge(call));
     expect(judged).toHaveLength(1);
     expect(judged[0].tier).toBe("judge");
+    // Logged apart from an analysis's judge.
+    expect(judged[0].callSite).toBe("factoids-judge");
     expect(statementsOf(judged[0]).map((statement) => statement.text)).toEqual([
       SOURCED,
       UNSUPPORTED,
@@ -153,7 +156,7 @@ describe("more facts as verified claims", () => {
     expect(res.body.factoids).toHaveLength(3);
     expect(claims.map((claim) => claim.kind)).toEqual(["inferred", "inferred", "inferred"]);
     expect(claims.every((claim) => claim.evidenceIds.length === 0)).toBe(true);
-    expect(llm.calls.some((call) => call.callSite === "verifier")).toBe(false);
+    expect(llm.calls.some((call) => isJudge(call))).toBe(false);
   });
 
   it("drops a citation of an item the prompt did not show (past the pack's size)", async () => {
@@ -188,7 +191,7 @@ describe("more facts as verified claims", () => {
     for (const claim of claims) {
       expect(claim).toMatchObject({ kind: "inferred", verdict: null, evidenceIds: [] });
     }
-    expect(llm.calls.some((call) => call.callSite === "verifier")).toBe(false);
+    expect(llm.calls.some((call) => isJudge(call))).toBe(false);
     // The prompt showed no evidence of the other song.
     expect(JSON.stringify(llm.calls[0].input)).not.toContain("ev-1");
   });
@@ -197,7 +200,7 @@ describe("more facts as verified claims", () => {
     const client = new AbortController();
     let written = 0;
     const llm = stubLlm((call) => {
-      if (call.callSite === "verifier") return { verdicts: [] };
+      if (isJudge(call)) return { verdicts: [] };
       // The client leaves as the last fact comes back.
       if (++written === 3) client.abort();
       return { factoids: [card(`${SOURCED} (${written})`, ["ev-1"])] };

@@ -57,31 +57,16 @@ describe("random-values-api", () => {
   });
 });
 
-describe("hex-colours-outside-tokens", () => {
-  it.each([
-    ["3 digits", 'fill="#fff"'],
-    ["4 digits with alpha", 'const c = "#abcd";'],
-    ["6 digits", "color: '#00f0ff'"],
-    ["8 digits", "color: '#00f0ff80'"],
-    ["code after a block comment", "/* brand */ export const c = '#ff0000';"],
-  ])("counts %s", (_name, line) => {
-    expect(count("hex-colours-outside-tokens", line)).toBe(1);
-  });
-
-  it.each([
-    ["a line comment", "// see issue #100"],
-    ["a trailing comment", "const a = 1; // fixed in #123"],
-    ["a JSDoc block", "/**\n * Matches #abc in the docs\n */\nconst a = 1;"],
-    ["an element id", 'href="#add-button"'],
-  ])("ignores %s", (_name, line) => {
-    expect(count("hex-colours-outside-tokens", line)).toBe(0);
-  });
-});
-
 describe("colour-literals-design-system", () => {
+  const css = "apps/web/src/a.css";
   it.each([
-    ["a hex colour", 'fill="#fff"'],
-    ["a hex colour in a class", 'className="shadow-[0_0_6px_#00F0FF]"'],
+    ["a 3-digit hex", 'fill="#fff"'],
+    ["a 4-digit hex with alpha", 'const c = "#abcd";'],
+    ["a 6-digit hex", "color: '#00f0ff'"],
+    ["an 8-digit hex", "color: '#00f0ff80'"],
+    ["a hex after a block comment", "/* brand */ export const c = '#ff0000';"],
+    ["a hex in a class", 'className="shadow-[0_0_6px_#00F0FF]"'],
+    ["a hex in an arbitrary value", 'className="bg-[#123]"'],
     ["rgb()", "color: 'rgb(0, 240, 255)'"],
     [
       "rgba() in a class",
@@ -89,39 +74,87 @@ describe("colour-literals-design-system", () => {
     ],
     ["hsl() in a template literal", "const from = `hsl(` + hue + `, 70%, 35%)`;"],
     ["hsla()", "const c = 'hsla(10, 50%, 50%, 0.5)';"],
-    ["upper-case RGB() in CSS", "a { color: RGB(0 0 0); }"],
+    ["hwb()", "const c = 'hwb(10 20% 30%)';"],
+    ["lab()", "const c = 'lab(50% 40 59)';"],
+    ["lch()", "const c = 'lch(52% 72 56)';"],
+    ["oklab()", "const c = 'oklab(0.6 0.1 0.1)';"],
+    ["oklch() from Tailwind's palette", "const c = 'oklch(70.4% 0.191 22.216)';"],
+    ["oklch() in an arbitrary value", 'className="bg-[oklch(70%_0.1_200)]"'],
+    ["color()", "const c = 'color(display-p3 1 0 0)';"],
+    ["a named colour in a JSX attribute", '<Play size={28} fill="black" />'],
+    ["a named colour in a JSX expression", "<path stroke={'white'} />"],
+    ["a named colour in a style object", "style={{ color: 'red' }}"],
+    ["a named colour as a background", 'style={{ backgroundColor: "navy" }}'],
+    ["a named colour in a D3 attribute", ".attr('fill', 'white')"],
+    ["a named colour in a D3 style", '.style("stop-color", "gold")'],
+    ["a named colour in an arbitrary class", 'className="bg-[red]"'],
+    ["a named colour inside an arbitrary value", 'className="shadow-[0_0_4px_white]"'],
+    ["a typed arbitrary value", 'className="text-[color:navy]"'],
   ])("counts %s", (_name, line) => {
-    const path = line.includes("{ color") ? "apps/web/src/a.css" : "apps/web/src/snippet.tsx";
-    expect(count("colour-literals-design-system", line, path)).toBe(1);
+    expect(count("colour-literals-design-system", line)).toBe(1);
+  });
+
+  it.each([
+    ["a stylesheet declaration", "a { color: red; }"],
+    ["a shorthand in a stylesheet", "a { border: 1px solid white; }"],
+    ["upper-case RGB() in a stylesheet", "a { color: RGB(0 0 0); }"],
+  ])("counts %s", (_name, line) => {
+    expect(count("colour-literals-design-system", line, css)).toBe(1);
   });
 
   it.each([
     ["a token in a class", 'className="shadow-[0_0_6px_var(--color-cyber)]"'],
     ["a theme.ts value", "fill: colors.white"],
+    ["a theme.ts value in a D3 attribute", ".attr('fill', colors.white)"],
+    ["a token class named after a colour", 'className="text-white bg-black/80 text-cyber"'],
     [
       "color-mix() of tokens",
       "background: color-mix(in srgb, var(--color-cyber) 20%, transparent)",
     ],
+    ["transparent and currentColor", '<Play fill="currentColor" stroke="transparent" />'],
     ["a comment", "// was rgba(255,255,255,0.3)"],
     ["a function whose name ends in rgb", "const c = toRgb(value);"],
-    ["an element id", 'fill="url(#placeholder)"'],
+    ["a method named color", "const c = palette.color(1);"],
+    ["an element id in url()", 'fill="url(#fade)"'],
+    ["an anchor", 'href="#add"'],
+    ["a word with a hash inside", "const id = 'page#fade';"],
+    ["an HTML entity", "<span>a&#160;b</span>"],
+    ["an issue number in text", "<p>Fixed in #123, see #1234.</p>"],
+    ["a named colour as text", "<p>The red line is a sample.</p>"],
+    ["a named colour as a prop that is not a colour", '<Badge variant="green">'],
+    ["a word that starts with a colour name in an arbitrary value", 'className="font-[redacted]"'],
   ])("ignores %s", (_name, line) => {
     expect(count("colour-literals-design-system", line)).toBe(0);
   });
 
-  it("scans web source and stylesheets, but not the tokens, theme.ts or tests", () => {
+  it.each([
+    ["a selector", "#abc { color: var(--color-cyber); }"],
+    ["a token in a declaration", "a { color: var(--color-white); }"],
+    ["a non-colour value", "a { border: none; transition: color 0.2s; }"],
+  ])("ignores %s in a stylesheet", (_name, line) => {
+    expect(count("colour-literals-design-system", line, css)).toBe(0);
+  });
+
+  it("counts one literal once", () => {
+    expect(count("colour-literals-design-system", "style={{ color: '#fff' }}")).toBe(1);
+    expect(count("colour-literals-design-system", ".attr('fill', '#fff')")).toBe(1);
+  });
+
+  it("scans web source, its stylesheets and the page, but not the tokens, theme.ts or test code", () => {
     const { files } = rule("colour-literals-design-system");
     expect(files("apps/web/src/components/Thing.tsx")).toBe(true);
     expect(files("apps/web/src/styles/index.css")).toBe(true);
     expect(files("apps/web/src/styles/placeholder.ts")).toBe(true);
+    expect(files("apps/web/index.html")).toBe(true);
     expect(files("apps/web/src/styles/tokens.css")).toBe(false);
     expect(files("apps/web/src/styles/theme.ts")).toBe(false);
     expect(files("apps/web/src/components/Thing.test.tsx")).toBe(false);
+    expect(files("apps/web/src/components/genealogy/testing.ts")).toBe(false);
     expect(files("apps/api/src/a.ts")).toBe(false);
   });
 });
 
-describe("gray-palette-utilities", () => {
+describe("default-palette-utilities", () => {
   it.each([
     ["a text class", 'className="text-gray-400 text-xs"'],
     ["a background class", "'bg-gray-900'"],
@@ -129,15 +162,23 @@ describe("gray-palette-utilities", () => {
     ["a class with an opacity", 'className="border-gray-600/50"'],
     ["a class with an arbitrary opacity", 'className="bg-gray-800/[0.4]"'],
     ["a class after a variant", "'group-hover/item:border-gray-400'"],
-    ["the lightest and darkest steps", "'bg-gray-50 text-gray-950'"],
+    ["an important class", "'!bg-gray-800'"],
+    ["a side border", "'border-t-gray-700'"],
+    ["the zinc palette", "'bg-zinc-800'"],
+    ["the slate palette", "'text-slate-400'"],
+    ["the neutral palette", "'ring-neutral-500/40'"],
+    ["the stone palette", "'divide-stone-700'"],
+    ["a coloured palette", "'border-red-500'"],
+    ["a ring offset", "'ring-offset-amber-950'"],
   ])("counts %s", (_name, line) => {
-    expect(count("gray-palette-utilities", line)).toBe(line.includes("gray-50 ") ? 2 : 1);
+    expect(count("default-palette-utilities", line)).toBe(1);
   });
 
-  it("counts a class in a stylesheet's @apply", () => {
-    expect(count("gray-palette-utilities", "a { @apply bg-gray-700; }", "apps/web/src/a.css")).toBe(
-      1,
-    );
+  it("counts each class, and a class in a stylesheet's @apply", () => {
+    expect(count("default-palette-utilities", "'bg-gray-50 text-gray-950'")).toBe(2);
+    expect(
+      count("default-palette-utilities", "a { @apply bg-gray-700; }", "apps/web/src/a.css"),
+    ).toBe(1);
   });
 
   it.each([
@@ -147,10 +188,14 @@ describe("gray-palette-utilities", () => {
     ["the Badge variant", '<Badge variant="gray">'],
     ["a comment", "// was text-gray-400"],
     ["a step that is not on the scale", "'text-gray-450'"],
+    ["a data attribute", '<li data-gray-500="1">'],
+    ["a test id", 'data-testid="swatch-gray-500"'],
+    ["a key that is not a class", "const k = 'colors-gray-500';"],
+    ["text", "<p>mid-gray-700</p>"],
     ["the token classes", 'className="text-text-tertiary bg-void-lighter border-white/30"'],
   ])("ignores %s", (_name, line) => {
     const path = line.startsWith("a {") ? "apps/web/src/a.css" : "apps/web/src/snippet.tsx";
-    expect(count("gray-palette-utilities", line, path)).toBe(0);
+    expect(count("default-palette-utilities", line, path)).toBe(0);
   });
 });
 
@@ -165,7 +210,7 @@ describe("allow markers", () => {
 
 describe("what a rule scans", () => {
   it("keeps `//` inside a string and in JSX text, and counts code after a block comment", () => {
-    expect(count("hex-colours-outside-tokens", "const url = 'a // #fff';")).toBe(1);
+    expect(count("colour-literals-design-system", "const url = 'a // #fff';")).toBe(1);
     expect(count("prototype-copy", "<p>X9-ALPHA {'//'} STATUS: ONLINE</p>")).toBe(2);
     expect(count("prototype-copy", "<p>AGENT_ID // STATUS: ONLINE</p>")).toBe(2);
     expect(count("prototype-copy", "/* note */ const t = 'Command Center';")).toBe(1);
@@ -173,7 +218,11 @@ describe("what a rule scans", () => {
 
   it("blanks comments that span lines in scripts, CSS and HTML", () => {
     expect(
-      count("hex-colours-outside-tokens", "/*\n  old: #fff\n*/\na { color: red; }", "a.css"),
+      count(
+        "colour-literals-design-system",
+        "/*\n  old: #fff\n*/\na { color: var(--x); }",
+        "a.css",
+      ),
     ).toBe(0);
     expect(
       count("prototype-copy", "<!--\n  <title>The Sonic Agent</title>\n-->", "apps/web/index.html"),
@@ -534,9 +583,8 @@ describe("baselines", () => {
       "random-values-api": 0,
       "stock-images-web": 0,
       "tailwind-v3-variable-classes": 0,
-      "hex-colours-outside-tokens": 0,
       "colour-literals-design-system": 0,
-      "gray-palette-utilities": 0,
+      "default-palette-utilities": 0,
       "dotenv-outside-config": 0,
       "string-sentinel-tool-results": 0,
       "prototype-copy": 0,
@@ -593,9 +641,8 @@ describe("baselines", () => {
         "random-values-api": 5,
         "stock-images-web": 0,
         "tailwind-v3-variable-classes": 0,
-        "hex-colours-outside-tokens": 0,
         "colour-literals-design-system": 0,
-        "gray-palette-utilities": 0,
+        "default-palette-utilities": 0,
         "dotenv-outside-config": 0,
         "string-sentinel-tool-results": 0,
         "prototype-copy": 0,

@@ -14,7 +14,7 @@ import { audioReadings, fingerprintSubtitle, normalizeTrack } from '../constants
 import type { TrackRelation } from './genealogy/links';
 import { resultClaims, withoutHiddenRelations } from './provenance/claims';
 import { useLinkReader } from './genealogy/useLinkReader';
-import { placeholderBackground } from '../styles/placeholder';
+import { PLACEHOLDER_NOTE, placeholderBackground } from '../styles/placeholder';
 
 interface DashboardProps {
   trackData: TrackData | null;
@@ -114,7 +114,7 @@ const PlaceholderCover: React.FC = () => (
     className="w-full h-full flex items-center justify-center"
     style={{ background: placeholderBackground }}
   >
-    <Music size={48} className="text-text-tertiary" />
+    <Music size={48} data-placeholder-note style={{ color: PLACEHOLDER_NOTE.color }} />
   </div>
 );
 
@@ -398,7 +398,8 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Connected tracks from the genealogy (P2:17 — stagger) */}
         <div className="lg:col-span-2 flex flex-col gap-6 animate-stagger-in stagger-4">
-          <div className="flex items-center justify-between">
+          {/* The count moves below the heading when the two do not fit side by side */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>
               <h3 className="text-lg font-medium tracking-tight text-white">Connected Tracks</h3>
               <p className="text-chrome font-mono text-text-muted mt-0.5">
@@ -408,7 +409,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </p>
             </div>
             {relatedTracks !== null && relatedTracks.length > 0 && (
-              <span className="text-xs font-mono text-analog">
+              <span className="text-xs font-mono text-analog whitespace-nowrap">
                 {/* What the cards show, out of how many connected tracks there are */}
                 {relatedTracks.length < relatedCount
                   ? `${relatedTracks.length} OF ${relatedCount} RELATED TRACKS`

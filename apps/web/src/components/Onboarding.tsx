@@ -591,7 +591,11 @@ const Onboarding: React.FC<OnboardingProps> = ({
       className={`h-[100dvh] w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? 'justify-center' : 'justify-start pt-[min(8vh,4rem)]'}`}
     >
       {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-void-lighter via-void to-void opacity-40"></div>
+      <div
+        aria-hidden="true"
+        data-testid="background-ambience"
+        className="absolute inset-0 bg-radial-[circle_at_center] from-void-lighter via-void to-void opacity-40"
+      ></div>
 
       {!isAnalyzing && status !== 'complete' ? (
         <div className="z-10 text-center space-y-12 animate-fade-in-up max-w-md mx-auto px-4">
@@ -723,7 +727,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-warning/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-warning/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
               >
                 or try a different song
               </button>
@@ -755,7 +759,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                 >
                   or try a different song
                 </button>

@@ -21,9 +21,12 @@ const baselinePath = join(root, "scripts", "guard-baseline.json");
 
 const isTest = (path) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
 const isScript = (path) => /\.[cm]?[jt]sx?$/.test(path);
-// Test helpers and fixtures that live next to the source (e.g. apps/api/src/sources/testing/).
+// Test helpers and fixtures that live next to the source (e.g. apps/api/src/sources/testing/, or
+// a `testing.ts` module that only tests import).
 const isTestSupport = (path) =>
-  isTest(path) || /(?:^|\/)(?:tests?|__tests__|__mocks__|testing|fixtures)\//.test(path);
+  isTest(path) ||
+  /(?:^|\/)(?:tests?|__tests__|__mocks__|testing|fixtures)\//.test(path) ||
+  /(?:^|\/)testing\.[cm]?[jt]sx?$/.test(path);
 const isRecording = (path) => /^fixtures\/replays\/[^/]+\.json$/.test(path);
 
 // An occurrence that is not user-facing data (e.g. retry jitter) is allowed only with a marker
@@ -283,6 +286,210 @@ export const PROTOTYPE_COPY = [
 ];
 const EMOJI = /\p{RGI_Emoji}/gv;
 
+// Colour literals. Web source draws with the tokens: a class (bg-cyber, text-text-tertiary/60),
+// a var(--color-*) in an arbitrary value, or a styles/theme.ts value in D3 and Recharts.
+//
+// - A hex colour: not an id or an anchor (`url(#fade)`, `href="#add"`), not a word that only looks
+//   like one (`page#fade`, `&#160;`), not an issue number in text (`see #123`), not a selector
+//   (`#abc {`).
+// - A colour function: rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch(), color(); color-mix()
+//   of tokens is allowed.
+// - A CSS named colour used as a colour: a JSX attribute or style property (fill="black",
+//   color: 'red'), a D3 attribute or style (.attr('fill', 'white')), a stylesheet declaration
+//   (color: red), or a Tailwind arbitrary value (bg-[red], shadow-[0_0_4px_white]).
+//   transparent, currentColor and inherit are not colours of their own.
+export const CSS_NAMED_COLOURS = [
+  "aliceblue",
+  "antiquewhite",
+  "aqua",
+  "aquamarine",
+  "azure",
+  "beige",
+  "bisque",
+  "black",
+  "blanchedalmond",
+  "blue",
+  "blueviolet",
+  "brown",
+  "burlywood",
+  "cadetblue",
+  "chartreuse",
+  "chocolate",
+  "coral",
+  "cornflowerblue",
+  "cornsilk",
+  "crimson",
+  "cyan",
+  "darkblue",
+  "darkcyan",
+  "darkgoldenrod",
+  "darkgray",
+  "darkgreen",
+  "darkgrey",
+  "darkkhaki",
+  "darkmagenta",
+  "darkolivegreen",
+  "darkorange",
+  "darkorchid",
+  "darkred",
+  "darksalmon",
+  "darkseagreen",
+  "darkslateblue",
+  "darkslategray",
+  "darkslategrey",
+  "darkturquoise",
+  "darkviolet",
+  "deeppink",
+  "deepskyblue",
+  "dimgray",
+  "dimgrey",
+  "dodgerblue",
+  "firebrick",
+  "floralwhite",
+  "forestgreen",
+  "fuchsia",
+  "gainsboro",
+  "ghostwhite",
+  "gold",
+  "goldenrod",
+  "gray",
+  "green",
+  "greenyellow",
+  "grey",
+  "honeydew",
+  "hotpink",
+  "indianred",
+  "indigo",
+  "ivory",
+  "khaki",
+  "lavender",
+  "lavenderblush",
+  "lawngreen",
+  "lemonchiffon",
+  "lightblue",
+  "lightcoral",
+  "lightcyan",
+  "lightgoldenrodyellow",
+  "lightgray",
+  "lightgreen",
+  "lightgrey",
+  "lightpink",
+  "lightsalmon",
+  "lightseagreen",
+  "lightskyblue",
+  "lightslategray",
+  "lightslategrey",
+  "lightsteelblue",
+  "lightyellow",
+  "lime",
+  "limegreen",
+  "linen",
+  "magenta",
+  "maroon",
+  "mediumaquamarine",
+  "mediumblue",
+  "mediumorchid",
+  "mediumpurple",
+  "mediumseagreen",
+  "mediumslateblue",
+  "mediumspringgreen",
+  "mediumturquoise",
+  "mediumvioletred",
+  "midnightblue",
+  "mintcream",
+  "mistyrose",
+  "moccasin",
+  "navajowhite",
+  "navy",
+  "oldlace",
+  "olive",
+  "olivedrab",
+  "orange",
+  "orangered",
+  "orchid",
+  "palegoldenrod",
+  "palegreen",
+  "paleturquoise",
+  "palevioletred",
+  "papayawhip",
+  "peachpuff",
+  "peru",
+  "pink",
+  "plum",
+  "powderblue",
+  "purple",
+  "rebeccapurple",
+  "red",
+  "rosybrown",
+  "royalblue",
+  "saddlebrown",
+  "salmon",
+  "sandybrown",
+  "seagreen",
+  "seashell",
+  "sienna",
+  "silver",
+  "skyblue",
+  "slateblue",
+  "slategray",
+  "slategrey",
+  "snow",
+  "springgreen",
+  "steelblue",
+  "tan",
+  "teal",
+  "thistle",
+  "tomato",
+  "turquoise",
+  "violet",
+  "wheat",
+  "white",
+  "whitesmoke",
+  "yellow",
+  "yellowgreen",
+];
+const NAMED = `(?:${CSS_NAMED_COLOURS.join("|")})`;
+// A property that takes a colour, in JSX or CSS spelling (fill, stroke, background, *color).
+const COLOUR_PROPERTY =
+  "(?:fill|stroke|background|background-color|border(?:-[a-z]+)*-color|[A-Za-z-]*[cC]olor)";
+const HEX = "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\\w-])";
+export const COLOUR_LITERALS = [
+  // Hex. After white space, a hex of digits only is an issue number ("see #123").
+  new RegExp(
+    `(?<![A-Za-z0-9&]|url\\(|href=["'])(?:(?<=\\s)(?!#\\d{3,4}(?![\\w-]))|(?<!\\s))${HEX}(?!\\s*\\{)`,
+    "g",
+  ),
+  // Not after a letter or digit (toRgb(), a.color()); after `_` it is in a Tailwind arbitrary value.
+  /(?<![A-Za-z0-9$.-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/gi,
+  // JSX attributes and style objects: fill="black", color: 'red', stroke={'white'}.
+  new RegExp(`(?<![\\w-])${COLOUR_PROPERTY}\\s*[=:]\\s*\\{?\\s*(['"\`])\\s*${NAMED}\\s*\\1`, "gi"),
+  // D3: .attr('fill', 'white'), .style('stroke', "red").
+  new RegExp(
+    `\\.(?:attr|style)\\(\\s*(['"])${COLOUR_PROPERTY}\\1\\s*,\\s*(['"\`])${NAMED}\\2`,
+    "gi",
+  ),
+  // A stylesheet declaration: color: red; border: 1px solid white.
+  new RegExp(
+    `(?<![\\w-])(?:${COLOUR_PROPERTY}|border(?:-[a-z]+)*|outline|box-shadow|text-shadow)\\s*:[^;{}'"\`\\n]*?(?<![\\w.$-])${NAMED}(?![\\w-])`,
+    "gi",
+  ),
+  // A Tailwind arbitrary value: bg-[red], shadow-[0_0_4px_white], text-[color:navy].
+  new RegExp(`-\\[[^\\]\\s'"\`]*?(?<=[\\[_,(:])${NAMED}(?=[\\]_,)])[^\\]\\s'"\`]*\\]`, "gi"),
+];
+
+// Tailwind's default palettes. tokens.css clears them (`--color-*: initial`), so such a class
+// builds nothing, except on the grey scale, which tokens.css keeps for styles/theme.ts.
+const PALETTES =
+  "red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone";
+// The utilities that take a colour; a variant (`hover:`, `group-hover/item:`) may come before one
+// and an opacity after it. `data-gray-500` or `swatch-gray-500` is not a utility.
+const COLOUR_UTILITY =
+  "(?:bg|text|border(?:-[xytrblse])?|from|via|to|ring(?:-offset)?|outline|divide|fill|stroke|shadow|inset-shadow|inset-ring|drop-shadow|text-shadow|accent|caret|decoration|placeholder)";
+export const DEFAULT_PALETTE_CLASS = new RegExp(
+  `(?<![\\w-])${COLOUR_UTILITY}-(?:${PALETTES})-(?:50|[1-9]00|950)(?:\\/(?:\\d+|\\[[^\\]\\s]+\\]))?(?![\\w-])`,
+  "g",
+);
+
 // Each rule counts the matches of `pattern` (one expression or several) in the files `files`
 // selects, in the part of each file that `scan` names (see scannedText). A match is reported on
 // the line where it starts.
@@ -310,48 +517,27 @@ export const rules = [
     pattern: /-\[--[\w-]+\]/g,
   },
   {
-    id: "hex-colours-outside-tokens",
+    id: "colour-literals-design-system",
     owner: "#30",
     description:
-      "Hex colours in web code outside the design tokens (styles/tokens.css, styles/theme.ts)",
+      "Colour literals in web source outside the design tokens (styles/tokens.css, styles/theme.ts): hex, colour functions, and named colours as a colour value",
     files: (p) =>
       ((p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p)) ||
         p === "apps/web/index.html") &&
       p !== "apps/web/src/styles/tokens.css" &&
       p !== "apps/web/src/styles/theme.ts" &&
-      !isTest(p),
-    pattern: /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g,
-    scan: "code",
-  },
-  {
-    id: "colour-literals-design-system",
-    owner: "#30",
-    description:
-      "Colour literals (hex, rgb(), hsl()) in web source outside the design tokens (styles/tokens.css, styles/theme.ts)",
-    files: (p) =>
-      p.startsWith("apps/web/src/") &&
-      /\.([cm]?[jt]sx?|css)$/.test(p) &&
-      p !== "apps/web/src/styles/tokens.css" &&
-      p !== "apps/web/src/styles/theme.ts" &&
       !isTestSupport(p),
-    pattern: [
-      /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g,
-      // Not `\b`: in a Tailwind arbitrary value the colour follows a `_` (`_rgba(0,0,0,0.5)`).
-      /(?<![A-Za-z0-9$])(?:rgba?|hsla?)\(/gi,
-    ],
+    pattern: COLOUR_LITERALS,
     scan: "code",
   },
   {
-    id: "gray-palette-utilities",
+    id: "default-palette-utilities",
     owner: "#30",
     description:
-      "Classes on Tailwind's gray scale (text-gray-400, hover:border-gray-600/50) in web source: use the surface, border and text tokens",
+      "Classes on Tailwind's default palettes (text-gray-400, bg-zinc-800, hover:border-red-500/50) in web source: use the surface, border, text and status tokens",
     files: (p) =>
       p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p) && !isTestSupport(p),
-    // A utility's name ends in `-gray-<step>`, with an optional opacity; a variant (`hover:`,
-    // `group-hover/item:`) may come before it. A custom property (`var(--color-gray-700)`) is
-    // not a class: a match never starts right after a `-`.
-    pattern: /(?<![\w-])(?:[a-z]+-)+gray-(?:50|[1-9]00|950)(?:\/(?:\d+|\[[^\]\s]+\]))?(?![\w-])/g,
+    pattern: DEFAULT_PALETTE_CLASS,
     scan: "code",
   },
   {

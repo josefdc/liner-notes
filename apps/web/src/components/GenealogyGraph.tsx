@@ -58,10 +58,15 @@ function lineLabel(link: ShownLink): string {
   return link.kind === 'sourced' ? label : `possible ${label}`;
 }
 
-/** Screen size of the line labels and track labels, whatever the zoom. */
-const LINE_LABEL_PX = 9;
-const NODE_LABEL_PX = { narrow: 9, wide: 10 };
-const SUB_LABEL_PX = 8;
+/**
+ * Screen size of the graph's text (line labels, track labels and their tags, the hover notes),
+ * whatever the zoom: zooming in does not enlarge it, so it is the chrome size (--text-chrome in
+ * tokens.css), not smaller.
+ */
+const GRAPH_TEXT_PX = 12;
+const LINE_LABEL_PX = GRAPH_TEXT_PX;
+const NODE_LABEL_PX = GRAPH_TEXT_PX;
+const SUB_LABEL_PX = GRAPH_TEXT_PX;
 
 /** The genealogy's nodes, or none when the list is missing. */
 function graphNodes(
@@ -384,7 +389,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         return colors.white;
       })
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', (d) => (d.group === 1 || isOrigin(d) ? 0.8 : 0.2))
+      // 2 px on screen whatever the zoom: zoomed out, a thinner ring fades into the page
+      .attr('vector-effect', 'non-scaling-stroke')
+      // A related track's ring is its outline (3:1 or more on the graph): its picture may be the
+      // dark placeholder
+      .attr('stroke-opacity', (d) => (d.group === 1 || isOrigin(d) ? 0.8 : 0.5))
       .style('filter', (d) => {
         if (d.group === 1) return 'url(#glow-cyan)';
         if (isOrigin(d)) return 'url(#glow-amber)';
@@ -426,7 +435,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     });
 
     // Node - Labels (responsive sizing)
-    const labelFontSize = isMobile ? NODE_LABEL_PX.narrow : NODE_LABEL_PX.wide;
+    const labelFontSize = NODE_LABEL_PX;
 
     // Only show labels on non-mobile or for important nodes
     const labels = node
@@ -483,6 +492,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           : labelFontSize;
         return `${base / k}px`;
       });
+      g.selectAll('.preview-indicator').attr('font-size', `${GRAPH_TEXT_PX / k}px`);
       const boxes = simulationLinks.map((d: any) => ({
         x: (((d.source.x ?? 0) + (d.target.x ?? 0)) / 2) * k,
         y: (((d.source.y ?? 0) + (d.target.y ?? 0)) / 2) * k,
@@ -667,7 +677,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
-            .attr('font-size', '9px')
+            .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
             .attr('fill', colors.cyber)
             // A preview of the node's track, whatever its relation to this one
             .text('♪ PREVIEW')
@@ -684,7 +694,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             .attr('y', -d.size - 10)
             .attr('text-anchor', 'middle')
             .attr('font-family', 'IBM Plex Mono')
-            .attr('font-size', '9px')
+            .attr('font-size', `${GRAPH_TEXT_PX / (transform.k || 1)}px`)
             .attr('fill', colors.analog)
             .text('⚡ CLICK TO EXPLORE')
             .style('opacity', 0)

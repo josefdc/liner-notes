@@ -216,7 +216,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       ) : (
         <div className="h-3 w-full rounded-xs bg-white/5 flex items-center justify-center">
-          <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
+          <span className="text-chrome leading-none font-mono text-text-tertiary uppercase tracking-widest">
             STRUCTURE DATA UNAVAILABLE
           </span>
         </div>

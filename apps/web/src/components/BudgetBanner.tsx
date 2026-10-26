@@ -95,11 +95,11 @@ const BudgetBanner: React.FC<BudgetBannerProps> = ({
                 <button
                   type="button"
                   onClick={() => onPick(track)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left bg-white/5 border border-transparent hover:bg-white/10 hover:border-status-warning/30 transition-colors focus-visible:ring-2 focus-visible:ring-status-warning/30 focus-visible:outline-none"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/20 transition-colors focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
                 >
                   <Disc3
                     size={16}
-                    className="text-status-warning flex-shrink-0"
+                    className="text-text-tertiary flex-shrink-0"
                     aria-hidden="true"
                   />
                   <span className="flex-1 min-w-0">

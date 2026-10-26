@@ -431,6 +431,29 @@ describe("class strings", () => {
     expect(entry.lowest.surface).toContain("no longer fails");
   });
 
+  it("prints a listed known failure as KNOWN, says how many there are, and exits 0", () => {
+    const out = [];
+    const err = [];
+    const faint = source("const a = 'text-text-tertiary opacity-60';");
+    const known = [
+      { name: "--color-text-tertiary/60", file: "components/Thing.tsx", issue: "fixed elsewhere" },
+    ];
+    const code = main(
+      [tokensPath, "--src", faint],
+      (line) => out.push(line),
+      (line) => err.push(line),
+      known,
+    );
+    expect(code).toBe(0);
+    expect(err).toEqual([]);
+    const text = out.join("\n");
+    expect(text).toMatch(
+      /^KNOWN --color-text-tertiary\/60 .*text at components\/Thing\.tsx:1 \[known: fixed elsewhere\]$/m,
+    );
+    expect(text).toMatch(/\(1 known, listed in KNOWN with the issue that fixes it\)$/m);
+    expect(text).not.toMatch(/^FAIL /m);
+  });
+
   it("passes the app's own source with nothing listed as known", () => {
     const { code, out } = run([tokensPath]);
     expect(code).toBe(0);

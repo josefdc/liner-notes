@@ -678,9 +678,9 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
                 aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
               >
                 {isPlaying ? (
-                  <Pause size={28} fill="black" />
+                  <Pause size={28} fill="currentColor" />
                 ) : (
-                  <Play size={28} fill="black" className="ml-1" />
+                  <Play size={28} fill="currentColor" className="ml-1" />
                 )}
               </button>
             ) : (

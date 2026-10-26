@@ -183,18 +183,28 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
         }`}
       />
 
-      {/* Header */}
-      <div className="relative flex items-center gap-2 mb-3">
+      {/* Header: in a narrow column the type chip moves below the title, and a title still
+          wider than the column wraps, so neither is cut */}
+      <div
+        data-factoid-header
+        className="relative flex flex-wrap items-center gap-x-2 gap-y-1 mb-3"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={`${style.color} flex shrink-0 items-center justify-center w-6 h-6 rounded-full bg-white/5`}
+          >
+            {style.icon}
+          </span>
+          <span
+            data-factoid-title
+            className="min-w-0 break-words text-xs font-semibold text-text-secondary uppercase font-mono tracking-wider"
+          >
+            {factoid.title}
+          </span>
+        </div>
         <span
-          className={`${style.color} flex items-center justify-center w-6 h-6 rounded-full bg-white/5`}
-        >
-          {style.icon}
-        </span>
-        <span className="text-xs font-semibold text-text-secondary uppercase font-mono tracking-wider truncate">
-          {factoid.title}
-        </span>
-        <span
-          className={`ml-auto text-chrome font-mono px-2 py-0.5 rounded-full ${style.color} bg-white/5`}
+          data-factoid-type
+          className={`ml-auto max-w-full truncate text-chrome font-mono px-2 py-0.5 rounded-full ${style.color} bg-white/5`}
         >
           {style.label}
         </span>

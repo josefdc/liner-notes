@@ -167,7 +167,7 @@ test.describe("the genealogy graph", () => {
       "1 link not shown: the claim behind it was rejected or cannot be read.",
     );
     // Sourced links are shown: the panel's label does not call the whole graph an inference.
-    await expect(page.getByTestId("genealogy-kinds")).toHaveText("Sourced and inferred links");
+    await expect(page.getByTestId("genealogy-kinds")).toHaveText("Sourced and not sourced links");
     // The track only the rejected link related is left out with it.
     await expect(graph.locator('g.nodes > g[data-node-id="rejected"]')).toHaveCount(0);
     // A track is marked as an origin (amber halo) only when a sourced link says this one uses

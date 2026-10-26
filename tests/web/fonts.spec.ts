@@ -75,7 +75,9 @@ test("a Latin page loads Inter and IBM Plex Mono from the app, and only their La
   expect(loaded).toContain("Inter");
   expect(loaded).toContain("IBM Plex Mono");
 
-  // A measured value's provenance line is set in IBM Plex Mono, and drawn with it.
+  // A measured value's provenance line (on the Dashboard, behind its kind chip) is set in IBM
+  // Plex Mono, and drawn with it.
+  await page.getByRole("button", { name: /^Measured: how BPM/ }).click();
   const line = page
     .getByRole("list", { name: "Audio values" })
     .getByText(/^Measured · /)

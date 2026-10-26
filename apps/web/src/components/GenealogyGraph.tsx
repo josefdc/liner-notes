@@ -36,6 +36,7 @@ import {
 } from './genealogy/links';
 import { labelHeight, labelWidth, placeLabels } from './genealogy/labels';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
+import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
 import { LinkLegend } from './genealogy/LinkLegend';
 import { LinkList } from './genealogy/LinkList';
 import { isValidImageUrl } from '../utils/image';
@@ -58,15 +59,6 @@ function lineLabel(link: ShownLink): string {
   return link.kind === 'sourced' ? label : `possible ${label}`;
 }
 
-/**
- * Screen size of the graph's text (line labels, track labels and their tags, the hover notes),
- * whatever the zoom: zooming in does not enlarge it, so it is the chrome size (--text-chrome in
- * tokens.css), not smaller.
- */
-const GRAPH_TEXT_PX = 12;
-const LINE_LABEL_PX = GRAPH_TEXT_PX;
-const NODE_LABEL_PX = GRAPH_TEXT_PX;
-const SUB_LABEL_PX = GRAPH_TEXT_PX;
 /** Where along its line a line's label may go, the middle first. */
 /**
  * Where a line's label may go, the first that fits: along the line (0 at its source, 1 at its

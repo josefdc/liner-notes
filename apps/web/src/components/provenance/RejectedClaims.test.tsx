@@ -50,6 +50,18 @@ describe('RejectedClaims', () => {
     expect(panel?.hidden).toBe(true);
   });
 
+  it('marks rejected claims with the warning colour and triangle', () => {
+    render(<RejectedClaims rejected={claims.rejected} unreadable={claims.unreadableRejected} />);
+    const button = screen.getByRole('button', { name: 'Rejected by the verifier (4)' });
+    const icon = button.querySelector('svg.lucide-triangle-alert');
+    expect(icon?.getAttribute('class')).toContain('text-status-warning');
+    fireEvent.click(button);
+    const panel = document.getElementById(button.getAttribute('aria-controls') ?? '');
+    for (const item of panel?.querySelectorAll('li') ?? []) {
+      expect(item.className).toContain('border-status-warning');
+    }
+  });
+
   it('opens and closes, listing each claim with why it was rejected', () => {
     render(
       <RejectedClaims

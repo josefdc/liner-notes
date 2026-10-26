@@ -12,8 +12,8 @@
  *   analog, spotify and white, and any colour a text-* class in apps/web/src names (at its
  *   opacity and the element's own; what it cannot see is listed in that file). It checks
  *   them on every surface: a void base, a translucent surface panel on it, and a hover or active
- *   state (or the class string's own bg tint) on that. Data-visualisation colours (--color-viz-*)
- *   are checked at 3:1 or more.
+ *   state (or the class string's own bg tint) on that. Data-visualisation colours (--color-viz-*,
+ *   --color-relation-*) are checked at 3:1 or more.
  *
  * A token that only points at another (`var(--color-...)`) is an alias kept for code that still
  * uses the old name.
@@ -63,40 +63,56 @@
   --color-analog-dim: rgba(255, 176, 0, 0.1);
   --color-analog-muted: rgba(255, 176, 0, 0.5);
 
-  /* ===== Provenance: how a value is known. Colour is never the only cue (chips carry text) ===== */
+  /* ===== Provenance: how a value is known. Colour is never the only cue: every chip carries an
+     icon and words (components/provenance/ProvenanceChip.tsx) ===== */
   --color-prov-measured: var(--color-cyber);
   --color-prov-sourced: var(--color-analog);
-  /* No hue of its own: colour marks what has evidence (measured, sourced); an inference is a
-     light neutral, set apart from missing (dimmer) by its text and icon */
-  --color-prov-inferred: #cbd5e1;
+  /* Violet means inferred, and only that: what a model wrote or estimated (its text, genre
+     profile, song sections and sample times, the model steps of a run, and audio-model scores).
+     No other token is violet or near it: check:contrast fails any colour token, whatever its
+     name, closer than CIE76 ΔE 15 to it with normal vision, deuteranopia or protanopia
+     (config/contrast.mjs), and the honesty guard keeps the old purple and indigo names out of web
+     source. It is the lightest violet still clearly a hue: 5.5:1 or more on every surface and
+     4.6:1 on its own badge tint. A light neutral (#cbd5e1) read as the neutral badge (ΔE 27 from
+     its grey) and, with protanopia, as the measured cyan (ΔE 9); this violet is ΔE 51 and 33
+     from them. Its closest token is the measured cyan, ΔE 17.5 with deuteranopia; the light
+     blues (info, the album accent) were ΔE 5 to 6 from it with red-green deficiencies and are
+     gone */
+  --color-prov-inferred: #c4a4fc;
   --color-prov-missing: var(--color-text-tertiary);
 
-  /* ===== Data visualisation: series and relation colours for charts and the graph ===== */
+  /* ===== Data visualisation: series colours for charts and the graph ===== */
   --color-viz-cyan: var(--color-cyber);
   --color-viz-amber: var(--color-analog);
-  --color-viz-purple: #a855f7;
   --color-viz-pink: #ec4899;
   --color-viz-blue: #3b82f6;
-  --color-viz-indigo: #6366f1;
   --color-viz-green: #22c55e;
   --color-viz-neutral: #9ca3af;
+
+  /* ===== Genealogy relations: the colour of each kind of link, named by relation ===== */
+  /* Only a sourced link is drawn as a sample, interpolation, cover or remix (an inferred one is
+     shown as an influence), so the sourced amber marks sourced samples. None is cyan or violet;
+     the remix is a light grey, apart from the influence grey by lightness (ΔE 25). Lines reach
+     3:1 and their labels 4.5:1 on the page */
+  --color-relation-sample: var(--color-analog);
+  --color-relation-interpolation: var(--color-viz-pink);
+  --color-relation-cover: var(--color-viz-green);
+  --color-relation-remix: #e5e7eb;
+  --color-relation-producer: var(--color-viz-blue);
+  --color-relation-influence: var(--color-viz-neutral);
 
   /* ===== Status ===== */
   --color-status-success: var(--color-viz-green);
   /* Orange, apart from the sourced amber: "its source contradicts it" must not look like "it has
-     a source" */
+     a source". Warnings carry their own icon too (a triangle) */
   --color-status-warning: #fb923c;
   --color-status-error: #ff8a8a;
-  --color-status-info: #60a5fa;
 
   /* ===== Accents: the data-visualisation hues for text and badges, lighter where the chart
      value is under 4.5:1 as text ===== */
-  --color-accent-purple: #d8b4fe;
   --color-accent-pink: #f9a8d4;
   --color-accent-green: var(--color-viz-green);
-  --color-accent-indigo: #a5b4fc;
   --color-accent-amber: var(--color-analog);
-  --color-accent-blue: #93c5fd;
 
   /* ===== Spotify brand ===== */
   --color-spotify: #1ed760; /* Spotify's current brand green */
@@ -134,8 +150,12 @@
 
   /* Text shadows (text-shadow-dark, text-shadow-glow-cyber, text-shadow-glow-analog) */
   --text-shadow-dark: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.8);
-  --text-shadow-glow-cyber: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
-  --text-shadow-glow-analog: 0 0 10px rgba(255, 176, 0, 0.5), 0 0 20px rgba(255, 176, 0, 0.3);
+  --text-shadow-glow-cyber:
+    0 0 10px color-mix(in srgb, var(--color-cyber) 50%, transparent),
+    0 0 20px color-mix(in srgb, var(--color-cyber) 30%, transparent);
+  --text-shadow-glow-analog:
+    0 0 10px color-mix(in srgb, var(--color-analog) 50%, transparent),
+    0 0 20px color-mix(in srgb, var(--color-analog) 30%, transparent);
 
   /* ===== Effects ===== */
   /* The console's CRT texture: dark scanlines over a faint red, green and blue fringe */
@@ -161,31 +181,20 @@
   --radius-full: 9999px;
 
   /* ===== Shadows ===== */
-  /* The accent and Spotify glows follow their colour tokens */
-  --shadow-glow-cyber: 0 0 20px rgba(0, 240, 255, 0.25);
-  --shadow-glow-analog: 0 0 20px rgba(255, 176, 0, 0.25);
-  --shadow-glow-purple: 0 0 20px color-mix(in srgb, var(--color-accent-purple) 25%, transparent);
-  --shadow-glow-pink: 0 0 20px color-mix(in srgb, var(--color-accent-pink) 25%, transparent);
-  --shadow-glow-green: 0 0 20px color-mix(in srgb, var(--color-accent-green) 25%, transparent);
+  /* Each glow is its colour token, mixed with transparency, so it follows the token */
+  --shadow-glow-cyber: 0 0 20px color-mix(in srgb, var(--color-cyber) 25%, transparent);
+  --shadow-glow-analog: 0 0 20px color-mix(in srgb, var(--color-analog) 25%, transparent);
   --shadow-glow-spotify: 0 0 20px color-mix(in srgb, var(--color-spotify) 25%, transparent);
-  --shadow-glow-indigo: 0 0 20px color-mix(in srgb, var(--color-accent-indigo) 25%, transparent);
-  --shadow-glow-amber: var(--shadow-glow-analog);
-  --shadow-glow-cyber-subtle: 0 0 12px rgba(0, 240, 255, 0.15);
-  --shadow-glow-analog-subtle: 0 0 12px rgba(255, 176, 0, 0.15);
-  --shadow-glow-purple-subtle: 0 0 12px
-    color-mix(in srgb, var(--color-accent-purple) 15%, transparent);
-  --shadow-glow-green-subtle: 0 0 12px
-    color-mix(in srgb, var(--color-accent-green) 15%, transparent);
-  --shadow-glow-pink-subtle: 0 0 12px color-mix(in srgb, var(--color-accent-pink) 15%, transparent);
+  --shadow-glow-cyber-subtle: 0 0 12px color-mix(in srgb, var(--color-cyber) 15%, transparent);
+  --shadow-glow-analog-subtle: 0 0 12px color-mix(in srgb, var(--color-analog) 15%, transparent);
   --shadow-glow-spotify-subtle: 0 0 12px color-mix(in srgb, var(--color-spotify) 15%, transparent);
-  --shadow-glow-indigo-subtle: 0 0 12px
-    color-mix(in srgb, var(--color-accent-indigo) 15%, transparent);
-  --shadow-glow-amber-subtle: var(--shadow-glow-analog-subtle);
-  --shadow-glow-white: 0 0 20px rgba(255, 255, 255, 0.15); /* play button */
-  --shadow-glow-white-hover: 0 0 30px rgba(255, 255, 255, 0.3);
+  --shadow-glow-white: 0 0 20px color-mix(in srgb, var(--color-white) 15%, transparent); /* play button */
+  --shadow-glow-white-hover: 0 0 30px color-mix(in srgb, var(--color-white) 30%, transparent);
   --shadow-elevated: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
   --shadow-elevated-lg: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-input-focus: 0 0 0 1px rgba(0, 240, 255, 0.4), 0 0 30px rgba(0, 240, 255, 0.08);
+  --shadow-input-focus:
+    0 0 0 1px color-mix(in srgb, var(--color-cyber) 40%, transparent),
+    0 0 30px color-mix(in srgb, var(--color-cyber) 8%, transparent);
 
   /* ===== Motion ===== */
   --duration-focus: 100ms;

@@ -11,8 +11,9 @@ interface SystemConsoleProps {
 const LOG_CODE_COLORS: Record<string, string> = {
   NET: 'text-cyber',
   AUDIO: 'text-analog',
-  GEMINI: 'text-accent-purple',
-  LLM: 'text-accent-purple',
+  // Model steps: the inferred violet, the colour of what a model writes (the code says which)
+  GEMINI: 'text-prov-inferred',
+  LLM: 'text-prov-inferred',
   SPOTIFY: 'text-accent-green',
   RESEARCH: 'text-cyber',
   GRAPH: 'text-analog',
@@ -90,7 +91,7 @@ const SystemConsole: React.FC<SystemConsoleProps> = ({ logs, isComplete }) => {
       aria-label="Analysis system console"
     >
       {/* Glow Effect Background */}
-      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/15 to-accent-purple/10 rounded-md blur opacity-20 group-hover:opacity-40 transition duration-(--duration-dramatic) ease-out-expo"></div>
+      <div className="absolute -inset-0.5 bg-gradient-to-b from-cyber/15 to-white/10 rounded-md blur opacity-20 group-hover:opacity-40 transition duration-(--duration-dramatic) ease-out-expo"></div>
 
       <div className="relative rounded-md overflow-hidden border border-border bg-black/90 shadow-2xl backdrop-blur-xl">
         {/* Terminal Header */}

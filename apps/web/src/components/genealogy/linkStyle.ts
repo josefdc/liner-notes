@@ -2,17 +2,17 @@ import type { LinkKind, LinkType } from '@liner-notes/contract';
 import { colors } from '../../styles/theme';
 
 /**
- * How a link is drawn. The relation it is shown as sets the colour, its kind the line: solid
- * when sourced, dashed when a model inference. Neither is the only cue: the graph names each
+ * How a link is drawn. The relation it is shown as sets the colour (tokens.css, named by
+ * relation), its kind the line: solid when sourced, dashed when not sourced. Neither is the only cue: the graph names each
  * relation next to its line, and the legend and the list say both in words.
  */
 export const LINK_COLOR: Record<LinkType, string> = {
-  sample: colors.analog,
-  interpolation: colors.pink,
-  cover: colors.purple,
-  remix: colors.cyber,
-  producer: colors.blue,
-  influence: colors.gray[400],
+  sample: colors.relation.sample,
+  interpolation: colors.relation.interpolation,
+  cover: colors.relation.cover,
+  remix: colors.relation.remix,
+  producer: colors.relation.producer,
+  influence: colors.relation.influence,
 };
 
 /** The dash pattern of a link's line (an SVG stroke-dasharray), by its kind. */

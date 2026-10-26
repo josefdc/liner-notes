@@ -417,6 +417,16 @@ export function kindLabel(link: ShownLink): string {
     : 'Model inference';
 }
 
+/**
+ * The provenance chip of a link, by its kind in words (kindLabel): sourced (amber, a book), a
+ * model inference (violet, sparkles), or not sourced (neutral: built from records whose evidence
+ * does not hold, not the model's).
+ */
+export function linkProvenanceKind(link: ShownLink): 'sourced' | 'inferred' | 'unconfirmed' {
+  const label = kindLabel(link);
+  return label === 'Sourced' ? 'sourced' : label === 'Model inference' ? 'inferred' : 'unconfirmed';
+}
+
 /** Where a link comes from, in words: its kind, the evidence it cites, and why it is not sourced. */
 export function provenanceText(link: ShownLink): string {
   if (link.kind === 'sourced') {

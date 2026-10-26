@@ -14,7 +14,8 @@ import {
 // Measured audio values on the result screens. A result with its measurement (the `audio`
 // block) shows each value with its confidence and basis, or as missing with why; model scores
 // are labelled model estimates; the preview lane spans the measured window. A result without
-// the block (older APIs) never shows a value as more than it is.
+// the block (older APIs) never shows a value as more than it is. The Dashboard shows each value
+// with a chip of its kind, its provenance behind the chip; the Player shows the provenance lines.
 const measured = loadFixture("measured-v2");
 const partly = loadFixture("partly-measured-v2");
 const gated = loadFixture("gated-v2");
@@ -54,6 +55,18 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string, part?: L
 const valueItem = (list: Locator, label: string) =>
   list.getByRole("listitem").filter({ hasText: new RegExp(`^${label}\\b`) });
 
+/**
+ * Opens the provenance of every value in the Dashboard's lists (each value's kind chip), so that
+ * an item reads: its value, its chip, then its provenance lines.
+ */
+async function openProvenance(page: Page) {
+  const chips = page
+    .getByRole("list", { name: /^Audio(-model)? (values|estimates)$/ })
+    .getByRole("button", { expanded: false });
+  for (let left = await chips.count(); left > 0; left -= 1) await chips.first().click();
+  await expect(chips).toHaveCount(0);
+}
+
 test("the mock results are results the API may send", () => {
   for (const fixture of [measured, partly, gated, withheldKey]) {
     const data = resultOf(fixture);
@@ -73,28 +86,29 @@ test.describe("a measured result", () => {
   }, testInfo) => {
     const problems = collectProblems(page);
     await analyzeAndOpenDashboard(page, "Bright Lines");
+    await openProvenance(page);
 
     const values = page.getByRole("list", { name: "Audio values" });
     // The confidence on the estimator's own scale, said to be uncalibrated; the method and the
     // analyzer as text.
     await expect(valueItem(values, "BPM")).toHaveText(
-      "BPM 105.2Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
+      "BPM 105.2MeasuredMeasured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
         `essentia.RhythmExtractor2013 · ${ANALYZER} · the confidence does not flag half or double tempo`,
     );
     await expect(valueItem(values, "Key")).toHaveText(
-      "Key A MinorMeasured · key strength 0.71 of 1, not a probability · signal, 29.8 s preview" +
+      "Key A MinorMeasuredMeasured · key strength 0.71 of 1, not a probability · signal, 29.8 s preview" +
         `essentia.KeyExtractor, edma profile · ${ANALYZER}`,
     );
     // Loudness, measured, replaces the 0-1 energy score.
     await expect(valueItem(values, "Loudness")).toHaveText(
-      "Loudness -13.6 dBFS RMSMeasured · direct measure · signal, 29.8 s preview" +
+      "Loudness -13.6 dBFS RMSMeasuredMeasured · direct measure · signal, 29.8 s preview" +
         `essentia.RMS, mean RMS 0.210 · ${ANALYZER}`,
     );
     await expect(values).not.toContainText("Energy");
 
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
     await expect(valueItem(scores, "Dance")).toHaveText(
-      "Dance 0.58Model estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview" +
+      "Dance 0.58Model estimateModel estimate · score, not a probability · model discogs-effnet-bs64-1, 29.8 s preview" +
         ANALYZER,
     );
     await expect(valueItem(scores, "Mood")).toContainText("Mood 5.20 on 1–9");
@@ -151,18 +165,122 @@ test.describe("a measured result", () => {
   });
 });
 
+// The Dashboard's hero is a summary: each value with a chip saying how it is known, and its
+// provenance on demand from that chip, by pointer or keyboard. The long provenance lines are the
+// Player's.
+for (const width of [390, 1440]) {
+  test(`the hero shows each value with its kind, and its provenance only on demand (${width} px)`, async ({
+    page,
+  }, testInfo) => {
+    const problems = collectProblems(page);
+    await useMockApi(page, measured);
+    await page.setViewportSize({ width, height: 900 });
+    await analyzeAndOpenDashboard(page, "Bright Lines");
+
+    const values = page.getByRole("list", { name: "Audio values" });
+    const bpm = valueItem(values, "BPM");
+    // The value and its kind, in words beside an icon: nothing more until it is asked for.
+    await expect(bpm).toHaveText("BPM 105.2Measured");
+    const chip = bpm.getByRole("button", { name: "Measured: how BPM was obtained" });
+    await expect(chip).toBeVisible();
+    await expect(chip).toHaveAttribute("aria-expanded", "false");
+    await expect(chip.locator('[data-provenance="measured"] svg.lucide-gauge')).toBeVisible();
+    await expect(valueItem(values, "Key")).toHaveText("Key A MinorMeasured");
+    await expect(valueItem(values, "Loudness")).toHaveText("Loudness -13.6 dBFS RMSMeasured");
+    const scores = page.getByRole("list", { name: "Audio-model estimates" });
+    await expect(valueItem(scores, "Dance")).toHaveText("Dance 0.58Model estimate");
+    await expect(valueItem(scores, "Dance").locator("[data-provenance]")).toHaveAttribute(
+      "data-provenance",
+      "inferred",
+    );
+    // No long provenance line anywhere in the hero.
+    const hero = page.locator("section").filter({ has: values });
+    await expect(hero.getByText(/confidence|preview|essentia|analyzer/)).toHaveCount(0);
+
+    // Each value and its chip are one unit, laid out the same way for every value: on one line
+    // from md up, the chip right under its value on a phone (where the two do not fit on one
+    // line), always closer to its own value than to the next one, every unit at the same edge.
+    const pairs = await hero.locator("[data-value-pair]").evaluateAll((elements) =>
+      elements.map((pair) => {
+        const [value, chip] = [...pair.children].map((child) => child.getBoundingClientRect());
+        const unit = pair.getBoundingClientRect();
+        const middle = (box: DOMRect) => box.top + box.height / 2;
+        const sameLine = Math.abs(middle(value) - middle(chip)) <= 1;
+        return {
+          text: pair.textContent ?? "",
+          sameLine,
+          stacked: Math.abs(value.left - chip.left) <= 1 && chip.top >= value.bottom,
+          inner: sameLine ? chip.left - value.right : chip.top - value.bottom,
+          top: unit.top,
+          bottom: unit.bottom,
+          left: Math.round(value.left),
+        };
+      }),
+    );
+    expect(pairs.length).toBe(8);
+    for (const pair of pairs) {
+      expect(width < 768 ? pair.stacked : pair.sameLine, `${pair.text} laid out`).toBe(true);
+      expect(pair.inner, `${pair.text}: its value and chip`).toBeLessThanOrEqual(4);
+    }
+    if (width < 768) {
+      expect(new Set(pairs.map((pair) => pair.left)).size).toBe(1);
+      // The next unit starts further away than a chip is from its value.
+      for (let i = 1; i < pairs.length; i += 1) {
+        if (pairs[i].top > pairs[i - 1].bottom) {
+          expect(pairs[i].top - pairs[i - 1].bottom).toBeGreaterThan(4);
+        }
+      }
+    }
+
+    // The keyboard reaches the chip and opens it: its provenance lines show below the value.
+    for (let presses = 0; !(await chip.evaluate((el) => el === document.activeElement)); ) {
+      presses += 1;
+      expect(presses, "Tab reaches the BPM chip").toBeLessThan(40);
+      await page.keyboard.press("Tab");
+    }
+    expect(await chip.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect(chip).toHaveAttribute("aria-expanded", "true");
+    const lines = page.locator(`[id="${await chip.getAttribute("aria-controls")}"]`);
+    await expect(lines).toBeVisible();
+    await expect(lines).toHaveText(
+      "Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
+        `essentia.RhythmExtractor2013 · ${ANALYZER} · the confidence does not flag half or double tempo`,
+    );
+    await screenshot(page, testInfo, `hero-open-${width}`, hero);
+    // And closes it again.
+    await page.keyboard.press("Space");
+    await expect(chip).toHaveAttribute("aria-expanded", "false");
+    await expect(lines).toBeHidden();
+    await expect(hero.getByText(/confidence/)).toHaveCount(0);
+
+    // The Player keeps the long lines, with nothing to open.
+    await openPlayer(page);
+    const player = valueItem(page.getByRole("list", { name: "Audio values" }), "BPM");
+    await expect(player).toHaveText(
+      "BPM 105.2Measured · estimator confidence 3.30 of 5.32, not calibrated · signal, 29.8 s preview" +
+        `essentia.RhythmExtractor2013 · ${ANALYZER} · the confidence does not flag half or double tempo`,
+    );
+    await expect(player.getByText(/^Measured · estimator confidence/)).toBeVisible();
+    await expect(player.getByRole("button")).toHaveCount(0);
+    expect(problems).toEqual([]);
+  });
+}
+
 test("a partly measured result says what was not measured and why", async ({ page }, testInfo) => {
   await useMockApi(page, partly);
   await analyzeAndOpenDashboard(page, "Half Signal");
 
   const values = page.getByRole("list", { name: "Audio values" });
+  // A value that was not measured says why with no chip to open.
+  await expect(valueItem(values, "Key")).toHaveText(
+    "Key not measured— not detected in the preview",
+  );
+  await openProvenance(page);
   // Its audioSource is "unavailable", but the tempo is in the measurement: it is shown.
   await expect(valueItem(values, "BPM")).toHaveText(
     // Its service ran without the models: the analyzer version names no model set.
-    "BPM 123Measured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · analyzer 2.1.0+essentia",
-  );
-  await expect(valueItem(values, "Key")).toHaveText(
-    "Key not measured— not detected in the preview",
+    "BPM 123MeasuredMeasured · no confidence given · signal, 22.4 s previewessentia.RhythmExtractor2013 · analyzer 2.1.0+essentia",
   );
   await expect(valueItem(values, "Loudness")).toContainText("Measured");
   await expect(page.getByRole("list", { name: "Audio-model estimates" })).toHaveText(
@@ -282,8 +400,10 @@ test("a measurement the contract cannot read is not shown as measured", async ({
 
   await expect(page.locator('[data-value-kind="measured"]')).toHaveCount(0);
   const values = page.getByRole("list", { name: "Audio values" });
+  await expect(valueItem(values, "BPM")).toHaveText("BPM 105.2Not confirmed, basis unknown");
+  await openProvenance(page);
   await expect(valueItem(values, "BPM")).toHaveText(
-    "BPM 105.2Not confirmed as measured · confidence and basis unknown",
+    "BPM 105.2Not confirmed, basis unknownNot confirmed as measured · confidence and basis unknown",
   );
   await expect(page.getByRole("region", { name: "Missing data" })).toContainText(
     "Audio values not confirmed",
@@ -341,8 +461,9 @@ test.describe("a result with a null audio block", () => {
     await useMockApi(page, withResult({ audio: null }));
     await analyzeAndOpenDashboard(page, "Bright Lines");
     const values = page.getByRole("list", { name: "Audio values" });
+    await openProvenance(page);
     await expect(valueItem(values, "BPM")).toHaveText(
-      "BPM 105Not confirmed as measured · confidence and basis unknown",
+      "BPM 105Not confirmed, basis unknownNot confirmed as measured · confidence and basis unknown",
     );
     await expect(valueItem(values, "Loudness")).toHaveText("Loudness not measured");
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
@@ -393,18 +514,26 @@ test.describe("a result without the audio block", () => {
     await useMockApi(page, loadFixture("full-result"));
     await analyzeAndOpenDashboard(page, "Bright Lines");
     const values = page.getByRole("list", { name: "Audio values" });
-    await expect(valueItem(values, "BPM")).toHaveText(
-      "BPM 105Measured · confidence and basis unknown",
-    );
     // The first analyzer's energy: on its own 0-1 scale, never a percentage or "Measured".
+    await expect(valueItem(values, "Energy")).toHaveText("Energy 0.71v1 score, basis unknown");
+    // Its result gives no basis: the hero's chips say so, closed, for its measured values and
+    // its model scores alike (which carry a confidence, a description of the score).
+    await expect(valueItem(values, "BPM")).toHaveText("BPM 105Measured, basis unknown");
+    await expect(
+      valueItem(page.getByRole("list", { name: "Audio-model estimates" }), "Mood"),
+    ).toHaveText("Mood Mellow 0.34Model estimate, basis unknown");
+    await openProvenance(page);
+    await expect(valueItem(values, "BPM")).toHaveText(
+      "BPM 105Measured, basis unknownMeasured · confidence and basis unknown",
+    );
     await expect(valueItem(values, "Energy")).toHaveText(
-      "Energy 0.71v1 energy score (0–1, saturates on loud masters) · confidence and basis unknown",
+      "Energy 0.71v1 score, basis unknownv1 energy score (0–1, saturates on loud masters) · confidence and basis unknown",
     );
     await screenshot(page, testInfo, "legacy-dashboard");
     // Its model scores are estimates, never measured.
     const scores = page.getByRole("list", { name: "Audio-model estimates" });
     await expect(valueItem(scores, "Mood")).toHaveText(
-      "Mood Mellow 0.34Model estimate · score, not a probability · basis unknown",
+      "Mood Mellow 0.34Model estimate, basis unknownModel estimate · score, not a probability · basis unknown",
     );
     await expect(scores).not.toContainText("Measured");
     await expect(scores.locator('[data-value-kind="measured"]')).toHaveCount(0);

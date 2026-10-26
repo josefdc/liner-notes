@@ -51,4 +51,10 @@ export interface CustomLink extends SimulationLinkDatum<CustomNode> {
   n: number;
   /** The link as the app shows it: its kind, relation and citations. */
   shown: ShownLink;
+  /**
+   * Where its label sits: how far along the line, from source (0) to target (1), and whether
+   * below the line rather than above; none while the label is hidden (the middle, above, until
+   * the labels are first placed).
+   */
+  labelPlace?: { at: number; below: boolean };
 }

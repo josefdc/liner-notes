@@ -83,6 +83,17 @@ const smallBadges = (page: Page) =>
     })),
   );
 
+test("the search screen draws its background glow", async ({ page }) => {
+  await useMockApi(page, loadFixture("full-result"));
+  await page.goto("/");
+  // A gradient whose stops do not resolve (Tailwind v3's var(--tw-gradient-stops) pattern) is
+  // valid CSS and computes to none.
+  const image = await page
+    .getByTestId("background-ambience")
+    .evaluate((element) => getComputedStyle(element).backgroundImage);
+  expect(image).toMatch(/^radial-gradient\(circle/);
+});
+
 test("small badges have one height wherever they sit", async ({ page }) => {
   await useMockApi(page, explicitResult());
   await analyzeAndOpenDashboard(page, "Bright Lines");

@@ -191,26 +191,91 @@ test.describe("the genealogy graph", () => {
     await screenshot(page, testInfo, "player", page.locator("#panel-genealogy"));
   });
 
-  test("hides overlapping line labels, keeping the best known", async ({ page }) => {
-    const graph = graphOf(page);
-    await graphFitted(page);
-    const boxes = await graph.locator("g.link-labels text").evaluateAll((elements) =>
-      elements
-        .filter((text) => text.getAttribute("visibility") !== "hidden")
-        .map((text) => {
-          const box = text.getBoundingClientRect();
-          return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
-        }),
+  /**
+   * The graph's labels drawn now, each with its box on screen: the tracks' names (with their
+   * tag) and the line labels, the hidden ones apart.
+   */
+  const graphLabels = (page: Page) =>
+    graphOf(page).evaluate((svg) =>
+      [...svg.querySelectorAll("g.node-label, g.link-labels text")].map((label) => {
+        const box = label.getBoundingClientRect();
+        return {
+          kind: label.matches("g.node-label") ? "name" : "line",
+          id: label.closest("[data-node-id]")?.getAttribute("data-node-id") ?? null,
+          shown: getComputedStyle(label).visibility !== "hidden",
+          box: { x: box.x, y: box.y, right: box.right, bottom: box.bottom },
+        };
+      }),
     );
-    expect(boxes.length).toBeGreaterThan(0);
-    for (let i = 0; i < boxes.length; i += 1) {
-      for (let j = i + 1; j < boxes.length; j += 1) {
-        const [a, b] = [boxes[i], boxes[j]];
-        const overlap = a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom;
-        expect(overlap, `labels ${i} and ${j}`).toBe(false);
+
+  /** Whether two label boxes overlap on screen. */
+  const overlap = (
+    a: { x: number; y: number; right: number; bottom: number },
+    b: { x: number; y: number; right: number; bottom: number },
+  ) => a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom;
+
+  // The line labels main showed at 9 px; at 12 px, a label may move along its line (or below it)
+  // to keep at least as many relation words on the graph.
+  const LINE_LABEL_FLOOR: Record<number, number> = { 320: 8, 768: 4, 1024: 4, 1440: 8 };
+
+  for (const width of [320, 768, 1024, 1440]) {
+    test(`at ${width} px shows no two names or two line labels over each other, and keeps this track's name and the pointed one`, async ({
+      page,
+    }) => {
+      if (width !== 1440) {
+        await graphToBeRedrawn(page);
+        await page.setViewportSize({ width, height: 900 });
+        if (width < 768) await page.getByRole("tab", { name: "Network" }).click();
       }
-    }
-  });
+      await graphFitted(page);
+      const labels = await graphLabels(page);
+      const shown = labels.filter((label) => label.shown);
+      // Names never overlap names, nor line labels line labels. A line label may sit over a
+      // name (it is drawn above it, on a band of the page's colour), never over this track's.
+      for (let i = 0; i < shown.length; i += 1) {
+        for (let j = i + 1; j < shown.length; j += 1) {
+          if (shown[i].kind !== shown[j].kind) continue;
+          expect(
+            overlap(shown[i].box, shown[j].box),
+            `${shown[i].kind} ${shown[i].id ?? i} and ${shown[j].id ?? j}`,
+          ).toBe(false);
+        }
+      }
+      const lines = shown.filter((label) => label.kind === "line");
+      expect(lines.length).toBeGreaterThanOrEqual(LINE_LABEL_FLOOR[width]);
+      // This track's name is always shown, and nothing covers it.
+      const current = await graphOf(page)
+        .locator('g.nodes > g[role="img"]')
+        .getAttribute("data-node-id");
+      const currentName = shown.find((label) => label.kind === "name" && label.id === current);
+      expect(currentName).toBeDefined();
+      for (const line of lines) {
+        expect(
+          overlap(line.box, currentName?.box ?? line.box),
+          "a line over this track's name",
+        ).toBe(false);
+      }
+      // A track whose name gave way shows it, uncovered, while the pointer is on the track, and
+      // hides it again after; the name is in the track's label for screen readers either way.
+      const hidden = labels.find((label) => label.kind === "name" && !label.shown);
+      expect(hidden?.id).toBeTruthy();
+      const track = graphOf(page).locator(`g.nodes > g[data-node-id="${hidden?.id}"]`);
+      await expect(track).toHaveAttribute("aria-label", /\S/);
+      await track.dispatchEvent("mouseenter");
+      const pointedLabels = await graphLabels(page);
+      const pointed = pointedLabels.find((label) => label.id === hidden?.id);
+      expect(pointed?.shown).toBe(true);
+      for (const other of pointedLabels.filter((label) => label.shown && label !== pointed)) {
+        expect(
+          overlap(other.box, pointed?.box ?? other.box),
+          `${other.kind} over the pointed name`,
+        ).toBe(false);
+      }
+      await track.dispatchEvent("mouseleave");
+      const after = (await graphLabels(page)).find((label) => label.id === hidden?.id);
+      expect(after?.shown).toBe(false);
+    });
+  }
 
   test("has a legend in words for the lines and every relation shown", async ({ page }) => {
     const legend = page.getByRole("group", { name: "Link legend" });

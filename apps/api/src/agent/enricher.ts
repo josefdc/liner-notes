@@ -612,7 +612,7 @@ function labelYear(label: string): number | null {
  */
 export function releaseYearFits(
   label: string,
-  releaseDate: string | undefined,
+  releaseDate: string | null | undefined,
   year?: string | null,
 ): boolean {
   const named = labelYear(label) ?? yearIn(year);

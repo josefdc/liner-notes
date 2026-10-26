@@ -94,7 +94,8 @@ describe("GET /api/search/suggest", () => {
     const res = await request(app()).get("/api/search/suggest?query=midnight%20city");
 
     expect(res.status).toBe(200);
-    // Read as the web reads it: through the contract, which must keep the date.
+    // The web casts the answer to the contract type without parsing it; parsing it here checks
+    // that the route sends the date and that the contract's schema does not strip it.
     const { suggestions } = SearchSuggestResponse.parse(res.body);
     expect(suggestions.map((suggestion) => suggestion.releaseDate ?? null)).toEqual([
       "2011-10-18",

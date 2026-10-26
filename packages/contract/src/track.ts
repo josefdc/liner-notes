@@ -391,10 +391,12 @@ export type TrackAnalysisInput = z.input<typeof TrackAnalysis>;
  * A track offered in search suggestions and in the track picker. `popularity` is optional:
  * the API is moving off Spotify fields that not every app can read, so it may stop sending it.
  *
- * `releaseDate` and `releaseYear` read the same Spotify date. A live search suggestion carries
- * `releaseDate` as Spotify sent it; the picker's candidates and the suggestions of a recorded
- * track carry `releaseYear` instead (the year part of that date). The search box keeps the
- * earliest release of a duplicate by `releaseDate`, or by `releaseYear` when there is none.
+ * `releaseDate` and `releaseYear` come from the same Spotify date. A live search suggestion
+ * carries `releaseDate` as Spotify sent it (null when it is not a year, a month or a day); the
+ * picker's candidates and the suggestions of a recorded track carry `releaseYear` instead. The
+ * search box orders duplicates by a row's `releaseDate` when it has one, else by its
+ * `releaseYear`. A `releaseDate` of "0000" counts as unknown, and the row's `releaseYear` is
+ * not read in its place.
  */
 export const SearchCandidate = z.object({
   id: z.string(),

@@ -107,6 +107,7 @@ describe("Spotify client", () => {
   describe("identity", () => {
     const withIdentity = () => ({
       ...track(),
+      album: { ...track().album, release_date: "1990-08-31" },
       external_ids: { isrc: "USAT29900609" },
       preview_url: "https://p.scdn.co/mp3-preview/abc",
     });
@@ -121,7 +122,7 @@ describe("Spotify client", () => {
       expect(result).toMatchObject({
         id: TRACK_ID,
         isrc: "USAT29900609",
-        releaseDate: "1990",
+        releaseDate: "1990-08-31",
         previewUrl: "https://p.scdn.co/mp3-preview/abc",
       });
     });
@@ -152,6 +153,33 @@ describe("Spotify client", () => {
       const results = await searchTracks("ice ice baby");
 
       expect(results.map((r: { isrc: unknown }) => r.isrc)).toEqual([null, null, "USAT29900609"]);
+    });
+
+    it("a release date that is not a year, a month or a day is null; 0000 is kept as sent", async () => {
+      const dated = (n: number, release_date: unknown) => ({
+        ...track(`00000000000000000000${String(n).padStart(2, "0")}`),
+        album: { name: "To the Extreme", release_date, images: [] },
+      });
+      const sent = ["1990", "1990-08", "1990-08-31", "0000", "1990-8-31", "31/08/1990", "", 1990];
+      spotify((call) =>
+        call.url.startsWith(`${API}/search?`)
+          ? json(searchAnswer([...sent.map((date, n) => dated(n, date)), dated(99, null)]))
+          : undefined,
+      );
+
+      const results = await searchTracks("ice ice baby", 10);
+
+      expect(results.map((r) => r.releaseDate)).toEqual([
+        "1990",
+        "1990-08",
+        "1990-08-31",
+        "0000",
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]);
     });
 
     it.each([

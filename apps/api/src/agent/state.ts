@@ -101,7 +101,11 @@ export interface SpotifyData {
   artistNames?: string[];
   artistIds: string[];
   album: string;
-  releaseDate: string;
+  /**
+   * Spotify's album release date as sent ("2011", "2011-10", "2011-10-18"; "0000" when Spotify
+   * does not know it); null when it sent none or something else.
+   */
+  releaseDate: string | null;
   coverUrl: string;
   /**
    * Spotify's popularity score (0-100). Spotify no longer gives it to this app, so it is

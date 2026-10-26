@@ -336,9 +336,18 @@ describe('mergeDuplicates', () => {
         { ...song('recorded', 'Intro'), releaseYear: '2011' },
       ]),
     ).toEqual(['recorded']);
+    // A row with both reads its release date, not its year.
+    expect(
+      ids([
+        { ...record('both', 'Intro', { releaseDate: '2016-04-08' }), releaseYear: '2011' },
+        record('dated', 'Intro', { releaseDate: '2012-01-01' }),
+      ]),
+    ).toEqual(['dated']);
   });
 
-  it("keeps the earliest release of an answer read through the contract's SearchSuggestResponse", () => {
+  // The web casts the answer to the contract type (apiClient.ts) and does not parse it; parsing
+  // here checks that the contract's schema keeps the date the merge reads.
+  it("keeps the earliest release of an answer the contract's SearchSuggestResponse accepts", () => {
     const answer = SearchSuggestResponse.parse({
       success: true,
       suggestions: [

@@ -813,8 +813,8 @@ export function useAgent(): UseAgentReturn {
 
   /**
    * Search suggestions for autocomplete (lightweight, no state changes). A failed request
-   * rejects, so the caller can say that suggestions are unavailable; a request `signal` aborts
-   * rejects too.
+   * rejects, so the caller can say that suggestions are unavailable. A request aborted through
+   * `signal` rejects too.
    */
   const searchSuggest = useCallback(
     async (query: string, limit: number = 5, signal?: AbortSignal): Promise<SearchCandidate[]> => {

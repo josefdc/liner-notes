@@ -141,6 +141,43 @@ describe('SearchBox: leaving the box', () => {
     expect(box().getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('keeps the list open while the focus is on one of its options', async () => {
+    await withSuggestions();
+    // As a screen reader that moves the focus with its cursor does.
+    act(() => screen.getAllByRole('option')[1].focus());
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(box().getAttribute('aria-expanded')).toBe('true');
+
+    // Leaving the list for elsewhere closes it.
+    act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+    expect(listbox()).toBeNull();
+  });
+
+  it('shows the list again when the focus comes back, without asking again', async () => {
+    const { calls } = await withSuggestions();
+    act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+    expect(listbox()).toBeNull();
+    act(() => box().focus());
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('lets a request under way finish after the focus left, and shows its answer only on return', async () => {
+    const { calls } = await withSuggestions();
+    type('Hurt N');
+    await pause();
+    act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+    expect(calls[1].signal?.aborted).toBe(false);
+    await act(async () => calls[1].resolve([HURT[1]]));
+    // The answer is kept, not shown, while the focus is away.
+    expect(listbox()).toBeNull();
+    expect(box().getAttribute('aria-expanded')).toBe('false');
+
+    act(() => box().focus());
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+  });
+
   it('does not open the list for an answer that comes after the focus left', async () => {
     const { calls, fetcher } = manualFetcher();
     render(<Harness fetcher={fetcher} onPick={vi.fn()} onSearch={vi.fn()} />);
@@ -172,6 +209,54 @@ describe('SearchBox: leaving the box', () => {
   it('keeps the listbox out of the Tab order', async () => {
     await withSuggestions();
     expect(screen.getByRole('listbox').getAttribute('tabindex')).toBe('-1');
+  });
+});
+
+describe('SearchBox: text answered with no suggestions', () => {
+  it('asks nothing again for it on arrow keys or focus', async () => {
+    const { calls, fetcher } = manualFetcher();
+    render(<Harness fetcher={fetcher} onPick={vi.fn()} onSearch={vi.fn()} />);
+    act(() => box().focus());
+    type('Zzzzqx');
+    await pause();
+    await act(async () => calls[0].resolve([]));
+
+    for (let press = 0; press < 5; press++) key('ArrowDown');
+    key('ArrowUp');
+    act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+    act(() => box().focus());
+    await pause();
+    expect(calls).toHaveLength(1);
+    expect(listbox()).toBeNull();
+  });
+});
+
+describe('SearchBox: text whose request failed', () => {
+  it('asks nothing again for it on arrow keys or focus, and keeps saying suggestions failed', async () => {
+    const { fetcher } = manualFetcher();
+    const failing = vi.fn((query: string, limit?: number, signal?: AbortSignal) => {
+      void fetcher(query, limit, signal);
+      return Promise.reject(new Error('HTTP 429'));
+    });
+    render(<Harness fetcher={failing} onPick={vi.fn()} onSearch={vi.fn()} />);
+    act(() => box().focus());
+    type('Hurt');
+    await pause();
+    await act(async () => {});
+    expect(screen.getByRole('status').textContent).toMatch(/unavailable/);
+
+    for (let press = 0; press < 5; press++) key('ArrowDown');
+    act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+    act(() => box().focus());
+    await pause();
+    await act(async () => {});
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status').textContent).toMatch(/unavailable/);
+
+    // An edit asks again.
+    type('Hurts');
+    await pause();
+    expect(failing).toHaveBeenCalledTimes(2);
   });
 });
 

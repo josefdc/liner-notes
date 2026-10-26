@@ -60,8 +60,18 @@ export function SearchBox({
   const listboxId = `${id}-suggestions`;
   const hintId = `${id}-hint`;
 
-  const { suggestions, open, highlighted, isLoading, failed, settle, dismiss, reopen, highlight } =
-    useSuggestions(value, fetchSuggestions);
+  const {
+    suggestions,
+    open,
+    highlighted,
+    isLoading,
+    failed,
+    settle,
+    dismiss,
+    leave,
+    reopen,
+    highlight,
+  } = useSuggestions(value, fetchSuggestions);
   const listShown = open && suggestions.length > 0;
   const highlightedId =
     listShown && suggestions[highlighted]
@@ -141,7 +151,7 @@ export function SearchBox({
         dismiss();
         return;
       case 'Tab':
-        // With nothing highlighted, Tab leaves the box, which closes the list (onBlur).
+        // With nothing highlighted, Tab leaves the box, which closes the list (see the box's onBlur).
         if (current) {
           event.preventDefault();
           fill(current);
@@ -167,7 +177,16 @@ export function SearchBox({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="relative">
+      {/* The list belongs to the box: it closes when the focus leaves the box and its list.
+          Focus moved onto an option (as some screen readers do) stays inside, and pressing the
+          list does not take the focus (onMouseDown below), so a click still picks. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: only watches the focus leave */}
+      <div
+        className="relative"
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) leave();
+        }}
+      >
         <label htmlFor={inputId} className="sr-only">
           {LABEL}
         </label>
@@ -193,9 +212,6 @@ export function SearchBox({
             }}
             onKeyDown={handleKeyDown}
             onFocus={reopen}
-            // The list belongs to the box: it closes when the focus leaves. Pressing the list
-            // does not take the focus (onMouseDown below), so a click still picks.
-            onBlur={dismiss}
             placeholder={LABEL}
             maxLength={200}
             className={`${inputVisualStyles} pl-12 pr-10`}
@@ -261,7 +277,7 @@ export function SearchBox({
                   key={candidate.id}
                   id={optionIdFor(id, candidate.id)}
                   role="option"
-                  // Reachable for assistive technology, never in the Tab order
+                  // Focusable (a screen reader may move the focus here), never in the Tab order
                   tabIndex={-1}
                   aria-selected={index === highlighted}
                   onClick={() => pick(candidate)}

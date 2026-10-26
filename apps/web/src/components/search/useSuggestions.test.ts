@@ -242,7 +242,7 @@ describe('mergeDuplicates', () => {
     ).toEqual(['album', 'live']);
   });
 
-  it('without an ISRC on either side, merges the same title and artist (case and spacing aside)', () => {
+  it('merges rows without an ISRC with the same title and artist, and with the one recording of that title (case and spacing aside)', () => {
     expect(
       ids([
         song('a', 'Midnight City', 'M83'),
@@ -252,6 +252,63 @@ describe('mergeDuplicates', () => {
         record('e', 'Midnight City', { isrc: 'GB55H1100002' }),
       ]),
     ).toEqual(['a', 'c', 'd']);
+  });
+
+  /** Every order of `list`. */
+  const orders = <T>(list: T[]): T[][] =>
+    list.length <= 1
+      ? [list]
+      : list.flatMap((item, index) =>
+          orders([...list.slice(0, index), ...list.slice(index + 1)]).map((rest) => [
+            item,
+            ...rest,
+          ]),
+        );
+
+  it('never puts two different ISRCs together, whatever order Spotify lists the rows in', () => {
+    // A row without an ISRC whose title and artist match two recordings cannot tell which one
+    // it is: it stays a row of its own instead of joining (and bridging) either.
+    const sets = [
+      [
+        record('noIsrc', 'Hurt', { isrc: null, releaseDate: '2002' }),
+        record('studio', 'Hurt', { isrc: 'USAT29900609', releaseDate: '2002-11-05' }),
+        record('live', 'Hurt', { isrc: 'USAT20200001', releaseDate: '2003-06-01' }),
+      ],
+      [
+        record('studio', 'Hurt', { isrc: 'USAT29900609', releaseDate: '2005' }),
+        record('noIsrc', 'Hurt', { isrc: null, releaseDate: '2001' }),
+        record('live', 'Hurt', { isrc: 'USAT20200001', releaseDate: '2003' }),
+      ],
+    ];
+    for (const rows of sets) {
+      for (const order of orders(rows)) {
+        expect([...ids(order)].sort(), order.map((row) => row.id).join(',')).toEqual([
+          'live',
+          'noIsrc',
+          'studio',
+        ]);
+      }
+    }
+  });
+
+  it('groups the same way in every order; only which of two equal rows is kept may change', () => {
+    const rows = [
+      record('album', 'Midnight City', { isrc: 'GB55H1100002' }),
+      record('single', 'Midnight City', { isrc: 'gb55h1100002' }),
+      record('undated', 'midnight city', {}),
+      record('remix', 'Midnight City', { isrc: 'GB55H1200001' }),
+      record('other', 'Wait', {}),
+    ];
+    // Each kept row stands for its group: its recording, or the title of an ISRC-less row.
+    const groups = (list: SearchCandidate[]) =>
+      mergeDuplicates(list)
+        .map((row) => (row as { isrc?: string | null }).isrc?.toUpperCase() ?? `title:${row.title}`)
+        .sort();
+    const expected = groups(rows);
+    expect(expected).toEqual(['GB55H1100002', 'GB55H1200001', 'title:Wait', 'title:midnight city']);
+    for (const order of orders(rows)) {
+      expect(groups(order), order.map((row) => row.id).join(',')).toEqual(expected);
+    }
   });
 
   it('keeps the earliest release of a duplicate, in the place of the first one listed', () => {
@@ -276,6 +333,17 @@ describe('mergeDuplicates', () => {
         { ...song('recorded', 'Intro'), releaseYear: '2011' },
       ]),
     ).toEqual(['recorded']);
+  });
+
+  it("takes a release date of 0000, Spotify's unknown date, as missing", () => {
+    const midnight = (id: string, releaseDate: string) =>
+      record(id, 'Midnight City', { isrc: 'GB55H1100002', releaseDate });
+    expect(ids([midnight('album', '2011-10-18'), midnight('compilation', '0000')])).toEqual([
+      'album',
+    ]);
+    expect(ids([midnight('album', '2011-10-18'), midnight('compilation', '0000-00-00')])).toEqual([
+      'album',
+    ]);
   });
 
   it('keeps Spotify order when either date is missing', () => {

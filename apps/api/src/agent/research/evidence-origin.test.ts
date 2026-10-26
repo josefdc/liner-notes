@@ -212,6 +212,21 @@ describe("evidence given back by the research cache", () => {
         { ...page, url: "https://genius.com/x-lyrics", id: "tavily:https://genius.com/x-lyrics" },
       ],
       ["a placeholder text", { ...page, excerpt: "No results found." }],
+      [
+        "a social platform page cached before they were left out",
+        {
+          ...page,
+          url: "https://www.instagram.com/p/abc123/",
+          id: "tavily:https://www.instagram.com/p/abc123/",
+        },
+      ],
+      [
+        "an excerpt of profile boilerplate",
+        {
+          ...page,
+          excerpt: "some_one's profile picture some_one 2w Love it some.one2's profile picture",
+        },
+      ],
       ["an item that breaks the contract", { ...primary, url: null, recordRef: null }],
       [
         "a web error page",
@@ -353,6 +368,32 @@ describe("items built from the sources' answers", () => {
     ]);
     const pack = new EvidencePack();
     expect(pack.addAll(items)).toBe(2);
+  });
+
+  it("leaves out social platform pages and excerpts of profile or handle boilerplate", () => {
+    const items = webSearchEvidence([
+      web("https://www.instagram.com/p/abc123/", "Daft Punk at the Grammys."),
+      web("https://www.tiktok.com/@someone/video/123", "One More Time edit."),
+      web("https://twitter.com/someone/status/1", "One More Time came out in 2000."),
+      web(
+        "https://example.test/comments",
+        "dj_someone's profile picture dj_someone 2w Love this! another.person’s profile picture another.person 1w so good",
+      ),
+      web("https://example.test/handles", "@first_user @second.user @third_user @fourth_user wow"),
+      web(
+        "https://example.test/mention",
+        "Thomas Bangalter (@thomasbangalter) produced it in 1999.",
+      ),
+      web(
+        "https://www.youtube.com/watch?v=FGBhQbmPwH8",
+        "Daft Punk - One More Time (Official Video)",
+      ),
+    ]);
+
+    expect(items.map((item) => item.url)).toEqual([
+      "https://example.test/mention",
+      "https://www.youtube.com/watch?v=FGBhQbmPwH8",
+    ]);
   });
 });
 

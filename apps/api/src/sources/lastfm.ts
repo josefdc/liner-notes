@@ -19,7 +19,7 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { credential, fetchJson, isSourceError, type Shape } from "./http.js";
+import { credential, fetchJson, isSourceError, plainReason, type Shape } from "./http.js";
 import { isMbid, normalizeName, onlyArtistNamed } from "./musicbrainz.js";
 import {
   failureWith,
@@ -223,7 +223,9 @@ function nameIsOnly(name: string, mbid: string, signal?: AbortSignal): Promise<b
  * is a rate limit.
  */
 function lastfmError(body: LastfmError): ToolFailure | NothingFound {
-  const message = `Last.fm error ${body.error ?? "?"}: ${body.message ?? "no message"}`;
+  // Only a short plain-text reason of Last.fm's: the answer is stored with the result.
+  const code = typeof body.error === "number" ? body.error : "?";
+  const message = `Last.fm error ${code}: ${plainReason(body.message) ?? "no message"}`;
   if (body.error === INVALID_PARAMETERS) {
     const notFound = !body.message || /\bnot (?:be )?found\b/i.test(body.message);
     return notAnswered(notFound ? "not_found" : "invalid_request", message);

@@ -44,7 +44,14 @@ import {
   sameArtistName,
   words,
 } from "../agent/trackMatch.js";
-import { abortError, cassetteMode, fetchJson, type Shape, SourceError } from "./http.js";
+import {
+  abortError,
+  cassetteMode,
+  fetchJson,
+  plainReason,
+  type Shape,
+  SourceError,
+} from "./http.js";
 import { LanePacer, type LanePace, PaceRefused } from "./pacing.js";
 import { type SourceErrorCode, sourceErrorCode } from "./toolResult.js";
 import { logger } from "../logger.js";
@@ -268,7 +275,9 @@ async function deezerGet<T extends { error?: DeezerError }>(
   const error = data?.error;
   if (!error) return data;
   if (error.code === NO_DATA) return null;
-  const message = `Deezer API: ${error.message ?? "error"} (code ${error.code ?? "?"})`;
+  // Only a short plain-text reason of Deezer's: the answer is stored with the result.
+  const code = typeof error.code === "number" ? error.code : "?";
+  const message = `Deezer API: ${plainReason(error.message) ?? "error"} (code ${code})`;
   throw new SourceError("deezer", error.code === QUOTA ? "rate_limited" : "http", message, {
     body: error,
   });

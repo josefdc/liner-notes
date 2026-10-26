@@ -128,7 +128,7 @@ export async function clarificationNode(
       ...(selected.artistNames ? { artistNames: selected.artistNames } : {}),
       artistIds: selected.artistIds ?? [],
       album: selected.album,
-      releaseDate: selected.releaseYear || "",
+      releaseDate: selected.releaseYear || null,
       coverUrl: selected.coverUrl,
       ...(typeof selected.popularity === "number" ? { popularity: selected.popularity } : {}),
       isrc: null,

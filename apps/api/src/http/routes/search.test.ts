@@ -1,8 +1,9 @@
 /**
- * Route tests for /api/search/suggest: validation limits and generic errors. The Spotify client's
- * search is a stub; Spotify is never called.
+ * Route tests for /api/search/suggest: validation limits, generic errors and the fields each
+ * suggestion carries. The Spotify client's search is a stub; Spotify is never called.
  */
 
+import { SearchSuggestResponse } from "@liner-notes/contract";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceError } from "../../sources/http.js";
@@ -72,6 +73,35 @@ describe("GET /api/search/suggest", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.suggestions).toEqual([{ id: "t1", isrc: "USAT29900609" }]);
+  });
+
+  it("sends each suggestion's release date as Spotify gave it, and none for a track without one", async () => {
+    const midnightCity = {
+      id: "6GyFP1nfCDB8lbD2bG0Hq9",
+      title: "Midnight City",
+      artist: "M83",
+      album: "Hurry Up, We're Dreaming",
+      coverUrl: "",
+      isrc: "FR6V81141061",
+      previewUrl: null,
+    };
+    spotify.invoke.mockResolvedValue([
+      { ...midnightCity, releaseDate: "2011-10-18" },
+      { ...midnightCity, id: "0000000000000000000002", releaseDate: "2011" },
+      { ...midnightCity, id: "0000000000000000000003", isrc: null },
+    ]);
+
+    const res = await request(app()).get("/api/search/suggest?query=midnight%20city");
+
+    expect(res.status).toBe(200);
+    // The web does not parse this answer (apiClient.ts casts it to its own type); parsing it here
+    // checks that the route sends the date and that the contract's schema does not strip it.
+    const { suggestions } = SearchSuggestResponse.parse(res.body);
+    expect(suggestions.map((suggestion) => suggestion.releaseDate ?? null)).toEqual([
+      "2011-10-18",
+      "2011",
+      null,
+    ]);
   });
 
   it("answers a Spotify failure with a generic message, not the upstream one", async () => {

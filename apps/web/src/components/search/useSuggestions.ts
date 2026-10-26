@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import type { SearchCandidate } from '../../hooks/agent/types';
+import type { SearchCandidate } from '@liner-notes/contract';
 
 /**
  * Asks the API for suggestions (useAgent's `searchSuggest`). Rejects when the request fails, and
@@ -23,29 +23,25 @@ export const SUGGESTIONS_SHOWN = 5;
 /** Shorter text gets no suggestions: the API asks for at least two characters. */
 const MIN_QUERY_LENGTH = 2;
 
-/**
- * A suggestion as the API sends it. Besides the contract's fields it carries Spotify's release
- * date (`releaseDate`: "2011", "2011-10" or "2011-10-18"), which the contract does not name; a
- * recorded track has `releaseYear` instead. `isrc` is the contract's, null when Spotify gave none.
- */
-type Suggestion = SearchCandidate & { releaseDate?: string; isrc?: string | null };
-
 // Lowercased the same way in every locale (a Turkish locale would lowercase "I" to "ı").
 const normalized = (text: string) =>
   text.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 
-const isrcOf = (suggestion: Suggestion) =>
+const isrcOf = (suggestion: SearchCandidate) =>
   typeof suggestion.isrc === 'string' && suggestion.isrc.trim()
     ? suggestion.isrc.trim().toUpperCase()
     : null;
 
-/** The release date, if any: Spotify gives "0000" for a date it does not know. */
-const dateOf = (suggestion: Suggestion) => {
+/**
+ * The release date, if any: the contract's `releaseDate` (Spotify's, as sent), or the
+ * `releaseYear` of a recorded track. Spotify gives "0000" for a date it does not know.
+ */
+const dateOf = (suggestion: SearchCandidate) => {
   const date = suggestion.releaseDate || suggestion.releaseYear || null;
   return date && !/^0+(?:-|$)/.test(date) ? date : null;
 };
 
-const songOf = (suggestion: Suggestion) =>
+const songOf = (suggestion: SearchCandidate) =>
   `${normalized(suggestion.title)}\u0000${normalized(suggestion.artist)}`;
 
 /**
@@ -56,7 +52,7 @@ const songOf = (suggestion: Suggestion) =>
  * which, and stands for its title and artist alone. So no row joins two ISRCs, and the keys do
  * not depend on the order of the rows.
  */
-function recordingKeys(rows: Suggestion[]) {
+function recordingKeys(rows: SearchCandidate[]) {
   const isrcsBySong = new Map<string, Set<string>>();
   for (const row of rows) {
     const isrc = isrcOf(row);
@@ -65,7 +61,7 @@ function recordingKeys(rows: Suggestion[]) {
     isrcs.add(isrc);
     isrcsBySong.set(songOf(row), isrcs);
   }
-  return (row: Suggestion) => {
+  return (row: SearchCandidate) => {
     const isrc = isrcOf(row);
     if (isrc) return `isrc:${isrc}`;
     const isrcs = isrcsBySong.get(songOf(row));
@@ -91,12 +87,11 @@ function isEarlier(date: string | null, than: string | null) {
  * listed does not depend on Spotify's order; only which of two equal rows is kept can.
  */
 export function mergeDuplicates(candidates: SearchCandidate[]): SearchCandidate[] {
-  const rows = candidates as Suggestion[];
-  const keyOf = recordingKeys(rows);
-  const kept: Suggestion[] = [];
+  const keyOf = recordingKeys(candidates);
+  const kept: SearchCandidate[] = [];
   const places = new Map<string, number>();
   const ids = new Set<string>();
-  for (const row of rows) {
+  for (const row of candidates) {
     if (ids.has(row.id)) continue;
     ids.add(row.id);
     const key = keyOf(row);

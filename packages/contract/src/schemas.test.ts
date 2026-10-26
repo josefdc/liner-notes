@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { ReplayRecord, RunResponse } from "./api.js";
+import { ReplayRecord, RunResponse, SearchSuggestResponse } from "./api.js";
 import { AudioFeatures } from "./audio.js";
 import { Timestamp } from "./common.js";
 import { AnalyzeStreamEvent, decodeSseStream, encodeSseEvent } from "./events.js";
@@ -27,7 +27,7 @@ import {
   sampleEvidence,
   sampleRun,
 } from "./testing/samples.js";
-import { RunInfo, TrackAnalysis, type TrackAnalysisInput } from "./track.js";
+import { RunInfo, SearchCandidate, TrackAnalysis, type TrackAnalysisInput } from "./track.js";
 
 const ok = (schema: { safeParse(value: unknown): { success: boolean } }, value: unknown) =>
   schema.safeParse(value).success;
@@ -327,6 +327,32 @@ describe("RunResponse", () => {
     };
     const parsed = RunResponse.parse({ success: true, run, analysis: null });
     expect(parsed.run).not.toHaveProperty("query");
+  });
+});
+
+describe("SearchCandidate", () => {
+  const candidate = {
+    id: "6GyFP1nfCDB8lbD2bG0Hq9",
+    title: "Midnight City",
+    artist: "M83",
+    album: "Hurry Up, We're Dreaming",
+    coverUrl: "",
+  };
+
+  it("keeps Spotify's release date as sent, at any precision, and 0000 for an unknown one", () => {
+    for (const releaseDate of ["2011", "2011-10", "2011-10-18", "0000", null]) {
+      expect(SearchCandidate.parse({ ...candidate, releaseDate }).releaseDate).toBe(releaseDate);
+    }
+    expect(SearchCandidate.parse(candidate)).not.toHaveProperty("releaseDate");
+    expect(ok(SearchCandidate, { ...candidate, releaseDate: 2011 })).toBe(false);
+  });
+
+  it("keeps the release date of each suggestion in a suggest answer", () => {
+    const parsed = SearchSuggestResponse.parse({
+      success: true,
+      suggestions: [{ ...candidate, releaseDate: "2011-10-18", isrc: "FR6V81141061" }],
+    });
+    expect(parsed.suggestions[0]).toMatchObject({ releaseDate: "2011-10-18" });
   });
 });
 

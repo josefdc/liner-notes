@@ -390,6 +390,13 @@ export type TrackAnalysisInput = z.input<typeof TrackAnalysis>;
 /**
  * A track offered in search suggestions and in the track picker. `popularity` is optional:
  * the API is moving off Spotify fields that not every app can read, so it may stop sending it.
+ *
+ * `releaseDate` and `releaseYear` come from the same Spotify date. A live search suggestion
+ * carries `releaseDate` as Spotify sent it (null when it is not a year, a month or a day); the
+ * picker's candidates and the suggestions of a recorded track carry `releaseYear` instead. The
+ * search box orders duplicates by a row's `releaseDate` when it has one, else by its
+ * `releaseYear`. A `releaseDate` of "0000" counts as unknown, and the row's `releaseYear` is
+ * not read in its place.
  */
 export const SearchCandidate = z.object({
   id: z.string(),
@@ -400,5 +407,12 @@ export const SearchCandidate = z.object({
   releaseYear: z.string().optional(),
   popularity: z.number().min(0).max(100).optional(),
   isrc: z.string().nullable().optional(),
+  releaseDate: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'Spotify\'s album release date as sent: a year ("2011"), a month ("2011-10") or a day ("2011-10-18"); "0000" means unknown. Null or absent when not known',
+    ),
 });
 export type SearchCandidate = z.infer<typeof SearchCandidate>;

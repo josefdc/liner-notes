@@ -47,6 +47,7 @@ import {
   NOT_ORIGINAL_RELEASE_TYPES,
   normalizeIsrc,
   normalizeName,
+  RELEASE_DATE,
   recordingRelationships,
   withMusicBrainzPriority,
   workCovers,
@@ -237,9 +238,6 @@ export function pickRecording(
   }
   return { recording: chosen, omitted, reason: "" };
 }
-
-/** A release date MusicBrainz writes: a year, a year and month, or a day. */
-const RELEASE_DATE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
 /**
  * A release date as a sort key; a bare year or month sorts after the dated days in it, and

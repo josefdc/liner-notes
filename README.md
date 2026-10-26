@@ -141,6 +141,9 @@ origin such as `http://192.168.1.20:3001`, for an API running elsewhere). A buil
 `VITE_API_URL`, the API's root URL including `/api` (see `apps/web/.env.example`); the web
 image is built with `VITE_API_URL=/api` and nginx forwards `/api` to the API. A value that
 cannot work (`api`, or an absolute URL without a path) stops the build with an error.
+`VITE_SOURCE_URL` sets where the footer's "Source" link points (default
+`https://github.com/josefdc/liner-notes`): a build of a modified version should point it at its
+own source.
 
 The web dev server listens on loopback only. `WEB_HOST=0.0.0.0 npm run dev` serves it on the
 network (to try it from a phone, say); anyone who can reach that port can then also start

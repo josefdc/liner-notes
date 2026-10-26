@@ -1,31 +1,44 @@
-import React, {
-  useState,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  Suspense,
-  lazy,
-  startTransition,
-} from 'react';
+import type React from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, Suspense, lazy } from 'react';
 import Layout from './components/Layout';
 import Onboarding from './components/Onboarding';
+import { TrackLinkScreen, type TrackLinkState } from './components/TrackLinkScreen';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Player = lazy(() => import('./components/Player'));
-import { AppPhase, type TrackData, type AgentLog } from './types';
+import { AppPhase, type TrackData } from './types';
 import { useAgent } from './hooks/useAgent';
+import { fetchStoredRun } from './hooks/agent/storedRun';
 import { preloadsResults } from './components/console/progress';
 import { isSpotifyTrackId } from './utils/spotify';
-import type { AgentStatus, AnalyzeOptions, ResultMode, SearchCandidate } from './hooks/agent/types';
-import type { Factoid, FactoidUnavailableCode } from './types';
+import type { AnalyzeOptions } from './hooks/agent/types';
+import {
+  currentRoute,
+  onHistoryMove,
+  type Route,
+  routeUrl,
+  writeHistoryEntry,
+} from './router/route';
+import { ShownResults } from './router/shownResults';
 
 // ─── P2:18 Dashboard skeleton fallback ──────────────────────────────────────
 const shimmerClass =
   'bg-gradient-to-r from-white/[0.03] via-white/[0.07] to-white/[0.03] bg-[length:200%_100%] animate-progress-shimmer';
 
+// The skeletons stand in for a result view while its code loads. Each holds the focus meanwhile
+// (`data-loading-view`), so the focus never falls to the page, until the view's heading takes it.
+const LOADING_VIEW_PROPS = {
+  'data-loading-view': true,
+  tabIndex: -1,
+  role: 'status',
+  'aria-label': 'Loading the results',
+} as const;
+
 // Same padding and gaps as the Dashboard (components/Dashboard.tsx), so nothing shifts when it loads.
 const DashboardSkeleton = (
-  <div className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-hidden bg-void animate-fade-in">
+  <div
+    {...LOADING_VIEW_PROPS}
+    className="h-full w-full p-(--space-md) md:p-(--space-2xl) flex flex-col gap-(--space-xl) md:gap-(--space-2xl) overflow-hidden bg-void animate-fade-in focus:outline-none"
+  >
     {/* Header skeleton */}
     <div className="flex justify-between items-center">
       <div className="space-y-2">
@@ -56,7 +69,10 @@ const DashboardSkeleton = (
 );
 
 const PlayerSkeleton = (
-  <div className="h-full w-full flex flex-col bg-void animate-fade-in">
+  <div
+    {...LOADING_VIEW_PROPS}
+    className="h-full w-full flex flex-col bg-void animate-fade-in focus:outline-none"
+  >
     <div className="px-6 py-4 border-b border-white/5">
       <div className={`h-4 w-32 ${shimmerClass} rounded-sm`} />
     </div>
@@ -70,162 +86,37 @@ const PlayerSkeleton = (
   </div>
 );
 
-// Choose skeleton based on likely phase
-const LOADING_FALLBACK = DashboardSkeleton;
+/** The loading view on the page, if any (see LOADING_VIEW_PROPS). */
+const loadingView = () => document.querySelector<HTMLElement>('[data-loading-view]');
 
-interface PhaseViewProps {
-  phase: AppPhase;
-  // Onboarding props
-  status: AgentStatus;
-  logs: AgentLog[];
-  trackData: TrackData | null;
-  error: string | null;
-  errorCode: string | null;
-  isLoading: boolean;
-  isComplete: boolean;
-  isReplay: boolean;
-  /** The server's own words for the step under way. */
-  statusNote: string | null;
-  candidates: SearchCandidate[] | null;
-  analyze: (query: string) => Promise<void>;
-  selectCandidate: (candidateId: string) => Promise<void>;
-  retry: () => void;
-  searchSuggest: (
-    query: string,
-    limit?: number,
-    signal?: AbortSignal,
-  ) => Promise<SearchCandidate[]>;
-  // Player props
-  decryptMoreFactoidsStream: (
-    trackTitle: string,
-    trackArtist: string,
-    existingIds: string[],
-    onFactoid: (factoid: Factoid) => void,
-    signal?: AbortSignal,
-    onUnavailable?: (code: FactoidUnavailableCode) => void,
-    resultMode?: ResultMode,
-  ) => Promise<void>;
-  // Navigation
-  onAnalysisComplete: (trackData: TrackData) => void;
-  onNavigate: (phase: AppPhase) => void;
-  onAnalyzeTrack: (trackId: string, title: string, artist: string) => void;
-  onBackToBoard: () => void;
-  // P0:3 — New search
-  onNewSearch: () => void;
-  // UX: Focus management refs
-  dashboardHeadingRef: React.RefObject<HTMLHeadingElement | null>;
-  playerHeadingRef: React.RefObject<HTMLHeadingElement | null>;
-  searchInputRef: React.RefObject<HTMLInputElement | null>;
-  // UX: Undo analysis
-  onUndoAnalysis: () => void;
-  // UX: Session restore
-  onRestorePrevious: (() => void) | null;
-  isRestoredSession: boolean;
+/** The API's limit on the length of an analysis query (the contract's MAX_QUERY_LENGTH). */
+const MAX_QUERY_LENGTH = 200;
+
+/**
+ * `text` cut to the API's limit, counted in UTF-16 code units as the API counts it, never inside
+ * a character: a character the cut would split (an emoji) is left out whole, since half of one
+ * cannot be sent in an address.
+ */
+function withinQueryLimit(text: string): string {
+  const cut = text.slice(0, MAX_QUERY_LENGTH);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
 
-const PhaseView = React.memo<PhaseViewProps>(
-  ({
-    phase,
-    status,
-    logs,
-    trackData,
-    error,
-    errorCode,
-    isLoading,
-    isComplete,
-    isReplay,
-    statusNote,
-    candidates,
-    analyze,
-    selectCandidate,
-    retry,
-    searchSuggest,
-    decryptMoreFactoidsStream,
-    onAnalysisComplete,
-    onNavigate,
-    onAnalyzeTrack,
-    onBackToBoard,
-    onNewSearch,
-    dashboardHeadingRef,
-    playerHeadingRef,
-    searchInputRef,
-    onUndoAnalysis,
-    onRestorePrevious,
-    isRestoredSession,
-  }) => {
-    switch (phase) {
-      case AppPhase.ONBOARDING:
-        return (
-          <Onboarding
-            status={status}
-            logs={logs}
-            trackData={trackData}
-            error={error}
-            errorCode={errorCode}
-            isLoading={isLoading}
-            isReplay={isReplay}
-            statusNote={statusNote}
-            candidates={candidates}
-            analyze={analyze}
-            selectCandidate={selectCandidate}
-            retry={retry}
-            searchSuggest={searchSuggest}
-            onComplete={onAnalysisComplete}
-            searchInputRef={searchInputRef}
-            onRestorePrevious={onRestorePrevious ?? undefined}
-            onSearchAgain={onNewSearch}
-          />
-        );
-      case AppPhase.DASHBOARD:
-        return (
-          <Dashboard
-            trackData={trackData}
-            onNavigate={onNavigate}
-            onAnalyzeTrack={onAnalyzeTrack}
-            logs={logs}
-            isComplete={isComplete}
-            onNewSearch={onNewSearch}
-            headingRef={dashboardHeadingRef}
-            onUndoAnalysis={onUndoAnalysis}
-            isRestoredSession={isRestoredSession}
-          />
-        );
-      case AppPhase.PLAYER:
-        return (
-          <Player
-            trackData={trackData}
-            onBack={onBackToBoard}
-            onDecryptMoreStream={decryptMoreFactoidsStream}
-            onAnalyzeTrack={onAnalyzeTrack}
-            onNewSearch={onNewSearch}
-            headingRef={playerHeadingRef}
-          />
-        );
-      default:
-        return (
-          <Onboarding
-            status={status}
-            logs={logs}
-            trackData={trackData}
-            error={error}
-            errorCode={errorCode}
-            isLoading={isLoading}
-            isReplay={isReplay}
-            statusNote={statusNote}
-            candidates={candidates}
-            analyze={analyze}
-            selectCandidate={selectCandidate}
-            retry={retry}
-            searchSuggest={searchSuggest}
-            onComplete={onAnalysisComplete}
-            searchInputRef={searchInputRef}
-            onRestorePrevious={onRestorePrevious ?? undefined}
-            onSearchAgain={onNewSearch}
-          />
-        );
-    }
-  },
-);
+/** A link to a track (`/t/<spotifyId>`) whose result is not on screen yet. */
+interface TrackLink {
+  trackId: string;
+  /** The link's own words for the track (`?q=`). */
+  query: string | null;
+  state: TrackLinkState;
+}
+
+const linkTo = (route: Extract<Route, { kind: 'track' }>): TrackLink => ({
+  trackId: route.trackId,
+  query: route.query,
+  // An id that cannot be a Spotify track id is not sent to the API.
+  state: isSpotifyTrackId(route.trackId) ? 'loading' : 'invalid',
+});
 
 /** What the app stores in each browser history entry. */
 interface HistoryEntry {
@@ -234,10 +125,41 @@ interface HistoryEntry {
   index: number;
   /** Pushed when a search started; its result replaces it. */
   search?: boolean;
+  /** The entry's address. */
+  url: string;
+}
+
+/**
+ * The address of a screen: `/` for the search (and an analysis under way), the link's own
+ * address while its result loads, and `/t/<id>?q=<title artist>` for a result.
+ */
+function addressOf(phase: AppPhase, track: TrackData | null, link: TrackLink | null): string {
+  if (link) return routeUrl({ kind: 'track', trackId: link.trackId, query: link.query });
+  // Only a Spotify track id makes a link that loads again: a result under any other id (a
+  // recording's placeholder) keeps the search's address rather than one the page calls invalid.
+  if (phase === AppPhase.ONBOARDING || !isSpotifyTrackId(track?.id)) return '/';
+  const query = `${track.title ?? ''} ${track.artist ?? ''}`.trim() || null;
+  return routeUrl({ kind: 'track', trackId: track.id, query });
+}
+
+/** The screen the page opens on: the search, or the result its address names. */
+function openingScreen(): { phase: AppPhase; link: TrackLink | null } {
+  const route = currentRoute();
+  if (route?.kind !== 'track') return { phase: AppPhase.ONBOARDING, link: null };
+  // A reload of the Player keeps the Player (the entry's state survives a reload).
+  const saved = window.history.state as Partial<HistoryEntry> | null;
+  return {
+    phase: saved?.phase === AppPhase.PLAYER ? AppPhase.PLAYER : AppPhase.DASHBOARD,
+    link: linkTo(route),
+  };
 }
 
 const App: React.FC = () => {
-  const [phase, setPhase] = useState<AppPhase>(AppPhase.ONBOARDING);
+  const [opening] = useState(openingScreen);
+  const [phase, setPhase] = useState<AppPhase>(opening.phase);
+  // A link to a track whose stored result is loading, missing or failed: shown instead of the
+  // phase's view until the result is in.
+  const [link, setLink] = useState<TrackLink | null>(opening.link);
   const {
     status,
     logs,
@@ -261,55 +183,108 @@ const App: React.FC = () => {
   const dashboardHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const playerHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // A result view whose heading is to take the focus as soon as it is in the page: its code
+  // was still loading when it was opened. Waited for however long the code takes: the focus
+  // stays on the loading view meanwhile, and is taken only from there or from the page.
+  const focusWait = useRef<AppPhase | null>(null);
+  const takeWaitingFocus = useCallback((screen: AppPhase, heading: HTMLHeadingElement) => {
+    if (focusWait.current !== screen) return;
+    focusWait.current = null;
+    // Unless the user has moved it elsewhere meanwhile (from the loading view, or from the
+    // page where the loading view's removal left it).
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== loadingView()) return;
+    heading.focus();
+  }, []);
+  const setDashboardHeading = useCallback(
+    (heading: HTMLHeadingElement | null) => {
+      dashboardHeadingRef.current = heading;
+      if (heading) takeWaitingFocus(AppPhase.DASHBOARD, heading);
+    },
+    [takeWaitingFocus],
+  );
+  const setPlayerHeading = useCallback(
+    (heading: HTMLHeadingElement | null) => {
+      playerHeadingRef.current = heading;
+      if (heading) takeWaitingFocus(AppPhase.PLAYER, heading);
+    },
+    [takeWaitingFocus],
+  );
 
-  // ─── UX: Previous track data for undo (Item 2) ──────────────────────────
-  const previousTrackDataRef = useRef<TrackData | null>(null);
+  // ─── UX: Previous result, for undo and "Back to the last result" (Items 2, 8) ──
+  const [previousTrackData, setPreviousTrackData] = useState<TrackData | null>(null);
 
   // ─── UX: Session restore / undo override (Items 2, 8) ──────────────────
-  // When undoing or restoring, the hook's trackData is null (reset clears it).
-  // This override holds the restored data, which is cleared on next analysis.
+  // A result that is not the hook's current run (a restored one, or the stored one a link
+  // loaded): the hook's trackData is null then. Cleared on the next analysis.
   const [overrideTrackData, setOverrideTrackData] = useState<TrackData | null>(null);
   const [isRestoredSession, setIsRestoredSession] = useState(false);
   const effectiveTrackData = overrideTrackData || trackData;
 
-  // ─── P1:13 Replace setTimeout hack with pendingQuery + useEffect ──────────
-  // The track's Spotify id goes with the text when it is known: that very track is analysed.
-  const [pendingQuery, setPendingQuery] = useState<{ query: string; trackId?: string } | null>(
-    null,
-  );
-
+  // The results shown on this page, by track id (the last SHOWN_RESULTS_LIMIT): Back and
+  // Forward to a result show it again without a request. One per track: an older entry of a
+  // track analysed twice on this page shows the track's newest result (the same track, never
+  // another's).
+  const shownResults = useRef(new ShownResults());
   useEffect(() => {
-    if (pendingQuery && phase === AppPhase.ONBOARDING) {
-      analyze(pendingQuery.query, pendingQuery.trackId ? { trackId: pendingQuery.trackId } : {});
-      setPendingQuery(null);
-    }
-  }, [pendingQuery, phase, analyze]);
+    if (effectiveTrackData?.id) shownResults.current.remember(effectiveTrackData);
+  }, [effectiveTrackData]);
 
-  // ─── UX: Focus management on phase transitions (Item 1) ─────────────────
-  useLayoutEffect(() => {
-    const focusWithRetry = (ref: React.RefObject<HTMLElement | null>) => {
-      requestAnimationFrame(() => {
-        if (ref.current) {
-          ref.current.focus();
-        } else {
-          // Retry on next frame if lazy chunk hasn't resolved yet
-          requestAnimationFrame(() => ref.current?.focus());
+  // ─── A link's stored result (GET /api/runs/by-track/:id): read only, never an analysis ──
+  const loadingTrackId = link?.state === 'loading' ? link.trackId : null;
+  useEffect(() => {
+    if (!loadingTrackId) return;
+    const controller = new AbortController();
+    fetchStoredRun(loadingTrackId, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return;
+        if (result.kind === 'found') {
+          setOverrideTrackData(result.track);
+          // Not a run of this page: it has no activity log to show.
+          setIsRestoredSession(true);
+          setLink(null);
+          return;
         }
-      });
-    };
+        setLink((current) =>
+          current?.trackId === loadingTrackId ? { ...current, state: result.kind } : current,
+        );
+      },
+      // Aborted: another screen replaced the link.
+      () => {},
+    );
+    return () => controller.abort();
+  }, [loadingTrackId]);
 
-    switch (phase) {
-      case AppPhase.ONBOARDING:
-        requestAnimationFrame(() => searchInputRef.current?.focus());
-        break;
-      case AppPhase.DASHBOARD:
-        focusWithRetry(dashboardHeadingRef);
-        break;
-      case AppPhase.PLAYER:
-        focusWithRetry(playerHeadingRef);
-        break;
+  // ─── UX: Focus management on screen changes (Item 1, UXN-05) ────────────
+  // In the same commit as the screen change, so the focus never rests on the page: a result's
+  // heading takes it, or, while the result's code loads, the loading view until the heading
+  // is in (setDashboardHeading, setPlayerHeading); the search box takes it on the search. A
+  // link's screen and the progress screen focus their own heading and status line.
+  const screen = link ? 'link' : phase;
+  useLayoutEffect(() => {
+    focusWait.current = null;
+    if (screen === 'link') return;
+    if (screen === AppPhase.ONBOARDING) {
+      searchInputRef.current?.focus();
+      return;
     }
-  }, [phase]);
+    const heading =
+      screen === AppPhase.DASHBOARD ? dashboardHeadingRef.current : playerHeadingRef.current;
+    if (heading?.isConnected) {
+      heading.focus();
+      return;
+    }
+    focusWait.current = screen;
+    loadingView()?.focus();
+  }, [screen]);
+
+  // A link to a result: its view's code is fetched while the stored result loads, not after.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the screen the page opened on
+  useEffect(() => {
+    if (!opening.link) return;
+    if (opening.phase === AppPhase.PLAYER) import('./components/Player');
+    else import('./components/Dashboard');
+  }, []);
 
   // Preload lazy chunks when analysis nears completion
   useEffect(() => {
@@ -327,25 +302,26 @@ const App: React.FC = () => {
   }, [phase]);
 
   // ─── P2:19 Preload images during analysis ─────────────────────────────────
+  // Keyed by the image addresses: a new result object with the same images loads nothing again.
+  const coverUrl = effectiveTrackData?.coverUrl ?? '';
+  const nodes = effectiveTrackData?.genealogy?.nodes;
+  const nodeImages = Array.isArray(nodes)
+    ? nodes
+        .map((node) => node?.img)
+        .filter(Boolean)
+        .join('\n')
+    : '';
   useEffect(() => {
-    const td = effectiveTrackData;
-    if (td) {
-      if (td.coverUrl) {
-        const img = new Image();
-        img.src = td.coverUrl;
-      }
-      // Preload genealogy node images
-      td.genealogy?.nodes?.forEach((node) => {
-        if (node.img) {
-          const img = new Image();
-          img.src = node.img;
-        }
-      });
+    if (coverUrl) new Image().src = coverUrl;
+  }, [coverUrl]);
+  useEffect(() => {
+    for (const src of nodeImages.split('\n')) {
+      if (src) new Image().src = src;
     }
-  }, [effectiveTrackData]);
+  }, [nodeImages]);
 
   // Handle song analysis completion
-  const handleAnalysisComplete = useCallback((_completedData: TrackData) => {
+  const handleAnalysisComplete = useCallback(() => {
     setOverrideTrackData(null); // New analysis data comes from hook
     setIsRestoredSession(false);
     setPhase(AppPhase.DASHBOARD);
@@ -356,21 +332,19 @@ const App: React.FC = () => {
     setPhase(newPhase);
   }, []);
 
-  // Handle analyzing a track from Dashboard (Discovered Gems) — P1:13 fix
+  // A connected track analysed from the Dashboard or the Player. The run starts at once, so the
+  // progress screen is up from its first frame and its status line takes the focus.
   const handleAnalyzeTrack = useCallback(
     (trackId: string, title: string, artist: string) => {
       // Save current trackData for undo (Item 2)
-      previousTrackDataRef.current = effectiveTrackData;
+      setPreviousTrackData(effectiveTrackData);
       setOverrideTrackData(null);
       setIsRestoredSession(false);
       reset();
-      setPendingQuery({
-        query: `${title} ${artist}`.trim(),
-        ...(isSpotifyTrackId(trackId) ? { trackId } : {}),
-      });
-      startTransition(() => setPhase(AppPhase.ONBOARDING));
+      analyze(`${title} ${artist}`.trim(), isSpotifyTrackId(trackId) ? { trackId } : {});
+      setPhase(AppPhase.ONBOARDING);
     },
-    [reset, effectiveTrackData],
+    [reset, analyze, effectiveTrackData],
   );
 
   const handleBackToDashboard = useCallback(() => {
@@ -380,63 +354,69 @@ const App: React.FC = () => {
   // UX: Undo analysis — abort SSE, restore previous state (Item 2)
   const handleUndoAnalysis = useCallback(() => {
     reset();
-    if (previousTrackDataRef.current) {
-      setOverrideTrackData(previousTrackDataRef.current);
+    if (previousTrackData) {
+      setOverrideTrackData(previousTrackData);
       setIsRestoredSession(true);
       setPhase(AppPhase.DASHBOARD);
-      previousTrackDataRef.current = null;
+      setPreviousTrackData(null);
     } else {
       setPhase(AppPhase.ONBOARDING);
     }
-  }, [reset]);
+  }, [reset, previousTrackData]);
 
   // UX: Restore previous session (Item 8)
   const handleRestorePrevious = useCallback(() => {
-    if (previousTrackDataRef.current) {
-      setOverrideTrackData(previousTrackDataRef.current);
+    if (previousTrackData) {
+      setOverrideTrackData(previousTrackData);
       setIsRestoredSession(true);
       setPhase(AppPhase.DASHBOARD);
     }
-  }, []);
+  }, [previousTrackData]);
 
   // ─── P0:3 New search handler (Item 8 — save session for restore) ─────────
   const handleNewSearch = useCallback(() => {
     // Save current trackData so user can restore previous session
     if (effectiveTrackData) {
-      previousTrackDataRef.current = effectiveTrackData;
+      setPreviousTrackData(effectiveTrackData);
     }
     setOverrideTrackData(null);
     setIsRestoredSession(false);
+    setLink(null);
     reset();
     setPhase(AppPhase.ONBOARDING);
   }, [reset, effectiveTrackData]);
 
   // ─── P1:15 Browser history support ────────────────────────────────────────
-  // One history entry per screen; the steps of an analysis add none. Each entry records how
-  // many in-app entries lie behind it (`index`). The entry a search pushes (`search`) is
-  // taken over by its result.
-  const entryRef = useRef<HistoryEntry>({ phase, index: 0 });
+  // One history entry per screen, at that screen's address; the steps of an analysis add none.
+  // Each entry records how many in-app entries lie behind it (`index`). The entry a search
+  // pushes (`search`) is taken over by its result.
+  const address = addressOf(phase, effectiveTrackData, link);
+  const entryRef = useRef<HistoryEntry>({ phase, index: 0, url: address });
   const writeHistory = useCallback((entry: HistoryEntry, mode: 'push' | 'replace') => {
     entryRef.current = entry;
-    if (mode === 'push') window.history.pushState(entry, '');
-    else window.history.replaceState(entry, '');
+    writeHistoryEntry(entry, entry.url, mode);
   }, []);
 
+  // The page's own entry, at its address (an unknown path becomes the search's `/`).
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs only on mount
   useEffect(() => {
-    writeHistory({ phase, index: 0 }, 'replace');
+    writeHistory({ phase, index: 0, url: address }, 'replace');
   }, []);
 
   useEffect(() => {
     const entry = entryRef.current;
-    // Already recorded: the initial entry, or the entry the browser just moved to.
-    if (entry.phase === phase) return;
-    if (entry.search && phase === AppPhase.DASHBOARD) {
-      writeHistory({ phase, index: entry.index }, 'replace');
-    } else {
-      writeHistory({ phase, index: entry.index + 1 }, 'push');
+    if (entry.phase === phase) {
+      // The same screen at a new address: a link's stored result came in, and the address now
+      // carries the track's name.
+      if (entry.url !== address) writeHistory({ ...entry, url: address }, 'replace');
+      return;
     }
-  }, [phase, writeHistory]);
+    if (entry.search && phase === AppPhase.DASHBOARD) {
+      writeHistory({ phase, index: entry.index, url: address }, 'replace');
+    } else {
+      writeHistory({ phase, index: entry.index + 1, url: address }, 'push');
+    }
+  }, [phase, address, writeHistory]);
 
   // A search started on an entry with nothing of the app behind it (the first search after
   // loading the page, or one after going back to the search) gets an entry of its own, so
@@ -445,7 +425,10 @@ const App: React.FC = () => {
   const markSearchEntry = useCallback(() => {
     const entry = entryRef.current;
     if (entry.search || entry.index > 0) return;
-    writeHistory({ phase: AppPhase.ONBOARDING, index: entry.index + 1, search: true }, 'push');
+    writeHistory(
+      { phase: AppPhase.ONBOARDING, index: entry.index + 1, search: true, url: '/' },
+      'push',
+    );
   }, [writeHistory]);
 
   const startSearch = useCallback(
@@ -461,55 +444,143 @@ const App: React.FC = () => {
     retry();
   }, [markSearchEntry, retry]);
 
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      const target = event.state as HistoryEntry | null;
-      const targetPhase = target?.phase;
-      if (!target || !targetPhase) return;
-      // Guard: don't interrupt a running analysis or an open track picker
-      if (phase === AppPhase.ONBOARDING && (isLoading || status === 'disambiguation')) {
-        // Re-push the entry the user was on to prevent navigation
-        writeHistory(entryRef.current, 'push');
-        return;
-      }
-      entryRef.current = { phase: targetPhase, index: target.index ?? 0, search: target.search };
-      if (targetPhase === AppPhase.ONBOARDING) {
-        // Back from a result starts a new search; the result stays available to restore.
-        if (phase !== AppPhase.ONBOARDING) handleNewSearch();
-        return;
-      }
-      if (!effectiveTrackData) {
-        // Forward to a result left with Back: show it again, without a new analysis.
-        if (previousTrackDataRef.current) {
-          setOverrideTrackData(previousTrackDataRef.current);
-          setIsRestoredSession(true);
-          setPhase(targetPhase);
-        } else {
-          // Guard: don't navigate to dashboard/player without track data
-          setPhase(AppPhase.ONBOARDING);
+  // Analyze, on a link to a track without a stored result: that very track, by its id, under
+  // the link's words for it (or its id when the link has none: the API reads the track by its
+  // id, and the words only label the run). Nothing but this click starts it. The link's entry
+  // becomes the search's, so Back from the result leads to the search, not to this screen.
+  const handleAnalyzeLink = useCallback(() => {
+    if (!link) return;
+    const query = withinQueryLimit(link.query ?? link.trackId);
+    writeHistory(
+      { phase: AppPhase.ONBOARDING, index: entryRef.current.index, url: '/' },
+      'replace',
+    );
+    setLink(null);
+    setOverrideTrackData(null);
+    setIsRestoredSession(false);
+    setPhase(AppPhase.ONBOARDING);
+    startSearch(query, { trackId: link.trackId, pickedBy: 'click' });
+  }, [link, writeHistory, startSearch]);
+
+  const handleRetryLink = useCallback(() => {
+    setLink((current) => (current ? { ...current, state: 'loading' } : current));
+  }, []);
+
+  useEffect(
+    () =>
+      onHistoryMove((route, state) => {
+        const target = state as Partial<HistoryEntry> | null;
+        const targetPhase = target?.phase;
+        // Not an entry of the app's (the skip link's #main-content): nothing to change.
+        if (!target || !targetPhase) return;
+        // Guard: don't interrupt a running analysis or an open track picker
+        if (phase === AppPhase.ONBOARDING && !link && (isLoading || status === 'disambiguation')) {
+          // Re-push the entry the user was on to prevent navigation
+          writeHistory(entryRef.current, 'push');
+          return;
         }
-        return;
-      }
-      setPhase(targetPhase);
-    };
+        entryRef.current = {
+          phase: targetPhase,
+          index: target.index ?? 0,
+          search: target.search,
+          url: `${window.location.pathname}${window.location.search}`,
+        };
+        if (targetPhase === AppPhase.ONBOARDING) {
+          // Back from a result starts a new search; the result stays available to restore.
+          if (phase !== AppPhase.ONBOARDING || link) handleNewSearch();
+          return;
+        }
+        const wanted = route?.kind === 'track' ? route : null;
+        const fits = (track: TrackData | null | undefined): track is TrackData =>
+          !!track && (!wanted || track.id === wanted.trackId);
+        if (!link && fits(effectiveTrackData)) {
+          setPhase(targetPhase);
+          return;
+        }
+        // Forward to a result left with Back, or to another result shown on this page: shown
+        // again, with no new analysis and no request.
+        const shown = wanted ? shownResults.current.get(wanted.trackId) : previousTrackData;
+        if (fits(shown)) {
+          setOverrideTrackData(shown);
+          setIsRestoredSession(true);
+          setLink(null);
+          setPhase(targetPhase);
+          return;
+        }
+        if (wanted) {
+          // A result this page has not shown: its stored result is read.
+          reset();
+          setOverrideTrackData(null);
+          setIsRestoredSession(false);
+          setLink(linkTo(wanted));
+          setPhase(targetPhase);
+          return;
+        }
+        // Guard: don't navigate to dashboard/player without track data
+        setLink(null);
+        setPhase(AppPhase.ONBOARDING);
+      }),
+    [
+      phase,
+      link,
+      isLoading,
+      status,
+      effectiveTrackData,
+      previousTrackData,
+      handleNewSearch,
+      reset,
+      writeHistory,
+    ],
+  );
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [phase, isLoading, status, effectiveTrackData, handleNewSearch, writeHistory]);
-
-  return (
-    <Layout>
-      <div id="main-content" className="h-[100dvh] w-full flex flex-col">
-        <Suspense fallback={phase === AppPhase.PLAYER ? PlayerSkeleton : LOADING_FALLBACK}>
-          <PhaseView
-            phase={phase}
+  const renderScreen = () => {
+    if (link) {
+      return (
+        <TrackLinkScreen
+          state={link.state}
+          trackId={link.trackId}
+          query={link.query}
+          onAnalyze={handleAnalyzeLink}
+          onRetry={handleRetryLink}
+          onSearch={handleNewSearch}
+        />
+      );
+    }
+    switch (phase) {
+      case AppPhase.DASHBOARD:
+        return (
+          <Dashboard
+            trackData={effectiveTrackData}
+            onNavigate={handleNavigate}
+            onAnalyzeTrack={handleAnalyzeTrack}
+            logs={logs}
+            isComplete={isComplete}
+            onNewSearch={handleNewSearch}
+            headingRef={setDashboardHeading}
+            onUndoAnalysis={handleUndoAnalysis}
+            isRestoredSession={isRestoredSession}
+          />
+        );
+      case AppPhase.PLAYER:
+        return (
+          <Player
+            trackData={effectiveTrackData}
+            onBack={handleBackToDashboard}
+            onDecryptMoreStream={decryptMoreFactoidsStream}
+            onAnalyzeTrack={handleAnalyzeTrack}
+            onNewSearch={handleNewSearch}
+            headingRef={setPlayerHeading}
+          />
+        );
+      default:
+        return (
+          <Onboarding
             status={status}
             logs={logs}
             trackData={effectiveTrackData}
             error={error}
             errorCode={errorCode}
             isLoading={isLoading}
-            isComplete={isComplete}
             isReplay={isReplay}
             statusNote={statusNote}
             candidates={candidates}
@@ -517,19 +588,20 @@ const App: React.FC = () => {
             selectCandidate={selectCandidate}
             retry={retrySearch}
             searchSuggest={searchSuggest}
-            decryptMoreFactoidsStream={decryptMoreFactoidsStream}
-            onAnalysisComplete={handleAnalysisComplete}
-            onNavigate={handleNavigate}
-            onAnalyzeTrack={handleAnalyzeTrack}
-            onBackToBoard={handleBackToDashboard}
-            onNewSearch={handleNewSearch}
-            dashboardHeadingRef={dashboardHeadingRef}
-            playerHeadingRef={playerHeadingRef}
+            onComplete={handleAnalysisComplete}
             searchInputRef={searchInputRef}
-            onUndoAnalysis={handleUndoAnalysis}
-            onRestorePrevious={previousTrackDataRef.current ? handleRestorePrevious : null}
-            isRestoredSession={isRestoredSession}
+            onRestorePrevious={previousTrackData ? handleRestorePrevious : undefined}
+            onSearchAgain={handleNewSearch}
           />
+        );
+    }
+  };
+
+  return (
+    <Layout footerFromMd={!link && phase === AppPhase.PLAYER}>
+      <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
+        <Suspense fallback={phase === AppPhase.PLAYER ? PlayerSkeleton : DashboardSkeleton}>
+          {renderScreen()}
         </Suspense>
       </div>
     </Layout>

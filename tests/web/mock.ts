@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AnalyzeStreamEvent, FactoidStreamEvent } from "@liner-notes/contract";
+import { AnalyzeStreamEvent, FactoidStreamEvent, RunResponse } from "@liner-notes/contract";
 import { expect, type Page } from "@playwright/test";
 import {
   contractMisfits,
@@ -37,7 +37,34 @@ export function mockConfig(fixture: unknown): MockConfig {
   if (misfits.length > 0) {
     throw new Error(`Mock stream events the API cannot send:\n${misfits.join("\n")}`);
   }
+  const runMisfits = storedRunMisfits(config);
+  if (runMisfits.length > 0) {
+    throw new Error(`Mock stored runs the API cannot send:\n${runMisfits.join("\n")}`);
+  }
   return config;
+}
+
+/**
+ * The stored runs of a configuration (`runs`, served by GET /api/runs/by-track/<id>) that the
+ * contract's RunResponse does not accept, or that answer for another track, as
+ * "<id>: <problems>".
+ */
+function storedRunMisfits(config: MockConfig): string[] {
+  const runs = (config.runs ?? {}) as Record<string, unknown>;
+  return Object.entries(runs).flatMap(([id, body]) => {
+    const parsed = RunResponse.safeParse(body);
+    if (!parsed.success) {
+      const problems = parsed.error.issues
+        .map((issue) => `${issue.path.map(String).join(".") || "(body)"} ${issue.message}`)
+        .join("; ");
+      return [`${id}: ${problems}`];
+    }
+    const { run, analysis } = parsed.data;
+    if (run.spotifyId !== id || (analysis && analysis.id !== id)) {
+      return [`${id}: the run is another track's`];
+    }
+    return [];
+  });
 }
 
 /** Installs the mocked API (tests/mock-sse/mock-api.js) configured with a fixture. */

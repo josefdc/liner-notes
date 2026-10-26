@@ -57,9 +57,15 @@ vi.mock("../../store/cache.js", () => ({
     putResearch: cache.putResearch,
   }),
 }));
-vi.mock("../enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: unknown) => genealogy,
-}));
+vi.mock(
+  "../enricher.js",
+  () =>
+    ({
+      enrichGenealogyWithArtwork: async (genealogy) => ({
+        nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })),
+      }),
+    }) satisfies Partial<typeof import("../enricher.js")>,
+);
 
 import geniusSearch from "../../sources/fixtures/genius-search-ice-ice-baby.json" with {
   type: "json",

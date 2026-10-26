@@ -12,7 +12,7 @@
  * re-recorded, karaoke, tribute or covers one). A cover, a remix, a live album or another song
  * gives nothing, so no node shows the art of another record; a node that names no title or no
  * artist is not searched, since nothing could be checked. A preview needs more: the release must
- * also date from within a year of the year the node's label names, if it names one (see
+ * also date from within a year of the year the node's label (or else the model) names, if any (see
  * `releaseYearFits`). The search's answer is cached for a week under the node's label, title and
  * artist (see `artworkCacheKey`; without the track's identity when its release names another
  * recording); a preview is never cached. The cached answer keeps what the preview is decided on
@@ -54,16 +54,24 @@ const log = logger("Enricher");
 // Persistent Artwork Cache (backed by SQLite)
 // =============================================================================
 
+/**
+ * A genealogy node as the composer hands it over: with the year the model gave for it, when it
+ * gave one (the result's nodes do not carry it).
+ */
+export type ArtworkNode = GenealogyNode & { year?: string | null };
+
 /** A node as the artwork lookup reads it: what it searches for and what it checks the hit on. */
-type NamedNode = Pick<GenealogyNode, "label" | "trackTitle" | "trackArtist">;
+type NamedNode = Pick<ArtworkNode, "label" | "trackTitle" | "trackArtist" | "year">;
 
 /**
  * The artwork row of a node: its label (what is searched for), title and artist (what the hit is
  * checked on), each normalised as trackMatch.ts `words` does (case, accents, punctuation). The
- * `v2` prefix keeps rows older code keyed by the label alone from being read: such a row may hold
- * another artist's track. They expire with the cache's TTL.
+ * title and artist give two nodes with one label (a song and its cover) a row each, so neither
+ * evicts the other's; correctness does not rest on the key, since every served row is judged
+ * against the node reading it (fromCache). The `v2` prefix sets these rows apart from those
+ * older code keyed by the label alone, which are never read and expire with the cache's TTL.
  */
-export function artworkCacheKey(node: NamedNode): string {
+function artworkCacheKey(node: NamedNode): string {
   const part = (text: string | undefined) => words(text ?? "").join(" ");
   return ["v2", part(node.label), part(node.trackTitle), part(node.trackArtist)].join("|");
 }
@@ -393,13 +401,68 @@ function sameCredit(nodeArtist: string, lead: string, credited: readonly string[
   return parts.every((part) => credited.some((name) => sameArtistName(part, name)));
 }
 
+/** The artists a title's featured-artist note names: "Stay With Me (feat. Mary J. Blige)". */
+function featuredIn(title: string): string[] {
+  const notes = [
+    ...title.matchAll(/[([]\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+)[)\]]/gi),
+    ...title.matchAll(/(?:^|\s)(?:feat\.|ft\.|featuring)\s+([^()[\]]+)$/gi),
+  ];
+  return notes.flatMap((note) => creditParts(note[1] ?? ""));
+}
+
 /**
- * Whether the track found is strictly the one the model named: the node names both a title and
- * an artist, the node's credit is the track's (sameCredit), nothing in the titles tells them
- * apart as recordings (no other title, version or take; a featured-artist note is not a
- * difference; see trackMatch.ts), and its album, when known, is not named as another recording
- * (marksOtherRecording). A label alone is never enough: a search for it can find a cover, a
- * remix or another song.
+ * Whether the node names every artist the found track credits, in its artist credit or in a
+ * featured-artist note of its title. A track that credits someone the node does not name is
+ * taken for another recording: a later duet single ("Stay With Me (feat. Mary J. Blige)" for
+ * Sam Smith's "Stay With Me"), or a credit the model left short. Either way the node gets no
+ * cover; a missed cover is better than another record's.
+ */
+function namesEveryCredit(
+  artist: string,
+  title: string,
+  credited: readonly string[],
+  foundTitle: string,
+): boolean {
+  const names = [artist, ...creditParts(artist), ...featuredIn(title)];
+  const named = (name: string) => names.some((own) => sameArtistName(own, name));
+  const wholeCredit = credited.length > 1 && sameArtistName(artist, credited.join(", "));
+  return (wholeCredit || credited.every(named)) && featuredIn(foundTitle).every(named);
+}
+
+/**
+ * Labels of a title that name another mix or edit than the album recording: a radio or single
+ * edit or version, a mono mix. trackMatch.ts reads them as labels of the same release; a node's
+ * cover is held to more, since an edit or mono mix may sit on a release of its own.
+ */
+const EDIT_LABEL = /\b(?:radio|single)\s+(?:edit|version)\b|\bmono\b/gi;
+
+/** The edit labels (EDIT_LABEL) of a title's bracketed and " - " parts, normalised. */
+function editLabels(title: string): Set<string> {
+  const brackets = [...title.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)].map((m) => m[1] ?? m[2] ?? "");
+  const dashed = title
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .split(/\s[-–—]\s/)
+    .slice(1);
+  const labels = [...brackets, ...dashed].flatMap((part) =>
+    [...part.matchAll(EDIT_LABEL)].map((m) => m[0].toLowerCase().replace(/\s+/g, " ")),
+  );
+  return new Set(labels);
+}
+
+/**
+ * Whether the track found is strictly the one the model named:
+ * - the node names both a title and an artist;
+ * - the node's credit is the track's (sameCredit), and the node names every artist the track
+ *   credits (namesEveryCredit);
+ * - nothing in the titles or the album tells them apart as recordings (no other title, version or
+ *   take; an album that marks other recordings: live, concert, sessions, demos, instrumentals,
+ *   re-recorded and the like; see trackMatch.ts recordingTitleDifference). A studio album whose
+ *   name carries such a word ("Live Through This", "The Sun Sessions") is refused too: a missed
+ *   cover is honest, another recording's is not;
+ * - the track carries no edit label the node's title lacks (editLabels: radio or single edit or
+ *   version, mono);
+ * - its album, when known, is not named as another recording (marksOtherRecording).
+ * A label alone is never enough: a search for it can find a cover, a remix or another song.
  */
 export function strictlyMatches(
   node: Pick<GenealogyNode, "trackTitle" | "trackArtist">,
@@ -410,9 +473,12 @@ export function strictlyMatches(
   if (!title || !artist) return false;
   const credited = found.artistNames.length > 0 ? found.artistNames : [found.artist];
   const lead = credited[0] ?? found.artist;
+  const ownEdits = editLabels(title);
   return (
     sameCredit(artist, lead, credited) &&
-    recordingTitleDifference({ title }, { title: found.title }) === null &&
+    namesEveryCredit(artist, title, credited, found.title) &&
+    recordingTitleDifference({ title }, { title: found.title, album: found.album }) === null &&
+    [...editLabels(found.title)].every((label) => ownEdits.has(label)) &&
     !marksOtherRecording(found.album, found.title)
   );
 }
@@ -434,34 +500,60 @@ const OTHER_RECORDING_PHRASES = [
   /\bcovers?\b/,
 ];
 
+/** A title or album name without its bracketed and " - " parts, lower case. */
+const nameProper = (text: string) =>
+  text
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .split(/\s[-–—]\s/)[0]
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 /**
  * Whether an album's name says its tracks are other recordings than the studio one (see
- * OTHER_RECORDING_PHRASES); a phrase the track's own title carries does not count.
+ * OTHER_RECORDING_PHRASES). An album named after the track ("Live and Let Die") is read without
+ * that name, so the title's own words are not taken for a phrase; a title's words never excuse
+ * any other part of the album's name ("Covers" for "Cover Me").
  */
 export function marksOtherRecording(album: string | undefined, title: string): boolean {
-  const name = (album ?? "").toLowerCase();
-  const own = title.toLowerCase();
-  return OTHER_RECORDING_PHRASES.some((phrase) => phrase.test(name) && !phrase.test(own));
+  let name = (album ?? "").toLowerCase().replace(/\s+/g, " ");
+  const own = nameProper(title);
+  if (own && nameProper(album ?? "") === own) name = name.replace(own, " ");
+  return OTHER_RECORDING_PHRASES.some((phrase) => phrase.test(name));
 }
 
-/** The last year in parentheses a node's label names ("Respect - Aretha Franklin (1967)"). */
+/** A year from 1900 to 2100 in a text, the first one. */
+function yearIn(text: string | null | undefined): number | null {
+  const year = Number(text?.match(/\b(\d{4})\b/)?.[1]);
+  return year >= 1900 && year <= 2100 ? year : null;
+}
+
+/**
+ * The year a node's label names: the last bracketed part that holds a year ("Respect - Aretha
+ * Franklin (1967)", "[1976]", "(1967 single)", "(1967–68)").
+ */
 function labelYear(label: string): number | null {
-  const years = [...label.matchAll(/\((\d{4})\)/g)]
-    .map((match) => Number(match[1]))
-    .filter((year) => year >= 1900 && year <= 2100);
+  const years = [...label.matchAll(/\(([^()]*)\)|\[([^[\]]*)\]/g)]
+    .map((match) => yearIn(match[1] ?? match[2]))
+    .filter((year) => year !== null);
   return years.at(-1) ?? null;
 }
 
 /**
- * Whether a release dates from within a year of the year a node's label names (always, when it
- * names none). This decides the preview only: a release from years later may be the recording
+ * Whether a release dates from within a year of the year a node's label names, or else of the
+ * year the model gave for the node (`year`); always, when neither names one. This decides the
+ * preview only: a release from years later may be the recording
  * reissued (a compilation) or another recording whose album name says nothing of it ("Aretha at
  * Fillmore West" for a 1967 "Respect"), so it keeps its Spotify id (a click analyses that track,
  * which shows its own album and date) but plays no clip, as missing is better than another
  * recording. A label without a year cannot tell such a live album apart.
  */
-export function releaseYearFits(label: string, releaseDate: string | undefined): boolean {
-  const named = labelYear(label);
+export function releaseYearFits(
+  label: string,
+  releaseDate: string | undefined,
+  year?: string | null,
+): boolean {
+  const named = labelYear(label) ?? yearIn(year);
   if (named === null) return true;
   const released = Number.parseInt(releaseDate?.slice(0, 4) ?? "", 10);
   return released > 0 && Math.abs(released - named) <= 1;
@@ -524,34 +616,55 @@ const NOTHING: NodeLookup = { artwork: NO_ARTWORK, previewUrl: null, byIsrc: nul
 function fromCache(node: NamedNode, cached: SpotifySearchResult): NodeLookup {
   const track = cachedTrack(cached);
   if (!cached.spotifyId || !track.album || !strictlyMatches(node, track)) return NOTHING;
-  if (!cached.trackDetails || !releaseYearFits(node.label, track.releaseDate)) {
+  if (!cached.trackDetails || !releaseYearFits(node.label, track.releaseDate, node.year)) {
     return { artwork: cached, previewUrl: null, byIsrc: null };
   }
   return { artwork: cached, previewUrl: null, byIsrc: isrcRequest(track) };
 }
 
 /**
- * Artwork for a node, from the cache or a Spotify search, only when the track found strictly
- * matches the node: its cover, its Spotify id and its preview. A loose match gives nothing (a
- * click on the node then searches its text). The preview is Spotify's own clip when the player
- * may load it, else the track is to be looked up on Deezer by its ISRC (`byIsrc`, when it has
- * one). A cached entry that may be served (servable) is judged the same way (fromCache), with
- * the Deezer lookup only: no preview is stored. A failed search gives nothing and caches nothing,
- * so a later run tries again; a cancelled run rejects. A row that may not be served (with an id
- * but no details) is searched again; when that search fails or finds nothing, the row is kept.
+ * The Spotify searches of one run. After a rate limit or a timeout of Spotify's (`stops`) no
+ * more are made: the next would most likely be refused or wait as long, and the run has a
+ * deadline. A node not searched gets no artwork.
  */
-async function lookUpNode(node: NamedNode, signal?: AbortSignal): Promise<NodeLookup> {
-  const cached = getCachedArtwork(node);
-  if (cached && servable(cached)) return fromCache(node, cached);
+function spotifySearches(signal: AbortSignal | undefined) {
+  let stopped = false;
+  return async (label: string): Promise<SpotifyTrackSummary | undefined | "failed"> => {
+    if (stopped) return "failed";
+    try {
+      const [found] = await searchTracks(label, 1, signal);
+      return found;
+    } catch (error) {
+      if (signal?.aborted || isAbortError(error)) throw error;
+      log.warn(`Spotify search for "${label}" failed: ${describeError(error)}`);
+      if (stops(error) && !stopped) {
+        stopped = true;
+        log.warn(
+          "Genealogy artwork: no more Spotify searches in this run; the other nodes get none",
+        );
+      }
+      return "failed";
+    }
+  };
+}
 
-  let found: SpotifyTrackSummary | undefined;
-  try {
-    [found] = await searchTracks(node.label, 1, signal);
-  } catch (error) {
-    if (signal?.aborted || isAbortError(error)) throw error;
-    log.warn(`Spotify search for "${node.label}" failed: ${describeError(error)}`);
-    return NOTHING;
-  }
+/**
+ * Artwork for a node from a Spotify search, only when the track found strictly matches the node:
+ * its cover, its Spotify id and its preview. A loose match gives nothing (a click on the node then
+ * searches its text). The preview is Spotify's own clip when the player may load it, else the
+ * track is to be looked up on Deezer by its ISRC (`byIsrc`, when it has one). A failed search
+ * gives nothing and caches nothing, so a later run tries again; a cancelled run rejects. `cached`
+ * is a row that may not be served (with an id but no details): when the search fails or finds
+ * nothing, it is kept.
+ */
+async function searchNode(
+  node: NamedNode,
+  cached: SpotifySearchResult | undefined,
+  search: ReturnType<typeof spotifySearches>,
+  signal?: AbortSignal,
+): Promise<NodeLookup> {
+  const found = await search(node.label);
+  if (found === "failed") return NOTHING;
   if (!found && cached) {
     // Searched again for a row without details and found nothing: it stays until it expires.
     signal?.throwIfAborted();
@@ -575,7 +688,7 @@ async function lookUpNode(node: NamedNode, signal?: AbortSignal): Promise<NodeLo
   const other = !!found && marksOtherRecording(found.album, found.title);
   setCachedArtwork(node, other ? withoutId(artwork) : artwork);
   if (!found || !strictlyMatches(node, found)) return NOTHING;
-  if (!releaseYearFits(node.label, found.releaseDate)) {
+  if (!releaseYearFits(node.label, found.releaseDate, node.year)) {
     return { artwork, previewUrl: null, byIsrc: null };
   }
   if (found.previewUrl && isAllowedPreviewUrl(found.previewUrl)) {
@@ -596,20 +709,23 @@ export interface NodeArtwork {
   spotifyId?: string;
 }
 
-/** Nodes looked up at once; a short pause between batches keeps clear of Spotify's limits. */
+/** Spotify searches made at once; a short pause between batches keeps clear of its limits. */
 const BATCH_SIZE = 5;
 const BATCH_PAUSE_MS = 100;
 
 /**
  * Artwork for the genealogy nodes, by node id (see the module comment for what a node gets).
  *
- * The analysed track's node (group 1) gets `currentTrackCoverUrl`. Every other node is looked up
- * by the title and artist the model named for it, and gets a cover, Spotify id and preview only
- * for that recording. A node without an id, or with an id an earlier node has, gets no entry: the
- * answer is merged by id, so it could not be told apart. A node whose lookup fails gets an entry
- * without artwork; the other nodes keep theirs. The answer holds no links and no node of its own.
+ * The analysed track's node (the id "current") gets `currentTrackCoverUrl`. Every other node is
+ * looked up by the title and artist the model named for it, and gets a cover, Spotify id and
+ * preview only for that recording. Only the nodes that need a Spotify search take a turn in its
+ * batches (a node served from the cache or naming no title or artist makes none). A node without
+ * an id, or with an id an earlier node has, gets no entry: the answer is merged by id, so it could
+ * not be told apart. A node whose lookup fails gets an entry without artwork; the other nodes keep
+ * theirs. The answer holds no links and no node of its own.
  *
- * @param genealogy - The composed genealogy; only its nodes are read
+ * @param genealogy - The composed genealogy, its nodes with the model's year when it gave one;
+ *   only its nodes are read
  * @param currentTrackCoverUrl - The cover URL of the analysed track (already known)
  * @param signal - The run's abort signal: a cancelled run stops the Spotify and Deezer requests
  *   and rejects
@@ -617,7 +733,7 @@ const BATCH_PAUSE_MS = 100;
  *   source errors
  */
 export async function enrichGenealogyWithArtwork(
-  genealogy: { nodes?: readonly GenealogyNode[] } | undefined,
+  genealogy: { nodes?: readonly ArtworkNode[] } | undefined,
   currentTrackCoverUrl: string,
   signal?: AbortSignal,
   report?: (error: SourceError) => void,
@@ -632,38 +748,84 @@ export async function enrichGenealogyWithArtwork(
 
   log.info(`Looking up artwork for ${nodes.length} genealogy nodes`);
   const deezer = deezerPreviews(signal, report);
+  const search = spotifySearches(signal);
 
-  const artworkOf = async (node: GenealogyNode): Promise<NodeArtwork> => {
-    const { id } = node;
-    if (node.group === 1) return currentTrackCoverUrl ? { id, img: currentTrackCoverUrl } : { id };
+  /** The node's entry: what `lookup` found, with the Deezer preview when it names one. */
+  const entryOf = async (id: string, lookup: NodeLookup): Promise<NodeArtwork> => {
+    const { artwork, previewUrl, byIsrc } = lookup;
+    const preview = previewUrl ?? (byIsrc ? await deezer.lookUp(byIsrc) : null);
+    return {
+      id,
+      ...(artwork.coverUrl ? { img: artwork.coverUrl } : {}),
+      ...(preview ? { previewUrl: preview } : {}),
+      ...(artwork.spotifyId ? { spotifyId: artwork.spotifyId } : {}),
+    };
+  };
+  /**
+   * A node whose lookup threw: source failures are handled where they happen, so what reaches
+   * here is a bug. It is logged as an error, with its stack, and costs that node its artwork only.
+   */
+  const failed = (id: string, error: unknown): NodeArtwork => {
+    log.error(`Could not look up the artwork of node "${id}"`, { err: error });
+    return { id };
+  };
+  const guarded = async (id: string, task: () => Promise<NodeArtwork>): Promise<NodeArtwork> => {
     try {
-      if (!node.trackTitle?.trim() || !node.trackArtist?.trim()) return { id };
-      const { artwork, previewUrl, byIsrc } = await lookUpNode(node, signal);
-      const preview = previewUrl ?? (byIsrc ? await deezer.lookUp(byIsrc) : null);
-      return {
-        id,
-        ...(artwork.coverUrl ? { img: artwork.coverUrl } : {}),
-        ...(preview ? { previewUrl: preview } : {}),
-        ...(artwork.spotifyId ? { spotifyId: artwork.spotifyId } : {}),
-      };
+      return await task();
     } catch (error) {
       // A cancelled run stops here: it reports nothing.
       if (signal?.aborted || isAbortError(error)) throw error;
-      log.warn(`Could not look up the artwork of node "${id}": ${describeError(error)}`);
-      return { id };
+      return failed(id, error);
     }
   };
 
+  // Which nodes need a Spotify search is known before the first one: the cache is read at once.
+  // A node served from the cache goes on to its Deezer lookup (if any) without waiting for a turn.
+  const entries: Array<Promise<NodeArtwork>> = [];
+  const toSearch: Array<{ at: number; node: ArtworkNode; cached?: SpotifySearchResult }> = [];
+  nodes.forEach((node, at) => {
+    const { id } = node;
+    try {
+      if (id === "current") {
+        entries[at] = Promise.resolve(
+          currentTrackCoverUrl ? { id, img: currentTrackCoverUrl } : { id },
+        );
+      } else if (!node.trackTitle?.trim() || !node.trackArtist?.trim()) {
+        entries[at] = Promise.resolve({ id });
+      } else {
+        const cached = getCachedArtwork(node);
+        if (cached && servable(cached)) {
+          const lookup = fromCache(node, cached);
+          entries[at] = guarded(id, () => entryOf(id, lookup));
+        } else {
+          toSearch.push({ at, node, cached });
+        }
+      }
+    } catch (error) {
+      entries[at] = Promise.resolve(failed(id, error));
+    }
+  });
+  // Awaited below; until then a rejection (a cancelled run) must not go unhandled.
+  const servedFirst = Promise.all(entries.filter(Boolean));
+  servedFirst.catch(() => {});
+
   try {
-    const found: NodeArtwork[] = [];
-    for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
-      found.push(...(await Promise.all(nodes.slice(i, i + BATCH_SIZE).map(artworkOf))));
-      if (i + BATCH_SIZE < nodes.length) {
+    for (let i = 0; i < toSearch.length; i += BATCH_SIZE) {
+      const batch = toSearch.slice(i, i + BATCH_SIZE).map(({ at, node, cached }) => {
+        entries[at] = guarded(node.id, async () =>
+          entryOf(node.id, await searchNode(node, cached, search, signal)),
+        );
+        return entries[at];
+      });
+      await Promise.all(batch);
+      if (i + BATCH_SIZE < toSearch.length) {
         await new Promise((resolve) => setTimeout(resolve, BATCH_PAUSE_MS));
       }
     }
-    log.info(`Found artwork for ${found.filter((n) => n.img).length}/${found.length} nodes`);
-    return { nodes: found };
+    await servedFirst;
+    const answer = await Promise.all(entries);
+    log.info(`Found artwork for ${answer.filter((n) => n.img).length}/${answer.length} nodes`);
+    return { nodes: answer };
   } finally {
     deezer.done();
   }

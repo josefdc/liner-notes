@@ -195,7 +195,7 @@ describe("scoutNode's stored results", () => {
 
     const out = await graph.invoke({ songQuery: "Song A" });
 
-    expect(TRACKS_NAMESPACE).toEqual(["tracks", "v6"]);
+    expect(TRACKS_NAMESPACE).toEqual(["tracks", "v7"]);
     expect(out.trackData ?? null).toBeNull();
     expect(out.spotifyData).toMatchObject({ id: "t1" });
   });

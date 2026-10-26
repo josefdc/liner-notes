@@ -205,6 +205,8 @@ interface Composed {
   factoids: Factoid[];
   claims: Claim[];
   genealogy: Genealogy;
+  /** The year the model gave for a node, by node id: for the artwork's release check only. */
+  nodeYears: Map<string, string>;
 }
 
 /**
@@ -317,22 +319,34 @@ export function composeFromOutput(
       },
     ];
   });
-  return { factoids, claims, genealogy: { nodes, links } };
+  const nodeYears = new Map<string, string>();
+  for (const node of output.genealogyNodes) {
+    const id = idOf.get(node.id);
+    if (id && id !== "current" && node.year?.trim()) nodeYears.set(id, node.year.trim());
+  }
+  return { factoids, claims, genealogy: { nodes, links }, nodeYears };
 }
 
 /**
  * Album artwork and previews for the genealogy nodes. The enricher's answer is used for
- * artwork only: nodes, labels and links stay as composed. `sourceErrors` holds a source the
- * enricher could not read for the previews (Deezer).
+ * artwork only: nodes, labels and links stay as composed, and an entry is merged into the node
+ * with its id (an entry for no node is ignored). The enricher is given the model's year for a
+ * node (`nodeYears`) for its release check; the result's nodes do not carry it. `sourceErrors`
+ * holds a source the enricher could not read for the previews (Deezer).
  */
 async function withArtwork(
   genealogy: Genealogy,
   coverUrl: string,
   signal: AbortSignal | undefined,
+  nodeYears: ReadonlyMap<string, string> = new Map(),
 ): Promise<{ genealogy: Genealogy; sourceErrors: SourceError[] }> {
   const sourceErrors: SourceError[] = [];
   try {
-    const enriched = await enrichGenealogyWithArtwork(genealogy, coverUrl, signal, (error) =>
+    const dated = genealogy.nodes.map((node) => {
+      const year = nodeYears.get(node.id);
+      return year ? { ...node, year } : node;
+    });
+    const enriched = await enrichGenealogyWithArtwork({ nodes: dated }, coverUrl, signal, (error) =>
       sourceErrors.push(error),
     );
     const byId = new Map(enriched.nodes.map((node) => [node.id, node]));
@@ -541,7 +555,12 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     );
 
     status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
-    const enriched = await withArtwork(composed.genealogy, spotify.coverUrl, signal);
+    const enriched = await withArtwork(
+      composed.genealogy,
+      spotify.coverUrl,
+      signal,
+      composed.nodeYears,
+    );
     const runErrors = enriched.sourceErrors;
     const trackData: TrackData = finalized({
       ...baseFields(state, spotify),

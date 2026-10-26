@@ -109,7 +109,11 @@ vi.mock("../sources/listenbrainz.js", () => ({
 }));
 const hooks = vi.hoisted(() => ({
   /** Replaces the artwork enricher when set. */
-  enrich: null as null | ((genealogy: unknown) => Promise<unknown>),
+  enrich: null as
+    | null
+    | ((answer: { nodes: Array<{ id: string }> }) => Promise<{
+        nodes: Array<{ id: string }>;
+      }>),
   putAudio: vi.fn(),
   putResearch: vi.fn(),
 }));
@@ -122,10 +126,16 @@ vi.mock("../store/cache.js", () => ({
     putResearch: hooks.putResearch,
   }),
 }));
-vi.mock("./enricher.js", () => ({
-  enrichGenealogyWithArtwork: async (genealogy: unknown) =>
-    hooks.enrich ? hooks.enrich(genealogy) : genealogy,
-}));
+vi.mock(
+  "./enricher.js",
+  () =>
+    ({
+      enrichGenealogyWithArtwork: async (genealogy) => {
+        const answer = { nodes: (genealogy?.nodes ?? []).map(({ id }) => ({ id })) };
+        return hooks.enrich ? hooks.enrich(answer) : answer;
+      },
+    }) satisfies Partial<typeof import("./enricher.js")>,
+);
 
 import { createLlm, type LlmDependencies } from "../llm/invoke.js";
 import {

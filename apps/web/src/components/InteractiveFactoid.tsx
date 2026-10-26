@@ -194,7 +194,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
           {factoid.title}
         </span>
         <span
-          className={`ml-auto text-[9px] font-mono px-2 py-0.5 rounded-full ${style.color} bg-white/5`}
+          className={`ml-auto text-chrome font-mono px-2 py-0.5 rounded-full ${style.color} bg-white/5`}
         >
           {style.label}
         </span>
@@ -214,7 +214,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
 
       {/* Entities count indicator */}
       {factoid.entities && factoid.entities.length > 0 && (
-        <div className="relative mt-3 pt-2 border-t border-white/5 text-[10px] font-mono text-cyber/80 flex items-center gap-1.5">
+        <div className="relative mt-3 pt-2 border-t border-white/5 text-chrome font-mono text-cyber/80 flex items-center gap-1.5">
           <span className="inline-block w-1 h-1 rounded-full bg-cyber/40" />
           {factoid.entities.length} CLICKABLE{' '}
           {factoid.entities.length === 1 ? 'ENTITY' : 'ENTITIES'}

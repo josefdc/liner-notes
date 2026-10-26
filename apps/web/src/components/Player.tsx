@@ -407,7 +407,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={onBack}>
             BACK TO BASE
-            <span className="hidden lg:inline text-text-muted text-[10px] ml-1">Esc</span>
+            <span className="hidden lg:inline text-text-muted text-chrome ml-1">Esc</span>
           </Button>
           {onNewSearch && (
             <Button variant="ghost" size="sm" leftIcon={<Search size={12} />} onClick={onNewSearch}>
@@ -752,8 +752,8 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             </div>
           )}
           <div className="absolute bottom-4 right-4 z-10 text-right pointer-events-none hidden md:block">
-            <p className="text-[10px] text-text-tertiary font-mono">D3.JS FORCE SIMULATION</p>
-            <p className="text-[10px] text-cyber font-mono">INTERACTIVE: ENABLED</p>
+            <p className="text-chrome text-text-tertiary font-mono">D3.JS FORCE SIMULATION</p>
+            <p className="text-chrome text-cyber font-mono">INTERACTIVE: ENABLED</p>
           </div>
         </div>
       </div>

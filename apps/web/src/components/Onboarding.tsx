@@ -81,10 +81,10 @@ class BannerBoundary extends Component<
     return (
       <section
         aria-label={title}
-        className="bg-analog/5 border border-analog/30 rounded-md p-6 space-y-4 text-left"
+        className="bg-status-warning/5 border border-status-warning/30 rounded-md p-6 space-y-4 text-left"
       >
         <div role="alert" className="space-y-4">
-          <h2 className="text-analog text-sm font-mono uppercase tracking-widest text-center">
+          <h2 className="text-status-warning text-sm font-mono uppercase tracking-widest text-center">
             {title}
           </h2>
           <p className="text-text-secondary text-xs font-mono leading-relaxed">{text}</p>
@@ -591,7 +591,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       className={`h-[100dvh] w-full flex flex-col items-center bg-void text-white relative overflow-y-auto overflow-x-hidden ${!isAnalyzing && status !== 'complete' ? 'justify-center' : 'justify-start pt-[min(8vh,4rem)]'}`}
     >
       {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-gray-900 via-void to-void opacity-40"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-void-lighter via-void to-void opacity-40"></div>
 
       {!isAnalyzing && status !== 'complete' ? (
         <div className="z-10 text-center space-y-12 animate-fade-in-up max-w-md mx-auto px-4">
@@ -723,7 +723,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-analog/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-warning/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
               >
                 or try a different song
               </button>
@@ -755,7 +755,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-analog/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
+                  className="text-xs font-mono text-text-tertiary hover:text-text-secondary underline underline-offset-4 transition-colors rounded-sm focus-visible:text-text-secondary focus-visible:ring-1 focus-visible:ring-status-error/40 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none"
                 >
                   or try a different song
                 </button>
@@ -849,7 +849,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <div className="text-center mb-3">
                 <p className="text-sm font-mono text-text-secondary">Is this the right track?</p>
                 {/* Keyboard hint above candidates */}
-                <p className="text-[10px] font-mono text-text-muted mt-1">
+                <p className="text-chrome font-mono text-text-muted mt-1">
                   ↑↓ navigate &nbsp; Enter select &nbsp; hover pauses timer
                 </p>
               </div>
@@ -940,7 +940,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   className="absolute inset-0 animate-progress-shimmer"
                   style={{
                     backgroundImage:
-                      'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                      'linear-gradient(90deg, transparent, var(--color-border-hover), transparent)',
                     backgroundSize: '200px 100%',
                     backgroundRepeat: 'no-repeat',
                   }}

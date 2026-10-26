@@ -78,6 +78,82 @@ describe("hex-colours-outside-tokens", () => {
   });
 });
 
+describe("colour-literals-design-system", () => {
+  it.each([
+    ["a hex colour", 'fill="#fff"'],
+    ["a hex colour in a class", 'className="shadow-[0_0_6px_#00F0FF]"'],
+    ["rgb()", "color: 'rgb(0, 240, 255)'"],
+    [
+      "rgba() in a class",
+      'className="bg-[radial-gradient(circle,_rgba(20,20,30,0.5)_0%,_transparent)]"',
+    ],
+    ["hsl() in a template literal", "const from = `hsl(` + hue + `, 70%, 35%)`;"],
+    ["hsla()", "const c = 'hsla(10, 50%, 50%, 0.5)';"],
+    ["upper-case RGB() in CSS", "a { color: RGB(0 0 0); }"],
+  ])("counts %s", (_name, line) => {
+    const path = line.includes("{ color") ? "apps/web/src/a.css" : "apps/web/src/snippet.tsx";
+    expect(count("colour-literals-design-system", line, path)).toBe(1);
+  });
+
+  it.each([
+    ["a token in a class", 'className="shadow-[0_0_6px_var(--color-cyber)]"'],
+    ["a theme.ts value", "fill: colors.white"],
+    [
+      "color-mix() of tokens",
+      "background: color-mix(in srgb, var(--color-cyber) 20%, transparent)",
+    ],
+    ["a comment", "// was rgba(255,255,255,0.3)"],
+    ["a function whose name ends in rgb", "const c = toRgb(value);"],
+    ["an element id", 'fill="url(#placeholder)"'],
+  ])("ignores %s", (_name, line) => {
+    expect(count("colour-literals-design-system", line)).toBe(0);
+  });
+
+  it("scans web source and stylesheets, but not the tokens, theme.ts or tests", () => {
+    const { files } = rule("colour-literals-design-system");
+    expect(files("apps/web/src/components/Thing.tsx")).toBe(true);
+    expect(files("apps/web/src/styles/index.css")).toBe(true);
+    expect(files("apps/web/src/styles/placeholder.ts")).toBe(true);
+    expect(files("apps/web/src/styles/tokens.css")).toBe(false);
+    expect(files("apps/web/src/styles/theme.ts")).toBe(false);
+    expect(files("apps/web/src/components/Thing.test.tsx")).toBe(false);
+    expect(files("apps/api/src/a.ts")).toBe(false);
+  });
+});
+
+describe("gray-palette-utilities", () => {
+  it.each([
+    ["a text class", 'className="text-gray-400 text-xs"'],
+    ["a background class", "'bg-gray-900'"],
+    ["a gradient stop", 'className="bg-radial from-gray-900 via-void"'],
+    ["a class with an opacity", 'className="border-gray-600/50"'],
+    ["a class with an arbitrary opacity", 'className="bg-gray-800/[0.4]"'],
+    ["a class after a variant", "'group-hover/item:border-gray-400'"],
+    ["the lightest and darkest steps", "'bg-gray-50 text-gray-950'"],
+  ])("counts %s", (_name, line) => {
+    expect(count("gray-palette-utilities", line)).toBe(line.includes("gray-50 ") ? 2 : 1);
+  });
+
+  it("counts a class in a stylesheet's @apply", () => {
+    expect(count("gray-palette-utilities", "a { @apply bg-gray-700; }", "apps/web/src/a.css")).toBe(
+      1,
+    );
+  });
+
+  it.each([
+    ["the grey tokens in a stylesheet", "a { background: var(--color-gray-700); }"],
+    ["a grey token in a class", 'className="bg-(--color-gray-700)"'],
+    ["the theme.ts grey scale", "stroke={colors.gray[700]}"],
+    ["the Badge variant", '<Badge variant="gray">'],
+    ["a comment", "// was text-gray-400"],
+    ["a step that is not on the scale", "'text-gray-450'"],
+    ["the token classes", 'className="text-text-tertiary bg-void-lighter border-white/30"'],
+  ])("ignores %s", (_name, line) => {
+    const path = line.startsWith("a {") ? "apps/web/src/a.css" : "apps/web/src/snippet.tsx";
+    expect(count("gray-palette-utilities", line, path)).toBe(0);
+  });
+});
+
 describe("allow markers", () => {
   it("exempt only the rule they name", () => {
     const line = (id) => `const s = 'Command Center'; // guard-allow: ${id} — kept for a test`;
@@ -459,6 +535,8 @@ describe("baselines", () => {
       "stock-images-web": 0,
       "tailwind-v3-variable-classes": 0,
       "hex-colours-outside-tokens": 0,
+      "colour-literals-design-system": 0,
+      "gray-palette-utilities": 0,
       "dotenv-outside-config": 0,
       "string-sentinel-tool-results": 0,
       "prototype-copy": 0,
@@ -516,6 +594,8 @@ describe("baselines", () => {
         "stock-images-web": 0,
         "tailwind-v3-variable-classes": 0,
         "hex-colours-outside-tokens": 0,
+        "colour-literals-design-system": 0,
+        "gray-palette-utilities": 0,
         "dotenv-outside-config": 0,
         "string-sentinel-tool-results": 0,
         "prototype-copy": 0,

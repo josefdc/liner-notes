@@ -152,10 +152,14 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
 };
 
 const Notice: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="flex gap-3 items-start px-4 py-3 border border-analog/30 bg-analog/5 rounded-md">
-    <TriangleAlert size={16} className="text-analog flex-shrink-0 mt-0.5" aria-hidden="true" />
+  <div className="flex gap-3 items-start px-4 py-3 border border-status-warning/30 bg-status-warning/5 rounded-md">
+    <TriangleAlert
+      size={16}
+      className="text-status-warning flex-shrink-0 mt-0.5"
+      aria-hidden="true"
+    />
     <div className="text-xs font-mono text-text-secondary space-y-1">
-      <p className="text-analog uppercase tracking-widest">{title}</p>
+      <p className="text-status-warning uppercase tracking-widest">{title}</p>
       {children}
     </div>
   </div>

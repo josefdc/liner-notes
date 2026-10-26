@@ -50,13 +50,7 @@ export const INVERSE = {
  * Text below 4.5:1 whose fix is planned elsewhere: { name (as reported), file (under src), issue }.
  * Only the app's own source is matched against it.
  */
-export const KNOWN = [
-  {
-    name: '--color-text-tertiary/60',
-    file: 'components/SystemConsole.tsx',
-    issue: 'the console timestamp is opacity-60; the #30 sweep removes it',
-  },
-];
+export const KNOWN = [];
 const isBase = (name) => /^--color-void(-|$)/.test(name);
 const isTranslucentSurface = (name) => /^--color-surface(-|$)/.test(name);
 const isState = (name) => /^--color-surface-(hover|active)$/.test(name);

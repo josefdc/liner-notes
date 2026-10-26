@@ -324,6 +324,37 @@ export const rules = [
     scan: "code",
   },
   {
+    id: "colour-literals-design-system",
+    owner: "#30",
+    description:
+      "Colour literals (hex, rgb(), hsl()) in web source outside the design tokens (styles/tokens.css, styles/theme.ts)",
+    files: (p) =>
+      p.startsWith("apps/web/src/") &&
+      /\.([cm]?[jt]sx?|css)$/.test(p) &&
+      p !== "apps/web/src/styles/tokens.css" &&
+      p !== "apps/web/src/styles/theme.ts" &&
+      !isTestSupport(p),
+    pattern: [
+      /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g,
+      // Not `\b`: in a Tailwind arbitrary value the colour follows a `_` (`_rgba(0,0,0,0.5)`).
+      /(?<![A-Za-z0-9$])(?:rgba?|hsla?)\(/gi,
+    ],
+    scan: "code",
+  },
+  {
+    id: "gray-palette-utilities",
+    owner: "#30",
+    description:
+      "Classes on Tailwind's gray scale (text-gray-400, hover:border-gray-600/50) in web source: use the surface, border and text tokens",
+    files: (p) =>
+      p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p) && !isTestSupport(p),
+    // A utility's name ends in `-gray-<step>`, with an optional opacity; a variant (`hover:`,
+    // `group-hover/item:`) may come before it. A custom property (`var(--color-gray-700)`) is
+    // not a class: a match never starts right after a `-`.
+    pattern: /(?<![\w-])(?:[a-z]+-)+gray-(?:50|[1-9]00|950)(?:\/(?:\d+|\[[^\]\s]+\]))?(?![\w-])/g,
+    scan: "code",
+  },
+  {
     id: "dotenv-outside-config",
     owner: "#5",
     description: "dotenv.config() outside apps/api/src/config (the API loads its env once, first)",

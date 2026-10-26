@@ -126,12 +126,12 @@ export class RequestPacer {
   /** The earliest start a new request may take at `now`, by the spacing, hold and budgets. */
   #earliest(now: number, budgets: readonly Budget[]): number {
     const longest = Math.max(0, ...budgets.map((b) => b.windowMs));
-    this.#starts = this.#starts.filter((t) => t > now - longest);
+    this.#starts = this.#starts.filter((t) => t + longest > now);
     let at = Math.max(now, this.#next, this.#heldUntil);
     for (const { max, windowMs } of budgets) {
       // Within this window, the slot frees when the oldest start that keeps it full leaves it.
       // Moving `at` later for one budget only empties the windows of the others.
-      const inside = this.#starts.filter((t) => t > at - windowMs);
+      const inside = this.#starts.filter((t) => t + windowMs > at);
       if (inside.length >= max) at = Math.max(at, inside[inside.length - max] + windowMs);
     }
     return at;
@@ -233,11 +233,16 @@ interface Waiter {
 /**
  * When a request of `lane` may start, at or after `from`, given the starts so far (in order).
  * Within a window, a slot frees when the oldest start that keeps it full leaves it.
+ *
+ * A start is inside the window at `at` while `start.at + windowMs > at`: the same sum that moves
+ * `at`, so the start that frees the slot is outside at the new `at`. Written as
+ * `start.at > at - windowMs`, a fractional clock time can round so that it never leaves, and the
+ * loop never ends.
  */
 function earliestStart(starts: readonly Start[], lane: Lane, from: number, pace: LanePace): number {
   let at = from;
   for (;;) {
-    const inside = starts.filter((start) => start.at > at - pace.windowMs);
+    const inside = starts.filter((start) => start.at + pace.windowMs > at);
     if (inside.length >= pace.max) {
       at = inside[inside.length - pace.max].at + pace.windowMs;
       continue;
@@ -296,7 +301,7 @@ export class LanePacer {
   }
 
   #prune(now: number, pace: LanePace): void {
-    this.#starts = this.#starts.filter((start) => start.at > now - pace.windowMs);
+    this.#starts = this.#starts.filter((start) => start.at + pace.windowMs > now);
   }
 
   /** When a new request of `lane` would start if no other request came ahead of it. */

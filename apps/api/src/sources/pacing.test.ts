@@ -269,6 +269,19 @@ describe("a lane pacer", () => {
     expect(background.out).toEqual(["refused"]);
   });
 
+  it("gives a full window's next slot at a fractional clock time, where the window's edge rounds", async () => {
+    // (1000.2 + 5000) - 5000 < 1000.2 in floating point: compared that way, the first start would
+    // never leave its window and finding the next slot would never end.
+    vi.useRealTimers();
+    vi.spyOn(performance, "now").mockReturnValue(1000.2);
+    const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
+    await pacer.slot();
+    const next = pacer.slot().then(() => "started");
+    expect(pacer.waiting).toBe(1);
+    pacer.clear();
+    await expect(next).resolves.toBe("started");
+  });
+
   it("lets a waiting request leave at once when its signal aborts, taking no slot", async () => {
     const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
     await pacer.slot();

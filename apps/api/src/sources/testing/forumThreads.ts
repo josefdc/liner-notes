@@ -54,8 +54,8 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "Daft Punk have split. posted by member at 6:47 AM on February 22, 2021 [3 favorites] One More Time still sounds like the future. posted by MusicLover at 7:02 AM on February 22, 2021 [12 favorites]",
   ],
   [
-    "a MetaFilter thread without favourites",
-    "Daft Punk have split. posted by member at 6:47 AM on February 22, 2021 One More Time still sounds like the future. posted by MusicLover at 7:02 AM on February 22, 2021",
+    "a MetaFilter post with its comments total",
+    "Daft Punk have split. (42 comments total) posted by member at 6:47 AM on February 22, 2021 One More Time still sounds like the future.",
   ],
   [
     "a Stack Exchange comment chain with a capitalised Add a comment",
@@ -66,12 +66,12 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "RecordFan Feb 22, 2021 #1 The vocal is Romanthony. DiscoHead Feb 22, 2021 #2 RIP. ThirdFan Feb 23, 2021 #3 Classic.",
   ],
   [
-    "XenForo post headers dated by weekday",
-    "RecordFan Sunday at 10:15 AM #3 The vocal is Romanthony. DiscoHead Sunday at 10:20 AM #4 RIP.",
-  ],
-  [
     "a XenForo post header dated by weekday, with its user card",
     "RecordFan Sunday at 10:15 AM #3 The vocal is Romanthony. Joined: Mar 3, 2010",
+  ],
+  [
+    "a XenForo post header with its poster's title",
+    "RecordFan Forum Resident Feb 22, 2021 #3 The vocal is Romanthony, and the sample is More Spell on You.",
   ],
   [
     "a XenForo 2 thread's header",
@@ -82,12 +82,24 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "RecordFan February 22, 2021, 3:15pm #1 Daft Punk split today. DiscoHead February 22, 2021, 3:20pm #2 One More Time still holds up. 1 Reply 5 Likes",
   ],
   [
+    "a Discourse thread with day-first dates",
+    "RecordFan 22 Feb 2021, 15:15 #1 Daft Punk split today. DiscoHead 22 Feb 2021, 15:20 #2 One More Time still holds up.",
+  ],
+  [
     "a Discourse post with its topic map",
     "Daft Punk split today. created Feb '21 last reply Mar '21 12 replies RecordFan February 22, 2021, 3:15pm #1 The vocal is Romanthony.",
   ],
   [
-    "a phpBB post with its user card",
-    "Re: Daft Punk vocoder Post by RecordFan » Mon Feb 22, 2021 3:15 pm The vocal is Romanthony. Posts: 1234 Joined: Mon Mar 03, 2010 10:00 am",
+    "a phpBB post with its poster's join date",
+    "Re: Daft Punk vocoder Post by RecordFan » Mon Feb 22, 2021 3:15 pm The vocal is Romanthony. Joined: Mon Mar 03, 2010 10:00 am",
+  ],
+  [
+    "a phpBB post with its poster's post count",
+    "Re: Daft Punk vocoder Post by RecordFan » Mon Feb 22, 2021 3:15 pm The vocal is Romanthony. Posts: 1234",
+  ],
+  [
+    "phpBB posts in subsilver's layout",
+    "Post subject: Re: Daft Punk vocoder Posted: Mon Feb 22, 2021 3:15 pm The vocal is Romanthony.",
   ],
   [
     "phpBB bylines",
@@ -100,6 +112,10 @@ export const FORUM_THREADS: Array<[string, string]> = [
   [
     "Reddit's text on another host",
     "RecordFan • 3y ago The vocal is Romanthony. 245 Reply Share DiscoHead • 3y ago RIP, and the sample is More Spell on You.",
+  ],
+  [
+    "today's Reddit text on another host",
+    "RecordFan • 3 yr. ago The vocal is Romanthony. Upvote 245 Downvote Reply reply Award Share",
   ],
   [
     "old Reddit's text on another host",
@@ -115,7 +131,11 @@ export const FORUM_THREADS: Array<[string, string]> = [
   ],
   [
     "a Gearspace post card on another host",
-    "#3 22nd February 2021 RecordFan Gear Addict 15 years The vocal is Romanthony. Quote Reply Report Post",
+    "#3 22nd February 2021 RecordFan Gear Addict 15 years The vocal is Romanthony.",
+  ],
+  [
+    "a Gearspace reply with its quote on another host",
+    "Quote: Originally Posted by RecordFan ► Which vocoder? A DigiTech Talker, I think. Quote Reply Report Post",
   ],
   [
     "Gearspace post headers only",
@@ -130,6 +150,14 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "Record Fan 3 years ago This song never gets old Reply · 45 replies Disco Head 2 years ago (edited) RIP Romanthony",
   ],
   [
+    "YouTube comments with glued ages and ago",
+    "RecordFan 3y ago This song never gets old 1.2K Reply DiscoHead 2y ago RIP Romanthony 300 Reply",
+  ],
+  [
+    "comments with glued year ages beside Reply",
+    "jane.doe12 3y Love this! Reply john_smith 2y Classic Reply",
+  ],
+  [
     "YouTube comments with glued ages",
     "RecordFan 3y This song never gets old 1.2K Reply DiscoHead 2y RIP Romanthony 300 Reply",
   ],
@@ -138,15 +166,19 @@ export const FORUM_THREADS: Array<[string, string]> = [
     "RecordFan • 3 years ago The vocal is Romanthony. 12 • Reply • Share › DiscoHead • 2 years ago RIP. 3 • Reply • Share ›",
   ],
   [
+    "Disqus comments with a minus before the age",
+    "RecordFan − 3 years ago The vocal is Romanthony. 12 • Reply • Share › DiscoHead − 2 years ago RIP.",
+  ],
+  [
     "Songfacts comments",
-    "Jane from Ohio Oct 2, 2009: This song got me through college. Mark from Leeds, England Nov 3, 2010: Still a classic.",
+    "Comments: 2 Jane from Ohio Oct 2, 2009: This song got me through college. Mark from Leeds, England Nov 3, 2010: Still a classic.",
   ],
   [
-    "Rate Your Music reviews",
-    "RecordFan Feb 22 2021 4.50 stars The best house record ever. DiscoHead Mar 1 2021 4.00 stars Romanthony is the star.",
+    "Amazon reviews, one with a flag",
+    "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States 🇺🇸 on February 22, 2021 The vocal is great. DiscoHead 4.0 out of 5 stars Good. Reviewed in the United Kingdom on 3 March 2021 Romanthony shines.",
   ],
   [
-    "an Amazon review",
+    "an Amazon review with its helpful count",
     "RecordFan 5.0 out of 5 stars A classic. Reviewed in the United States on February 22, 2021 Verified Purchase The vocal is great. 12 people found this helpful",
   ],
 ];

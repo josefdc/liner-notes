@@ -358,45 +358,66 @@ describe("web research searches", () => {
     }
   });
 
+  /**
+   * The length of an adversarial text, and the time a linear check of it takes at most. A check
+   * that grows with the square of the length (main's NAME_LINE took 0.5 s at 40,000 characters)
+   * takes seconds at this length; a linear one takes a few milliseconds, so the bound leaves room
+   * for a loaded machine.
+   */
+  const LONG = 100_000;
+  const LINEAR_MS = 250;
+  /** `unit` repeated to LONG characters. */
+  const repeated = (unit: string) => unit.repeat(Math.ceil(LONG / unit.length));
+
   it.each([
-    ["spaces", `share${" ".repeat(40_000)}x`],
-    ["tabs, no-break spaces and newlines", `share${"\t\u00a0\n ".repeat(10_000)}x`],
-    ["spaces around a pipe", `share${" ".repeat(20_000)}|${" ".repeat(19_993)}x`],
-    ["spaces before cite", `share | cite${" ".repeat(40_000)}x`],
-  ])("checks a stored text of 40,000 characters of %s in linear time", (_name, text) => {
-    expect(text.length).toBeGreaterThanOrEqual(40_000);
+    ["spaces", `share${" ".repeat(LONG)}x`],
+    ["tabs, no-break spaces and newlines", `share${repeated("\t\u00a0\n ")}x`],
+    ["spaces around a pipe", `share${" ".repeat(LONG / 2)}|${" ".repeat(LONG / 2)}x`],
+    ["spaces before cite", `share | cite${" ".repeat(LONG)}x`],
+  ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(LONG);
     const start = performance.now();
     expect(webTextIssue(text)).toBeNull();
-    expect(performance.now() - start).toBeLessThan(50);
+    expect(performance.now() - start).toBeLessThan(LINEAR_MS);
   });
 
   it.each([
-    ["ages without a Reply", "1 year ago x ".repeat(3_077)],
-    ["glued ages", "3y ".repeat(13_334)],
-    ["an age, a long comment, then a Reply", `3 years ago ${"a ".repeat(20_000)} 12 Reply`],
-    ["dotted digits", "1.".repeat(20_000)],
-    ["dotted capitals", "A.".repeat(20_000)],
-    ["digits and commas", "1,".repeat(20_000)],
-    ["bylines without a date", "by x ".repeat(8_000)],
-    ["bylines with an arrow", "by x » ".repeat(5_715)],
-    ["a byline's long name", `by ${"x".repeat(40_000)}`],
-    ["names from places", "Jane from ".repeat(4_000)],
-    ["a place's long name", `Jane from ${"x".repeat(40_000)}`],
-    ["bullets", "• ".repeat(20_000)],
-    ["bullets before numbers", "· 3 ".repeat(10_000)],
-    ["post numbers before ordinal days", "#1 22nd ".repeat(5_000)],
-    ["lowercase bylines", "posted by a ".repeat(3_334)],
-    ["a topic's created", "created ".repeat(5_000)],
-    ["comment depths", "level 1 ".repeat(5_000)],
-    ["Replies", "Reply · ".repeat(5_000)],
-    ["quotes before an arrow", `Originally Posted by ${"x".repeat(40_000)}`],
-    ["points", "1 points ".repeat(4_445)],
-    ["weekdays", "Sunday at ".repeat(4_000)],
-  ])("checks a stored text of 40,000 characters of %s in linear time", (_name, text) => {
-    expect(text.length).toBeGreaterThanOrEqual(40_000);
+    ["ages without a Reply", repeated("1 year ago x ")],
+    ["glued ages", repeated("3y ")],
+    ["glued ages with ago", repeated("3y ago x ")],
+    ["an age, a long comment, then a Reply", `3 years ago ${repeated("a ")} 12 Reply`],
+    ["dotted digits", repeated("1.")],
+    ["dotted capitals", repeated("A.")],
+    ["digits and commas", repeated("1,")],
+    ["bylines without a date", repeated("by x ")],
+    ["bylines with an arrow", repeated("by x » ")],
+    ["a byline's long name", `by ${"x".repeat(LONG)}`],
+    ["names from places", repeated("Jane from ")],
+    ["a place's long name", `Jane from ${"x".repeat(LONG)}`],
+    ["bullets", repeated("• ")],
+    ["bullets before numbers", repeated("· 3 ")],
+    ["minuses before numbers", repeated("− 3 ")],
+    ["post numbers before ordinal days", repeated("#1 22nd ")],
+    ["named Gearspace headers", repeated("#1 22nd February 2021 RecordFan ")],
+    ["named XenForo headers", repeated("RecordFan Feb 22, 2021 #1 ")],
+    ["a long token before a header", `${"x".repeat(LONG)} Feb 22, 2021 #1`],
+    ["lowercase bylines", repeated("posted by a ")],
+    ["a topic's created", repeated("created ")],
+    ["comment depths", repeated("level 1 ")],
+    ["Replies", repeated("Reply · ")],
+    ["votes", repeated("Upvote 1 ")],
+    ["quotes before an arrow", `Originally Posted by ${"x".repeat(LONG)}`],
+    ["thread starters", repeated("Thread starter x ")],
+    ["points", repeated("1 points ")],
+    ["weekdays", repeated("Sunday at ")],
+    ["post subjects", repeated("Posted: Mon ")],
+    ["comment headings", repeated("Comments: 1 ")],
+    ["reviews with flags", repeated("Reviewed in the United States 🇺🇸 ")],
+  ])("checks a stored text of 100,000 characters of %s in linear time", (_name, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(LONG);
     const start = performance.now();
     webTextIssue(text);
-    expect(performance.now() - start).toBeLessThan(50);
+    expect(performance.now() - start).toBeLessThan(LINEAR_MS);
   });
 
   it("excludes TalkBass, the WATMM forums, Rate Your Music and Disqus, and forum copies on the Wayback Machine", async () => {
@@ -412,6 +433,7 @@ describe("web research searches", () => {
       "https://web.archive.org/web/*/news.ycombinator.com/item?id=26214151",
       "https://web.archive.org/web/https://www.kvraudio.com/forum/viewtopic.php?t=12345",
       "https://web.archive.org/web/2021/https://www.talkbass.com/threads/x.1/",
+      "https://wayback.archive.org/web/2012/http://old.reddit.com/r/Music/comments/abc/",
     ];
     const ARCHIVED = {
       ...WHOSAMPLED,

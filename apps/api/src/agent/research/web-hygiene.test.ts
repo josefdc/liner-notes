@@ -633,6 +633,163 @@ const MUSIC_PROSE: Array<[string, string]> = [
     "a dateline",
     "News from Paris Feb 22, 2021: Daft Punk have split after 28 years, with a video.",
   ],
+  // Pages a first version of these layouts left out: each read like one layout's two marks.
+  [
+    "a news byline's age beside a contest's points",
+    "By Jane Doe · 6 months ago. Eurovision 2024: Loreen, who won with 583 points a year ago, returns to open the show in Malmö.",
+  ],
+  [
+    "a contest's points beside a byline's age",
+    "Måneskin, who won Eurovision with 524 points 3 years ago, play Rome tonight. Jane Doe • 2 years ago",
+  ],
+  [
+    "contest news with a related list's ages",
+    "Loreen won Eurovision with 583 points a year ago in Liverpool, the second performer ever to win twice. More Eurovision news • 1y ago Käärijä's Cha Cha Cha tops the Finnish chart • 2y ago Måneskin sign a worldwide deal",
+  ],
+  [
+    "a game score's level beside a related list's age",
+    "Koji Kondo wrote the level 1 theme · 3 notes repeat before the bass enters, and the overworld theme became the most covered game tune. Related: Inside the Zelda score • 3y ago",
+  ],
+  [
+    "a news card with Reply and Share under a byline",
+    "Jane Doe • 2 years ago Why the Amen break is the most sampled drum loop in history: a six-second solo from the Winstons' 1969 B-side. Reply Share this story with a friend",
+  ],
+  [
+    "a trends page with a bullet age and Reply Share",
+    "r/Music trends: Daft Punk's One More Time · 3 yr. ago became the most streamed French song; Reply Share",
+  ],
+  [
+    "one writer's blog archive with an arrow, a date and a time",
+    "by Mark Smith » February 22, 2021 3:15 pm Kid A turns 21. by Mark Smith » March 1, 2021 9:00 am Amnesiac's Pyramid Song was built on a Mingus record.",
+  ],
+  [
+    "a blog's category bylines with an arrow",
+    "Posted by admin in Reviews » 22 Feb 2021, 15:15 Daft Punk's Discovery samples Edwin Birdsong. Posted by admin in News » 23 Feb 2021, 10:00 Romanthony sang One More Time.",
+  ],
+  [
+    "one week's chart in two countries",
+    "On the charts dated Feb 24, 2001 #1 in the UK and Feb 24, 2001 #2 in Ireland, Daft Punk's One More Time was at its peak.",
+  ],
+  [
+    "one week's peaks in two countries",
+    "One More Time peaked on Dec 2, 2000 #1 in France and Dec 2, 2000 #2 in the UK.",
+  ],
+  [
+    "one week's chart with ordinal dates",
+    "The Official Chart of #1 26th February 2000 was All Saints; #2 26th February 2000 was Craig David's Fill Me In.",
+  ],
+  [
+    "a festival's best sets with weekday times",
+    "Our five best sets of Glastonbury: Saturday at 10:15 PM #1 Coldplay, Saturday at 8:00 PM #2 Burna Boy, Sunday at 9:30 PM #3 SZA.",
+  ],
+  [
+    "a festival live-blog with weekday times",
+    "Glastonbury 2024 live: Friday at 9:45 PM #1 Dua Lipa's headline set began, after Friday at 7:00 PM #2 Michael Kiwanuka.",
+  ],
+  [
+    "a festival's running order with weekday times",
+    "Woodstock running order: Saturday at 9:00 PM #1 Santana; Saturday at 10:30 PM #2 Grateful Dead; Sunday at 9:00 AM #3 Jimi Hendrix.",
+  ],
+  [
+    "a tour's infobox with a chart week",
+    "The Eras Tour Start date March 17, 2023 End date December 8, 2024 No. of shows 149. It led Billboard Boxscore on Dec 9, 2023 #1 among all tours.",
+  ],
+  [
+    "a tour's infobox and its box office",
+    "The Eras Tour Start date March 17, 2023 End date December 8, 2024 Legs 5 No. of shows 149 Box office $2.077 billion. Billboard Boxscore chart dated Dec 9, 2023 #1 for the year.",
+  ],
+  [
+    "a tour's infobox beside a trending list",
+    "Start date March 17, 2023 End date December 8, 2024. Trending 3 hours ago #1 Taylor Swift ends The Eras Tour.",
+  ],
+  [
+    "an article quoting one Amazon review",
+    "One fan's review captures it: '5.0 out of 5 stars A classic. Reviewed in the United States on February 22, 2021. Verified Purchase. The vocoder still sounds like the future.' The album has sold four million copies.",
+  ],
+  [
+    "an article quoting one Amazon review without its badge",
+    "A fan wrote: '5.0 out of 5 stars Masterpiece. Reviewed in the United States on February 22, 2021.' Another called it overrated.",
+  ],
+  [
+    "a metareview with dated star ratings",
+    "Critics: AllMusic Mar 12 2001 4.50 stars; Rolling Stone Mar 29 2001 4.00 stars; Pitchfork gave it 6.4.",
+  ],
+  [
+    "two writers' lowercase blog bylines",
+    "posted by jane at 9:00 AM on February 22, 2021 Discovery turns 20. posted by mark at 10:00 AM on February 23, 2021 Homework's Da Funk was a b-side first.",
+  ],
+  [
+    "liner notes with Live from datelines",
+    "Disc 1 – Live from Wembley Stadium, London, July 13, 1985: Status Quo, Queen, David Bowie. Disc 2 – Live from JFK Stadium, Philadelphia, July 13, 1985: Led Zeppelin, Madonna.",
+  ],
+  [
+    "a live album's Live from sections",
+    "Live from the Royal Albert Hall May 2, 1966: Tell Me, Baby. Live from the Free Trade Hall May 17, 1966: Like a Rolling Stone.",
+  ],
+  [
+    "liner notes quoting dated letters",
+    "Letter from Brian Epstein, London, October 2, 1963: the boys will record on the 17th. Letter from George Martin, London, October 18, 1963: I Want to Hold Your Hand is finished.",
+  ],
+  [
+    "a tour diary's datelines",
+    "Notes from Tokyo March 3, 2024: the Budokan show sold out in an hour. Notes from Osaka March 5, 2024: we added a second encore.",
+  ],
+  [
+    "a related tracks list with glued ages beside Like",
+    "Daft Punk - Veridis Quo (Edit) 3y Like Repost Daft Punk - Aerodynamic (Live) 2mo Like Repost 12.3K plays",
+  ],
+  [
+    "a related artists list with glued ages beside Follow",
+    "Daft Punk 3y Follow · Justice 1y Follow · Air 2mo Follow — artists you may like.",
+  ],
+  [
+    "an artist card with ages beside Follow",
+    "Daft Punk Artist 23,456,789 monthly listeners Follow 3y ago released Random Access Memories (10th Anniversary Edition). Popular releases 2mo ago Follow",
+  ],
+  [
+    "an article naming a forum title and a start date",
+    "Steve Hoffman's board gave him the title Forum Resident; his remasters of Discovery are discussed with Start date Feb 22, 2021 in the trade press.",
+  ],
+  [
+    "a gear magazine's issue number with gear words",
+    "Sound On Sound: Lives for gear? The DigiTech Talker that Daft Punk used on Digital Love. Report Post-production notes follow. #1 22nd February 2001 issue.",
+  ],
+  [
+    "an interview with a clock, a number and a last reply",
+    "February 22, 2021, 3:15pm #1 single of the week. Bangalter created the vocal as his last reply to critics of Homework.",
+  ],
+  [
+    "a feature quoting two YouTube comments with their likes",
+    "Fans still argue about the vocal. 'It is Romanthony, not a vocoder' 3 years ago 1.2K Reply and 'This is the best house record ever' 2 years ago 300 Reply, read two top comments.",
+  ],
+  [
+    "an article quoting two YouTube comments with their likes",
+    "Two comments sum up the reaction: 'Romanthony forever' 3 years ago 1.2K Reply and 'Still my favourite' 2 years ago 845 Reply.",
+  ],
+  [
+    "an author box with a join date and a post count",
+    "About the author: Jane Doe Joined: Mon Mar 03, 2010 Posts: 245. Jane has written about house music since 1997.",
+  ],
+  [
+    "an article quoting four YouTube comments with their likes",
+    "Four comments sum up the reaction: 'Romanthony forever' 3 years ago 1.2K Reply, 'Still my favourite' 2 years ago 845 Reply, 'One more time' 1 year ago 300 Reply, and 'RIP' 4 years ago 120 Reply.",
+  ],
+  [
+    "a video page with one top comment",
+    "Daft Punk - One More Time (Official Video) 245M views 13 years ago. Top comment 3 years ago Romanthony's voice is the reason this works 1.2K Reply",
+  ],
+  [
+    "a festival's best sets with the artists before their times",
+    "Our top three Glastonbury sets: Coldplay Saturday at 10:15 PM #1 Burna Boy Saturday at 8:00 PM #2 SZA Sunday at 9:30 PM #3",
+  ],
+  [
+    "a drama's title after an episode number",
+    "Reply 1988 rewatch diary. Started 3 years ago with episode 1 Reply 1988 and its OST; finished 2 years ago with episode 20 Reply 1988, still the best soundtrack.",
+  ],
+  [
+    "two albums' peaks on different days",
+    "Daft Punk's albums in France: Homework Jan 20, 1997 #1 and Discovery Mar 12, 2001 #2.",
+  ],
   [
     "a podcast's episode ages",
     "Episode 12 • 3 years ago: the making of Discovery. Episode 13 • 2 years ago: Romanthony. Listen and Share.",

@@ -190,7 +190,9 @@ function translatedPage(parsed: URL, host: string): string | null {
  * The page a Wayback Machine copy stands for, if it is one: the URL in its path after "/web/"
  * and the capture's timestamp ("web.archive.org/web/20200101000000/https://…", also with a
  * modifier such as "id_", with "*" or without a timestamp, and with the scheme's slashes
- * collapsed to one).
+ * collapsed to one). Not read: a timestamp with "*" right after its digits
+ * ("20200101000000*" then the URL), a percent-encoded inner URL, copies on archive.ph or
+ * archive.today (their paths hold an id), and Google's cache.
  */
 function archivedPage(parsed: URL, host: string): string | null {
   if (!onSite(host, "web.archive.org") && !onSite(host, "wayback.archive.org")) return null;
@@ -280,11 +282,16 @@ const THREAD_LABELS: ReadonlySet<string> = new Set([
   "Follow",
   "Following",
 ]);
+/** A comment's age as a thread shows it, glued: "3w", "2d", "5h", "10m" (never "'90s" or "5 min"). */
+const AGE = /^\d{1,3}[wdhm]$/;
 /**
- * A comment's age as a thread shows it, glued: "3y", "2mo", "3w", "2d", "5h", "10m" (never
- * "'90s" or "5 min").
+ * An older comment's age, glued: "3y", "2mo". It counts beside "Reply" only: a related list of
+ * tracks or artists writes it beside "Like" or "Follow" ("Veridis Quo 3y Like Repost", "Justice
+ * 1y Follow").
  */
-const AGE = /^\d{1,3}(?:[ywdhm]|mo)$/;
+const LONG_AGE = /^\d{1,3}(?:y|mo)$/;
+/** The thread buttons a LONG_AGE counts beside. */
+const REPLY_LABELS: ReadonlySet<string> = new Set(["Reply", "Replies"]);
 /** How far a thread's button stands from its comment's age, in words. */
 const LABEL_REACH = 3;
 /**
@@ -360,7 +367,7 @@ const COMMENT_REACH = 300;
 /** A comment's age written out: "3 years ago", "an hour ago". */
 const AGE_AGO = "(?:\\d{1,3}|an?)\\s+(?:second|minute|hour|day|week|month|year)s?\\s+ago\\b";
 
-/** A comment's age glued, as a comment widget writes it: "3y", "2mo", "5d" (also "3y ago"). */
+/** A comment's age glued, as a comment widget writes it: "3y", "2mo", "5d", also "3y ago". */
 const GLUED_AGE = "\\b\\d{1,3}(?:y|mo|w|d|h)\\b";
 
 /** A comment's age after a bullet: "• 3y ago", "· 3 yr. ago", "• 3 years ago". */
@@ -378,46 +385,104 @@ const ANY_DATE = `(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|${DAY_FIRST})`;
 /** A post's time after its date: "3:15 pm", "15:15". */
 const CLOCK = "\\d{1,2}:\\d{2}(?:\\s*[AaPp][Mm])?";
 
+/**
+ * A post's day as a forum writes it in a header: POST_DATE without the times ("Sunday at 10:15
+ * AM"), which a festival's running order also writes before "#1", "#2".
+ */
+const POST_DAY = `(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|${DAY_FIRST}|(?:\\d{1,4}|an?)\\s+(?:minute|hour|day|week|month|year)s?\\s+ago)`;
+
+/** A Gearspace post's day: "22nd February 2021". */
+const ORDINAL_DAY = `\\d{1,2}(?:st|nd|rd|th)\\s+${MONTH}\\s+\\d{4}`;
+
 /** The countries Amazon names under a review ("Reviewed in the United States on …"). */
 const REVIEW_COUNTRY =
   "(?:the United States|the United Kingdom|the Netherlands|the United Arab Emirates|Canada|Australia|India|Germany|France|Italy|Spain|Japan|Mexico|Brazil|Sweden|Poland|Belgium|Singapore|Turkey|Saudi Arabia|Egypt)";
 
 /**
- * 1 when two post headers in a row (`header`, its `day` and its post number `n`) are of the same
- * day and number consecutive posts ("RecordFan Feb 22, 2021 #1 … DiscoHead Feb 22, 2021 #2"):
- * replies in one thread. A chart run is not: its position changes week by week ("Week of Feb 24,
- * 2001 #1 … Week of Mar 3, 2001 #2"). A day written with a time ("Sunday at 10:15 AM") is
- * compared without it.
+ * A poster's name beside a post header: a token with a capital, a digit or "_" ("RecordFan",
+ * "mark99"), and no punctuation at its end. Never a word of a sentence ("of", "on", "was",
+ * "dated", "after") or a heading ("Glastonbury:", "Santana;").
+ */
+const POSTER = /^[\p{L}\p{N}_.-]*[\p{Lu}\p{N}_][\p{L}\p{N}_.-]*(?<![.-])$/u;
+
+/** One post header that `header` finds: its day, its number, and whether a poster's name is beside it. */
+interface PostHeader {
+  readonly day: string;
+  readonly n: number;
+  readonly named: boolean;
+}
+
+/**
+ * The post headers `header` finds (groups `day`, `n`, and the tokens `before` and `after` it), in
+ * order. A header is named when the token before it or after it is a POSTER.
+ */
+function postHeaders(header: RegExp, text: string): PostHeader[] {
+  return Array.from(text.matchAll(header), (match) => {
+    const { day = "", n = "", before, after } = match.groups ?? {};
+    return {
+      day: day.replace(/[\s,]+/g, " ").toLowerCase(),
+      n: Number(n),
+      named: [before, after].some((token) => token !== undefined && POSTER.test(token)),
+    };
+  });
+}
+
+/** 1 when `header` finds a post header with a poster's name beside it. */
+function namedHeader(header: RegExp): (text: string) => number {
+  return (text) => (postHeaders(header, text).some((post) => post.named) ? 1 : 0);
+}
+
+/**
+ * 1 when two post headers in a row, each with a poster's name beside it, are of the same day and
+ * number consecutive posts ("RecordFan Feb 22, 2021 #1 … DiscoHead Feb 22, 2021 #2"): replies in
+ * one thread. A chart run is not: its position changes week by week ("Week of Feb 24, 2001 #1 …
+ * Week of Mar 3, 2001 #2"), and a chart of one week names no poster ("dated Feb 24, 2001 #1 in
+ * the UK and Feb 24, 2001 #2 in Ireland").
  */
 function consecutivePosts(header: RegExp): (text: string) => number {
   return (text) => {
-    let last: { day: string; n: number } | null = null;
-    for (const match of text.matchAll(header)) {
-      const day = (match.groups?.day ?? "")
-        .replace(/\s+at\s[\s\S]*$/, "")
-        .replace(/[\s,]+/g, " ")
-        .toLowerCase();
-      const n = Number(match.groups?.n);
-      if (last && day === last.day && n === last.n + 1) return 1;
-      last = { day, n };
-    }
-    return 0;
+    const posts = postHeaders(header, text);
+    return posts.some(
+      (post, i) =>
+        i > 0 &&
+        post.named &&
+        posts[i - 1].named &&
+        post.day === posts[i - 1].day &&
+        post.n === posts[i - 1].n + 1,
+    )
+      ? 1
+      : 0;
   };
 }
 
-/** How many different names `byline` finds (its first group): one mark per commenter. */
+/** How many different names `byline` finds (its first group): one mark per poster. */
 function distinctNames(byline: RegExp): (text: string) => number {
   return (text) => new Set(Array.from(text.matchAll(byline), (m) => m[1].toLowerCase())).size;
 }
 
+/** A XenForo post header with the tokens around it, for postHeaders. */
+const XENFORO_HEADER = new RegExp(
+  `(?:(?<![^\\s])(?<before>[^\\s]{1,64})\\s+)?(?<day>${POST_DAY})\\s*#(?<n>\\d{1,6})(?![\\p{L}\\p{N}])`,
+  "gu",
+);
+
+/** A Gearspace post header ("#3 22nd February 2021") with the tokens around it, for postHeaders. */
+const GEARSPACE_HEADER = new RegExp(
+  `(?:(?<![^\\s])(?<before>[^\\s]{1,64})\\s+)?#(?<n>\\d{1,6})\\s+(?<day>${ORDINAL_DAY})(?:\\s+(?<after>[^\\s]{1,64}))?`,
+  "gu",
+);
+
 /**
  * One mark of a forum's layout, and how it counts: each time it is found, `once` however often
  * it is found, or `alone`: one is a comment thread by itself. A mark is a pattern, or a function
- * that counts what it finds.
+ * that counts what it finds. A `supporting` mark is one other pages also write (a byline's "· 3y
+ * ago", a contest's "583 points a year ago", an author box's "Posts: 245"): it makes a thread
+ * only beside a mark of the same layout that is not supporting.
  */
 interface ForumMark {
   readonly mark: RegExp | ((text: string) => number);
   readonly counts?: "once" | "alone";
+  readonly supporting?: true;
 }
 
 /**
@@ -429,68 +494,83 @@ interface ForumMark {
  * - XenForo (the Steve Hoffman forums): a quote with XenForo's arrow ("<name> said: ↑", alone),
  *   a quote closed by its expander within QUOTE_REACH characters ("<name> said: … Click to
  *   expand…"), a post's date and number ("Feb 22, 2021 #12", "22 Feb 2021 #12", "Sunday at
- *   10:15 AM #3"), two such headers in a row of the same day and consecutive numbers (alone:
- *   consecutivePosts), a poster's "Joined: Mar 3, 2010" (or "3 Mar 2010") and "Messages: 4,512"
- *   (a CARD_COUNT; or reaction score, likes, trophy points; with or without the colon, as
- *   XenForo 2's user cards read), a poster's title ("Thread Starter", "Forum Resident",
- *   "Well-Known Member"), "Start date Feb 22, 2021" and "Discussion in '…' started by <name>".
+ *   10:15 AM #3"), two such headers in a row with a poster's name beside each, of the same day
+ *   and with consecutive numbers (alone: consecutivePosts; never one dated "Sunday at 10:15 AM"),
+ *   a poster's "Joined: Mar 3, 2010" (or "3 Mar 2010") and "Messages: 4,512" (a CARD_COUNT; or
+ *   reaction score, likes, trophy points; with or without the colon, as XenForo 2's user cards
+ *   read), a poster's title ("Thread Starter", "Forum Resident", "Well-Known Member"), XenForo
+ *   2's "Thread starter <name> Start date" (alone) and "Discussion in '…' started by <name>".
  * - vBulletin: a quote ("Quote: Originally Posted by <name>"), "Reply With Quote", a post's date
  *   ("02-22-2021, 03:15 PM"), a poster's "Join Date: Mar 2005" and "Posts: 1,234".
- * - Gearspace (vBulletin, copied onto other hosts): a post's number and date ("#3 22nd February
- *   2021"), two in a row of the same day and consecutive numbers (alone), a poster's title
- *   ("Lives for gear", "Gear Addict"), "Report Post" and a quote with Gearspace's arrow
- *   ("Originally Posted by <name> ►").
+ * - Gearspace (vBulletin, copied onto other hosts): a post's number and day with a poster's name
+ *   before or after it ("#3 22nd February 2021 RecordFan"), two such in a row of the same day and
+ *   with consecutive numbers (alone), a poster's title ("Lives for gear", "Gear Addict"), "Report
+ *   Post" and a quote with Gearspace's arrow ("Originally Posted by <name> ►").
  * - Stack Exchange: "share | improve this answer | follow", "asked" or "answered" with a time
  *   ("answered Feb 21, 2021 at 10:12"), a comment's signature after its sentence ("… sample? –
  *   <name> Feb 22 '21 at 16:01", the name with no comma or weekday), "Show 3 more comments" and
  *   "add a comment" or "Add a comment". A signature counts once, so a chain of them takes
  *   another mark.
- * - MetaFilter: a comment's byline ("posted by <name> at 6:47 AM on February 22, 2021"), once
- *   per name (distinctNames), its favourites ("[3 favorites]") and a post's "(42 comments
- *   total)".
- * - Discourse: a post's date, time and number ("February 22, 2021, 3:15pm #1") and the topic's
- *   "created … last reply".
- * - phpBB: a post's byline ("Post by <name> » Mon Feb 22, 2021 3:15 pm", "by <name> » 22 Feb
- *   2021, 15:15"), a poster's "Joined: Mon Mar 03, 2010" and "Posts: 1234".
- * - Reddit, as its text reads on other hosts: an age after a bullet ("<name> • 3y ago", "· 3 yr.
- *   ago"), "Reply Share", "245 points 3 years ago", "permalink embed save" and a comment's depth
- *   ("level 1 <name> ·").
- * - Disqus: an age after a bullet ("<name> • 3 years ago") and "12 • Reply • Share".
- * - YouTube comments: an age and, within COMMENT_REACH characters with no other age or "Reply"
- *   between, a like count and "Reply" ("3 years ago … 1.2K Reply"; not "Reply 1988", a TV
- *   series), "Reply · 45 replies" and "2 years ago (edited)".
- * - Songfacts comments with their date: "<name> from <place> Oct 2, 2009:".
- * - Rate Your Music reviews: "<name> Feb 22 2021 4.50 stars".
- * - Amazon reviews: "Reviewed in the United States on February 22, 2021", "Verified Purchase",
- *   "5.0 out of 5 stars" and "12 people found this helpful".
+ * - MetaFilter: a comment's byline ("posted by <name> at 6:47 AM on February 22, 2021"), its
+ *   favourites ("[3 favorites]") and a post's "(42 comments total)", each once.
+ * - Discourse: a post's date, time and number ("February 22, 2021, 3:15pm #1", "22 Feb 2021,
+ *   15:15 #1") and the topic's "created <date> last reply".
+ * - phpBB: a post's byline, once per poster ("Post by <name> » Mon Feb 22, 2021 3:15 pm", "by
+ *   <name> » 22 Feb 2021, 15:15"; not after "Posted", as a blog's category reads), subsilver's
+ *   "Post subject:" and "Posted: Mon Feb 22, 2021 3:15 pm", and a poster's "Joined: Mon Mar 03,
+ *   2010" and "Posts: 1234" (supporting: an author box writes them too).
+ * - Reddit, as its text reads on other hosts: "245 Reply Share", "Upvote 245 Downvote",
+ *   "permalink embed save", a comment's depth ("level 1 <name> · 3 yr. ago"), and, supporting, an
+ *   age after a bullet ("<name> • 3y ago") and "245 points 3 years ago".
+ * - Disqus: an age after a bullet or a minus ("<name> • 3 years ago", "<name> − 3 years ago") and
+ *   "12 • Reply • Share".
+ * - YouTube comments: an age, then the comment, then within COMMENT_REACH characters, with no
+ *   other age or "Reply" between, a like count and "Reply" ("3 years ago This song … 1.2K Reply";
+ *   not "Reply 1988", a TV series), "Reply · 45 replies" and "2 years ago (edited)".
+ * - Songfacts comments: a comment's name, place and date ("<name> from <place> Oct 2, 2009:") and
+ *   the comments' heading ("Comments: 390"), each once.
+ * - Amazon reviews: "Reviewed in the United States on February 22, 2021" (also with a flag before
+ *   "on") and "12 people found this helpful", each time.
  * Kept: a writer quoted with "said:" (no arrow, or no expander right after), a signed article
  * ("– Jane Doe, Feb 22, 2021 at 10:00") with its "edited Feb 23, 2021 at 9:00" note, any number
  * of dated stamps, set times or tour dates after a dash ("– Updated Feb 22, 2021 at 10:00", "–
- * Daft Punk Jul 14 at 22:00", "– Bercy Jun 14, 2007 at 20:00"), a member's "Joined: 1993", a song
- * named "Messages" beside its chart run ("Messages 1980 … Oct 25, 1980 #13"), a chart run that
- * moves one place a week ("Week of Feb 24, 2001 #1 … Week of Mar 3, 2001 #2"), a blog's bylines
- * ("Posted by <name> at 9:00 AM", "posted by admin at 9:00 AM on February 22, 2021" on each post,
- * "by <name> » February 22, 2021" without a time), an interview's or a list's "• 3y ago", an
- * editorial review's "4.0 out of 5 stars", and one YouTube comment quoted with its age.
+ * Daft Punk Jul 14 at 22:00", "– Bercy Jun 14, 2007 at 20:00"), a festival's running order
+ * ("Saturday at 9:00 PM #1 Santana; Saturday at 10:30 PM #2 …"), a member's "Joined: 1993", a
+ * song named "Messages" beside its chart run ("Messages 1980 … Oct 25, 1980 #13"), a chart run
+ * ("Week of Feb 24, 2001 #1 … Week of Mar 3, 2001 #2") or one week's chart in two countries,
+ * Wikipedia's tour infobox ("Start date March 17, 2023 End date …"), a blog's bylines ("Posted by
+ * <name> at 9:00 AM", "posted by <name> at 9:00 AM on February 22, 2021" on each post, by one
+ * writer or two, "by <name> » February 22, 2021" without a time, one writer's "by <name> »
+ * <date> <time>" on each post), an author box ("Joined: Mon Mar 03, 2010 Posts: 245"), a news
+ * byline's "· 6 months ago" beside a contest's "583 points a year ago", an interview's or a
+ * list's "• 3y ago", a related list's "3y Like" or "1y Follow", datelines ("Live from Wembley
+ * Stadium, London, July 13, 1985:", "Letter from …"), an editorial review's "4.0 out of 5
+ * stars", one Amazon review quoted without its "people found this helpful", and YouTube comments
+ * quoted in an article, which put the comment before its age ("'Romanthony forever' 3 years ago
+ * 1.2K Reply"), where a comment section puts it after.
  * Known limits:
  * - Missed, names included: one mark alone (a quote without XenForo's arrow, one "Originally
- *   Posted by", one answer card, one MetaFilter byline, one Discourse or phpBB post, one Rate Your
- *   Music review); a chain of Stack Exchange comment signatures with no other Stack Exchange mark
- *   (a signature counts once); XenForo or Gearspace post headers only, when no two in a row are
- *   of one day with consecutive numbers ("#1 … #5 … #12", or each on another day: a chart run
- *   writes them the same way); Reddit or Disqus headers with no buttons ("<name> • 3y ago …",
- *   which a news site's list of articles also writes); YouTube comments with no like count before
- *   "Reply", or no "Reply"; and Songfacts comments without their date ("<name> from <place>",
- *   as the site writes them now, which reads like prose). Songfacts' comments sit on the same
- *   page as its facts, so they cannot be left out by path either.
+ *   Posted by", one answer card, one Discourse or phpBB post, one Amazon review without its
+ *   helpful count); a chain of Stack Exchange comment signatures with no other Stack Exchange mark
+ *   (a signature counts once); MetaFilter bylines without favourites or a comments total (a group
+ *   blog with a lowercase theme writes them the same way); XenForo or Gearspace post headers
+ *   only, when no two in a row are of one day with consecutive numbers ("#1 … #5 …", or each on
+ *   another day: a chart run writes them the same way), when the posters' names are lowercase
+ *   words ("listener"), when they are dated by weekday and time, or without an ordinal ("#1 Feb
+ *   22, 2021"); Reddit headers with no buttons ("<name> • 3y ago …", which a news site's list of
+ *   articles also writes), "More replies" and "Continue this thread"; Discourse posts without "#";
+ *   phpBB in other languages ("Beitrag von <name> » Mo 22. Feb 2021") or with ISO dates; Disqus
+ *   with votes and no "Share"; YouTube comments with no like count before "Reply", or no "Reply";
+ *   Songfacts comments without their date ("<name> from <place>", as the site writes them now,
+ *   which reads like prose) or without the heading; and Rate Your Music reviews on other hosts
+ *   ("<name> Feb 22 2021 4.50 stars …"), which read like a metareview's dated ratings ("AllMusic
+ *   Mar 12 2001 4.50 stars"). Songfacts' comments sit on the same page as its facts, so they
+ *   cannot be left out by path either; Rate Your Music is left out by site.
  * - Dropped, although music writing: two quotes each right before an expander (an interview or
- *   lecture with collapsed answers); a blog byline with "[3 favorites]", or lowercase bylines
- *   ("posted by <name> at 9:00 AM on …") of two different writers; "asked … at 9:15" with "add a
- *   comment" or "Add a comment"; "Originally Posted by" twice, or with "Posts: 245"; a weekly
- *   chart that writes the same date before consecutive positions ("Feb 24, 2001 #1 … Feb 24, 2001
- *   #2"); a blog whose posts each read "by <name> » <date> <time>"; two datelines written
- *   "<Word> from <place> <date>:"; and `once` marks of one software in unrelated fields
- *   ("Joined: Feb 1, 1999" beside a chart's "Feb 24, 2001 #1").
+ *   lecture with collapsed answers); a blog byline with "[3 favorites]" or "(2 comments total)";
+ *   "asked … at 9:15" with "add a comment" or "Add a comment"; "Originally Posted by" twice, or
+ *   with "Posts: 245"; two writers' bylines "by <name> » <date> <time>"; and `once` marks of one
+ *   software in unrelated fields ("Joined: Feb 1, 1999" beside a chart's "Feb 24, 2001 #1").
  */
 const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   xenforo: [
@@ -502,12 +582,7 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
       ),
     },
     { mark: new RegExp(`${POST_DATE}\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`, "gu"), counts: "once" },
-    {
-      mark: consecutivePosts(
-        new RegExp(`(?<day>${POST_DATE})\\s*#(?<n>\\d{1,6})(?![\\p{L}\\p{N}])`, "gu"),
-      ),
-      counts: "alone",
-    },
+    { mark: consecutivePosts(XENFORO_HEADER), counts: "alone" },
     {
       mark: new RegExp(
         `\\bJoined:?\\s*(?:${MONTH}\\s+\\d{1,2},?\\s+\\d{4}|${DAY_FIRST}|\\d{1,2}/\\d{1,2}/\\d{2,4})`,
@@ -526,7 +601,7 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
       mark: /\b(?:Thread [Ss]tarter|Forum Resident|Well-Known Member)\b/gu,
       counts: "once",
     },
-    { mark: new RegExp(`\\bStart date:?\\s*${POST_DATE}`, "gu"), counts: "once" },
+    { mark: /\bThread starter\s+[^\s]{1,64}\s+Start date\b/gu, counts: "alone" },
     { mark: /Discussion in ['‘][^'’]{1,80}['’] started by \S/gu, counts: "once" },
   ],
   vbulletin: [
@@ -543,24 +618,13 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
     { mark: /Posts:\s*\d[\d,.]*(?![\p{L}\p{N}])/gu, counts: "once" },
   ],
   gearspace: [
-    {
-      mark: new RegExp(`#\\d{1,6}\\s+\\d{1,2}(?:st|nd|rd|th)\\s+${MONTH}\\s+\\d{4}`, "gu"),
-      counts: "once",
-    },
-    {
-      mark: consecutivePosts(
-        new RegExp(
-          `#(?<n>\\d{1,6})\\s+(?<day>\\d{1,2}(?:st|nd|rd|th)\\s+${MONTH}\\s+\\d{4})`,
-          "gu",
-        ),
-      ),
-      counts: "alone",
-    },
+    { mark: namedHeader(GEARSPACE_HEADER), counts: "once" },
+    { mark: consecutivePosts(GEARSPACE_HEADER), counts: "alone" },
     {
       mark: /\b(?:Lives for gear|Here for the gear|Gear (?:Addict|Maniac|Nut|Head|Guru))\b/gu,
       counts: "once",
     },
-    { mark: /\bReport Post\b/gu, counts: "once" },
+    { mark: /\bReport Post\b(?!-)/gu, counts: "once" },
     { mark: /Originally Posted by\s+[^\s►]+(?:\s+[^\s►]+){0,2}?\s*►/gu, counts: "once" },
   ],
   stackExchange: [
@@ -581,12 +645,11 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   ],
   metafilter: [
     {
-      mark: distinctNames(
-        new RegExp(
-          `posted by (\\S+(?:\\s+\\S+){0,3}?)\\s+at\\s+\\d{1,2}:\\d{2}\\s*[AP]M\\s+on\\s+${MONTH}\\s+\\d{1,2}`,
-          "gu",
-        ),
+      mark: new RegExp(
+        `posted by \\S+(?:\\s+\\S+){0,3}?\\s+at\\s+\\d{1,2}:\\d{2}\\s*[AP]M\\s+on\\s+${MONTH}\\s+\\d{1,2}`,
+        "gu",
       ),
+      counts: "once",
     },
     { mark: /\[\d+ favorites?\]/gu, counts: "once" },
     { mark: /\(\d+ comments? total\)/gu, counts: "once" },
@@ -594,38 +657,68 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
   discourse: [
     {
       mark: new RegExp(
-        `${MONTH}\\s+\\d{1,2},\\s+\\d{4},\\s+\\d{1,2}:\\d{2}\\s*[ap]m\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`,
+        `(?:${MONTH}\\s+\\d{1,2},\\s+\\d{4},\\s+\\d{1,2}:\\d{2}\\s*[ap]m|\\d{1,2}\\s+${MONTH}\\s+\\d{4},\\s+\\d{1,2}:\\d{2})\\s*#\\d{1,6}(?![\\p{L}\\p{N}])`,
         "gu",
       ),
     },
-    { mark: /\bcreated\b[\s\S]{0,40}?\blast reply\b/gu, counts: "once" },
+    {
+      mark: new RegExp(
+        `\\bcreated\\s+(?:${MONTH}\\s+(?:['’]\\d{2}|\\d{1,2}(?:,\\s*\\d{4})?)|\\d{1,2}\\s*(?:m|h|d|w|mo|y)|\\d{1,2}\\s+${MONTH}(?:\\s+\\d{4})?)\\s+last reply\\b`,
+        "gu",
+      ),
+      counts: "once",
+    },
   ],
   phpbb: [
     {
-      mark: new RegExp(
-        `\\b[Bb]y\\s+[^\\s»]+(?:\\s+[^\\s»]+){0,2}?\\s*»\\s*(?:${WEEKDAY})?${ANY_DATE},?\\s+${CLOCK}`,
-        "gu",
+      mark: distinctNames(
+        new RegExp(
+          `(?<!\\bPosted\\s)\\b[Bb]y\\s+([^\\s»]+(?:\\s+[^\\s»]+){0,2}?)\\s*»\\s*(?:${WEEKDAY})?${ANY_DATE},?\\s+${CLOCK}`,
+          "gu",
+        ),
       ),
     },
-    { mark: new RegExp(`\\bJoined:?\\s*${WEEKDAY}${ANY_DATE}`, "gu"), counts: "once" },
-    { mark: /Posts:\s*\d[\d,.]*(?![\p{L}\p{N}])/gu, counts: "once" },
+    { mark: /\bPost subject:/gu, counts: "once" },
+    {
+      mark: new RegExp(`\\bPosted:\\s*(?:${WEEKDAY})?${ANY_DATE},?\\s+${CLOCK}`, "gu"),
+      counts: "once",
+    },
+    {
+      mark: new RegExp(`\\bJoined:?\\s*${WEEKDAY}${ANY_DATE}`, "gu"),
+      counts: "once",
+      supporting: true,
+    },
+    { mark: /Posts:\s*\d[\d,.]*(?![\p{L}\p{N}])/gu, counts: "once", supporting: true },
   ],
   reddit: [
-    { mark: new RegExp(BULLET_AGE, "gu"), counts: "once" },
-    { mark: /\bReply\s+Share\b/gu, counts: "once" },
-    { mark: new RegExp(`${SHORT_COUNT}\\s+points?\\s+${AGE_AGO}`, "gu"), counts: "once" },
+    { mark: new RegExp(`${SHORT_COUNT}\\s+Reply\\s+Share\\b`, "gu"), counts: "once" },
+    { mark: new RegExp(`\\bUpvote\\s+${SHORT_COUNT}\\s+Downvote\\b`, "gu"), counts: "once" },
     { mark: /\bpermalink\s+(?:embed\s+)?save\b/gu, counts: "once" },
-    { mark: /\blevel\s+\d{1,2}\s+\S+\s*[·•]\s*\d/gu, counts: "once" },
+    {
+      mark: new RegExp(`\\blevel\\s+\\d{1,2}\\s+[^\\s]{1,64}\\s*${BULLET_AGE}`, "gu"),
+      counts: "once",
+    },
+    { mark: new RegExp(BULLET_AGE, "gu"), counts: "once", supporting: true },
+    {
+      mark: new RegExp(`${SHORT_COUNT}\\s+points?\\s+${AGE_AGO}`, "gu"),
+      counts: "once",
+      supporting: true,
+    },
   ],
   disqus: [
-    { mark: new RegExp(BULLET_AGE, "gu"), counts: "once" },
+    {
+      mark: new RegExp(`[•·−]\\s*(?:\\d{1,3}\\s*(?:y|mo|w|d|h)\\s+ago\\b|${AGE_AGO})`, "gu"),
+      counts: "once",
+    },
     { mark: /[•·]\s*Reply\s*[•·]\s*Share\b/gu, counts: "once" },
   ],
   youtube: [
-    // The span stops at the next age or "Reply", so each comment is read once: linear time.
+    // The comment comes between the age and its count, and the span stops at the next age or
+    // "Reply": each comment is read once, in linear time, and a comment quoted before its age
+    // ("'Romanthony forever' 3 years ago 1.2K Reply") is not one.
     {
       mark: new RegExp(
-        `(?:${AGE_AGO}|${GLUED_AGE})(?:(?!\\bago\\b|\\bReply\\b|${GLUED_AGE})[\\s\\S]){0,${COMMENT_REACH}}?\\s${SHORT_COUNT}\\s+Reply\\b(?!\\s+\\d{4}\\b)`,
+        `(?:${AGE_AGO}|${GLUED_AGE}(?:\\s+ago\\b)?)\\s+(?:(?!\\bago\\b|\\bReply\\b|${GLUED_AGE})[\\s\\S]){1,${COMMENT_REACH}}?\\s${SHORT_COUNT}\\s+Reply\\b(?!\\s+\\d{4}\\b)`,
         "gu",
       ),
     },
@@ -644,19 +737,18 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
         `(?<![\\p{L}\\p{N}'’.-])\\p{Lu}[\\p{L}'’.-]*(?:\\s+\\p{Lu}[\\p{L}'’.-]*)?\\s+from\\s+[^\\s:]+(?:\\s+[^\\s:]+){0,3}?\\s+${MONTH}\\s+\\d{1,2},?\\s+\\d{4}:`,
         "gu",
       ),
-    },
-  ],
-  rateYourMusic: [
-    { mark: new RegExp(`${MONTH}\\s+\\d{1,2}\\s+\\d{4}\\s+\\d\\.\\d{2}\\s+stars\\b`, "gu") },
-  ],
-  amazon: [
-    { mark: new RegExp(`Reviewed in ${REVIEW_COUNTRY} on ${ANY_DATE}`, "gu") },
-    { mark: /\bVerified Purchase\b/gu, counts: "once" },
-    { mark: /\b\d\.\d out of 5 stars\b/gu, counts: "once" },
-    {
-      mark: new RegExp(`(?:\\bOne person|${SHORT_COUNT} people) found this helpful\\b`, "gu"),
       counts: "once",
     },
+    { mark: /\bComments:\s*\d{1,6}(?![\p{L}\p{N}])/gu, counts: "once" },
+  ],
+  amazon: [
+    {
+      mark: new RegExp(
+        `Reviewed in ${REVIEW_COUNTRY}(?:\\s*[^\\s\\p{L}\\p{N}]{1,8})?\\s+on\\s+${ANY_DATE}`,
+        "gu",
+      ),
+    },
+    { mark: new RegExp(`(?:\\bOne person|${SHORT_COUNT} people) found this helpful\\b`, "gu") },
   ],
 };
 
@@ -664,28 +756,34 @@ const FORUM_LAYOUTS: Readonly<Record<string, readonly ForumMark[]>> = {
 function forumThread(text: string): boolean {
   return Object.values(FORUM_LAYOUTS).some((marks) => {
     let found = 0;
-    for (const { mark, counts } of marks) {
+    let own = false;
+    for (const { mark, counts, supporting } of marks) {
       const count = typeof mark === "function" ? mark(text) : (text.match(mark)?.length ?? 0);
       if (counts === "alone" && count > 0) return true;
       found += counts === "once" ? Math.min(count, 1) : count;
+      if (count > 0 && !supporting) own = true;
     }
-    return found >= 2;
+    return found >= 2 && own;
   });
 }
 
 /** A token without the punctuation around it. */
 const bare = (token: string) => token.replace(/^[^\p{L}\p{N}@…]+|[^\p{L}\p{N}…]+$/gu, "");
 
-/** How many comments' ages stand within LABEL_REACH words of their own thread button. */
+/**
+ * How many comments' ages stand within LABEL_REACH words of their own thread button (a LONG_AGE
+ * only of "Reply").
+ */
 function labelledAges(words: readonly string[]): number {
   const tokens = words.map(bare);
   const used = new Set<number>();
   let pairs = 0;
   tokens.forEach((token, i) => {
-    if (!AGE.test(token)) return;
+    const labels = AGE.test(token) ? THREAD_LABELS : LONG_AGE.test(token) ? REPLY_LABELS : null;
+    if (!labels) return;
     for (let d = 1; d <= LABEL_REACH; d++) {
       for (const j of [i + d, i - d]) {
-        if (j >= 0 && j < tokens.length && !used.has(j) && THREAD_LABELS.has(tokens[j])) {
+        if (j >= 0 && j < tokens.length && !used.has(j) && labels.has(tokens[j])) {
           used.add(j);
           pairs++;
           return;

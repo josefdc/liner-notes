@@ -125,7 +125,7 @@ test("a stream that fails shows an error with a retry instead of starting a seco
   expect(posts(log)).toEqual([]);
 });
 
-test("a complete event without a result shows an error with a retry", async ({ page }) => {
+test("a complete event without a result shows an error that offers a reload", async ({ page }) => {
   await useMockApi(page, {
     suggestions: [],
     streams: {
@@ -141,7 +141,9 @@ test("a complete event without a result shows an error with a retry", async ({ p
   await search(page, "Bright Lines");
 
   await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  // Running it again from this page would fail the same way.
+  await expect(page.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open the results" })).toHaveCount(0);
   expect(posts(await apiRequests(page))).toEqual([]);
 });
@@ -228,7 +230,9 @@ test.describe("with the browser's EventSource", () => {
     await search(page, "Hurt");
 
     await expect(
-      page.getByText("A music service is not answering right now. Try again in a few minutes."),
+      page.getByText(
+        "The analysis took too long and was stopped. Try again, or search for a different song.",
+      ),
     ).toBeVisible();
     await page.waitForTimeout(1_000);
     expect(opened).toHaveLength(1);
@@ -244,7 +248,11 @@ test.describe("with the browser's EventSource", () => {
     );
     await search(page, "Hurt");
 
-    await expect(page.getByText(/Lost the connection to the analysis\./)).toBeVisible();
+    await expect(
+      page.getByText(
+        /^The connection to the analysis server was lost\. The problem may be on your side or on the server's\./,
+      ),
+    ).toBeVisible();
     await page.waitForTimeout(1_000);
     expect(opened).toHaveLength(1);
   });

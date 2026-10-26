@@ -34,8 +34,9 @@ export interface AgentState {
   threadId: string | null;
   error: string | null;
   /**
-   * Why the run failed, when the server said so (`error` events carry a code such as
-   * no_match, choice_expired or timeout); null for errors without one.
+   * Why the run failed: the code of the server's `error` event (no_match, choice_expired,
+   * timeout…), or the app's own code for a failure it raised itself (useAgent's
+   * CLIENT_ERROR_CODES and OUTDATED_ERROR). Null only for an error without either.
    */
   errorCode: string | null;
   isLoading: boolean;

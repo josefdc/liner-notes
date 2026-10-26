@@ -52,7 +52,8 @@ const STATUS_MESSAGES: Record<AgentStatus, string> = {
   // Used only when the server's own question is missing.
   disambiguation: 'Pick the track to analyse...',
   complete: 'Analysis complete. Opening the results',
-  error: 'The analysis failed. Check your search and try again.',
+  // Nothing here: an error replaces this view with the error block, which says what happened.
+  error: '',
 };
 
 // While a recorded run plays, the recorded progress is not live work: these replace the
@@ -206,61 +207,93 @@ function pickerTarget(key: string, current: number, count: number): number | nul
 /** The heading of the error block. */
 const ERROR_TITLE = 'The analysis did not finish';
 
+/** The error block's primary button: the step that can help after this failure. */
+type ErrorAction = 'retry' | 'search' | 'reload';
+
+interface ErrorView {
+  /** What happened and what to do next. */
+  lines: string[];
+  action: ErrorAction;
+}
+
 const NEXT_STEP = 'Try again, or search for a different song.';
 const GENERIC_ERROR = `Something went wrong. ${NEXT_STEP}`;
-const NO_MATCH = 'No song matched your search. Check the title and artist, then try again.';
-const CHOICE_CLOSED = 'That choice is no longer open. Search again.';
-const SERVICE_DOWN = 'A music service is not answering right now. Try again in a few minutes.';
-const UNREADABLE_SEARCH = 'The search could not be read. Check what you typed, then try again.';
-const OFFLINE_ERROR =
-  'The connection to the analysis server failed. Check your internet connection, then try again.';
+const NO_MATCH = 'No song matched your search. Check the title and artist, then search again.';
+const CHOICE_CLOSED = 'That choice is no longer open. Try again to get a fresh list of tracks.';
+const UNREADABLE_REQUEST = 'The request could not be read. Search again.';
+// The connection can fail on either side (the user's network, or a server that is down or
+// restarting): neither is blamed.
+const EITHER_SIDE = "The problem may be on your side or on the server's. Try again in a moment.";
+const CONNECTION_LOST = `The connection to the analysis server was lost. ${EITHER_SIDE}`;
 
-// What happened and what to do next, for each failure code the API (or the app) sends with an
-// error.
-const ERROR_COPY_BY_CODE: Record<string, string> = {
-  no_match: NO_MATCH,
-  choice_expired: CHOICE_CLOSED,
-  run_interrupted: CHOICE_CLOSED,
-  not_waiting: CHOICE_CLOSED,
-  invalid_selection: CHOICE_CLOSED,
-  upstream_unavailable: SERVICE_DOWN,
-  timeout: SERVICE_DOWN,
-  rate_limited: 'Too many requests. Wait a minute, then try again.',
-  forbidden_origin:
-    'The analysis server does not accept requests from this page. Open Liner Notes at its usual address and try again.',
-  invalid_input: UNREADABLE_SEARCH,
-  invalid_json: UNREADABLE_SEARCH,
-  bad_request: UNREADABLE_SEARCH,
-  // The app's own codes (useAgent's CLIENT_ERROR_CODES and OUTDATED_ERROR).
-  wrong_track: `The recording found is not the track you picked, so it is not shown. ${NEXT_STEP}`,
-  no_result: `The analysis ended without a result. ${NEXT_STEP}`,
-  stream_stalled:
-    'The analysis stopped responding. Check your internet connection, then try again.',
-  connection_lost:
-    'Lost the connection to the analysis. Check your internet connection, then try again.',
-  choice_lost: 'The track you picked could not be found again. Search again.',
-  // A newer version was deployed since this page loaded.
-  outdated_client:
+const view = (line: string, action: ErrorAction): ErrorView => ({ lines: [line], action });
+
+// The page's words, for the codes whose server message says nothing more than the code, and for
+// the app's own codes (useAgent's CLIENT_ERROR_CODES and OUTDATED_ERROR). A code that is not here
+// (rate_limited, upstream_unavailable, failed, internal_error, and any code this page does not
+// know) shows the server's own message: it can say how long to wait, or which service refused.
+const ERROR_VIEW_BY_CODE: Record<string, ErrorView> = {
+  no_match: view(NO_MATCH, 'search'),
+  choice_expired: view(CHOICE_CLOSED, 'retry'),
+  run_interrupted: view(CHOICE_CLOSED, 'retry'),
+  not_waiting: view(CHOICE_CLOSED, 'retry'),
+  invalid_selection: view(CHOICE_CLOSED, 'retry'),
+  // The run's own deadline: the whole analysis took too long, not one service.
+  timeout: view(`The analysis took too long and was stopped. ${NEXT_STEP}`, 'retry'),
+  forbidden_origin: view(
+    'The analysis server does not accept requests from this page. Open Liner Notes at its usual address, then search again.',
+    'search',
+  ),
+  invalid_input: view(UNREADABLE_REQUEST, 'search'),
+  invalid_json: view(UNREADABLE_REQUEST, 'search'),
+  bad_request: view(UNREADABLE_REQUEST, 'search'),
+  // The app's own codes.
+  wrong_track: view(
+    'The recording found is not the track you picked, so it is not shown. Search again to pick another take.',
+    'search',
+  ),
+  no_result: view(`The analysis ended without a result. ${NEXT_STEP}`, 'retry'),
+  stream_stalled: view(`The analysis server stopped answering. ${EITHER_SIDE}`, 'retry'),
+  connection_lost: view(CONNECTION_LOST, 'retry'),
+  stream_open_failed: view('The analysis could not be started. Try again in a moment.', 'retry'),
+  resume_failed: view(
+    'Your choice could not be sent to the analysis server. Try again in a moment.',
+    'retry',
+  ),
+  choice_lost: view('The track you picked could not be found again. Search again.', 'search'),
+  // A newer version was deployed since this page loaded: retrying from this page cannot help.
+  outdated_client: view(
     'This page is out of date. Reload the page to get the new version, then search again.',
+    'reload',
+  ),
 };
 
 /**
- * The lines the error block shows. A failure code this page knows (the API's or the app's own)
- * gets its own words. Any other code shows the server's message (short and written for people,
- * by the contract) and the next step. An error without a code is a thrown exception's own text
- * ("Failed to fetch"): it is never shown, only read for the kind of failure.
+ * What the error block says, and its primary button. A code with the page's own words gets
+ * them. Any other code shows the server's message (written for people, by the contract), with
+ * the next step only when the message gives none. An error without a code is an exception's own
+ * text ("Failed to fetch"): it is never shown, only read for the kind of failure.
  */
-function errorCopy(error: string | null, code: string | null): string[] {
+function errorView(error: string | null, code: string | null): ErrorView {
   if (code) {
-    const known = ERROR_COPY_BY_CODE[code];
-    if (known) return [known];
-    return error ? [error, NEXT_STEP] : [GENERIC_ERROR];
+    const known = ERROR_VIEW_BY_CODE[code];
+    if (known) return known;
+    if (!error) return view(GENERIC_ERROR, 'retry');
+    return { lines: /try again/i.test(error) ? [error] : [error, NEXT_STEP], action: 'retry' };
   }
   const text = error ?? '';
-  if (/connection|network|fetch|offline|responding|timed? ?out/i.test(text)) return [OFFLINE_ERROR];
-  if (/not (?:be )?found|no match|no results|\b404\b/i.test(text)) return [NO_MATCH];
-  return [GENERIC_ERROR];
+  if (/connection|network|fetch|offline|responding|timed? ?out/i.test(text)) {
+    return view(CONNECTION_LOST, 'retry');
+  }
+  if (/not (?:be )?found|no match|no results|\b404\b/i.test(text)) return view(NO_MATCH, 'search');
+  return view(GENERIC_ERROR, 'retry');
 }
+
+const ERROR_ACTION_LABEL: Record<ErrorAction, string> = {
+  retry: 'Try again',
+  search: 'Search again',
+  reload: 'Reload the page',
+};
 
 interface OnboardingProps {
   status: AgentStatus;
@@ -309,8 +342,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
   onSearchAgain,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  // An empty search was submitted: the box says what to type until the query changes.
-  const [emptySubmit, setEmptySubmit] = useState(false);
+  // Empty searches submitted since the query last changed: the box says what to type until it
+  // changes. Each submit renders a new alert, so a repeat is announced again.
+  const [emptySubmits, setEmptySubmits] = useState(0);
   const [sugState, sugDispatch] = useReducer(suggestionReducer, initialSuggestionState);
   const {
     suggestions,
@@ -491,14 +525,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      setEmptySubmit(false);
+      setEmptySubmits(0);
       analyze(searchQuery.trim());
     } else {
-      setEmptySubmit(true);
+      setEmptySubmits((count) => count + 1);
       inputRef.current?.focus();
     }
   };
-  const showEmptyHint = emptySubmit && !searchQuery.trim();
+  const showEmptyHint = emptySubmits > 0 && !searchQuery.trim();
 
   // The error block shows plain words; the error's own text goes to the console.
   const showsErrorBlock = status === 'error' && !isLiveUnavailable(errorCode);
@@ -506,6 +540,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
     if (showsErrorBlock)
       console.warn('[Onboarding] The analysis failed:', errorCode ?? '(no code)', error);
   }, [showsErrorBlock, error, errorCode]);
+  // The block replaces the view that had the focus (the progress screen, the picker): its
+  // heading takes the focus, so it is announced with what happened (its description) and
+  // focus never falls to the page.
+  const errorHeadingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (showsErrorBlock) errorHeadingRef.current?.focus();
+  }, [showsErrorBlock]);
+  const shownError = showsErrorBlock ? errorView(error, errorCode) : null;
 
   const isAnalyzing = isLoading || ANALYZING_STATUSES.has(status);
 
@@ -654,8 +696,8 @@ const Onboarding: React.FC<OnboardingProps> = ({
             Liner Notes
           </h1>
           <p className="text-text-secondary font-sans text-base max-w-md mx-auto leading-relaxed">
-            Type a song and its artist. Liner Notes traces its samples, credits, history and sound,
-            and shows which claims are measured, sourced or inferred.
+            Type a song and its artist. Liner Notes traces the song's samples, credits, history and
+            sound, and shows which claims are measured, sourced or inferred.
           </p>
 
           {/* Search Form */}
@@ -684,7 +726,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
-                    setEmptySubmit(false);
+                    setEmptySubmits(0);
                   }}
                   onKeyDown={handleKeyDown}
                   onFocus={() =>
@@ -699,12 +741,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   aria-expanded={showSuggestions}
                   aria-controls="search-suggestions"
                   aria-invalid={showEmptyHint || undefined}
-                  aria-describedby={showEmptyHint ? 'search-empty-hint' : undefined}
                 />
               </div>
 
               {showEmptyHint && (
+                // The alert speaks the sentence; the field does not also take it as its
+                // description, which would read it twice once focus lands there.
                 <p
+                  key={emptySubmits}
                   id="search-empty-hint"
                   role="alert"
                   className="mt-2 text-xs font-mono text-text-secondary text-left"
@@ -796,15 +840,25 @@ const Onboarding: React.FC<OnboardingProps> = ({
           )}
 
           {/* Error state: what happened and what to do next, in plain words */}
-          {showsErrorBlock && (
+          {shownError && (
             <div className="bg-status-error/5 border border-status-error/20 rounded-md p-6 space-y-4">
-              <h2 className="text-status-error text-sm font-mono flex items-center justify-center gap-2">
-                <CircleAlert size={16} aria-hidden="true" />
+              <h2
+                ref={errorHeadingRef}
+                tabIndex={-1}
+                aria-describedby={shownError.lines
+                  .map((_, index) => `error-line-${index}`)
+                  .join(' ')}
+                className="text-status-error text-sm font-mono text-balance flex items-center justify-center gap-2 focus:outline-none"
+              >
+                <CircleAlert size={16} aria-hidden="true" className="shrink-0" />
                 {ERROR_TITLE}
               </h2>
-              {errorCopy(error, errorCode).map((line, index) => (
+              {shownError.lines.map((line, index) => (
                 <p
-                  key={line}
+                  // The lines are fixed for one error: their place is their identity.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: see above
+                  key={index}
+                  id={`error-line-${index}`}
                   className={`text-xs font-mono text-center ${index === 0 ? 'text-text-secondary' : 'text-text-tertiary'}`}
                 >
                   {line}
@@ -814,10 +868,18 @@ const Onboarding: React.FC<OnboardingProps> = ({
                 <Button
                   variant="cyber"
                   size="md"
-                  leftIcon={<RotateCcw size={14} />}
-                  onClick={retry}
+                  leftIcon={
+                    shownError.action === 'search' ? <Search size={14} /> : <RotateCcw size={14} />
+                  }
+                  onClick={
+                    shownError.action === 'retry'
+                      ? retry
+                      : shownError.action === 'search'
+                        ? handleSearchAgain
+                        : () => window.location.reload()
+                  }
                 >
-                  Try again
+                  {ERROR_ACTION_LABEL[shownError.action]}
                 </Button>
                 <button
                   type="button"

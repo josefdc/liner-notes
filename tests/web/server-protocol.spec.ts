@@ -103,7 +103,9 @@ test("a refused resume shows its error with the hint for its code, and retry sea
 
   await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
   // The code decides the words, not the words "not found" in the message.
-  await expect(page.getByText("That choice is no longer open. Search again.")).toBeVisible();
+  await expect(
+    page.getByText("That choice is no longer open. Try again to get a fresh list of tracks."),
+  ).toBeVisible();
   await expect(page.getByText(/No song matched/)).toHaveCount(0);
   // A code this page has words for shows those words alone, not the server's message too.
   await expect(page.getByText(/This choice has expired/)).toHaveCount(0);
@@ -115,39 +117,75 @@ test("a refused resume shows its error with the hint for its code, and retry sea
   expect(log.filter((entry) => entry.startsWith("fetch /api/analyze"))).toEqual([]);
 });
 
-for (const { code, error, hint, showsError } of [
+// What the error block says for each code: the page's words where the server's message says
+// nothing more, the server's own message where it carries specifics (a wait time, a service),
+// with a next step only when the message has none.
+for (const { code, error, lines, action } of [
   {
     code: "no_match",
-    error: "No song matched the search.",
-    hint: "No song matched your search. Check the title and artist, then try again.",
-    showsError: false,
+    error: "No song matched that search.",
+    lines: ["No song matched your search. Check the title and artist, then search again."],
+    action: "Search again",
   },
   {
     code: "timeout",
-    error: "The analysis took too long.",
-    hint: "A music service is not answering right now. Try again in a few minutes.",
-    showsError: false,
+    error: "The analysis took too long. Please try again.",
+    lines: [
+      "The analysis took too long and was stopped. Try again, or search for a different song.",
+    ],
+    action: "Try again",
   },
   {
     code: "upstream_unavailable",
-    error: "A music service could not be reached.",
-    hint: "A music service is not answering right now. Try again in a few minutes.",
-    showsError: false,
+    error: "Spotify is limiting requests right now. Please try again in about 45 s.",
+    lines: ["Spotify is limiting requests right now. Please try again in about 45 s."],
+    action: "Try again",
   },
-  // A code without words of its own: the server's message, then the next step.
   {
     code: "failed",
-    error: "The analysis failed.",
-    hint: "Try again, or search for a different song.",
-    showsError: true,
+    error: "The request could not be completed. Please try again.",
+    lines: ["The request could not be completed. Please try again."],
+    action: "Try again",
+  },
+  {
+    code: "internal_error",
+    error: "Something went wrong. Please try again.",
+    lines: ["Something went wrong. Please try again."],
+    action: "Try again",
+  },
+  {
+    code: "invalid_input",
+    error: "The request is not valid.",
+    lines: ["The request could not be read. Search again."],
+    action: "Search again",
+  },
+  // A code this page does not know: the server's message, then the next step.
+  {
+    code: "some_new_code",
+    error: "A new kind of failure.",
+    lines: ["A new kind of failure.", "Try again, or search for a different song."],
+    action: "Try again",
   },
 ]) {
-  test(`a failure with code ${code} shows its hint`, async ({ page }) => {
-    await useMockApi(page, { suggestions: [], streams: { [ANALYZE]: failure(code, error) } });
+  test(`a failure with code ${code} says what happened and offers ${action}`, async ({ page }) => {
+    await useMockApi(page, {
+      suggestions: [],
+      streams: {
+        [ANALYZE]: failure(code, error).map((event) =>
+          event.type === "error" && code === "some_new_code" ? { $unchecked: event } : event,
+        ),
+      },
+    });
     await search(page, "Hurt");
-    await expect(page.getByRole("heading", { name: "The analysis did not finish" })).toBeVisible();
-    await expect(page.getByText(hint)).toBeVisible();
-    await expect(page.getByText(error, { exact: true })).toHaveCount(showsError ? 1 : 0);
+    const heading = page.getByRole("heading", { name: "The analysis did not finish" });
+    await expect(heading).toBeVisible();
+    const block = heading.locator("xpath=..");
+    await expect(block.locator("p")).toHaveText(lines);
+    await expect(block.getByRole("button", { name: action, exact: true })).toBeVisible();
+    // Never a second "try again" after a message that already says it.
+    expect(
+      (await block.locator("p").allInnerTexts()).join(" ").match(/try again/gi)?.length ?? 0,
+    ).toBeLessThanOrEqual(1);
   });
 }
 

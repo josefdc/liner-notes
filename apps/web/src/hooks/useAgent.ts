@@ -78,6 +78,9 @@ export const CLIENT_ERROR_CODES = {
   streamStalled: 'stream_stalled',
   connectionLost: 'connection_lost',
   choiceLost: 'choice_lost',
+  // The stream could not be opened (the exception's own text is kept in `error`, never shown).
+  streamOpenFailed: 'stream_open_failed',
+  resumeFailed: 'resume_failed',
 } as const;
 
 /** Loads the code that reads the streams, unless it is loaded already. */
@@ -605,7 +608,11 @@ export function useAgent(): UseAgentReturn {
           ),
         );
       } catch (error) {
-        fail(run, error instanceof Error ? error.message : 'Connection failed');
+        fail(
+          run,
+          error instanceof Error ? error.message : 'Connection failed',
+          CLIENT_ERROR_CODES.streamOpenFailed,
+        );
       }
     },
     [addLog, fail, openRunStream],
@@ -665,7 +672,11 @@ export function useAgent(): UseAgentReturn {
         const url = `${API_BASE_URL}/analyze/stream/resume?threadId=${encodeURIComponent(run.threadId)}&selectedTrackId=${encodeURIComponent(candidateId)}${how}`;
         openRunStream(url, run);
       } catch (error) {
-        fail(run, error instanceof Error ? error.message : 'Selection failed');
+        fail(
+          run,
+          error instanceof Error ? error.message : 'Selection failed',
+          CLIENT_ERROR_CODES.resumeFailed,
+        );
       }
     },
     [addLog, analyze, fail, openRunStream],

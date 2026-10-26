@@ -133,6 +133,7 @@ describe('useAgent stream errors', () => {
     analysis.fail();
 
     expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('connection_lost');
     expect(result.current.isLoading).toBe(false);
     expect(analysis.closed).toBe(true);
     expect(streams()).toHaveLength(1);
@@ -193,6 +194,49 @@ describe('useAgent stream errors', () => {
     lastStream().send({ type: 'done' });
 
     expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('no_result');
+  });
+
+  it('gives a search without candidates the no_match code', () => {
+    const { result } = startAnalysis();
+    lastStream().send({ type: 'connected', threadId: 't1' });
+    lastStream().send(interrupt([]));
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('no_match');
+  });
+
+  it('gives a stream that cannot be opened its own code', () => {
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        constructor() {
+          throw new TypeError('Failed to fetch');
+        }
+      },
+    );
+    const { result } = startAnalysis();
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorCode).toBe('stream_open_failed');
+  });
+
+  it('gives a resume that cannot be opened its own code', async () => {
+    const { hook } = openPicker();
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        constructor() {
+          throw new TypeError('Failed to fetch');
+        }
+      },
+    );
+    await act(async () => {
+      await hook.result.current.selectCandidate('c2', 'click');
+    });
+
+    expect(hook.result.current.status).toBe('error');
+    expect(hook.result.current.errorCode).toBe('resume_failed');
   });
 });
 

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { audioReadings } from '../../constants';
 import { AudioStats, ResultNotices } from '../EstimatedWarning';
@@ -6,6 +6,8 @@ import SmartTimeline from '../SmartTimeline';
 import SonicFingerprint from '../SonicFingerprint';
 import { MeasuredValue } from './MeasuredValue';
 import { MissingValue } from './MissingValue';
+import fullResultRaw from '../../../../../tests/mock-sse/fixtures/full-result.json?raw';
+import type { TrackData } from '../../types';
 import { audioBlock, measuredTrack } from './testing';
 
 afterEach(cleanup);
@@ -53,6 +55,189 @@ describe('MeasuredValue', () => {
   it('says the confidence and basis are unknown when the result does not send them', () => {
     render(<MeasuredValue label="BPM" value="123" kind="measured" title="Measured" />);
     expect(document.body.textContent).toContain('Measured · confidence and basis unknown');
+  });
+});
+
+describe('MeasuredValue, compact', () => {
+  const measured = (
+    <MeasuredValue
+      label="BPM"
+      value="123"
+      kind="measured"
+      confidence="confidence 0.62"
+      basis="signal, 29.8 s preview"
+      detail="essentia.RhythmExtractor2013"
+      title="Measured from the audio preview"
+      layout="compact"
+    />
+  );
+
+  it('shows the value and a chip of its kind, with no provenance line until it is asked for', () => {
+    const { container } = render(measured);
+    expect(container.textContent).toBe('BPM 123Measured');
+    const chip = screen.getByRole('button', { name: 'Measured: how BPM was obtained' });
+    expect(chip.getAttribute('aria-expanded')).toBe('false');
+    const lines = document.getElementById(chip.getAttribute('aria-controls') ?? '');
+    expect(lines?.hidden).toBe(true);
+    expect(container.querySelector('[data-provenance="measured"]')).not.toBeNull();
+  });
+
+  it('opens the provenance lines from the chip, and closes them again', () => {
+    const { container } = render(measured);
+    const chip = screen.getByRole('button', { name: /^Measured/ });
+    fireEvent.click(chip);
+    expect(chip.getAttribute('aria-expanded')).toBe('true');
+    const lines = document.getElementById(chip.getAttribute('aria-controls') ?? '');
+    expect(lines?.hidden).toBe(false);
+    expect(lines?.textContent).toBe(
+      'Measured · confidence 0.62 · signal, 29.8 s previewessentia.RhythmExtractor2013',
+    );
+    fireEvent.click(chip);
+    expect(container.textContent).toBe('BPM 123Measured');
+  });
+
+  it('calls a model score a model estimate, in the inferred colour, never measured', () => {
+    const { container } = render(
+      <MeasuredValue
+        label="Dance"
+        value="0.81"
+        kind="estimate"
+        confidence="score, not a probability"
+        basis="model discogs-effnet-bs64-1"
+        title="Score"
+        layout="compact"
+      />,
+    );
+    expect(container.textContent).toBe('Dance 0.81Model estimate');
+    expect(container.textContent).not.toMatch(/measured/i);
+    const chip = container.querySelector('[data-provenance]') as HTMLElement;
+    expect(chip.dataset.provenance).toBe('inferred');
+    expect(chip.className).toContain('text-prov-inferred');
+    // Off the sourced amber: an estimate never reads as sourced.
+    expect(container.innerHTML).not.toMatch(/analog|amber/);
+  });
+
+  it('says a value no measurement confirms is not confirmed, in neutral', () => {
+    const { container } = render(
+      <MeasuredValue label="BPM" value="105" kind="unverified" title="Copy" layout="compact" />,
+    );
+    expect(container.textContent).toBe('BPM 105Not confirmed, basis unknown');
+    const chip = container.querySelector('[data-provenance]') as HTMLElement;
+    expect(chip.dataset.provenance).toBe('unconfirmed');
+    expect(chip.dataset.variant).toBe('neutral');
+  });
+
+  it('draws the measured label in a text colour, not a faded cyan', () => {
+    const { container } = render(measured);
+    const label = Array.from(container.querySelectorAll('span')).find(
+      (span) => span.textContent === 'BPM',
+    );
+    expect(label?.className).toBe('text-text-secondary');
+  });
+});
+
+describe("the Dashboard's compact audio values", () => {
+  it('show each value with its kind, and a missing one with why', () => {
+    const track = measuredTrack(
+      audioBlock({ analyzerVersion: '2.1.0+essentia', key: null, fingerprint: null }),
+      { key: null, audioSource: 'unavailable', audioUnavailableReason: 'not_detected' },
+    );
+    render(<AudioStats track={track} compact />);
+    const values = screen.getByRole('list', { name: 'Audio values' });
+    expect(item(values, 'BPM')).toBe('BPM 123.1Measured');
+    // A withheld value still says why, without opening anything.
+    expect(item(values, 'Key')).toBe('Key not measured— not detected in the preview');
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Measured',
+      'Measured',
+    ]);
+  });
+});
+
+describe('MeasuredValue, compact, without a confidence or basis', () => {
+  it('says the basis is unknown on the chip itself, for a measured value and an estimate', () => {
+    const { container } = render(
+      <>
+        <MeasuredValue label="BPM" value="105" kind="measured" title="Measured" layout="compact" />
+        <MeasuredValue label="Mood" value="0.3" kind="estimate" title="Score" layout="compact" />
+      </>,
+    );
+    expect(container.textContent).toBe(
+      'BPM 105Measured, basis unknownMood 0.3Model estimate, basis unknown',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Measured, basis unknown: how BPM was obtained' }),
+    ).toBeTruthy();
+  });
+
+  it('keeps the value and its chip together, as one unit', () => {
+    const { container } = render(
+      <MeasuredValue
+        label="Loudness"
+        value="-13.6 dBFS RMS"
+        kind="measured"
+        confidence="direct measure"
+        basis="signal"
+        title="Measured"
+        layout="compact"
+      />,
+    );
+    const pair = container.querySelector('[data-value-pair]') as HTMLElement;
+    // One line from md up; on a narrow screen the chip right under the value, for every value.
+    expect(pair.className).toContain('md:flex-nowrap');
+    expect(pair.className).toContain('flex-col');
+    expect(pair.className).toContain('gap-1');
+    expect(pair.children).toHaveLength(2);
+    expect((pair.lastElementChild as HTMLElement).className).toContain('shrink-0');
+  });
+});
+
+describe('the compact view of a result from an older API', () => {
+  // The full-result fixture: no `audio` block, so its values' basis is unknown, and its model
+  // scores carry a confidence (the description of the score) but no basis.
+  const legacy = () => {
+    const fixture = JSON.parse(fullResultRaw) as {
+      streams: Record<string, Array<{ type: string; data?: unknown }>>;
+    };
+    return fixture.streams['/api/analyze/stream'].find((event) => event.type === 'complete')
+      ?.data as TrackData;
+  };
+
+  it('says "basis unknown" on each chip exactly where the provenance line says it', () => {
+    const track = legacy();
+    const chips = (() => {
+      const { container } = render(<AudioStats track={track} compact />);
+      const found = [...container.querySelectorAll('[data-value-pair]')].map((pair) => ({
+        label: pair.firstElementChild?.textContent ?? '',
+        chip: pair.lastElementChild?.textContent ?? '',
+      }));
+      cleanup();
+      return found;
+    })();
+    const { container } = render(<AudioStats track={track} />);
+    const lines = new Map(
+      [...container.querySelectorAll('[data-value-kind]')].map((value) => [
+        value.firstElementChild?.textContent ?? '',
+        value.textContent ?? '',
+      ]),
+    );
+    expect(chips.map(({ label }) => label)).toEqual([
+      'BPM 105',
+      'Key A Minor',
+      'Energy 0.71',
+      'Mood Mellow 0.34',
+      'Dance 0.62',
+      'Acoustic 0.12',
+    ]);
+    for (const { label, chip } of chips) {
+      const line = lines.get(label) ?? '';
+      expect(chip.includes('basis unknown'), `${label}: ${chip} / ${line}`).toBe(
+        line.includes('basis unknown'),
+      );
+    }
+    expect(chips.find(({ label }) => label.startsWith('Mood'))?.chip).toBe(
+      'Model estimate, basis unknown',
+    );
   });
 });
 

@@ -36,6 +36,7 @@ export const SourceLink: React.FC<SourceLinkProps> = ({ evidence, showTier = tru
       </span>
     );
   }
+  const lastSpace = label.lastIndexOf(' ');
   // The title is part of the link's name, once: no title attribute to announce it again.
   return (
     <a
@@ -43,11 +44,21 @@ export const SourceLink: React.FC<SourceLinkProps> = ({ evidence, showTier = tru
       target="_blank"
       rel="noopener noreferrer"
       data-source={evidence.source}
-      className="inline-flex items-center gap-1 text-text-secondary underline underline-offset-2 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
+      className="text-text-secondary underline underline-offset-2 decoration-white/30 hover:text-white hover:decoration-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber focus-visible:ring-offset-2 focus-visible:ring-offset-void rounded-sm"
     >
-      {label}
+      {/* The icon stays with the label's last word, so a label that wraps in a narrow column
+          keeps it at its end instead of at the column's edge */}
+      {label.slice(0, lastSpace + 1)}
+      <span className="whitespace-nowrap">
+        {label.slice(lastSpace + 1)}
+        <ExternalLink
+          size={10}
+          aria-hidden="true"
+          data-external-icon
+          className="ml-1 inline-block align-baseline"
+        />
+      </span>
       <span className="sr-only">{title ? ` — ${title}` : ''}, opens in a new tab</span>
-      <ExternalLink size={10} aria-hidden="true" className="flex-shrink-0" />
     </a>
   );
 };

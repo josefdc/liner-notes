@@ -2,7 +2,13 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AUDIO_UNAVAILABLE_TEXT } from '../constants';
 import type { AudioUnavailableReason, TrackData } from '../types';
-import { AudioStats, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
+import {
+  AudioStats,
+  InferenceLabel,
+  RecordedRunNotice,
+  ResultNotices,
+  ResultOriginLabel,
+} from './EstimatedWarning';
 
 afterEach(cleanup);
 
@@ -420,6 +426,28 @@ describe('ResultNotices search match', () => {
     expect(screen.getByRole('region', { name: 'Search match' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Missing data' }).textContent).toContain(
       'Model unavailable',
+    );
+  });
+});
+
+describe('the chips of who wrote a result', () => {
+  it('labels only what a model wrote as model inference: that chip takes no other words', () => {
+    // @ts-expect-error: content no model wrote has a chip of its own kind (ResultOriginLabel)
+    render(<InferenceLabel>From source data</InferenceLabel>);
+    const chip = document.querySelector('[data-provenance]') as HTMLElement;
+    expect(chip.textContent).toBe('Model inference');
+    expect(chip.dataset.provenance).toBe('inferred');
+  });
+
+  it('labels source data with a neutral record chip, and the model with the inferred one', () => {
+    render(<ResultOriginLabel fromSourceData />);
+    expect(document.querySelector('[data-provenance]')?.getAttribute('data-provenance')).toBe(
+      'record',
+    );
+    cleanup();
+    render(<ResultOriginLabel fromSourceData={false} />);
+    expect(document.querySelector('[data-provenance]')?.getAttribute('data-provenance')).toBe(
+      'inferred',
     );
   });
 });

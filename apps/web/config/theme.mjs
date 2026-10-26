@@ -7,8 +7,8 @@
 //
 // Every --color-* token becomes a key of `colors`, its var() aliases resolved to the value:
 // --color-void-light is colors.voidLight and --color-status-error is colors.error; the gray, viz,
-// prov, text and accent families are nested (colors.gray[400], colors.viz.pink,
-// colors.prov.measured), and each data-visualisation colour is also exported under its hue
+// prov, text, accent and relation families are nested (colors.gray[400], colors.viz.pink,
+// colors.prov.measured, colors.relation.cover), and each data-visualisation colour is also exported under its hue
 // (colors.pink is colors.viz.pink), the names the charts and the graph use.
 //
 // It fails, and writes nothing, when a token's var() does not resolve, when a --color-* token is
@@ -26,7 +26,7 @@ export const SRC_DIR = join(web, 'src');
 export const TOKENS_PATH = join(SRC_DIR, 'styles', 'tokens.css');
 export const THEME_PATH = join(SRC_DIR, 'styles', 'theme.ts');
 
-const NESTED = new Set(['gray', 'viz', 'prov', 'text', 'accent']);
+const NESTED = new Set(['gray', 'viz', 'prov', 'text', 'accent', 'relation']);
 const GROUPS = ['status-'];
 
 /**
@@ -39,30 +39,19 @@ export const ROLES = {
     map: {
       current: '--color-cyber',
       origin: '--color-analog',
-      sampler: '--color-viz-purple',
-      influence: '--color-viz-green',
       default: '--color-gray-500',
     },
   },
   linkColors: {
     doc: 'Genealogy graph: link colours by type (the graph itself uses genealogy/linkStyle.ts).',
     map: {
-      sample: '--color-analog',
-      cover: '--color-viz-purple',
-      remix: '--color-viz-pink',
-      influence: '--color-gray-600',
+      sample: '--color-relation-sample',
+      interpolation: '--color-relation-interpolation',
+      cover: '--color-relation-cover',
+      remix: '--color-relation-remix',
+      producer: '--color-relation-producer',
+      influence: '--color-relation-influence',
       default: '--color-gray-600',
-    },
-  },
-  keyMomentColors: {
-    doc: "SmartTimeline: key moment colours, for the marker and for the moment's description.",
-    text: true,
-    map: {
-      energy_peak: '--color-cyber',
-      energy_drop: '--color-accent-pink',
-      onset: '--color-accent-indigo',
-      harmonic_change: '--color-analog',
-      silence: '--color-gray-400',
     },
   },
 };

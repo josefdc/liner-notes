@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   contrastRatio,
   contrastReport,
+  distancesFromInferred,
+  MIN_DISTANCE_FROM_INFERRED,
   main,
   over,
   surfaceStacks,
@@ -125,25 +127,24 @@ describe("contrast report", () => {
       "--color-text-muted",
       "--color-prov-inferred",
       "--color-status-warning",
-      "--color-accent-purple",
+      "--color-accent-pink",
       "--color-spotify",
       // Text by use in the source, not by name:
-      "--color-gray-400",
+      "--color-cyber/70",
       "--color-cyber/80",
     ]) {
       expect(out).toMatch(new RegExp(`^ok {3}${name.replace("/", "\\/")} +needs 4\\.5:1 `, "m"));
     }
-    expect(out).toMatch(/^ok {3}--color-viz-indigo +needs 3:1 /m);
+    expect(out).toMatch(/^ok {3}--color-viz-blue +needs 3:1 /m);
+    expect(out).toMatch(/^ok {3}--color-relation-cover +needs 3:1 /m);
     expect(out).toMatch(/^ok {3}--color-black +needs 4\.5:1 +lowest 21\.00:1 on white$/m);
   });
 
   it("holds every accent to 4.5:1 as text, used or not", () => {
-    const css = withToken("--color-accent-indigo", "#6366f1");
+    const css = withToken("--color-accent-pink", "#db2777");
     const { code, out } = run([sheet(css), "--src", "none"]);
     expect(code).toBe(1);
-    expect(out).toMatch(
-      /^FAIL --color-accent-indigo +needs 4\.5:1 +[23]\.\d\d:1 on surface-active/m,
-    );
+    expect(out).toMatch(/^FAIL --color-accent-pink +needs 4\.5:1 +[23]\.\d\d:1 on surface-active/m);
   });
 
   it("holds a colour the source draws text with to 4.5:1, at the class's opacity", () => {
@@ -172,22 +173,22 @@ describe("contrast report", () => {
   });
 
   it("checks text on the tint its own class string sets, at rest and hovered", () => {
-    // The chart purple: 3:1 or more as a graphic, far below 4.5:1 as text on its own hover tint.
-    const css = withToken("--color-accent-purple", "#a855f7");
+    // A darker pink: far below 4.5:1 as text on its own hover tint.
+    const css = withToken("--color-accent-pink", "#db2777");
     const src = source(
-      "const chip = 'text-accent-purple hover:bg-accent-purple/20 border-accent-purple/30';",
+      "const chip = 'text-accent-pink hover:bg-accent-pink/20 border-accent-pink/30';",
     );
-    const purple = entry(contrastReport(css, src), "--color-accent-purple");
-    expect(purple.passes).toBe(false);
-    const tinted = purple.results.filter((result) =>
-      result.surface.startsWith("bg-accent-purple/20 on "),
+    const pink = entry(contrastReport(css, src), "--color-accent-pink");
+    expect(pink.passes).toBe(false);
+    const tinted = pink.results.filter((result) =>
+      result.surface.startsWith("bg-accent-pink/20 on "),
     );
     expect(tinted.length).toBeGreaterThan(0);
     expect(Math.min(...tinted.map((result) => result.ratio))).toBeLessThan(3.5);
     // The tint stands in for a state: it is never drawn on a hover or active surface.
     expect(tinted.some((result) => /on surface-(hover|active)/.test(result.surface))).toBe(false);
     // The token as it is passes there.
-    expect(entry(contrastReport(tokens, src), "--color-accent-purple").passes).toBe(true);
+    expect(entry(contrastReport(tokens, src), "--color-accent-pink").passes).toBe(true);
   });
 
   it("checks dark text on its light fill instead of on the surfaces", () => {
@@ -196,20 +197,33 @@ describe("contrast report", () => {
     expect(black.results.map((result) => result.surface)).toEqual(["white"]);
   });
 
-  it("checks the colours of chart roles that colour text (key moment descriptions)", () => {
-    const report = contrastReport(tokens);
-    expect(entry(report, "--color-accent-pink").sites).toContain(
-      "theme.ts keyMomentColors.energy_drop",
-    );
-    expect(entry(report, "--color-gray-400").sites).toContain("theme.ts keyMomentColors.silence");
+  it("checks the colours of chart roles that colour text, at 4.5:1 with their role named", () => {
+    const roles = {
+      tooltipColors: {
+        doc: "A chart's tooltip text.",
+        text: true,
+        map: { dim: "--color-gray-600" },
+      },
+      lineColors: { doc: "A chart's lines.", map: { dim: "--color-gray-700" } },
+    };
+    const report = contrastReport(tokens, null, [], roles);
+    const text = entry(report, "--color-gray-600");
+    expect(text.minimum).toBe(4.5);
+    expect(text.sites).toContain("theme.ts tooltipColors.dim");
+    expect(text.passes).toBe(false);
+    // A role that does not colour text is not held to the text minimum.
+    expect(report.find((item) => item.name === "--color-gray-700")).toBeUndefined();
   });
 
-  it("checks data-visualisation colours at 3:1 on the page and panels only", () => {
-    const indigo = entry(contrastReport(tokens), "--color-viz-indigo");
-    expect(indigo.minimum).toBe(3);
-    expect(indigo.results.some((result) => /surface-(hover|active)/.test(result.surface))).toBe(
-      false,
-    );
+  it("checks data-visualisation and relation colours at 3:1 on the page and panels only", () => {
+    for (const name of ["--color-viz-blue", "--color-relation-remix"]) {
+      const graphic = entry(contrastReport(tokens), name);
+      expect(graphic.minimum, name).toBe(3);
+      expect(
+        graphic.results.some((result) => /surface-(hover|active)/.test(result.surface)),
+        name,
+      ).toBe(false);
+    }
   });
 
   it("fails the old text colours: tertiary 4.45:1 and muted 2.07:1 on the page", () => {
@@ -305,9 +319,13 @@ describe("token sheet", () => {
 
   it("validates every alias, colour or not", () => {
     expect(() => validateTokens(readTokens(tokens))).not.toThrow();
-    const broken = withToken("--shadow-glow-amber-subtle", "var(--shadow-glow-analog-sutble)");
+    // A shadow is not a colour, but the colour it mixes must exist.
+    const broken = withToken(
+      "--shadow-glow-analog-subtle",
+      "0 0 12px color-mix(in srgb, var(--color-analog-sutble) 15%, transparent)",
+    );
     expect(() => validateTokens(readTokens(broken))).toThrow(
-      "--shadow-glow-amber-subtle: --shadow-glow-analog-sutble is not defined",
+      "--shadow-glow-analog-subtle: --color-analog-sutble is not defined",
     );
   });
 
@@ -393,12 +411,12 @@ describe("class strings", () => {
   });
 
   it("takes a tint passed to a class-joining call as the same element's", () => {
-    const css = withToken("--color-accent-purple", "#a855f7");
-    const code = "const a = cn('text-accent-purple', active && 'hover:bg-accent-purple/20');";
-    const purple = contrastReport(css, source(code)).find(
-      (item) => item.name === "--color-accent-purple",
+    const css = withToken("--color-accent-pink", "#db2777");
+    const code = "const a = cn('text-accent-pink', active && 'hover:bg-accent-pink/20');";
+    const pink = contrastReport(css, source(code)).find(
+      (item) => item.name === "--color-accent-pink",
     );
-    expect(purple.results.some((r) => r.surface.startsWith("bg-accent-purple/20 on "))).toBe(true);
+    expect(pink.results.some((r) => r.surface.startsWith("bg-accent-pink/20 on "))).toBe(true);
   });
 
   it("fails a default-palette colour used as text: it is not a design token", () => {
@@ -459,5 +477,47 @@ describe("class strings", () => {
     expect(code).toBe(0);
     expect(out).not.toMatch(/^(KNOWN|FAIL) /m);
     expect(out).not.toContain("known");
+  });
+});
+
+describe("distance from the inferred violet", () => {
+  it("passes the tokens, the measured cyan closest at ΔE 17.5 with deuteranopia", () => {
+    const rows = distancesFromInferred(tokens);
+    expect(rows.every((row) => row.passes)).toBe(true);
+    expect(rows[0]).toMatchObject({ name: "--color-cyber", vision: "deuteranopia" });
+    expect(rows[0].distance).toBeGreaterThanOrEqual(MIN_DISTANCE_FROM_INFERRED);
+  });
+
+  it.each([
+    ["a lavender under any name", "--color-accent-lavender", "#d8b4fe", "protanopia"],
+    [
+      "a light blue that red-green deficiencies see as violet",
+      "--color-status-info",
+      "#60a5fa",
+      "protanopia",
+    ],
+    ["the old album blue", "--color-accent-sky", "#93c5fd", "deuteranopia"],
+  ])("fails %s", (_name, token, value, vision) => {
+    const css = tokens.replace("@theme {", `@theme {\n  ${token}: ${value};`);
+    const row = distancesFromInferred(css).find((item) => item.name === token);
+    expect(row).toMatchObject({ passes: false, vision });
+    const { code, out } = run([sheet(css), "--src", "none"]);
+    expect(code).toBe(1);
+    expect(out).toMatch(
+      new RegExp(`^FAIL ${token} +ΔE \\d+\\.\\d from --color-prov-inferred \\(${vision}\\)`, "m"),
+    );
+  });
+
+  it("reads a translucent token as drawn on the page", () => {
+    const css = tokens.replace("@theme {", "@theme {\n  --color-wash: rgba(196, 164, 252, 0.9);");
+    expect(distancesFromInferred(css).find((row) => row.name === "--color-wash")?.passes).toBe(
+      false,
+    );
+  });
+
+  it("says nothing for a sheet without the inferred token", () => {
+    expect(
+      distancesFromInferred("@theme { --color-void: #050505; --color-cyber: #00f0ff; }"),
+    ).toEqual([]);
   });
 });

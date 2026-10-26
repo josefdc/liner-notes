@@ -1,12 +1,13 @@
 import type { Claim, ClaimKind } from '@liner-notes/contract';
-import { BookOpenCheck, Gauge } from 'lucide-react';
+import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type React from 'react';
 import { formatBpm, formatSeconds, type Reading } from '../../constants';
 import { InferenceLabel, ReadingValue } from '../EstimatedWarning';
 import { keyLabel, type MeasuredAudio } from '../measured/audio';
 import { Badge } from '../ui/Badge';
 import type { ShownClaim } from './claims';
-import { SourceLink } from './SourceLink';
+import { ProvenanceChip } from './ProvenanceChip';
+import { SourceNote } from './SourceNote';
 
 // Where one claim comes from, as text: its kind (measured, sourced or inferred), the sources it
 // cites with their tier, what the verifier said ("not checked by the verifier" when it has not
@@ -149,22 +150,28 @@ export function citationsText(shown: ShownClaim): string {
   return shown.claim.origin === 'code' ? 'Cites:' : 'Cited by the model:';
 }
 
-const KindBadge: React.FC<{ kind: ClaimKind; origin: Claim['origin'] }> = ({ kind, origin }) => {
-  // A code-built claim that cannot be shown as measured or sourced is inferred, not the model's.
-  if (kind === 'inferred')
-    return <InferenceLabel>{origin === 'code' ? 'Inferred' : undefined}</InferenceLabel>;
-  if (kind === 'sourced') {
-    return (
-      <Badge variant="green" icon={<BookOpenCheck size={10} />}>
-        {KIND_TEXT.sourced}
-      </Badge>
+/** The words for a code-built claim that cannot be shown as measured or sourced. */
+export const NOT_SOURCED_TEXT = 'Not sourced';
+
+const KindBadge: React.FC<{
+  kind: ClaimKind;
+  origin: Claim['origin'];
+  /** The kind the claim states (a measurement, a sourced fact…), before it was checked. */
+  stated: ClaimKind;
+}> = ({ kind, origin, stated }) => {
+  // A code-built claim that cannot be shown as measured or sourced is not the model's. A claim
+  // of a measurement whose value was not measured is "not confirmed" (the unconfirmed chip's own
+  // words); any other is "not sourced" (built from records whose evidence does not hold), as a
+  // link of that kind is.
+  if (kind === 'inferred') {
+    if (origin !== 'code') return <InferenceLabel />;
+    return stated === 'measured' ? (
+      <ProvenanceChip kind="unconfirmed" />
+    ) : (
+      <ProvenanceChip kind="unconfirmed">{NOT_SOURCED_TEXT}</ProvenanceChip>
     );
   }
-  return (
-    <Badge variant="cyber" icon={<Gauge size={10} />}>
-      {KIND_TEXT.measured}
-    </Badge>
-  );
+  return <ProvenanceChip kind={kind}>{KIND_TEXT[kind]}</ProvenanceChip>;
 };
 
 interface ClaimChipProps {
@@ -204,10 +211,24 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
         <ReadingValue reading={measuredValue} />
       ) : (
         <div className="flex flex-wrap items-center gap-1.5">
-          <KindBadge kind={kind} origin={claim.origin} />
-          {partial && <Badge variant="gray">Partly supported</Badge>}
-          {unsupported && <Badge variant="warning">Not supported</Badge>}
-          {conflict && <Badge variant="warning">Conflict</Badge>}
+          <KindBadge kind={kind} origin={claim.origin} stated={claim.kind} />
+          {/* The verifier's objections: their own colour and icon, so a sourced claim its
+              sources contradict never reads as plainly sourced */}
+          {partial && (
+            <Badge variant="neutral" icon={<CircleAlert size={12} />}>
+              Partly supported
+            </Badge>
+          )}
+          {unsupported && (
+            <Badge variant="warning" icon={<TriangleAlert size={12} />}>
+              Not supported
+            </Badge>
+          )}
+          {conflict && (
+            <Badge variant="warning" icon={<TriangleAlert size={12} />}>
+              Conflict
+            </Badge>
+          )}
           {status && <span className={LINE}>{status}</span>}
         </div>
       )}
@@ -217,7 +238,7 @@ export const ClaimChip: React.FC<ClaimChipProps> = ({
         <p className={`${LINE} flex flex-wrap items-center gap-x-2 gap-y-1`}>
           <span>{citationsText(shown)}</span>
           {cited.map((evidence) => (
-            <SourceLink key={evidence.id} evidence={evidence} showTier={kind === 'sourced'} />
+            <SourceNote key={evidence.id} evidence={evidence} showTier={kind === 'sourced'} />
           ))}
         </p>
       )}

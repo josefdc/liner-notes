@@ -672,7 +672,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       role="option"
                       aria-selected={index === selectedIndex}
                       onClick={() => handleSelectAndAnalyze(candidate)}
-                      className={`w-full flex items-center gap-3 p-3 text-left transition-all animate-fade-in-up opacity-0 focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
+                      className={`w-full flex items-center gap-3 p-3 text-left transition-all animate-fade-in-up opacity-0 focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
                         index === selectedIndex
                           ? 'bg-cyber/20 border-l-2 border-cyber'
                           : 'hover:bg-white/5 border-l-2 border-transparent'
@@ -844,7 +844,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
           {showPicker && candidates && (
             <div
               ref={hitlRef}
-              className="mb-6 animate-fade-in-up rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/40 focus-visible:ring-offset-4 focus-visible:ring-offset-void"
+              className="mb-6 animate-fade-in-up rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-4 focus-visible:ring-offset-void"
               onKeyDown={handleHitlKeyDown}
               tabIndex={0}
               onMouseEnter={() => setHitlPaused(true)}
@@ -876,7 +876,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
                       setHitlSelectedIndex(index);
                       setHitlCountdown(null);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-all focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none ${
                       index === hitlSelectedIndex
                         ? 'bg-cyber/15 border border-cyber/30'
                         : 'bg-white/5 border border-transparent hover:bg-white/10'

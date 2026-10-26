@@ -52,7 +52,7 @@ const ScoreList: React.FC<{ reading: ScoreListReading }> = ({ reading }) => {
         {items.map((item) => (
           <li key={item.key}>
             <MeasuredValue
-              compact
+              layout="bare"
               kind="estimate"
               label={scoreLabel(item.label)}
               value={item.score.toFixed(2)}
@@ -117,7 +117,7 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
     <div className="w-full h-full relative flex flex-col gap-4">
       {fingerprint && <AudioScores fingerprint={fingerprint} />}
       <div className="flex-1 min-h-[250px] relative">
-        <div className="absolute inset-0 bg-cyber-dim blur-3xl rounded-full opacity-20 pointer-events-none"></div>
+        <div className="absolute inset-0 bg-prov-inferred/10 blur-3xl rounded-full opacity-20 pointer-events-none"></div>
         {/* initialDimension avoids the width(-1)/height(-1) warning before the first measure */}
         <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
           <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
@@ -129,9 +129,10 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
             <Radar
               name="Genre affinity (model inference)"
               dataKey="A"
-              stroke={colors.cyber}
+              // Written by the model: the inferred violet, never the measured cyan
+              stroke={colors.prov.inferred}
               strokeWidth={2}
-              fill={colors.cyber}
+              fill={colors.prov.inferred}
               fillOpacity={0.3}
               animationDuration={800}
               animationEasing="ease-out"

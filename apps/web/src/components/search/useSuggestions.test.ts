@@ -343,10 +343,20 @@ describe('mergeDuplicates', () => {
         record('dated', 'Intro', { releaseDate: '2012-01-01' }),
       ]),
     ).toEqual(['dated']);
+    // A date of 0000 is unknown, and the row's year is not read in its place.
+    expect(
+      ids([
+        record('dated', 'Intro', { isrc: 'USAT29900609', releaseDate: '2012-01-01' }),
+        {
+          ...record('unknown', 'Intro', { isrc: 'USAT29900609', releaseDate: '0000' }),
+          releaseYear: '2011',
+        },
+      ]),
+    ).toEqual(['dated']);
   });
 
-  // The web casts the answer to the contract type (apiClient.ts) and does not parse it; parsing
-  // here checks that the contract's schema keeps the date the merge reads.
+  // The web does not parse this answer (apiClient.ts casts it to its own type); parsing here
+  // checks that the contract's schema keeps the date the merge reads.
   it("keeps the earliest release of an answer the contract's SearchSuggestResponse accepts", () => {
     const answer = SearchSuggestResponse.parse({
       success: true,

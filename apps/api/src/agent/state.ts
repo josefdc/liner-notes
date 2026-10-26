@@ -103,7 +103,8 @@ export interface SpotifyData {
   album: string;
   /**
    * Spotify's album release date as sent ("2011", "2011-10", "2011-10-18"; "0000" when Spotify
-   * does not know it); null when it sent none or something else.
+   * does not know it); null when it sent none or something else. A track picked in the picker
+   * holds its year only.
    */
   releaseDate: string | null;
   coverUrl: string;

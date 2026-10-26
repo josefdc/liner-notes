@@ -216,6 +216,42 @@ describe("web research searches", () => {
     expect(isSocialPage("https://www.toscana.com/")).toBe(false);
   });
 
+  it("excludes forum comment pages: Hacker News, on any subdomain or translate proxy", async () => {
+    const pages = [
+      "https://news.ycombinator.com/item?id=26214151",
+      "https://m.news.ycombinator.com/item?id=26214151",
+      "https://news-ycombinator-com.translate.goog/item?id=26214151",
+      "https://translate.google.com/translate?u=https://news.ycombinator.com/item?id=26214151",
+    ];
+    const net = stubFetch((call) =>
+      call.url === TAVILY
+        ? json(
+            answer([
+              ...pages.map((url) => ({
+                ...WHOSAMPLED,
+                url,
+                content: "One More Time is still the best house record ever made.",
+              })),
+              WHOSAMPLED,
+            ]),
+          )
+        : undefined,
+    );
+
+    const text = await searchSamples.invoke({
+      songTitle: "Ice Ice Baby",
+      artistName: "Vanilla Ice",
+    });
+
+    expect(JSON.parse(text).results.map((r: { url: string }) => r.url)).toEqual([WHOSAMPLED.url]);
+    expect(JSON.parse(net.calls[0].body ?? "{}").exclude_domains).toEqual(
+      expect.arrayContaining(["news.ycombinator.com", "news-ycombinator-com.translate.goog"]),
+    );
+    for (const url of pages) expect(isSocialPage(url), url).toBe(true);
+    // Y Combinator's own pages are not its forum.
+    expect(isSocialPage("https://www.ycombinator.com/companies")).toBe(false);
+  });
+
   it("masks every @handle in a result's text and title", async () => {
     const page = {
       ...WHOSAMPLED,

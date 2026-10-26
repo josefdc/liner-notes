@@ -201,6 +201,48 @@ describe("the text of a web page", () => {
     expect(items.map((item) => item.url)).toEqual(["https://www.example.org/news/one-more-time"]);
   });
 
+  it("leaves out a forum comment thread by its byline, on any site, and keeps prose like it", () => {
+    const threads = [
+      "some_user on Feb 22, 2021 | parent | next (javascript:void(0)) Love it! One More Time is still the best house record.",
+      "some_user 3 hours ago | parent | next [–] The sample is More Spell on You by Eddie Johns.",
+      "Discovery came out in 2001. some_user 1 day ago | prev | next [–] Still a classic.",
+      "some_user 2 years ago | root | parent | next [–] Romanthony sang it.",
+      "someone on Sep 3, 2010 | next [–] Daft Punk recorded it in Paris.",
+    ];
+    const prose = [
+      "Hacker News readers discussed Daft Punk's One More Time when the duo split in 2021.",
+      "Daft Punk | Discovery | 2001 | Virgin Records",
+      "One More Time, a review by Jane Smith on Feb 22, 2021. The single opened Discovery.",
+      "Posted 3 hours ago | Music | News. Daft Punk's One More Time turns 25.",
+    ];
+    const items = webSearchEvidence([
+      ...threads.map((text, i) => web(`https://www.example.org/thread/${i}`, text)),
+      ...prose.map((text, i) => web(`https://www.example.org/page/${i}`, text)),
+    ]);
+
+    expect(items.map((item) => item.excerpt)).toEqual(prose);
+  });
+
+  it("refuses a forum comment byline or a Hacker News page when read back (written by older code)", async () => {
+    const [item] = webSearchEvidence([
+      web("https://www.example.org/news/one-more-time", "A page about the song."),
+    ]);
+    const older = {
+      ...item,
+      excerpt: "some_user on Feb 22, 2021 | parent | next (javascript:void(0)) Love it!",
+    } as SourcedEvidence;
+    const onForum = { ...item, url: "https://news.ycombinator.com/item?id=26214151" };
+
+    expect(restores([older])).toBe(false);
+    expect(restores([onForum])).toBe(false);
+    expect(await served([older])).toBe(false);
+    expect(await served([onForum])).toBe(false);
+    expect(recorderRefuses([older])).toEqual(["analysis.evidence[0].excerpt: a comment thread"]);
+    expect(recorderRefuses([onForum])).toContain(
+      "analysis.evidence[0].url: a social platform page",
+    );
+  });
+
   it("keeps a YouTube video's title and its channel's name: the channel is the publisher", () => {
     const [item] = webSearchEvidence([
       web(

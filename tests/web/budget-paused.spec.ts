@@ -162,9 +162,9 @@ test("while a recording plays, the progress screen says it is a replay, not a li
   await page.getByRole("button", { name: /Bright Lines/ }).click();
 
   const replaying = "Replaying a recorded analysis — nothing runs live...";
-  // The status line on screen (a live region repeats it for screen readers, half a second later)
+  // The status line on screen; screen readers hear the replay from the run log's first line.
   await expect(page.getByText(replaying, { exact: true }).filter({ visible: true })).toBeVisible();
-  await expect(page.locator('div.sr-only[aria-live="polite"]')).toHaveText(replaying);
+  await expect(page.getByRole("log")).toContainText("nothing below runs live");
   await expect(page.getByText(/Searching Spotify for your track/)).toHaveCount(0);
 
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
@@ -237,7 +237,7 @@ test("a track picked after the budget tripped replays its recording", async ({ p
   await page.goto("/");
   await search(page, "Bright Lines");
   // The studio take (2001), the one with a recording.
-  await page.getByRole("button", { name: /Test Artist • 2001/ }).click();
+  await page.getByRole("option", { name: /Test Artist • 2001/ }).click();
 
   // The resume is refused (budget spent); the recording of that very track is replayed.
   await expect(page.getByRole("log")).toContainText(
@@ -262,7 +262,7 @@ test("a picked take without a recording ends paused, never with another take's r
   await page.goto("/");
   await search(page, "Bright Lines");
   // The live take (2004): same title and artist as the recorded studio take, no recording.
-  await page.getByRole("button", { name: /Test Artist • 2004/ }).click();
+  await page.getByRole("option", { name: /Test Artist • 2004/ }).click();
 
   await expect(page.getByRole("region", { name: "Live analysis paused" })).toBeVisible();
   const requests = await apiRequests(page);

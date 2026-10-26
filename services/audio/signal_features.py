@@ -1,6 +1,7 @@
 """
 Signal measurements of the v2 features that do not depend on the tempo or key estimator:
-the gate, loudness, the energy contour, neutral sections and key moments.
+the gate, loudness, the energy contour, which tracked beats have sound under them, neutral
+sections and key moments.
 
 Every time is in seconds from the start of the decoded preview. The thresholds below were
 picked on the generated fixtures in tests/ (WAV and MP3); each comment gives the values
@@ -92,6 +93,41 @@ SILENCE_BELOW_PEAK_DB = 40.0
 SILENCE_MIN_S = 0.5
 SILENCE_FULL_S = 2.0
 
+# --- beats -------------------------------------------------------------------------------
+
+# A tracked beat is reported only where there is sound to carry it: the RMS of the signal
+# within BEAT_LEVEL_WINDOW_S of the beat (the window's own mean removed, so a DC offset counts
+# as silence) must be no more than BEAT_BELOW_PEAK_DB under the loudest frame of the energy
+# contour, and at least BEAT_MIN_RMS. Trackers keep counting through silence: Essentia put
+# 23 of its 55 beats in the 10 s of digital silence before a 97 BPM band (tests/signals.py),
+# and both trackers four beats in a 2.5 s gap inside one. Those beats are extrapolated, not
+# measured. The tempo is still fitted to the tracked beats on onsets, and the steadiness
+# check and the sections still use every tracked beat, as before.
+# Measured on the probes: the beats in digital silence read exactly 0 (WAV and MP3); the
+# quietest other beat is 26 dB under the loudest frame (brown noise with a kick). On 30 s clips
+# of 100 Ballroom and 100 GiantSteps Tempo tracks (a random window of each, and the first 30 s
+# of the GiantSteps ones), the quietest beat on an onset (onset_beats) is 43 dB under the
+# loudest frame and -54.8 dBFS, the quietest beat kept -64.8 dBFS; the 51 beats under 60 dB are
+# Essentia's, in the silence that ends 32 Ballroom files and starts one (42 at exactly 0, the
+# others at -72.5 dBFS and under), and none is on an onset. A floor of 40 dB would drop 2 beats
+# on onsets; the count does not change with windows of 25 to 100 ms.
+# The relative floor alone keeps beats over dither in a quiet clip: with its loudest frame at
+# -45.5 dBFS, 60 dB under it is -105.5 dBFS, and Essentia's beats over a dithered intro (-98
+# dBFS) were all reported. BEAT_MIN_RMS (-90.5 dBFS) is above 16-bit TPDF dither in the
+# window (rounded to 16 bits at 22.05 kHz, 1.43e-5 to 1.62e-5; at 44.1 kHz, once resampled,
+# 1.1e-5, and 8.9e-6 in float; shaped dither less; MP3 decodes it to 0 or 1.2e-6;
+# SILENCE_RMS's note measured 1.5e-5 to 1.8e-5, 4.4 dB under it) and 25.7 dB under the
+# quietest beat kept on the clips above, which it leaves unchanged. The tests pin it between
+# the two: rounded dither must count as silence, a triad at 7e-5 on a quiet clip as sound.
+# Known limits: beats tracked through an audible intro without onsets (a pad) are kept: of the
+# 208 beats off onsets at either end of those grids, 101 are within 20 dB of the loudest frame,
+# in the music, so onsets alone cannot tell them from extrapolated ones. Beats over a low noise
+# floor (hum or hiss at -70 to -50 dBFS, vinyl crackle) are kept too: that is sound, and a level
+# cannot tell it from a quiet passage.
+BEAT_LEVEL_WINDOW_S = 0.05
+BEAT_BELOW_PEAK_DB = 60.0
+BEAT_MIN_RMS = 3e-5
+
 
 @dataclass(frozen=True)
 class Gate:
@@ -141,6 +177,39 @@ def check_gate(signals: Signals, loudness: Levels | None) -> Gate:
         if (no_pitch or one_artefact) and not (voice and (voice.moving or voice.without_notes)):
             return Gate(False, "noise")
     return Gate(True, None)
+
+
+# --- beats -------------------------------------------------------------------------------
+
+
+def beat_floor(loudness: Levels) -> float:
+    """The RMS a beat needs within BEAT_LEVEL_WINDOW_S to be reported."""
+    peak = float(np.max(loudness.frames)) if loudness.frames.size else 0.0
+    return max(BEAT_MIN_RMS, peak * 10 ** (-BEAT_BELOW_PEAK_DB / 20))
+
+
+def beat_levels(signals: Signals, beats: np.ndarray) -> np.ndarray:
+    """The RMS of the signal within BEAT_LEVEL_WINDOW_S of each beat, its own mean removed."""
+    y = signals.y
+    rms = []
+    for t in np.asarray(beats, dtype=float):
+        lo = max(0, round((t - BEAT_LEVEL_WINDOW_S) * signals.sr))
+        part = y[lo : max(lo, round((t + BEAT_LEVEL_WINDOW_S) * signals.sr) + 1)]
+        part = part.astype(np.float64)
+        rms.append(float(np.sqrt(np.mean((part - part.mean()) ** 2))) if part.size else 0.0)
+    return np.array(rms)
+
+
+def audible_beats(signals: Signals, beats: np.ndarray, loudness: Levels) -> np.ndarray:
+    """
+    The beats with sound under them (BEAT_LEVEL_WINDOW_S, beat_floor), in their order: the
+    beat grid the service reports. The tempo, the steadiness check and the sections are
+    measured from the tracked beats, before this.
+    """
+    beats = np.asarray(beats, dtype=float)
+    if beats.size == 0:
+        return beats
+    return beats[beat_levels(signals, beats) >= beat_floor(loudness)]
 
 
 # --- sections ----------------------------------------------------------------------------

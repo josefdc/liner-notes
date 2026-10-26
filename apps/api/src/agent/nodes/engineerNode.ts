@@ -151,7 +151,7 @@ const withheldText = (reason: { code: AudioWithheldCode } | undefined) =>
  * A tempo or key the service withheld is named with the reason for that field
  * (`audio.withheld`), in this app's words; "not detected" only when the block gives no reason.
  */
-function measuredSummary(measurement: AudioMeasurement): {
+export function measuredSummary(measurement: AudioMeasurement): {
   measured: boolean;
   /** A tempo or a key was measured, even if not both. */
   partly: boolean;
@@ -253,8 +253,35 @@ function unversionedFrom(analyzerVersion: string, measuredAt: Date): string {
   return ` by analyzer ${version}${known ? ` from ${measuredAt.toISOString().slice(0, 10)}` : ""}`;
 }
 
+/** Why a run serves the newest cached measurement of any analyzer version. */
+export const UNVERSIONED_REASON = {
+  noVersion: "The audio service did not name its analyzer version.",
+  unavailable: "The audio service is unavailable.",
+} as const;
+
+/** The status line said when a measurement is attempted. */
+export const MEASURING_LINE = "Measuring tempo and key from the preview clip";
+
+/**
+ * The status line of a measurement served from the cache: an earlier run's, or, when the
+ * service could not say its version, the newest one, with the analyzer that made it and when.
+ */
+export function cachedLine(hit: CacheHit): string {
+  const summary = measuredSummary(hit.measurement).text;
+  const old = hit.unversioned;
+  return old
+    ? `${old.reason} Showing an earlier measurement${unversionedFrom(hit.measurement.audio.analyzerVersion, old.measuredAt)}: ${summary}`
+    : `Measured in an earlier run: ${summary}`;
+}
+
+/** The status line of a measurement made by this run. */
+export function measuredLine(summary: ReturnType<typeof measuredSummary>): string {
+  const partial = summary.complete ? "" : " (some perceptual features not measured)";
+  return `Measured from the preview: ${summary.text}${partial}`;
+}
+
 /** A cached measurement the run serves. */
-interface CacheHit {
+export interface CacheHit {
   measurement: CachedAudio;
   /**
    * Set when the service did not say its analyzer version: the newest row was served, and the
@@ -291,9 +318,7 @@ function cachedMeasurement(
     });
     return hits.find((hit) => audioConfidence(hit.measurement) === "high") ?? hits[0] ?? null;
   }
-  const reason = health
-    ? "The audio service did not name its analyzer version."
-    : "The audio service is unavailable.";
+  const reason = health ? UNVERSIONED_REASON.noVersion : UNVERSIONED_REASON.unavailable;
   const newest = keys
     .flatMap((key) => {
       const found = cache.getNewestAudio(key);
@@ -333,14 +358,10 @@ export async function engineerNode(
   }
   const hit = cache ? cachedMeasurement(cache, track.id, request.isrc, health, fresh) : null;
   if (hit) {
-    const summary = measuredSummary(hit.measurement).text;
     // When the service cannot say its version, the newest measurement is served, and the run
     // says which analyzer made it and when.
-    const old = hit.unversioned;
-    const served = old
-      ? `${old.reason} Showing an earlier measurement${unversionedFrom(hit.measurement.audio.analyzerVersion, old.measuredAt)}: ${summary}`
-      : `Measured in an earlier run: ${summary}`;
-    log.info(`Cache hit for: ${track.title}${old ? " (service version unknown)" : ""}`);
+    const served = cachedLine(hit);
+    log.info(`Cache hit for: ${track.title}${hit.unversioned ? " (service version unknown)" : ""}`);
     writer?.({
       type: "status",
       code: "AUDIO-COMPLETE",
@@ -352,7 +373,9 @@ export async function engineerNode(
     return {
       // A measurement served without the service's version is marked, so the result built on
       // it is not stored (composerNode.ts) and the note above is never lost.
-      audioFeatures: old ? { ...hit.measurement, servedUnversioned: true } : hit.measurement,
+      audioFeatures: hit.unversioned
+        ? { ...hit.measurement, servedUnversioned: true }
+        : hit.measurement,
       preview: previewProvenance(hit.measurement.previewMatch),
       previewUrl:
         fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl) ? fresh.previewUrl : null,
@@ -367,7 +390,7 @@ export async function engineerNode(
     writer?.({
       type: "status",
       code: "AUDIO-INIT",
-      message: "Measuring tempo and key from the preview clip",
+      message: MEASURING_LINE,
       node: "engineer",
       timestamp: timestampOf(runtime),
     });
@@ -435,8 +458,7 @@ export async function engineerNode(
     }
   }
 
-  const partial = summary.complete ? "" : " (some perceptual features not measured)";
-  const measured = `Measured from the preview: ${summary.text}${partial}`;
+  const measured = measuredLine(summary);
   writer?.({
     type: "status",
     code: "AUDIO-COMPLETE",

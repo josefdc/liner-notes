@@ -1,6 +1,5 @@
 import type React from 'react';
-import { TriangleAlert, Disc, Heart, History, Sparkles, Zap } from 'lucide-react';
-import { Badge } from './ui/Badge';
+import { TriangleAlert, Disc, Heart, History, Zap } from 'lucide-react';
 import type { TrackData } from '../types';
 import {
   type AudioField,
@@ -10,13 +9,13 @@ import {
   modelUnavailableText,
   QUERY_MATCH_TITLE,
   type Reading,
-  type ShownReading,
   queryMatchText,
   recordingOf,
 } from '../constants';
 import { isWholeRecording, recordedDate } from '../utils/recording';
 import { MeasuredValue } from './measured/MeasuredValue';
 import { MissingValue } from './measured/MissingValue';
+import { ProvenanceChip } from './provenance/ProvenanceChip';
 
 // Provenance display for the result screens: measured values, audio-model scores, model
 // inference, and what is missing. A missing value is always shown as missing, never as 0.
@@ -26,14 +25,9 @@ export const InferenceLabel: React.FC<{ children?: React.ReactNode; className?: 
   children = 'Model inference',
   className = '',
 }) => (
-  <Badge
-    variant="analog"
-    icon={<Sparkles size={10} />}
-    className={className}
-    title="Not measured from the audio"
-  >
+  <ProvenanceChip kind="inferred" className={className} title="Not measured from the audio">
     {children}
-  </Badge>
+  </ProvenanceChip>
 );
 
 interface AudioStatsProps {
@@ -41,29 +35,28 @@ interface AudioStatsProps {
   size?: 'sm' | 'md';
   /** Classes for each row of values (alignment). */
   rowClassName?: string;
+  /** Each value with a chip of its kind, its provenance behind the chip (the Dashboard). */
+  compact?: boolean;
   className?: string;
 }
 
-const ICONS: Partial<Record<AudioField, (size: number, reading: ShownReading) => React.ReactNode>> =
-  {
-    loudness: (size) => <Zap size={size} className="text-cyber" />,
-    energy: (size) => <Zap size={size} className="text-cyber" />,
-    valence: (size, reading) => (
-      <Heart
-        size={size}
-        className={
-          /^(Euphoric|Upbeat)/.test(reading.value) ? 'text-accent-pink' : 'text-accent-blue'
-        }
-      />
-    ),
-    danceability: (size) => <Disc size={size} className="text-analog" />,
-  };
+// The icons take the colour of their value's badge, which says how the value is known.
+const ICONS: Partial<Record<AudioField, (size: number) => React.ReactNode>> = {
+  loudness: (size) => <Zap size={size} />,
+  energy: (size) => <Zap size={size} />,
+  valence: (size) => <Heart size={size} />,
+  danceability: (size) => <Disc size={size} />,
+};
 
-/** One audio value with its provenance, or marked missing with why. */
-export const ReadingValue: React.FC<{ reading: Reading; size?: 'sm' | 'md' }> = ({
-  reading,
-  size = 'sm',
-}) =>
+/**
+ * One audio value with its provenance, or marked missing with why. Compact: the provenance
+ * opens from the value's kind chip; a missing value still says why.
+ */
+export const ReadingValue: React.FC<{
+  reading: Reading;
+  size?: 'sm' | 'md';
+  compact?: boolean;
+}> = ({ reading, size = 'sm', compact = false }) =>
   reading.state === 'missing' ? (
     <MissingValue
       label={reading.label}
@@ -81,7 +74,8 @@ export const ReadingValue: React.FC<{ reading: Reading; size?: 'sm' | 'md' }> = 
       detail={reading.detail}
       title={reading.title}
       size={size}
-      icon={ICONS[reading.field]?.(size === 'md' ? 12 : 10, reading)}
+      layout={compact ? 'compact' : 'full'}
+      icon={ICONS[reading.field]?.(size === 'md' ? 12 : 10)}
     />
   );
 
@@ -95,6 +89,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
   track,
   size = 'sm',
   rowClassName = 'justify-center',
+  compact = false,
   className = '',
 }) => {
   const { signal, model, showMissingModel, fingerprint } = audioReadings(track);
@@ -111,7 +106,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
       <ul aria-label="Audio values" className={`flex flex-wrap items-start gap-2 ${rowClassName}`}>
         {signal.map((reading) => (
           <li key={reading.field}>
-            <ReadingValue reading={reading} size={size} />
+            <ReadingValue reading={reading} size={size} compact={compact} />
           </li>
         ))}
       </ul>
@@ -140,7 +135,7 @@ export const AudioStats: React.FC<AudioStatsProps> = ({
             ) : (
               modelRows.map((reading) => (
                 <li key={reading.field}>
-                  <ReadingValue reading={reading} size={size} />
+                  <ReadingValue reading={reading} size={size} compact={compact} />
                 </li>
               ))
             )}

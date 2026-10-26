@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import type { ShownClaim } from './claims';
 import type { MeasuredAudio } from '../measured/audio';
 import { comparisonText, LINE } from './ClaimChip';
-import { SourceLink } from './SourceLink';
+import { SourceNote } from './SourceNote';
 
 // The claims the verifier rejected, kept out of the main view: a claim its judge found
 // contradicted by its sources, or whose number the measurement contradicts, whatever its kind.
@@ -86,7 +86,7 @@ export const RejectedClaims: React.FC<RejectedClaimsProps> = ({
                   <p className={`${LINE} flex flex-wrap items-center gap-x-2 gap-y-1`}>
                     <span>{shown.claim.verdict !== null ? 'Checked against:' : 'Cites:'}</span>
                     {shown.cited.map((evidence) => (
-                      <SourceLink
+                      <SourceNote
                         key={evidence.id}
                         evidence={evidence}
                         showTier={shown.kind === 'sourced'}

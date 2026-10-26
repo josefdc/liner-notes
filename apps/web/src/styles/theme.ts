@@ -33,7 +33,7 @@ export const colors = {
   prov: {
     measured: '#00f0ff',
     sourced: '#ffb000',
-    inferred: '#cbd5e1',
+    inferred: '#c4a4fc',
     missing: 'rgba(255, 255, 255, 0.55)',
   },
   viz: {

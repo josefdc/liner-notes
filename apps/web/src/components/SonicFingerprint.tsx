@@ -52,7 +52,7 @@ const ScoreList: React.FC<{ reading: ScoreListReading }> = ({ reading }) => {
         {items.map((item) => (
           <li key={item.key}>
             <MeasuredValue
-              compact
+              layout="bare"
               kind="estimate"
               label={scoreLabel(item.label)}
               value={item.score.toFixed(2)}

@@ -500,6 +500,35 @@ export const DEFAULT_PALETTE_CLASS = new RegExp(
   "g",
 );
 
+// The design system's own code: the token sheet's neighbours in styles/ (not the tokens or the
+// theme generated from them) and the provenance, measured-value and shared UI components. Its
+// colours are named by what they mean (measured, sourced, inferred, warning, error, neutral).
+const DESIGN_SYSTEM_DIRS = [
+  "apps/web/src/styles/",
+  "apps/web/src/components/provenance/",
+  "apps/web/src/components/measured/",
+  "apps/web/src/components/ui/",
+];
+const isDesignSystemCode = (p) =>
+  DESIGN_SYSTEM_DIRS.some((dir) => p.startsWith(dir)) &&
+  /\.([cm]?[jt]sx?|css)$/.test(p) &&
+  p !== "apps/web/src/styles/tokens.css" &&
+  p !== "apps/web/src/styles/theme.ts" &&
+  !isTestSupport(p);
+// A hue that means nothing about where a value comes from, named in code: a class
+// (text-accent-pink), a variant ("green"), a glow (shadow-glow-purple-subtle), a theme value
+// (colors.indigo).
+export const UNMEANING_HUE =
+  /(?<![A-Za-z0-9_])(?:pink|green|purple|indigo|violet)(?![A-Za-z0-9_])/gi;
+// Text under 12 px: a Tailwind size (text-[10px], text-[0.6rem]), a stylesheet font-size, or a
+// size set from script (D3 .attr('font-size', 9), a fontSize: 10 prop or style).
+export const TINY_TEXT = [
+  /(?<![\w-])text-\[(?:\d|1[01])(?:\.\d+)?px\]/g,
+  /(?<![\w-])text-\[0?\.(?:[0-6]\d*|7[0-4]\d*)r?em\]/g,
+  /(?<![\w-])font-size\s*:\s*(?:\d|1[01])(?:\.\d+)?px/gi,
+  /(?:(['"])font-size\1\s*,\s*|\bfontSize\s*[:=]\s*\{?\s*)(['"]?)(?:\d|1[01])(?:\.\d+)?(?:px)?\2(?![\d.])/g,
+];
+
 // Each rule counts the matches of `pattern` (one expression or several) in the files `files`
 // selects, in the part of each file that `scan` names (see scannedText). A match is reported on
 // the line where it starts.
@@ -548,6 +577,25 @@ export const rules = [
     files: (p) =>
       p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p) && !isTestSupport(p),
     pattern: DEFAULT_PALETTE_CLASS,
+    scan: "code",
+  },
+  {
+    id: "unmeaning-hues-design-system",
+    owner: "#30",
+    description:
+      "Pink, green, purple, indigo or violet named in the design system's code (styles/, components/provenance, measured, ui): name colours by meaning (measured, sourced, inferred, warning, error, neutral)",
+    files: isDesignSystemCode,
+    pattern: UNMEANING_HUE,
+    scan: "code",
+  },
+  {
+    id: "tiny-text-web",
+    owner: "#30",
+    description:
+      "Text under 12 px in web source (text-[10px], font-size: 9px, .attr('font-size', 9)): use text-chrome (12 px) or larger",
+    files: (p) =>
+      p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p) && !isTestSupport(p),
+    pattern: TINY_TEXT,
     scan: "code",
   },
   {

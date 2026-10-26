@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { audioReadings } from '../../constants';
 import { AudioStats, ResultNotices } from '../EstimatedWarning';
@@ -53,6 +53,102 @@ describe('MeasuredValue', () => {
   it('says the confidence and basis are unknown when the result does not send them', () => {
     render(<MeasuredValue label="BPM" value="123" kind="measured" title="Measured" />);
     expect(document.body.textContent).toContain('Measured · confidence and basis unknown');
+  });
+});
+
+describe('MeasuredValue, compact', () => {
+  const measured = (
+    <MeasuredValue
+      label="BPM"
+      value="123"
+      kind="measured"
+      confidence="confidence 0.62"
+      basis="signal, 29.8 s preview"
+      detail="essentia.RhythmExtractor2013"
+      title="Measured from the audio preview"
+      layout="compact"
+    />
+  );
+
+  it('shows the value and a chip of its kind, with no provenance line until it is asked for', () => {
+    const { container } = render(measured);
+    expect(container.textContent).toBe('BPM 123Measured');
+    const chip = screen.getByRole('button', { name: 'Measured: how BPM was obtained' });
+    expect(chip.getAttribute('aria-expanded')).toBe('false');
+    const lines = document.getElementById(chip.getAttribute('aria-controls') ?? '');
+    expect(lines?.hidden).toBe(true);
+    expect(container.querySelector('[data-provenance="measured"]')).not.toBeNull();
+  });
+
+  it('opens the provenance lines from the chip, and closes them again', () => {
+    const { container } = render(measured);
+    const chip = screen.getByRole('button', { name: /^Measured/ });
+    fireEvent.click(chip);
+    expect(chip.getAttribute('aria-expanded')).toBe('true');
+    const lines = document.getElementById(chip.getAttribute('aria-controls') ?? '');
+    expect(lines?.hidden).toBe(false);
+    expect(lines?.textContent).toBe(
+      'Measured · confidence 0.62 · signal, 29.8 s previewessentia.RhythmExtractor2013',
+    );
+    fireEvent.click(chip);
+    expect(container.textContent).toBe('BPM 123Measured');
+  });
+
+  it('calls a model score a model estimate, in the inferred colour, never measured', () => {
+    const { container } = render(
+      <MeasuredValue
+        label="Dance"
+        value="0.81"
+        kind="estimate"
+        confidence="score, not a probability"
+        basis="model discogs-effnet-bs64-1"
+        title="Score"
+        layout="compact"
+      />,
+    );
+    expect(container.textContent).toBe('Dance 0.81Model estimate');
+    expect(container.textContent).not.toMatch(/measured/i);
+    const chip = container.querySelector('[data-provenance]') as HTMLElement;
+    expect(chip.dataset.provenance).toBe('inferred');
+    expect(chip.className).toContain('text-prov-inferred');
+    // Off the sourced amber: an estimate never reads as sourced.
+    expect(container.innerHTML).not.toMatch(/analog|amber/);
+  });
+
+  it('says a value no measurement confirms is not confirmed, in neutral', () => {
+    const { container } = render(
+      <MeasuredValue label="BPM" value="105" kind="unverified" title="Copy" layout="compact" />,
+    );
+    expect(container.textContent).toBe('BPM 105Not confirmed');
+    const chip = container.querySelector('[data-provenance]') as HTMLElement;
+    expect(chip.dataset.provenance).toBe('unconfirmed');
+    expect(chip.dataset.variant).toBe('neutral');
+  });
+
+  it('draws the measured label in a text colour, not a faded cyan', () => {
+    const { container } = render(measured);
+    const label = Array.from(container.querySelectorAll('span')).find(
+      (span) => span.textContent === 'BPM',
+    );
+    expect(label?.className).toBe('text-text-secondary');
+  });
+});
+
+describe("the Dashboard's compact audio values", () => {
+  it('show each value with its kind, and a missing one with why', () => {
+    const track = measuredTrack(
+      audioBlock({ analyzerVersion: '2.1.0+essentia', key: null, fingerprint: null }),
+      { key: null, audioSource: 'unavailable', audioUnavailableReason: 'not_detected' },
+    );
+    render(<AudioStats track={track} compact />);
+    const values = screen.getByRole('list', { name: 'Audio values' });
+    expect(item(values, 'BPM')).toBe('BPM 123.1Measured');
+    // A withheld value still says why, without opening anything.
+    expect(item(values, 'Key')).toBe('Key not measured— not detected in the preview');
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Measured',
+      'Measured',
+    ]);
   });
 });
 

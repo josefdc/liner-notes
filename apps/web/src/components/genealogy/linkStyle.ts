@@ -9,7 +9,8 @@ import { colors } from '../../styles/theme';
 export const LINK_COLOR: Record<LinkType, string> = {
   sample: colors.analog,
   interpolation: colors.pink,
-  cover: colors.purple,
+  // Not violet: violet means model inference (ProvenanceChip), and a cover can be sourced.
+  cover: colors.green,
   remix: colors.cyber,
   producer: colors.blue,
   influence: colors.gray[400],

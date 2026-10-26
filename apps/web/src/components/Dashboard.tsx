@@ -7,6 +7,7 @@ import TargetScanOverlay from './TargetScanOverlay';
 import { AudioStats, InferenceLabel, RecordedRunNotice, ResultNotices } from './EstimatedWarning';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { ProvenanceChip } from './provenance/ProvenanceChip';
 import { AlbumCover, useAlbumCover } from './AlbumCover';
 import { SectionLabel } from './ui/SectionLabel';
 import { isValidImageUrl } from '../utils/image';
@@ -315,14 +316,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <span>{trackData.releaseYear}</span>
                     </>
                   )}
-                  {trackData.explicit && <Badge variant="gray">EXPLICIT</Badge>}
+                  {trackData.explicit && <Badge variant="neutral">EXPLICIT</Badge>}
                 </div>
               )}
 
-              {/* Audio values: measured, model scores, or "not measured" */}
+              {/* Audio values: measured, model scores, or "not measured". Compact: each value
+                  with a chip of its kind, its provenance behind the chip (the Player has the
+                  full lines) */}
               <AudioStats
                 track={trackData}
                 size="md"
+                compact
                 rowClassName="justify-center md:justify-start"
                 className="mb-6"
               />
@@ -368,12 +372,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             </SectionLabel>
             <div className="flex flex-col items-end gap-1">
               {hasModelScores && (
-                <Badge
-                  variant="analog"
+                <ProvenanceChip
+                  kind="inferred"
                   title="Scores from audio models run on the preview: estimates, not measurements and not probabilities"
                 >
                   Model estimate
-                </Badge>
+                </ProvenanceChip>
               )}
               {hasGenreProfile && <InferenceLabel />}
             </div>
@@ -456,7 +460,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
                 data-hovered={hoveredCardId === rec.id || undefined}
-                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
+                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-none animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${index * 80}ms`,
                   animationFillMode: 'forwards',
@@ -491,7 +495,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         says so in words, not by colour alone. The neutral badge's text is raised
                         to secondary: on a hovered card its chip grey is under 4.5:1. */}
                     <Badge
-                      variant={rec.relation.link?.kind === 'sourced' ? 'analog' : 'gray'}
+                      variant={rec.relation.link?.kind === 'sourced' ? 'sourced' : 'neutral'}
                       glow={rec.relation.link?.kind === 'sourced'}
                       data-link-kind={rec.relation.link?.kind ?? 'none'}
                     >
@@ -541,7 +545,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <button
             type="button"
             onClick={handleUndo}
-            className="text-xs font-mono font-bold text-cyber uppercase tracking-widest hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyber/30 focus-visible:outline-none px-2 py-1"
+            className="text-xs font-mono font-bold text-cyber uppercase tracking-widest hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:outline-none px-2 py-1"
           >
             UNDO
           </button>

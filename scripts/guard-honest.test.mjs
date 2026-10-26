@@ -259,6 +259,81 @@ describe("default-palette-utilities", () => {
   });
 });
 
+describe("unmeaning-hues-design-system", () => {
+  const path = "apps/web/src/components/ui/Badge.tsx";
+  it.each([
+    ["an accent class", "'bg-accent-pink/10 text-accent-pink'", 2],
+    ["a variant name", '<Badge variant="green">', 1],
+    ["a variant key", "  purple: 'x',", 1],
+    ["a glow", "'shadow-glow-indigo-subtle'", 1],
+    ["a theme value", "stroke={colors.violet}", 1],
+    ["a capitalised name", "const Purple = 1;", 1],
+  ])("counts %s", (_name, line, expected) => {
+    expect(count("unmeaning-hues-design-system", line, path)).toBe(expected);
+  });
+
+  it.each([
+    ["the meaning variants", "'text-prov-inferred bg-status-warning/10'"],
+    ["a comment", "// was text-accent-pink"],
+    ["a longer word", "const greenhouse = 1; const pinkish = 2;"],
+  ])("ignores %s", (_name, line) => {
+    expect(count("unmeaning-hues-design-system", line, path)).toBe(0);
+  });
+
+  it("scans the design system's code, but not the tokens, theme.ts, tests or other components", () => {
+    const { files } = rule("unmeaning-hues-design-system");
+    for (const scanned of [
+      "apps/web/src/components/ui/Badge.tsx",
+      "apps/web/src/components/provenance/ClaimChip.tsx",
+      "apps/web/src/components/measured/MeasuredValue.tsx",
+      "apps/web/src/styles/placeholder.ts",
+      "apps/web/src/styles/index.css",
+    ]) {
+      expect(files(scanned), scanned).toBe(true);
+    }
+    for (const skipped of [
+      "apps/web/src/styles/tokens.css",
+      "apps/web/src/styles/theme.ts",
+      "apps/web/src/components/ui/Badge.test.tsx",
+      "apps/web/src/components/provenance/testing.ts",
+      "apps/web/src/components/InteractiveFactoid.tsx",
+      "apps/web/src/components/genealogy/linkStyle.ts",
+    ]) {
+      expect(files(skipped), skipped).toBe(false);
+    }
+  });
+});
+
+describe("tiny-text-web", () => {
+  it.each([
+    ["a pixel size", 'className="text-[10px] font-mono"'],
+    ["an 11 px size", "'text-[11px]'"],
+    ["a fractional size", "'text-[9.5px]'"],
+    ["a rem size", "'text-[0.6rem]'"],
+    ["a size after a variant", "'md:text-[8px]'"],
+    ["a D3 font size", ".attr('font-size', 9)"],
+    ["a D3 font size in pixels", '.attr("font-size", "10px")'],
+    ["a font size prop", "tick={{ fontSize: 10 }}"],
+    ["a font size attribute", "<text fontSize={11}>"],
+  ])("counts %s", (_name, line) => {
+    expect(count("tiny-text-web", line)).toBe(1);
+  });
+
+  it("counts a stylesheet font size", () => {
+    expect(count("tiny-text-web", "a { font-size: 10px; }", "apps/web/src/a.css")).toBe(1);
+  });
+
+  it.each([
+    ["the chrome size", 'className="text-chrome"'],
+    ["a 12 px size", "'text-[12px] text-[0.75rem]'"],
+    ["a larger size", ".attr('font-size', 14) tick={{ fontSize: 12 }}"],
+    ["a comment", "// was text-[10px]"],
+    ["a width", "'w-[10px] h-[9px]'"],
+  ])("ignores %s", (_name, line) => {
+    expect(count("tiny-text-web", line)).toBe(0);
+  });
+});
+
 describe("allow markers", () => {
   it("exempt only the rule they name", () => {
     const line = (id) => `const s = 'Command Center'; // guard-allow: ${id} — kept for a test`;
@@ -645,6 +720,8 @@ describe("baselines", () => {
       "tailwind-v3-variable-classes": 0,
       "colour-literals-design-system": 0,
       "default-palette-utilities": 0,
+      "unmeaning-hues-design-system": 0,
+      "tiny-text-web": 0,
       "dotenv-outside-config": 0,
       "string-sentinel-tool-results": 0,
       "prototype-copy": 0,
@@ -703,6 +780,8 @@ describe("baselines", () => {
         "tailwind-v3-variable-classes": 0,
         "colour-literals-design-system": 0,
         "default-palette-utilities": 0,
+        "unmeaning-hues-design-system": 0,
+        "tiny-text-web": 0,
         "dotenv-outside-config": 0,
         "string-sentinel-tool-results": 0,
         "prototype-copy": 0,

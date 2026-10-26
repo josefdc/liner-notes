@@ -723,12 +723,12 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             </h3>
             {genealogy.nodes.length > 1 &&
               (linkKinds.sourced ? (
-                <Badge variant="gray" data-testid="genealogy-kinds">
+                <Badge variant="neutral" data-testid="genealogy-kinds">
                   {linkKinds.inferred ? 'Sourced and inferred links' : 'Sourced links'}
                 </Badge>
               ) : linkKinds.notSourced ? (
                 // Not the model's: built from records whose evidence does not hold.
-                <Badge variant="gray" data-testid="genealogy-kinds">
+                <Badge variant="neutral" data-testid="genealogy-kinds">
                   Not sourced
                 </Badge>
               ) : (

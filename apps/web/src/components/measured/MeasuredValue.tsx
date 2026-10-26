@@ -1,11 +1,19 @@
 import type React from 'react';
-import { Badge } from '../ui/Badge';
+import { useId, useState } from 'react';
+import { type ProvenanceKind, ProvenanceChip } from '../provenance/ProvenanceChip';
+import { Badge, type BadgeVariant } from '../ui/Badge';
 
 // One audio value as shown on the result screens, with where it comes from: measured from the
 // signal, an audio model's score (an estimate, never called measured), a copy no measurement
-// confirms, or a score on the first analyzer's own scale. Its confidence and basis are on one line, its method and analyzer on the next, as
-// text (not only a tooltip). A result that does not say how a value was measured shows that as
-// unknown.
+// confirms, or a score on the first analyzer's own scale.
+//
+// - full (the detail views): its confidence and basis on one line, its method and analyzer on
+//   the next, as text (not only a tooltip). A result that does not say how a value was measured
+//   shows that as unknown.
+// - compact (the Dashboard's summary): the value and a chip saying its kind; the chip is a
+//   button that opens the same lines below it.
+// - bare (a list whose heading states the provenance): the value alone, the provenance in its
+//   tooltip.
 
 export interface MeasuredValueProps {
   label: string;
@@ -25,8 +33,7 @@ export interface MeasuredValueProps {
   title: string;
   icon?: React.ReactNode;
   size?: 'sm' | 'md';
-  /** One line: the provenance only in the tooltip, for lists whose heading states it. */
-  compact?: boolean;
+  layout?: 'full' | 'compact' | 'bare';
 }
 
 export const KIND_TEXT: Record<MeasuredValueProps['kind'], string> = {
@@ -48,6 +55,22 @@ export function provenanceText(
   return parts.join(' · ');
 }
 
+/** The chip of each kind: its colour and icon, and its words, short enough for a chip. */
+const CHIP: Record<MeasuredValueProps['kind'], { kind: ProvenanceKind; text: string }> = {
+  measured: { kind: 'measured', text: 'Measured' },
+  estimate: { kind: 'inferred', text: 'Model estimate' },
+  unverified: { kind: 'unconfirmed', text: 'Not confirmed' },
+  score: { kind: 'unconfirmed', text: 'v1 score' },
+};
+
+/** The value's badge: the colour of how it is known; the label in a text colour, never faded. */
+const BADGE: Record<MeasuredValueProps['kind'], { variant: BadgeVariant; label: string }> = {
+  measured: { variant: 'measured', label: 'text-text-secondary' },
+  estimate: { variant: 'inferred', label: 'text-text-secondary' },
+  unverified: { variant: 'neutral', label: 'text-text-chip' },
+  score: { variant: 'neutral', label: 'text-text-chip' },
+};
+
 // The provenance lines carry the meaning of the value: text-chip keeps them at WCAG AA. They wrap
 // anywhere, so an analyser name wider than a narrow column breaks instead of being cut off.
 const LINE = 'max-w-60 wrap-anywhere text-chrome font-mono text-text-chip text-left';
@@ -62,21 +85,53 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
   title,
   icon,
   size = 'sm',
-  compact = false,
+  layout = 'full',
 }) => {
+  const [open, setOpen] = useState(false);
+  const linesId = useId();
   const provenance = provenanceText(kind, confidence, basis);
+  const badge = BADGE[kind];
+  const lines = (
+    <>
+      <span className={LINE}>{provenance}</span>
+      {detail && <span className={LINE}>{detail}</span>}
+    </>
+  );
   return (
     <span
       data-value-kind={kind}
-      title={compact ? `${title} · ${provenance}` : title}
+      title={layout === 'bare' ? `${title} · ${provenance}` : layout === 'full' ? title : undefined}
       className="inline-flex flex-col items-start gap-1 max-w-full"
     >
-      <Badge variant={kind === 'measured' ? 'cyber' : 'gray'} size={size} icon={icon}>
-        <span className={kind === 'measured' ? 'text-cyber/75' : 'text-text-chip'}>{label}</span>{' '}
-        <span className={kind === 'estimate' ? 'text-analog' : ''}>{value}</span>
-      </Badge>
-      {!compact && <span className={LINE}>{provenance}</span>}
-      {!compact && detail && <span className={LINE}>{detail}</span>}
+      <span className="inline-flex flex-wrap items-center gap-1.5 max-w-full">
+        <Badge
+          variant={badge.variant}
+          size={size}
+          icon={icon}
+          title={layout === 'compact' ? title : undefined}
+        >
+          <span className={badge.label}>{label}</span> <span>{value}</span>
+        </Badge>
+        {layout === 'compact' && (
+          <ProvenanceChip
+            kind={CHIP[kind].kind}
+            disclosure={{
+              expanded: open,
+              controls: linesId,
+              onToggle: () => setOpen((shown) => !shown),
+              label: `${CHIP[kind].text}: how ${label} was obtained`,
+            }}
+          >
+            {CHIP[kind].text}
+          </ProvenanceChip>
+        )}
+      </span>
+      {layout === 'full' && lines}
+      {layout === 'compact' && (
+        <span id={linesId} hidden={!open} className="flex flex-col items-start gap-1">
+          {open && lines}
+        </span>
+      )}
     </span>
   );
 };

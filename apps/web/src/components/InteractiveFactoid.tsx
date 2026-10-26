@@ -26,11 +26,12 @@ interface InteractiveFactoidProps {
   audio?: MeasuredAudio | null;
 }
 
-// Color mapping for entity types
+// Color mapping for entity types. Violet means model inference only (ProvenanceChip), so a
+// sample is amber, the colour of history and of sample links in the genealogy graph.
 const ENTITY_COLORS: Record<FactoidEntity['type'], string> = {
   synth: 'text-cyber hover:bg-cyber/20 border-cyber/30',
   producer: 'text-analog hover:bg-analog/20 border-analog/30',
-  sample: 'text-accent-purple hover:bg-accent-purple/20 border-accent-purple/30',
+  sample: 'text-analog hover:bg-analog/20 border-analog/30',
   technique: 'text-accent-pink hover:bg-accent-pink/20 border-accent-pink/30',
   artist: 'text-accent-green hover:bg-accent-green/20 border-accent-green/30',
   album: 'text-accent-blue hover:bg-accent-blue/20 border-accent-blue/30',
@@ -45,7 +46,7 @@ function getBorderColor(type: Factoid['type']): string {
     case 'credits':
       return 'border-l-analog';
     case 'sample':
-      return 'border-l-accent-purple';
+      return 'border-l-analog';
     case 'curiosity':
       return 'border-l-accent-amber';
     case 'connection':
@@ -63,7 +64,7 @@ function getHoverBorderColor(type: Factoid['type']): string {
     case 'credits':
       return 'hover:border-analog/25';
     case 'sample':
-      return 'hover:border-accent-purple/25';
+      return 'hover:border-analog/25';
     case 'curiosity':
       return 'hover:border-accent-amber/25';
     case 'connection':
@@ -85,7 +86,7 @@ function getFactoidStyle(type: Factoid['type']): {
     case 'credits':
       return { icon: <Users size={14} />, color: 'text-analog', label: 'CREDITS' };
     case 'sample':
-      return { icon: <Music size={14} />, color: 'text-accent-purple', label: 'SAMPLE' };
+      return { icon: <Music size={14} />, color: 'text-analog', label: 'SAMPLE' };
     case 'curiosity':
       return { icon: <Sparkles size={14} />, color: 'text-accent-amber', label: 'CURIOSITY' };
     case 'connection':
@@ -174,7 +175,7 @@ const InteractiveFactoid: React.FC<InteractiveFactoidProps> = ({
             : factoid.type === 'credits'
               ? 'to-analog/[0.03]'
               : factoid.type === 'sample'
-                ? 'to-accent-purple/[0.03]'
+                ? 'to-analog/[0.03]'
                 : factoid.type === 'curiosity'
                   ? 'to-accent-amber/[0.03]'
                   : factoid.type === 'connection'

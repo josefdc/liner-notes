@@ -63,12 +63,16 @@
   --color-analog-dim: rgba(255, 176, 0, 0.1);
   --color-analog-muted: rgba(255, 176, 0, 0.5);
 
-  /* ===== Provenance: how a value is known. Colour is never the only cue (chips carry text) ===== */
+  /* ===== Provenance: how a value is known. Colour is never the only cue: every chip carries an
+     icon and words (components/provenance/ProvenanceChip.tsx) ===== */
   --color-prov-measured: var(--color-cyber);
   --color-prov-sourced: var(--color-analog);
-  /* No hue of its own: colour marks what has evidence (measured, sourced); an inference is a
-     light neutral, set apart from missing (dimmer) by its text and icon */
-  --color-prov-inferred: #cbd5e1;
+  /* Violet, for model inference and audio-model estimates only (nothing else is violet). It is
+     the lightest violet still clearly a hue: 5.5:1 or more on every surface and 4.6:1 on its own
+     badge tint. A light neutral (#cbd5e1) read as the neutral badge (CIE76 ΔE 27 from its grey)
+     and, with protanopia, as the measured cyan (ΔE 9); this violet is ΔE 51 and 33 from them,
+     and over 99 from the sourced amber and the warning orange */
+  --color-prov-inferred: #c4a4fc;
   --color-prov-missing: var(--color-text-tertiary);
 
   /* ===== Data visualisation: series and relation colours for charts and the graph ===== */
@@ -84,7 +88,7 @@
   /* ===== Status ===== */
   --color-status-success: var(--color-viz-green);
   /* Orange, apart from the sourced amber: "its source contradicts it" must not look like "it has
-     a source" */
+     a source". Warnings carry their own icon too (a triangle) */
   --color-status-warning: #fb923c;
   --color-status-error: #ff8a8a;
   --color-status-info: #60a5fa;
@@ -134,8 +138,12 @@
 
   /* Text shadows (text-shadow-dark, text-shadow-glow-cyber, text-shadow-glow-analog) */
   --text-shadow-dark: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.8);
-  --text-shadow-glow-cyber: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
-  --text-shadow-glow-analog: 0 0 10px rgba(255, 176, 0, 0.5), 0 0 20px rgba(255, 176, 0, 0.3);
+  --text-shadow-glow-cyber:
+    0 0 10px color-mix(in srgb, var(--color-cyber) 50%, transparent),
+    0 0 20px color-mix(in srgb, var(--color-cyber) 30%, transparent);
+  --text-shadow-glow-analog:
+    0 0 10px color-mix(in srgb, var(--color-analog) 50%, transparent),
+    0 0 20px color-mix(in srgb, var(--color-analog) 30%, transparent);
 
   /* ===== Effects ===== */
   /* The console's CRT texture: dark scanlines over a faint red, green and blue fringe */
@@ -161,31 +169,20 @@
   --radius-full: 9999px;
 
   /* ===== Shadows ===== */
-  /* The accent and Spotify glows follow their colour tokens */
-  --shadow-glow-cyber: 0 0 20px rgba(0, 240, 255, 0.25);
-  --shadow-glow-analog: 0 0 20px rgba(255, 176, 0, 0.25);
-  --shadow-glow-purple: 0 0 20px color-mix(in srgb, var(--color-accent-purple) 25%, transparent);
-  --shadow-glow-pink: 0 0 20px color-mix(in srgb, var(--color-accent-pink) 25%, transparent);
-  --shadow-glow-green: 0 0 20px color-mix(in srgb, var(--color-accent-green) 25%, transparent);
+  /* Each glow is its colour token, mixed with transparency, so it follows the token */
+  --shadow-glow-cyber: 0 0 20px color-mix(in srgb, var(--color-cyber) 25%, transparent);
+  --shadow-glow-analog: 0 0 20px color-mix(in srgb, var(--color-analog) 25%, transparent);
   --shadow-glow-spotify: 0 0 20px color-mix(in srgb, var(--color-spotify) 25%, transparent);
-  --shadow-glow-indigo: 0 0 20px color-mix(in srgb, var(--color-accent-indigo) 25%, transparent);
-  --shadow-glow-amber: var(--shadow-glow-analog);
-  --shadow-glow-cyber-subtle: 0 0 12px rgba(0, 240, 255, 0.15);
-  --shadow-glow-analog-subtle: 0 0 12px rgba(255, 176, 0, 0.15);
-  --shadow-glow-purple-subtle: 0 0 12px
-    color-mix(in srgb, var(--color-accent-purple) 15%, transparent);
-  --shadow-glow-green-subtle: 0 0 12px
-    color-mix(in srgb, var(--color-accent-green) 15%, transparent);
-  --shadow-glow-pink-subtle: 0 0 12px color-mix(in srgb, var(--color-accent-pink) 15%, transparent);
+  --shadow-glow-cyber-subtle: 0 0 12px color-mix(in srgb, var(--color-cyber) 15%, transparent);
+  --shadow-glow-analog-subtle: 0 0 12px color-mix(in srgb, var(--color-analog) 15%, transparent);
   --shadow-glow-spotify-subtle: 0 0 12px color-mix(in srgb, var(--color-spotify) 15%, transparent);
-  --shadow-glow-indigo-subtle: 0 0 12px
-    color-mix(in srgb, var(--color-accent-indigo) 15%, transparent);
-  --shadow-glow-amber-subtle: var(--shadow-glow-analog-subtle);
-  --shadow-glow-white: 0 0 20px rgba(255, 255, 255, 0.15); /* play button */
-  --shadow-glow-white-hover: 0 0 30px rgba(255, 255, 255, 0.3);
+  --shadow-glow-white: 0 0 20px color-mix(in srgb, var(--color-white) 15%, transparent); /* play button */
+  --shadow-glow-white-hover: 0 0 30px color-mix(in srgb, var(--color-white) 30%, transparent);
   --shadow-elevated: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
   --shadow-elevated-lg: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-input-focus: 0 0 0 1px rgba(0, 240, 255, 0.4), 0 0 30px rgba(0, 240, 255, 0.08);
+  --shadow-input-focus:
+    0 0 0 1px color-mix(in srgb, var(--color-cyber) 40%, transparent),
+    0 0 30px color-mix(in srgb, var(--color-cyber) 8%, transparent);
 
   /* ===== Motion ===== */
   --duration-focus: 100ms;

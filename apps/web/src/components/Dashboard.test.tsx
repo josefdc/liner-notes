@@ -247,7 +247,9 @@ describe('Dashboard connected tracks', () => {
     );
     expect(lonely.textContent).not.toMatch(/Sourced|Model inference/);
     // Kind in words and in the badge's colour: amber for sourced, neutral otherwise.
-    expect(older.querySelector('[data-link-kind]')?.className).toContain('text-analog');
+    expect(older.querySelector('[data-link-kind]')?.getAttribute('data-variant')).toBe('sourced');
+    expect(older.querySelector('[data-link-kind]')?.className).toContain('text-prov-sourced');
+    expect(guess.querySelector('[data-link-kind]')?.getAttribute('data-variant')).toBe('neutral');
     expect(guess.querySelector('[data-link-kind]')?.className).toContain('border-white/15');
     expect(guess.querySelector('[data-link-kind] > span')?.className).toBe('text-text-secondary');
   });

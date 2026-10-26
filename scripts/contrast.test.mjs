@@ -305,9 +305,13 @@ describe("token sheet", () => {
 
   it("validates every alias, colour or not", () => {
     expect(() => validateTokens(readTokens(tokens))).not.toThrow();
-    const broken = withToken("--shadow-glow-amber-subtle", "var(--shadow-glow-analog-sutble)");
+    // A shadow is not a colour, but the colour it mixes must exist.
+    const broken = withToken(
+      "--shadow-glow-analog-subtle",
+      "0 0 12px color-mix(in srgb, var(--color-analog-sutble) 15%, transparent)",
+    );
     expect(() => validateTokens(readTokens(broken))).toThrow(
-      "--shadow-glow-amber-subtle: --shadow-glow-analog-sutble is not defined",
+      "--shadow-glow-analog-subtle: --color-analog-sutble is not defined",
     );
   });
 

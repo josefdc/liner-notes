@@ -109,14 +109,14 @@ describe("check-theme-sync", () => {
     const [tokensPath] = files(tokens, "");
     expect(check(tokensPath, join(tokensPath, "..", "missing.ts")).code).toBe(2);
     const broken = tokens.replace(
-      "--shadow-glow-amber: var(--shadow-glow-analog);",
-      "--shadow-glow-amber: var(--shadow-glow-analgo);",
+      "--shadow-glow-analog: 0 0 20px color-mix(in srgb, var(--color-analog) 25%, transparent);",
+      "--shadow-glow-analog: 0 0 20px color-mix(in srgb, var(--color-analgo) 25%, transparent);",
     );
     expect(broken).not.toBe(tokens);
     const [brokenPath, themePath] = files(broken, readFileSync(THEME_PATH, "utf8"));
     const { code, out } = check(brokenPath, themePath);
     expect(code).toBe(2);
-    expect(out).toContain("--shadow-glow-amber: --shadow-glow-analgo is not defined");
+    expect(out).toContain("--shadow-glow-analog: --color-analgo is not defined");
   });
 
   it("runs as a script", () => {

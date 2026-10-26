@@ -443,7 +443,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'context' ? 'block absolute inset-0 md:static z-20 bg-void md:bg-transparent' : 'hidden md:block'}
         `}
         >
-          <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest">
               Agent Analysis
             </h3>
@@ -717,7 +717,7 @@ const PlayerView: React.FC<Omit<PlayerProps, 'trackData'> & { track: TrackData }
             ${activeTab === 'genealogy' ? 'block max-md:absolute max-md:inset-0 max-md:z-20 max-md:bg-void' : 'hidden md:block'}
         `}
         >
-          <div className="absolute top-4 left-4 z-10 pointer-events-none flex items-center gap-2">
+          <div className="absolute top-4 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center gap-2">
             <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-widest hidden md:block">
               Genealogy Network
             </h3>

@@ -68,6 +68,30 @@ function setup(route: ProviderRoute, env: Record<string, string> = {}) {
   return { llm, net, rows, waits };
 }
 
+const realSetTimeout = globalThis.setTimeout;
+/** How often a waiter tries the spend log's lock again (fileLock.ts POLL_MS). */
+const LOCK_POLL_MS = 5;
+const PENDING = Symbol("pending");
+/** What `call` has settled with so far: PENDING until it settles. */
+function outcome<T>(call: Promise<T>): () => T | typeof PENDING {
+  let settled: T | typeof PENDING = PENDING;
+  void call.then((value) => {
+    settled = value;
+  });
+  return () => settled;
+}
+
+/**
+ * Fakes the clocks until the test ends. "At once" is then exact: what the abort settles does
+ * not need the clock to move at all, however busy the machine is.
+ */
+function onFakeClock(): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+}
+
 const lines = (): SpendLine[] => parseSpendLog(readFileSync(log, "utf8"));
 const settles = () => lines().filter((l) => l.kind === "settle");
 const reserves = () => lines().filter((l) => l.kind === "reserve");
@@ -478,31 +502,42 @@ describe("aborts", () => {
   });
 
   it("leaves the queue at once when aborted while waiting for a slot, charging nothing", async () => {
+    // The first call holds the only slot until the test lets it answer: the queued call has to
+    // leave on its abort while the slot is still taken, with no time passing.
+    let answerFirst!: () => void;
+    const firstMayAnswer = new Promise<void>((resolve) => {
+      answerFirst = resolve;
+    });
     let first = true;
-    const { llm, net } = setup(
-      (call) => {
-        if (!first) return hang(call);
-        first = false;
-        return new Promise((resolve) =>
-          setTimeout(() => resolve(Response.json(responseBody({ ok: true }, null))), 500),
-        );
-      },
-      { LLM_CONCURRENCY: "1" },
-    );
+    const { route, received } = onReceipt(async (call) => {
+      if (!first) return hang(call);
+      first = false;
+      await firstMayAnswer;
+      return Response.json(responseBody({ ok: true }, null));
+    });
+    const { llm, net } = setup(route, { LLM_CONCURRENCY: "1" });
     const running = llm.invoke("a", "research", "hi", Schema, { ...OPTIONS, runId: "rA" });
+    await untilSentOrSettled(received, running);
+    onFakeClock();
     const controller = new AbortController();
-    const started = performance.now();
-    const queued = llm
-      .invoke("b", "research", "hi", Schema, {
-        ...OPTIONS,
-        runId: "rB",
-        signal: controller.signal,
-      })
-      .catch((e) => e);
-    setTimeout(() => controller.abort(), 20);
-    const error = await queued;
-    expect(isLlmError(error, "aborted")).toBe(true);
-    expect(performance.now() - started).toBeLessThan(300);
+    const queued = outcome(
+      llm
+        .invoke("b", "research", "hi", Schema, {
+          ...OPTIONS,
+          runId: "rB",
+          signal: controller.signal,
+        })
+        .catch((e) => e),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    // Waiting: with the only slot taken, for the slot.
+    expect(queued()).toBe(PENDING);
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queued(), "left the queue with no time passing").not.toBe(PENDING);
+    expect(isLlmError(queued(), "aborted")).toBe(true);
+    vi.useRealTimers();
+    answerFirst();
     await running;
     expect(net.calls).toHaveLength(1);
     expect(lines().filter((l) => l.callSite === "b")).toEqual([]);
@@ -510,25 +545,33 @@ describe("aborts", () => {
   });
 
   it("stops during the retry wait, sending and charging no second attempt", async () => {
+    onFakeClock();
     const controller = new AbortController();
     const net = providerFetch(() => errorResponse(503));
+    let inRetryWait!: () => void;
+    const retryWait = new Promise<void>((resolve) => {
+      inRetryWait = resolve;
+    });
     const llm = createLlm({
       settings: testSettings({ LLM_SPEND_LOG: log }),
       fetch: net.fetch,
       recordUsage: () => {},
-      sleep: () =>
-        new Promise((resolve) => {
-          controller.abort();
-          setTimeout(resolve, 1000);
-        }),
+      // A retry wait that never ends: the call has to stop on the abort, with no time passing.
+      sleep: () => {
+        inRetryWait();
+        return new Promise<void>(() => {});
+      },
     });
-    const started = performance.now();
-    const error = await llm
-      .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
-      .catch((e) => e);
-    expect(isLlmError(error, "aborted")).toBe(true);
-    // Without waiting out the 1 s retry wait.
-    expect(performance.now() - started).toBeLessThan(500);
+    const call = outcome(
+      llm
+        .invoke("x", "research", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+        .catch((e) => e),
+    );
+    await retryWait;
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(call(), "stopped with no time passing").not.toBe(PENDING);
+    expect(isLlmError(call(), "aborted")).toBe(true);
     expect(net.calls).toHaveLength(1);
     expect(reserves()).toHaveLength(1);
     expect(llm.callsForRun("run-1")).toBe(1);
@@ -587,20 +630,40 @@ describe("aborts", () => {
 
 describe("an abort while waiting for the spend log's lock", () => {
   it("returns at once, sending and charging nothing", async () => {
+    // The lock stays taken until the call has returned: it has to return without it, at its
+    // next try for the lock, one poll (5 ms, fileLock.ts) after the abort on the fake clock.
     const release = await acquireLock(await resolveSpendLogPath(log));
-    setTimeout(() => void release(), 1500);
+    onFakeClock();
     const { llm, net } = setup(hang);
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
-    const started = performance.now();
-    const error = await llm
-      .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
-      .catch((e) => e);
+    const call = outcome(
+      llm
+        .invoke("x", "fast", "hi", Schema, { ...OPTIONS, signal: controller.signal })
+        .catch((e) => e),
+    );
+    // Waits (at most 2 s of real time) until the call waits for its next try: a timer on the
+    // fake clock, the only one before a request is sent.
+    const waitFrom = process.hrtime.bigint();
+    while (vi.getTimerCount() === 0) {
+      if (process.hrtime.bigint() - waitFrom > 2_000_000_000n) {
+        throw new Error("the call never waited for the lock");
+      }
+      await new Promise((resolve) => realSetTimeout(resolve, 1));
+    }
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(LOCK_POLL_MS);
+    const error = call();
+    expect(error, "returned within one poll, the lock still taken").not.toBe(PENDING);
     expect(isLlmError(error, "aborted")).toBe(true);
-    expect(performance.now() - started).toBeLessThan(1000);
     expect(net.calls).toHaveLength(0);
     expect(llm.callsForRun("run-1")).toBe(0);
-    await new Promise((r) => setTimeout(r, 1500));
+    // Nor does it write once the lock is free. Still on the fake clock, so a try it scheduled
+    // there is run: the clock is stepped well past any next try, with real time for the files.
+    await release();
+    for (let i = 0; i < 50; i++) {
+      await vi.advanceTimersByTimeAsync(LOCK_POLL_MS);
+      await new Promise((resolve) => realSetTimeout(resolve, 1));
+    }
     expect(readFileSync(log, "utf8")).toBe("");
   });
 });

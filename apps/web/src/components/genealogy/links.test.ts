@@ -523,6 +523,14 @@ describe('link styles', () => {
     }
   });
 
+  it('name every relation in text at 4.5:1 or more on the page-coloured halo it is drawn on', () => {
+    // GenealogyGraph draws each line's label in the link's colour over a stroke of colors.void.
+    const page = rgb(colors.void);
+    for (const [type, color] of Object.entries(LINK_COLOR)) {
+      expect(contrast(rgb(color), page), type).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('draw sourced links solid and the others dashed', () => {
     expect(LINK_DASH).toEqual({ sourced: 'none', inferred: '6 4' });
   });

@@ -368,7 +368,10 @@ describe("one log reached through a symlink", () => {
     const real = join(dir, "spend.jsonl");
     writeFileSync(real, "");
     symlinkSync(real, join(dir, "alias.jsonl"));
-    const startAt = String(Date.now() + 2500);
+    // Lined up on a shared directory, and answered only once both calls were sent or refused
+    // (callWorker.ts): however long each process took to start, the admitted call is still open
+    // when the other one is decided.
+    const group = mkdtempSync(join(dir, "group-"));
     const runs = await Promise.all(
       [real, join(dir, "alias.jsonl")].map((path, i) =>
         runWorker({
@@ -376,8 +379,8 @@ describe("one log reached through a symlink", () => {
           BUDGET_TOTAL_USD: "0.02",
           BUDGET_EVAL_FLOOR_USD: "0",
           WORKER_MAX_OUTPUT: "1000",
-          WORKER_START_AT: startAt,
-          STUB_DELAY_MS: "300",
+          WORKER_GROUP_DIR: group,
+          WORKER_GROUP_SIZE: "2",
           SQLITE_DB_PATH: join(dir, `p${i}.db`),
         }),
       ),

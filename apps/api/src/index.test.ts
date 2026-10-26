@@ -167,6 +167,46 @@ function logged(output: string, component: string, message: string): boolean {
   );
 }
 
+/**
+ * Resolves once `child`'s output passes `test`. A line the child wrote around an answer (the
+ * request line is written once the answer is sent) can reach this process after the answer
+ * does. Fails, with the output, as soon as the child has exited and closed its output without
+ * it, or when nothing passes within `ms`.
+ */
+function untilOutput(child: Child, test: (output: string) => boolean, ms = 4000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const streams = [child.process.stdout, child.process.stderr];
+    const stop = () => {
+      clearTimeout(timer);
+      for (const stream of streams) stream?.off("data", check);
+      child.process.off("close", closed);
+    };
+    // Registered after start()'s own listener, so the output already holds the chunk.
+    function check() {
+      if (!test(child.output())) return;
+      stop();
+      resolve();
+    }
+    function closed() {
+      if (test(child.output())) return check();
+      stop();
+      reject(
+        new Error(
+          `exited (${child.process.exitCode ?? child.process.signalCode}) first:\n${child.output()}`,
+        ),
+      );
+    }
+    const timer = setTimeout(() => {
+      stop();
+      reject(new Error(`not in the output within ${ms} ms:\n${child.output()}`));
+    }, ms);
+    for (const stream of streams) stream?.on("data", check);
+    child.process.once("close", closed);
+    check();
+    if (child.process.exitCode !== null && child.process.stdout?.readableEnded) closed();
+  });
+}
+
 const CONTINUE = "HTTP/1.1 100 Continue\r\n\r\n";
 
 /**
@@ -236,24 +276,9 @@ describe("the API process", () => {
   let port: number;
   let api: Child;
 
+  // Shared by these tests, in any order: none of them stops it.
   beforeAll(async () => {
-    const paths = scratch();
-    dbPath = paths.dbPath;
-    port = await freePort();
-    api = start(ENTRY, paths.dir, apiEnv(port, dbPath));
-
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      if (api.process.exitCode !== null) throw new Error(`exited at startup:\n${api.output()}`);
-      try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/health`);
-        if (res.ok) break;
-      } catch {
-        // not listening yet
-      }
-      if (Date.now() > deadline) throw new Error(`did not start:\n${api.output()}`);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
+    ({ api, port, dbPath } = await startApi());
   }, 40_000);
 
   // The issue's body, and one that passes the required-field check that used to come first and
@@ -278,11 +303,16 @@ describe("the API process", () => {
     expect(health.status).toBe(200);
   }, 15_000);
 
-  it("binds 127.0.0.1 by default", () => {
+  it("binds 127.0.0.1 by default", async () => {
+    await untilOutput(api, (output) => logged(output, "Server", "Listening on"));
     expect(logged(api.output(), "Server", `Listening on http://127.0.0.1:${port}`)).toBe(true);
   });
 
-  it("writes its log as JSON lines, one object per line", () => {
+  it("writes its log as JSON lines, one object per line", async () => {
+    // The health probes it answered while starting are logged once each answer was sent.
+    await untilOutput(api, (output) =>
+      logEntries(output).some((entry) => entry.path === "/api/health"),
+    );
     const lines = api
       .output()
       .split("\n")
@@ -302,8 +332,12 @@ describe("the API process", () => {
   it("cancels runs left open by a previous process once it listens", () => {
     expect(withDatabase(dbPath, (db) => getRun(db, "left-open")?.status)).toBe("cancelled");
   });
+});
 
+describe("an API process stopped by SIGTERM", () => {
+  // A process of its own: the shared one above must keep serving whatever test runs after.
   it("drains on SIGTERM, ignores the relayed duplicate, settles runs in flight and exits 0", async () => {
+    const { api, port, dbPath } = await startApi();
     withDatabase(dbPath, (db) =>
       startRun(db, { runId: "in-flight", threadId: "in-flight", query: "q" }),
     );
@@ -317,22 +351,36 @@ describe("the API process", () => {
     // soon as the first has been handled (two pending signals would be delivered as one).
     const signalledAt = Date.now();
     api.process.kill("SIGTERM");
-    while (!api.output().includes("SIGTERM received")) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
+    await untilOutput(api, (output) => output.includes("SIGTERM received"));
     api.process.kill("SIGTERM");
+    // Exit 0 means the drain, not the 8 s shutdown timeout, closed the open connection.
     expect(await api.exit).toBe(0);
     await socketClosed;
-    // The open connection was given the drain (3 s) and closed well before the timeout (8 s).
+    expect(logged(api.output(), "Server", "still open after the shutdown timeout")).toBe(false);
+    // The process drains for 3 s and gives up after 8 s; lifecycle.test.ts checks on a fake
+    // clock that the drain closes the connections exactly then.
+    const entries = logEntries(api.output());
+    const signalled = entries.find((entry) => String(entry.msg).startsWith("SIGTERM received"));
+    const stopped = entries.find(
+      (entry) => entry.component === "Server" && entry.msg === "Stopped",
+    );
+    expect(signalled).toMatchObject({ drainMs: 3_000, timeoutMs: 8_000 });
+    // The whole shutdown, by the process's own clock: the drain, then at most half of what is
+    // left before the shutdown timeout for settling the runs and closing the store.
+    const { drainMs, timeoutMs } = signalled as { drainMs: number; timeoutMs: number };
+    const tookMs = Date.parse(String(stopped?.time)) - Date.parse(String(signalled?.time));
+    expect(tookMs, "SIGTERM to Stopped, in the process's log").toBeLessThan(
+      drainMs + (timeoutMs - drainMs) / 2,
+    );
+    // The open connection was given the drain.
     expect(Date.now() - signalledAt).toBeGreaterThanOrEqual(2900);
-    expect(Date.now() - signalledAt).toBeLessThan(7000);
     expect(received()).toBe(CONTINUE); // held until the drain closed it, never answered
 
     expect(logged(api.output(), "Server", "ignored as a duplicate")).toBe(true);
     expect(logged(api.output(), "Database", "Connection closed.")).toBe(true);
     expect(logged(api.output(), "Server", "Stopped")).toBe(true);
     expect(withDatabase(dbPath, (db) => getRun(db, "in-flight")?.status)).toBe("cancelled");
-  }, 15_000);
+  }, 20_000);
 });
 
 describe("an API process stopped by SIGINT", () => {

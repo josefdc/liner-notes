@@ -9,15 +9,21 @@
  *   SQLITE_DB_PATH        opens this app database, so usage rows are recorded in it
  *   WORKER_CALLS          number of calls (default 1)
  *   WORKER_PARALLEL       "1": start every call at once (default: one after another)
- *   WORKER_START_AT       epoch ms to wait for before the first call (to line processes up)
+ *   WORKER_GROUP_DIR      a directory shared by the processes of one test, which line up on
+ *                         it: none calls before all WORKER_GROUP_SIZE have started, and the
+ *                         stub answers no call before every call of the group was sent to it or
+ *                         refused (so an admitted call is still open while the others decide).
+ *                         A process still waiting for the group 20 s after it started exits 2.
+ *   WORKER_GROUP_SIZE     the number of calls in the group (its processes make one each)
  *   WORKER_MAX_OUTPUT     max_output_tokens per call (default 1000)
  *   STUB_INPUT, STUB_OUTPUT   tokens the stub reports per call (default 100 / 20)
- *   STUB_DELAY_MS         delay before the stub answers (default 0)
  *   STUB_HANG             "1": the stub prints "in-flight" and never answers
  *
  * Prints one `RESULT {json}` line per call: { ok: true, usd } or { ok: false, kind }.
  */
 
+import { readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { readLlmSettings } from "../../config/settings.js";
 import { initializeDatabase } from "../../store/database.js";
 import { isLlmError } from "../errors.js";
@@ -40,14 +46,42 @@ const { settings, errors } = readLlmSettings({
 if (errors.length > 0) throw new Error(errors.join("; "));
 if (env.SQLITE_DB_PATH) initializeDatabase(env.SQLITE_DB_PATH);
 
+const groupDir = env.WORKER_GROUP_DIR;
+const groupSize = Number(env.WORKER_GROUP_SIZE ?? 0);
+
+let marks = 0;
+/** Leaves a mark named `name` in the group's directory. */
+const mark = (name: string) => {
+  if (groupDir) writeFileSync(join(groupDir, `${name}-${process.pid}-${marks++}`), "");
+};
+
+/**
+ * One deadline for both waits, well inside the tests' 60 s timeout: when a process of the group
+ * never starts or never decides, the others exit 2 with a message, so the test shows every
+ * process's exit code and output instead of timing out.
+ */
+const groupDeadline = Date.now() + 20_000;
+
+/** Waits until the group's directory holds `groupSize` marks starting with `prefix`. */
+async function untilGroup(prefix: string): Promise<void> {
+  if (!groupDir) return;
+  while (readdirSync(groupDir).filter((name) => name.startsWith(prefix)).length < groupSize) {
+    if (Date.now() > groupDeadline) {
+      process.stderr.write(`callWorker: the group did not reach ${groupSize} "${prefix}" marks\n`);
+      process.exit(2);
+    }
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
 const stubUsage = { input: Number(env.STUB_INPUT ?? 100), output: Number(env.STUB_OUTPUT ?? 20) };
-const delayMs = Number(env.STUB_DELAY_MS ?? 0);
 const provider = providerFetch(async () => {
   if (env.STUB_HANG === "1") {
     process.stdout.write("in-flight\n");
     return new Promise<Response>(() => {});
   }
-  if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+  mark("decided-sent");
+  await untilGroup("decided-");
   return Response.json(responseBody({ ok: true }, stubUsage));
 });
 
@@ -56,8 +90,8 @@ const Schema = z.object({ ok: z.boolean() });
 const calls = Number(env.WORKER_CALLS ?? 1);
 const maxOutputTokens = Number(env.WORKER_MAX_OUTPUT ?? 1000);
 
-const startAt = Number(env.WORKER_START_AT ?? 0);
-while (Date.now() < startAt) await new Promise((r) => setTimeout(r, 2));
+mark("started");
+await untilGroup("started-");
 
 async function one(index: number): Promise<void> {
   try {
@@ -69,6 +103,8 @@ async function one(index: number): Promise<void> {
     });
     process.stdout.write(`RESULT ${JSON.stringify({ ok: true, usd: result.usage.usdEst })}\n`);
   } catch (error) {
+    // Refused (or failed) without being answered: decided too.
+    mark("decided-refused");
     const kind = isLlmError(error) ? error.kind : "unexpected";
     const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(`RESULT ${JSON.stringify({ ok: false, kind, message })}\n`);

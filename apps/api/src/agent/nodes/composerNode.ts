@@ -32,7 +32,7 @@ import {
   type SourceError,
   TrackAnalysis,
 } from "@liner-notes/contract";
-import { isLlmError, LlmError } from "../../llm/errors.js";
+import { LlmError } from "../../llm/errors.js";
 import type { InvokeResult } from "../../llm/invoke.js";
 import type { IdentifiedRecording } from "../../sources/identity.js";
 import {
@@ -54,6 +54,11 @@ import {
 } from "../prompts.js";
 import { type AgentRuntime, defaultAgentRuntime, runIdFor, timestampOf } from "../runtime.js";
 import { shownQueryMatch, storeResult } from "../storedResults.js";
+import {
+  MODEL_FAILURE_TEXT,
+  modelErrorCategory,
+  type ModelUnavailableReason,
+} from "../statusText.js";
 import type { Factoid, Genealogy, GenealogyLink, GenealogyNode, TrackData } from "../schema.js";
 import {
   createDefaultSegments,
@@ -69,50 +74,16 @@ export const COMPOSER_CALL_SITE = "composer";
 /** Output budget of the composer call, reasoning included (main tier: low effort). */
 export const COMPOSER_MAX_OUTPUT_TOKENS = 6000;
 
-export type ModelUnavailableReason =
-  | "no_output"
-  | "rate_limited"
-  | "timeout"
-  | "auth"
-  | "error"
-  | "budget_exhausted";
+export { modelErrorCategory, type ModelUnavailableReason } from "../statusText.js";
 
-/**
- * The category sent to clients when the model call fails, from the error's kind. Provider
- * text stays in the server log: it can name keys, deployments or quotas.
- */
-export function modelErrorCategory(error: unknown): ModelUnavailableReason {
-  if (!isLlmError(error)) return "error";
-  switch (error.kind) {
-    case "budget_exceeded":
-    case "call_cap":
-      return "budget_exhausted";
-    case "rate_limited":
-      return "rate_limited";
-    case "timeout":
-      return "timeout";
-    case "not_configured":
-      return "auth";
-    case "provider":
-      return error.status === 401 || error.status === 403 ? "auth" : "error";
-    case "incomplete":
-    case "refused":
-    case "invalid_output":
-    case "invalid_response":
-    case "content_filtered":
-      return "no_output";
-    default:
-      return "error";
-  }
-}
+/** What the fallback result shows, for its status line. */
+const FALLBACK_SHOWS =
+  "showing source data only, with a template song structure and no written notes";
 
-const MODEL_REASON_TEXT: Record<ModelUnavailableReason, string> = {
-  no_output: "no output",
-  rate_limited: "rate limited",
-  timeout: "timed out",
-  auth: "not authorised",
-  error: "request failed",
-  budget_exhausted: "budget exhausted",
+/** A status line that starts with what happened to the model call. */
+const modelLine = (reason: ModelUnavailableReason, rest: string) => {
+  const text = MODEL_FAILURE_TEXT[reason];
+  return `${text[0].toUpperCase()}${text.slice(1)}; ${rest}`;
 };
 
 // Audio problems that may clear up on the next run. A result missing audio for one of these
@@ -469,7 +440,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
     if (!spotify) {
       return {
         error: "No Spotify data to compose",
-        statusMessages: ["❌ Cannot compose - missing track data"],
+        statusMessages: ["Liner notes not written: no track was chosen"],
       };
     }
 
@@ -516,7 +487,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       return result;
     };
 
-    status("LLM-CONNECT", "Composing the liner notes...");
+    status("LLM-CONNECT", "Writing the liner notes");
     log.info(`Synthesizing data for: ${spotify.title}`);
 
     // The recording the historian's identity chain matched by ISRC; its errors are the run's.
@@ -562,7 +533,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       runtime.newId,
     );
 
-    status("GRAPH-ENRICH", "Cross-referencing visual artifacts from Spotify...");
+    status("GRAPH-ENRICH", "Looking up cover art on Spotify for the genealogy");
     const enriched = await withArtwork(
       composed.genealogy,
       spotify.coverUrl,
@@ -644,7 +615,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       claims: composed.claims,
       usage: [call],
       sourceErrors: runErrors,
-      statusMessages: ["🎼 Analysis complete!"],
+      statusMessages: ["Analysis complete"],
     };
 
     /**
@@ -661,7 +632,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         error: `Composer result does not fit the contract: ${problems}`,
         usage: calls,
         sourceErrors: errors,
-        statusMessages: ["❌ The analysis could not be completed"],
+        statusMessages: ["The analysis could not be completed: the result failed its checks"],
       };
     }
 
@@ -674,10 +645,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
       log.warn(
         `Model unavailable (${failed.status}); building the result from source data: ${error instanceof Error ? error.message : String(error)}`,
       );
-      status(
-        "LLM-ERROR",
-        `Model unavailable (${MODEL_REASON_TEXT[reason]}); building the result from source data only`,
-      );
+      status("LLM-ERROR", modelLine(reason, FALLBACK_SHOWS));
 
       const fallback = await createFallbackTrackData(state, { newId: runtime.newId });
       const enriched = await withArtwork(fallback.genealogy, spotify!.coverUrl, signal);
@@ -700,9 +668,7 @@ export function createComposerNode(runtime: AgentRuntime = defaultAgentRuntime) 
         claims: [],
         usage: [failed],
         sourceErrors: runErrors,
-        statusMessages: [
-          `⚠️ Model unavailable (${MODEL_REASON_TEXT[reason]}); showing source data only`,
-        ],
+        statusMessages: [modelLine(reason, FALLBACK_SHOWS)],
       };
     }
   };

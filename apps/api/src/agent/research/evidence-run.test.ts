@@ -254,7 +254,7 @@ describe("the historian's evidence pack", () => {
       ]),
     );
     expect(out.statusMessages).toContain(
-      `📇 Primary sources: ${evidence.length - 1} records (MusicBrainz ${
+      `Read ${evidence.length - 1} records from the primary sources (MusicBrainz ${
         evidence.filter((e) => e.source === "musicbrainz").length
       }, SecondHandSongs ${evidence.filter((e) => e.source === "secondhandsongs").length})`,
     );
@@ -296,7 +296,7 @@ describe("the historian's evidence pack", () => {
     // While the sources are read, the stream says what the run is waiting for.
     // Only the sources that will be asked: Discogs and Genius have no credential here.
     const reading = events.findIndex(
-      (e) => e.message === "📇 Reading primary sources (MusicBrainz, SecondHandSongs)...",
+      (e) => e.message === "Reading the primary sources again (MusicBrainz, SecondHandSongs)",
     );
     expect(reading).toBeGreaterThan(-1);
     expect(reading).toBeLessThan(events.findIndex((e) => e.type === "evidence"));
@@ -310,7 +310,7 @@ describe("the historian's evidence pack", () => {
     );
     expect(net.calls).toEqual([]);
     expect(out.evidence?.map((e) => e.id)).toEqual([WEB_ID]);
-    expect(out.statusMessages).toContain("📇 Primary sources not asked: the track has no ISRC");
+    expect(out.statusMessages).toContain("Primary sources not asked: the track has no ISRC");
   });
 });
 
@@ -416,10 +416,8 @@ describe("a run whose primary sources fail", () => {
     const { events } = await runGraph();
 
     const lines = statusLines(events);
-    expect(lines).toContain(
-      "📇 Primary sources: none could be read (MusicBrainz could not be read)",
-    );
-    expect(lines).not.toContain("📇 Primary sources: no record matched the track");
+    expect(lines).toContain("Primary sources: none could be read (MusicBrainz could not be read)");
+    expect(lines).not.toContain("Primary sources: no record matched the track");
   });
 
   it("does not keep the result on a research-cache hit when a primary source fails", async () => {
@@ -457,7 +455,7 @@ describe("a run whose primary sources fail", () => {
       ]),
     );
     expect(statusLines(served.events)).toContain(
-      "⚠️ Stored result: SecondHandSongs could not be read when it was composed (invalid_response)",
+      "Stored analysis: SecondHandSongs answered in a form the reader does not know",
     );
   });
 
@@ -476,6 +474,11 @@ describe("a run whose primary sources fail", () => {
     expect(statusLines(events).some((m) => /MusicBrainz records are incomplete/.test(m))).toBe(
       true,
     );
+    // In words: never the request's error text (its URL, status or body) nor the code.
+    const incomplete = statusLines(events).filter((m) => /records are incomplete/.test(m));
+    expect(incomplete).toEqual([
+      "MusicBrainz records are incomplete: a request was refused: the source is limiting requests; a later run reads them again",
+    ]);
     // MusicBrainz lists no cover of the work, and the run does not pass that off as complete.
     const covers = (e: { source: string; recordRef: string | null }) =>
       e.source === "musicbrainz" && /covered-by/.test(e.recordRef ?? "");
@@ -512,9 +515,7 @@ describe("a run whose primary sources fail", () => {
     expect(error).toMatchObject({ code: "unavailable" });
     expect(error?.message).toMatch(/^internal error: /);
     // The status blames our reader, not the source.
-    expect(statusLines(events)).toContain(
-      "⚠️ SecondHandSongs: our reader failed on its answer (internal error)",
-    );
+    expect(statusLines(events)).toContain("SecondHandSongs: our reader failed on its answer");
     expect(stored).toBe(0);
   });
 
@@ -555,7 +556,7 @@ describe("a run whose primary source our own pacing did not ask", () => {
     expect(stored).toBe(0);
     expect(sourceErrors.some((e) => e.source === "secondhandsongs")).toBe(false);
     expect(statusLines(events)).toContain(
-      "📇 SecondHandSongs not asked: our own pacing of its requests left no time in this run; a later run asks it",
+      "SecondHandSongs not asked: our own pacing of its requests left no time in this run; a later run asks it",
     );
   });
 

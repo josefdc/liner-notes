@@ -264,6 +264,7 @@ async function runPlan(
   });
   let trackData: TrackData | null = null;
   const status: string[] = [];
+  const statusEvents: Array<{ message?: string; code?: string; node?: string }> = [];
   const stream = await graph.stream(
     { songQuery: options.query ?? "Ice Ice Baby Vanilla Ice" },
     { configurable: { thread_id: "run-plan" }, streamMode: ["updates", "custom"] },
@@ -273,8 +274,11 @@ async function runPlan(
   const messages: string[] = [];
   for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
     if (mode === "custom") {
-      const event = chunk as { type: string; message?: string };
-      if (event.type === "status") status.push(event.message ?? "");
+      const event = chunk as { type: string; message?: string; code?: string; node?: string };
+      if (event.type === "status") {
+        status.push(event.message ?? "");
+        statusEvents.push(event);
+      }
       continue;
     }
     for (const update of Object.values(chunk as Record<string, unknown>)) {
@@ -298,6 +302,7 @@ async function runPlan(
     trackData,
     research,
     status,
+    statusEvents,
     asked,
     lastfmMethods,
     tavilyQueries,
@@ -371,7 +376,7 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.planner).toHaveLength(1);
     expect(run.planner[0].tier).toBe("fast");
     // The status counts the steps that ran: the four fixed ones.
-    expect(run.status).toContain("Intelligence extraction complete: 4 layers processed");
+    expect(run.status).toContain("Research finished");
     // The research holds what they found.
     expect(run.research?.collaborators).toEqual(["Earthquake (supporting musician)"]);
     expect(run.research?.listenbrainzSimilarArtists?.[0]).toMatch(/^1\. MC Hammer \(similar to /);
@@ -411,10 +416,10 @@ describe("the research plan of a track with an ISRC", () => {
     }
     expect(choices).toContain("search_general");
     expect(run.status).toContain(
-      "⏭️ Not asked again: listenbrainz similar (already ran in this research)",
+      "Not asked again: ListenBrainz similar artists (already ran in this research)",
     );
     // Skipped picks are not counted as steps that ran.
-    expect(run.status).toContain("Intelligence extraction complete: 4 layers processed");
+    expect(run.status).toContain("Research finished");
   });
 
   it("does not run a step the research itself ran again", async () => {
@@ -422,8 +427,10 @@ describe("the research plan of a track with an ISRC", () => {
 
     // The sample history, the production history and one lead: the second pick is not asked.
     expect(run.tavilyQueries).toHaveLength(3);
-    expect(run.status).toContain("⏭️ Not asked again: general (already ran in this research)");
-    expect(run.status).toContain("Intelligence extraction complete: 5 layers processed");
+    expect(run.status).toContain(
+      "Not asked again: the planner's lead on the web (already ran in this research)",
+    );
+    expect(run.status).toContain("Research finished");
   });
 
   it("keeps no placeholder or error page as research or evidence", async () => {
@@ -511,10 +518,10 @@ describe("the research plan of a track with an ISRC", () => {
     // The steps run with it are kept, each with its own status line.
     expect(run.messages).toEqual(
       expect.arrayContaining([
-        "Found samples information (1 web results kept, 2 left out: error pages or no text)",
-        "Found production information (1 web results kept, 2 left out: error pages or no text)",
-        "Found artist collaborators information",
-        "⚠️ ListenBrainz could not be read (unavailable)",
+        "Found: sample history on the web (1 web results kept, 2 left out: error pages or no text)",
+        "Found: production history on the web (1 web results kept, 2 left out: error pages or no text)",
+        "Found: MusicBrainz collaborators of the artist",
+        "ListenBrainz could not be read: it gave no usable answer",
       ]),
     );
     expect(run.research?.collaborators).toEqual(["Earthquake (supporting musician)"]);
@@ -551,10 +558,10 @@ describe("the research plan of a track with an ISRC", () => {
     expect(run.research?.notAsked?.some((l) => l.startsWith(`Last.fm artist tags (${why}`))).toBe(
       true,
     );
-    expect(run.status.some((l) => l.startsWith(`⚠️ Last.fm artist tags (${why}`))).toBe(true);
+    expect(run.status.some((l) => l.startsWith(`Last.fm artist tags (${why}`))).toBe(true);
     expect(
       run.messages.some((l) =>
-        l.startsWith("Not asked: lastfm artist info (Last.fm does not know"),
+        l.startsWith("Not asked: Last.fm artist info (Last.fm does not know"),
       ),
     ).toBe(true);
     // MusicBrainz is asked once for the name, for the run's two artist requests.
@@ -565,8 +572,21 @@ describe("the research plan of a track with an ISRC", () => {
     vi.stubEnv("TAVILY_API_KEY", "");
     const run = await runPlan([]);
 
-    const warnings = run.status.filter((l) => l.startsWith("⚠️ Web search (Tavily)"));
-    expect(warnings).toHaveLength(1);
+    const warnings = run.statusEvents.filter((e) => e.message?.startsWith("Web search (Tavily)"));
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        message: "Web search (Tavily) not asked: no key is configured for it",
+        code: "SYS-WARN",
+        node: "research_tool",
+      }),
+    ]);
+    // A step whose source has no key is not announced as searched.
+    expect(run.status.filter((l) => l.startsWith("Searching: sample history"))).toEqual([]);
+    // The research's first line names only the sources it asks: no web search without a key.
+    const start = run.status.filter((l) => l.startsWith("Starting the research"));
+    expect(start).toHaveLength(2);
+    expect(start[0]).toMatch(/^Starting the research: .*MusicBrainz/);
+    expect(start[0]).not.toMatch(/web search/);
     // Only the recording's MusicBrainz sample relations: no web text.
     expect((run.research?.samples ?? []).every((e) => e.startsWith("[MusicBrainz Samples]"))).toBe(
       true,
@@ -645,7 +665,7 @@ describe("a track whose title reads like an error page", () => {
     expect(urls).not.toContain(ERROR_PAGE);
     expect(run.research?.noneFound ?? []).not.toContain("web search: sample history");
     expect(run.messages).toContain(
-      "Found samples information (2 web results kept, 2 left out: error pages or no text)",
+      "Found: sample history on the web (2 web results kept, 2 left out: error pages or no text)",
     );
   });
 });
@@ -680,7 +700,7 @@ describe("steps run together", () => {
         stepsRun: 1,
         sourceErrors: [{ source: "listenbrainz", code: "unavailable", message: "busy" }],
         lastfmArtistUncertain: "shared",
-        statusMessages: ["⚠️ ListenBrainz could not be read (unavailable)"],
+        statusMessages: ["ListenBrainz could not be read (unavailable)"],
       },
     ]);
     expect(merged.researchData?.samples).toEqual(["a"]);
@@ -698,7 +718,7 @@ describe("steps run together", () => {
     expect(merged.statusMessages).toEqual([
       "Found samples information",
       "Found artist collaborators information",
-      "⚠️ ListenBrainz could not be read (unavailable)",
+      "ListenBrainz could not be read (unavailable)",
     ]);
     expect(merged.artistResolution).toEqual(artist);
     expect(merged.lastfmArtistUncertain).toBe("shared");

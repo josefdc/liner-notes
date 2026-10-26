@@ -74,11 +74,10 @@ vi.mock("../sources/spotify.js", async (importOriginal) => ({
 vi.mock("../sources/audio.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../sources/audio.js")>()),
   // The engineer's own preview lookup and health probe (the analysis itself is stubbed).
-  resolvePreview: async () => ({
-    previewUrl: null,
-    match: null,
-    detail: "No preview in this test",
-  }),
+  resolvePreview: async () => {
+    hooks.onPreview?.();
+    return { previewUrl: null, match: null, detail: "No preview in this test" };
+  },
   audioServiceHealth: async () => null,
   analyzeAudioPreview: tools.analyzeAudioPreview,
 }));
@@ -117,6 +116,8 @@ const hooks = vi.hoisted(() => ({
       }>),
   putAudio: vi.fn(),
   putResearch: vi.fn(),
+  /** Called when the engineer looks up the track's preview. */
+  onPreview: null as null | (() => void),
 }));
 vi.mock("../store/cache.js", () => ({
   getCache: () => ({
@@ -159,7 +160,7 @@ import type { TrackData } from "./schema.js";
 import { TransientError } from "./errors.js";
 import { SourceError } from "../sources/http.js";
 import { failureWith, toolFailure } from "../sources/toolResult.js";
-import { ANALYZER_VERSION, audioV2 } from "./testing/measuredAudio.js";
+import { ANALYZER_VERSION, audioV2, keyWithheldV2 } from "./testing/measuredAudio.js";
 import { type StubCall, stubLlm, testRuntime } from "./testing/stubLlm.js";
 
 // The web's query names the artist: a title alone always asks which recording is meant.
@@ -171,6 +172,7 @@ beforeEach(() => {
   writeFileSync(join(dir, "spend.jsonl"), "");
   for (const tool of Object.values(tools)) tool.invoke.mockClear();
   hooks.enrich = null;
+  hooks.onPreview = null;
   hooks.putAudio.mockClear();
   hooks.putResearch.mockClear();
   // Every source is stubbed: any other request is a mistake, and fails.
@@ -710,14 +712,9 @@ describe("the analysis graph under failure", () => {
 
   it("starts no audio analysis once the run is cancelled", async () => {
     const controller = new AbortController();
-    // The clock is read for the engineer's first status event: the client leaves then.
-    const runtime = {
-      ...testRuntime(stubModel(["done"])),
-      now: () => {
-        controller.abort();
-        return new Date("2026-01-01T00:00:00.000Z");
-      },
-    };
+    // The client leaves while the engineer looks up the preview.
+    hooks.onPreview = () => controller.abort();
+    const runtime = testRuntime(stubModel(["done"]));
     const state = {
       spotifyData: { id: "x", title: "T", artist: "A", previewUrl: null },
     } as unknown as SonicAgentStateType;
@@ -875,5 +872,171 @@ describe("the analysis graph's stored results", () => {
 
     expect(complete(again.events)?.data.id).toBe("4Fcfwhm8oRrBvBZ8KGhteb");
     expect(llm.calls.map((call) => call.callSite)).toContain("composer");
+  });
+});
+
+// The honesty guard's own patterns (scripts/guard-honest.mjs): the prototype's phrases and the
+// emoji it counts in progress messages.
+const guard: {
+  PROTOTYPE_COPY: RegExp[];
+  rules: Array<{ id: string; pattern: RegExp | RegExp[] }>;
+} = await import(new URL("../../../../scripts/guard-honest.mjs", import.meta.url).href);
+const EMOJI = [guard.rules.find((rule) => rule.id === "emoji-in-progress")!.pattern].flat();
+
+/** What a message holds that the guard counts: emoji and the prototype's phrases. */
+const flagged = (message: string) =>
+  [...EMOJI, ...guard.PROTOTYPE_COPY].flatMap((pattern) => message.match(pattern) ?? []);
+
+/**
+ * Every message a run writes for the user: its status and candidate messages, error texts, the
+ * interrupt's message, and the status lines it keeps in its state.
+ */
+async function messagesOf(
+  llm: ReturnType<typeof stubLlm> | ReturnType<typeof createLlm>,
+  options: {
+    store?: InMemoryStore;
+    checkpointer?: MemorySaver;
+    threadId?: string;
+    query?: string;
+    resume?: string;
+  } = {},
+): Promise<string[]> {
+  const graph = buildSonicAgentGraph({
+    runtime: testRuntime(llm),
+    checkpointer: options.checkpointer ?? new MemorySaver(),
+    store: options.store ?? new InMemoryStore(),
+  });
+  const messages: string[] = [];
+  const stream = await graph.stream(
+    options.resume
+      ? new Command({ resume: options.resume })
+      : { songQuery: options.query ?? QUERY },
+    {
+      configurable: { thread_id: options.threadId ?? "t-messages" },
+      streamMode: ["updates", "custom"],
+    },
+  );
+  for await (const [mode, data] of stream as AsyncIterable<[string, Record<string, unknown>]>) {
+    if (mode === "custom") {
+      for (const text of [data.message, data.error]) {
+        if (typeof text === "string") messages.push(text);
+      }
+      continue;
+    }
+    for (const [node, update] of Object.entries(data)) {
+      if (node === "__interrupt__") {
+        for (const { value } of update as Array<{ value?: { message?: string } }>) {
+          if (value?.message) messages.push(value.message);
+        }
+      } else {
+        messages.push(...((update as { statusMessages?: string[] } | null)?.statusMessages ?? []));
+      }
+    }
+  }
+  return messages;
+}
+
+describe("the analysis graph's progress messages", () => {
+  it("say what happened, with no emoji and none of the prototype's phrases", async () => {
+    // A measured tempo whose key the service withheld, then the result served from the store.
+    tools.analyzeAudioPreview.invoke.mockImplementationOnce(async () =>
+      JSON.stringify({
+        source: "analyzed",
+        audio: keyWithheldV2(),
+        previewUrl: null,
+        previewMatch: { provider: "deezer", method: "search", deezerId: 1, score: 1 },
+      }),
+    );
+    const store = new InMemoryStore();
+    const measured = await messagesOf(stubModel(["search_lastfm_tags"]), { store });
+    const served = await messagesOf(stubModel(["done"]), { store, threadId: "t-served" });
+
+    // A source that cannot be read, and a model that keeps answering 429: the fallback.
+    tools.searchSamples.invoke.mockImplementationOnce(async () =>
+      JSON.stringify(failureWith("unavailable", "Tavily is down")),
+    );
+    const provider = providerFetch(() => errorResponse(429));
+    const fallback = await messagesOf(llmWith({ LLM_CASSETTE: "off" }, { fetch: provider.fetch }), {
+      threadId: "t-fallback",
+    });
+
+    // A title alone: the user is asked which recording is meant, and picks one.
+    const checkpointer = new MemorySaver();
+    const asked = await messagesOf(stubModel(["done"]), {
+      checkpointer,
+      threadId: "t-ask",
+      query: "Ice Ice Baby",
+    });
+    const picked = await messagesOf(stubModel(["done"]), {
+      checkpointer,
+      threadId: "t-ask",
+      resume: "3Fcfwhm8oRrBvBZ8KGhtea",
+    });
+
+    // Each path wrote its own lines (so the check below reads them all).
+    expect(measured).toEqual(
+      expect.arrayContaining([
+        "Searching Spotify",
+        "Found the track on Spotify: Ice Ice Baby by Vanilla Ice",
+        "Measured 116 BPM; key not given: one pitched source, not a key",
+        // Only the sources it will ask: no ISRC, so no primary source, and no web search key.
+        "Starting the research: Last.fm",
+        "Primary sources not asked: the track has no ISRC",
+        "Choosing follow-up step 1 of at most 2",
+        // A finish with no count: each step said what it did.
+        "Research finished",
+        "Writing the liner notes",
+        "Looking up cover art on Spotify for the genealogy",
+        "Analysis complete",
+      ]),
+    );
+    expect(served).toContain("Serving the analysis stored for this track");
+    expect(fallback).toEqual(
+      expect.arrayContaining([
+        "Web search (Tavily) could not be read: it gave no usable answer",
+        "The model is unavailable: it is limiting requests; showing source data only, with a template song structure and no written notes",
+        // The planner's 429 ended the research early: said, and never followed by a normal finish.
+        "Research ended early: the model is unavailable: it is limiting requests",
+        "Research stopped early; showing what was found",
+      ]),
+    );
+    expect(fallback).not.toContain("Research finished");
+    // The streamed fallback line and the state's are the same line.
+    expect(
+      fallback.filter(
+        (line) =>
+          line ===
+          "The model is unavailable: it is limiting requests; showing source data only, with a template song structure and no written notes",
+      ),
+    ).toHaveLength(2);
+    // One candidate: the choice line says one, in the candidates event, the state and the
+    // interrupt alike.
+    const one = "One possible track from Spotify; confirm it or search again";
+    expect(asked.filter((message) => message === one)).toHaveLength(3);
+    expect(asked.join("\n")).not.toMatch(/Multiple|songs found|matching songs/);
+    expect(picked).toContain("Selected: Ice Ice Baby (its Spotify details could not be read)");
+    // Its ISRC is unknown, not absent: the details could not be read.
+    expect(picked).toContain(
+      "Primary sources not asked: the track's ISRC could not be read from Spotify",
+    );
+    expect(picked).not.toContain("Primary sources not asked: the track has no ISRC");
+
+    const all = [...measured, ...served, ...fallback, ...asked, ...picked];
+    expect(all.filter((message) => flagged(message).length > 0)).toEqual([]);
+    expect(all.filter((message) => message.endsWith("..."))).toEqual([]);
+    expect(all.filter((message) => /steps? run/.test(message))).toEqual([]);
+    // No web search key in these runs: no line says the web is being searched.
+    expect(all.filter((message) => message.startsWith("Searching: sample history"))).toEqual([]);
+    // The planner's reasoning ("planned …", model text) is never a status line.
+    expect(all.filter((message) => message.startsWith("planned "))).toEqual([]);
+  });
+
+  it("flag a message the guard counts (the check above can fail)", () => {
+    expect(flagged("🔍 Target acquired: deep-web research protocols")).toEqual([
+      "🔍",
+      "Target acquired",
+      "deep-web research protocols",
+    ]);
+    expect(flagged("Found the track on Spotify: One More Time by Daft Punk")).toEqual([]);
   });
 });

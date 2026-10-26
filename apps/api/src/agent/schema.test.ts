@@ -25,6 +25,15 @@ describe("result schema", () => {
     }
   });
 
+  it("describes the genealogy by the links it carries, and claims no Spotify match it cannot", () => {
+    const described = schema.TrackDataSchema.shape.genealogy.description ?? "";
+    for (const type of schema.GenealogyLinkSchema.shape.type.unwrap().options) {
+      expect(described).toContain(type === "producer" ? "producer" : type);
+    }
+    expect(described).toMatch(/sourced or inferred/);
+    expect(described).not.toMatch(/MUST be REAL|exist on Spotify|DNA/);
+  });
+
   it("takes measured values from the measurement only", () => {
     expect(measuredAudioFields(measurementOf(audioV2()))).toMatchObject({
       bpm: 116,

@@ -18,9 +18,10 @@ import {
   readStoredResult,
   servedResult,
   shownQueryMatch,
+  STORED_LINE,
   storedErrorStatus,
 } from "../storedResults.js";
-import { matchTrack } from "../trackMatch.js";
+import { choiceMessage, matchTrack } from "../trackMatch.js";
 import { logger } from "../../logger.js";
 
 const log = logger("Clarification");
@@ -63,7 +64,7 @@ export async function clarificationNode(
   const resumed = interrupt<DisambiguationInterrupt, PickResume | string>({
     type: "disambiguation",
     candidates: state.candidates!, // non-null: routing guarantees candidates exist here
-    message: "Multiple songs found. Please select the correct one.",
+    message: choiceMessage(state.candidates!.length),
   });
 
   // Keep the runtime guard — Command({ resume }) could pass any value at runtime
@@ -71,7 +72,7 @@ export async function clarificationNode(
   if (!pick) {
     return {
       error: "No track selected during disambiguation",
-      statusMessages: ["❌ No track was selected"],
+      statusMessages: ["No track was selected"],
     };
   }
 
@@ -82,7 +83,7 @@ export async function clarificationNode(
   if (!selected) {
     return {
       error: "Invalid selection",
-      statusMessages: ["❌ Selected track not found"],
+      statusMessages: ["The selected track is not one of the offered choices"],
     };
   }
 
@@ -90,7 +91,7 @@ export async function clarificationNode(
   writer?.({
     type: "status",
     code: "SPOTIFY-FOUND",
-    message: `User confirmed: "${selected.title}" // ${selected.artist}`,
+    message: `Selected: ${selected.title} by ${selected.artist}`,
     node: "clarification",
     timestamp: timestampOf(runtime),
   });
@@ -160,7 +161,7 @@ export async function clarificationNode(
     writer?.({
       type: "status",
       code: "NET-200",
-      message: "Cache hit — returning stored analysis",
+      message: STORED_LINE,
       node: "clarification",
       timestamp: timestampOf(runtime),
     });
@@ -190,8 +191,8 @@ export async function clarificationNode(
     ...picked,
     statusMessages: [
       detailed
-        ? `✅ Selected: "${spotifyData.title}" by ${spotifyData.artist}`
-        : `✅ Selected: "${selected.title}"`,
+        ? `Selected: ${spotifyData.title} by ${spotifyData.artist}`
+        : `Selected: ${selected.title} (its Spotify details could not be read)`,
     ],
   };
 }

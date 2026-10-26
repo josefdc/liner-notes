@@ -555,6 +555,39 @@ describe("recordings", () => {
     expect(found("emoji-in-recordings")).toEqual(["🔎", "🔍", "🔬"]);
   });
 
+  describe("the planner's lines in a newer run, which sends no reasoning", () => {
+    const newer = JSON.stringify(
+      {
+        events: [
+          status("Starting the research steps", "research_manager"),
+          status("Choosing follow-up step 1 of at most 2", "research_manager"),
+          // A line at the planner's node without an emoji is the app's: scanned in full.
+          status("A deep dive into its DNA finds the Command Center 🎧", "research_manager"),
+          status("Research ended early: Target acquired", "research_manager"),
+          // The same phrases in another node's status.
+          status("A deep dive into its DNA 🎧", "historian"),
+          // An older run's reasoning line: only the emoji before it counts.
+          status("🔍 A deep dive into its DNA", "research_manager"),
+        ],
+      },
+      null,
+      2,
+    );
+    const foundIn = (id) => countInText(rule(id), newer, path).matches.map(({ text }) => text);
+
+    it("counts every planner line in full, and only the emoji of an older reasoning line", () => {
+      expect(foundIn("prototype-copy-recordings")).toEqual([
+        "deep dive",
+        "its DNA",
+        "Command Center",
+        "Target acquired",
+        "deep dive",
+        "its DNA",
+      ]);
+      expect(foundIn("emoji-in-recordings")).toEqual(["🎧", "🎧", "🔍"]);
+    });
+  });
+
   it("reports a recorded message on its own line", () => {
     const { lines } = countInText(rule("emoji-in-recordings"), recording, path);
     const text = recording.split("\n");
@@ -633,12 +666,15 @@ describe("baselines", () => {
   const script = join(repoRoot, "scripts", "guard-honest.mjs");
   let dir;
 
-  // A throwaway repository with the guard, a baseline and one API file.
-  function repo(baseline, source) {
-    dir = mkdtempSync(join(tmpdir(), "guard-"));
+  // A throwaway repository with the guard, a baseline and one API file, in `parent`. Its own
+  // package.json says it is a module, as the repository's does, so whatever package.json lies
+  // above it does not decide how Node loads its files.
+  function repo(baseline, source, parent = tmpdir()) {
+    dir = mkdtempSync(join(parent, "guard-"));
     mkdirSync(join(dir, "scripts"));
     mkdirSync(join(dir, "apps/api/src"), { recursive: true });
     copyFileSync(script, join(dir, "scripts/guard-honest.mjs"));
+    writeFileSync(join(dir, "package.json"), '{ "private": true, "type": "module" }\n');
     const full = {
       "random-values-api": 0,
       "stock-images-web": 0,
@@ -675,6 +711,19 @@ describe("baselines", () => {
 
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("runs the same under a CommonJS package.json", () => {
+    const parent = mkdtempSync(join(tmpdir(), "guard-cjs-"));
+    try {
+      writeFileSync(join(parent, "package.json"), '{ "type": "commonjs" }\n');
+      repo({}, "export const a = 1;\n", parent);
+      const result = run();
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 
   it("fails above the baseline", () => {

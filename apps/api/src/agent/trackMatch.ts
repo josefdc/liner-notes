@@ -584,6 +584,17 @@ function sameTake(a: SpotifyData, b: SpotifyData): boolean {
 }
 
 /**
+ * The line that asks the user to choose among the `count` candidates offered: "One possible
+ * track from Spotify; confirm it or search again", "5 possible tracks from Spotify; choose one".
+ * It counts what is offered, never what Spotify returned (the offer is capped).
+ */
+export function choiceMessage(count: number): string {
+  return count === 1
+    ? "One possible track from Spotify; confirm it or search again"
+    : `${count} possible tracks from Spotify; choose one`;
+}
+
+/**
  * Whether the user has to choose among ranked results. A query that names no artist always
  * asks. A query that names an artist selects the best result without asking only when:
  * - its title is exactly the one the query asks for, it is credited to the named artist, and it

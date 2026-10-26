@@ -549,7 +549,7 @@ describe("what a primary source lost, and a bug in its reader", () => {
     );
     expect(pack.lost).toEqual([]);
     const line =
-      "📇 MusicBrainz: dates incomplete, the work's recordings could not be dated, so its covers are not claimed for this recording";
+      "MusicBrainz release dates incomplete: the work's recordings could not be dated, so its covers are not claimed for this recording; a later run reads them";
     expect(pack.status).toContain(line);
     expect(sent).toContainEqual(expect.objectContaining({ type: "status", message: line }));
     expect(pack.incomplete).toEqual([
@@ -557,7 +557,7 @@ describe("what a primary source lost, and a bug in its reader", () => {
       { source: "musicbrainz", part: "releases" },
     ]);
     expect(pack.status).toContain(
-      "MusicBrainz: releases incomplete, the recording's releases could not be read, so no release is named for it; a later run reads them",
+      "MusicBrainz releases incomplete: the recording's releases could not be read, so no release is named for it; a later run reads them",
     );
   });
 

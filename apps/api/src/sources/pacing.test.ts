@@ -269,18 +269,22 @@ describe("a lane pacer", () => {
     expect(background.out).toEqual(["refused"]);
   });
 
-  it("gives a full window's next slot at a fractional clock time, where the window's edge rounds", async () => {
-    // (1000.2 + 5000) - 5000 < 1000.2 in floating point: compared that way, the first start would
-    // never leave its window and finding the next slot would never end.
-    vi.useRealTimers();
-    vi.spyOn(performance, "now").mockReturnValue(1000.2);
-    const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
-    await pacer.slot();
-    const next = pacer.slot().then(() => "started");
-    expect(pacer.waiting).toBe(1);
-    pacer.clear();
-    await expect(next).resolves.toBe("started");
-  });
+  // For each time t, (t + 5000) - 5000 < t in floating point: compared that way, the first start
+  // would never leave its window and finding the next slot would never end.
+  it.each([1000.2, 4321.3, 126072.00101004688])(
+    "gives a full window's next slot at the fractional clock time %d, where the window's edge rounds",
+    async (now) => {
+      expect(now + 5000 - 5000).toBeLessThan(now);
+      vi.useRealTimers();
+      vi.spyOn(performance, "now").mockReturnValue(now);
+      const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));
+      await pacer.slot();
+      const next = pacer.slot().then(() => "started");
+      expect(pacer.waiting).toBe(1);
+      pacer.clear();
+      await expect(next).resolves.toBe("started");
+    },
+  );
 
   it("lets a waiting request leave at once when its signal aborts, taking no slot", async () => {
     const pacer = new LanePacer("Test", () => lanePace({ max: 1 }));

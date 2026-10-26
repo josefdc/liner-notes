@@ -1,4 +1,9 @@
-import type { AudioFeatures, KeyMoment, ModelScore } from '@liner-notes/contract';
+import type {
+  AudioFeatures,
+  AudioWithheldCode,
+  KeyMoment,
+  ModelScore,
+} from '@liner-notes/contract';
 
 // Reading the `audio` block of a result: the measurement itself (AudioFeatures v2), with each
 // value's method, confidence and basis.
@@ -11,8 +16,9 @@ import type { AudioFeatures, KeyMoment, ModelScore } from '@liner-notes/contract
 // measured. Its key moments are the one tolerant list: entries it cannot read are dropped, as
 // the contract does. audio.property.test.ts checks this against the contract's schema.
 //
-// Per-field reasons for a withheld tempo, key or mood are not in the contract yet (only the
-// gate's reason is); the audio service is to add them, and they belong here when it does.
+// Why the service withheld a value (`withheld`, analyzer 2.3.0 and later) is read as the contract
+// reads it: a reason this page cannot read (an unknown code, a malformed entry) is left out, and
+// never rejects the block.
 
 type Tempo = NonNullable<AudioFeatures['tempo']>;
 type MusicalKey = NonNullable<AudioFeatures['key']>;
@@ -31,6 +37,32 @@ export const MOOD_HEADS: readonly MoodHead[] = [
   'instrumental',
 ];
 
+/** A withheld value's reason: the service's code and its own words. */
+export interface WithheldReason {
+  code: AudioWithheldCode;
+  reason: string;
+}
+
+/** The fields the service gives a reason for (`withheld`); the mood heads have their own. */
+export const WITHHELD_FIELDS = [
+  'tempo',
+  'key',
+  'loudness',
+  'beats',
+  'energyContour',
+  'sections',
+  'fingerprint',
+  'styles',
+  'tags',
+] as const;
+export type WithheldField = (typeof WITHHELD_FIELDS)[number];
+
+/** Why each null value is null, as far as the block says; empty for an older analyzer. */
+export interface MeasuredWithheld {
+  fields: Partial<Record<WithheldField, WithheldReason>>;
+  moods: Partial<Record<MoodHead, WithheldReason>>;
+}
+
 /** The parts of a result's `audio` block the result screens show. */
 export interface MeasuredAudio {
   analyzerVersion: string;
@@ -45,6 +77,8 @@ export interface MeasuredAudio {
   fingerprint: { styles: Styles | null; tags: Tags | null; moods: Moods | null } | null;
   /** Times are seconds from the start of the preview window (moments past it are kept). */
   keyMoments: KeyMoment[];
+  /** Why the service withheld each missing value, where it says. */
+  withheld: MeasuredWithheld;
 }
 
 type Obj = Record<string, unknown>;
@@ -94,6 +128,32 @@ export const MOMENT_TYPES: ReadonlySet<string> = new Set([
   'silence',
 ]);
 export const GATE_REASONS: ReadonlySet<string> = new Set(['silence', 'noise', 'too_short']);
+export const WITHHELD_CODES: ReadonlySet<string> = new Set([
+  'gate_silence',
+  'gate_noise',
+  'gate_too_short',
+  'no_beat',
+  'tempo_out_of_range',
+  'too_few_beats',
+  'low_confidence',
+  'unsteady_tempo',
+  'no_tempo_estimate',
+  'no_sustained_pitch',
+  'speech_like',
+  'one_harmonic_series',
+  'one_held_pitch',
+  'no_pitch_track',
+  'few_pitch_classes',
+  'one_pitched_source',
+  'low_key_strength',
+  'no_key_estimate',
+  'models_not_loaded',
+  'not_music',
+  'model_failed',
+  'out_of_range',
+  'non_music_style',
+  'estimate_failed',
+]);
 export const WINDOW_KIND = 'preview-30s';
 export const SIGNAL_BASIS = 'signal';
 export const MODEL_BASIS = 'model';
@@ -192,6 +252,32 @@ export function isAudioFeatures(value: unknown): value is AudioFeatures {
   );
 }
 
+const isWithheldReason = (value: unknown): value is WithheldReason =>
+  isObject(value) &&
+  typeof value.code === 'string' &&
+  WITHHELD_CODES.has(value.code) &&
+  isText(value.reason);
+
+/** The block's `withheld` reasons this page can read; the others are left out. */
+export function readWithheld(value: unknown): MeasuredWithheld {
+  const withheld: MeasuredWithheld = { fields: {}, moods: {} };
+  if (!isObject(value)) return withheld;
+  for (const field of WITHHELD_FIELDS) {
+    const reason = value[field];
+    if (isWithheldReason(reason))
+      withheld.fields[field] = { code: reason.code, reason: reason.reason };
+  }
+  const moods = value.moods;
+  if (isObject(moods)) {
+    for (const head of MOOD_HEADS) {
+      const reason = moods[head];
+      if (isWithheldReason(reason))
+        withheld.moods[head] = { code: reason.code, reason: reason.reason };
+    }
+  }
+  return withheld;
+}
+
 const byScore = (items: { label: string; score: number }[]) =>
   items.map(({ label, score }) => ({ label, score })).sort((a, b) => b.score - a.score);
 
@@ -206,6 +292,7 @@ export function readAudio(value: unknown): MeasuredAudio | null {
     analyzerVersion: value.analyzerVersion,
     windowSeconds: value.window.durationSeconds,
     gate: { passed: value.gate.passed, reason: value.gate.reason },
+    withheld: readWithheld((value as Obj).withheld),
   };
   if (!value.gate.passed) {
     return { ...read, tempo: null, key: null, loudness: null, fingerprint: null, keyMoments: [] };

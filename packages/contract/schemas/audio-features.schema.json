@@ -534,6 +534,594 @@
         { "type": "null" }
       ],
       "description": "null when the models are not loaded"
+    },
+    "withheld": {
+      "description": "Why each null value is null (analyzer 2.3.0 and later)",
+      "type": "object",
+      "properties": {
+        "tempo": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "key": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "loudness": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "beats": {
+          "description": "The beat grid follows the tempo: no tempo, no grid",
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "energyContour": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "sections": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "fingerprint": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "styles": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "tags": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "gate_silence",
+                "gate_noise",
+                "gate_too_short",
+                "no_beat",
+                "tempo_out_of_range",
+                "too_few_beats",
+                "low_confidence",
+                "unsteady_tempo",
+                "no_tempo_estimate",
+                "no_sustained_pitch",
+                "speech_like",
+                "one_harmonic_series",
+                "one_held_pitch",
+                "no_pitch_track",
+                "few_pitch_classes",
+                "one_pitched_source",
+                "low_key_strength",
+                "no_key_estimate",
+                "models_not_loaded",
+                "not_music",
+                "model_failed",
+                "out_of_range",
+                "non_music_style",
+                "estimate_failed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The check that withheld the value, in words"
+            }
+          },
+          "required": ["code", "reason"],
+          "additionalProperties": false
+        },
+        "moods": {
+          "type": "object",
+          "properties": {
+            "danceability": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "gate_silence",
+                    "gate_noise",
+                    "gate_too_short",
+                    "no_beat",
+                    "tempo_out_of_range",
+                    "too_few_beats",
+                    "low_confidence",
+                    "unsteady_tempo",
+                    "no_tempo_estimate",
+                    "no_sustained_pitch",
+                    "speech_like",
+                    "one_harmonic_series",
+                    "one_held_pitch",
+                    "no_pitch_track",
+                    "few_pitch_classes",
+                    "one_pitched_source",
+                    "low_key_strength",
+                    "no_key_estimate",
+                    "models_not_loaded",
+                    "not_music",
+                    "model_failed",
+                    "out_of_range",
+                    "non_music_style",
+                    "estimate_failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The check that withheld the value, in words"
+                }
+              },
+              "required": ["code", "reason"],
+              "additionalProperties": false
+            },
+            "acoustic": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "gate_silence",
+                    "gate_noise",
+                    "gate_too_short",
+                    "no_beat",
+                    "tempo_out_of_range",
+                    "too_few_beats",
+                    "low_confidence",
+                    "unsteady_tempo",
+                    "no_tempo_estimate",
+                    "no_sustained_pitch",
+                    "speech_like",
+                    "one_harmonic_series",
+                    "one_held_pitch",
+                    "no_pitch_track",
+                    "few_pitch_classes",
+                    "one_pitched_source",
+                    "low_key_strength",
+                    "no_key_estimate",
+                    "models_not_loaded",
+                    "not_music",
+                    "model_failed",
+                    "out_of_range",
+                    "non_music_style",
+                    "estimate_failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The check that withheld the value, in words"
+                }
+              },
+              "required": ["code", "reason"],
+              "additionalProperties": false
+            },
+            "instrumental": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "gate_silence",
+                    "gate_noise",
+                    "gate_too_short",
+                    "no_beat",
+                    "tempo_out_of_range",
+                    "too_few_beats",
+                    "low_confidence",
+                    "unsteady_tempo",
+                    "no_tempo_estimate",
+                    "no_sustained_pitch",
+                    "speech_like",
+                    "one_harmonic_series",
+                    "one_held_pitch",
+                    "no_pitch_track",
+                    "few_pitch_classes",
+                    "one_pitched_source",
+                    "low_key_strength",
+                    "no_key_estimate",
+                    "models_not_loaded",
+                    "not_music",
+                    "model_failed",
+                    "out_of_range",
+                    "non_music_style",
+                    "estimate_failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The check that withheld the value, in words"
+                }
+              },
+              "required": ["code", "reason"],
+              "additionalProperties": false
+            },
+            "valence": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "gate_silence",
+                    "gate_noise",
+                    "gate_too_short",
+                    "no_beat",
+                    "tempo_out_of_range",
+                    "too_few_beats",
+                    "low_confidence",
+                    "unsteady_tempo",
+                    "no_tempo_estimate",
+                    "no_sustained_pitch",
+                    "speech_like",
+                    "one_harmonic_series",
+                    "one_held_pitch",
+                    "no_pitch_track",
+                    "few_pitch_classes",
+                    "one_pitched_source",
+                    "low_key_strength",
+                    "no_key_estimate",
+                    "models_not_loaded",
+                    "not_music",
+                    "model_failed",
+                    "out_of_range",
+                    "non_music_style",
+                    "estimate_failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The check that withheld the value, in words"
+                }
+              },
+              "required": ["code", "reason"],
+              "additionalProperties": false
+            },
+            "arousal": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "gate_silence",
+                    "gate_noise",
+                    "gate_too_short",
+                    "no_beat",
+                    "tempo_out_of_range",
+                    "too_few_beats",
+                    "low_confidence",
+                    "unsteady_tempo",
+                    "no_tempo_estimate",
+                    "no_sustained_pitch",
+                    "speech_like",
+                    "one_harmonic_series",
+                    "one_held_pitch",
+                    "no_pitch_track",
+                    "few_pitch_classes",
+                    "one_pitched_source",
+                    "low_key_strength",
+                    "no_key_estimate",
+                    "models_not_loaded",
+                    "not_music",
+                    "model_failed",
+                    "out_of_range",
+                    "non_music_style",
+                    "estimate_failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The check that withheld the value, in words"
+                }
+              },
+              "required": ["code", "reason"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

@@ -1,4 +1,4 @@
-import type { ModelScore } from '@liner-notes/contract';
+import type { AudioWithheldCode, ModelScore } from '@liner-notes/contract';
 import {
   inModelRange,
   keyLabel,
@@ -7,6 +7,7 @@ import {
   type MoodHead,
   readAudio,
   rmsToDbfs,
+  type WithheldField,
 } from './components/measured/audio';
 import { isWholeRecording } from './utils/recording';
 import type {
@@ -345,6 +346,42 @@ function gateText(audio: MeasuredAudio): string | null {
   return (reason && AUDIO_GATE_TEXT[reason]) || 'the preview did not pass the analysis gate';
 }
 
+/**
+ * Why the audio service withheld a value (the block's `withheld` codes), in a few plain words:
+ * short enough for a chip, and never naming the value that was withheld.
+ */
+export const AUDIO_WITHHELD_TEXT: Record<AudioWithheldCode, string> = {
+  gate_silence: AUDIO_GATE_TEXT.silence,
+  gate_noise: AUDIO_GATE_TEXT.noise,
+  gate_too_short: AUDIO_GATE_TEXT.too_short,
+  no_beat: 'no steady beat in the preview',
+  tempo_out_of_range: 'outside the 40–208 BPM the analysis searches',
+  too_few_beats: 'too few beats in the preview',
+  low_confidence: 'the tempo estimate was not confident enough',
+  unsteady_tempo: 'the tempo changes within the preview',
+  no_tempo_estimate: 'the tempo estimator gave no tempo',
+  no_sustained_pitch: 'no sustained pitch (drums or noise), so no key',
+  speech_like: 'a voice without steady notes (speech), so no key',
+  one_harmonic_series: 'a single tone or hum, so no key',
+  one_held_pitch: 'one held note, so no key',
+  no_pitch_track: 'the pitch could not be followed, so no key',
+  few_pitch_classes: 'fewer than three notes, so no key',
+  one_pitched_source: 'one pitched source (a cowbell or similar), so no key',
+  low_key_strength: 'the key estimate was too weak',
+  no_key_estimate: 'the key estimator named no key',
+  models_not_loaded: 'the audio models are not loaded',
+  not_music: 'not music (one tone or a voice, no beat)',
+  model_failed: 'the audio model gave no usable output',
+  out_of_range: 'outside the range its model produces',
+  non_music_style: 'the models read the preview as not music',
+  estimate_failed: 'the estimator failed on this preview',
+};
+
+/** A withheld reason in this page's words (readAudio keeps only the codes it knows). */
+function withheldText(reason: { code: AudioWithheldCode } | undefined): string | null {
+  return reason ? AUDIO_WITHHELD_TEXT[reason.code] : null;
+}
+
 /** The v1 energy (0-1) reads 1.0 for any master louder than about -11 dBFS RMS. */
 export const SATURATED_ENERGY_TEXT = 'energy saturates on loud masters';
 
@@ -487,14 +524,16 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
   const titleOf = (detail: string) =>
     `${recorded ? RECORDED_TITLE : MEASURED_TITLE} (${window}) · ${detail}`;
   const gateReason = gateText(audio);
-  // The result-level reason applies to a withheld tempo or key only when it is about detection.
-  // Per-field reasons come with the audio service's withheld reasons (not in the contract yet).
+  // Why the service withheld a value, per field (analyzer 2.3.0 and later); the gate's reason
+  // comes first, and a block without reasons falls back to the result-level reason, which
+  // applies to a withheld tempo or key only when it is about detection.
   const resultReason =
     track.audioUnavailableReason === 'not_detected' ||
     track.audioUnavailableReason === 'low_confidence'
       ? AUDIO_UNAVAILABLE_SHORT[track.audioUnavailableReason]
       : null;
-  const signalReason = gateReason ?? resultReason;
+  const fieldReason = (field: WithheldField) => withheldText(audio.withheld.fields[field]);
+  const signalReason = (field: WithheldField) => gateReason ?? fieldReason(field) ?? resultReason;
   const shown = (
     field: AudioField,
     label: string,
@@ -524,7 +563,7 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
           tempoConfidence(tempo),
           `${tempo.method} · ${analyzer}${tempo.confidence === null ? '' : ' · the confidence does not flag half or double tempo'}`,
         )
-      : missing('bpm', 'BPM', signalReason),
+      : missing('bpm', 'BPM', signalReason('tempo')),
     key
       ? shown(
           'key',
@@ -535,7 +574,7 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
             : `key strength ${key.strength.toFixed(2)} of 1, not a probability`,
           `${key.method}, ${key.profile} profile · ${analyzer}`,
         )
-      : missing('key', 'Key', signalReason),
+      : missing('key', 'Key', signalReason('key')),
     loudness && level !== null
       ? shown(
           'loudness',
@@ -547,14 +586,20 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
       : loudness
         ? // A zero level on a preview the gate passed: measured, but it has no dBFS value.
           missing('loudness', 'Loudness', 'a level of zero has no dBFS value', NOT_SHOWN)
-        : missing('loudness', 'Loudness', gateReason),
+        : missing('loudness', 'Loudness', gateReason ?? fieldReason('loudness')),
   ];
 
-  const modelReason = gateReason ?? (fingerprint ? null : MODELS_NOT_LOADED_TEXT);
+  // A null fingerprint's reason covers its parts; without one from the service, a block with no
+  // fingerprint had no models loaded.
+  const modelReason =
+    gateReason ?? (fingerprint ? null : (fieldReason('fingerprint') ?? MODELS_NOT_LOADED_TEXT));
   const model: Reading[] = MOOD_HEADS.map((head) => {
     const [field, label] = MOOD_LABELS[head];
     const score = fingerprint?.moods?.[head] ?? null;
-    if (!score) return missing(field, label, modelReason, NOT_AVAILABLE);
+    if (!score) {
+      const reason = modelReason ?? withheldText(audio.withheld.moods[head]);
+      return missing(field, label, reason, NOT_AVAILABLE);
+    }
     if (!inModelRange(score)) {
       return missing(field, label, 'outside the range its model produces', NOT_SHOWN);
     }
@@ -576,6 +621,7 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
   const scoreList = (
     label: string,
     list: { model: { id: string }; items: { label: string; score: number }[] } | null,
+    part: WithheldField,
   ): ScoreListReading =>
     list && list.items.length > 0
       ? {
@@ -587,7 +633,7 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
           detail: analyzer,
           title: `Activations of the audio model ${list.model.id} on the ${window}: scores, not probabilities · ${analyzer}`,
         }
-      : { label, state: 'missing', reason: modelReason };
+      : { label, state: 'missing', reason: modelReason ?? fieldReason(part) };
   const styles = fingerprint?.styles;
   const tags = fingerprint?.tags;
   return {
@@ -595,8 +641,12 @@ function measuredReadings(track: TrackData, audio: MeasuredAudio, recorded: bool
     model,
     showMissingModel: true,
     fingerprint: {
-      styles: scoreList('Styles', styles ? { model: styles.model, items: styles.top } : null),
-      tags: scoreList('Tags', tags ? { model: tags.model, items: tags.scores } : null),
+      styles: scoreList(
+        'Styles',
+        styles ? { model: styles.model, items: styles.top } : null,
+        'styles',
+      ),
+      tags: scoreList('Tags', tags ? { model: tags.model, items: tags.scores } : null, 'tags'),
     },
   } satisfies AudioReadings;
 }
@@ -777,7 +827,15 @@ export function audioNoticeOf(track: TrackData): AudioNotice | null {
   const notShownReadings = [...signalMissing, ...missingOf(model)].filter(
     (r) => r.status === NOT_SHOWN,
   );
-  const notMeasured = lineOf('Not measured', notMeasuredReadings, false);
+  // A block that says why each value was withheld: each missing value is named with its reason,
+  // and no result-level reason is added.
+  const perField =
+    state.kind === 'measured' &&
+    state.audio.gate.passed &&
+    notMeasuredReadings.some((r) => r.reason !== null) &&
+    (Object.keys(state.audio.withheld.fields).length > 0 ||
+      Object.keys(state.audio.withheld.moods).length > 0);
+  const notMeasured = lineOf('Not measured', notMeasuredReadings, perField);
   const notShown = lineOf('Not shown', notShownReadings, true);
   const estimates = missingModelEstimates(track);
   const estimatesLine =
@@ -823,7 +881,7 @@ export function audioNoticeOf(track: TrackData): AudioNotice | null {
   else title = state.kind === 'none' ? 'Audio not analysed' : 'Audio not measured';
 
   let reason: string | null = null;
-  if (notMeasured) {
+  if (notMeasured && !perField) {
     const missingField = (field: AudioField) => notMeasuredReadings.some((r) => r.field === field);
     const detection = detectionText(
       track.audioUnavailableReason,

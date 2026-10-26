@@ -18,7 +18,9 @@ import {
   ANALYZER_VERSION,
   audioV2,
   gatedV2,
+  keyWithheldV2,
   serviceAnswer,
+  v1Answer,
 } from "../agent/testing/measuredAudio.js";
 
 // Every test's log lines, for the tests that check what is logged.
@@ -166,9 +168,9 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
     vi.restoreAllMocks();
   });
 
-  it("measures from the v2 block and ignores the v1 fields next to it", async () => {
+  it("measures from the v2 block and ignores an older service's v1 fields next to it", async () => {
     // v1 fields that disagree with the block: none of them is read.
-    service(serviceAnswer(audioV2(), { bpm: 58, key: "C", mode: "Major", energy: 1 }));
+    service(v1Answer(audioV2(), { bpm: 58, key: "C", mode: "Major", energy: 1 }));
 
     const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
 
@@ -185,8 +187,40 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
     expect(data).toMatchObject({ source: "analyzed", audio: audioV2() });
   });
 
+  it("keeps why the service withheld a value in the block, and nowhere else", async () => {
+    service(serviceAnswer(keyWithheldV2()));
+
+    const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
+
+    expect(data).toMatchObject({ source: "analyzed", audio: keyWithheldV2() });
+    expect(data.audio.key).toBeNull();
+    expect(data.audio.withheld).toEqual({
+      key: {
+        code: "one_pitched_source",
+        reason: "one pitched source (its partials hold still and rise and fall together)",
+      },
+    });
+    expect(Object.keys(data).sort()).toEqual(["audio", "previewMatch", "previewUrl", "source"]);
+  });
+
+  it("drops a reason it cannot read, and keeps the measurement and the other reasons", () => {
+    const block = keyWithheldV2();
+    const read = readServiceMeasurement(
+      serviceAnswer({
+        ...block,
+        withheld: {
+          ...block.withheld,
+          tempo: { code: "a_reason_from_a_newer_service", reason: "newer" },
+          beats: "not a reason",
+        },
+      } as unknown as typeof block),
+    );
+    expect(read.audio?.tempo).toEqual(block.tempo);
+    expect(read.audio?.withheld).toEqual(block.withheld);
+  });
+
   it("treats an answer with only the v1 fields as no measurement, and says why", async () => {
-    const { v2: _block, ...v1Only } = serviceAnswer(audioV2());
+    const { v2: _block, ...v1Only } = v1Answer(audioV2());
     service(v1Only);
 
     const data = JSON.parse(await analyzeAudioPreview.invoke(TRACK));
@@ -233,6 +267,12 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
     expect(read.audio?.fingerprint?.moods?.valence).toBeNull();
     expect(read.audio?.fingerprint?.moods?.danceability).toEqual(moods.danceability);
     expect(read).toMatchObject({ outOfRange: ["valence"] });
+    expect(read.audio?.withheld?.moods).toEqual({
+      valence: {
+        code: "out_of_range",
+        reason: "the valence head gave a value outside the range its model produces",
+      },
+    });
   });
 
   it("reads the analyzer version the service reports on /health, or none", async () => {

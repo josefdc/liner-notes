@@ -18,6 +18,10 @@ does not keep (``steady_tempo``). A key is only estimated from tonal evidence th
 mains hum) and one pitched source whose partials never change and rise and fall together (a
 cowbell, a bell, one note repeated on a bass: ``SourceEvidence``) get no key, whatever an
 estimator would answer.
+
+``measure_tempo`` and ``measure_key`` return the estimate or why there is none (``Withheld``: the
+reason in words and a stable code, the contract's AudioWithheldCode); ``tempo`` and ``key``
+return the estimate or None.
 """
 
 from __future__ import annotations
@@ -380,15 +384,22 @@ NO_VOICE = Voice(0.0, 0.0, 0.0, 0.0, 0.0)
 @dataclass(frozen=True)
 class Withheld:
     """
-    Why no key is measured. `one_source` marks evidence of one pitched source (one harmonic
-    series, one held pitch, one voice without notes): without a beat, such input is not music.
+    Why a tempo or key is not measured: the reason in words and its stable code (the contract's
+    AudioWithheldCode). For a key, `one_source` marks evidence of one pitched source (one
+    harmonic series, one held pitch, one voice without notes): without a beat, such input is not
+    music.
     """
 
     reason: str
     one_source: bool = False
+    code: str = ""
 
     def __str__(self) -> str:
         return self.reason
+
+    def entry(self) -> dict:
+        """The contract's WithheldReason for this reason."""
+        return {"code": self.code, "reason": self.reason}
 
 
 SPEECH_LIKE = "one voice without stable notes (speech-like)"
@@ -467,20 +478,26 @@ class Tonality:
         )
         if self.tonal_ratio < MIN_TONAL_RATIO and not voice.moving:
             if voice.without_notes:  # speech pitched up leaves no lines and spans little
-                return Withheld(SPEECH_LIKE, one_source=True)
-            return Withheld("no sustained pitch")
+                return Withheld(SPEECH_LIKE, one_source=True, code="speech_like")
+            return Withheld("no sustained pitch", code="no_sustained_pitch")
         if self.series_f0 is not None and still:
-            return Withheld(f"one harmonic series on {self.series_f0:.1f} Hz", one_source=True)
+            return Withheld(
+                f"one harmonic series on {self.series_f0:.1f} Hz",
+                one_source=True,
+                code="one_harmonic_series",
+            )
         if (
             voice.one_pitch
             and still
             and self.explained_by(voice.f0_hz, *voice.tolerance) >= ONE_PITCH_MIN_EXPLAINED
         ):
-            return Withheld("one held pitch (vibrato or a bend)", one_source=True)
+            return Withheld(
+                "one held pitch (vibrato or a bend)", one_source=True, code="one_held_pitch"
+            )
         if voice.without_notes:
-            return Withheld(SPEECH_LIKE, one_source=True)
+            return Withheld(SPEECH_LIKE, one_source=True, code="speech_like")
         if len(self.line_classes | voice.note_classes) < KEY_MIN_PITCH_CLASSES:
-            return Withheld("fewer than three pitch classes")
+            return Withheld("fewer than three pitch classes", code="few_pitch_classes")
         return None
 
 
@@ -640,7 +657,7 @@ class Signals:
         """
         withheld = self._evidence_withheld()
         if withheld is None and self.source_evidence.single:
-            return Withheld(ONE_SOURCE)
+            return Withheld(ONE_SOURCE, code="one_pitched_source")
         return withheld
 
     def _evidence_withheld(self) -> Withheld | None:
@@ -661,15 +678,19 @@ class Signals:
             if voice is None:
                 return None
             if voice.without_notes:
-                return Withheld(SPEECH_LIKE, one_source=True)
+                return Withheld(SPEECH_LIKE, one_source=True, code="speech_like")
             explained = self.harmonic_tonality.explained_by(voice.f0_hz, *voice.held_tolerance)
             if voice.one_pitch and explained >= ONE_PITCH_MIN_EXPLAINED:
-                return Withheld("one held pitch over the beat (a drone or one bass note)", True)
+                return Withheld(
+                    "one held pitch over the beat (a drone or one bass note)",
+                    True,
+                    code="one_held_pitch",
+                )
             return None
         if self.voice is None:
             # Without a pitch track, one held pitch cannot be told from music: no key.
             withheld = self.tonality.key_withheld(NO_VOICE, self.chroma_movement)
-            return withheld or Withheld("no pitch track")
+            return withheld or Withheld("no pitch track", code="no_pitch_track")
         return self.tonality.key_withheld(self.voice, self.chroma_movement)
 
 
@@ -1218,18 +1239,69 @@ def krumhansl_key(chroma_mean: np.ndarray) -> tuple[str, str, float] | None:
     return best
 
 
-def _key_estimate(
+# Why an estimator gives no tempo or key, besides the evidence rules (Signals.key_withheld) and
+# the steadiness check (main.py). The texts name the check, never the value it withheld.
+NO_BEAT = Withheld("the onsets do not repeat enough to count a beat", code="no_beat")
+TEMPO_OUT_OF_RANGE = Withheld(
+    f"the tempo found is outside the {MIN_BPM:.0f}-{MAX_BPM:.0f} BPM searched",
+    code="tempo_out_of_range",
+)
+TOO_FEW_BEATS = Withheld(f"fewer than {MIN_BEATS} beats were tracked", code="too_few_beats")
+NO_KEY_ESTIMATE = Withheld("the key estimator named no key", code="no_key_estimate")
+
+
+def low_confidence(confidence: float, minimum: float) -> Withheld:
+    return Withheld(
+        f"the tempo estimator's confidence ({confidence:.2f} of 1) is under its minimum "
+        f"({minimum:.2f})",
+        code="low_confidence",
+    )
+
+
+def _key_measurement(
     tonic: str, mode: str, strength: float, profile: str, method: str, minimum: float
-):
+) -> KeyEstimate | Withheld:
     strength = float(np.clip(strength, 0.0, 1.0)) if np.isfinite(strength) else 0.0
     if tonic not in PITCH_CLASSES or mode not in ("major", "minor"):
-        return None
+        return NO_KEY_ESTIMATE
     if strength < minimum:
-        return None
+        return Withheld(
+            f"the key strength ({strength:.2f} of 1) is under the minimum ({minimum:.2f})",
+            code="low_key_strength",
+        )
     return KeyEstimate(tonic=tonic, mode=mode, strength=strength, profile=profile, method=method)
 
 
-class LibrosaEstimator:
+def _key_estimate(
+    tonic: str, mode: str, strength: float, profile: str, method: str, minimum: float
+) -> KeyEstimate | None:
+    found = _key_measurement(tonic, mode, strength, profile, method, minimum)
+    return found if isinstance(found, KeyEstimate) else None
+
+
+class _Estimator:
+    """
+    `measure_tempo` and `measure_key` give the estimate or the reason it is withheld
+    (Withheld); `tempo` and `key` give the estimate or None, for callers that only need that
+    (the calibration in evals/audio).
+    """
+
+    def measure_tempo(self, signals: Signals) -> TempoEstimate | Withheld:
+        raise NotImplementedError
+
+    def measure_key(self, signals: Signals) -> KeyEstimate | Withheld:
+        raise NotImplementedError
+
+    def tempo(self, signals: Signals) -> TempoEstimate | None:
+        found = self.measure_tempo(signals)
+        return found if isinstance(found, TempoEstimate) else None
+
+    def key(self, signals: Signals) -> KeyEstimate | None:
+        found = self.measure_key(signals)
+        return found if isinstance(found, KeyEstimate) else None
+
+
+class LibrosaEstimator(_Estimator):
     name = "librosa"
     min_tempo_confidence = LIBROSA_MIN_TEMPO_CONFIDENCE
     min_key_strength = LIBROSA_MIN_KEY_STRENGTH
@@ -1237,28 +1309,28 @@ class LibrosaEstimator:
     # tempo change: the steadiness check needs that part.
     steady_onset_check = True
 
-    def tempo(self, signals: Signals) -> TempoEstimate | None:
+    def measure_tempo(self, signals: Signals) -> TempoEstimate | Withheld:
         oenv = signals.onset_envelope
         if not oenv.any() or signals.onset_periodicity < MIN_TEMPO_PERIODICITY:
-            return None
+            return NO_BEAT
         # librosa's default log-normal prior around 120 BPM, capped at MAX_BPM.
         start = librosa.feature.tempo(
             onset_envelope=oenv, sr=signals.sr, hop_length=signals.hop, max_tempo=MAX_BPM
         )
         start_bpm = float(np.atleast_1d(start)[0])
         if not MIN_BPM <= start_bpm <= MAX_BPM:
-            return None
+            return TEMPO_OUT_OF_RANGE
         _, frames = librosa.beat.beat_track(
             onset_envelope=oenv, sr=signals.sr, hop_length=signals.hop, bpm=start_bpm
         )
         beats = librosa.frames_to_time(frames, sr=signals.sr, hop_length=signals.hop)
         if len(beats) < MIN_BEATS:
-            return None
+            return TOO_FEW_BEATS
         bpm = refine_bpm(onset_beats(beats, signals), start_bpm)
         lag = 60.0 / bpm * signals.sr / signals.hop
         confidence = periodicity_at_lag(signals.smoothed_onset_envelope, lag)
         if confidence < self.min_tempo_confidence:
-            return None
+            return low_confidence(confidence, self.min_tempo_confidence)
         measured = steadiness(beats, bpm, signals)
         return TempoEstimate(
             bpm=bpm,
@@ -1270,14 +1342,14 @@ class LibrosaEstimator:
             steadiness=measured,
         )
 
-    def key(self, signals: Signals) -> KeyEstimate | None:
-        if signals.key_withheld():
-            return None
+    def measure_key(self, signals: Signals) -> KeyEstimate | Withheld:
+        if withheld := signals.key_withheld():
+            return withheld
         found = krumhansl_key(signals.chroma_mean)
         if found is None:
-            return None
+            return NO_KEY_ESTIMATE
         tonic, mode, corr = found
-        return _key_estimate(
+        return _key_measurement(
             tonic,
             mode,
             corr,
@@ -1305,16 +1377,16 @@ def _essentia_algorithm(name: str, factory):
     return algorithms[name]
 
 
-class EssentiaEstimator:
+class EssentiaEstimator(_Estimator):
     name = "essentia"
     min_tempo_confidence = ESSENTIA_MIN_TEMPO_CONFIDENCE
     min_key_strength = ESSENTIA_MIN_KEY_STRENGTH
     steady_onset_check = True
     key_profile = "bgate"
 
-    def tempo(self, signals: Signals) -> TempoEstimate | None:
+    def measure_tempo(self, signals: Signals) -> TempoEstimate | Withheld:
         if signals.onset_periodicity < MIN_TEMPO_PERIODICITY:
-            return None
+            return NO_BEAT
         rhythm = _essentia_algorithm(
             "rhythm",
             lambda: _es.RhythmExtractor2013(
@@ -1323,12 +1395,14 @@ class EssentiaEstimator:
         )
         bpm, ticks, raw, _, _ = rhythm(signals.at(ESSENTIA_RATE))
         ticks = np.asarray(ticks, dtype=float)
-        if not MIN_BPM <= bpm <= MAX_BPM or len(ticks) < MIN_BEATS:
-            return None
+        if not MIN_BPM <= bpm <= MAX_BPM:
+            return TEMPO_OUT_OF_RANGE
+        if len(ticks) < MIN_BEATS:
+            return TOO_FEW_BEATS
         low, high = ESSENTIA_CONFIDENCE_SCALE
         confidence = float(np.clip((raw - low) / (high - low), 0.0, 1.0))
         if confidence < self.min_tempo_confidence:
-            return None
+            return low_confidence(confidence, self.min_tempo_confidence)
         bpm = refine_bpm(onset_beats(ticks, signals), float(bpm))
         measured = steadiness(ticks, bpm, signals)
         return TempoEstimate(
@@ -1342,15 +1416,15 @@ class EssentiaEstimator:
             steadiness=measured,
         )
 
-    def key(self, signals: Signals) -> KeyEstimate | None:
-        if signals.key_withheld():
-            return None
+    def measure_key(self, signals: Signals) -> KeyEstimate | Withheld:
+        if withheld := signals.key_withheld():
+            return withheld
         extractor = _essentia_algorithm(
             f"key-{self.key_profile}",
             lambda: _es.KeyExtractor(sampleRate=signals.sr, profileType=self.key_profile),
         )
         name, scale, strength = extractor(signals.harmonic)
-        return _key_estimate(
+        return _key_measurement(
             FLAT_TO_SHARP.get(name, name),
             scale,
             strength,

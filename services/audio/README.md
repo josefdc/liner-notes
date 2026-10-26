@@ -74,13 +74,12 @@ Always `200` while the service can measure tempo and key. `status` is `ok` when 
 models are loaded and `degraded` when they are not. `analyzer_version` is the version of the
 analysis output: `ANALYZER_VERSION` in `main.py` (it changes whenever a measurement can change
 for the same input) with the estimator and, when the models are loaded, a tag for the pinned
-model set as semver build metadata, e.g. `2.2.0+essentia.models-5c5c0c7f`. Every successful
-(`200`) `/analyze` response carries the same string, as `analyzer_version` and
-`v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
+model set as semver build metadata, e.g. `2.3.0+essentia.models-5c5c0c7f`. Every successful
+(`200`) `/analyze` response carries the same string, as `v2.analyzerVersion`. Error responses are only `{"detail": "..."}`.
 
 ```bash
 curl http://localhost:3002/health
-# {"status":"degraded","analyzer_version":"2.2.0+essentia","models":false}
+# {"status":"degraded","analyzer_version":"2.3.0+essentia","models":false}
 ```
 
 ### `POST /analyze`
@@ -94,26 +93,16 @@ curl -X POST http://localhost:3002/analyze \
 The request body is limited to 16 KB (`413` beyond that).
 
 Response for the 97 BPM drum pattern of `tests/signals.py` (an MP3), with the Essentia
-estimators and the models loaded; lists shortened to their first items. Without the models
-the perceptual fields and `v2.fingerprint` are `null`.
+estimators and the models loaded; lists shortened to their first items. The response is the
+`v2` block and nothing else (the v1 fields `bpm`, `key`, `mode`, `energy`, the perceptual scores
+and the rest went with analyzer 2.3.0). Without the models `v2.fingerprint` is `null` and
+`v2.withheld.fingerprint` says so.
 
 ```json
 {
-  "bpm": 97,
-  "key": "C",
-  "mode": "Major",
-  "energy": 0.778,
-  "duration": 30.0,
-  "source": "analyzed",
-  "analyzer_version": "2.2.0+essentia.models-5c5c0c7f",
-  "keyMoments": [{ "time": 1.88, "type": "onset", "intensity": 0.986, "description": "Onset" }],
-  "valence": 0.389,
-  "danceability": 1.0,
-  "acousticness": 0.006,
-  "instrumentalness": 0.85,
   "v2": {
     "version": 2,
-    "analyzerVersion": "2.2.0+essentia.models-5c5c0c7f",
+    "analyzerVersion": "2.3.0+essentia.models-5c5c0c7f",
     "window": { "kind": "preview-30s", "durationSeconds": 30.0 },
     "gate": { "passed": true, "reason": null },
     "tempo": {
@@ -166,7 +155,8 @@ the perceptual fields and `v2.fingerprint` are `null`.
         "valence": { "value": 4.1125, "range": [1.0, 9.0], "model": { "id": "deam-msd-musicnn-2", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" },
         "arousal": { "value": 4.8876, "range": [1.0, 9.0], "model": { "id": "deam-msd-musicnn-2", "licence": "CC BY-NC-SA 4.0" }, "basis": "model" }
       }
-    }
+    },
+    "withheld": {}
   }
 }
 ```
@@ -245,16 +235,38 @@ times are seconds from the start of the preview. Every block is `null` when it w
   `null` when the strongest style is a `Non-Music---` one (spoken word, field recording...).
   Each block names its model id and the licence of its weights (CC BY-NC-SA 4.0). A part whose
   model fails, or gives values that are not finite, outside that range or of the wrong width,
-  is `null` on its own. Every reason for a `null` is written to the service log.
+  is `null` on its own.
 
-The v1 fields stay until the API reads `v2`, and are derived from it: `bpm` is `v2.tempo.bpm`
-rounded, `key` and `mode` are `v2.key`, `keyMoments` are `v2.keyMoments`, and the perceptual
-fields are the mood heads (valence mapped from DEAM's 1-9 onto 0-1). Each is `null` when `v2`
-has nothing for it, so v1 never says more than v2. `energy` keeps the scale it had before v2:
-(`v2.loudness.rmsMean` - 0.02) / 0.25, clipped to 0-1 (a loudness, not a perceptual energy).
-That scale reads 0 below -34 dBFS mean RMS, so quieter input that passes the gate gets a small
-floor instead, from 0.005 at -86 dBFS to 0.02 at -34 dBFS; `energy` is `null` when the gate did
-not pass.
+**Why a value is `null`** is in `v2.withheld`, per field: a stable `code` and the check in
+words (`reason`), e.g. `"key": {"code": "one_pitched_source", "reason": "one pitched source
+(its partials hold still and rise and fall together)"}`. Every measured block left `null` has
+one (`tempo`, `key`, `loudness`, `beats`, `energyContour`, `sections`, `fingerprint`); within a
+fingerprint, so do `styles`, `tags` and each of `moods` that is `null`; a measured value never
+has one. The codes (the contract's `AudioWithheldCode`):
+
+| field | code | the check |
+|---|---|---|
+| every block | `gate_silence`, `gate_noise`, `gate_too_short` | the gate did not pass |
+| tempo, beats | `no_beat` | onset periodicity under 0.2: nothing repeats at a beat rate |
+| tempo, beats | `tempo_out_of_range` | the estimate is outside 40-208 BPM |
+| tempo, beats | `too_few_beats` | fewer than 4 tracked beats |
+| tempo, beats | `low_confidence` | under the estimator's minimum (Essentia 1.5 of 5.32, librosa 0.3); it does not rank octave errors, and no rule here catches them |
+| tempo, beats | `unsteady_tempo` | the tempo does not hold in each third of the window (beats are kept with Essentia) |
+| tempo, beats | `no_tempo_estimate` | an estimator that gives no reasons (only the evals' beat-this) gave no tempo |
+| key | `no_sustained_pitch` | too little energy in spectral lines (drums, clicks, noise) |
+| key | `speech_like` | one voice without stable notes |
+| key | `one_harmonic_series` | the lines form one harmonic series (a tone, mains hum) |
+| key | `one_held_pitch` | one held pitch (vibrato, a bend; over a beat, a drone or one bass note) |
+| key | `no_pitch_track` | without a beat, the pitch track failed |
+| key | `few_pitch_classes` | fewer than three pitch classes |
+| key | `one_pitched_source` | the partials hold still, rise and fall together and spell one note or an open interval |
+| key | `low_key_strength` | key strength under 0.4 |
+| key | `no_key_estimate` | the estimator named no key |
+| fingerprint | `models_not_loaded`, `not_music`, `model_failed` | no models; no beat and one tone, held pitch or voice; no model part gave usable output |
+| styles, tags, moods | `model_failed` | that model or head failed, or gave non-finite or misshapen output |
+| moods | `out_of_range` | the head's output is outside its range |
+| moods | `non_music_style` | the strongest Discogs style is a `Non-Music---` one |
+| any | `estimate_failed` | the estimator raised (logged) |
 
 A preview that cannot be decoded, or that holds non-finite samples or samples beyond 1000
 times full scale, is refused with `422`.
@@ -340,7 +352,7 @@ The tests run without network access: a local HTTP server stands in for the CDN.
 `tests/test_fixtures.py` runs the real analysis on audio generated at test time: click tracks at
 85, 120, 140 and 174 BPM, an A major triad, the progressions C–F–G–C and Am–Dm–E–Am, silence,
 1 s clips, white noise and a DC offset, as WAV and MP3, plus 44.1 kHz stereo MP3 variants, and
-pins the v1 fields. `tests/test_v2.py` covers the `v2` block with both estimators: tempo within
+pins the rounded tempo, key, loudness and the reasons for what it withholds. `tests/test_v2.py` covers the `v2` block with both estimators: tempo within
 1 BPM, tempo changes, keys and when they are withheld (drums, clicks, hum, tones), the gate
 (noise, silence, short input, and music under noise or with human timing, from
 `tests/signals.py`), music without a beat and single held pitches or speech (sung and played
@@ -360,7 +372,8 @@ seeded tests that run the key estimators also carry the marker `estimators`: the
 workflow, with Essentia, runs `-m "not seeded or estimators"` for their Essentia half; the
 others do not depend on the estimator. A plain `uv run pytest` runs everything. Every
 result in both files is checked against the contract's JSON Schema after a strict JSON round
-trip, and for v1/v2 agreement (`tests/checks.py`). The Essentia cases and the real-model
+trip, and for its reasons: every `null` has one and no measured value has one
+(`tests/checks.py`). `tests/test_v1_removed.py` checks that the response is the `v2` block alone. The Essentia cases and the real-model
 tests are reported as skipped without the `models` extra and the models; run
 `uv sync --locked --extra models` and `uv run python download_models.py` first to include them.
 `AUDIO_REQUIRE_MODELS=1` turns those skips into an error; CI's `audio models` workflow runs the

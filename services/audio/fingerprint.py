@@ -16,7 +16,8 @@ The input follows the MTG reference: the decoded signal resampled to 16 kHz by E
 Resample at quality 4, as MonoLoader(sampleRate=16000, resampleQuality=4) does.
 
 A part that fails, or returns values that are not finite, outside its range or of the wrong
-width, is null on its own; the fingerprint is null when no part can be computed.
+width, is null on its own; the fingerprint is null when no part can be computed. Each null part
+gets its reason (the contract's WithheldReason) in the `withheld` dict the caller passes.
 """
 
 from __future__ import annotations
@@ -272,14 +273,30 @@ def _scores(mean: np.ndarray, labels, order) -> list[dict]:
     return [{"label": labels[i], "score": round(float(mean[i]), 4)} for i in order]
 
 
-def fingerprint(native: np.ndarray, native_sr: int, loaded: bool) -> dict | None:
-    """The `fingerprint` block of the v2 result, or None (see the module docstring)."""
+def _reason(code: str, reason: str) -> dict:
+    return {"code": code, "reason": reason}
+
+
+MODELS_NOT_LOADED = _reason("models_not_loaded", "the audio models are not loaded")
+
+
+def fingerprint(
+    native: np.ndarray, native_sr: int, loaded: bool, withheld: dict | None = None
+) -> dict | None:
+    """
+    The `fingerprint` block of the v2 result, or None (see the module docstring). Why each null
+    part is null goes into `withheld` (the v2 block's `withheld`), when given: `fingerprint`
+    when the block is None, else `styles`, `tags` and `moods` (per head).
+    """
+    withheld = {} if withheld is None else withheld
     if not loaded:
+        withheld["fingerprint"] = MODELS_NOT_LOADED
         return None
     try:
         mel = mel_frames(model_input(native, native_sr))
     except Exception as e:
         logger.warning("The model input could not be computed: %s", e)
+        withheld["fingerprint"] = _reason("model_failed", "the model input could not be computed")
         return None
     styles, effnet = _run(
         "effnet",
@@ -292,11 +309,15 @@ def fingerprint(native: np.ndarray, native_sr: int, loaded: bool) -> dict | None
         (len(MSD_TAGS), MUSICNN_EMBEDDING),
     )
     if styles is None and effnet is None and tags is None and musicnn is None:
+        withheld["fingerprint"] = _reason(
+            "model_failed", "no audio model gave a usable output (failed, non-finite or misshapen)"
+        )
         return None
 
     embeddings = {"effnet": effnet, "musicnn": musicnn}
     outputs = {}
     moods: dict[str, dict | None] = {}
+    mood_reasons: dict[str, dict] = {}
     for mood, (name, backbone, column, (low, high)) in HEADS.items():
         if name not in outputs:
             outputs[name] = _head(name, embeddings[backbone])
@@ -305,6 +326,14 @@ def fingerprint(native: np.ndarray, native_sr: int, loaded: bool) -> dict | None
         if value is None or not low <= value <= high:
             if value is not None:
                 logger.warning("The %s head gave %s, outside [%s, %s]", mood, value, low, high)
+                mood_reasons[mood] = _reason(
+                    "out_of_range", f"the {mood} head gave a value outside its range {low}-{high}"
+                )
+            else:
+                mood_reasons[mood] = _reason(
+                    "model_failed",
+                    f"the {mood} head or the model it reads failed or gave unusable output",
+                )
             moods[mood] = None
             continue
         moods[mood] = {
@@ -323,6 +352,20 @@ def fingerprint(native: np.ndarray, native_sr: int, loaded: bool) -> dict | None
         if top_style.startswith(NON_MUSIC_PREFIX):
             logger.info("No moods: the strongest style is %s", top_style)
             moods = dict.fromkeys(moods)
+            not_music = _reason(
+                "non_music_style",
+                f"the strongest style is {top_style.removeprefix(NON_MUSIC_PREFIX)} (not music), "
+                "and the mood models describe music",
+            )
+            mood_reasons = dict.fromkeys(moods, not_music)
+    if style_mean is None:
+        withheld["styles"] = _reason(
+            "model_failed", "the style model failed or gave unusable output"
+        )
+    if tag_mean is None:
+        withheld["tags"] = _reason("model_failed", "the tag model failed or gave unusable output")
+    if mood_reasons:
+        withheld["moods"] = mood_reasons
     return {
         "styles": None
         if style_mean is None
